@@ -98,9 +98,19 @@ ROUTE_FILE_SYMBOL: dict[tuple[str, str], tuple[str, str]] = {
         "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp", "DequantizerQ4K_AVX2"),
     ("MUL_MAT", "q5_k"): (
         "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp", "DequantizerQ5K_AVX2"),
-    # The ad-hoc Q4_K/Q5_K admission above is DENSE-only; the MoE (MUL_MAT_ID) path
-    # for every K-quant/IQ4_XS expert matmul falls through to `repack.cpp`, which no
-    # route names (scope/README.md 2026-10-06).
+    # 2026-10-06 seed-6 widening (`iqk_kquants_q6_iq4xs_dequant`, gates.py ~635-653):
+    # the DENSE (MUL_MAT) Q6_K/IQ4_XS dot route's dequantizer bodies.
+    ("MUL_MAT", "q6_k"): (
+        "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp", "DequantizerQ6K_AVX2"),
+    ("MUL_MAT", "iq4_xs"): (
+        "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp", "DequantizerIQ4XS"),
+    # The ad-hoc/table-driven dense admissions above are DENSE-only; the MoE
+    # (MUL_MAT_ID) path for every K-quant/IQ4_XS expert matmul falls through to
+    # `repack.cpp` (scope/README.md 2026-10-06). `cpu_repack_mmid` DOES name that
+    # (file, symbol) pair structurally (gates.py ~616-628), but is refused at
+    # ppl_contract layer (a) for every patch unconditionally
+    # (`gates.PPL_CONTRACT_NO_OP_ORACLE`, gates.py ~2436) -- `route_is_admitted`
+    # treats that as uncovered, not "named".
     ("MUL_MAT_ID", "q4_k"): (
         "ggml/src/ggml-cpu/repack.cpp", "forward_mul_mat_id"),
     ("MUL_MAT_ID", "q5_k"): (
@@ -231,10 +241,19 @@ def route_is_admitted(file_path: str, symbol: str) -> bool:
     with `gates.py` about what is covered today. It answers NAMED, not
     ADMITS-THIS-PATCH: a route naming the pair can still refuse a specific patch on
     hunk-confinement grounds; that gate runs at author time, not here.
+
+    A route whose `route` name sits in `gates.PPL_CONTRACT_NO_OP_ORACLE` is named in
+    the structural table but is refused at ppl_contract layer (a) for EVERY patch,
+    unconditionally (no op oracle on this host can ever reach it -- gates.py
+    ~2423-2425) -- not a hunk-confinement refusal that depends on the patch's shape.
+    That makes it a standing, not patch-dependent, refusal, so this reports it
+    uncovered rather than "named, patch TBD" (`cpu_repack_mmid`/`repack.cpp`, 2026-10-06).
     """
     if (file_path, symbol) in AD_HOC_ADMITTED_PAIRS:
         return True
-    if gates.cpu_source_routes(file_path, symbol):
+    routes = gates.cpu_source_routes(file_path, symbol)
+    if routes and any(route.route not in gates.PPL_CONTRACT_NO_OP_ORACLE
+                      for route in routes):
         return True
     multi = gates.cpu_multi_file_routes(symbol)
     if multi:

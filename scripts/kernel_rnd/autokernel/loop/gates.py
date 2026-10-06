@@ -1981,6 +1981,39 @@ def check_cpu_gdn_reference(build_dir: Path, source_root: Path, *,
                    result.reason, result.detail)
 
 
+#: 2026-10-06 follow-up (seed 6 kquants widening, `iqk_kquants_q6_iq4xs_dequant` /
+#: `iqk_kquants_set_kernels`): symbols `check_cpu_iqk_reference` now NAMES explicitly
+#: instead of lumping them into the generic "unsupported" bucket, and the specific,
+#: honest reason each has no PASSING independent reference today. `cpu_quant_reference`
+#: (the scalar-decode independent oracle `check_q45_dot` uses) only implements and
+#: EMPIRICALLY CALIBRATES Q4_K/Q5_K/Q8_0 -- its tolerances are fit against measured
+#: anchor-gen scalar-vs-graph error, something this review could not do (no build, no
+#: inference). Q6_K's block layout (`ggml-quants.c::dequantize_row_q6_K`) is simple
+#: enough to transcribe correctly from source alone, but a transcribed decode with an
+#: UNCALIBRATED tolerance is not a safer "pass" than no reference at all -- a bound
+#: guessed instead of measured could pass a wrong kernel or fail a correct one just as
+#: easily as having no bound. IQ4_XS's codebook-based layout is materially more
+#: complex (non-uniform scale packing, shared LUT) and was not attempted blind.
+#: `iqk_set_kernels_kquants` is different: it is the SAME dispatch switch
+#: `mul_mat_qX_K_q8_2_X4_T` already reviews for Q4_K/Q5_K (`check_q45_dot`), so a
+#: Q4_K/Q5_K-slice reference is real, immediately-usable coverage for it today, even
+#: though the switch also routes Q6_K/IQ4_XS this reference cannot independently check.
+_CPU_IQK_UNCALIBRATED_SYMBOLS = {
+    "DequantizerQ6K_AVX2": (
+        "Q6_K has a transcribable scalar decode (ggml-quants.c dequantize_row_q6_K) "
+        "but NO calibrated tolerance: cpu_quant_reference's bounds are fit against "
+        "measured anchor-gen scalar-vs-graph error, which requires a build+run this "
+        "review could not do. Refusing rather than guessing a bound."),
+    "mul_mat_qY_K_q8_2_X4_T": (
+        "Q6_K kernel-selection body: same gap as DequantizerQ6K_AVX2 -- a "
+        "transcribable decode with no calibrated tolerance is refused, not guessed."),
+    "DequantizerIQ4XS": (
+        "IQ4_XS uses a codebook-based (non-uniform scale) layout materially more "
+        "complex than the K-quant family; its decode was not transcribed blind, "
+        "and has no independent reference."),
+}
+
+
 def check_cpu_iqk_reference(build_dir: Path, source_root: Path, *,
                             resolved_recipe, target_symbol: str) -> Verdict:
     """Run the exact helper's independent numerical and engagement witness."""
@@ -1992,9 +2025,15 @@ def check_cpu_iqk_reference(build_dir: Path, source_root: Path, *,
     elif target_symbol == "iqk_moe_fused_up_gate":
         result = iqk_witness.check_fused(build_dir, resolved_recipe=resolved_recipe,
                                          source_root=source_root)
-    elif target_symbol == "mul_mat_qX_K_q8_2_X4_T":
+    elif target_symbol in ("mul_mat_qX_K_q8_2_X4_T", "iqk_set_kernels_kquants"):
+        # iqk_set_kernels_kquants is the type-dispatch switch Q4_K/Q5_K already share
+        # with mul_mat_qX_K_q8_2_X4_T's own route; the Q4_K/Q5_K slice of an edit to
+        # either body is real, reviewable evidence even though the switch also
+        # dispatches Q6_K/IQ4_XS, which this reference cannot independently check.
         result = iqk_witness.check_q45_dot(build_dir, resolved_recipe=resolved_recipe,
                                             source_root=source_root)
+    elif target_symbol in _CPU_IQK_UNCALIBRATED_SYMBOLS:
+        return Verdict("oracle_unavailable", False, _CPU_IQK_UNCALIBRATED_SYMBOLS[target_symbol])
     else:
         return Verdict("oracle_unavailable", False,
                        "unsupported CPU IQK helper has no independent reference")
@@ -2081,6 +2120,37 @@ def check_cpu_fa_perf_screen(anchor_build: Path, candidate_build: Path, *, ancho
         return Verdict("oracle_unavailable", False, result.reason, result.detail)
     return Verdict("cpu_fa_perf_screen", result.status == "pass", result.reason,
                    result.detail)
+
+
+def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
+                                manifest_path: Path) -> Verdict:
+    """ppl_contract layer (a) addendum (review 2026-10-06): the model's OWN served
+    (k, m[, n_mats, n_used]) matmul shapes, at the served widths, for every witness
+    quant -- `served_shape_cases.py`'s HONEST LIMITATIONS fix for the generic
+    `k=256, m=16/512` sweep layer (a) otherwise runs alone.
+
+    UNLIKE `check_cpu_fa_case_set`, this FAILS CLOSED, never skips, when the manifest
+    is missing/malformed or the binary lacks the case-set literal: there is no
+    redundant independent probe covering these shapes, so an absent corpus here is a
+    gap in the correctness oracle, not a harmlessly-skipped extra."""
+    from . import served_shape_cases as ssc
+
+    try:
+        cases = ssc.load_manifest(manifest_path)
+    except ssc.ManifestRefused as exc:
+        return Verdict("served_shape_case_set", False,
+                       f"served-shape case set is not available: {exc}")
+    if not ssc.binary_has_case_set(build_dir):
+        return Verdict("served_shape_case_set", False,
+                       f"test-backend-ops at {build_dir} does not carry the "
+                       f"{ssc.CASE_SET_ID} case set (llama-tree patch not applied); "
+                       "layer (a) has no served-shape evidence for this candidate")
+    ops_present = sorted({c.shape.op for c in cases})
+    verdict = op_correctness(build_dir, op=",".join(ops_present), backend="CPU",
+        resolved_recipe=resolved_recipe, params_filter=ssc.case_set_regex(cases),
+        environment_overrides=((ssc.CASE_SET_ENV, ssc.CASE_SET_ID),),
+        expected_cases=len(cases))
+    return Verdict("served_shape_case_set", verdict.passed, verdict.reason, verdict.detail)
 
 
 def check_model_output_identity(*, anchor_recipe, candidate_recipe, requests,
@@ -2461,8 +2531,53 @@ PRODUCTION_CPU_KERNEL = "/mnt/raid0/llm/kernels/production/cpu"
 
 
 def production_cpu_reference_build() -> Path:
-    """The build directory (parent of `bin/`) behind the production CPU kernel store."""
+    """The build directory (parent of `bin/`) behind the production CPU kernel store.
+
+    Resolves the store symlink only -- it does NOT prove the resulting directory is a
+    real build or that it can load any particular lane's model (a newer GGUF
+    architecture than the frozen production tree supports, or a broken/missing store
+    symlink, both land here as a directory `_build_identity`/`check_production_
+    reference_loads` must still prove is usable). Never caches: the store symlink can
+    move across a production promotion, and a cached stale target would silently
+    compare a candidate against last freeze's kernel forever.
+    """
     return Path(os.path.realpath(PRODUCTION_CPU_KERNEL)).parent
+
+
+def check_production_reference_loads(reference_build: Path, *, model: Path, cpu_list: str,
+                                     env: dict, log_dir: Path, threads: int = 1) -> Verdict:
+    """Fail closed when the frozen production CPU kernel reference cannot load THIS
+    lane's model at all (review 2026-10-06).
+
+    `ppl_contract_gate`'s layers (b)-(d) treat `reference_build` as a FIXED, trusted
+    baseline every candidate (and every advancing anchor) is compared against. A
+    reference that cannot load the model at all is not "no evidence" -- without this
+    preflight, `ppl_wikitext2` reads it as `ppl_r=None` and SKIPS the fixed-reference
+    comparison entirely (silently falling back to anchor-only bars), which is
+    indistinguishable from "the reference agrees" to anything reading the verdict
+    reason alone. A model built against an architecture newer than the frozen
+    production tree (this lane's own DS41/Q38FN GGUFs, both well past the v10
+    freeze date) is exactly the failure this preflight exists to catch, named and
+    fail-closed, before any layer silently degrades.
+    """
+    binary = Path(reference_build) / "bin" / "llama-completion"
+    if not binary.is_file():
+        return Verdict("production_reference_load", False,
+                       f"no llama-completion at the frozen production reference "
+                       f"{reference_build} (PPL_CONTRACT_TOOL_TARGETS missing from the "
+                       "production kernel store build)")
+    result = _completion(reference_build, "The quick brown fox jumps.", 1, 32, model=model,
+                         threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
+                         cache_dir=None, label="production_reference_load")
+    if result is None:
+        return Verdict("production_reference_load", False,
+                       f"the frozen production CPU kernel reference at {reference_build} "
+                       f"could not load {model} (llama-completion refused or produced no "
+                       "output) -- this lane's model may use an architecture the frozen "
+                       "production kernel predates; the reference is not independent "
+                       "evidence if it cannot run the model at all")
+    return Verdict("production_reference_load", True,
+                   f"production reference at {reference_build} loads {model}")
 
 
 def ppl_contract_paths() -> frozenset[str]:
@@ -2513,6 +2628,30 @@ def ppl_contract_ledger_add(store: Path, mechanism_id: str) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(sorted(current | {mechanism_id})), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def ppl_contract_anchor_obligated(store: Path) -> bool:
+    """True when the next champion-advancement anchor build must widen its targets to
+    `PROMOTION_TARGETS + PPL_CONTRACT_TOOL_TARGETS`, so a ppl_contract candidate's
+    layers (b)-(d) (which compare the CANDIDATE build against the CURRENT anchor)
+    have a reference anchor that carries `llama-perplexity`/`llama-completion` at all.
+
+    Review 2026-10-06: `pool.promote_anchor` built every anchor with
+    `gates.PROMOTION_TARGETS` alone, so even a run with an admitted ppl_contract route
+    could never clear layer (b) -- the shared anchor never had the tool to run it with
+    (`_build_identity` raises 'the build lacks llama-perplexity'). This is the signal
+    `run.py`'s keep path reads before calling `pool.promote_anchor`.
+
+    Fails WIDE (True), never narrow, when the ledger cannot be read: a too-narrow
+    anchor is a missing-tool refusal discovered later (named, at layer (a)); a
+    too-wide one costs one extra link. An EMPTY, readable ledger (no ppl_contract
+    keep admitted yet in this store) is the only case that stays narrow -- the
+    existing-run/resume case this must not regress (2026-10-06 follow-up): a store
+    with no ppl_contract history keeps promoting bench-only-plus-server anchors
+    exactly as before.
+    """
+    ledger = ppl_contract_ledger_read(store)
+    return ledger is None or bool(ledger)
 
 
 def ppl_contract_fold_required(keeps, changed_paths, ledger: "set[str] | None") -> bool:
@@ -2704,12 +2843,24 @@ def ppl_wikitext2(anchor_build: Path, candidate_build: Path, *, model: Path, thr
 def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
                          route_name: "str | None" = None,
                          ops: tuple[str, ...] = ("MUL_MAT", "MUL_MAT_ID"),
-                         _op_correctness=None) -> Verdict:
+                         served_shape_manifest: "Path | None" = None,
+                         _op_correctness=None,
+                         _check_served_shape_case_set=None) -> Verdict:
     """Layer (a): test-backend-ops vs the independent `use_ref=true` reference at the
     served widths (decode N=1, verify 2-5), for EVERY quant type the suite carries --
     never narrowed to the route's witness quants: a whitelist / kernel-selection edit
     can reroute any type, so the oracle must cover any type. `_op_correctness` is a test
-    seam with `op_correctness`'s signature."""
+    seam with `op_correctness`'s signature.
+
+    `served_shape_manifest` (review 2026-10-06): when given, this layer ALSO requires
+    `check_served_shape_case_set` on the model's own served (k, m[, n_mats, n_used])
+    shapes -- see `served_shape_cases.py` -- and FAILS CLOSED (never skips) when that
+    manifest or the binary's case-set literal is missing: the generic sweep above has
+    no served-shape evidence of its own. `None` (the default, every caller before this
+    review) leaves this layer's pre-existing behaviour untouched -- the real pipeline
+    call site now always passes a manifest path; a caller that does not is making an
+    explicit, reviewable choice to run layer (a) without served-shape evidence.
+    `_check_served_shape_case_set` is a test seam."""
     if route_name in PPL_CONTRACT_NO_OP_ORACLE:
         return Verdict("ppl_contract_nmse", False,
                        f"route {route_name} has no op-level oracle: test-backend-ops never "
@@ -2725,9 +2876,18 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
                            f"{op} served-width suite ({params_filter}) refused: "
                            f"{getattr(verdict, 'reason', 'no verdict')}",
                            getattr(verdict, "detail", ""))
+    if served_shape_manifest is not None:
+        check = _check_served_shape_case_set or check_served_shape_case_set
+        served_verdict = check(candidate_build, resolved_recipe=resolved_recipe,
+                               manifest_path=served_shape_manifest)
+        if not served_verdict.passed:
+            return Verdict("ppl_contract_nmse", False,
+                           f"served-shape suite refused: {served_verdict.reason}",
+                           served_verdict.detail)
     return Verdict("ppl_contract_nmse", True,
                    f"served-width suite ({params_filter}), all types, passed for "
-                   f"{', '.join(ops)}")
+                   f"{', '.join(ops)}" + ("; served-shape suite passed"
+                                          if served_shape_manifest is not None else ""))
 
 
 def prefix_token_agreement(candidate_text: str, anchor_text: str, *,
@@ -2936,7 +3096,8 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
                          model: Path, threads: int, cpu_list: str, env: dict, log_dir: Path,
                          reference_build: "Path | None", cache_dir: "Path | None",
                          prod_prompts, canary_prompt, _layers: dict | None,
-                         gate_name: str) -> Verdict:
+                         gate_name: str,
+                         served_shape_manifest: "Path | None" = None) -> Verdict:
     overrides = _layers or {}
 
     def layer(name: str, default):
@@ -2955,8 +3116,16 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
     prompts = prod_prompts
     canary = canary_prompt
     layers = (
+        ("production_reference_load", lambda: (
+            check_production_reference_loads(
+                reference_build, model=model, cpu_list=cpu_list, env=env,
+                log_dir=log_dir, threads=threads)
+            if reference_build is not None else
+            Verdict("production_reference_load", True,
+                   "no fixed reference build supplied (test seam)"))),
         ("nmse", lambda: ppl_contract_op_nmse(
-            candidate_build, resolved_recipe=resolved_recipe, route_name=route_name)),
+            candidate_build, resolved_recipe=resolved_recipe, route_name=route_name,
+            served_shape_manifest=served_shape_manifest)),
         ("ppl", lambda: ppl_wikitext2(
             anchor_build, candidate_build, model=model, threads=threads, env=env,
             cpu_list=cpu_list, log_dir=log_dir, reference_build=reference_build,
@@ -2992,10 +3161,13 @@ def ppl_contract_gate(anchor_build: Path, candidate_build: Path, *, route: "CpuS
                       cache_dir: "Path | None" = None,
                       prod_prompts: "tuple[str, ...] | None" = None,
                       canary_prompt: "str | None" = None,
+                      served_shape_manifest: "Path | None" = None,
                       _layers: dict | None = None) -> Verdict:
     """The single blocking pre-keep check for a `numerics="ppl_contract"` route: ALL FOUR
     layers (a)-(d) must pass, fail-closed on any missing/errored layer or a missing fixed
     reference. `prod_prompts`/`canary_prompt` default to the pinned corpus slices.
+    `served_shape_manifest` is layer (a)'s served-shape addendum (`ppl_contract_op_nmse`);
+    `None` leaves layer (a) exactly as it ran before the 2026-10-06 served-shape review.
     `_layers` is a test seam (layer name -> callable returning `Verdict`)."""
     if route.numerics != "ppl_contract":
         raise ValueError(f"ppl_contract_gate called for a {route.numerics!r} route "
@@ -3008,7 +3180,7 @@ def ppl_contract_gate(anchor_build: Path, candidate_build: Path, *, route: "CpuS
         resolved_recipe=resolved_recipe, model=model, threads=threads, cpu_list=cpu_list,
         env=env, log_dir=log_dir, reference_build=reference_build, cache_dir=cache_dir,
         prod_prompts=prod_prompts, canary_prompt=canary_prompt, _layers=_layers,
-        gate_name="ppl_contract")
+        gate_name="ppl_contract", served_shape_manifest=served_shape_manifest)
 
 
 def ppl_contract_bundle_gate(cor_build: Path, tip_build: Path, *, resolved_recipe,
@@ -3017,6 +3189,7 @@ def ppl_contract_bundle_gate(cor_build: Path, tip_build: Path, *, resolved_recip
                              cache_dir: "Path | None" = None,
                              prod_prompts: "tuple[str, ...] | None" = None,
                              canary_prompt: "str | None" = None,
+                             served_shape_manifest: "Path | None" = None,
                              _layers: dict | None = None) -> Verdict:
     """Layer (e) at FOLD time: the whole accumulated bundle (champion of record -> tip)
     re-judged by layers (a)-(d) before the champion of record may advance. Individually
@@ -3025,7 +3198,8 @@ def ppl_contract_bundle_gate(cor_build: Path, tip_build: Path, *, resolved_recip
         cor_build, tip_build, route_name=None, resolved_recipe=resolved_recipe, model=model,
         threads=threads, cpu_list=cpu_list, env=env, log_dir=log_dir,
         reference_build=reference_build, cache_dir=cache_dir, prod_prompts=prod_prompts,
-        canary_prompt=canary_prompt, _layers=_layers, gate_name="ppl_contract_bundle")
+        canary_prompt=canary_prompt, _layers=_layers, gate_name="ppl_contract_bundle",
+        served_shape_manifest=served_shape_manifest)
 
 
 def cpu_route_witness_quants(route: "CpuSourceRoute") -> tuple[str, ...]:
@@ -3043,6 +3217,7 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "backend_ops_selector", "compiles",
            "cpu_source_route", "deterministic",
            "affected_op_scope", "check_cpu_fa_case_set", "check_cpu_fa_perf_screen",
+           "check_served_shape_case_set",
            "check_cpu_fa_reference", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
            "check_cpu_route_reference", "gpu_graph_pool_hold_refusal",
            "no_fallback_dispatch", "op_correctness", "run_all",
@@ -3051,10 +3226,12 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "PPL_CONTRACT_PROD_PROMPT_SLICES", "PPL_CONTRACT_PROD_GEN_TOKENS",
            "PPL_CONTRACT_GEN_CTX", "PPL_CONTRACT_CANARY_SLICE", "PPL_CONTRACT_CANARY_CTX",
            "PPL_CONTRACT_CANARY_DISTINCT4_DROP", "PPL_CONTRACT_TOOL_TARGETS",
-           "PRODUCTION_CPU_KERNEL", "production_cpu_reference_build", "ppl_contract_paths",
+           "PRODUCTION_CPU_KERNEL", "production_cpu_reference_build",
+           "check_production_reference_loads", "ppl_contract_paths",
            "ppl_contract_prod_prompts", "ppl_contract_canary_prompt",
            "ppl_contract_bundle_gate", "PPL_CONTRACT_LEDGER", "ppl_contract_only_paths",
            "ppl_contract_ledger_read", "ppl_contract_ledger_add", "ppl_contract_fold_required",
+           "ppl_contract_anchor_obligated",
            "PPL_CONTRACT_SERVED_WIDTHS", "PPL_CONTRACT_AGREEMENT_FLOOR",
            "PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN", "PPL_CONTRACT_CANARY_TOKENS",
            "PPL_CONTRACT_CANARY_MAX_REPEAT_RUN",

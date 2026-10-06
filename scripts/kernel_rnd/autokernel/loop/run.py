@@ -3553,7 +3553,14 @@ def main(argv: list[str] | None = None) -> int:
                         env=dict(arm.launch_env),
                         reference_build=gates.production_cpu_reference_build(),
                         cache_dir=Path(args.store) / "ppl_contract" / "cache",
-                        log_dir=Path(args.store) / "ppl_contract" / admitted_route.route))
+                        log_dir=Path(args.store) / "ppl_contract" / admitted_route.route,
+                        # 2026-10-06 served-shape review: layer (a) also requires the
+                        # model's own served-shape case set (served_shape_cases.py).
+                        # The manifest is baked (operator action, `write_manifest`)
+                        # once real anchor NMSE measurements exist for every shape/
+                        # type pair; until then this FAILS CLOSED, never skips.
+                        served_shape_manifest=Path(args.store) / "served_shape"
+                                              / "manifest.json"))
                 if witness is not None and witness.reference == "fa_anchor_bits":
                     # cpu_fa_schedule (audit 2026-10-04 C2/C3): the case-set corpus, bit
                     # identity with the ANCHOR build, then the paired FA perf screen
@@ -4537,7 +4544,13 @@ def main(argv: list[str] | None = None) -> int:
                 step="keep: building the new anchor generation (clean build)")
         anchor_build[0] = pool.promote_anchor(
             args.store, build=build_champion, recipe=recipe.to_dict(),
-            champion_commit=_git(args.worktree, "rev-parse", "HEAD"))
+            champion_commit=_git(args.worktree, "rev-parse", "HEAD"),
+            # 2026-10-06 follow-up: widen to PPL_CONTRACT_TOOL_TARGETS only when this
+            # store has a ppl_contract obligation (an admitted mechanism, or an
+            # unreadable ledger failing wide) -- a store with no ppl_contract history
+            # keeps getting exactly gates.PROMOTION_TARGETS, so an existing run's
+            # resume is unaffected.
+            ppl_contract_obligated=gates.ppl_contract_anchor_obligated(args.store))
         current_anchor_commit[0] = _git(args.worktree, "rev-parse", "HEAD")
         print(f"anchor    advanced to {anchor_build[0].name} — subsequent effects are "
               f"MARGINAL against this {'experimental candidate' if experimental else 'champion'}, "

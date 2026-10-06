@@ -197,6 +197,70 @@ class, or before the disabled-build stub.
     macro, which is defined on this AVX512 host: the FIRST, fancy arm is the compiled one
     and the only one admitted); the second is the
     type-dispatch switch, `iqk_set_kernels_kquants`, a separate body entirely.
+  - **2026-10-06 follow-up, served-shape layer (a)**: `served_shape_cases.py` adds a
+    served-shape `test-backend-ops` corpus (`ServedShapeCase`, real `(k, m[, n_mats,
+    n_used])` dims read off the lanes' own GGUF headers: DS41/`deepseek41` expert
+    `(5120, 2304, 128 experts, 3 used)` and its dense shared-expert twin; Q38FN/
+    `qwen35` dense FFN `(5120, 17408)`), at decode `n=1` and verify `n=2..5`, for every
+    witness quant (`IQ3_S`, `IQ4_NL`, `Q4_K`, `Q5_K`, `Q6_K`, `IQ4_XS`), each held to a
+    PER-CASE `max_nmse_err()` override (`test_mul_mat[_id]_served_shape`) derived from
+    the ANCHOR's own measured NMSE on that exact shape/type times a small safety
+    factor, capped at `SERVED_SHAPE_NMSE_CAP` (well below the generic flat `5e-4`) --
+    never a shape-blind constant. `gates.check_served_shape_case_set`, wired into
+    `ppl_contract_op_nmse` via `served_shape_manifest`, FAILS CLOSED (never skips, UNLIKE
+    `cpu_fa_schedule`'s redundantly-probed FLASH_ATTN_EXT set) when the manifest or the
+    binary's case-set literal is absent -- there is no independent probe covering these
+    shapes the way `cpu_fa_reference`'s anchor-identity probe covers FLASH_ATTN_EXT.
+    **Open operator action**: the manifest (`<store>/served_shape/manifest.json`) does
+    not yet exist for any live store -- it is baked by running the independent
+    `use_ref=true` reference on the ANCHOR at each `(shape, type)` pair, computing
+    `served_shape_cases.tightened_nmse_bound` from the measured NMSE, and calling
+    `served_shape_cases.write_manifest`; until that is done, `ppl_contract_op_nmse`
+    fails closed on every ppl_contract candidate at this layer, by design.
+  - **2026-10-06 follow-up, verify-width (n=2-5) coverage outside layer (a) --
+    DOCUMENTED, not added**: layers (b)-(d) (`ppl_wikitext2`, `ppl_contract_coherence`,
+    `ppl_contract_long_canary`) all drive `llama-perplexity`/`llama-completion`, which
+    only ever decode one token at a time (`n=1`); plain prompt-processing batching
+    (`-b`/`-ub`) is NOT the same code path as a speculative-decode VERIFY step (a draft
+    proposing `n` candidate tokens the target accepts/rejects in one batched forward
+    pass) -- so (b)-(d) exercise width 1 only, never 2-5, and no such verify-width
+    end-to-end path exists in this tree's examples without introducing a draft model
+    and an unverified new tool invocation (this session built/ran nothing, per the
+    safety-review constraint, so a `llama-speculative`-based check was NOT added rather
+    than guessed at). Verify widths 2-5 are therefore covered ONLY by layer (a)'s
+    op-level suite above (both the generic sweep and, once baked, the served-shape
+    corpus) -- at the per-op NMSE bound, never at a whole-model ppl/coherence/canary
+    bound. A follow-up that wants (b)-(d)-level verify-width coverage needs a reviewed
+    draft model and a `llama-speculative`-driven agreement check; this is a named gap,
+    not a silent one.
+  - **2026-10-06 follow-up, production reference loadability**: `_ppl_contract_layers`
+    now runs `gates.check_production_reference_loads` FIRST (cheapest, before nmse),
+    whenever `reference_build` is supplied. `ppl_wikitext2` reads a reference it
+    cannot run as `ppl_r=None` and silently SKIPS the fixed-reference bar -- the
+    candidate still gets scored against the anchor alone, which is indistinguishable
+    from "the reference agreed" in the verdict reason. This preflight runs a 1-token
+    `llama-completion` against `reference_build` + the lane's own model and fails
+    closed, by name, if it cannot load it -- the exact failure a lane model on an
+    architecture newer than the frozen production tree (DS41/`deepseek41`, Q38FN/
+    `qwen35`, both well past the v10 freeze) would otherwise hit silently.
+  - **Open item (NOT implemented -- flagged for operator clarification, not guessed
+    at)**: "T0 short-prompt byte identity ... replace byte-identity with the
+    token-agreement ratio used by layer (c)" from the 2026-10-06 follow-up list could
+    not be located as a LIVE conflict in this loop: `gates.check_model_output_identity`/
+    `check_model_identity_targets` (the loop's only short-prompt byte-identity check)
+    fires ONLY for `witness.reference == "model_identity"` routes
+    (`run.py` ~3579-3581), and `ppl_contract_gate` already raises if a route declares
+    both `model_identity` and `ppl_contract` numerics (mutually exclusive) -- so no
+    ppl_contract route reaches a byte-identity check through this path today. The one
+    OTHER byte-identity-vs-tolerance mechanism found anywhere in `autokernel/` is
+    `evaluator/correctness.py`'s `_derive_coherence`/`T0Policy` (the `t0.*` gate IDs),
+    which has ZERO existing references to `ppl_contract` (`grep -rl ppl_contract
+    scripts/kernel_rnd/autokernel` returns only `loop/`) and is a heavily
+    self-locking anti-tampering module (`CoherenceTampering`,
+    cross-reconciled determinism records) this review could not safely extend and
+    fully re-verify without a live build/run. Widening it blind risked being the
+    exact "garbage-generating change" this follow-up exists to prevent. An operator
+    should confirm WHERE this check actually lives before it is implemented.
 - **`float_tinyblas_plan`**: `ggml/src/ggml-cpu/llamafile/sgemm.cpp`, target `tinyBLAS`
   or `matmul` (class-qualified names resolve to the class they name).
   - **Scope:** only the `matmul` body of the float `class tinyBLAS` (F32/F16/BF16): the

@@ -384,7 +384,8 @@ __all__ = ["CHAMPION_BRANCH", "CHAMPION_TREE", "MAX_WORKERS", "PhaseClock",
 
 def promote_anchor(store: Path, *, build: Callable[..., Any], champion_commit: str,
                    recipe: Mapping[str, Any] | None = None,
-                   targets: Sequence[str] = gates.PROMOTION_TARGETS) -> Path:
+                   targets: Sequence[str] | None = None,
+                   ppl_contract_obligated: bool = False) -> Path:
     """BUILD the champion into a new anchor slot. Never MOVE a build directory into one.
 
     THE WHOLE POINT of an advancing anchor: if it does not advance, every effect is
@@ -413,7 +414,21 @@ def promote_anchor(store: Path, *, build: Callable[..., Any], champion_commit: s
     `provenance.json`: one fact, one source, and an artifact whose record omits
     `llama-server` is detectably incomplete. Candidate-lane and guard builds are NOT
     widened -- they call `gates.compiles` on its narrow per-iteration default.
+
+    `ppl_contract_obligated` (2026-10-06 follow-up): when `targets` is left default
+    AND this is True, the default widens to `gates.PROMOTION_TARGETS +
+    gates.PPL_CONTRACT_TOOL_TARGETS` -- the anchor this call promotes is the
+    reference every ppl_contract candidate's layers (b)-(d) compares against, and
+    without `llama-perplexity`/`llama-completion` on it those layers can never run
+    (`gates.ppl_contract_anchor_obligated` names the campaign-obligation signal: an
+    unreadable or non-empty ppl_contract ledger). A caller passing `targets`
+    explicitly always wins, and a store with no ppl_contract history keeps getting
+    exactly `gates.PROMOTION_TARGETS` -- the pre-existing, already-resuming behavior
+    is untouched.
     """
+    if targets is None:
+        targets = (gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS
+                  if ppl_contract_obligated else gates.PROMOTION_TARGETS)
     # MAX existing number + 1, never the COUNT. Counting collides the moment pruning
     # holds the population steady: with keep=1 the count is always 1, so every promotion
     # targeted anchor-gen-002 forever. Run 17 lost 23 of its 30 champion advances to it,

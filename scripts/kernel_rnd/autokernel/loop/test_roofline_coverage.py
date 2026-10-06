@@ -3,8 +3,15 @@
 Covers: a covered gap producing no warning, an uncovered gap producing a warning
 plus `scope_gap.json`, and prefill-contaminated path-level data being ignored in
 favour of the per-node rows -- the three fixture classes the handoff asked for, plus
-a Q38FN-like profile (IQ3_S/IQ4_NL MoE expert matmul, low achieved bandwidth, no
-admitted route) as the end-to-end verdict.
+a Q38FN-like profile (Q6_K/IQ4_XS MoE expert matmul routed to `repack.cpp`, low
+achieved bandwidth, no admitted route) as the end-to-end verdict.
+
+2026-10-06 post-merge update: the low-bit CPU source routes this branch landed
+(`iqk_iquants_dequant`, `iqk_legacy_iq4nl`) now admit IQ3_S/IQ4_NL (both MUL_MAT and
+MUL_MAT_ID) in `gates.CPU_SOURCE_ROUTES`, so fixtures that need an UNCOVERED gap use
+the MoE K-quant/IQ4_XS shape that still falls through to `repack.cpp`
+(`cpu_repack_mmid`, refused for every patch via `gates.PPL_CONTRACT_NO_OP_ORACLE`)
+instead.
 """
 from __future__ import annotations
 
@@ -22,8 +29,15 @@ from . import roofline_coverage as rc
 Q4_K_SHAPE = ([5120, 2304, 1], [2304, 1, 1])
 #: Same element count, IQ3_S layout (256 elements/110 bytes): ~4.84 MB, ~88.7 GB/s
 #: at the same timing -- ~20% of ceiling, matching the 10-40%-of-ceiling range the
-#: 2026-10-06 scope audit measured for these kernels.
+#: 2026-10-06 scope audit measured for these kernels. IQ3_S/IQ4_NL are now ADMITTED
+#: (`iqk_iquants_dequant`/`iqk_legacy_iq4nl`), so this shape is used only where a
+#: COVERED gap is wanted.
 IQ3_S_SHAPE = ([5120, 2304, 1], [2304, 1, 1])
+#: Same element count, Q6_K layout (256 elements/210 bytes): ~9.23 MB, ~169 GB/s at
+#: the same timing -- the MoE (MUL_MAT_ID) K-quant/IQ4_XS shape that still falls
+#: through to `repack.cpp` (`cpu_repack_mmid`, refused by `PPL_CONTRACT_NO_OP_ORACLE`
+#: for every patch), used where an UNCOVERED gap is wanted.
+Q6_K_REPACK_SHAPE = ([5120, 2304, 1], [2304, 1, 1])
 
 
 def _node(op, src0_type, src0_ne, dst_ne, wall_us, evals, *, idx=1, name=None):
@@ -72,10 +86,14 @@ def test_dense_q4_k_dot_route_is_covered_by_the_ad_hoc_admission():
 
 
 def test_iq3_s_and_repack_routes_are_not_admitted_today():
-    # Matches the 2026-10-06 lowbit-scope audit verdict: both OUT of scope.
+    # Post-merge 2026-10-06: the low-bit CPU source routes this branch landed admit
+    # IQ3_S (`iqk_iquants_dequant`), so it is IN scope now -- but the MoE K-quant/
+    # IQ4_XS path still falls through to `repack.cpp`, whose only naming route
+    # (`cpu_repack_mmid`) is refused for every patch (`PPL_CONTRACT_NO_OP_ORACLE`,
+    # no op oracle reaches it), so repack stays uncovered.
     iq3 = rc.ROUTE_FILE_SYMBOL[("MUL_MAT_ID", "iq3_s")]
     repack = rc.ROUTE_FILE_SYMBOL[("MUL_MAT_ID", "q6_k")]
-    assert rc.route_is_admitted(*iq3) is False
+    assert rc.route_is_admitted(*iq3) is True
     assert rc.route_is_admitted(*repack) is False
 
 
@@ -117,20 +135,21 @@ def test_covered_gap_never_triggers_the_uncovered_warning():
 
 
 def test_uncovered_gap_triggers_warning_and_names_file_and_symbol():
-    """A gap sitting in iq3_s (no admitted route): triggers, names the real file."""
-    src0, dst = IQ3_S_SHAPE
-    nodes = [_node("MUL_MAT_ID", "iq3_s", src0, dst, 2000.0, 35, idx=1)]
+    """A gap sitting in the repack-routed MoE q6_k (no admitted route): triggers,
+    names the real file."""
+    src0, dst = Q6_K_REPACK_SHAPE
+    nodes = [_node("MUL_MAT_ID", "q6_k", src0, dst, 2000.0, 35, idx=1)]
     report = rc.from_node_dump({"nodes": nodes, "total_wall_us": 10_000.0},
                                ceiling_gb_s=430.0)
     row = report["gap_table"][0]
     assert row["gap_share"] > 0
     assert row["covered"] is False
-    assert row["file"] == "ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp"
-    assert row["symbol"] == "DequantizerIQ3S"
+    assert row["file"] == "ggml/src/ggml-cpu/repack.cpp"
+    assert row["symbol"] == "forward_mul_mat_id"
     gap = report["uncovered_gap"]
     assert gap["triggered"] is True
     assert gap["uncovered_fraction"] == pytest.approx(1.0)
-    assert gap["uncovered_nodes"][0]["file"] == "ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp"
+    assert gap["uncovered_nodes"][0]["file"] == "ggml/src/ggml-cpu/repack.cpp"
 
 
 def test_unresolved_type_counts_as_uncovered_not_silently_safe():
@@ -191,8 +210,8 @@ def test_is_stagnant_reads_slope_and_null_streak():
 
 
 def test_stagnation_hook_writes_scope_gap_only_when_both_hold(tmp_path):
-    src0, dst = IQ3_S_SHAPE
-    nodes = [_node("MUL_MAT_ID", "iq3_s", src0, dst, 2000.0, 35, idx=1)]
+    src0, dst = Q6_K_REPACK_SHAPE
+    nodes = [_node("MUL_MAT_ID", "q6_k", src0, dst, 2000.0, 35, idx=1)]
     report = rc.from_node_dump({"nodes": nodes, "total_wall_us": 10_000.0},
                                ceiling_gb_s=430.0)
     uncovered = report["uncovered_gap"]
@@ -209,7 +228,7 @@ def test_stagnation_hook_writes_scope_gap_only_when_both_hold(tmp_path):
     body = json.loads(path.read_text(encoding="utf-8"))
     assert body["schema"] == rc.SCOPE_GAP_SCHEMA
     assert body["triggered"] is True
-    assert body["uncovered_nodes"][0]["file"] == "ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp"
+    assert body["uncovered_nodes"][0]["file"] == "ggml/src/ggml-cpu/repack.cpp"
 
 
 def test_stagnation_hook_is_a_noop_without_a_triggered_gap(tmp_path):
@@ -238,34 +257,38 @@ def test_write_scope_gap_is_machine_readable_and_idempotent(tmp_path):
 # ---- Q38FN-like end-to-end verdict ------------------------------------------------
 
 def test_q38fn_like_profile_flags_iq3_s_and_iq4_nl_moe_as_the_uncovered_headroom(tmp_path):
-    """Reproduces the shape of the 2026-10-06 incident: IQ3_S/IQ4_NL MoE expert
-    matmul running at 10-40% of the host's measured ceiling, with the admitted-route
-    table covering only the dense Q4_K/Q5_K dot and MoE dispatch wiring -- never the
-    IQ3_S/IQ4_NL dequant bodies themselves."""
+    """Reproduces the shape of the 2026-10-06 incident, post-merge: IQ3_S/IQ4_NL MoE
+    expert matmul is now ADMITTED (`iqk_iquants_dequant`/`iqk_legacy_iq4nl`), so the
+    remaining uncovered headroom is the Q6_K/IQ4_XS MoE expert matmul that still
+    falls through to `repack.cpp` (`cpu_repack_mmid`, refused by
+    `PPL_CONTRACT_NO_OP_ORACLE` for every patch)."""
     nodes = [
-        # IQ3_S expert matmul: ~115 MB/call at ~2ms/call -> ~58 GB/s, 13% of ceiling.
+        # IQ3_S expert matmul: now covered -- must not show as uncovered.
         _node("MUL_MAT_ID", "iq3_s", [256, 4096, 256], [4096, 8, 1], 70_000.0, 35,
              idx=1, name="ffn_moe_iq3s"),
-        # IQ4_NL expert matmul: ~19 MB/call at ~0.57ms/call -> ~33 GB/s, 8% of ceiling.
+        # IQ4_NL expert matmul: now covered -- must not show as uncovered.
         _node("MUL_MAT_ID", "iq4_nl", [32, 4096, 256], [4096, 8, 1], 20_000.0, 35,
              idx=2, name="ffn_moe_iq4nl"),
         # Dense Q4_K dot IS covered (ad-hoc admission) -- must not show as uncovered.
         _node("MUL_MAT", "q4_k", [5120, 2304, 1], [2304, 1, 1], 5_000.0, 35,
              idx=3, name="attn_q4k_dot"),
+        # Q6_K expert matmul: still falls through to repack.cpp, refused.
+        _node("MUL_MAT_ID", "q6_k", [256, 4096, 256], [4096, 8, 1], 70_000.0, 35,
+             idx=4, name="ffn_moe_q6k"),
+        # IQ4_XS expert matmul: same repack fallback, refused.
+        _node("MUL_MAT_ID", "iq4_xs", [256, 4096, 256], [4096, 8, 1], 20_000.0, 35,
+             idx=5, name="ffn_moe_iq4xs"),
     ]
-    report = rc.from_node_dump({"nodes": nodes, "total_wall_us": 100_000.0},
+    report = rc.from_node_dump({"nodes": nodes, "total_wall_us": 200_000.0},
                                ceiling_gb_s=430.0)
     gap = report["uncovered_gap"]
     assert gap["triggered"] is True
     uncovered_files = {row["file"] for row in gap["uncovered_nodes"]}
-    assert uncovered_files == {
-        "ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp",
-        "ggml/src/ggml-cpu/iqk/iqk_gemm_legacy_quants.cpp",
-    }
+    assert uncovered_files == {"ggml/src/ggml-cpu/repack.cpp"}
     covered_names = {row["name"] for row in report["gap_table"] if row["covered"] is True}
-    assert covered_names == {"attn_q4k_dot"}
+    assert covered_names == {"attn_q4k_dot", "ffn_moe_iq3s", "ffn_moe_iq4nl"}
     uncovered_names = {row["name"] for row in report["gap_table"] if row["covered"] is False}
-    assert uncovered_names == {"ffn_moe_iq3s", "ffn_moe_iq4nl"}
+    assert uncovered_names == {"ffn_moe_q6k", "ffn_moe_iq4xs"}
     # The stagnation hook fires for this shape once the lane has actually stalled.
     path = rc.stagnation_scope_gap_hook(
         gap, {"best_effect_slope_per_measurement": 0.0, "measured_points": 10,

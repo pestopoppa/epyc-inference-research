@@ -539,6 +539,39 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
         self.assertTrue(verdict.passed)
         dot.assert_called_once()
 
+    def test_cpu_iqk_reference_kquants_set_kernels_reuses_the_q45_dot_witness(self):
+        """2026-10-06 seed-6 widening: `iqk_set_kernels_kquants` is the SAME
+        Q4_K/Q5_K-sharing dispatch switch `check_q45_dot` already reviews, so it gets
+        real coverage instead of falling into the generic 'unsupported' bucket."""
+        from autokernel.loop import iqk_witness
+        with mock.patch.object(iqk_witness, "check_q45_dot",
+                               return_value=iqk_witness.Result("pass", "dot")) as dot:
+            verdict = gates.check_cpu_iqk_reference(
+                Path("/build"), Path("/source"), resolved_recipe=object(),
+                target_symbol="iqk_set_kernels_kquants")
+        self.assertTrue(verdict.passed)
+        dot.assert_called_once()
+
+    def test_cpu_iqk_reference_q6k_and_iq4xs_refuse_by_name_not_genuinely(self):
+        """Q6_K/IQ4_XS symbols are now NAMED explicitly (not lumped into the generic
+        'unsupported CPU IQK helper' message), but have no CALIBRATED independent
+        reference (cpu_quant_reference's tolerances are fit against a measured
+        anchor-gen build, which a review with no build/inference access cannot do) --
+        so they refuse with a specific, actionable reason, never a guessed pass."""
+        for symbol, needle in (
+                ("DequantizerQ6K_AVX2", "calibrated tolerance"),
+                ("mul_mat_qY_K_q8_2_X4_T", "calibrated tolerance"),
+                ("DequantizerIQ4XS", "codebook-based")):
+            verdict = gates.check_cpu_iqk_reference(
+                Path("/build"), Path("/source"), resolved_recipe=object(),
+                target_symbol=symbol)
+            self.assertEqual(verdict.gate, "oracle_unavailable")
+            self.assertFalse(verdict.passed)
+            self.assertIn(needle, verdict.reason)
+            # Never the generic, unnamed message any OTHER unknown symbol still gets.
+            self.assertNotEqual(verdict.reason, "unsupported CPU IQK helper has no "
+                                                "independent reference")
+
     # --- widened CPU source routes (DS41 scope, 2026-09-26) ---------------------------
 
     _SGEMM = ("class tinyBLAS {\n"
@@ -1761,6 +1794,72 @@ class ThePplContractGateIsLayeredAndFailsClosed(unittest.TestCase):
             reference_build=None, _layers=failing)
         self.assertFalse(verdict.passed)
         self.assertEqual(verdict.gate, "ppl_contract_bundle")
+
+    def test_production_reference_load_runs_first_and_fails_closed(self):
+        """2026-10-06 follow-up: a reference build that cannot load the lane's model
+        refuses the WHOLE gate before any of the four named layers spend anything,
+        with a specific reason naming production_reference_load, not a generic
+        'no fixed reference' or a layer-(b)/(c)/(d) failure that could be misread as
+        the kernel being wrong rather than the reference being unusable."""
+        passing = self._passing()
+        with mock.patch.object(gates, "check_production_reference_loads",
+                               return_value=gates.Verdict(
+                                   "production_reference_load", False,
+                                   "could not load the model")) as check:
+            verdict = gates.ppl_contract_gate(
+                Path("/anchor"), Path("/candidate"), route=self._route(),
+                resolved_recipe=None, model=Path("/model.gguf"), threads=48,
+                cpu_list="0-47", env={}, log_dir=Path("/tmp/ppl-log"),
+                reference_build=Path("/prod-ref"), _layers=passing)
+        self.assertFalse(verdict.passed)
+        self.assertIn("production_reference_load", verdict.reason)
+        self.assertIn("could not load the model", verdict.reason)
+        check.assert_called_once()
+
+    def test_production_reference_load_is_skipped_without_a_reference_build(self):
+        """No `reference_build` at all (every existing `_call()`-based test, which
+        stubs ppl/coherence/long_canary so the pre-existing 'no fixed reference'
+        early-return never fires): the new layer must read as a harmless skip, never
+        a refusal of its own and never a call into the real loadability check."""
+        with mock.patch.object(gates, "check_production_reference_loads") as check:
+            verdict = self._call()
+        self.assertTrue(verdict.passed)
+        check.assert_not_called()
+
+
+class CheckProductionReferenceLoads(unittest.TestCase):
+    def test_refuses_when_llama_completion_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            verdict = gates.check_production_reference_loads(
+                Path(tmp), model=Path("/model.gguf"), cpu_list="0-1", env={},
+                log_dir=Path(tmp) / "log")
+        self.assertFalse(verdict.passed)
+        self.assertIn("no llama-completion", verdict.reason)
+
+    def test_refuses_when_completion_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            build = Path(tmp) / "build"
+            (build / "bin").mkdir(parents=True)
+            (build / "bin" / "llama-completion").write_bytes(b"\0ELF")
+            with mock.patch.object(gates, "_completion", return_value=None) as completion:
+                verdict = gates.check_production_reference_loads(
+                    build, model=Path("/model.gguf"), cpu_list="0-1", env={},
+                    log_dir=Path(tmp) / "log")
+            self.assertFalse(verdict.passed)
+            self.assertIn("could not load", verdict.reason)
+            completion.assert_called_once()
+
+    def test_passes_when_completion_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            build = Path(tmp) / "build"
+            (build / "bin").mkdir(parents=True)
+            (build / "bin" / "llama-completion").write_bytes(b"\0ELF")
+            with mock.patch.object(gates, "_completion", return_value=("fox", 5)):
+                verdict = gates.check_production_reference_loads(
+                    build, model=Path("/model.gguf"), cpu_list="0-1", env={},
+                    log_dir=Path(tmp) / "log")
+            self.assertTrue(verdict.passed)
+            self.assertEqual(verdict.gate, "production_reference_load")
 
 
 class ThePplWikitext2GateComparesAnchorAndCandidate(unittest.TestCase):

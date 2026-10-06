@@ -125,6 +125,83 @@ class PromoteAnchorOwnsTheWideSet(unittest.TestCase):
             self.assertEqual(body["targets"], ["llama-bench"])
 
 
+class PromoteAnchorPplContractObligation(unittest.TestCase):
+    """2026-10-06 follow-up: `pool.promote_anchor` widens its default to
+    `PROMOTION_TARGETS + PPL_CONTRACT_TOOL_TARGETS` only when the STORE carries a
+    ppl_contract obligation (`gates.ppl_contract_anchor_obligated`) -- never
+    unconditionally, and never for a caller that already passed `targets` explicitly.
+    This is the backward-compatibility contract for resume: an existing store with no
+    ppl_contract ledger (every run before this follow-up) must keep promoting the
+    EXACT same `gates.PROMOTION_TARGETS` anchor it always did."""
+
+    def _promote(self, store: Path, **kwargs):
+        calls = []
+
+        def build(dest, targets):
+            calls.append((Path(dest), tuple(targets)))
+            (Path(dest) / "bin").mkdir(parents=True, exist_ok=True)
+            (Path(dest) / "bin" / "llama-bench").write_text("elf", encoding="utf-8")
+            return gates.Verdict("compile", True)
+
+        promoted = pool.promote_anchor(store, build=build, champion_commit="5ad3e36d",
+                                       recipe={"name": "house-gpu"}, **kwargs)
+        return promoted, calls
+
+    def test_resuming_an_old_run_with_no_ppl_contract_history_stays_narrow(self):
+        """A store with no ledger file at all (every run before this follow-up, and
+        every run that never admitted a ppl_contract route) -- `ppl_contract_
+        obligated` reads False, and the anchor is built/recorded exactly as before."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            self.assertFalse(gates.ppl_contract_anchor_obligated(store))
+            promoted, calls = self._promote(
+                store, ppl_contract_obligated=gates.ppl_contract_anchor_obligated(store))
+            self.assertEqual(calls, [(promoted, gates.PROMOTION_TARGETS)])
+            body = json.loads((promoted / "provenance.json").read_text())
+            self.assertEqual(body["targets"], list(gates.PROMOTION_TARGETS))
+            self.assertNotIn("llama-perplexity", body["targets"])
+
+    def test_a_new_run_with_an_admitted_ppl_contract_mechanism_widens(self):
+        """A store carrying a ppl_contract ledger with at least one admitted mechanism
+        (a NEW run that landed a low-bit CPU route keep) widens the anchor so the next
+        candidate's layers (b)-(d) have a reference that can run `llama-perplexity`/
+        `llama-completion` at all."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            gates.ppl_contract_ledger_add(store, "mech-iq3s-dequant")
+            self.assertTrue(gates.ppl_contract_anchor_obligated(store))
+            promoted, calls = self._promote(
+                store, ppl_contract_obligated=gates.ppl_contract_anchor_obligated(store))
+            expected = gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS
+            self.assertEqual(calls, [(promoted, expected)])
+            body = json.loads((promoted / "provenance.json").read_text())
+            self.assertEqual(body["targets"], list(expected))
+            self.assertIn("llama-perplexity", body["targets"])
+            self.assertIn("llama-completion", body["targets"])
+
+    def test_an_unreadable_ledger_fails_wide_not_narrow(self):
+        """A corrupt/malformed ledger file must never silently narrow the anchor."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            ledger = store / "ppl_contract" / "admitted_mechanisms.json"
+            ledger.parent.mkdir(parents=True)
+            ledger.write_text("not json", encoding="utf-8")
+            self.assertIsNone(gates.ppl_contract_ledger_read(store))
+            self.assertTrue(gates.ppl_contract_anchor_obligated(store))
+
+    def test_an_explicit_targets_override_wins_regardless_of_obligation(self):
+        """`ppl_contract_obligated` only governs the DEFAULT; an explicit `targets`
+        kwarg is never second-guessed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            gates.ppl_contract_ledger_add(store, "mech-iq3s-dequant")
+            promoted, calls = self._promote(store, targets=("llama-bench",),
+                                            ppl_contract_obligated=True)
+            self.assertEqual(calls[0][1], ("llama-bench",))
+            body = json.loads((promoted / "provenance.json").read_text())
+            self.assertEqual(body["targets"], ["llama-bench"])
+
+
 class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
     """One simulated keep, end-to-end through `run.main`'s automatic path."""
 
