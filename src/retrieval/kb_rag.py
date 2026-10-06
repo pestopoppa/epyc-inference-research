@@ -37,6 +37,7 @@ import logging
 import math
 import os
 import sqlite3
+import tempfile
 import time
 from contextlib import closing
 from dataclasses import dataclass
@@ -497,6 +498,32 @@ def _emb_relative_path(file_path: str, content_hash: str) -> str:
     return f"emb/{safe_name}__{content_hash}.npz"
 
 
+def _write_embedding_atomic(path: Path, emb: np.ndarray) -> None:
+    """Publish a fully serialized vector without exposing a partial target."""
+    staged_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w+b",
+            prefix=f".{path.name}.",
+            suffix=".tmp.npz",
+            dir=path.parent,
+            delete=False,
+        ) as staged:
+            staged_path = Path(staged.name)
+            np.savez_compressed(staged, emb=emb)
+        os.replace(staged_path, path)
+        staged_path = None
+    except BaseException:
+        if staged_path is not None:
+            try:
+                staged_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                logger.warning("kb_rag: failed to clean staged embedding %s: %s", staged_path, exc)
+        raise
+
+
 @colbert_encoder.state_transaction
 def build_index(
     config: CorpusConfig,
@@ -582,7 +609,7 @@ def build_index(
                 emb_rel = _emb_relative_path(str(f), ch.content_hash)
                 emb_abs = index_dir / emb_rel
                 emb_abs.parent.mkdir(parents=True, exist_ok=True)
-                np.savez_compressed(emb_abs, emb=emb)
+                _write_embedding_atomic(emb_abs, emb)
 
                 preview = ch.text.strip()[:240]
                 row_values = (
@@ -726,7 +753,7 @@ def update_files(
                 emb_rel = _emb_relative_path(str(p), ch.content_hash)
                 emb_abs = index_dir / emb_rel
                 emb_abs.parent.mkdir(parents=True, exist_ok=True)
-                np.savez_compressed(emb_abs, emb=emb)
+                _write_embedding_atomic(emb_abs, emb)
                 cur.execute(
                     "INSERT INTO chunk "
                     "(file_path, heading_path, line_start, line_end, content_hash, "
