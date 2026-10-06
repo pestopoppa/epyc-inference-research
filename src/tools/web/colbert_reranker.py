@@ -162,6 +162,7 @@ def _snippet_text(snippet_dict: dict[str, Any]) -> str:
     return text
 
 
+@colbert_encoder.state_transaction
 def rerank_snippets(
     query: str,
     snippets: list[dict[str, Any]],

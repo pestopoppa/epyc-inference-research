@@ -75,12 +75,44 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import threading
 import time
+from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# One process owns one mutable tokenizer/session generation. Consumer transactions
+# may re-enter this lock through encode/count/metadata helpers; no helper loads
+# a model implicitly merely because it acquires the lock.
+_state_lock = threading.RLock()
+_generation = 0
+
+
+@contextmanager
+def locked_state():
+    """Hold the current encoder generation for a complete consumer transaction."""
+    with _state_lock:
+        yield _generation
+
+
+def state_transaction(function):
+    """Serialize a state operation without changing its loading policy."""
+    @wraps(function)
+    def guarded(*args, **kwargs):
+        with locked_state():
+            return function(*args, **kwargs)
+    return guarded
+
+
+@state_transaction
+def generation() -> int:
+    """Process-local generation token, meaningful only in this process."""
+    return _generation
+
 
 # ── Model path resolution: the three-slot selector (see module docstring) ────
 DEFAULT_MODEL_DIR = Path("/mnt/raid0/llm/models/gte-moderncolbert-v1-onnx")
@@ -292,6 +324,7 @@ def _prefix_encodes_to_one_token(tokenizer, prefix: str, declared_id: "int | Non
     return declared_id is None or ids[0] == declared_id
 
 
+@state_transaction
 def refresh_model_dir() -> "tuple[Path, str]":
     """Re-read the slot env vars and re-point the module at the resolved model.
 
@@ -303,13 +336,11 @@ def refresh_model_dir() -> "tuple[Path, str]":
     """
     global _MODEL_DIR, _MODEL_SLOT, _MODEL_PATH, _TOKENIZER_PATH
     global _session, _tokenizer, _prefix_tokens_ok, _input_names, _do_lower_case
-    global _count_tokenizer, _tokenizer_sha256
+    global _count_tokenizer, _tokenizer_sha256, _generation
 
     model_dir, slot = resolve_model_dir()
     if model_dir == _MODEL_DIR:
         return _MODEL_DIR, _MODEL_SLOT
-
-    _tokenizer_sha256 = None
 
     if _session is not None or _tokenizer is not None:
         logger.warning(
@@ -317,12 +348,8 @@ def refresh_model_dir() -> "tuple[Path, str]":
             "loaded session so the next encode uses the model now configured.",
             _MODEL_DIR, model_dir, slot,
         )
-        _session = None
-        _tokenizer = None
-        _prefix_tokens_ok = False
-        _input_names = ()
-        _do_lower_case = False
-        _count_tokenizer = None
+    _clear_loaded_state()
+    _generation += 1
 
     _MODEL_DIR, _MODEL_SLOT = model_dir, slot
     _MODEL_PATH = _MODEL_DIR / "model_int8.onnx"
@@ -345,6 +372,7 @@ _MIN_DECLARED_TOKENS = 8
 _declared_lengths_cache: dict = {}
 
 
+@state_transaction
 def _declared_lengths(model_dir: Path) -> "tuple[int | None, int | None]":
     """(query_length, document_length) as DECLARED by the checkpoint, or None."""
     key = str(model_dir)
@@ -365,6 +393,7 @@ def _declared_lengths(model_dir: Path) -> "tuple[int | None, int | None]":
     return out
 
 
+@state_transaction
 def max_query_tokens() -> int:
     """Query truncation cap declared by the LIVE checkpoint (`query_length`)."""
     declared, _ = _declared_lengths(_MODEL_DIR)
@@ -377,6 +406,7 @@ def max_query_tokens() -> int:
     return declared
 
 
+@state_transaction
 def max_document_tokens() -> int:
     """Document truncation cap declared by the LIVE checkpoint (`document_length`)."""
     _, declared = _declared_lengths(_MODEL_DIR)
@@ -389,6 +419,7 @@ def max_document_tokens() -> int:
     return declared
 
 
+@state_transaction
 def prefix_for_role(role: str) -> str:
     """Return the literal prefix string for `role` ("" for ROLE_NONE)."""
     if role == ROLE_QUERY:
@@ -400,16 +431,30 @@ def prefix_for_role(role: str) -> str:
     raise ValueError(f"unknown ColBERT role {role!r}; expected one of {VALID_ROLES}")
 
 
+@state_transaction
 def prefix_tokens_available() -> bool:
     """True iff the loaded tokenizer maps both prefixes to single trained tokens."""
     return _prefix_tokens_ok
 
 
+@state_transaction
 def is_available() -> bool:
     """Return True iff model files exist on disk. Does not load."""
     return _MODEL_PATH.exists() and _TOKENIZER_PATH.exists()
 
 
+def _clear_loaded_state() -> None:
+    """Caller holds the state lock; failed loads publish no partial state."""
+    global _session, _tokenizer, _tokenizer_sha256, _count_tokenizer
+    global _query_prefix, _document_prefix, _prefix_tokens_ok, _input_names, _do_lower_case
+    _session = _tokenizer = _tokenizer_sha256 = _count_tokenizer = None
+    _query_prefix, _document_prefix = _FALLBACK_QUERY_PREFIX, _FALLBACK_DOCUMENT_PREFIX
+    _prefix_tokens_ok = False
+    _input_names = ()
+    _do_lower_case = False
+
+
+@state_transaction
 def ensure_loaded() -> bool:
     """Lazily load ONNX session + tokenizer. Returns True on success.
 
@@ -417,12 +462,11 @@ def ensure_loaded() -> bool:
     dependencies are missing or model files cannot be opened.
     """
     global _session, _tokenizer, _query_prefix, _document_prefix, _prefix_tokens_ok
-    global _input_names, _do_lower_case, _count_tokenizer, _tokenizer_sha256
+    global _input_names, _do_lower_case, _count_tokenizer, _tokenizer_sha256, _generation
 
     if _session is not None and _tokenizer is not None:
         return True
-    _count_tokenizer = None
-    _tokenizer_sha256 = None
+    _clear_loaded_state()
 
     if not is_available():
         logger.warning("ColBERT ONNX model not found at %s", _MODEL_PATH)
@@ -436,7 +480,7 @@ def ensure_loaded() -> bool:
         sess_options = ort.SessionOptions()
         sess_options.intra_op_num_threads = _onnx_threads()
         sess_options.inter_op_num_threads = 1
-        _session = ort.InferenceSession(
+        loaded_session = ort.InferenceSession(
             str(_MODEL_PATH),
             sess_options=sess_options,
             providers=["CPUExecutionProvider"],
@@ -444,8 +488,8 @@ def ensure_loaded() -> bool:
         # Parse and fingerprint the same byte buffer: the file may change while
         # this singleton stays loaded, so hashing its path alone is insufficient.
         tokenizer_bytes = _TOKENIZER_PATH.read_bytes()
-        _tokenizer = Tokenizer.from_str(tokenizer_bytes.decode("utf-8"))
-        _tokenizer_sha256 = hashlib.sha256(tokenizer_bytes).hexdigest()
+        loaded_tokenizer = Tokenizer.from_str(tokenizer_bytes.decode("utf-8"))
+        loaded_tokenizer_sha256 = hashlib.sha256(tokenizer_bytes).hexdigest()
 
         # K1: which inputs this graph actually declares. BERT-family
         # late-interaction exports (answerai-colbert-small-v1, ColBERTv2,
@@ -453,27 +497,27 @@ def ensure_loaded() -> bool:
         # initializer default, so a hardcoded two-input feed raises
         # InvalidArgument and the encoder returns None for every text. Pattern
         # borrowed from cross_encoder.py:148, which already does this.
-        _input_names = tuple(i.name for i in _session.get_inputs())
+        loaded_input_names = tuple(i.name for i in loaded_session.get_inputs())
 
-        _query_prefix, _document_prefix = _load_declared_prefixes(_MODEL_DIR)
+        loaded_query_prefix, loaded_document_prefix = _load_declared_prefixes(_MODEL_DIR)
         declared = _load_declared_prefix_ids(_MODEL_DIR)
-        _do_lower_case = bool(_load_declared_config(_MODEL_DIR).get("do_lower_case", False))
-        q_id = _tokenizer.token_to_id(_query_prefix)
-        d_id = _tokenizer.token_to_id(_document_prefix)
+        loaded_do_lower_case = bool(_load_declared_config(_MODEL_DIR).get("do_lower_case", False))
+        q_id = loaded_tokenizer.token_to_id(loaded_query_prefix)
+        d_id = loaded_tokenizer.token_to_id(loaded_document_prefix)
         # K6: encode-round-trip, NOT base-vocab membership. See
         # _prefix_encodes_to_one_token for why token_to_id cannot answer this.
-        _prefix_tokens_ok = (
-            _prefix_encodes_to_one_token(_tokenizer, _query_prefix, declared.get("query"))
-            and _prefix_encodes_to_one_token(_tokenizer, _document_prefix, declared.get("document"))
+        loaded_prefix_tokens_ok = (
+            _prefix_encodes_to_one_token(loaded_tokenizer, loaded_query_prefix, declared.get("query"))
+            and _prefix_encodes_to_one_token(loaded_tokenizer, loaded_document_prefix, declared.get("document"))
         )
-        if not _prefix_tokens_ok:
+        if not loaded_prefix_tokens_ok:
             logger.error(
                 "ColBERT: prefixes %r/%r do not ENCODE to single tokens in %s "
                 "(base-vocab ids %r/%r, declared ids %r/%r) — prefixed roles will be "
                 "refused; only ROLE_NONE can be encoded. A non-None base-vocab id here "
                 "with a failing probe is the silent-corruption case: the config declares "
                 "a prefix the tokenizer never promoted into added_tokens.",
-                _query_prefix, _document_prefix, _TOKENIZER_PATH, q_id, d_id,
+                loaded_query_prefix, loaded_document_prefix, _TOKENIZER_PATH, q_id, d_id,
                 declared.get("query"), declared.get("document"),
             )
 
@@ -482,23 +526,26 @@ def ensure_loaded() -> bool:
             "ColBERT encoder loaded: %s (%.0fms), prefixes %r=%r %r=%r",
             _MODEL_PATH.name,
             elapsed_ms,
-            _query_prefix, q_id, _document_prefix, d_id,
+            loaded_query_prefix, q_id, loaded_document_prefix, d_id,
         )
+        _session, _tokenizer = loaded_session, loaded_tokenizer
+        _tokenizer_sha256 = loaded_tokenizer_sha256
+        _input_names = loaded_input_names
+        _query_prefix, _document_prefix = loaded_query_prefix, loaded_document_prefix
+        _do_lower_case, _prefix_tokens_ok = loaded_do_lower_case, loaded_prefix_tokens_ok
+        _generation += 1
         return True
     except ImportError as e:
-        _session = None
-        _tokenizer = None
-        _tokenizer_sha256 = None
+        _clear_loaded_state()
         logger.warning("ColBERT encoder dependencies missing: %s", e)
         return False
     except Exception as e:  # noqa: BLE001 — defensive; caller checks return.
-        _session = None
-        _tokenizer = None
-        _tokenizer_sha256 = None
+        _clear_loaded_state()
         logger.error("ColBERT encoder load failed: %s", e)
         return False
 
 
+@state_transaction
 def encode(text: str, max_tokens: int, *, role: str) -> np.ndarray | None:
     """Encode text into per-token L2-normalized ColBERT embeddings.
 
@@ -579,6 +626,7 @@ def encode(text: str, max_tokens: int, *, role: str) -> np.ndarray | None:
 _count_tokenizer = None
 
 
+@state_transaction
 def count_tokens(text: str, *, role: str) -> int | None:
     """UNTRUNCATED, unpadded token count of `text` as `encode()` would see it.
 

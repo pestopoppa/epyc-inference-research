@@ -107,19 +107,20 @@ def record_query_length(
             return None
         from src.retrieval import colbert_encoder
 
-        n = colbert_encoder.count_tokens(text, role=role)
-        if n is None:
-            return None  # no count is recorded rather than a fabricated one
-        record = build_record(
-            text,
-            query_tokens=n,
-            cap=cap,
-            role=role,
-            prefix_convention=prefix_convention,
-            encoder_model_dir=str(colbert_encoder._MODEL_DIR),  # noqa: SLF001
-            encoder_slot=str(colbert_encoder._MODEL_SLOT),  # noqa: SLF001
-            index_dir=str(index_dir),
-        )
+        with colbert_encoder.locked_state():
+            n = colbert_encoder.count_tokens(text, role=role)
+            if n is None:
+                return None  # no count is recorded rather than a fabricated one
+            record = build_record(
+                text,
+                query_tokens=n,
+                cap=cap,
+                role=role,
+                prefix_convention=prefix_convention,
+                encoder_model_dir=str(colbert_encoder._MODEL_DIR),  # noqa: SLF001
+                encoder_slot=str(colbert_encoder._MODEL_SLOT),  # noqa: SLF001
+                index_dir=str(index_dir),
+            )
         path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
         # One O_APPEND write per record, so concurrent writers never interleave a line.

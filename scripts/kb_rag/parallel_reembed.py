@@ -85,6 +85,7 @@ if str(_REPO) not in sys.path:
 
 import numpy as np  # noqa: E402
 
+from src.retrieval import colbert_encoder  # noqa: E402
 from src.retrieval.markdown_chunker import chunk_file  # noqa: E402
 
 DEFAULT_CONFIG = _REPO / "config" / "kb_rag_config.yaml"
@@ -161,6 +162,7 @@ def build_manifest(config_path: Path, jobs: int) -> list[dict]:
 _WORKER_STATE: dict = {}
 
 
+@colbert_encoder.state_transaction
 def _parallel_contract(index_dir: Path, *, load_encoder: bool = False) -> tuple[int, str]:
     """Resolve cap and role together without mutating catalog identity."""
     import sqlite3
@@ -193,6 +195,7 @@ def _parallel_contract(index_dir: Path, *, load_encoder: bool = False) -> tuple[
     return doc_cap, role
 
 
+@colbert_encoder.state_transaction
 def _prepare_encoding_contract(index_dir: Path) -> tuple[int, str]:
     """Stamp only a genuinely new output before any worker/manifest work."""
     from src.retrieval.kb_rag import (
@@ -224,11 +227,13 @@ def _encode_init(index_dir: str, onnx_threads: int, cpus: list[int]) -> None:
         except OSError:
             pass
     from src.retrieval import colbert_encoder
-    doc_cap, role = _parallel_contract(Path(index_dir), load_encoder=True)
-    _WORKER_STATE["enc"] = colbert_encoder
-    _WORKER_STATE["index_dir"] = Path(index_dir)
-    _WORKER_STATE["max_tokens"] = doc_cap
-    _WORKER_STATE["role"] = role
+    with colbert_encoder.locked_state():
+        doc_cap, role = _parallel_contract(Path(index_dir), load_encoder=True)
+        _WORKER_STATE["enc"] = colbert_encoder
+        _WORKER_STATE["index_dir"] = Path(index_dir)
+        _WORKER_STATE["max_tokens"] = doc_cap
+        _WORKER_STATE["role"] = role
+        _WORKER_STATE["generation"] = colbert_encoder.generation()
 
 
 def _encode_task(task: tuple[str, str, str]) -> tuple[str, int, str]:
@@ -237,14 +242,17 @@ def _encode_task(task: tuple[str, str, str]) -> tuple[str, int, str]:
     if role != _WORKER_STATE["role"]:
         raise RuntimeError("encode task role differs from stored index convention")
     enc = _WORKER_STATE["enc"]
-    out = _WORKER_STATE["index_dir"] / emb_rel
-    if out.exists():
-        try:
-            with np.load(out) as z:
-                return emb_rel, int(z["emb"].shape[0]), "skipped"
-        except Exception:  # noqa: BLE001 — truncated by a crash; re-encode
-            pass
-    emb = enc.encode(text, _WORKER_STATE["max_tokens"], role=role)
+    with enc.locked_state():
+        if _WORKER_STATE["generation"] != enc.generation():
+            raise RuntimeError("worker encoder generation changed; reinitialize worker")
+        out = _WORKER_STATE["index_dir"] / emb_rel
+        if out.exists():
+            try:
+                with np.load(out) as z:
+                    return emb_rel, int(z["emb"].shape[0]), "skipped"
+            except Exception:  # noqa: BLE001 — truncated by a crash; re-encode
+                pass
+        emb = enc.encode(text, _WORKER_STATE["max_tokens"], role=role)
     if emb is None:
         return emb_rel, 0, "failed"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -338,6 +346,7 @@ def _pid_alive(pid: int) -> bool:
 # ── phase 3: single-writer catalog rebuild ───────────────────────────────────
 
 
+@colbert_encoder.state_transaction
 def rebuild_catalog(manifest: list[dict], index_dir: Path) -> dict:
     import sqlite3
 
