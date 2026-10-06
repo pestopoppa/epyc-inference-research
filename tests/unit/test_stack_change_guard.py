@@ -3223,6 +3223,169 @@ def test_explicit_launch_numa_mode_bypasses_realized_fleet_probe(
     assert set(full["frontdoor"]["ports"]) < set(both["frontdoor"]["ports"])
 
 
+def test_standalone_guard_uses_declared_mode_despite_ambient_and_fleet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    topology = tmp_path / "orchestration" / "stack_topology.yaml"
+    _write_yaml(topology, {"numa_mode": "both"})
+    scanner_root = tmp_path / "scanner-root"
+    _write_yaml(
+        scanner_root / "orchestration" / "stack_topology.yaml", {"numa_mode": "quarter"}
+    )
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("ORCHESTRATOR_STACK_NUMA_MODE", "full")
+    def fail_if_fleet_probed() -> str:
+        raise AssertionError("standalone guard must not probe fleet")
+
+    monkeypatch.setattr(
+        stack_change_guard, "_realized_launch_numa_mode", fail_if_fleet_probed
+    )
+    calls: dict[str, object] = {}
+
+    def fake_validate(_priors, **kwargs):
+        calls.update(kwargs)
+        return GuardResult(errors=[], warnings=[])
+
+    monkeypatch.setattr(stack_change_guard, "validate_stack_priors", fake_validate)
+
+    result = stack_change_guard_main(
+        ["--skip-hardcoded-surface-scan", "--repo-root", str(scanner_root)]
+    )
+
+    assert result == 0
+    assert calls["launch_numa_mode"] == "both"
+
+
+def test_standalone_guard_explicit_mode_overrides_declared_topology(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    topology = tmp_path / "orchestration" / "stack_topology.yaml"
+    topology.parent.mkdir(parents=True)
+    topology.write_text("numa_mode: halves\n", encoding="utf-8")
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("ORCHESTRATOR_STACK_NUMA_MODE", "full")
+    calls: dict[str, object] = {}
+
+    def fake_validate(_priors, **kwargs):
+        calls.update(kwargs)
+        return GuardResult(errors=[], warnings=[])
+
+    monkeypatch.setattr(stack_change_guard, "validate_stack_priors", fake_validate)
+
+    result = stack_change_guard_main(
+        ["--skip-hardcoded-surface-scan", "--numa-mode", "quarter"]
+    )
+
+    assert result == 0
+    assert calls["launch_numa_mode"] == "quarter"
+
+
+@pytest.mark.parametrize(
+    "topology_state",
+    [
+        "missing_file",
+        "malformed_yaml",
+        "not_mapping",
+        "missing_mode",
+        "invalid_mode",
+        "unreadable",
+    ],
+)
+def test_standalone_guard_fails_closed_on_unresolvable_declared_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    topology_state: str,
+) -> None:
+    topology = tmp_path / "orchestration" / "stack_topology.yaml"
+    topology.parent.mkdir(parents=True)
+    contents = {
+        "malformed_yaml": "numa_mode: [\n",
+        "not_mapping": "- full\n",
+        "missing_mode": "{}\n",
+        "invalid_mode": "numa_mode: halves\n",
+        "unreadable": "numa_mode: both\n",
+    }
+    if topology_state != "missing_file":
+        topology.write_text(contents[topology_state], encoding="utf-8")
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    validated = False
+
+    def fake_validate(_priors, **_kwargs):
+        nonlocal validated
+        validated = True
+        return GuardResult(errors=[], warnings=[])
+
+    monkeypatch.setattr(stack_change_guard, "validate_stack_priors", fake_validate)
+    if topology_state == "unreadable":
+        real_read_text = Path.read_text
+
+        def unreadable_read_text(path, *args, **kwargs):
+            if path == topology:
+                raise PermissionError("fixture denied read")
+            return real_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", unreadable_read_text)
+
+    result = stack_change_guard_main(["--skip-hardcoded-surface-scan"])
+
+    output = capsys.readouterr().out
+    assert result == 1
+    assert output.startswith(f"{stack_change_guard.COULD_NOT_CHECK}:")
+    assert not validated
+
+
+def test_standalone_guard_rejects_invalid_explicit_mode_before_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    validated = False
+
+    def fake_validate(_priors, **_kwargs):
+        nonlocal validated
+        validated = True
+        return GuardResult(errors=[], warnings=[])
+
+    monkeypatch.setattr(stack_change_guard, "validate_stack_priors", fake_validate)
+
+    result = stack_change_guard_main(
+        ["--skip-hardcoded-surface-scan", "--numa-mode", "halves"]
+    )
+
+    assert result == 1
+    assert capsys.readouterr().out.startswith(f"{stack_change_guard.COULD_NOT_CHECK}:")
+    assert not validated
+
+
+@pytest.mark.parametrize("special_args", ["list", "staleness"])
+def test_special_cli_commands_bypass_standalone_numa_admission(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    special_args: str,
+) -> None:
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    if special_args == "list":
+        monkeypatch.setattr(
+            stack_change_guard, "load_surface_manifest", lambda _path: ({}, [])
+        )
+        monkeypatch.setattr(stack_change_guard, "validate_surface_manifest", lambda _path: [])
+        monkeypatch.setattr(
+            stack_change_guard,
+            "hardcoded_surface_rule_inventory",
+            lambda **_kwargs: {},
+        )
+        args = ["--list-hardcoded-surface-rules", "--numa-mode", "invalid"]
+    else:
+        monkeypatch.setattr(
+            stack_change_guard,
+            "check_source_artifact_staleness",
+            lambda *_args, **_kwargs: GuardResult(errors=[], warnings=[]),
+        )
+        args = ["--check-source-artifact-staleness", "--numa-mode", "invalid"]
+
+    assert stack_change_guard_main(args) == 0
+
+
 # ── Portable source pins (2026-09-24) ────────────────────────────────────────
 # The compiled artifacts used to record the ABSOLUTE path of whichever checkout
 # compiled them. Every worktree shares the committed artifacts, so a gate run in
