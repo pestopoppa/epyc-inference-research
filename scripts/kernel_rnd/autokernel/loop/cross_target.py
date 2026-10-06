@@ -343,7 +343,9 @@ def record_keep(bound, *, repo: Path, keep_commit: str, decision: Mapping[str, A
                    if row.get("decision") == PENDING_GATE
                    and any(p.startswith(g) for g in declared))
     final = dict(decision)
-    if gates:
+    # A keep already refused (e.g. a ppl_contract keep, run.py) stays refused: declaring
+    # GATES-KEEP must never turn it into a foldable GATE_COMMIT.
+    if gates and decision.get("decision") != GATE_REFUSED:
         ok, why = gate_mechanism(_out(repo, "show", "--format=", "--no-color", keep_commit))
         final = ({"decision": GATE_COMMIT, "reason": "gates held keep(s) "
                   + ", ".join(g[:12] for g in gates) + "; folds with them as one series "

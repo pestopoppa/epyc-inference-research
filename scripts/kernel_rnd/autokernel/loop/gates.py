@@ -610,6 +610,11 @@ CPU_SOURCE_ROUTES = (
         required_added=(r"static_assert\(",
                         "a whitelist change must carry a matching static_assert (positive or "
                         "negative) proving the new admission/refusal, as every existing case does"),
+        # Re-review 2026-10-06: the served-shape oracle covers exactly
+        # served_shape_cases.WITNESS_TYPES; a whitelist edit naming any OTHER type could
+        # route it into iqk with no served-shape evidence, so it is refused outright.
+        forbidden_added=(r"GGML_TYPE_(?!(?:Q4_0|Q4_1|Q5_0|Q5_1|Q8_0|IQ4_NL|Q2_K|Q3_K|Q4_K|"
+                         r"Q5_K|Q6_K|IQ4_XS|IQ2_XXS|IQ2_XS|IQ2_S|IQ3_XXS|IQ3_S)\b)\w+"),
         numerics="ppl_contract",
         admitted_text=("case additions/removals inside the three constexpr whitelists, each with a "
                        "matching static_assert; the dispatch bodies, kernels and the disabled-build "
@@ -2544,6 +2549,44 @@ def production_cpu_reference_build() -> Path:
     return Path(os.path.realpath(PRODUCTION_CPU_KERNEL)).parent
 
 
+#: Store-relative pin of the fixed reference (re-review 2026-10-06): the production
+#: symlink is movable, so the first ppl_contract use records the RESOLVED build path
+#: and its content identity; every later gate/fold refuses on any change. Resetting the
+#: contract is an explicit act: delete this file (an operator decision, visible).
+PPL_CONTRACT_REFERENCE_PIN = Path("ppl_contract") / "reference_pin.json"
+
+
+def _reference_identity(build: Path) -> str:
+    return hashlib.sha256("\n".join(
+        _build_identity(build, tool) for tool in PPL_CONTRACT_TOOL_TARGETS).encode()).hexdigest()
+
+
+def pinned_production_reference(store: Path) -> Path:
+    """The campaign's FIXED reference build: pinned on first use (resolved path +
+    content identity of both tools and every DSO), verified on every later use.
+    Raises ValueError on a moved symlink, a changed build, or an unreadable pin."""
+    pin = Path(store) / PPL_CONTRACT_REFERENCE_PIN
+    current = production_cpu_reference_build()
+    if pin.exists():
+        try:
+            body = json.loads(pin.read_text(encoding="utf-8"))
+            pinned, digest = Path(body["path"]), body["identity"]
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ValueError(f"{pin} is unreadable ({exc}); refusing to re-pin silently")
+        if pinned != current:
+            raise ValueError(f"production reference moved: pinned {pinned}, symlink now "
+                             f"resolves to {current}; delete {pin} to re-baseline explicitly")
+        if _reference_identity(pinned) != digest:
+            raise ValueError(f"pinned production reference {pinned} changed content")
+        return pinned
+    identity = _reference_identity(current)
+    pin.parent.mkdir(parents=True, exist_ok=True)
+    tmp = pin.with_name(f".{pin.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps({"path": str(current), "identity": identity}), encoding="utf-8")
+    os.replace(tmp, pin)
+    return current
+
+
 def check_production_reference_loads(reference_build: Path, *, model: Path, cpu_list: str,
                                      env: dict, log_dir: Path, threads: int = 1) -> Verdict:
     """Fail closed when the frozen production CPU kernel reference cannot load THIS
@@ -2656,13 +2699,32 @@ def ppl_contract_anchor_obligated(store: Path) -> bool:
     return ledger is None or bool(ledger)
 
 
-def ppl_contract_fold_required(keeps, changed_paths, ledger: "set[str] | None") -> bool:
+#: Git trailer the keep commit carries when its patch was admitted under a ppl_contract
+#: route (re-review 2026-10-06): git history is the durable record, so a lost or reset
+#: ledger can no longer let a shared-path ppl_contract keep fold unexamined.
+PPL_CONTRACT_TRAILER = "AK-Numerics: ppl_contract"
+
+
+def ppl_contract_commits_in_range(worktree: Path, base: str, tip: str) -> "bool | None":
+    """True when any commit in base..tip carries PPL_CONTRACT_TRAILER; None when git
+    cannot answer (callers treat None as True)."""
+    done = subprocess.run(["git", "-C", str(worktree), "log", "--format=%B", f"{base}..{tip}"],
+                          capture_output=True, text=True)
+    if done.returncode != 0:
+        return None
+    return any(line.strip() == PPL_CONTRACT_TRAILER for line in done.stdout.splitlines())
+
+
+def ppl_contract_fold_required(keeps, changed_paths, ledger: "set[str] | None",
+                               trailer: "bool | None" = False) -> bool:
     """Does a champion-of-record fold of this bundle need `ppl_contract_bundle_gate`?
 
     Yes when a bundled keep was admitted under a ppl_contract route, when the bundle
     touches a path only ppl_contract routes can edit, or -- fail closed -- when the
     ledger is unreadable and the bundle touches ANY ppl_contract path."""
     changed = set(changed_paths)
+    if trailer is None or trailer:
+        return True
     if ledger is None:
         return bool(changed & ppl_contract_paths())
     return bool(set(keeps) & ledger) or bool(changed & ppl_contract_only_paths())
@@ -2724,9 +2786,15 @@ def _model_identity(model: Path) -> str:
 
 
 def _env_identity(env: dict) -> str:
-    """Every launch variable except the loader path (which is set per build)."""
+    """Every launch variable except the loader path (which is set per build), plus the
+    CONTENT of every file `LD_PRELOAD` names (re-review 2026-10-06: an unchanged
+    preload path over a replaced library changed execution without changing the key).
+    A preload entry that cannot be hashed raises: never a key for an unknown binary."""
     items = sorted((k, v) for k, v in (env or {}).items() if k != "LD_LIBRARY_PATH")
-    return hashlib.sha256(json.dumps(items).encode()).hexdigest()
+    preload = [entry for entry in re.split(r"[:\s]+", (env or {}).get("LD_PRELOAD", ""))
+               if entry]
+    contents = [(entry, _file_sha256(Path(entry))) for entry in preload]
+    return hashlib.sha256(json.dumps([items, contents]).encode()).hexdigest()
 
 
 def _cache_get(cache_dir: "Path | None", key: str):
@@ -2899,10 +2967,13 @@ def prefix_token_agreement(candidate_text: str, anchor_text: str, *,
 
     Agreement = matching prefix length / the LONGER output, so a candidate that stops
     early (or produces nothing) is a divergence, never a pass. Two empty outputs are 0.0:
-    nothing generated is not agreement. `tokenize` defaults to a whitespace split (a
-    conservative floor: it can only understate agreement). Returns (ratio, first
-    divergence index or None when the outputs are identical)."""
-    tok = tokenize or (lambda text: text.split())
+    nothing generated is not agreement. `tokenize` defaults to CHARACTERS (re-review
+    2026-10-06: a whitespace split equated texts differing only in whitespace, so it
+    could OVERSTATE agreement; a character prefix is strictly conservative -- any byte
+    difference is a divergence at that point -- and over a 512-token generation the
+    0.98 floor still admits a difference only in roughly the last ten tokens).
+    Returns (ratio, first divergence index or None when the outputs are identical)."""
+    tok = tokenize or list
     candidate_tokens, anchor_tokens = tok(candidate_text), tok(anchor_text)
     denom = max(len(candidate_tokens), len(anchor_tokens))
     if denom == 0:
@@ -2923,9 +2994,12 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
 
     `llama-completion -no-cnv` (raw text, no chat template, no REPL), stdin closed, the
     prompt from a file and NOT echoed, EOS ignored so every build generates exactly
-    `n_predict` tokens; the prompt token count is the tool's own (--verbose-prompt)."""
+    `n_predict` tokens; the prompt token count is the tool's own (--verbose-prompt) and
+    the GENERATED count is the context's own decode count (--perf): a run that
+    generated fewer than `n_predict - 1` decodes (the last sampled token is never
+    decoded) is refused, so a short or aborted generation can never be compared."""
     prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
-    key = _key(kind="completion", build=_build_identity(build, "llama-completion"),
+    key = _key(kind="completion-v2", build=_build_identity(build, "llama-completion"),
                model=_model_identity(model), prompt=prompt_sha, n_predict=n_predict,
                ctx=ctx, threads=threads, cpu_list=cpu_list, env=_env_identity(env))
     cached = _cache_get(cache_dir, key)
@@ -2939,11 +3013,14 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
             "-f", str(prompt_file), "-n", str(n_predict), "-c", str(ctx),
             "-t", str(threads), "--temp", "0", "--top-k", "1", "--seed", "0",
             "-no-cnv", "--no-display-prompt", "--ignore-eos", "--verbose-prompt",
-            "--no-mmap"]
+            "--perf", "--no-mmap"]
     rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": str(Path(build) / "bin")},
                              log_dir=log_dir, label=f"{label}_{Path(build).name}")
     found = re.search(r"number of tokens in prompt = (\d+)", err + out)
-    if rc != 0 or found is None or not out.strip():
+    decoded = re.search(r"(?<!prompt )eval time =\s*[0-9.]+ ms /\s*(\d+) runs", err + out)
+    if rc != 0 or found is None or decoded is None or not out.strip():
+        return None
+    if int(decoded.group(1)) < max(1, n_predict - 1):
         return None
     result = (out, int(found.group(1)))
     _cache_put(cache_dir, key, list(result), {"build": str(build), "label": label})
@@ -3062,6 +3139,19 @@ def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
         tokens = text.split()
         return len(tokens), _distinct_ngram_ratio(tokens), _longest_exact_repeat_run(tokens)
 
+    def tail_distinct(text: str) -> float:
+        """Distinct-4 over the LAST quarter: drift into a loop late in the generation
+        is diluted in a whole-text ratio (re-review 2026-10-06)."""
+        tokens = text.split()
+        return _distinct_ngram_ratio(tokens[-max(16, len(tokens) // 4):])
+
+    def garbage_share(text: str) -> float:
+        """Share of replacement/control characters (bytes that do not decode to text)."""
+        if not text:
+            return 1.0
+        bad = sum(1 for ch in text if ch == "\ufffd" or (ord(ch) < 32 and ch not in "\n\t\r"))
+        return bad / len(text)
+
     text = generate(candidate_build)
     if not isinstance(text, str) or not text.strip():
         return Verdict("ppl_contract_long_canary", False,
@@ -3082,11 +3172,20 @@ def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
         if not isinstance(base_text, str) or not base_text.strip():
             return Verdict("ppl_contract_long_canary", False,
                            f"{name} build did not complete the canary generation")
-        _, base_distinct, base_run = stats(base_text)
+        base_count, base_distinct, base_run = stats(base_text)
+        if base_count < n_predict // 4:
+            return Verdict("ppl_contract_long_canary", False,
+                           f"{name} build produced only {base_count} words for {n_predict} "
+                           "tokens (truncated baseline: not a comparison)")
         run_ok = run <= max(PPL_CONTRACT_CANARY_MAX_REPEAT_RUN, base_run)
         distinct_ok = distinct >= base_distinct - PPL_CONTRACT_CANARY_DISTINCT4_DROP
-        passed = passed and run_ok and distinct_ok   # EVERY baseline must clear
-        reason += f"; {name} distinct-4 {base_distinct:.3f}, longest run {base_run}"
+        tail_ok = (tail_distinct(text)
+                   >= tail_distinct(base_text) - PPL_CONTRACT_CANARY_DISTINCT4_DROP)
+        garbage_ok = garbage_share(text) <= garbage_share(base_text) + 0.01
+        passed = passed and run_ok and distinct_ok and tail_ok and garbage_ok
+        reason += (f"; {name} distinct-4 {base_distinct:.3f} (tail {tail_distinct(base_text):.3f} "
+                   f"vs candidate {tail_distinct(text):.3f}), longest run {base_run}, "
+                   f"garbage {garbage_share(base_text):.4f} vs {garbage_share(text):.4f}")
     if baselines == 0:
         passed = run <= PPL_CONTRACT_CANARY_MAX_REPEAT_RUN
     return Verdict("ppl_contract_long_canary", passed,
@@ -3112,6 +3211,9 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
             return Verdict(f"ppl_contract_{name}", False, f"layer {name!r} produced no verdict")
         return verdict
 
+    if served_shape_manifest is None and "nmse" not in overrides:
+        return Verdict(gate_name, False, "no served-shape manifest: layer (a) would run "
+                       "without served-shape evidence, refusing (re-review 2026-10-06)")
     if reference_build is None and not {"ppl", "coherence", "long_canary"} <= set(overrides):
         return Verdict(gate_name, False, "no fixed reference build: cumulative drift across "
                        "advancing anchors cannot be bounded, refusing")
@@ -3233,7 +3335,9 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "ppl_contract_prod_prompts", "ppl_contract_canary_prompt",
            "ppl_contract_bundle_gate", "PPL_CONTRACT_LEDGER", "ppl_contract_only_paths",
            "ppl_contract_ledger_read", "ppl_contract_ledger_add", "ppl_contract_fold_required",
-           "ppl_contract_anchor_obligated",
+           "ppl_contract_anchor_obligated", "PPL_CONTRACT_TRAILER",
+           "ppl_contract_commits_in_range", "PPL_CONTRACT_REFERENCE_PIN",
+           "pinned_production_reference",
            "PPL_CONTRACT_SERVED_WIDTHS", "PPL_CONTRACT_AGREEMENT_FLOOR",
            "PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN", "PPL_CONTRACT_CANARY_TOKENS",
            "PPL_CONTRACT_CANARY_MAX_REPEAT_RUN",

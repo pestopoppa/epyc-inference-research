@@ -76,12 +76,23 @@ SERVED_WIDTHS: tuple[int, ...] = (1, 2, 3, 4, 5)
 #: The witness quants the admitted 2026-10-06 low-bit CPU routes edit
 #: (`gates.CPU_SOURCE_ROUTES`: `iqk_iquants_dequant`, `iqk_legacy_iq4nl`, the ad-hoc
 #: dense Q4_K/Q5_K admission, `iqk_kquants_q6_iq4xs_dequant`).
-WITNESS_TYPES: tuple[str, ...] = ("IQ3_S", "IQ4_NL", "Q4_K", "Q5_K", "Q6_K", "IQ4_XS")
+#:
+#: Re-review 2026-10-06: the whitelist (`iqk_type_whitelist`) and kernel-selection
+#: (`iqk_set_kernels_*`) routes can reroute ANY type their switches name, so the
+#: served-shape oracle covers every type an iqk selection switch can dispatch (the
+#: legacy, K-quant and i-quant families); `gates`' whitelist route refuses an edit
+#: naming any type outside this set.
+WITNESS_TYPES: tuple[str, ...] = (
+    "Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0", "IQ4_NL",
+    "Q2_K", "Q3_K", "Q4_K", "Q5_K", "Q6_K", "IQ4_XS",
+    "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ3_XXS", "IQ3_S")
 
 #: `ggml_type_name()` spellings, which test-backend-ops prints in `vars()`.
 GGML_TYPE_NAMES: dict[str, str] = {
-    "IQ3_S": "iq3_s", "IQ4_NL": "iq4_nl", "Q4_K": "q4_K", "Q5_K": "q5_K",
-    "Q6_K": "q6_K", "IQ4_XS": "iq4_xs"}
+    "Q4_0": "q4_0", "Q4_1": "q4_1", "Q5_0": "q5_0", "Q5_1": "q5_1", "Q8_0": "q8_0",
+    "IQ4_NL": "iq4_nl", "Q2_K": "q2_K", "Q3_K": "q3_K", "Q4_K": "q4_K", "Q5_K": "q5_K",
+    "Q6_K": "q6_K", "IQ4_XS": "iq4_xs", "IQ2_XXS": "iq2_xxs", "IQ2_XS": "iq2_xs",
+    "IQ2_S": "iq2_s", "IQ3_XXS": "iq3_xxs", "IQ3_S": "iq3_s"}
 
 CASE_SET_ID = "served_shape_lowbit_v1"
 CASE_SET_ENV = "AUTOKERNEL_CORRECTNESS_CASE_SET"
@@ -140,6 +151,13 @@ def tightened_nmse_bound(anchor_nmse: float, *, factor: float = 3.0) -> float:
             or anchor_nmse != anchor_nmse or anchor_nmse in (float("inf"), float("-inf")) \
             or anchor_nmse < 0:
         raise ValueError(f"anchor_nmse must be a finite non-negative number, got {anchor_nmse!r}")
+    if anchor_nmse >= SERVED_SHAPE_NMSE_CAP:
+        # Re-review 2026-10-06: clipping would yield a bound BELOW the anchor's own
+        # error, refusing an unchanged correct kernel. Incompatible calibration is
+        # refused explicitly instead.
+        raise ValueError(f"anchor_nmse {anchor_nmse!r} is at or above the cap "
+                         f"{SERVED_SHAPE_NMSE_CAP}; this shape/type cannot be bound "
+                         "tighter than the generic sweep -- investigate, do not clip")
     if not isinstance(factor, (int, float)) or isinstance(factor, bool) or factor <= 0:
         raise ValueError(f"factor must be a positive number, got {factor!r}")
     return min(SERVED_SHAPE_NMSE_CAP, max(SERVED_SHAPE_NMSE_FLOOR, anchor_nmse * factor))
@@ -188,22 +206,23 @@ class ServedShapeCase:
                 f"{self.max_nmse:g}));")
 
 
-def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str], float], *,
+def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
             factor: float = 3.0) -> tuple[ServedShapeCase, ...]:
     """Every `(ServedShape, type, width)` case, bound from `anchor_nmse_by_shape`
-    (keyed `(shape.name, type_a)`, the independent reference run's measured NMSE on
-    the anchor build at that exact shape/type). Raises `KeyError` naming the missing
-    pair -- a served-shape case this caller cannot justify a bound for is never
-    silently dropped OR silently given a guessed one."""
+    keyed `(shape.name, type_a, n)` -- the independent reference run's measured NMSE on
+    the anchor build at that exact shape, type AND width (re-review 2026-10-06: one
+    calibration reused across widths 1-5 hid width-specific kernels). Raises
+    `KeyError` naming the missing triple -- a served-shape case this caller cannot
+    justify a bound for is never silently dropped OR silently given a guessed one."""
     cases = []
     for shape in SERVED_SHAPES:
         for type_a in WITNESS_TYPES:
-            key = (shape.name, type_a)
-            if key not in anchor_nmse_by_shape:
-                raise KeyError(f"no anchor NMSE measurement for {key}; refusing to bake "
-                               "a served-shape case with a guessed bound")
-            bound = tightened_nmse_bound(anchor_nmse_by_shape[key], factor=factor)
             for width in SERVED_WIDTHS:
+                key = (shape.name, type_a, width)
+                if key not in anchor_nmse_by_shape:
+                    raise KeyError(f"no anchor NMSE measurement for {key}; refusing to "
+                                   "bake a served-shape case with a guessed bound")
+                bound = tightened_nmse_bound(anchor_nmse_by_shape[key], factor=factor)
                 cases.append(ServedShapeCase(shape, type_a, width, bound))
     return tuple(cases)
 
@@ -336,10 +355,17 @@ def load_manifest(path: Path) -> tuple[ServedShapeCase, ...]:
             raise ManifestRefused(f"{path}: max_nmse={max_nmse!r} is out of bounds "
                                   f"(0, {SERVED_SHAPE_NMSE_CAP}]")
         cases.append(ServedShapeCase(shape, row["type_a"], row["n"], float(max_nmse)))
-    expected = len(SERVED_SHAPES) * len(WITNESS_TYPES) * len(SERVED_WIDTHS)
-    if len(cases) != expected:
-        raise ManifestRefused(f"{path}: manifest carries {len(cases)} case(s), "
-                              f"not the full {expected}-case served-shape corpus")
+    # Re-review 2026-10-06: exact canonical SET equality, duplicates refused -- a row
+    # count alone accepted 180 copies of one case.
+    keys = [(c.shape.name, c.type_a, c.n) for c in cases]
+    canonical = {(shape.name, type_a, width) for shape in SERVED_SHAPES
+                 for type_a in WITNESS_TYPES for width in SERVED_WIDTHS}
+    if len(keys) != len(set(keys)):
+        raise ManifestRefused(f"{path}: manifest repeats a (shape, type, width) case")
+    if set(keys) != canonical:
+        missing = sorted(canonical - set(keys))[:5]
+        raise ManifestRefused(f"{path}: manifest is not the full served-shape corpus "
+                              f"({len(set(keys))}/{len(canonical)}; missing e.g. {missing})")
     return tuple(cases)
 
 

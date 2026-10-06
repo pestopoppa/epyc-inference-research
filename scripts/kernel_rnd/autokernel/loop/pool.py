@@ -181,16 +181,19 @@ def reset_to_champion(worker: pipeline.Worker, *,
     return head
 
 
-def commit_message(hypothesis, comparison) -> str:
-    """One spelling of the champion commit subject, shared by both run paths."""
-    return (f"{hypothesis.mechanism_id}: {comparison.effect * 100:+.3f}% "
-            f"on {comparison.surface} over {comparison.pairs} pairs")
+def commit_message(hypothesis, comparison, *, ppl_contract: bool = False) -> str:
+    """One spelling of the champion commit subject, shared by both run paths. A
+    ppl_contract admission carries `gates.PPL_CONTRACT_TRAILER` (re-review 2026-10-06):
+    git history is the durable record the fold-time quality gate reads."""
+    subject = (f"{hypothesis.mechanism_id}: {comparison.effect * 100:+.3f}% "
+               f"on {comparison.surface} over {comparison.pairs} pairs")
+    return f"{subject}\n\n{gates.PPL_CONTRACT_TRAILER}" if ppl_contract else subject
 
 
 def advance_champion(worker: pipeline.Worker, hypothesis, paths, comparison, *,
                      champion_tree: Path = CHAMPION_TREE,
                      branch: str = CHAMPION_BRANCH,
-                     expected_tree: str | None = None) -> str:
+                     expected_tree: str | None = None, ppl_contract: bool = False) -> str:
     """Commit the lane's patch and move the champion BRANCH onto it.
 
     The sequential path commits with `branch="HEAD"`, which works because its worktree
@@ -211,7 +214,8 @@ def advance_champion(worker: pipeline.Worker, hypothesis, paths, comparison, *,
     """
     base = _git(worker.worktree, "rev-parse", "HEAD")
     new_head = archive.keep(worker.worktree, branch="HEAD",
-                            message=commit_message(hypothesis, comparison),
+                            message=commit_message(hypothesis, comparison,
+                                                   ppl_contract=ppl_contract),
                             paths=tuple(paths))
     if expected_tree is not None:
         committed_tree = _git(worker.worktree, "rev-parse", f"{new_head}^{{tree}}")

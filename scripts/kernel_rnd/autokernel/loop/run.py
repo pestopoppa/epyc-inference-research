@@ -3546,21 +3546,30 @@ def main(argv: list[str] | None = None) -> int:
                         return False, [gates.Verdict(
                             "ppl_contract", False,
                             f"ppl_contract admission could not be recorded: {exc}")]
-                    route_references.append(lambda arm: gates.ppl_contract_gate(
-                        anchor_build[0], worker.build_dir, route=admitted_route,
-                        resolved_recipe=arm, model=args.model,
-                        threads=len(_parse_cpu_list(build_cpu_list)), cpu_list=build_cpu_list,
-                        env=dict(arm.launch_env),
-                        reference_build=gates.production_cpu_reference_build(),
-                        cache_dir=Path(args.store) / "ppl_contract" / "cache",
-                        log_dir=Path(args.store) / "ppl_contract" / admitted_route.route,
-                        # 2026-10-06 served-shape review: layer (a) also requires the
-                        # model's own served-shape case set (served_shape_cases.py).
-                        # The manifest is baked (operator action, `write_manifest`)
-                        # once real anchor NMSE measurements exist for every shape/
-                        # type pair; until then this FAILS CLOSED, never skips.
-                        served_shape_manifest=Path(args.store) / "served_shape"
-                                              / "manifest.json"))
+                    def _ppl_gate(arm, route=admitted_route):
+                        # Re-review 2026-10-06: the anchor the layers compare against must
+                        # carry the tools (a tools build of the SAME commit, object-
+                        # identical, when the slot predates the obligation), and the
+                        # fixed reference is PINNED in the store. Any failure to provide
+                        # either is a refusal, never an exception out of the gate.
+                        try:
+                            anchor_for_gate = ppl_contract_anchor_for_gate()
+                            reference = gates.pinned_production_reference(args.store)
+                        except Exception as exc:  # noqa: BLE001 -- fail CLOSED
+                            return gates.Verdict("ppl_contract", False,
+                                                 f"ppl_contract preconditions unmet: "
+                                                 f"{type(exc).__name__}: {exc}")
+                        return gates.ppl_contract_gate(
+                            anchor_for_gate, worker.build_dir, route=route,
+                            resolved_recipe=arm, model=args.model,
+                            threads=len(_parse_cpu_list(build_cpu_list)),
+                            cpu_list=build_cpu_list, env=dict(arm.launch_env),
+                            reference_build=reference,
+                            cache_dir=Path(args.store) / "ppl_contract" / "cache",
+                            log_dir=Path(args.store) / "ppl_contract" / route.route,
+                            served_shape_manifest=Path(args.store) / "served_shape"
+                                                  / "manifest.json")
+                    route_references.append(_ppl_gate)
                 if witness is not None and witness.reference == "fa_anchor_bits":
                     # cpu_fa_schedule (audit 2026-10-04 C2/C3): the case-set corpus, bit
                     # identity with the ANCHOR build, then the paired FA perf screen
@@ -4884,6 +4893,51 @@ def main(argv: list[str] | None = None) -> int:
             bundle[0].mark_serving_gate_fired()
             bundle[0].save(args.store)
 
+    def ppl_contract_tools_build(slot: Path, commit: str) -> Path:
+        """`slot` when it carries PPL_CONTRACT_TOOL_TARGETS; otherwise a tools build of
+        the SAME commit and recipe (re-review 2026-10-06: an anchor promoted before the
+        ppl_contract obligation lacked the tools, so the first candidate could never
+        pass the gate that would widen the next anchor). Built from the champion tree
+        only when it is clean at `commit`, into the store (the slot is never touched),
+        and admitted only when its library OBJECT digest equals the slot's -- the
+        anchor guard's own identity rule, so its numerics are the slot's. Raises on
+        anything else; callers fail closed."""
+        slot = Path(slot)
+        if all((slot / "bin" / tool).is_file() for tool in gates.PPL_CONTRACT_TOOL_TARGETS):
+            return slot
+        slot_digest = anchor_integrity.object_digest(slot)
+        if slot_digest is None:
+            raise ValueError(f"{slot} has no library objects to prove a tools build against")
+        dest = Path(args.store) / "ppl_contract" / f"tools-{commit[:12]}"
+        marker = dest / "ak_ppl_tools_build.json"
+        if marker.is_file():
+            body = json.loads(marker.read_text(encoding="utf-8"))
+            if body.get("commit") != commit or body.get("object_digest") != slot_digest:
+                raise ValueError(f"{marker} does not match {slot} at {commit[:12]}")
+            return dest
+        head = _git(args.worktree, "rev-parse", "HEAD")
+        dirty = _git(args.worktree, "status", "--porcelain", "--untracked-files=no")
+        if head != commit or dirty:
+            raise ValueError(f"champion tree is not clean at {commit[:12]} (HEAD {head[:12]}"
+                             f"{', dirty' if dirty else ''}); cannot build its tools")
+        verdict = gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
+                                 jobs=anchor_build_jobs(recipe, build_jobs),
+                                 cpu_list=build_cpu_list,
+                                 targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
+        if not verdict.passed:
+            raise ValueError(f"tools build of {commit[:12]} failed: {verdict.reason}")
+        if _git(args.worktree, "rev-parse", "HEAD") != commit:
+            raise ValueError("champion tree moved during the tools build")
+        built_digest = anchor_integrity.object_digest(dest)
+        if built_digest != slot_digest:
+            raise ValueError(f"tools build of {commit[:12]} is not object-identical to {slot}")
+        marker.write_text(json.dumps({"commit": commit, "object_digest": slot_digest,
+                                      "slot": str(slot)}), encoding="utf-8")
+        return dest
+
+    def ppl_contract_anchor_for_gate() -> Path:
+        return ppl_contract_tools_build(anchor_build[0], current_anchor_commit[0])
+
     def ppl_contract_fold_check(tip_commit: str) -> "gates.Verdict | None":
         """None when the bundle carries no ppl_contract change; else the whole-bundle
         quality verdict (cor build vs tip build, fixed production reference). Any error
@@ -4892,18 +4946,30 @@ def main(argv: list[str] | None = None) -> int:
             changed = _git(args.worktree, "diff", "--name-only", cor_commit[0],
                            tip_commit).splitlines()
             ledger = gates.ppl_contract_ledger_read(args.store)
-            if not gates.ppl_contract_fold_required(bundle[0].keeps, changed, ledger):
+            trailer = gates.ppl_contract_commits_in_range(args.worktree, cor_commit[0],
+                                                          tip_commit)
+            if not gates.ppl_contract_fold_required(bundle[0].keeps, changed, ledger,
+                                                    trailer=trailer):
                 return None
             if cpu_launch is None:
                 return gates.Verdict("ppl_contract_bundle", False,
                                      "ppl_contract bundle on a non-CPU target")
             from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
             arm = _cpu_arm(direct_launch, anchor_build[0])
+            reference = gates.pinned_production_reference(args.store)
+            tip_tools = ppl_contract_anchor_for_gate()
+            # The champion of record's build predates the tools when it was promoted
+            # before the obligation; it cannot be rebuilt here (the champion tree is at
+            # the tip). Judge the bundle against the PINNED reference alone then -- the
+            # strict bar (allowed drift = the bar itself), never a skipped comparison.
+            cor_has_tools = all((Path(cor_build[0]) / "bin" / tool).is_file()
+                                for tool in gates.PPL_CONTRACT_TOOL_TARGETS)
             return gates.ppl_contract_bundle_gate(
-                cor_build[0], anchor_build[0], resolved_recipe=arm, model=args.model,
+                cor_build[0] if cor_has_tools else reference, tip_tools,
+                resolved_recipe=arm, model=args.model,
                 threads=len(_parse_cpu_list(build_cpu_list)), cpu_list=build_cpu_list,
                 env=dict(arm.launch_env),
-                reference_build=gates.production_cpu_reference_build(),
+                reference_build=reference,
                 cache_dir=Path(args.store) / "ppl_contract" / "cache",
                 log_dir=Path(args.store) / "ppl_contract" / "bundle",
                 # The fold judges the WHOLE bundle with the same layer (a) the keep did,
@@ -5622,6 +5688,19 @@ def main(argv: list[str] | None = None) -> int:
             cross_decision = (cross_target.decide(cross, preservation["peers"])
                               if cross is not None else None)
             if cross_decision is not None:
+                _ledger_x = gates.ppl_contract_ledger_read(args.store)
+                if _ledger_x is None or hypothesis.mechanism_id in _ledger_x:
+                    # Re-review 2026-10-06: a cross-target FOLD moves the keep into THE
+                    # global champion with peer A/B + kernel-coverage evidence only; a
+                    # ppl_contract numerics change can alter a peer model's output with
+                    # its executed-kernel manifest unchanged. No cross-lane quality gate
+                    # exists, so such a keep is refused for the global champion and its
+                    # series is held (cross_target.eligible skips refused series).
+                    cross_decision = {"decision": cross_target.GATE_REFUSED,
+                                      "reason": "ppl_contract keep: no cross-target quality "
+                                                "gate (layers a-d on every peer model); held "
+                                                "off the global champion"}
+            if cross_decision is not None:
                 evidence["cross_target"] = {**cross, **cross_decision}
             source_fold_candidate = experimental and cpu_launch \
                 and selected_identity is not None
@@ -5634,10 +5713,15 @@ def main(argv: list[str] | None = None) -> int:
             patch_path = keep_the_diff(worker, hypothesis) if source_fold_candidate else None
             parent = (_git(worker.worktree, "rev-parse", "HEAD")
                       if source_fold_candidate else None)
+            # Re-review 2026-10-06: a ppl_contract admission is recorded IN GIT (a commit
+            # trailer), not only in the store ledger; an unreadable ledger marks it.
+            _ledger = gates.ppl_contract_ledger_read(args.store)
+            ppl_keep = _ledger is None or hypothesis.mechanism_id in _ledger
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch,
-                                         expected_tree=checked.tree)
+                                         expected_tree=checked.tree,
+                                         ppl_contract=ppl_keep)
             if cross_decision is not None:
                 # ONE-champion lineage (cross_target.py): ledger the decision, fold a
                 # non-regressing keep into THE champion (G0 first), or hold it and

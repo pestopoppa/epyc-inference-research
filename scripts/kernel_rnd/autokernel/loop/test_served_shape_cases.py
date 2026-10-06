@@ -12,7 +12,8 @@ import pytest
 from . import gates
 from . import served_shape_cases as ssc
 
-ANCHOR_NMSE = {(shape.name, t): 1e-5 for shape in ssc.SERVED_SHAPES for t in ssc.WITNESS_TYPES}
+ANCHOR_NMSE = {(shape.name, t, n): 1e-5 for shape in ssc.SERVED_SHAPES
+               for t in ssc.WITNESS_TYPES for n in ssc.SERVED_WIDTHS}
 
 
 def _recipe():
@@ -57,8 +58,14 @@ def test_shape_constructor_refuses_malformed_moe_fields():
 
 def test_tightened_bound_scales_caps_and_floors():
     assert ssc.tightened_nmse_bound(1e-6, factor=3.0) == pytest.approx(3e-6)
-    # Capped well below the generic 5e-4 bound, never above it.
-    assert ssc.tightened_nmse_bound(1.0, factor=3.0) == ssc.SERVED_SHAPE_NMSE_CAP
+    # Capped well below the generic 5e-4 bound, never above it...
+    assert ssc.tightened_nmse_bound(5e-5, factor=3.0) == ssc.SERVED_SHAPE_NMSE_CAP
+    # ...but an anchor already at/above the cap is REFUSED, never clipped below its
+    # own error (re-review 2026-10-06).
+    with pytest.raises(ValueError, match="do not clip"):
+        ssc.tightened_nmse_bound(1.0, factor=3.0)
+    with pytest.raises(ValueError):
+        ssc.tightened_nmse_bound(ssc.SERVED_SHAPE_NMSE_CAP)
     assert ssc.SERVED_SHAPE_NMSE_CAP < 5e-4
     # A measured-zero anchor NMSE must not produce a zero bound.
     assert ssc.tightened_nmse_bound(0.0) == ssc.SERVED_SHAPE_NMSE_FLOOR
@@ -85,7 +92,7 @@ def test_case_set_is_the_full_cross_product():
 
 def test_case_set_refuses_a_missing_anchor_measurement():
     partial = dict(ANCHOR_NMSE)
-    del partial[("ds41_expert_gate_up", "IQ3_S")]
+    del partial[("ds41_expert_gate_up", "IQ3_S", 3)]   # one WIDTH missing refuses
     with pytest.raises(KeyError, match="ds41_expert_gate_up"):
         ssc.case_set(partial)
 
@@ -319,3 +326,29 @@ def test_direct_launch_anchor_build_keeps_widened_targets():
     fold = source[source.index("    def ppl_contract_fold_check("):]
     fold = fold[:fold.index("    def gpu_reading(")]
     assert "served_shape_manifest=" in fold
+
+
+def test_manifest_refuses_duplicates_and_partial_corpora(tmp_path):
+    """Re-review 2026-10-06: a row count accepted N copies of one case."""
+    cases = ssc.case_set(ANCHOR_NMSE)
+    path = tmp_path / "m.json"
+    ssc.write_manifest(path, cases)
+    assert len(ssc.load_manifest(path)) == len(cases)
+    ssc.write_manifest(path, (cases[0],) * len(cases))
+    with pytest.raises(ssc.ManifestRefused):
+        ssc.load_manifest(path)
+    ssc.write_manifest(path, cases[:-1] + (cases[0],))
+    with pytest.raises(ssc.ManifestRefused, match="repeats"):
+        ssc.load_manifest(path)
+
+
+def test_witness_types_cover_every_type_the_iqk_whitelist_admits():
+    tree = Path("/mnt/raid0/llm/llama.cpp-experimental-cor-b0ba1d427-20261005")
+    src = tree / "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp"
+    if not src.is_file():
+        pytest.skip("champion tree not present")
+    text = src.read_text(encoding="utf-8")
+    body = text[text.index("constexpr bool iqk_typeA_supported(int t) {"):]
+    body = body[:body.index("default:")]
+    admitted = set(re.findall(r"case GGML_TYPE_(\w+):", body))
+    assert admitted and admitted <= set(ssc.WITNESS_TYPES), admitted - set(ssc.WITNESS_TYPES)

@@ -3,6 +3,7 @@ import ast
 import inspect
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -1938,10 +1939,20 @@ class TheToolRunnerNeverTreatsAFailureAsOutput(unittest.TestCase):
                 self.assertIsNone(gates._completion(build, "p", 8, 64, **kwargs))
             with mock.patch.object(gates, "_run_tool", return_value=(0, "text", "no count")):
                 self.assertIsNone(gates._completion(build, "p", 8, 64, **kwargs))
-            with mock.patch.object(gates, "_run_tool", return_value=(
-                    0, "generated", "number of tokens in prompt = 5000")):
+            ok_err = ("number of tokens in prompt = 5000\n"
+                      "llama_perf_context_print: prompt eval time = 1.0 ms / 5000 tokens\n"
+                      "llama_perf_context_print:        eval time = 2.0 ms /     7 runs\n")
+            with mock.patch.object(gates, "_run_tool", return_value=(0, "generated", ok_err)):
                 self.assertEqual(gates._completion(build, "p", 8, 64, **kwargs),
                                  ("generated", 5000))
+            # a short generation (3 decodes of 8 requested) is refused, and the PROMPT
+            # eval line must never be read as the generated count
+            short_err = ok_err.replace("/     7 runs", "/     3 runs")
+            with mock.patch.object(gates, "_run_tool", return_value=(0, "generated", short_err)):
+                self.assertIsNone(gates._completion(build, "p", 8, 64, **kwargs))
+            no_gen = "\n".join(ok_err.splitlines()[:2])
+            with mock.patch.object(gates, "_run_tool", return_value=(0, "generated", no_gen)):
+                self.assertIsNone(gates._completion(build, "p", 8, 64, **kwargs))
 
 
 class PrefixTokenAgreementIsASafeFloorCheck(unittest.TestCase):
@@ -1951,9 +1962,15 @@ class PrefixTokenAgreementIsASafeFloorCheck(unittest.TestCase):
         self.assertIsNone(first)
 
     def test_divergence_partway_through(self):
-        ratio, first = gates.prefix_token_agreement("one two THREE four", "one two three four")
+        ratio, first = gates.prefix_token_agreement("abXd", "abcd")
         self.assertEqual(first, 2)
         self.assertAlmostEqual(ratio, 2 / 4)
+
+    def test_whitespace_differences_are_divergences(self):
+        """Re-review 2026-10-06: a whitespace split equated these."""
+        ratio, first = gates.prefix_token_agreement("one  two", "one two")
+        self.assertLess(ratio, 1.0)
+        self.assertEqual(first, 4)
 
     def test_empty_both_sides_is_not_agreement(self):
         ratio, _first = gates.prefix_token_agreement("", "")
@@ -1966,8 +1983,8 @@ class PrefixTokenAgreementIsASafeFloorCheck(unittest.TestCase):
     def test_an_early_stop_is_a_divergence_not_a_pass(self):
         """The first cut divided by the SHORTER output: a candidate that emitted 3 of the
         anchor's 100 tokens agreed 1.0."""
-        anchor = " ".join(f"w{i}" for i in range(100))
-        ratio, first = gates.prefix_token_agreement("w0 w1 w2", anchor)
+        anchor = "x" * 100
+        ratio, first = gates.prefix_token_agreement("xxx", anchor)
         self.assertAlmostEqual(ratio, 0.03)
         self.assertEqual(first, 3)
 
@@ -2187,4 +2204,114 @@ class TheFoldRequiresTheBundleQualityGate(unittest.TestCase):
         self.assertLess(fold, promote)
         self.assertIn("gates.ppl_contract_ledger_add(args.store, hypothesis.mechanism_id)",
                       source)
-        self.assertIn("reference_build=gates.production_cpu_reference_build()", source)
+        self.assertIn("gates.pinned_production_reference(args.store)", source)
+
+
+class ThePplContractReReviewFixesHold(unittest.TestCase):
+    """2026-10-06 re-review (independent Codex findings, each verified against code)."""
+
+    def test_a_missing_served_shape_manifest_refuses_unstubbed_layer_a(self):
+        verdict = gates.ppl_contract_gate(
+            Path("/anchor"), Path("/candidate"),
+            route=gates.CpuSourceRoute(route="r", path="x.cpp", symbols=(), bodies=(),
+                                       ops=(), numerics="ppl_contract"),
+            resolved_recipe=None, model=Path("/m.gguf"), threads=1, cpu_list="0", env={},
+            log_dir=Path("/tmp/x"), reference_build=Path("/ref"),
+            _layers={"ppl": lambda: gates.Verdict("p", True)})
+        self.assertFalse(verdict.passed)
+        self.assertIn("served-shape manifest", verdict.reason)
+
+    def test_a_trailer_or_an_unanswerable_history_requires_the_fold_gate(self):
+        shared = ["ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp"]
+        self.assertFalse(gates.ppl_contract_fold_required(["m"], shared, set(), trailer=False))
+        self.assertTrue(gates.ppl_contract_fold_required(["m"], shared, set(), trailer=True))
+        self.assertTrue(gates.ppl_contract_fold_required(["m"], shared, set(), trailer=None))
+
+    def test_commit_trailer_is_read_back_from_git(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            def git(*a):
+                return subprocess.run(["git", "-C", str(repo), *a], check=True,
+                                      capture_output=True, text=True).stdout.strip()
+            git("init", "-q")
+            git("config", "user.email", "t@t"); git("config", "user.name", "t")
+            git("commit", "-q", "--allow-empty", "-m", "base")
+            base = git("rev-parse", "HEAD")
+            hyp = SimpleNamespace(mechanism_id="akm-x")
+            comp = SimpleNamespace(effect=0.01, surface="s", pairs=3)
+            git("commit", "-q", "--allow-empty", "-m",
+                pool.commit_message(hyp, comp, ppl_contract=False))
+            self.assertFalse(gates.ppl_contract_commits_in_range(repo, base, "HEAD"))
+            git("commit", "-q", "--allow-empty", "-m",
+                pool.commit_message(hyp, comp, ppl_contract=True))
+            self.assertTrue(gates.ppl_contract_commits_in_range(repo, base, "HEAD"))
+            self.assertIsNone(gates.ppl_contract_commits_in_range(repo, "nope", "HEAD"))
+
+    def test_the_reference_pin_refuses_a_moved_or_changed_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def make(name, payload):
+                build = root / name
+                (build / "bin").mkdir(parents=True)
+                for tool in gates.PPL_CONTRACT_TOOL_TARGETS:
+                    (build / "bin" / tool).write_bytes(b"tool")
+                (build / "bin" / "libggml-cpu.so").write_bytes(payload)
+                return build
+            a, b = make("a", b"v1"), make("b", b"v1")
+            store = root / "store"
+            with mock.patch.object(gates, "production_cpu_reference_build", return_value=a):
+                self.assertEqual(gates.pinned_production_reference(store), a)
+                self.assertEqual(gates.pinned_production_reference(store), a)
+                (a / "bin" / "libggml-cpu.so").write_bytes(b"v2")
+                with self.assertRaises(ValueError):
+                    gates.pinned_production_reference(store)
+            with mock.patch.object(gates, "production_cpu_reference_build", return_value=b):
+                with self.assertRaisesRegex(ValueError, "moved"):
+                    gates.pinned_production_reference(store)
+
+    def test_env_identity_covers_preloaded_library_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lib = Path(tmp) / "libshim.so"
+            lib.write_bytes(b"one")
+            env = {"LD_PRELOAD": str(lib)}
+            first = gates._env_identity(env)
+            lib.write_bytes(b"two")
+            self.assertNotEqual(first, gates._env_identity(env))
+            with self.assertRaises(OSError):
+                gates._env_identity({"LD_PRELOAD": str(Path(tmp) / "missing.so")})
+
+    def test_canary_catches_late_drift_garbage_and_truncated_baselines(self):
+        healthy = " ".join(f"word{i}" for i in range(1024))
+        late_loop = " ".join([f"word{i}" for i in range(700)] + ["a b c d"] * 81)
+        garbage = healthy + "�" * 400
+
+        def run(cand, base):
+            return gates.ppl_contract_long_canary(
+                Path("/candidate"), model=Path("/m"), prompt="p", env={}, cpu_list="0",
+                log_dir=Path("/tmp/x"), anchor_build=Path("/anchor"),
+                _generate=lambda b, p, n: {"candidate": cand, "anchor": base}[Path(b).name])
+        self.assertTrue(run(healthy, healthy).passed)
+        self.assertFalse(run(late_loop, healthy).passed)
+        self.assertFalse(run(garbage, healthy).passed)
+        self.assertFalse(run(healthy, "short baseline").passed)
+
+    def test_whitelist_route_refuses_types_outside_the_served_shape_corpus(self):
+        from autokernel.loop import served_shape_cases as ssc
+        route = next(r for r in gates.CPU_SOURCE_ROUTES if r.route == "iqk_type_whitelist")
+        rx = re.compile(route.forbidden_added)
+        for t in ssc.WITNESS_TYPES:
+            self.assertIsNone(rx.search(f"        case GGML_TYPE_{t}:"), t)
+        for t in ("IQ1_S", "IQ1_M", "MXFP4", "TQ2_0", "Q8_K", "IQ4_XS_R8"):
+            self.assertIsNotNone(rx.search(f"        case GGML_TYPE_{t}:"), t)
+
+    def test_a_refused_cross_target_keep_cannot_be_upgraded_by_a_gate_declaration(self):
+        from autokernel.loop import cross_target
+        source = inspect.getsource(cross_target.record_keep)
+        self.assertIn('if gates and decision.get("decision") != GATE_REFUSED:', source)
+        run_src = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
+        self.assertIn('"decision": cross_target.GATE_REFUSED', run_src)
+        self.assertIn("ppl_contract=ppl_keep)", run_src)
+        self.assertIn("anchor_for_gate = ppl_contract_anchor_for_gate()", run_src)
+        self.assertIn("gates.pinned_production_reference(args.store)", run_src)
+        self.assertNotIn("gates.production_cpu_reference_build()", run_src)
