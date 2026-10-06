@@ -24,6 +24,9 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from src.retrieval.kb_rag import DEFAULT_INDEX_DIR, query as kb_query, stats as kb_stats  # noqa: E402
+from src.retrieval.kb_catalog_dependency import (  # noqa: E402
+    read_dependency as read_catalog_dependency,
+)
 
 DEFAULT_CASES_PATH = _HERE.with_name("k7_seed_cases.json")
 DEFAULT_CUTOFFS = (3, 5, 10)
@@ -371,6 +374,7 @@ def run_eval(
             "evidence_files_missing_on_disk": evidence_missing,
             "index_stats": kb_stats(index_dir=index_dir),
             "catalog_metadata": _catalog_metadata(index_dir),
+            "catalog_dependency_at_report": read_catalog_dependency(index_dir / "catalog.sqlite"),
         }
     )
 
