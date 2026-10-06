@@ -1388,12 +1388,19 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
     #   * inside an admitted body every directive is refused (`#pragma omp` included);
     #   * a file-scope new-helper hunk may carry only conditional-compilation lines
     #     (balanced; see `_new_helper_refusal`) and `#include <system>`.
+    #   * operator 2026-10-06 (friction): ISA/feature guards from the closed
+    #     `_ISA_GUARD_LINE` grammar are admitted anywhere, balanced within the hunk.
     for hunk, label in zip(hunks, labels):
+        balance = _directive_balance_refusal(hunk[5])
+        if balance is not None:
+            return f"unbalanced conditional compilation in an added hunk: {balance}"
         for line in hunk[5]:
             directive = _PREPROCESSOR_LINE.match(line)
             if directive is None and "_Pragma" not in line:
                 continue
             word = directive.group(1) if directive is not None else "_Pragma"
+            if _ISA_GUARD_LINE.fullmatch(_directive_code(line)):
+                continue
             if label is None and word in ("if", "ifdef", "ifndef", "elif", "else", "endif"):
                 continue
             if label is None and route.new_helpers and _SYSTEM_INCLUDE.fullmatch(line):
@@ -1410,6 +1417,46 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
 
 _PREPROCESSOR_LINE = re.compile(r"^\s*#\s*([A-Za-z_]+)")
 _FILE_SCOPE_DIRECTIVES = ("if", "ifdef", "ifndef", "elif", "else", "endif")
+#: Operator 2026-10-06 ("don't introduce excessive friction"): the CLOSED set of ISA /
+#: feature guards a SIMD kernel edit legitimately needs inside a body. Terms are only
+#: `defined(X)` / `!defined(X)` over this allowlist, joined by && / ||; plus
+#: `#ifdef X`, `#ifndef X`, `#else`, `#endif`. Nothing else (no `#if 0`, no
+#: arithmetic, no unlisted macro), and every hunk must balance its own guards.
+_ISA_MACRO = (r"(?:__AVX__|__AVX2__|__AVX512F__|__AVX512BW__|__AVX512VL__|__AVX512VNNI__"
+              r"|__AVX512BF16__|__AVXVNNI__|__F16C__|__FMA__|__ARM_NEON|__ARM_FEATURE_[A-Z0-9_]+"
+              r"|HAVE_FANCY_SIMD|GGML_USE_[A-Z0-9_]+)")
+_ISA_TERM = rf"!?\s*defined\s*\(\s*{_ISA_MACRO}\s*\)"
+_ISA_EXPR = rf"{_ISA_TERM}(?:\s*(?:&&|\|\|)\s*{_ISA_TERM})*"
+_ISA_GUARD_LINE = re.compile(
+    rf"\s*#\s*(?:(?:if|elif)\s+{_ISA_EXPR}|ifdef\s+{_ISA_MACRO}|ifndef\s+{_ISA_MACRO}"
+    rf"|else|endif)\s*")
+
+
+def _directive_code(line: str) -> str:
+    """The code part of a line (trailing `//` comment and literal contents removed)."""
+    split = _split_line_lexically(line.rstrip("\n"))
+    return line.rstrip("\n") if split is None else split[0]
+
+
+def _directive_balance_refusal(lines) -> "str | None":
+    """None when the conditional-compilation lines among `lines` open and close in
+    order (`#else`/`#elif`/`#endif` never at depth 0, depth 0 at the end)."""
+    depth = 0
+    for line in lines:
+        match = _PREPROCESSOR_LINE.match(_directive_code(line))
+        if match is None:
+            continue
+        word = match.group(1)
+        if word in ("if", "ifdef", "ifndef"):
+            depth += 1
+        elif word in ("elif", "else"):
+            if depth == 0:
+                return f"`#{word}` without an opening guard in the same hunk"
+        elif word == "endif":
+            if depth == 0:
+                return "`#endif` without an opening guard in the same hunk"
+            depth -= 1
+    return None if depth == 0 else f"{depth} guard(s) left open at the end of the hunk"
 
 
 def _split_line_lexically(line: str) -> "tuple[str, str] | None":
@@ -1478,6 +1525,8 @@ def _lexical_refusal(line: str, *, file_scope_helper: bool, new_helpers: bool) -
     if "#" in code:
         directive = _PREPROCESSOR_LINE.match(code)
         stripped = code.strip()
+        if _ISA_GUARD_LINE.fullmatch(code):
+            return None
         if not (file_scope_helper and directive is not None and stripped.startswith("#")
                 and (directive.group(1) in _FILE_SCOPE_DIRECTIVES
                      or (new_helpers and _SYSTEM_INCLUDE.fullmatch(line.rstrip("\n"))))):

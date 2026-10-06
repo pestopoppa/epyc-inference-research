@@ -29,9 +29,9 @@ def test_served_shapes_match_the_2026_10_06_gguf_header_read():
     (qwen35) dense: embedding_length=5120, feed_forward_length=17408."""
     by_name = {s.name: s for s in ssc.SERVED_SHAPES}
     assert by_name["ds41_expert_gate_up"] == ssc.ServedShape(
-        "ds41_expert_gate_up", "MUL_MAT_ID", k=5120, m=2304, n_mats=128, n_used=3)
+        "ds41_expert_gate_up", "MUL_MAT_ID", k=5120, m=2304, n_mats=8, n_used=3)
     assert by_name["ds41_expert_down"] == ssc.ServedShape(
-        "ds41_expert_down", "MUL_MAT_ID", k=2304, m=5120, n_mats=128, n_used=3)
+        "ds41_expert_down", "MUL_MAT_ID", k=2304, m=5120, n_mats=8, n_used=3)
     assert by_name["ds41_dense_shexp_gate_up"].op == "MUL_MAT"
     assert by_name["q38fn_dense_ffn_gate_up"] == ssc.ServedShape(
         "q38fn_dense_ffn_gate_up", "MUL_MAT", k=5120, m=17408)

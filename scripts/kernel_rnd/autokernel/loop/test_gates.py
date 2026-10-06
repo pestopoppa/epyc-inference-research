@@ -2756,3 +2756,28 @@ class Round9LexicalAndLoaderRules(unittest.TestCase):
             (extra / "helper.so").write_bytes(b"v2-longer")
             self.assertNotEqual(first, gates._build_identity(build, "llama-completion", ld))
 
+
+
+class IsaGuardsAreAClosedBalancedSet(unittest.TestCase):
+    """Operator 2026-10-06 (friction): ISA/feature guards are admitted in bodies from a
+    closed grammar, balanced within the hunk; everything else stays refused."""
+
+    def test_the_closed_grammar(self):
+        lex = lambda line: gates._lexical_refusal(line, file_scope_helper=False,
+                                                  new_helpers=False)
+        for line in ("#if defined(__AVX512VNNI__) && defined(__AVX512VL__)",
+                     "#ifdef HAVE_FANCY_SIMD", "#ifndef __AVX2__", "#else", "#endif // x",
+                     "    #elif defined(__ARM_FEATURE_DOTPROD) || defined(__ARM_NEON)",
+                     "#if !defined(__F16C__)", "#if defined(GGML_USE_OPENMP)"):
+            self.assertIsNone(lex(line), line)
+        for line in ("#if 0", "#if defined(FOO)", "#if defined(__AVX512F__) && (defined(__FMA__))",
+                     "#ifdef IQK_IMPLEMENT", "#define X 1", "#undef X", "#pragma omp simd",
+                     "#include <immintrin.h>", "#if __AVX512F__", "%:if defined(__AVX2__)"):
+            self.assertIsNotNone(lex(line), line)
+
+    def test_balance_within_the_hunk(self):
+        bal = gates._directive_balance_refusal
+        self.assertIsNone(bal(["#if defined(__AVX2__)", "x;", "#else", "y;", "#endif"]))
+        self.assertIsNotNone(bal(["#else", "y;", "#endif"]))
+        self.assertIsNotNone(bal(["#endif"]))
+        self.assertIsNotNone(bal(["#ifdef HAVE_FANCY_SIMD", "x;"]))
