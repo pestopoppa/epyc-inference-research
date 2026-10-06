@@ -273,6 +273,7 @@ def _check_tokenizer_identity(meta: dict[str, str]) -> None:
         )
 
 
+@colbert_encoder.state_transaction
 def _stamp_meta(conn: sqlite3.Connection, convention: str) -> None:
     """Record encoder identity + convention alongside the vectors."""
     _check_tokenizer_identity(
@@ -342,6 +343,7 @@ def _writer_convention(conn: sqlite3.Connection) -> str:
     return convention
 
 
+@colbert_encoder.state_transaction
 def _warn_on_encoder_drift(meta: dict[str, str]) -> None:
     """Log if the live encoder is not the one that produced the stored vectors."""
     stored_dir = meta.get("encoder_model_dir")
@@ -481,6 +483,7 @@ def _emb_relative_path(file_path: str, content_hash: str) -> str:
     return f"emb/{safe_name}__{content_hash}.npz"
 
 
+@colbert_encoder.state_transaction
 def build_index(
     config: CorpusConfig,
     index_dir: Path | str = DEFAULT_INDEX_DIR,
@@ -641,6 +644,7 @@ def build_index(
     }
 
 
+@colbert_encoder.state_transaction
 def update_files(
     paths: list[str],
     config: CorpusConfig,
@@ -773,6 +777,7 @@ def remove_files(
     }
 
 
+@colbert_encoder.state_transaction
 def query(
     text: str,
     top_k: int = 8,
