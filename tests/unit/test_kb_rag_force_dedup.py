@@ -160,7 +160,7 @@ def test_touched_duplicate_identity_converges_without_unlinking_active_vector(
     other_source.write_text("# Other\n\nunrelated body text\n", encoding="utf-8")
     kb_rag.build_index(config, index_dir=index, force=True)
     source.write_text(
-        "# Fixture\n\n## Repeated\nshared body text\n\n## Repeated\nshared body text\n",
+        "## Repeated\nshared body text\n\n## Repeated\nshared body text\n",
         encoding="utf-8",
     )
     kb_rag.build_index(config, index_dir=index, force=True)
