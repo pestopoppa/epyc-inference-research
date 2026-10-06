@@ -309,8 +309,6 @@ def test_eval_result_pair_cli_refusal_emits_no_report(
             "eval-result-pair",
             str(baseline),
             str(candidate),
-            "--min-shared-qids",
-            "1",
         ])
 
     assert capsys.readouterr().out == ""
