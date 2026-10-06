@@ -383,8 +383,9 @@ def test_call_orchestrator_forced_omits_native_tool_payload_by_default():
     client = Mock()
     client.post.return_value = _Resp(200, {"answer": "ok"})
 
-    _MOD.call_orchestrator_forced(prompt="hello", force_role="worker", client=client)
+    data = _MOD.call_orchestrator_forced(prompt="hello", force_role="worker", client=client)
 
+    assert "_eval_reconnect" not in data
     payload = client.post.call_args.kwargs["json"]
     assert "tools" not in payload
     assert "tool_choice" not in payload
@@ -393,6 +394,47 @@ def test_call_orchestrator_forced_omits_native_tool_payload_by_default():
 
 
 # ── Eval reconnect backoff (REL-2) ───────────────────────────────────
+
+
+def test_eval_reconnect_first_response_records_one_outer_attempt_and_no_backoff():
+    client = Mock()
+    client.post.return_value = _Resp(200, {"answer": "ok"})
+
+    data = _MOD.call_orchestrator_forced(
+        prompt="q",
+        force_role="worker_math",
+        client=client,
+        workload_class="eval_batch",
+    )
+
+    assert data["answer"] == "ok"
+    assert data["_eval_reconnect"] == {
+        "schema": "epyc.eval_reconnect.v1",
+        "outer_loop_attempts": 1,
+        "cumulative_backoff_s": 0.0,
+        "return_reason": "response_returned",
+    }
+
+
+def test_eval_deadline_starvation_records_zero_attempts_without_post():
+    client = Mock()
+    with patch.dict(os.environ, {"AUTOPILOT_EVAL_MIN_LLAMA_BUDGET_S": "30"}):
+        data = _MOD.call_orchestrator_forced(
+            prompt="q",
+            force_role="worker_math",
+            client=client,
+            timeout=1,
+            workload_class="eval_batch",
+        )
+
+    assert data["failure_reason"] == "deadline_starved"
+    assert data["_eval_reconnect"] == {
+        "schema": "epyc.eval_reconnect.v1",
+        "outer_loop_attempts": 0,
+        "cumulative_backoff_s": 0.0,
+        "return_reason": "preflight_refusal",
+    }
+    client.post.assert_not_called()
 
 
 def test_eval_reconnect_recovers_after_transient_connection_failure():
@@ -414,6 +456,12 @@ def test_eval_reconnect_recovers_after_transient_connection_failure():
     assert data["answer"] == "recovered"
     assert data.get("error") is None
     assert client.post.call_count == 3
+    assert data["_eval_reconnect"] == {
+        "schema": "epyc.eval_reconnect.v1",
+        "outer_loop_attempts": 3,
+        "cumulative_backoff_s": 3.0,
+        "return_reason": "response_returned",
+    }
     # Exponential backoff: 1s then 2s before the successful third attempt.
     assert sleep_mock.call_args_list == [call(1.0), call(2.0)]
 
@@ -438,6 +486,12 @@ def test_eval_reconnect_persistent_failure_honest_error_row():
     # Budget=3s → sleeps 1s + 2s (=3), the next (4s) would overrun → honest row.
     assert sleep_mock.call_args_list == [call(1.0), call(2.0)]
     assert client.post.call_count == 3
+    assert data["_eval_reconnect"] == {
+        "schema": "epyc.eval_reconnect.v1",
+        "outer_loop_attempts": 3,
+        "cumulative_backoff_s": 3.0,
+        "return_reason": "reconnect_budget_exhausted",
+    }
 
 
 def test_eval_reconnect_does_not_retry_timeouts():
@@ -472,6 +526,12 @@ def test_eval_reconnect_does_not_retry_timeouts():
     assert "degraded" not in data["failure_provenance"]
     sleep_mock.assert_not_called()
     assert client.post.call_count == 1
+    assert data["_eval_reconnect"] == {
+        "schema": "epyc.eval_reconnect.v1",
+        "outer_loop_attempts": 1,
+        "cumulative_backoff_s": 0.0,
+        "return_reason": "non_reconnectable_terminal",
+    }
 
 
 def test_non_eval_connection_error_preserves_legacy_terminal_semantics():
@@ -501,6 +561,7 @@ def test_non_eval_connection_error_preserves_legacy_terminal_semantics():
     assert "failure_provenance" not in data
     # Additive structural disposition signal (see comment above).
     assert data["failure_reason"] == "connect_error"
+    assert "_eval_reconnect" not in data
     sleep_mock.assert_not_called()
     assert client.post.call_count == 1
 
@@ -576,10 +637,16 @@ def test_eval_reconnect_watcher_path_backs_off_and_recovers():
     calls = [
         (
             {"answer": "", "error": "ConnectError: connection refused"},
-            _reconnect_meta(real_failure=True, reason="connect_error",
-                            detail="ConnectError: connection refused"),
+            _reconnect_meta(
+                real_failure=True,
+                reason="connect_error",
+                detail="ConnectError: connection refused",
+            ),
         ),
-        ({"answer": "recovered"}, _reconnect_meta(clean=True)),
+        (
+            {"answer": "recovered"},
+            _reconnect_meta(exogenous_recovered=True, retry_count=1, wait_s=4.0),
+        ),
     ]
     rp_mock = Mock(side_effect=calls)
     with patch.object(resilient_http, "resilient_post", rp_mock):
@@ -593,6 +660,15 @@ def test_eval_reconnect_watcher_path_backs_off_and_recovers():
     assert data["answer"] == "recovered"
     assert rp_mock.call_count == 2
     assert sleep_mock.call_args_list == [call(1.0)]
+    assert data["_eval_reconnect"] == {
+        "schema": "epyc.eval_reconnect.v1",
+        "outer_loop_attempts": 2,
+        "cumulative_backoff_s": 1.0,
+        "return_reason": "response_returned",
+    }
+    assert data["_meta"] == calls[1][1]
+    assert data["_meta"]["retry_count"] == 1
+    assert data["_meta"]["wait_s"] == 4.0
 
 
 def test_watcher_path_preserves_server_failure_provenance_unchanged():
@@ -658,6 +734,13 @@ def test_watcher_client_timeout_omits_unobserved_server_state():
     provenance = data["failure_provenance"]
     assert provenance["class"] == "client_transport_timeout"
     assert provenance["code"] == "read_timeout"
+    assert data["_eval_reconnect"] == {
+        "schema": "epyc.eval_reconnect.v1",
+        "outer_loop_attempts": 1,
+        "cumulative_backoff_s": 0.0,
+        "return_reason": "non_reconnectable_terminal",
+    }
+    assert data["_meta"]["retry_count"] == 0
     assert set(provenance).isdisjoint(
         {"generation_started", "tokens_generated", "partial", "degraded"}
     )

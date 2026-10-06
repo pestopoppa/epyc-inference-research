@@ -1569,6 +1569,9 @@ def _compact_question_result(r: "QuestionResult") -> dict[str, Any]:
         item["external_restart"] = True
     if r.retry_count:
         item["retry_count"] = int(r.retry_count)
+    reconnect_cost = getattr(r, "eval_reconnect", None)
+    if isinstance(reconnect_cost, EvalReconnectCost):
+        item["eval_reconnect"] = reconnect_cost.as_dict()
     rubric_scores = {
         key: float(value)
         for key, value in sorted((r.rubric_scores or {}).items())
@@ -3177,6 +3180,52 @@ def _compute_branching_density(answer: str) -> float:
     return branching_steps / len(steps)
 
 
+@dataclass(frozen=True)
+class EvalReconnectCost:
+    """Bounded outer eval reconnect cost, separate from watcher ``_meta``."""
+
+    outer_loop_attempts: int
+    cumulative_backoff_s: float
+    return_reason: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "epyc.eval_reconnect.v1",
+            "outer_loop_attempts": self.outer_loop_attempts,
+            "cumulative_backoff_s": self.cumulative_backoff_s,
+            "return_reason": self.return_reason,
+        }
+
+
+def _eval_reconnect_cost_from_response(resp: Mapping[str, Any]) -> EvalReconnectCost | None:
+    raw = resp.get("_eval_reconnect")
+    if not isinstance(raw, Mapping) or raw.get("schema") != "epyc.eval_reconnect.v1":
+        return None
+    attempts = raw.get("outer_loop_attempts")
+    backoff = raw.get("cumulative_backoff_s")
+    reason = raw.get("return_reason")
+    if type(attempts) is not int or attempts < 0:
+        return None
+    if isinstance(backoff, bool) or not isinstance(backoff, (int, float)):
+        return None
+    try:
+        backoff_s = float(backoff)
+    except (OverflowError, ValueError):
+        return None
+    if not math.isfinite(backoff_s) or backoff_s < 0:
+        return None
+    if not isinstance(reason, str):
+        return None
+    if reason not in {
+        "preflight_refusal",
+        "response_returned",
+        "non_reconnectable_terminal",
+        "reconnect_budget_exhausted",
+    }:
+        return None
+    return EvalReconnectCost(attempts, backoff_s, reason)
+
+
 @dataclass
 class QuestionResult:
     question_id: str
@@ -3294,6 +3343,8 @@ class QuestionResult:
     # EV-CONF-2: bounded per-token logprob trace (token_confidence.build_token_trace_record).
     # Written ONLY to the question-result sidecar (never to the compact journal row).
     token_logprobs: dict[str, Any] | None = None
+    # Append-only to preserve the positional layout of the existing result type.
+    eval_reconnect: EvalReconnectCost | None = None
 
 
 class _EvalBatchResults(list[QuestionResult]):
@@ -4990,6 +5041,7 @@ class EvalTower:
         # bits onto QuestionResult so _aggregate can roll them up into
         # the trial-level EvalResult.
         meta = resp.get("_meta") or {}
+        eval_reconnect = _eval_reconnect_cost_from_response(resp)
         failure_provenance = (
             dict(resp["failure_provenance"])
             if error and isinstance(resp.get("failure_provenance"), dict)
@@ -5051,6 +5103,7 @@ class EvalTower:
             exogenous_unrecovered=bool(meta.get("exogenous_unrecovered", False)),
             external_restart=bool(meta.get("external_restart", False)),
             retry_count=int(meta.get("retry_count", 0)),
+            eval_reconnect=eval_reconnect,
             eval_partition=outcome.eval_partition,
             eval_batch_id=eval_batch_id,
             rubric_scores=rubric_scores,

@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "autopilot"))
 
@@ -419,3 +421,129 @@ def test_empty_or_missing_batch_status_is_never_reported_complete() -> None:
         == "not_applicable"
     )
     assert "question_sidecar_persistence" not in legacy_aggregate.details
+
+
+def test_eval_reconnect_cost_reaches_original_question_row_separately_from_watcher_meta(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("AUTOPILOT_EVAL_ARTIFACT_ROOT", str(tmp_path))
+    monkeypatch.setenv("AUTOPILOT_EVAL_CONCURRENCY", "1")
+    tower = EvalTower()
+    tower.set_trial_context(707)
+    reconnect = {
+        "schema": "epyc.eval_reconnect.v1",
+        "outer_loop_attempts": 3,
+        "cumulative_backoff_s": 3.0,
+        "return_reason": "response_returned",
+    }
+
+    def fake_call_orchestrator(**_kwargs) -> dict:
+        return {
+            "answer": "expected answer",
+            "tokens_generated": 4,
+            "_eval_reconnect": reconnect,
+            "_meta": {"clean": True, "retry_count": 2, "wait_s": 7.5},
+        }
+
+    monkeypatch.setattr(eval_tower, "call_orchestrator_forced", fake_call_orchestrator)
+    results = tower._eval_batch(
+        [{"id": "reconnect-q", "suite": "unit", "prompt": "question", "expected": "expected answer"}],
+        client=object(),
+        label="reconnect-cost",
+    )
+
+    rows = _read_rows(_sidecar_path(tmp_path, 707))
+    row = next(row for row in rows if row["row_type"] == "question_result")
+    assert row["result"]["correct"] is True
+    assert row["result"]["eval_reconnect"] == reconnect
+    assert row["result"]["retry_count"] == 2
+    assert row["result"]["eval_reconnect"]["outer_loop_attempts"] != 3 + 2
+    assert row["result"]["eval_reconnect"]["cumulative_backoff_s"] != 3.0 + 7.5
+    assert "wait_s" not in row["result"]
+    assert results[0].correct is True
+
+
+def test_question_row_omits_eval_reconnect_when_response_has_no_metadata(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("AUTOPILOT_EVAL_ARTIFACT_ROOT", str(tmp_path))
+    monkeypatch.setenv("AUTOPILOT_EVAL_CONCURRENCY", "1")
+    tower = EvalTower()
+    tower.set_trial_context(808)
+
+    def fake_call_orchestrator(**_kwargs) -> dict:
+        return {"answer": "expected answer", "tokens_generated": 4}
+
+    monkeypatch.setattr(eval_tower, "call_orchestrator_forced", fake_call_orchestrator)
+    results = tower._eval_batch(
+        [{"id": "legacy-q", "suite": "unit", "prompt": "question", "expected": "expected answer"}],
+        client=object(),
+        label="legacy-row",
+    )
+
+    rows = _read_rows(_sidecar_path(tmp_path, 808))
+    row = next(row for row in rows if row["row_type"] == "question_result")
+    assert row["result"]["correct"] is True
+    assert "eval_reconnect" not in row["result"]
+    assert results[0].correct is True
+
+
+@pytest.mark.parametrize(
+    "bad_reconnect",
+    [
+        {
+            "schema": "epyc.eval_reconnect.v0",
+            "outer_loop_attempts": 3,
+            "cumulative_backoff_s": 3.0,
+            "return_reason": "response_returned",
+        },
+        {
+            "schema": "epyc.eval_reconnect.v1",
+            "outer_loop_attempts": True,
+            "cumulative_backoff_s": 3.0,
+            "return_reason": "response_returned",
+        },
+        {
+            "schema": "epyc.eval_reconnect.v1",
+            "outer_loop_attempts": 3,
+            "cumulative_backoff_s": float("inf"),
+            "return_reason": "response_returned",
+        },
+        {
+            "schema": "epyc.eval_reconnect.v1",
+            "outer_loop_attempts": 3,
+            "cumulative_backoff_s": -1.0,
+            "return_reason": "response_returned",
+        },
+    ],
+)
+def test_malformed_eval_reconnect_is_omitted_without_changing_scoring_or_watcher_meta(
+    monkeypatch, tmp_path: Path, bad_reconnect: dict
+) -> None:
+    monkeypatch.setenv("AUTOPILOT_EVAL_ARTIFACT_ROOT", str(tmp_path))
+    monkeypatch.setenv("AUTOPILOT_EVAL_CONCURRENCY", "1")
+    tower = EvalTower()
+    tower.set_trial_context(909)
+
+    def fake_call_orchestrator(**_kwargs) -> dict:
+        return {
+            "answer": "expected answer",
+            "tokens_generated": 4,
+            "_eval_reconnect": bad_reconnect,
+            "_meta": {"clean": True, "retry_count": 2, "wait_s": 7.5},
+        }
+
+    monkeypatch.setattr(eval_tower, "call_orchestrator_forced", fake_call_orchestrator)
+    results = tower._eval_batch(
+        [{"id": "malformed-q", "suite": "unit", "prompt": "question", "expected": "expected answer"}],
+        client=object(),
+        label="malformed-reconnect-cost",
+    )
+
+    rows = _read_rows(_sidecar_path(tmp_path, 909))
+    row = next(row for row in rows if row["row_type"] == "question_result")
+    assert row["result"]["correct"] is True
+    assert "eval_reconnect" not in row["result"]
+    assert row["result"]["retry_count"] == 2
+    assert "wait_s" not in row["result"]
+    assert results[0].correct is True
