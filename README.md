@@ -12,10 +12,10 @@ This repo is the production substrate; the *why* lives in [epyc-root](https://gi
 
 | Index | What's there |
 |---|---|
-| **[wiki/INDEX.md (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/wiki/INDEX.md)** | 30 compiled topic articles — speculative decoding, KV cache, routing, hardware optimization, autonomous research, … |
-| **[handoffs/active/master-handoff-index.md (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/handoffs/active/master-handoff-index.md)** | Active cross-repo work queue (95 active items) |
-| **[research/deep-dives/ (epyc-root)](https://github.com/pestopoppa/epyc-root/tree/main/research/deep-dives)** | 105 long-form analyses |
-| **[research/intake_index.yaml (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/research/intake_index.yaml)** | 595 triaged papers/repos with verdicts |
+| **[wiki/INDEX.md (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/wiki/INDEX.md)** | Compiled topic articles on serving, routing, hardware optimization, research, and related topics |
+| **[handoffs/active/master-handoff-index.md (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/handoffs/active/master-handoff-index.md)** | Active cross-repo work queue |
+| **[research/deep-dives/ (epyc-root)](https://github.com/pestopoppa/epyc-root/tree/main/research/deep-dives)** | Long-form research analyses |
+| **[research/intake_index.yaml (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/research/intake_index.yaml)** | Triaged papers and repositories with verdicts |
 | **In-repo docs** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/chapters/INDEX.md`](docs/chapters/INDEX.md) (17 chapters: runtime, REPL, MemRL, escalation, tools, SkillBank), [`scripts/autopilot/program.md`](scripts/autopilot/program.md) |
 
 ---
@@ -35,11 +35,13 @@ This repo is the production substrate; the *why* lives in [epyc-root](https://gi
 
 ---
 
-## Production Stack (2026-05-24)
+## Historical Production Snapshot (2026-05-24)
 
-All servers run on a single AMD EPYC 9655 via the `production-consolidated-v5` llama.cpp branch (Hadamard auto-rotation, flash attention, KV q4_0 K / f16 V, NPS4 NUMA + CCD work distribution, AVX-512BW 8×8 Q8_0 kernel, OMP idle-spin fix).
+This is a historical stack snapshot. For the current serving posture, see [epyc-root’s inference-serving wiki](https://github.com/pestopoppa/epyc-root/blob/main/wiki/inference-serving.md).
 
-### LLM Servers (20 llama-server ports — query live via `/dashboard/api/llama_fleet_ids`)
+All servers in this snapshot ran on a single AMD EPYC 9655 via the `production-consolidated-v5` llama.cpp branch (Hadamard auto-rotation, flash attention, KV q4_0 K / f16 V, NPS4 NUMA + CCD work distribution, AVX-512BW 8×8 Q8_0 kernel, OMP idle-spin fix).
+
+### LLM Servers in the May 2026 snapshot (20 ports)
 
 | Role | Model | Quant | Port(s) | Notes |
 |---|---|---|---|---|
@@ -186,7 +188,7 @@ ruff check src/                                # lint
 python scripts/autopilot/preflight_audit.py    # 9-check diagnostic
 ```
 
-Pre-edit gate for non-trivial changes: run `gitnexus impact <symbol> --direction upstream` (see [CLAUDE.md](CLAUDE.md)). The wrapper script `scripts/gitnexus-analyze.sh` re-indexes without re-bloating agent files.
+Pre-edit gate for non-trivial changes: run `gitnexus impact <symbol> --direction upstream` only when the selected index is trusted and current (see [CLAUDE.md](CLAUDE.md)). The canonical host index is currently untrusted; this advice does not authorize querying or recovering it ([incident record](https://github.com/pestopoppa/epyc-root/blob/main/docs/reference/agent-config/INCIDENT_LOG.md#inc-20261005-unclaimed-host-code-index)). The wrapper script `scripts/gitnexus-analyze.sh` requires eight live CPU-region claims before invoking GitNexus and serializes writers; see the ROOT wiki’s [NI76 implementation record](https://github.com/pestopoppa/epyc-root/blob/main/wiki/tool-implementation.md).
 
 ---
 
