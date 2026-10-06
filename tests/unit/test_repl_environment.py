@@ -1185,6 +1185,95 @@ class TestExecuteTimeout:
         result = repl.execute("x = 1 + 1")
         assert result.error is None
 
+    def test_alarm_timeout_marks_terminal_and_refuses_later_execute(self, monkeypatch):
+        import builtins
+        import signal
+
+        handlers = {}
+
+        def fake_signal(signum, handler):
+            old_handler = handlers.get(signum)
+            handlers[signum] = handler
+            return old_handler
+
+        def fake_alarm(_seconds):
+            return 0
+
+        monkeypatch.setattr("src.repl_environment.environment.signal.signal", fake_signal)
+        monkeypatch.setattr("src.repl_environment.environment.signal.alarm", fake_alarm)
+        repl = REPLEnvironment(context="test", config=REPLConfig(timeout_seconds=1))
+        original_exec = builtins.exec
+
+        def timeout_during_exec(*args, **kwargs):
+            if len(args) > 1 and args[1] is repl._globals:
+                handlers[signal.SIGALRM](signal.SIGALRM, None)
+            return original_exec(*args, **kwargs)
+
+        monkeypatch.setattr("builtins.exec", timeout_during_exec)
+
+        result = repl.execute("x = 1")
+
+        assert result.error == "REPLTimeout: Execution timed out after 1s"
+        assert repl.timed_out is True
+        assert repl.execute("print('late')").error == result.error
+        repl.reset()
+        assert repl.execute("print('after reset')").error == result.error
+
+    def test_structured_alarm_timeout_is_sticky(self, monkeypatch):
+        import builtins
+        import signal
+
+        handlers = {}
+
+        def fake_signal(signum, handler):
+            old_handler = handlers.get(signum)
+            handlers[signum] = handler
+            return old_handler
+
+        def fake_alarm(_seconds):
+            return 0
+
+        monkeypatch.setattr("src.repl_environment.environment.signal.signal", fake_signal)
+        monkeypatch.setattr("src.repl_environment.environment.signal.alarm", fake_alarm)
+        repl = REPLEnvironment(
+            context="test", config=REPLConfig(timeout_seconds=1, structured_mode=True)
+        )
+        original_exec = builtins.exec
+
+        def timeout_during_exec(*args, **kwargs):
+            if len(args) > 1 and args[1] is repl._globals:
+                handlers[signal.SIGALRM](signal.SIGALRM, None)
+            return original_exec(*args, **kwargs)
+
+        monkeypatch.setattr("builtins.exec", timeout_during_exec)
+
+        result = repl.execute("print('hello')")
+
+        assert result.error == "REPLTimeout: Execution timed out after 1s"
+        assert repl.timed_out is True
+        assert repl.execute("FINAL('late')").error == result.error
+
+    def test_restricted_timeout_result_marks_terminal_without_executor_import(self):
+        from types import SimpleNamespace
+
+        from src.repl_environment.environment import _RestrictedREPLEnvironment
+        from src.repl_environment.types import ExecutionResult
+
+        repl = object.__new__(_RestrictedREPLEnvironment)
+        repl.config = REPLConfig(timeout_seconds=3)
+        repl._timeout_terminal = False
+        repl._restricted_executor = SimpleNamespace(
+            execute=lambda code: ExecutionResult(
+                output="", is_final=False, error="Execution timed out after 3s"
+            )
+        )
+
+        result = repl.execute("ignored")
+
+        assert result.error == "REPLTimeout: Execution timed out after 3s"
+        assert repl.timed_out is True
+        assert repl.execute("ignored again").error == result.error
+
 
 class TestMixinContractAssertions:
     """Characterize that mixin contract assertions pass on construction."""

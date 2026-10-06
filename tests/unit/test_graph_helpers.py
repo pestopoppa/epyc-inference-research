@@ -1,13 +1,20 @@
 """Unit tests for graph helper utilities."""
 
 import json
+import asyncio
+from threading import Event
 from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
 
 from src.escalation import ErrorCategory
 from src.graph.helpers import (
     _add_evidence,
     _classify_error,
     _detect_role_cycle,
+    _execute_turn,
+    _execute_repl_with_timeout,
     _looks_like_prompt_echo,
     _loop_guard_classification_view,
     _record_mitigation,
@@ -17,6 +24,17 @@ from src.graph.helpers import (
     _update_workspace_from_turn,
 )
 from src.graph.state import TaskState
+from src.repl_environment import REPLConfig, REPLEnvironment
+from src.repl_environment.types import ExecutionResult, REPLTimeout
+from src.session.persister import SessionPersister
+
+
+async def _async_none(*_args, **_kwargs):
+    return None
+
+
+async def _async_final_late(*_args, **_kwargs):
+    return "FINAL('late')", {}
 
 
 class TestClassifyError:
@@ -31,6 +49,161 @@ class TestClassifyError:
 
     def test_classifies_unknown(self):
         assert _classify_error("completely novel failure") == ErrorCategory.UNKNOWN
+
+
+class TestReplTimeoutTerminal:
+    @pytest.mark.asyncio
+    async def test_terminal_environment_stops_future_turn_before_llm_work(self, monkeypatch):
+        repl = REPLEnvironment(context="test", config=REPLConfig(timeout_seconds=7))
+        repl.mark_timed_out()
+        state = TaskState(task_id="timed-out", prompt="p")
+        monkeypatch.setattr("src.graph.helpers._record_session_turn", Mock())
+        ctx = SimpleNamespace(state=state, deps=SimpleNamespace(repl=repl))
+
+        result = await _execute_turn(ctx, "worker_general")
+
+        assert result == (
+            "", "REPLTimeout: Execution timed out after 7s", False, {}
+        )
+        assert state.turns == 0
+
+    @pytest.mark.asyncio
+    async def test_execute_turn_timeout_does_not_rescue_final_or_export_artifacts(
+        self, monkeypatch
+    ):
+        from src.graph.helpers import _execute_turn
+
+        started = Event()
+        release = Event()
+        finished = Event()
+        repl = REPLEnvironment(
+            context="test",
+            artifacts={"existing": "must not be exported"},
+            config=REPLConfig(timeout_seconds=0.05),
+        )
+        original_execute = repl.execute
+
+        def late_execute(code):
+            started.set()
+            try:
+                if not release.wait(timeout=2):
+                    raise AssertionError("test did not release late REPL worker")
+                repl.artifacts["late"] = True
+                return original_execute(code)
+            finally:
+                finished.set()
+
+        repl.execute = late_execute
+        state = TaskState(
+            task_id="timeout-turn", prompt="p", escalation_prompt="skip prompt build"
+        )
+        primitives = SimpleNamespace(llm_call=lambda *_args, **_kwargs: "unused")
+        ctx = SimpleNamespace(
+            state=state,
+            deps=SimpleNamespace(repl=repl, primitives=primitives),
+        )
+        flags = SimpleNamespace(
+            state_history_snapshots=False,
+            generalized_interrupts=False,
+            session_token_budget=False,
+            tool_output_compression=False,
+            batch_edit_mode=False,
+            interleaved_edit_rider=False,
+        )
+        monkeypatch.setattr("src.features.features", lambda: flags)
+        monkeypatch.setattr("src.graph.helpers._use_inline_calls_in_tests", lambda: False)
+        monkeypatch.setattr("src.graph.helpers._answer_force_due", lambda _state: False)
+        monkeypatch.setattr("src.graph.helpers._init_session_log", lambda _state: None)
+        monkeypatch.setattr("src.graph.helpers._clear_stale_tool_outputs", lambda _state: 0)
+        monkeypatch.setattr("src.graph.helpers._maybe_compact_context", _async_none)
+        monkeypatch.setattr("src.graph.helpers._auto_seed_tasks_from_task_ir", lambda _state: None)
+        monkeypatch.setattr("src.graph.helpers._auto_gather_context", lambda *_args: "")
+        monkeypatch.setattr("src.graph.helpers._check_anti_pattern", lambda _ctx: "")
+        monkeypatch.setattr("src.graph.helpers._maybe_refresh_session_summary", _async_none)
+        monkeypatch.setattr("src.graph.helpers._session_log_prompt_block", lambda _state: "")
+        monkeypatch.setattr("src.graph.helpers._budget_pressure_warnings", lambda _state: "")
+        monkeypatch.setattr("src.graph.helpers._maybe_compress_for_escalation", lambda prompt, _state: prompt)
+        monkeypatch.setattr("src.graph.helpers._call_llm_capturing_meta", _async_final_late)
+        monkeypatch.setattr("src.graph.helpers._bep_turn_trace", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("src.graph.helpers._backend_infra_sentinel", lambda _text: None)
+        monkeypatch.setattr("src.graph.helpers._check_reasoning_length_alarm", lambda *_args: False)
+        monkeypatch.setattr("src.graph.helpers._maybe_batch_edit_turn", _async_none)
+        monkeypatch.setattr("src.graph.helpers._repl_loop_guard_enabled", lambda: False)
+        monkeypatch.setattr("src.graph.helpers._persist_solution_file", lambda *_args: None)
+        monkeypatch.setattr("src.graph.helpers._update_workspace_from_turn", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("src.graph.helpers._tap_write_repl_exec", lambda *_args: None)
+        monkeypatch.setattr("src.graph.helpers._tap_write_repl_result", lambda *_args: None)
+        monkeypatch.setattr("src.graph.helpers._get_exploration_tool_calls", lambda *_args: [])
+        monkeypatch.setattr("src.graph.helpers._record_session_turn", Mock())
+
+        worker = asyncio.create_task(_execute_turn(ctx, "worker_general"))
+        try:
+            assert await asyncio.to_thread(started.wait, 1)
+            result = await asyncio.wait_for(worker, timeout=1)
+            assert result == (
+                "", "REPLTimeout: Execution timed out after 0.05s", False, {}
+            )
+            release.set()
+            assert await asyncio.to_thread(finished.wait, 1)
+            assert repl.artifacts["late"] is True
+        finally:
+            release.set()
+            if not finished.is_set():
+                assert await asyncio.to_thread(finished.wait, 2)
+
+    @pytest.mark.asyncio
+    async def test_late_worker_cannot_resume_execute_or_checkpoint(self):
+        started = Event()
+        release = Event()
+        finished = Event()
+        repl = REPLEnvironment(
+            context="test", config=REPLConfig(timeout_seconds=0.05)
+        )
+
+        execute = repl.execute
+
+        def late_execute(code):
+            if not started.is_set():
+                started.set()
+                try:
+                    if not release.wait(timeout=2):
+                        raise AssertionError("test did not release late worker")
+                    repl.artifacts["late_write"] = True
+                    return ExecutionResult(output="late", is_final=False)
+                finally:
+                    finished.set()
+            return execute(code)
+
+        repl.execute = late_execute
+        worker = asyncio.create_task(_execute_repl_with_timeout(repl, "blocked"))
+        try:
+            assert await asyncio.to_thread(started.wait, 1)
+            result = await asyncio.wait_for(worker, timeout=1)
+            assert result.error == "REPLTimeout: Execution timed out after 0.05s"
+            assert repl.timed_out is True
+            assert repl.execute("second").error == result.error
+            with pytest.raises(REPLTimeout, match="Execution timed out"):
+                repl.checkpoint()
+
+            persister = SessionPersister.__new__(SessionPersister)
+            persister.session_store = Mock()
+            with pytest.raises(REPLTimeout, match="Execution timed out"):
+                persister.save_checkpoint(repl)
+            persister.session_store.save_checkpoint.assert_not_called()
+
+            release.set()
+            assert await asyncio.to_thread(finished.wait, 1)
+            assert repl.artifacts["late_write"] is True
+            assert repl.execute("after completion").error == result.error
+            with pytest.raises(REPLTimeout, match="Execution timed out"):
+                repl.checkpoint()
+            with pytest.raises(REPLTimeout, match="Execution timed out"):
+                persister.save_checkpoint(repl)
+            persister.session_store.save_checkpoint.assert_not_called()
+        finally:
+            release.set()
+            if not finished.is_set():
+                assert await asyncio.to_thread(finished.wait, 2)
 
 
 class TestRoleCycleDetection:
