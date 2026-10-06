@@ -112,6 +112,13 @@ def _write_private_once(path: Path, raw: bytes) -> None:
         os.fsync(handle.fileno())
 
 
+def _ensure_private_dir(path: Path) -> None:
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if path.is_symlink() or not path.is_dir():
+        raise ValueError(f"snapshot directory is not a real directory: {path}")
+    path.chmod(0o700)
+
+
 def _seal_report(report: dict[str, Any], inputs: list[dict[str, Any]],
                  report_path: Path) -> dict[str, Any]:
     """Bind the report to immutable snapshots of the exact parsed inputs/source."""
@@ -144,10 +151,8 @@ def _seal_report(report: dict[str, Any], inputs: list[dict[str, Any]],
                                       "producer_sha256": producer_sha})
     snapshot_dir = destination.with_name(destination.name + ".native") / snapshot_key
     snapshot_root = destination.with_name(destination.name + ".native")
-    snapshot_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    snapshot_root.chmod(0o700)
-    snapshot_dir.mkdir(mode=0o700, exist_ok=True)
-    snapshot_dir.chmod(0o700)
+    _ensure_private_dir(snapshot_root)
+    _ensure_private_dir(snapshot_dir)
     for index, (entry, raw_entry) in enumerate(zip(manifest, raw_inputs, strict=True)):
         raw_bytes = raw_entry.get("_raw_bytes")
         if not isinstance(raw_bytes, bytes) or hashlib.sha256(raw_bytes).hexdigest() != entry["sha256"]:
