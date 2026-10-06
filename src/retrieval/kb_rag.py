@@ -45,7 +45,7 @@ from typing import Any
 
 import numpy as np
 
-from src.retrieval import colbert_encoder, cross_encoder, kb_rag_query_telemetry
+from src.retrieval import colbert_encoder, cross_encoder, kb_catalog_dependency, kb_rag_query_telemetry
 from src.retrieval.markdown_chunker import chunk_file
 
 logger = logging.getLogger(__name__)
@@ -228,6 +228,20 @@ def _encoder_embedding_dim() -> int | None:
     except Exception:  # noqa: BLE001
         return None
     return dim if isinstance(dim, int) and dim > 0 else None
+
+
+@colbert_encoder.state_transaction
+def _catalog_loaded_identity() -> dict | None:
+    """Snapshot only already-loaded native identity; never initialize a model."""
+    if colbert_encoder._session is None or colbert_encoder._tokenizer is None:
+        return None
+    return {
+        "tokenizer_sha256": colbert_encoder._tokenizer_sha256,
+        "embedding_dim": _encoder_embedding_dim(),
+        "model_dir": str(colbert_encoder._MODEL_DIR),
+        "model_slot": colbert_encoder._MODEL_SLOT,
+        "generation": colbert_encoder.generation(),
+    }
 
 
 def _check_embedding_dim(meta: dict[str, str]) -> None:
@@ -514,120 +528,120 @@ def build_index(
         return {"ok": False, "error": "encoder failed to load"}
 
     conn = _ensure_catalog(index_dir, verify_tokenizer=True)
-    conn.row_factory = sqlite3.Row
-    convention = _writer_convention(conn)
-    _, doc_cap = _index_token_caps(_read_meta(conn))
-    fts_enabled = _ensure_fts(conn)
-    _, doc_role = _roles_for_convention(convention)
-    cur = conn.cursor()
+    with kb_catalog_dependency.writer_connection(conn):
+        conn.row_factory = sqlite3.Row
+        convention = _writer_convention(conn)
+        _, doc_cap = _index_token_caps(_read_meta(conn))
+        fts_enabled = _ensure_fts(conn)
+        _, doc_role = _roles_for_convention(convention)
+        cur = conn.cursor()
 
-    files = _walk_corpus(config)
-    n_files = len(files)
-    n_chunks_seen = 0
-    n_chunks_encoded = 0
-    n_chunks_skipped = 0
-    started = time.perf_counter()
+        files = _walk_corpus(config)
+        n_files = len(files)
+        n_chunks_seen = 0
+        n_chunks_encoded = 0
+        n_chunks_skipped = 0
+        started = time.perf_counter()
 
-    for file_idx, f in enumerate(files, start=1):
-        try:
-            chunks = chunk_file(f, max_chars=config.max_chunk_chars)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("chunker failed on %s: %s", f, e)
-            continue
+        for file_idx, f in enumerate(files, start=1):
+            try:
+                chunks = chunk_file(f, max_chars=config.max_chunk_chars)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("chunker failed on %s: %s", f, e)
+                continue
 
-        mtime = f.stat().st_mtime
-        current_chunk_keys: set[tuple[str, int, int]] = set()
-        for ch in chunks:
-            n_chunks_seen += 1
-            line_start, line_end = ch.line_range
-            current_chunk_keys.add((ch.content_hash, line_start, line_end))
-            existing = cur.execute(
-                "SELECT chunk_id, content_hash FROM chunk "
-                "WHERE file_path=? AND content_hash=? AND line_start=? AND line_end=?",
-                (str(f), ch.content_hash, line_start, line_end),
-            ).fetchone()
-            if existing and not force:
-                n_chunks_skipped += 1
+            mtime = f.stat().st_mtime
+            current_chunk_keys: set[tuple[str, int, int]] = set()
+            for ch in chunks:
+                n_chunks_seen += 1
+                line_start, line_end = ch.line_range
+                current_chunk_keys.add((ch.content_hash, line_start, line_end))
+                existing = cur.execute(
+                    "SELECT chunk_id, content_hash FROM chunk "
+                    "WHERE file_path=? AND content_hash=? AND line_start=? AND line_end=?",
+                    (str(f), ch.content_hash, line_start, line_end),
+                ).fetchone()
+                if existing and not force:
+                    n_chunks_skipped += 1
+                    _sync_chunk_fts_row(
+                        cur,
+                        int(existing["chunk_id"]),
+                        str(f),
+                        ch.heading_path,
+                        ch.text,
+                        fts_enabled,
+                    )
+                    continue
+
+                emb = colbert_encoder.encode(ch.text, doc_cap, role=doc_role)
+                if emb is None:
+                    continue
+
+                emb_rel = _emb_relative_path(str(f), ch.content_hash)
+                emb_abs = index_dir / emb_rel
+                emb_abs.parent.mkdir(parents=True, exist_ok=True)
+                np.savez_compressed(emb_abs, emb=emb)
+
+                preview = ch.text.strip()[:240]
+                cur.execute(
+                    "INSERT INTO chunk "
+                    "(file_path, heading_path, line_start, line_end, content_hash, "
+                    " mtime, emb_path, text_preview, token_count) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(f),
+                        json.dumps(ch.heading_path),
+                        ch.line_range[0],
+                        ch.line_range[1],
+                        ch.content_hash,
+                        mtime,
+                        emb_rel,
+                        preview,
+                        int(emb.shape[0]),
+                    ),
+                )
                 _sync_chunk_fts_row(
                     cur,
-                    int(existing["chunk_id"]),
+                    int(cur.lastrowid),
                     str(f),
                     ch.heading_path,
                     ch.text,
                     fts_enabled,
                 )
-                continue
+                n_chunks_encoded += 1
 
-            emb = colbert_encoder.encode(ch.text, doc_cap, role=doc_role)
-            if emb is None:
-                continue
+            stale_chunk_rows = cur.execute(
+                "SELECT chunk_id, content_hash, line_start, line_end FROM chunk WHERE file_path = ?",
+                (str(f),),
+            ).fetchall()
+            for row in stale_chunk_rows:
+                key = (str(row["content_hash"]), int(row["line_start"]), int(row["line_end"]))
+                if key in current_chunk_keys:
+                    continue
+                if fts_enabled:
+                    cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (int(row["chunk_id"]),))
+                cur.execute("DELETE FROM chunk WHERE chunk_id = ?", (int(row["chunk_id"]),))
 
-            emb_rel = _emb_relative_path(str(f), ch.content_hash)
-            emb_abs = index_dir / emb_rel
-            emb_abs.parent.mkdir(parents=True, exist_ok=True)
-            np.savez_compressed(emb_abs, emb=emb)
+            if file_idx % 25 == 0:
+                conn.commit()
+                logger.info(
+                    "kb_rag: %d/%d files, %d chunks encoded, %d skipped",
+                    file_idx, n_files, n_chunks_encoded, n_chunks_skipped,
+                )
 
-            preview = ch.text.strip()[:240]
-            cur.execute(
-                "INSERT INTO chunk "
-                "(file_path, heading_path, line_start, line_end, content_hash, "
-                " mtime, emb_path, text_preview, token_count) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    str(f),
-                    json.dumps(ch.heading_path),
-                    ch.line_range[0],
-                    ch.line_range[1],
-                    ch.content_hash,
-                    mtime,
-                    emb_rel,
-                    preview,
-                    int(emb.shape[0]),
-                ),
-            )
-            _sync_chunk_fts_row(
-                cur,
-                int(cur.lastrowid),
-                str(f),
-                ch.heading_path,
-                ch.text,
-                fts_enabled,
-            )
-            n_chunks_encoded += 1
-
-        stale_chunk_rows = cur.execute(
-            "SELECT chunk_id, content_hash, line_start, line_end FROM chunk WHERE file_path = ?",
-            (str(f),),
-        ).fetchall()
-        for row in stale_chunk_rows:
-            key = (str(row["content_hash"]), int(row["line_start"]), int(row["line_end"]))
-            if key in current_chunk_keys:
-                continue
+        # Optional cleanup: remove catalog rows for files that disappeared.
+        catalog_files = {r[0] for r in cur.execute("SELECT DISTINCT file_path FROM chunk")}
+        current_files = {str(f) for f in files}
+        stale = catalog_files - current_files
+        for stale_file in stale:
             if fts_enabled:
-                cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (int(row["chunk_id"]),))
-            cur.execute("DELETE FROM chunk WHERE chunk_id = ?", (int(row["chunk_id"]),))
-
-        if file_idx % 25 == 0:
-            conn.commit()
-            logger.info(
-                "kb_rag: %d/%d files, %d chunks encoded, %d skipped",
-                file_idx, n_files, n_chunks_encoded, n_chunks_skipped,
-            )
-
-    # Optional cleanup: remove catalog rows for files that disappeared.
-    catalog_files = {r[0] for r in cur.execute("SELECT DISTINCT file_path FROM chunk")}
-    current_files = {str(f) for f in files}
-    stale = catalog_files - current_files
-    for stale_file in stale:
-        if fts_enabled:
-            for row in cur.execute(
-                "SELECT chunk_id FROM chunk WHERE file_path = ?",
-                (stale_file,),
-            ).fetchall():
-                cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (int(row["chunk_id"]),))
-        cur.execute("DELETE FROM chunk WHERE file_path = ?", (stale_file,))
-    conn.commit()
-    conn.close()
+                for row in cur.execute(
+                    "SELECT chunk_id FROM chunk WHERE file_path = ?",
+                    (stale_file,),
+                ).fetchall():
+                    cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (int(row["chunk_id"]),))
+            cur.execute("DELETE FROM chunk WHERE file_path = ?", (stale_file,))
+        kb_catalog_dependency.commit_completed_writer(conn, "build_index", loaded=_catalog_loaded_identity())
     _clear_embedding_cache()
 
     elapsed = time.perf_counter() - started
@@ -662,66 +676,66 @@ def update_files(
         return {"ok": False, "error": "encoder failed to load"}
 
     conn = _ensure_catalog(index_dir, verify_tokenizer=True)
-    conn.row_factory = sqlite3.Row
-    convention = _writer_convention(conn)
-    _, doc_cap = _index_token_caps(_read_meta(conn))
-    fts_enabled = _ensure_fts(conn)
-    _, doc_role = _roles_for_convention(convention)
-    cur = conn.cursor()
+    with kb_catalog_dependency.writer_connection(conn):
+        conn.row_factory = sqlite3.Row
+        convention = _writer_convention(conn)
+        _, doc_cap = _index_token_caps(_read_meta(conn))
+        fts_enabled = _ensure_fts(conn)
+        _, doc_role = _roles_for_convention(convention)
+        cur = conn.cursor()
 
-    # Resolve which paths actually belong to corpus.
-    corpus_files = {str(p) for p in _walk_corpus(config)}
-    encoded = 0
-    for raw_path in paths:
-        p = Path(raw_path).resolve()
-        if str(p) not in corpus_files:
-            continue
-        if fts_enabled:
-            for row in cur.execute(
-                "SELECT chunk_id, heading_path, line_start, line_end, text_preview "
-                "FROM chunk WHERE file_path = ?",
-                (str(p),),
-            ).fetchall():
-                cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (int(row["chunk_id"]),))
-        cur.execute("DELETE FROM chunk WHERE file_path = ?", (str(p),))
-        chunks = chunk_file(p, max_chars=config.max_chunk_chars)
-        mtime = p.stat().st_mtime
-        for ch in chunks:
-            emb = colbert_encoder.encode(ch.text, doc_cap, role=doc_role)
-            if emb is None:
+        # Resolve which paths actually belong to corpus.
+        corpus_files = {str(p) for p in _walk_corpus(config)}
+        encoded = 0
+        for raw_path in paths:
+            p = Path(raw_path).resolve()
+            if str(p) not in corpus_files:
                 continue
-            emb_rel = _emb_relative_path(str(p), ch.content_hash)
-            emb_abs = index_dir / emb_rel
-            emb_abs.parent.mkdir(parents=True, exist_ok=True)
-            np.savez_compressed(emb_abs, emb=emb)
-            cur.execute(
-                "INSERT INTO chunk "
-                "(file_path, heading_path, line_start, line_end, content_hash, "
-                " mtime, emb_path, text_preview, token_count) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
+            if fts_enabled:
+                for row in cur.execute(
+                    "SELECT chunk_id, heading_path, line_start, line_end, text_preview "
+                    "FROM chunk WHERE file_path = ?",
+                    (str(p),),
+                ).fetchall():
+                    cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (int(row["chunk_id"]),))
+            cur.execute("DELETE FROM chunk WHERE file_path = ?", (str(p),))
+            chunks = chunk_file(p, max_chars=config.max_chunk_chars)
+            mtime = p.stat().st_mtime
+            for ch in chunks:
+                emb = colbert_encoder.encode(ch.text, doc_cap, role=doc_role)
+                if emb is None:
+                    continue
+                emb_rel = _emb_relative_path(str(p), ch.content_hash)
+                emb_abs = index_dir / emb_rel
+                emb_abs.parent.mkdir(parents=True, exist_ok=True)
+                np.savez_compressed(emb_abs, emb=emb)
+                cur.execute(
+                    "INSERT INTO chunk "
+                    "(file_path, heading_path, line_start, line_end, content_hash, "
+                    " mtime, emb_path, text_preview, token_count) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(p),
+                        json.dumps(ch.heading_path),
+                        ch.line_range[0],
+                        ch.line_range[1],
+                        ch.content_hash,
+                        mtime,
+                        emb_rel,
+                        ch.text.strip()[:240],
+                        int(emb.shape[0]),
+                    ),
+                )
+                _sync_chunk_fts_row(
+                    cur,
+                    int(cur.lastrowid),
                     str(p),
-                    json.dumps(ch.heading_path),
-                    ch.line_range[0],
-                    ch.line_range[1],
-                    ch.content_hash,
-                    mtime,
-                    emb_rel,
-                    ch.text.strip()[:240],
-                    int(emb.shape[0]),
-                ),
-            )
-            _sync_chunk_fts_row(
-                cur,
-                int(cur.lastrowid),
-                str(p),
-                ch.heading_path,
-                ch.text,
-                fts_enabled,
-            )
-            encoded += 1
-    conn.commit()
-    conn.close()
+                    ch.heading_path,
+                    ch.text,
+                    fts_enabled,
+                )
+                encoded += 1
+        kb_catalog_dependency.commit_completed_writer(conn, "update_files", loaded=_catalog_loaded_identity())
     _clear_embedding_cache()
     return {
         "ok": True,
@@ -738,36 +752,36 @@ def remove_files(
     """Remove catalog rows for files that left the source corpus."""
     index_dir = Path(index_dir)
     conn = _ensure_catalog(index_dir)
-    conn.row_factory = sqlite3.Row
-    fts_enabled = _ensure_fts(conn)
-    cur = conn.cursor()
+    with kb_catalog_dependency.writer_connection(conn):
+        conn.row_factory = sqlite3.Row
+        fts_enabled = _ensure_fts(conn)
+        cur = conn.cursor()
 
-    removed_files = 0
-    removed_chunks = 0
-    removed_embeddings = 0
-    for raw_path in paths:
-        p = Path(raw_path).expanduser().resolve()
-        rows = cur.execute(
-            "SELECT chunk_id, emb_path FROM chunk WHERE file_path = ?",
-            (str(p),),
-        ).fetchall()
-        if not rows:
-            continue
-        removed_files += 1
-        removed_chunks += len(rows)
-        for row in rows:
-            if fts_enabled:
-                cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (int(row["chunk_id"]),))
-            emb_path = index_dir / str(row["emb_path"])
-            try:
-                emb_path.unlink()
-                removed_embeddings += 1
-            except FileNotFoundError:
-                pass
-        cur.execute("DELETE FROM chunk WHERE file_path = ?", (str(p),))
+        removed_files = 0
+        removed_chunks = 0
+        removed_embeddings = 0
+        for raw_path in paths:
+            p = Path(raw_path).expanduser().resolve()
+            rows = cur.execute(
+                "SELECT chunk_id, emb_path FROM chunk WHERE file_path = ?",
+                (str(p),),
+            ).fetchall()
+            if not rows:
+                continue
+            removed_files += 1
+            removed_chunks += len(rows)
+            for row in rows:
+                if fts_enabled:
+                    cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (int(row["chunk_id"]),))
+                emb_path = index_dir / str(row["emb_path"])
+                try:
+                    emb_path.unlink()
+                    removed_embeddings += 1
+                except FileNotFoundError:
+                    pass
+            cur.execute("DELETE FROM chunk WHERE file_path = ?", (str(p),))
 
-    conn.commit()
-    conn.close()
+        kb_catalog_dependency.commit_completed_writer(conn, "remove_files", loaded=None)
     _clear_embedding_cache()
     return {
         "ok": True,
