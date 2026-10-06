@@ -874,6 +874,26 @@ def call_orchestrator_forced(
 
     timeout = max(1, int(math.ceil(float(timeout))))
 
+    def _with_eval_reconnect(
+        data: dict[str, Any],
+        *,
+        outer_loop_attempts: int,
+        cumulative_backoff_s: float,
+        return_reason: str,
+    ) -> dict[str, Any]:
+        """Attach bounded cost from this eval call's outer reconnect loop.
+
+        The watcher path's existing ``_meta`` remains independent: its retry
+        count and recovery wait describe resilient_post's inner retry.
+        """
+        data["_eval_reconnect"] = {
+            "schema": "epyc.eval_reconnect.v1",
+            "outer_loop_attempts": outer_loop_attempts,
+            "cumulative_backoff_s": cumulative_backoff_s,
+            "return_reason": return_reason,
+        }
+        return data
+
     # ── Guard 3 (REL-1 eval-honesty): deadline-starvation floor ──────────
     # 2026-07-21 EV-11c incident: client-deadline starvation on long MATH-tail
     # questions shrank the effective per-call budget to ~1s; those doomed calls
@@ -894,15 +914,20 @@ def call_orchestrator_forced(
                 "doomed call that trips the circuit breaker",
                 force_role, float(timeout), _min_llama_budget_s,
             )
-            return {
-                "answer": "",
-                "error": (
-                    f"deadline_starved: eval llama budget {float(timeout):.1f}s "
-                    f"< floor {_min_llama_budget_s:.0f}s (role={force_role}); "
-                    "refused pre-send"
-                ),
-                "failure_reason": "deadline_starved",
-            }
+            return _with_eval_reconnect(
+                {
+                    "answer": "",
+                    "error": (
+                        f"deadline_starved: eval llama budget {float(timeout):.1f}s "
+                        f"< floor {_min_llama_budget_s:.0f}s (role={force_role}); "
+                        "refused pre-send"
+                    ),
+                    "failure_reason": "deadline_starved",
+                },
+                outer_loop_attempts=0,
+                cumulative_backoff_s=0.0,
+                return_reason="preflight_refusal",
+            )
 
     if str(workload_class or "") == "eval_batch":
         # Queueing and inference share one absolute request deadline.  Reserving
@@ -1125,7 +1150,13 @@ def call_orchestrator_forced(
         attempts += 1
         if watcher is None:
             try:
-                return _execute_direct()
+                data = _execute_direct()
+                return _with_eval_reconnect(
+                    data,
+                    outer_loop_attempts=attempts,
+                    cumulative_backoff_s=slept,
+                    return_reason="response_returned",
+                )
             except Exception as exc:
                 reason, _detail = _classify_exc(exc)
                 if reason not in _RECONNECT_REASONS:
@@ -1133,8 +1164,15 @@ def call_orchestrator_forced(
                     # Client timeouts carry typed provenance but never claim
                     # that server-side generation did not start.
                     if reason in _TRANSPORT_TIMEOUT_REASONS:
-                        return _timeout_result(exc, reason)
-                    return _transport_error_result(exc, reason)
+                        data = _timeout_result(exc, reason)
+                    else:
+                        data = _transport_error_result(exc, reason)
+                    return _with_eval_reconnect(
+                        data,
+                        outer_loop_attempts=attempts,
+                        cumulative_backoff_s=slept,
+                        return_reason="non_reconnectable_terminal",
+                    )
                 last_detail = str(exc)
         else:
             data = _execute_watcher()
@@ -1142,12 +1180,22 @@ def call_orchestrator_forced(
             meta = meta if isinstance(meta, dict) else {}
             # Clean success or a watcher-recovered request → return as-is.
             if meta.get("clean") or meta.get("exogenous_recovered"):
-                return data
+                return _with_eval_reconnect(
+                    data,
+                    outer_loop_attempts=attempts,
+                    cumulative_backoff_s=slept,
+                    return_reason="response_returned",
+                )
             reason = str(meta.get("reason") or "")
             if reason not in _RECONNECT_REASONS:
                 # Terminal non-connection failure (timeout / http / in-band /
                 # recovered): return whatever resilient_post produced.
-                return data
+                return _with_eval_reconnect(
+                    data,
+                    outer_loop_attempts=attempts,
+                    cumulative_backoff_s=slept,
+                    return_reason="non_reconnectable_terminal",
+                )
             last_detail = str(meta.get("detail") or data.get("error") or "")
 
         # Reached only on a CONNECTION-level failure. Back off while budget
@@ -1158,15 +1206,20 @@ def call_orchestrator_forced(
                 "(%d attempts, waited %.0fs, budget %.0fs): %s",
                 force_role, attempts, slept, max_reconnect_s, last_detail,
             )
-            return {
-                "answer": "",
-                "error": (
-                    f"api_unreachable_after_backoff: {last_detail} "
-                    f"(role={force_role}, attempts={attempts}, "
-                    f"waited={slept:.0f}s, budget={max_reconnect_s:.0f}s)"
-                ),
-                "failure_reason": "api_unreachable_after_backoff",
-            }
+            return _with_eval_reconnect(
+                {
+                    "answer": "",
+                    "error": (
+                        f"api_unreachable_after_backoff: {last_detail} "
+                        f"(role={force_role}, attempts={attempts}, "
+                        f"waited={slept:.0f}s, budget={max_reconnect_s:.0f}s)"
+                    ),
+                    "failure_reason": "api_unreachable_after_backoff",
+                },
+                outer_loop_attempts=attempts,
+                cumulative_backoff_s=slept,
+                return_reason="reconnect_budget_exhausted",
+            )
         logger.warning(
             "  [eval-reconnect] role=%s connection failure (%s); backing off "
             "%.0fs then retrying (attempt %d, waited %.0fs/%.0fs)",
