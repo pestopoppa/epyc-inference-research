@@ -501,7 +501,12 @@ def _load_orchestrator_debug_scorer():
         raise ImportError(f"cannot load orchestrator debug scorer from {scorer_path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[_ORCH_SCORER_KEY] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        if sys.modules.get(_ORCH_SCORER_KEY) is module:
+            sys.modules.pop(_ORCH_SCORER_KEY, None)
+        raise
     return module
 
 
@@ -618,8 +623,8 @@ def write_core_jsonl(
         suites = sorted({str(v.get("suite")) for v in structural})
         print(
             f"WARNING: {len(structural)} of {len(emitted)} selected rows have a STRUCTURALLY "
-            f"VACUOUS ORACLE — `expected` is a long contiguous span already present in the "
-            f"input the model is given, so echoing the input scores a pass. Suites: "
+            f"VACUOUS ORACLE — echoing the model input is accepted by the "
+            f"configured scorer. Suites: "
             f"{', '.join(suites)}. Retire these rows or rebuild their oracle before trusting "
             f"this pool. ({len(incidental)} further rows show short/incidental containment; "
             f"see `vacuous_rows` in the selection report.)",

@@ -16,6 +16,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / "scripts" / "autopilot"), str(REPO / "src"), str(REPO)]
 _spec = importlib.util.spec_from_file_location(
@@ -54,6 +56,47 @@ def test_exact_scorer_is_not_made_vacuous_by_containment() -> None:
     """An exact scorer does not inherit substring containment semantics."""
     assert cvs.vacuous_rows(
         [_row(expected="x" * 80, prompt="x" * 200, scoring_method="exact")]) == []
+
+
+@pytest.mark.parametrize(
+    "method", ["llm_judge", "code_execution", "math_verify", "unknown", "exact"],
+    ids=["llm-judge", "code-execution", "math-verify", "unknown", "exact"],
+)
+def test_non_programmatic_methods_never_load_the_orchestrator_verifier(
+    monkeypatch, method: str,
+) -> None:
+    def forbidden_loader():
+        raise AssertionError("non-programmatic method attempted verifier load")
+
+    monkeypatch.setattr(cvs, "_load_orchestrator_debug_scorer", forbidden_loader)
+    row = _row(expected="copy this", scoring_method=method, prompt="copy this")
+    assert cvs.vacuous_rows([row]) == []
+
+
+def test_failed_verifier_import_does_not_poison_the_module_cache(monkeypatch) -> None:
+    import importlib.machinery
+
+    class FailingLoader:
+        def create_module(self, spec):
+            return None
+
+        def exec_module(self, module):
+            raise RuntimeError("synthetic module execution failure")
+
+    key = cvs._ORCH_SCORER_KEY
+    previous = sys.modules.pop(key, None)
+    monkeypatch.setattr(
+        importlib.util, "spec_from_file_location",
+        lambda name, _path: importlib.machinery.ModuleSpec(name, FailingLoader()),
+    )
+    try:
+        with pytest.raises(RuntimeError, match="synthetic module execution failure"):
+            cvs._load_orchestrator_debug_scorer()
+        assert key not in sys.modules
+    finally:
+        sys.modules.pop(key, None)
+        if previous is not None:
+            sys.modules[key] = previous
 
 
 def test_programmatic_echo_uses_the_existing_verifier() -> None:
