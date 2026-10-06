@@ -28,7 +28,6 @@ try:
         DEFAULT_JOURNAL_DIR,
         McNemarResult,
         QuestionOutcome,
-        extract_question_outcomes,
         group_rows_by_fingerprint,
         iter_journal_rows,
         majority_vector,
@@ -40,7 +39,6 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution path
         DEFAULT_JOURNAL_DIR,
         McNemarResult,
         QuestionOutcome,
-        extract_question_outcomes,
         group_rows_by_fingerprint,
         iter_journal_rows,
         majority_vector,
@@ -48,6 +46,13 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution path
         trial_vectors,
     )
 
+from src.autopilot_core.measurement_guards import (
+    DISPOSITION_INFRA_FAILED,
+    DISPOSITION_SCORED,
+    DISPOSITION_SCORING_FAILED,
+    DISPOSITION_TASK_FAILED,
+    is_quality_admissible,
+)
 from src.behavior_signature import compute_behavior_signature, diff_signatures
 
 DEFAULT_MIN_SHARED_QIDS = 35
@@ -299,10 +304,20 @@ def _eval_result_row(
     label: str,
     synthetic_trial_id: int,
 ) -> dict[str, Any]:
-    row = dict(payload.get("eval_result") or payload)
+    if not isinstance(payload, dict):
+        raise ValueError("eval result payload must be an object")
+    if "eval_result" in payload:
+        wrapped = payload["eval_result"]
+        if not isinstance(wrapped, dict):
+            raise ValueError("eval_result wrapper must contain an object")
+        row = dict(wrapped)
+    else:
+        row = dict(payload)
     trial_id = _trial_id_or_none(row)
     row.setdefault("trial_id", trial_id if trial_id is not None else synthetic_trial_id)
-    if not isinstance(row.get("eval_details"), dict):
+    if "eval_details" in row and not isinstance(row["eval_details"], dict):
+        raise ValueError("eval result eval_details must be an object")
+    if "eval_details" not in row:
         row["eval_details"] = {}
     if "question_results" in row and "question_results" not in row["eval_details"]:
         row["eval_details"] = {
@@ -316,10 +331,98 @@ def _eval_result_row(
 
 
 def _vector_from_eval_result_row(row: dict[str, Any], label: str) -> dict[str, QuestionOutcome]:
-    outcomes = extract_question_outcomes(row)
-    if not outcomes:
+    locations: list[tuple[str, Any]] = []
+    if "question_results" in row:
+        locations.append(("question_results", row["question_results"]))
+
+    eval_details = row.get("eval_details")
+    if "eval_details" in row and not isinstance(eval_details, dict):
+        raise ValueError(f"eval result has malformed eval_details: {label}")
+    if isinstance(eval_details, dict):
+        if "question_results" in eval_details:
+            locations.append(("eval_details.question_results", eval_details["question_results"]))
+        nested = eval_details.get("details")
+        if "details" in eval_details and not isinstance(nested, dict):
+            raise ValueError(f"eval result has malformed eval_details.details: {label}")
+        if isinstance(nested, dict) and "question_results" in nested:
+            locations.append(("eval_details.details.question_results", nested["question_results"]))
+
+    if not locations:
         raise ValueError(f"eval result has no question_results vector: {label}")
-    return {outcome.qid: outcome for outcome in outcomes}
+
+    known_dispositions = {
+        DISPOSITION_SCORED,
+        DISPOSITION_INFRA_FAILED,
+        DISPOSITION_SCORING_FAILED,
+        DISPOSITION_TASK_FAILED,
+    }
+
+    def normalize(location: str, raw: Any) -> dict[str, tuple[str, bool, str]]:
+        if not isinstance(raw, list) or not raw:
+            raise ValueError(f"{location} must be a non-empty list: {label}")
+        normalized: dict[str, tuple[str, bool, str]] = {}
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                raise ValueError(f"{location}[{index}] must be an object: {label}")
+            qid = ""
+            for key in ("qid", "question_id"):
+                value = item.get(key)
+                if value is None:
+                    continue
+                if not isinstance(value, str):
+                    raise ValueError(
+                        f"{location}[{index}].{key} must be a string when present: {label}"
+                    )
+                qid = value.strip()
+                if qid:
+                    break
+            if not qid:
+                raise ValueError(f"{location}[{index}] has no usable qid/question_id: {label}")
+            if qid in normalized:
+                raise ValueError(
+                    f"{location} has duplicate normalized question id {qid!r}: {label}"
+                )
+
+            if "correct" not in item or type(item["correct"]) is not bool:
+                raise ValueError(
+                    f"{location}[{index}].correct must be an explicit boolean: {label}"
+                )
+
+            raw_disposition = item.get("disposition")
+            disposition = (
+                DISPOSITION_SCORED
+                if raw_disposition is None or raw_disposition == ""
+                else raw_disposition
+            )
+            if not isinstance(disposition, str) or disposition not in known_dispositions:
+                raise ValueError(f"{location}[{index}] has unknown disposition: {label}")
+            if not is_quality_admissible(disposition):
+                raise ValueError(
+                    f"{location}[{index}] disposition {disposition!r} "
+                    f"has no quality verdict: {label}"
+                )
+            if disposition == DISPOSITION_TASK_FAILED and item["correct"]:
+                raise ValueError(
+                    f"{location}[{index}] task_failed outcome cannot be correct: {label}"
+                )
+
+            suite = str(item.get("suite") or "").strip()
+            normalized[qid] = (suite, item["correct"], disposition)
+        return normalized
+
+    vectors = [(name, normalize(name, raw)) for name, raw in locations]
+    canonical = vectors[0][1]
+    for name, vector in vectors[1:]:
+        if vector != canonical:
+            raise ValueError(
+                f"conflicting question_results locations ({vectors[0][0]} and {name}): {label}"
+            )
+
+    trial_id = _trial_id_or_none(row)
+    return {
+        qid: QuestionOutcome(qid=qid, suite=values[0], correct=values[1], trial_id=trial_id)
+        for qid, values in canonical.items()
+    }
 
 
 def _trial_id_or_none(payload: dict[str, Any]) -> int | None:

@@ -137,6 +137,183 @@ def test_eval_result_pair_compares_standalone_payloads() -> None:
     assert report["candidate_signature"]["trial_id"] == 102
 
 
+def test_eval_result_pair_uses_stable_qid_when_source_question_id_differs() -> None:
+    baseline = {"question_results": [
+        {"qid": "stable:one", "question_id": "dataset-17", "suite": "suite", "correct": True},
+        {"qid": "stable:two", "question_id": "dataset-18", "suite": "suite", "correct": False},
+    ]}
+    candidate = {"eval_result": {"eval_details": {"details": {"question_results": [
+        {"question_id": "stable:one", "suite": "suite", "correct": True},
+        {"question_id": "stable:two", "suite": "suite", "correct": True},
+    ]}}}}
+
+    report = bsv_paired_report.build_eval_result_pair_report(
+        baseline, candidate, min_shared_qids=2
+    )
+
+    assert report["paired_stats"]["shared_qids"] == 2
+    assert report["paired_stats"]["delta_b_minus_a"] == 0.5
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        {"qid": "q1"},
+        {"qid": "q1", "correct": None},
+        {"qid": "q1", "correct": "false"},
+        {"qid": "q1", "correct": 0},
+        None,
+        "not-an-outcome",
+    ],
+)
+def test_eval_result_pair_refuses_malformed_boolean_rows(outcome) -> None:  # noqa: ANN001
+    valid = {"question_results": [{"qid": "q1", "correct": True}]}
+    malformed = {"question_results": [outcome]}
+
+    with pytest.raises(ValueError):
+        bsv_paired_report.build_eval_result_pair_report(valid, malformed)
+
+
+@pytest.mark.parametrize(
+    "outcomes",
+    [
+        [{"correct": True}],
+        [{"qid": "   ", "correct": True}],
+        [{"qid": ["q1"], "correct": True}],
+        [{"qid": {"id": "q1"}, "correct": True}],
+        [{"qid": True, "correct": True}],
+        [{"qid": 17, "correct": True}],
+        [{"question_id": 17, "correct": True}],
+        [
+            {"qid": " q1 ", "correct": True},
+            {"question_id": "q1", "correct": False},
+        ],
+    ],
+)
+def test_eval_result_pair_refuses_missing_or_duplicate_question_ids(
+    outcomes,
+) -> None:  # noqa: ANN001
+    valid = {"question_results": [{"qid": "q1", "correct": True}]}
+    malformed = {"question_results": outcomes}
+
+    with pytest.raises(ValueError):
+        bsv_paired_report.build_eval_result_pair_report(valid, malformed)
+
+
+def test_eval_result_pair_requires_consistent_question_result_locations() -> None:
+    valid = {"question_results": [{"qid": "q1", "correct": True}]}
+    inconsistent = {
+        "question_results": [{"qid": "q1", "correct": True}],
+        "eval_details": {"question_results": [{"qid": "q1", "correct": False}]},
+    }
+
+    with pytest.raises(ValueError, match="conflicting question_results locations"):
+        bsv_paired_report.build_eval_result_pair_report(valid, inconsistent)
+
+
+@pytest.mark.parametrize("disposition", ["infra_failed", "scoring_failed", "unrecognized"])
+def test_eval_result_pair_refuses_nonquality_or_unknown_dispositions(disposition: str) -> None:
+    valid = {"question_results": [{"qid": "q1", "correct": True}]}
+    nonquality = {
+        "question_results": [
+            {"qid": "q1", "correct": False, "disposition": disposition}
+        ]
+    }
+
+    with pytest.raises(ValueError):
+        bsv_paired_report.build_eval_result_pair_report(valid, nonquality)
+
+
+@pytest.mark.parametrize("legacy_disposition", [None, ""])
+def test_eval_result_pair_accepts_explicit_task_failure_and_legacy_scored_rows(
+    legacy_disposition: str | None,
+) -> None:
+    baseline = {
+        "question_results": [
+            {"qid": "q1", "correct": False, "disposition": "task_failed"}
+        ]
+    }
+    candidate = {
+        "question_results": [
+            {"qid": "q1", "correct": True, "disposition": legacy_disposition}
+        ]
+    }
+
+    report = bsv_paired_report.build_eval_result_pair_report(baseline, candidate, min_shared_qids=1)
+
+    assert report["paired_stats"]["shared_qids"] == 1
+    assert report["paired_stats"]["delta_b_minus_a"] == 1.0
+
+
+def test_eval_result_pair_refuses_task_failure_marked_correct() -> None:
+    invalid = {
+        "question_results": [
+            {"qid": "q1", "correct": True, "disposition": "task_failed"}
+        ]
+    }
+    valid = {"question_results": [{"qid": "q1", "correct": True}]}
+
+    with pytest.raises(ValueError, match="task_failed outcome cannot be correct"):
+        bsv_paired_report.build_eval_result_pair_report(invalid, valid)
+
+
+def test_eval_result_pair_accepts_identical_question_result_aliases() -> None:
+    outcomes = [
+        {"qid": "stable:one", "question_id": "dataset-17", "correct": True},
+        {"qid": "stable:two", "question_id": "dataset-18", "correct": False},
+    ]
+    payload = {
+        "question_results": outcomes,
+        "eval_details": {
+            "question_results": outcomes,
+            "details": {"question_results": outcomes},
+        },
+    }
+
+    report = bsv_paired_report.build_eval_result_pair_report(
+        payload,
+        {"question_results": [
+            {"qid": "stable:one", "correct": True},
+            {"qid": "stable:two", "correct": False},
+        ]},
+        min_shared_qids=2,
+    )
+
+    assert report["paired_stats"]["shared_qids"] == 2
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        {"eval_result": None},
+        {"eval_result": {"eval_details": None}},
+        {"eval_details": None},
+        {"eval_details": {"details": None}},
+        {"question_results": None},
+        {"question_results": []},
+        {"question_results": [{"qid": "q1", "correct": None}]},
+    ],
+)
+def test_eval_result_pair_cli_refusal_emits_no_report(
+    malformed, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:  # noqa: ANN001
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+    baseline.write_text(json.dumps({"question_results": [{"qid": "q1", "correct": True}]}))
+    if "question_results" not in malformed and "eval_details" not in malformed:
+        malformed = {"question_results": [{"qid": "q1", "correct": None}], **malformed}
+    candidate.write_text(json.dumps(malformed))
+
+    with pytest.raises(ValueError):
+        bsv_paired_report.main([
+            "eval-result-pair",
+            str(baseline),
+            str(candidate),
+        ])
+
+    assert capsys.readouterr().out == ""
+
+
 def test_blocks_when_shared_qid_coverage_is_too_low() -> None:
     rows = [
         _row(1, "base", [("q1", True)]),
