@@ -4,6 +4,8 @@ Tests coverage for src/session/persister.py (16% coverage).
 Focus on checkpoint triggers, finding sync, and lifecycle events.
 """
 
+import base64
+import pickle
 import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
@@ -329,6 +331,23 @@ class TestSaveCheckpoint:
 
         try:
             saved = persister.save_checkpoint(source, trigger="explicit")
+            tampered = dict(saved.pickled_globals["persist_set"])
+            tampered["b64"] = base64.b64encode(
+                pickle.dumps({"forged": True}, protocol=safe_pickle.PICKLE_PROTOCOL)
+            ).decode("ascii")
+            unsupported_blob = pickle.dumps(eval, protocol=safe_pickle.PICKLE_PROTOCOL)
+            saved.pickled_globals.update(
+                {
+                    "tampered_set": tampered,
+                    "unsupported_callable": {
+                        "b64": base64.b64encode(unsupported_blob).decode("ascii"),
+                        "hmac": safe_pickle._sign(unsupported_blob),
+                        "type": "builtin_function_or_method",
+                        "bytes": len(unsupported_blob),
+                    },
+                }
+            )
+            store.save_checkpoint(saved)
             loaded = store.get_latest_checkpoint(session.id)
             assert loaded is not None
             assert loaded.pickled_globals == saved.pickled_globals
@@ -337,6 +356,10 @@ class TestSaveCheckpoint:
             result = restored.restore(loaded.to_dict())
             assert "persist_set" in result["restored"]
             assert restored._globals["persist_set"] == {"alpha", "beta"}
+            assert "tampered_set" not in result["restored"]
+            assert "HMAC mismatch" in result["unavailable"]["tampered_set"]
+            assert "unsupported_callable" not in result["restored"]
+            assert "not allowlisted" in result["unavailable"]["unsupported_callable"]
         finally:
             store.close()
 
