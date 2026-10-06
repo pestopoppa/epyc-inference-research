@@ -47,18 +47,29 @@ def _write_yaml(path: Path, data: dict) -> Path:
 
 
 @pytest.fixture
-def _synthetic_stack_manifest_meminfo(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make the two launch-helper import controls independent of runner RAM.
+def _synthetic_stack_manifest_inputs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Make the two launch-helper controls independent of host RAM/kernel paths.
 
     stack_manifest reads /proc/meminfo once at import time. The captured GitHub
     runner has 15.61 GiB while the production capacity contract reserves 64 GiB,
-    so these pure helper tests need a synthetic import-only value. This fixture
-    primes the exact module under a narrowly patched Path.read_text, then removes
-    that cached module at teardown so the synthetic value cannot leak to later
-    tests. Every other path read delegates to Path.read_text unchanged. The
-    recipe separately records the runner's physical /proc/meminfo as context.
+    so these pure helper tests need a synthetic import-only value. The launch
+    preview also resolves backend directories; empty synthetic backend directories
+    keep that lookup independent of this runner's absent production kernel store.
+    No binary is created or executed. The fixture primes the exact module under a
+    narrowly patched Path.read_text, then removes its cached module/package
+    attribute at teardown so synthetic inputs cannot leak to later tests. Every
+    other path read delegates unchanged. The recipe separately records the
+    runner's physical /proc/meminfo as context.
     """
     import importlib
+    from src.registry import kernel_paths
+
+    production_root = tmp_path / "synthetic-kernel-store" / "production"
+    for backend in ("cpu", "gpu", "stt", "tts"):
+        (production_root / backend).mkdir(parents=True)
+    monkeypatch.setattr(kernel_paths, "PRODUCTION_ROOT", production_root)
 
     module_name = "scripts.server.stack_manifest"
     missing = object()
@@ -3245,7 +3256,7 @@ def test_staleness_check_is_reachable_from_the_guard_cli(staleness_repo, capsys)
 
 
 def test_launch_view_rejects_invalid_explicit_numa_mode_as_could_not_check(
-    _synthetic_stack_manifest_meminfo: None,
+    _synthetic_stack_manifest_inputs: None,
 ) -> None:
     """NIB2-69: an explicit launch mode is never silently normalised to a default."""
     targets, view_errors = stack_change_guard._launch_manifest_targets_or_error(
@@ -3259,7 +3270,7 @@ def test_launch_view_rejects_invalid_explicit_numa_mode_as_could_not_check(
 
 def test_explicit_launch_numa_mode_bypasses_realized_fleet_probe(
     monkeypatch: pytest.MonkeyPatch,
-    _synthetic_stack_manifest_meminfo: None,
+    _synthetic_stack_manifest_inputs: None,
 ) -> None:
     def _probe_must_not_run() -> str:
         raise AssertionError("explicit launch mode must not consult the realized fleet")
