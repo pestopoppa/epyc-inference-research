@@ -36,8 +36,9 @@ import json
 import logging
 import math
 import os
+import secrets
 import sqlite3
-import tempfile
+import stat
 import time
 from contextlib import closing
 from dataclasses import dataclass
@@ -500,20 +501,46 @@ def _emb_relative_path(file_path: str, content_hash: str) -> str:
 
 def _write_embedding_atomic(path: Path, emb: np.ndarray) -> None:
     """Publish a fully serialized vector without exposing a partial target."""
+    target = path.resolve(strict=False)
     staged_path: Path | None = None
+    staged_fd: int | None = None
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w+b",
-            prefix=f".{path.name}.",
-            suffix=".tmp.npz",
-            dir=path.parent,
-            delete=False,
-        ) as staged:
-            staged_path = Path(staged.name)
+        try:
+            target_stat = target.lstat()
+        except FileNotFoundError:
+            target_mode = None
+        else:
+            if not stat.S_ISREG(target_stat.st_mode):
+                raise OSError(f"embedding target is not a regular file: {target}")
+            target_mode = stat.S_IMODE(target_stat.st_mode)
+
+        for _ in range(10):
+            candidate = target.with_name(f".{target.name}.{secrets.token_hex(12)}.tmp.npz")
+            try:
+                staged_fd = os.open(
+                    candidate,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o666,
+                )
+            except FileExistsError:
+                continue
+            staged_path = candidate
+            break
+        if staged_fd is None or staged_path is None:
+            raise FileExistsError(f"could not allocate staged embedding beside {target}")
+        if target_mode is not None:
+            os.fchmod(staged_fd, target_mode)
+        with os.fdopen(staged_fd, "wb") as staged:
+            staged_fd = None
             np.savez_compressed(staged, emb=emb)
-        os.replace(staged_path, path)
+        os.replace(staged_path, target)
         staged_path = None
     except BaseException:
+        if staged_fd is not None:
+            try:
+                os.close(staged_fd)
+            except OSError:
+                pass
         if staged_path is not None:
             try:
                 staged_path.unlink()

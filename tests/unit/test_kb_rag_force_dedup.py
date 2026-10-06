@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import stat
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -350,6 +352,9 @@ def test_staged_vector_success_keeps_npz_format_and_cleans_temporary(
 ) -> None:
     config, source = corpus
     index = tmp_path / "index"
+    kb_rag.build_index(config, index_dir=index, force=True)
+    vector = index / _rows(index)[0][5]
+    vector.chmod(0o640)
 
     result = _run_writer(operation, config, source, index)
 
@@ -357,9 +362,31 @@ def test_staged_vector_success_keeps_npz_format_and_cleans_temporary(
     assert result["chunks_encoded"] == 1
     assert len(rows) == 1
     vector = index / rows[0][5]
+    assert stat.S_IMODE(vector.stat().st_mode) == 0o640
     with np.load(vector) as stored:
         np.testing.assert_array_equal(stored["emb"], fake_encoder.return_value)
     assert list((index / "emb").glob(".*.tmp.npz")) == []
     record = kb_catalog_dependency.read_dependency(index / "catalog.sqlite")
     assert record is not None
     assert record["operation"] == operation
+
+
+@pytest.mark.skipif(os.name != "posix", reason="vector permission modes are POSIX-specific")
+@pytest.mark.parametrize("operation", ["build_index", "update_files"])
+def test_new_staged_vector_uses_standard_create_mode(
+    fake_encoder: Mock,
+    corpus: tuple[kb_rag.CorpusConfig, Path],
+    tmp_path: Path,
+    operation: str,
+) -> None:
+    config, source = corpus
+    index = tmp_path / "index"
+    probe = tmp_path / "create-mode-probe"
+    probe_fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    os.close(probe_fd)
+    expected_mode = stat.S_IMODE(probe.stat().st_mode)
+
+    _run_writer(operation, config, source, index)
+
+    vector = index / _rows(index)[0][5]
+    assert stat.S_IMODE(vector.stat().st_mode) == expected_mode
