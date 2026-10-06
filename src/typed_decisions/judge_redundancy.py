@@ -2,8 +2,9 @@
 
 The typed-decision plane answers a rubric directly (``noul`` per criterion,
 one ``choice`` overall) in ONE JSON pass — this is the **typed judge**. A
-plain single ``llm_call`` asks for the same per-criterion pass/fail list and
-has its emission parsed and validated — this is the **LLM judge**. Both read
+single ``llm_call`` independently asks for the same per-criterion pass/fail
+list under a constrained verdict-array schema, then has its emission parsed
+and validated — this is the **LLM judge**. Both read
 the SAME ~24 deterministic rubric cases, each a (answer text, criteria list)
 pair whose per-criterion verdict is fully determined by the answer text and
 frozen here as ground truth.
