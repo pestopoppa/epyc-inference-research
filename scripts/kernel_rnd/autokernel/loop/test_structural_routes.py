@@ -280,6 +280,11 @@ def test_r3_graph_optimize_hook():
     assert not isinstance(scope, gates.Verdict), scope
     scope, _ = _scope({CPU_C: _cogroup_patch()}, "graph_optimize", CPU_C)
     assert not scope.passed and "must change ggml/src/ggml-cpu/ggml-cpu.cpp" in scope.reason
+    # Round-9: the closed-regex slot may not name a process/loader API.
+    evil = text.replace("    /* .graph_optimize          = */ ggml_backend_cpu_graph_optimize,",
+                        "    /* .graph_optimize          = */ system,", 1)
+    scope, _ = _scope({cpp: evil}, "graph_optimize", cpp)
+    assert isinstance(scope, gates.Verdict) and not scope.passed, scope
     other = text.replace("    /* .graph_compute           = */ ggml_backend_cpu_graph_compute,",
                          "    /* .graph_compute           = */ NULL,", 1)
     scope, _ = _scope({cpp: other}, "graph_optimize", cpp)

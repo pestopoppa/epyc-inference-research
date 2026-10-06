@@ -2454,14 +2454,17 @@ class TheFoldProvenanceComesFromHistory(unittest.TestCase):
             gates.bind_bit_exact_record(store, head, oracle or digest)
         return head
 
-    def test_a_store_recorded_bit_exact_change_does_not(self):
+    def test_even_a_store_recorded_bit_exact_change_requires_the_gate(self):
+        """Round-9 resolution A: candidate code shares the loop's account and could write
+        the store, so records are diagnostics only -- never an exemption."""
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as st:
             repo, git, path = self._repo(tmp)
             store = Path(st)
             base = git("rev-parse", "HEAD")
             self._stamped_commit(repo, git, path, store)
-            self.assertFalse(gates.ppl_contract_range_requires_gate(repo, base, "HEAD",
-                                                                    store=store))
+            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD",
+                                                                   store=store))
+            self.assertFalse(hasattr(gates, "_bit_exact_record_valid"))
             # without the store the same text grants nothing
             self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
 
@@ -2656,3 +2659,55 @@ class TheLexicalRuleSeesOnlySingleLines(unittest.TestCase):
         self.assertIsNone(lex("#include <immintrin.h>", fs=True, nh=True))
         self.assertIsNotNone(lex("#define X 1", fs=True, nh=True))
         self.assertIsNotNone(lex("#include \"evil.h\"", fs=True, nh=True))
+
+
+class Round9LexicalAndLoaderRules(unittest.TestCase):
+    def test_dangerous_apis_includes_and_digraphs_are_refused(self):
+        lex = lambda line, **k: gates._lexical_refusal(
+            line, file_scope_helper=k.get("fs", False), new_helpers=k.get("nh", False))
+        for line in ("    system(\"touch x\");", "    FILE * f = fopen(p, \"w\");",
+                     "    std::ofstream o(p);", "    int fd = open(p, 0);",
+                     "    void * h = dlopen(p, 1);", "    asm volatile(\"nop\");",
+                     "    __asm__(\"nop\");", "    const char * v = getenv(\"X\");",
+                     "    setenv(\"X\", \"1\", 1);", "    unlink(p);", "    syscall(1);",
+                     "    pid_t p = fork();", "    std::filesystem::remove(p);",
+                     "    write(1, b, n);", "    popen(c, \"r\");", "    execv(p, a);",
+                     "    posix_spawn(&p, a, 0, 0, v, e);", "    rename(a, b);",
+                     "    if (t <: 1 :>) {}", "    x = y ??/", "    <% %>", "%:define X 1"):
+            self.assertIsNotNone(lex(line), line)
+        for header in ("cstdlib", "fstream", "filesystem", "unistd.h", "dlfcn.h"):
+            self.assertIsNotNone(lex(f"#include <{header}>", fs=True, nh=True), header)
+        for line in ("    const char * s = \"system fopen\";", "    float writes = 0;",
+                     "    // system() is not called here", "    x = a ? b : c;"):
+            self.assertIsNone(lex(line), line)
+
+    def test_tools_run_under_the_rebound_recipe_loader_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cand, anchor = Path(tmp) / "cand", Path(tmp) / "anchor"
+            for b in (cand, anchor):
+                (b / "bin").mkdir(parents=True)
+            env = {"LD_LIBRARY_PATH": f"{cand}/bin:/opt/toolchain/lib"}
+            self.assertEqual(gates._rebind_ld(env, anchor, cand),
+                             f"{anchor}/bin:/opt/toolchain/lib")
+            with self.assertRaises(OSError):
+                gates._rebind_ld({"LD_LIBRARY_PATH": "/elsewhere/bin"}, anchor, cand)
+            with self.assertRaises(OSError):
+                gates._rebind_ld({"LD_LIBRARY_PATH": f"{cand}/bin::/x"}, anchor, cand)
+            with self.assertRaises(OSError):
+                gates._rebind_ld({}, anchor, cand)
+            with self.assertRaises(OSError):
+                gates._rebind_ld(env, anchor, None)
+
+    @mock.patch.object(gates, "_resolved_closure", return_value=[])
+    def test_identity_hashes_every_file_in_every_loader_directory(self, _closure):
+        with tempfile.TemporaryDirectory() as tmp:
+            build, extra = Path(tmp) / "b", Path(tmp) / "ext"
+            (build / "bin").mkdir(parents=True)
+            extra.mkdir()
+            (build / "bin" / "llama-completion").write_bytes(b"tool")
+            (extra / "helper.so").write_bytes(b"v1")
+            ld = f"{build}/bin:{extra}"
+            first = gates._build_identity(build, "llama-completion", ld)
+            (extra / "helper.so").write_bytes(b"v2-longer")
+            self.assertNotEqual(first, gates._build_identity(build, "llama-completion", ld))
+

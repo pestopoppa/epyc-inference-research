@@ -3573,7 +3573,8 @@ def main(argv: list[str] | None = None) -> int:
                         try:
                             anchor_for_gate = ppl_contract_anchor_for_gate()
                             reference = gates.pinned_production_reference(
-                                args.store, env=dict(arm.launch_env))
+                                args.store, env=dict(arm.launch_env),
+                                candidate_build=worker.build_dir)
                         except Exception as exc:  # noqa: BLE001 -- fail CLOSED
                             return gates.Verdict("ppl_contract", False,
                                                  f"ppl_contract preconditions unmet: "
@@ -4996,10 +4997,13 @@ def main(argv: list[str] | None = None) -> int:
                 return gates.Verdict("ppl_contract_bundle", False,
                                      "ppl_contract bundle on a non-CPU target")
             from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
-            arm = _cpu_arm(direct_launch, anchor_build[0])
-            reference = gates.pinned_production_reference(args.store,
-                                                          env=dict(arm.launch_env))
             tip_tools = ppl_contract_anchor_for_gate()
+            # Round-9 resolution D: the bundle's "candidate" is the tip's tools build, so
+            # its resolved recipe (and LD_LIBRARY_PATH) is rebound to THAT build.
+            arm = _cpu_arm(direct_launch, tip_tools)
+            reference = gates.pinned_production_reference(args.store,
+                                                          env=dict(arm.launch_env),
+                                                          candidate_build=tip_tools)
             # The champion of record's build predates the tools when it was promoted
             # before the obligation; it cannot be rebuilt here (the champion tree is at
             # the tip). Judge the bundle against the PINNED reference alone then -- the

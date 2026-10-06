@@ -1361,6 +1361,11 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
             # `/* .graph_optimize = */ <fn>,` slot) is fully determined by that regex.
             if label is None and route.line_rewrites and any(
                     re.fullmatch(new, line.strip()) for _old, new in route.line_rewrites):
+                # Round-9: even the closed-regex slot may not name a dangerous API
+                # (`/* .graph_optimize = */ system,` would install libc system()).
+                if _DANGEROUS_API.search(line):
+                    return (f"an added line rewrite names a process/filesystem/loader "
+                            f"API: {line.strip()[:120]!r}")
                 continue
             why = _lexical_refusal(line, file_scope_helper=(label is None),
                                    new_helpers=route.new_helpers)
@@ -1429,7 +1434,29 @@ def _split_line_lexically(line: str) -> "tuple[str, str] | None":
     return "".join(code), ""
 
 
+#: Round-9 resolution B: process, filesystem, dynamic-loading, environment and
+#: inline-asm APIs refused in every added line of every route (code part, outside
+#: literals): candidate code shares the loop's account, so it must not be able to
+#: touch the store, spawn processes, load code or read/alter the environment.
+_DANGEROUS_API = re.compile(
+    r"\b(?:system|popen|execl|execlp|execle|execv|execvp|execvpe|execve|fexecve|fork|vfork"
+    r"|posix_spawnp?|fopen|fopen64|freopen|open|open64|openat|creat|write|pwrite|pwrite64"
+    r"|pwritev2?|fwrite|ofstream|ifstream|fstream|filesystem|rename|renameat2?|unlink"
+    r"|unlinkat|remove|mkdir|mkdirat|syscall|dlopen|dlmopen|dlsym|dlvsym|asm|__asm|__asm__"
+    r"|getenv|secure_getenv|setenv|putenv|unsetenv|clearenv|mmap|mprotect|ptrace|kill"
+    r"|raise|signal|sigaction|chmod|chown|truncate|ftruncate|symlink|link|socket|connect)\b")
+_DANGEROUS_INCLUDE = re.compile(
+    r"#\s*include\s*<\s*(?:cstdlib|stdlib\.h|fstream|filesystem|unistd\.h|dlfcn\.h|"
+    r"spawn\.h)\s*>")
+#: Round-9 resolution C: digraphs and trigraphs refused anywhere in an added line.
+_DIGRAPH_TRIGRAPH = re.compile(r"%:|<%|%>|<:|:>|\?\?")
+
+
 def _lexical_refusal(line: str, *, file_scope_helper: bool, new_helpers: bool) -> "str | None":
+    if _DIGRAPH_TRIGRAPH.search(line):
+        return "digraph or trigraph"
+    if _DANGEROUS_INCLUDE.search(line):
+        return "process/filesystem/loader header include"
     if line.rstrip("\n").rstrip().endswith("\\"):
         return "line continuation"
     split = _split_line_lexically(line.rstrip("\n"))
@@ -1441,6 +1468,11 @@ def _lexical_refusal(line: str, *, file_scope_helper: bool, new_helpers: bool) -
             return "block comment delimiter"
     if re.search(r"\b(?:u8|u|U|L)?R\"\"", code):
         return "raw string literal"
+    # (an admitted file-scope `#include <...>` line names a header, not a call; the
+    # header itself is screened by `_DANGEROUS_INCLUDE` above)
+    api = None if code.lstrip().startswith("#") else _DANGEROUS_API.search(code)
+    if api is not None:
+        return f"process/filesystem/loader/asm API `{api.group(0)}`"
     if "#" in comment:
         return "`#` in a comment"
     if "#" in code:
@@ -2657,15 +2689,18 @@ def production_cpu_reference_build() -> Path:
 PPL_CONTRACT_REFERENCE_PIN = Path("ppl_contract") / "reference_pin.json"
 
 
-def _reference_identity(build: Path, env: "dict | None" = None) -> str:
+def _reference_identity(build: Path, env: "dict | None" = None,
+                        candidate_build: "Path | None" = None) -> str:
     """Both tools + every DSO + the resolved closure + the EFFECTIVE environment
     (LD_PRELOAD contents and closure included; round-3 review)."""
     return hashlib.sha256("\n".join(
-        [*(_build_identity(build, tool) for tool in PPL_CONTRACT_TOOL_TARGETS),
+        [*(_build_identity(build, tool, _rebind_ld(env or {}, build, candidate_build))
+           for tool in PPL_CONTRACT_TOOL_TARGETS),
          _env_identity(env or {})]).encode()).hexdigest()
 
 
-def pinned_production_reference(store: Path, env: "dict | None" = None) -> Path:
+def pinned_production_reference(store: Path, env: "dict | None" = None,
+                                candidate_build: "Path | None" = None) -> Path:
     """The campaign's FIXED reference build: pinned on first use (resolved path +
     content identity of both tools and every DSO), verified on every later use.
     Raises ValueError on a moved symlink, a changed build, or an unreadable pin."""
@@ -2680,11 +2715,11 @@ def pinned_production_reference(store: Path, env: "dict | None" = None) -> Path:
         if pinned != current:
             raise ValueError(f"production reference moved: pinned {pinned}, symlink now "
                              f"resolves to {current}; delete {pin} to re-baseline explicitly")
-        if _reference_identity(pinned, env) != digest:
+        if _reference_identity(pinned, env, candidate_build) != digest:
             raise ValueError(f"pinned production reference {pinned} changed content or "
                              "effective environment (LD_PRELOAD / launch env)")
         return pinned
-    identity = _reference_identity(current, env)
+    identity = _reference_identity(current, env, candidate_build)
     pin.parent.mkdir(parents=True, exist_ok=True)
     tmp = pin.with_name(f".{pin.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps({"path": str(current), "identity": identity}), encoding="utf-8")
@@ -2693,7 +2728,8 @@ def pinned_production_reference(store: Path, env: "dict | None" = None) -> Path:
 
 
 def check_production_reference_loads(reference_build: Path, *, model: Path, cpu_list: str,
-                                     env: dict, log_dir: Path, threads: int = 1) -> Verdict:
+                                     env: dict, log_dir: Path, threads: int = 1,
+                                     candidate_build: "Path | None" = None) -> Verdict:
     """Fail closed when the frozen production CPU kernel reference cannot load THIS
     lane's model at all (review 2026-10-06).
 
@@ -2718,7 +2754,8 @@ def check_production_reference_loads(reference_build: Path, *, model: Path, cpu_
     # `_completion` (correctly) reads as "no output" -- a spurious fail-closed.
     result = _completion(reference_build, "The quick brown fox jumps.", 8, 64, model=model,
                          threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
-                         cache_dir=None, label="production_reference_load")
+                         cache_dir=None, label="production_reference_load",
+                         candidate_build=candidate_build)
     if result is None:
         return Verdict("production_reference_load", False,
                        f"the frozen production CPU kernel reference at {reference_build} "
@@ -2834,10 +2871,10 @@ def ppl_contract_relevant(path: str) -> bool:
             or path in ppl_contract_paths())
 
 
-#: Round-7 resolution A: commit text is never proof. A bit_exact exemption needs a
-#: RECORD in the loop's own store, written by the keep path from the gate's own
-#: passing bit-exact verdicts: content-addressed by the sha256 of its canonical bytes
-#: (the `AK-Oracle:` value) plus a by-commit index binding the commit SHA to it.
+#: Round-9 resolution A: DIAGNOSTIC ONLY. Candidate code runs unprivileged in the same
+#: account as the loop (an admitted body executing `system()` could write these files),
+#: so nothing reads these records as proof: no stamp or record exempts a range from the
+#: fold-time quality gate. They are kept as an audit trail of bit-exact admissions.
 BIT_EXACT_RECORD_DIR = Path("ppl_contract") / "bit_exact_records"
 BIT_EXACT_RECORD_SCHEMA = "epyc.autokernel.bit_exact_record.v1"
 _CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")
@@ -2872,40 +2909,18 @@ def bind_bit_exact_record(store: Path, commit: str, digest: str) -> None:
     os.replace(tmp, folder / f"{commit}.json")
 
 
-def _bit_exact_record_valid(store: "Path | None", commit: str, oracle: str, *, tree: str,
-                            parent: str, files: list) -> bool:
-    """True only when the store holds the record `oracle` names, its bytes hash to
-    `oracle`, the by-commit index binds THIS commit to it, and the record's tree,
-    parent and changed-file list equal the commit's actual ones."""
-    if store is None or not re.fullmatch(r"[0-9a-f]{64}", oracle):
-        return False
-    folder = Path(store) / BIT_EXACT_RECORD_DIR
-    try:
-        index = json.loads((folder / "by-commit" / f"{commit}.json").read_text(encoding="utf-8"))
-        raw = (folder / f"{oracle}.json").read_bytes()
-        record = json.loads(raw)
-    except (OSError, ValueError):
-        return False
-    return (index.get("commit") == commit and index.get("record") == oracle
-            and hashlib.sha256(raw).hexdigest() == oracle
-            and record.get("schema") == BIT_EXACT_RECORD_SCHEMA
-            and record.get("route_class") == "bit_exact"
-            and record.get("tree") == tree and record.get("parent") == parent
-            and record.get("changed_files") == sorted(set(files))
-            and isinstance(record.get("verdict_digests"), list)
-            and bool(record.get("verdict_digests")))
-
-
 def ppl_contract_range_requires_gate(worktree: Path, base: str, tip: str,
                                      store: "Path | None" = None) -> bool:
-    """Round-7 resolutions A/B: must base..tip pass the ppl_contract quality layers
-    before it reaches a champion? Framing-safe: commits come from `rev-list` (hex only),
-    and per commit the raw message (`cat-file`), the AK trailers (`%(trailers:...)`,
-    unit-separated) and the file list (`diff-tree -r -m --name-only -z`) are read by
-    SEPARATE commands bound by SHA. True when git cannot answer; when any message
-    carries a control character or mentions ppl_contract; or when the range touches a
-    relevant file and some commit touching one (every merge does) lacks a VALID store
-    record (`_bit_exact_record_valid`)."""
+    """Round-9 resolution A: must base..tip pass the ppl_contract quality layers before
+    it reaches a champion? True when git cannot answer; when any commit message carries
+    a control character or mentions ppl_contract; or when ANY commit in the range (or
+    the range as a whole) touches a ppl_contract-relevant file -- any iqk file,
+    repack.cpp, the dispatch whitelists, any ppl_contract path. There is NO exemption:
+    stamps and store records are not proof (`store` is accepted for call compatibility
+    and deliberately unused). History is read framing-safe: SHAs from rev-list, raw
+    messages via cat-file, file lists via diff-tree -z, bound by SHA."""
+    del store  # never an exemption source (round-9 resolution A)
+
     def run_git(*args) -> bytes:
         done = subprocess.run(["git", "-C", str(worktree), *args], capture_output=True)
         if done.returncode != 0:
@@ -2914,38 +2929,20 @@ def ppl_contract_range_requires_gate(worktree: Path, base: str, tip: str,
     try:
         whole = [n for n in run_git("diff", "--name-only", "--no-renames", "-z", base,
                                     tip).decode().split("\x00") if n]
+        if any(ppl_contract_relevant(n) for n in whole):
+            return True
         shas = run_git("rev-list", f"{base}..{tip}").decode().split()
-        range_relevant = any(ppl_contract_relevant(n) for n in whole)
         for sha in shas:
             if not re.fullmatch(r"[0-9a-f]{40}", sha):
                 return True
             raw = run_git("cat-file", "commit", sha)
-            header, _, message = raw.partition(b"\n\n")
+            _header, _, message = raw.partition(b"\n\n")
             text = message.decode("utf-8", errors="replace")
             if _CONTROL.search(text) or "\ufffd" in text or "ppl_contract" in text:
                 return True
-            parents = [line.split()[1].decode() for line in header.split(b"\n")
-                       if line.startswith(b"parent ")]
             files = [n for n in run_git("diff-tree", "-r", "-m", "--root", "--no-commit-id",
                                         "--name-only", "-z", sha).decode().split("\x00") if n]
-            touched = any(ppl_contract_relevant(n) for n in files)
-            if len(parents) > 1:
-                if touched or range_relevant:
-                    return True
-                continue
-            if not touched:
-                continue
-            numerics = run_git("log", "-1", "--format=%(trailers:key=AK-Numerics,valueonly,"
-                               "separator=%x1f)", sha).decode().rstrip("\n").split("\x1f")
-            oracle = run_git("log", "-1", "--format=%(trailers:key=AK-Oracle,valueonly,"
-                             "separator=%x1f)", sha).decode().rstrip("\n").split("\x1f")
-            if numerics != ["bit_exact"] or len(oracle) != 1 or \
-                    not oracle[0].startswith("sha256:"):
-                return True
-            tree = run_git("rev-parse", f"{sha}^{{tree}}").decode().strip()
-            if not _bit_exact_record_valid(store, sha, oracle[0][len("sha256:"):], tree=tree,
-                                           parent=parents[0] if parents else "",
-                                           files=files):
+            if any(ppl_contract_relevant(n) for n in files):
                 return True
     except (OSError, UnicodeDecodeError, IndexError):
         return True
@@ -3010,7 +3007,35 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _build_identity(build: Path, tool: str) -> str:
+def _rebind_ld(env: dict, build: Path, candidate_build: "Path | None") -> str:
+    """Round-9 resolution D: the LD_LIBRARY_PATH a tool on `build` runs under -- the
+    candidate arm's RESOLVED RECIPE value (the one layer (a) and serving use) with the
+    candidate's own bin entry rebound to `build`'s bin, every other entry unchanged
+    (exactly `run._cpu_arm`'s rebinding). Raises OSError when the recipe value is
+    missing, carries an empty entry (an empty entry means the cwd), or does not name
+    the candidate's bin. Without a recipe value AND without a candidate (unit seams
+    only) the build's own bin is used."""
+    value = (env or {}).get("LD_LIBRARY_PATH")
+    if not value:
+        if candidate_build is None:
+            return str(Path(build) / "bin")
+        raise OSError("the resolved recipe environment carries no LD_LIBRARY_PATH")
+    if candidate_build is None:
+        raise OSError("LD_LIBRARY_PATH is set but no candidate build names its bin entry")
+    parts = value.split(":")
+    if any(not part for part in parts):
+        raise OSError("LD_LIBRARY_PATH carries an empty entry (the cwd); refusing")
+    candidate_bin = os.path.realpath(Path(candidate_build) / "bin")
+    hits = [i for i, part in enumerate(parts) if os.path.realpath(part) == candidate_bin]
+    if not hits:
+        raise OSError(f"LD_LIBRARY_PATH {value!r} does not name the candidate's bin "
+                      f"{candidate_bin}; not the candidate's resolved recipe")
+    for i in hits:
+        parts[i] = str(Path(build) / "bin")
+    return ":".join(parts)
+
+
+def _build_identity(build: Path, tool: str, ld_path: "str | None" = None) -> str:
     """Content identity of what a `tool` run on `build` executes: the tool executable
     and EVERY shared object in `build/bin` (the kernel lives in libggml-cpu.so; the tool
     executable is often byte-identical across builds). Raises OSError when the tool is
@@ -3020,16 +3045,17 @@ def _build_identity(build: Path, tool: str) -> str:
     if not exe.is_file():
         raise OSError(f"{exe} does not exist (the build lacks {tool!r}; "
                       f"add PPL_CONTRACT_TOOL_TARGETS to its build targets)")
-    parts = [f"{tool}:{_file_sha256(exe)}"]
+    ld_path = ld_path or str(bin_dir)
+    parts = [f"{tool}:{_file_sha256(exe)}", f"LD_LIBRARY_PATH={ld_path}"]
     libs = [lib for lib in sorted(bin_dir.glob("lib*.so*")) if lib.is_file()]
-    # Round-7 resolution D: EVERY regular file in the LD_LIBRARY_PATH directory (the
-    # gate's only one), not only lib*.so* -- a dependency need not be named lib*.
-    for entry in sorted(bin_dir.iterdir()):
-        if entry.is_file():
-            parts.append(f"{entry.name}:{_file_sha256_memo(entry)}")
-    # Round-3 review: bind the RESOLVED dependency closure (system libgomp/libstdc++,
-    # anything reached through RPATH), not only what sits in build/bin.
-    parts.extend(_resolved_closure([exe, *libs], lib_dir=bin_dir))
+    # Round-9 resolution D: EVERY regular file in EVERY LD_LIBRARY_PATH directory the
+    # tool actually runs under (the recipe's own, rebound), plus the build's bin.
+    for directory in dict.fromkeys([str(bin_dir), *ld_path.split(":")]):
+        for entry in sorted(Path(directory).iterdir()):
+            if entry.is_file():
+                parts.append(f"{directory}/{entry.name}:{_file_sha256_memo(entry)}")
+    # The RESOLVED dependency closure under that exact loader path.
+    parts.extend(_resolved_closure([exe, *libs], lib_dir=ld_path))
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()
 
 
@@ -3162,6 +3188,7 @@ def ppl_wikitext2(anchor_build: Path, candidate_build: Path, *, model: Path, thr
                   reference_build: "Path | None" = None,
                   cache_dir: "Path | None" = None,
                   _run_binary: "Callable[[Path], float | None] | None" = None) -> Verdict:
+    # Round-9 resolution D: every arm runs under the candidate's resolved recipe env.
     """Layer (b): wikitext2 perplexity under the lane's CPU claim.
 
     Pass iff |ppl_c - ppl_a| / ppl_a <= PPL_REL_BAR (marginal) AND, when a fixed
@@ -3171,7 +3198,8 @@ def ppl_wikitext2(anchor_build: Path, candidate_build: Path, *, model: Path, thr
     def run(build: Path) -> float | None:
         if _run_binary is not None:
             return _run_binary(build)
-        key = _key(kind="ppl", build=_build_identity(build, "llama-perplexity"),
+        ld_path = _rebind_ld(env, build, candidate_build)
+        key = _key(kind="ppl", build=_build_identity(build, "llama-perplexity", ld_path),
                    model=_model_identity(model), corpus=PPL_CORPUS_SHA256,
                    chunks=PPL_CHUNKS, ctx=PPL_CTX, batch=PPL_BATCH, threads=threads,
                    cpu_list=cpu_list, env=_env_identity(env))
@@ -3184,7 +3212,7 @@ def ppl_wikitext2(anchor_build: Path, candidate_build: Path, *, model: Path, thr
                 str(Path(build) / "bin" / "llama-perplexity"), "-m", str(model),
                 "-f", PPL_CORPUS, "-c", str(PPL_CTX), "--chunks", str(PPL_CHUNKS),
                 "-t", str(threads), "-b", str(PPL_BATCH), "--no-mmap"]
-        rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": str(Path(build) / "bin")},
+        rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": ld_path},
                                  log_dir=log_dir, label=f"ppl_{Path(build).name}")
         found = re.search(r"Final estimate: PPL = ([0-9.]+)", out + err)
         if rc != 0 or not found:
@@ -3325,7 +3353,8 @@ _SESSION_SAVE_LINE = re.compile(r"\n?[\w:]*: saving final output to session file
 
 def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Path,
                 threads: int, env: dict, cpu_list: str, log_dir: Path,
-                cache_dir: "Path | None", label: str
+                cache_dir: "Path | None", label: str,
+                candidate_build: "Path | None" = None
                 ) -> "tuple[str, int, tuple[int, ...], tuple[int, ...]] | None":
     """Greedy raw completion on `build`: (generated text, prompt token count, GENERATED
     TOKEN IDS) or None.
@@ -3339,7 +3368,8 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
     a prompt-only or short session can never be read as agreement (round-3 review)."""
     import uuid
     prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
-    key = _key(kind="completion-v4", build=_build_identity(build, "llama-completion"),
+    ld_path = _rebind_ld(env, build, candidate_build)
+    key = _key(kind="completion-v5", build=_build_identity(build, "llama-completion", ld_path),
                model=_model_identity(model), prompt=prompt_sha, n_predict=n_predict,
                ctx=ctx, threads=threads, cpu_list=cpu_list, env=_env_identity(env))
     cached = _cache_get(cache_dir, key)
@@ -3360,7 +3390,7 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
             "-no-cnv", "--no-display-prompt", "--ignore-eos", "--verbose-prompt",
             "--perf", "--prompt-cache", str(session), "--prompt-cache-all", "--no-mmap"]
     try:
-        rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": str(Path(build) / "bin")},
+        rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": ld_path},
                                  log_dir=log_dir, label=f"{label}_{Path(build).name}")
         tokens = _session_tokens(session) if rc == 0 else None
     finally:
@@ -3417,7 +3447,8 @@ def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: 
             return _generate(build, prompt)
         return _completion(build, prompt, n_predict, PPL_CONTRACT_GEN_CTX, model=model,
                            threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
-                           cache_dir=cache_dir, label="coherence")
+                           cache_dir=cache_dir, label="coherence",
+                           candidate_build=candidate_build)
     if len(prompts) < PPL_CONTRACT_PROD_PROMPT_COUNT_MIN:
         return Verdict("ppl_contract_coherence", False,
                        f"{len(prompts)} production-length prompt(s) supplied; "
@@ -3513,7 +3544,8 @@ def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
             return _generate(build, prompt, n_predict)
         return _completion(build, prompt, n_predict, PPL_CONTRACT_CANARY_CTX, model=model,
                            threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
-                           cache_dir=cache_dir, label="canary")
+                           cache_dir=cache_dir, label="canary",
+                           candidate_build=candidate_build)
 
     def stats(ids) -> tuple[float, float, int]:
         ids = list(ids)
@@ -3583,7 +3615,7 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
         ("production_reference_load", lambda: (
             check_production_reference_loads(
                 reference_build, model=model, cpu_list=cpu_list, env=env,
-                log_dir=log_dir, threads=threads)
+                log_dir=log_dir, threads=threads, candidate_build=candidate_build)
             if reference_build is not None else
             Verdict("production_reference_load", True,
                    "no fixed reference build supplied (test seam)"))),
