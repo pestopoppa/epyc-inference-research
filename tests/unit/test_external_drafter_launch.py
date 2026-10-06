@@ -44,6 +44,7 @@ def _runtime(accel: dict, *, role: str = "architect_critic", primary: str = "arc
     )
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_draft_dflash_spec_is_enabled_with_drafter_path_and_ngld() -> None:
     spec = _runtime({"type": "speculative_decoding", "spec_type": "draft-dflash",
                      "draft_model": DFLASH, "draft_max": 8,
@@ -55,6 +56,7 @@ def test_draft_dflash_spec_is_enabled_with_drafter_path_and_ngld() -> None:
     assert spec["n_gpu_layers_draft"] == 99
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_draft_mtp_spec_is_unchanged_and_carries_no_ngld() -> None:
     spec = _runtime({"type": "speculative_decoding", "spec_type": "draft-mtp",
                      "draft_model": MODEL, "draft_max": 4})["flags"]["spec"]
@@ -62,6 +64,7 @@ def test_draft_mtp_spec_is_unchanged_and_carries_no_ngld() -> None:
     assert spec["n_gpu_layers_draft"] is None
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_alias_of_a_dflash_host_does_not_launch_its_own_drafter() -> None:
     spec = _runtime({"type": "none", "spec_type": "draft-dflash", "draft_model": DFLASH,
                      "draft_max": 8, "n_gpu_layers_draft": 99},
@@ -105,6 +108,7 @@ def test_runtime_spec_args_project_ngld(ngld, expected) -> None:
 # --- STACKCHG-DFLASH2-20261003: fail closed at compile, and attest -ngld live ---
 
 @pytest.mark.parametrize("draft_model", [MODEL, None])
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_external_drafter_without_a_distinct_drafter_refuses_at_compile(draft_model) -> None:
     """draft-dflash whose drafter resolves to the target itself (or nothing) would launch
     `--spec-type draft-dflash` with no -md and die at load; refuse at compile instead."""
@@ -120,3 +124,31 @@ def test_runtime_attestation_maps_the_ngld_field() -> None:
     mode, flags, _ = stack_commands._RUNTIME_FIELD_CHECKS["runtime.flags.spec.n_gpu_layers_draft"]
     assert mode == "int_or_token_flag"
     assert "-ngld" in flags
+
+
+@pytest.fixture
+def _declared_backend_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Owned path metadata for pure compilation; no binary or store evidence."""
+    import subprocess
+    from src.registry import kernel_paths
+
+    directories = {}
+    for backend in ("cpu", "gpu"):
+        directory = tmp_path / "declared-backends" / backend
+        directory.mkdir(mode=0o700, parents=True)
+        directories[backend] = directory
+
+    def declared_backend_dir(backend):
+        if backend not in directories:
+            raise AssertionError(f"unexpected metadata backend: {backend!r}")
+        return directories[backend]
+
+    def refuse_child(*args, **kwargs):
+        raise AssertionError("pure metadata fixture must not create a child process")
+
+    monkeypatch.setattr(kernel_paths, "backend_dir", declared_backend_dir)
+    # Preserve real CPU [] and GPU vendor-path library policy.
+    monkeypatch.setattr(subprocess, "Popen", refuse_child)
+    yield directories
+    for directory in directories.values():
+        assert not list(directory.iterdir()), "metadata fixture acquired a binary or output"
