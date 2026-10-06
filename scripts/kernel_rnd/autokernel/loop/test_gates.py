@@ -2760,7 +2760,7 @@ class Round9LexicalAndLoaderRules(unittest.TestCase):
 
 class IsaGuardsAreAClosedBalancedSet(unittest.TestCase):
     """Operator 2026-10-06 (friction): ISA/feature guards are admitted in bodies from a
-    closed grammar, balanced within the hunk; everything else stays refused."""
+    closed grammar, balanced per file (across hunks); everything else stays refused."""
 
     def test_the_closed_grammar(self):
         lex = lambda line: gates._lexical_refusal(line, file_scope_helper=False,
@@ -2775,7 +2775,7 @@ class IsaGuardsAreAClosedBalancedSet(unittest.TestCase):
                      "#include <immintrin.h>", "#if __AVX512F__", "%:if defined(__AVX2__)"):
             self.assertIsNotNone(lex(line), line)
 
-    def test_balance_within_the_hunk(self):
+    def test_balance_over_the_files_added_lines(self):
         bal = gates._directive_balance_refusal
         self.assertIsNone(bal(["#if defined(__AVX2__)", "x;", "#else", "y;", "#endif"]))
         self.assertIsNotNone(bal(["#else", "y;", "#endif"]))

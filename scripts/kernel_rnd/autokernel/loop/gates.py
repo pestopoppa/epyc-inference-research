@@ -1390,10 +1390,12 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
     #     (balanced; see `_new_helper_refusal`) and `#include <system>`.
     #   * operator 2026-10-06 (friction): ISA/feature guards from the closed
     #     `_ISA_GUARD_LINE` grammar are admitted anywhere, balanced within the hunk.
+    # Balance is checked per FILE (every added line of this file's patch, in order):
+    # wrapping existing code puts the opening and closing guard in different -U0 hunks.
+    balance = _directive_balance_refusal([line for hunk in hunks for line in hunk[5]])
+    if balance is not None:
+        return f"unbalanced conditional compilation in this file's added lines: {balance}"
     for hunk, label in zip(hunks, labels):
-        balance = _directive_balance_refusal(hunk[5])
-        if balance is not None:
-            return f"unbalanced conditional compilation in an added hunk: {balance}"
         for line in hunk[5]:
             directive = _PREPROCESSOR_LINE.match(line)
             if directive is None and "_Pragma" not in line:
@@ -1421,7 +1423,7 @@ _FILE_SCOPE_DIRECTIVES = ("if", "ifdef", "ifndef", "elif", "else", "endif")
 #: feature guards a SIMD kernel edit legitimately needs inside a body. Terms are only
 #: `defined(X)` / `!defined(X)` over this allowlist, joined by && / ||; plus
 #: `#ifdef X`, `#ifndef X`, `#else`, `#endif`. Nothing else (no `#if 0`, no
-#: arithmetic, no unlisted macro), and every hunk must balance its own guards.
+#: arithmetic, no unlisted macro), and each file's added guards must balance.
 _ISA_MACRO = (r"(?:__AVX__|__AVX2__|__AVX512F__|__AVX512BW__|__AVX512VL__|__AVX512VNNI__"
               r"|__AVX512BF16__|__AVXVNNI__|__F16C__|__FMA__|__ARM_NEON|__ARM_FEATURE_[A-Z0-9_]+"
               r"|HAVE_FANCY_SIMD|GGML_USE_[A-Z0-9_]+)")
@@ -1451,12 +1453,12 @@ def _directive_balance_refusal(lines) -> "str | None":
             depth += 1
         elif word in ("elif", "else"):
             if depth == 0:
-                return f"`#{word}` without an opening guard in the same hunk"
+                return f"`#{word}` without an opening guard"
         elif word == "endif":
             if depth == 0:
-                return "`#endif` without an opening guard in the same hunk"
+                return "`#endif` without an opening guard"
             depth -= 1
-    return None if depth == 0 else f"{depth} guard(s) left open at the end of the hunk"
+    return None if depth == 0 else f"{depth} guard(s) left open"
 
 
 def _split_line_lexically(line: str) -> "tuple[str, str] | None":

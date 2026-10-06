@@ -34,6 +34,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
@@ -46,6 +47,13 @@ REGION_LOCK = "/mnt/raid0/llm/epyc-orchestrator/scripts/region-lock"
 FROZEN_TREE = "/mnt/raid0/llm/llama.cpp"
 TERMINAL_STATES = {"complete", "failed", "stopped"}
 CALIBRATION_TIMEOUT_S = 3600
+BUILD_TIMEOUT_S = 7200
+#: The lanes' exact anchor recipe (tmp/ak-lanes-relaunch-20261005/build_anchors.sh and
+#: build_anchor_q38fn_802bf9.sh): Release, gcc-15, GGML_NATIVE, GGML_OPENMP, HIP off.
+ANCHOR_RECIPE_DEFINES = ("-DCMAKE_BUILD_TYPE=Release", "-DGGML_HIP=OFF", "-DGGML_NATIVE=ON",
+                         "-DGGML_OPENMP=ON", "-DCMAKE_C_COMPILER=/usr/bin/gcc-15",
+                         "-DCMAKE_CXX_COMPILER=/usr/bin/g++-15")
+CALIBRATION_BUILD_DIRNAME = "build-ak-calib"
 
 
 class Refused(RuntimeError):
@@ -107,6 +115,57 @@ def provenance(build: Path, cpu_list: str, threads: int, argv: list) -> dict:
         except (OSError, ValueError):
             record["anchor_commit"] = None
     return record
+
+
+def build_calibration_argv(tree: Path, build: Path, cpu_list: str, region_lock: str,
+                           jobs: int) -> list:
+    """`region-lock run --role build` around configure + build of test-backend-ops with
+    the lanes' exact anchor recipe, pinned to `cpu_list`."""
+    script = (f"set -euo pipefail; taskset -c {shlex.quote(cpu_list)} cmake -S "
+              f"{shlex.quote(str(tree))} -B {shlex.quote(str(build))} "
+              + " ".join(ANCHOR_RECIPE_DEFINES)
+              + f" && taskset -c {shlex.quote(cpu_list)} nice -n 10 cmake --build "
+              f"{shlex.quote(str(build))} -j {int(jobs)} --target test-backend-ops")
+    return [region_lock, "run", "--cpu-list", cpu_list, "--role", "build",
+            "--timeout-s", str(BUILD_TIMEOUT_S), "--tag", "ak-served-shape-calibration-build",
+            "--", "bash", "-c", script]
+
+
+def build_calibration(tree: Path, cpu_list: str, region_lock: str, jobs: int,
+                      out=sys.stdout) -> Path:
+    """Build test-backend-ops of `tree` (with the staged calibration block) into
+    `<tree>/build-ak-calib`. Refuses unless the tree's ONLY change is the staged
+    tests/test-backend-ops.cpp carrying the calibration block -- the build must be the
+    anchor commit's code plus the test patch, nothing else."""
+    test_file = Path(tree) / "tests" / "test-backend-ops.cpp"
+    if ssc.CALIBRATION_CASE_SET_ID not in test_file.read_text(encoding="utf-8"):
+        raise Refused(f"{test_file} carries no calibration block; run "
+                      "--stage-calibration-patch first")
+    dirty = subprocess.run(["git", "-C", str(tree), "status", "--porcelain",
+                            "--untracked-files=no"], capture_output=True, text=True)
+    changed = {line[3:] for line in dirty.stdout.splitlines() if line.strip()}
+    if dirty.returncode != 0 or changed - {"tests/test-backend-ops.cpp"}:
+        raise Refused(f"{tree} has changes besides tests/test-backend-ops.cpp: "
+                      f"{sorted(changed - {'tests/test-backend-ops.cpp'})}")
+    build = Path(tree) / CALIBRATION_BUILD_DIRNAME
+    argv = build_calibration_argv(tree, build, cpu_list, region_lock, jobs)
+    print(f"build     {' '.join(argv[:11])} -- <configure + build test-backend-ops>",
+          file=out)
+    done = subprocess.run(argv, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                          timeout=BUILD_TIMEOUT_S + 600)
+    if done.returncode != 0:
+        raise Refused(f"calibration build exited {done.returncode}: "
+                      f"{(done.stderr or done.stdout)[-600:]}")
+    if not ssc.binary_has_calibration(build):
+        raise Refused(f"{build}/bin/test-backend-ops was built without the calibration block")
+    head = subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    (build / "provenance.json").write_text(json.dumps(
+        {"champion_commit": head, "built_for": "served-shape calibration",
+         "recipe": list(ANCHOR_RECIPE_DEFINES), "cpu_list": cpu_list}), encoding="utf-8")
+    print(f"built     {build} (tree HEAD {head[:12]}); next: --anchor-build {build} "
+          "--execute --apply", file=out)
+    return build
 
 
 def calibration_argv(build: Path, cpu_list: str, region_lock: str) -> list:
@@ -194,16 +253,20 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
     parser.add_argument("--region-lock", default=REGION_LOCK)
     parser.add_argument("--measurements", type=Path)
     parser.add_argument("--stage-calibration-patch", action="store_true")
+    parser.add_argument("--build-calibration", action="store_true")
+    parser.add_argument("--jobs", type=int, default=24)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
     try:
-        mutating = args.stage_calibration_patch or args.execute or args.apply
+        mutating = (args.stage_calibration_patch or args.build_calibration or args.execute
+                    or args.apply)
         if mutating:
             alive = loop_alive_refusal(args.store)
             if alive:
                 raise Refused(alive)
-        if args.tree is not None and (args.stage_calibration_patch or args.apply):
+        if args.tree is not None and (args.stage_calibration_patch or args.apply
+                                      or args.build_calibration):
             frozen = frozen_tree_refusal(args.tree)
             if frozen:
                 raise Refused(frozen)
@@ -214,11 +277,14 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
                                   ssc.calibration_patch_block())
             print(f"staged    calibration block into {args.tree}/tests/test-backend-ops.cpp",
                   file=out)
-            print("next      build test-backend-ops of this tree with the lane's CPU recipe "
-                  "into a scratch build dir under the region lock, e.g. "
-                  f"`{args.region_lock} run --cpu-list <served list> --role bench -- "
-                  f"cmake --build <calib build> --target test-backend-ops -j 64`, then "
-                  "rerun with --anchor-build <calib build> --execute --apply", file=out)
+            print("next      --build-calibration --cpu-list <served list> (builds "
+                  f"{args.tree}/{CALIBRATION_BUILD_DIRNAME} with the anchor recipe under the "
+                  "region lock), then --anchor-build <that dir> --execute --apply", file=out)
+            return 0
+        if args.build_calibration:
+            if args.tree is None or not args.cpu_list:
+                raise Refused("--build-calibration needs --tree and --cpu-list")
+            build_calibration(args.tree, args.cpu_list, args.region_lock, args.jobs, out=out)
             return 0
         measurements = None
         if args.execute:
