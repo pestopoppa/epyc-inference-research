@@ -247,8 +247,8 @@ def checkouts(repo: Path, branch: str) -> list[Path]:
 
 
 def fold_onto_champion(repo: Path, champion_branch: str, commits: Sequence[str], *,
-                       note: str, fold_check: Callable[..., Mapping[str, Any]] | None = None
-                       ) -> dict:
+                       note: str, fold_check: Callable[..., Mapping[str, Any]] | None = None,
+                       store: Path | None = None) -> dict:
     """Fold `commits` (in order) into the ONE champion: pick, G0, CAS, fast-forward.
 
     Returns {"result": folded | conflict | already present | g0_refused |
@@ -262,8 +262,10 @@ def fold_onto_champion(repo: Path, champion_branch: str, commits: Sequence[str],
     # classified non-ppl, never folds into the global champion -- no cross-lane quality
     # gate (layers a-d on every peer model) exists. Kernel-coverage G0 is not one.
     from . import gates
+    # `store` is the lane store holding the bit-exact records of its OWN keeps; another
+    # lane's series has no records here and is held (over-refusal is the accepted side).
     held_ppl = [c for c in commits if gates.ppl_contract_range_requires_gate(
-        repo, f"{c}^", c)]
+        repo, f"{c}^", c, store=store)]
     if held_ppl:
         return {"result": "ppl_contract_held", "commit": None, "picked": [],
                 "held": list(held_ppl)}
@@ -378,7 +380,7 @@ def record_keep(bound, *, repo: Path, keep_commit: str, decision: Mapping[str, A
         try:
             entry["fold"] = {"branch": bound.champion_branch, **fold_onto_champion(
                 repo, bound.champion_branch, [keep_commit], fold_check=fold_check,
-                note=f"fold from {bound.lane.target_id} ({lane})")}
+                note=f"fold from {bound.lane.target_id} ({lane})", store=store)}
         except Exception as exc:  # noqa: BLE001 -- held on the working branch, retried
             entry["fold"] = {"branch": bound.champion_branch, "commit": None,
                              "result": f"error: {type(exc).__name__}: {exc}"}
@@ -444,7 +446,8 @@ def refresh_gates(bound, *, repo: Path, store: Path, branch: str,
             try:
                 result = fold_onto_champion(repo, bound.champion_branch, [commit],
                                             fold_check=fold_check,
-                                            note=f"fold retry from {bound.lane.target_id}")
+                                            note=f"fold retry from {bound.lane.target_id}",
+                                            store=store)
             except Exception as exc:  # noqa: BLE001
                 result = {"result": f"error: {type(exc).__name__}: {exc}", "commit": None}
             out.append(append(bound, {"event": "fold_retry", "lane": lane, "patch_id": pid,

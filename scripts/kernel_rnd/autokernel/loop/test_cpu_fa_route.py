@@ -87,7 +87,7 @@ def test_fa_route_refuses_tiled_body_and_pragma_omp():
     scope = _scope(_gqa_pass_patch(in_tiled=True))
     assert not scope.passed and "outside every admitted body" in scope.reason
     scope = _scope(_gqa_pass_patch(pragma=True))
-    assert not scope.passed and "forbidden pattern" in scope.reason
+    assert not scope.passed and ("forbidden pattern" in scope.reason or "refused lexically" in scope.reason)
 
 
 @needs_anchor
@@ -439,7 +439,9 @@ def test_fa_route_refuses_preprocessor_and_openmp_spellings_inside_a_body(insert
     text = _after_line(_head(), "    const bool write_partials = (partials != nullptr);",
                        inserted)
     scope = _scope(text)
-    assert not scope.passed and match in scope.reason, scope.reason
+    # round-7 resolution C: the lexical refusal (no `#` outside a literal) may fire
+    # before the route's own forbidden pattern; either is a refusal.
+    assert not scope.passed and (match in scope.reason or "refused lexically" in scope.reason), scope.reason
 
 
 @needs_anchor
@@ -451,4 +453,6 @@ def test_fa_route_new_static_objects_must_be_const_and_call_free():
                        ("static struct fa_init { fa_init() {} } fa_init_once;\n\n", "const"),
                        ("static const float fa_scale = fa_compute_scale();\n\n", "call")):
         scope = _scope(_before(_head(), marker, bad))
-        assert not scope.passed and match in scope.reason, scope.reason
+        # round-7 resolution C: the lexical refusal (no `#` outside a literal) may fire
+    # before the route's own forbidden pattern; either is a refusal.
+    assert not scope.passed and (match in scope.reason or "refused lexically" in scope.reason), scope.reason

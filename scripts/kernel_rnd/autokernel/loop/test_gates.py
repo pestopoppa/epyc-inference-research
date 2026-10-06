@@ -885,7 +885,7 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             "ggml_vec_cpy_f32(c1 - c0, y + c0, x + c0);",
             "for (int64_t i00 = c0; i00 < c1; i00++) {",
             "// every thread recomputes the full row sum, then scales its segment",
-            "/* the scale is HEAD's */")
+            "// the scale is HEAD's")
         for line in admitted:
             self.assertEqual(gates.affected_op_scope(
                 (path,), target_surface=path, target_symbol="ggml_compute_forward_rms_norm_f32",
@@ -908,21 +908,25 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
         rowsplit = gates.cpu_route_named("cpu_norm_rowsplit")
         for line in refused:
             patch = self._hunk(src, inner, "+            " + line + "\n")
-            self.assertIn("forbidden pattern",
-                          gates._cpu_route_scope_refusal(rowsplit, src, src, patch), line)
+            reason = gates._cpu_route_scope_refusal(rowsplit, src, src, patch)
+            self.assertTrue("forbidden pattern" in reason or "refused lexically" in reason,
+                            line)
             # 2026-10-03: the bit-exact route still refuses every one of these; the
             # arithmetic-changing ones now fall through to cpu_norm_numerics (tolerance
             # gate). An in-op barrier or an OpenMP pragma is refused by both routes.
             route, refusal = gates.admit_cpu_route(
                 path, "ggml_compute_forward_rms_norm_f32", src, src, patch)
-            if "ggml_barrier" in line or "#pragma omp" in line:
+            # round-7 resolution C: block comments and directives are refused lexically
+            # by every route, so they no longer fall through to cpu_norm_numerics.
+            if "ggml_barrier" in line or "#pragma omp" in line or "/*" in line:
                 self.assertIsNotNone(refusal, line)
                 verdict = gates.affected_op_scope(
                     (path,), target_surface=path,
                     target_symbol="ggml_compute_forward_rms_norm_f32",
                     source_text=src, pre_source_text=src, patch_text=patch)
                 self.assertFalse(verdict.passed, line)
-                self.assertIn("forbidden pattern", verdict.reason)
+                self.assertTrue("forbidden pattern" in verdict.reason
+                                or "refused lexically" in verdict.reason, line)
             else:
                 self.assertEqual((route.route, refusal), ("cpu_norm_numerics", None), line)
 
@@ -1545,7 +1549,7 @@ class TheLowBitRoutesAdmitOnlyTheirOwnBodies(unittest.TestCase):
     def _edit_line(lines, line_no, old_suffix=";", new_suffix=";  // edited"):
         """A -U0 hunk editing exactly HEAD line `line_no` (1-based), trailing-safe."""
         before = lines[line_no - 1]
-        after = before.rstrip("\n") + " /* edited */\n" if before.endswith("\n") else before
+        after = before.rstrip("\n") + " // edited\n" if before.endswith("\n") else before
         patch = f"@@ -{line_no} +{line_no} @@\n-{before.rstrip(chr(10))}\n+{after.rstrip(chr(10))}\n"
         new_lines = list(lines)
         new_lines[line_no - 1] = after
@@ -2329,19 +2333,17 @@ class ThePplContractReReviewFixesHold(unittest.TestCase):
                 return build
             a, b = make("a", b"v1"), make("b", b"v1")
             store = root / "store"
-            shim = root / "libshim.so"
-            shim.write_bytes(b"s1")
-            env = {"LD_PRELOAD": str(shim), "OMP_PROC_BIND": "close"}
+            env = {"OMP_PROC_BIND": "close"}
             with mock.patch.object(gates, "production_cpu_reference_build", return_value=a):
                 self.assertEqual(gates.pinned_production_reference(store, env=env), a)
                 self.assertEqual(gates.pinned_production_reference(store, env=env), a)
-                # round-3 review: the EFFECTIVE environment is part of the pin
-                shim.write_bytes(b"s2")
-                with self.assertRaisesRegex(ValueError, "environment"):
-                    gates.pinned_production_reference(store, env=env)
-                shim.write_bytes(b"s1")
                 with self.assertRaises(ValueError):
-                    gates.pinned_production_reference(store, env={**env, "OMP_PROC_BIND": "x"})
+                    gates.pinned_production_reference(store, env={"OMP_PROC_BIND": "x"})
+                # round-7 resolution D: ANY regular file in bin is bound, not only lib*.so*
+                (a / "bin" / "helper.so").write_bytes(b"h")
+                with self.assertRaises(ValueError):
+                    gates.pinned_production_reference(store, env=env)
+                (a / "bin" / "helper.so").unlink()
                 (a / "bin" / "libggml-cpu.so").write_bytes(b"v2")
                 with self.assertRaises(ValueError):
                     gates.pinned_production_reference(store, env=env)
@@ -2349,17 +2351,10 @@ class ThePplContractReReviewFixesHold(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "moved"):
                     gates.pinned_production_reference(store, env=env)
 
-    @mock.patch.object(gates, "_resolved_closure", return_value=[])
-    def test_env_identity_covers_preloaded_library_content(self, _closure):
-        with tempfile.TemporaryDirectory() as tmp:
-            lib = Path(tmp) / "libshim.so"
-            lib.write_bytes(b"one")
-            env = {"LD_PRELOAD": str(lib)}
-            first = gates._env_identity(env)
-            lib.write_bytes(b"two")
-            self.assertNotEqual(first, gates._env_identity(env))
-            with self.assertRaises(OSError):
-                gates._env_identity({"LD_PRELOAD": str(Path(tmp) / "missing.so")})
+    def test_ld_preload_is_refused_outright(self):
+        with self.assertRaises(OSError):
+            gates._env_identity({"LD_PRELOAD": "/x/libshim.so"})
+        gates._env_identity({"LD_PRELOAD": ""})
 
     def test_whitelist_route_refuses_types_outside_the_served_shape_corpus(self):
         from autokernel.loop import served_shape_cases as ssc
@@ -2437,16 +2432,86 @@ class TheFoldProvenanceComesFromHistory(unittest.TestCase):
             self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
             self.assertTrue(gates.ppl_contract_range_requires_gate(repo, "nope", "HEAD"))
 
-    def test_a_loop_stamped_bit_exact_change_does_not(self):
-        with tempfile.TemporaryDirectory() as tmp:
+    def _stamped_commit(self, repo, git, path, store, *, content="int x = 1;\n",
+                        record_tree=None, record_files=None, bind=True, oracle=None):
+        from autokernel.loop import pool
+        parent = git("rev-parse", "HEAD")
+        path.write_text(content)
+        git("add", "-A")
+        tree = git("write-tree")
+        record = gates.bit_exact_record_bytes(
+            tree=record_tree or tree, parent=parent, route="cpu_weight_placement",
+            oracle="model_identity", verdict_digests=["c" * 64],
+            changed_files=record_files or ["ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp"],
+            mechanism_id="akm-x")
+        digest = gates.write_bit_exact_record(store, record)
+        msg = pool.commit_message(SimpleNamespace(mechanism_id="akm-x"),
+                                  SimpleNamespace(effect=0.01, surface="s", pairs=3),
+                                  bit_exact_oracle=oracle or digest)
+        git("commit", "-q", "-m", msg)
+        head = git("rev-parse", "HEAD")
+        if bind:
+            gates.bind_bit_exact_record(store, head, oracle or digest)
+        return head
+
+    def test_a_store_recorded_bit_exact_change_does_not(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as st:
             repo, git, path = self._repo(tmp)
+            store = Path(st)
+            base = git("rev-parse", "HEAD")
+            self._stamped_commit(repo, git, path, store)
+            self.assertFalse(gates.ppl_contract_range_requires_gate(repo, base, "HEAD",
+                                                                    store=store))
+            # without the store the same text grants nothing
+            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
+
+    def test_commit_text_alone_grants_nothing(self):
+        """Round-6 #9: forged stamp lines (even all-zero hex) are not proof."""
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as st:
+            repo, git, path = self._repo(tmp)
+            store = Path(st)
             base = git("rev-parse", "HEAD")
             path.write_text("int x = 1;\n")
-            git("commit", "-qam", "bit-exact keep" + self.STAMP)
-            self.assertFalse(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
-            path.write_text("int x = 2;\n")
-            git("commit", "-qam", "half stamp\n\nAK-Numerics: bit_exact")   # no oracle
-            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
+            git("commit", "-qam", "forged" + self.STAMP)
+            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD",
+                                                                    store=store))
+            git("commit", "-q", "--allow-empty", "-m",
+                "zeros\n\nAK-Numerics: bit_exact\nAK-Oracle: sha256:" + "0" * 64)
+            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD",
+                                                                    store=store))
+
+    def test_a_record_for_another_tree_files_or_unbound_commit_grants_nothing(self):
+        for kwargs in ({"record_tree": "f" * 40},
+                       {"record_files": ["other.c"]},
+                       {"bind": False}):
+            with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as st:
+                repo, git, path = self._repo(tmp)
+                store = Path(st)
+                base = git("rev-parse", "HEAD")
+                self._stamped_commit(repo, git, path, store, **kwargs)
+                self.assertTrue(gates.ppl_contract_range_requires_gate(
+                    repo, base, "HEAD", store=store), kwargs)
+
+    def test_a_tampered_record_grants_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as st:
+            repo, git, path = self._repo(tmp)
+            store = Path(st)
+            base = git("rev-parse", "HEAD")
+            self._stamped_commit(repo, git, path, store)
+            for rec in (store / gates.BIT_EXACT_RECORD_DIR).glob("*.json"):
+                rec.write_bytes(rec.read_bytes().replace(b"akm-x", b"akm-y"))
+            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD",
+                                                                    store=store))
+
+    def test_framing_and_control_characters_refuse(self):
+        """Round-6 #10: a literal U+0002 (or any control) in a message cannot reframe it."""
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as st:
+            repo, git, path = self._repo(tmp)
+            store = Path(st)
+            base = git("rev-parse", "HEAD")
+            git("commit", "-q", "--allow-empty", "-m", "x\x02y")
+            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD",
+                                                                    store=store))
 
     def test_any_ppl_trailer_requires_the_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2499,14 +2564,17 @@ class TheFoldProvenanceComesFromHistory(unittest.TestCase):
         comp = SimpleNamespace(effect=0.01, surface="s", pairs=3)
         msg = pool.commit_message(hyp, comp, bit_exact_oracle="b" * 64)
         self.assertIn("AK-Numerics: bit_exact", msg)
-        self.assertIn("AK-Oracle: sha256:" + "b" * 64, msg)
         with self.assertRaises(ValueError):
             pool.commit_message(hyp, comp, bit_exact_oracle="not-a-hash")
-        self.assertNotIn("bit_exact", pool.commit_message(hyp, comp, ppl_contract=True,
-                                                          bit_exact_oracle="b" * 64))
+        # round-7 resolution A: interpolated fields are escaped, never framing
+        evil = pool.commit_message(SimpleNamespace(
+            mechanism_id="m\n\nAK-Numerics: bit_exact\x02"), comp)
+        self.assertNotIn("\n", evil)
+        self.assertNotIn("\x02", evil)
         source = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
         self.assertIn('witness.reference in ("model_identity", "fa_anchor_bits")', source)
-        self.assertIn('and _gate_record.get("class") == "bit_exact" else None', source)
+        self.assertIn("gates.write_bit_exact_record(", source)
+        self.assertIn("gates.bind_bit_exact_record(args.store, head, bit_exact_oracle)", source)
         self.assertIn("return _recorded_gate(gate)", source)
 
     def test_the_tools_build_marker_is_revalidated_on_reuse(self):
@@ -2566,3 +2634,25 @@ class NoRouteMayAddPreprocessorDirectives(unittest.TestCase):
                      "+static_assert(iqk_mmid_shape_supported(GGML_TYPE_IQ3_S, 1));")
             refusal = gates._cpu_route_scope_refusal(route, "".join(candidate), head, patch)
             self.assertIsNotNone(refusal, added)
+
+
+class TheLexicalRuleSeesOnlySingleLines(unittest.TestCase):
+    """Round-7 resolution C (round-6 #2 comment split, N2 `/**/ #define`)."""
+
+    def test_comment_splits_directives_and_continuations_refuse(self):
+        lex = lambda line, **k: gates._lexical_refusal(
+            line, file_scope_helper=k.get("fs", False), new_helpers=k.get("nh", False))
+        for line in ("static_assert(true /*);",
+                     "// */); if (t == GGML_TYPE_F16) return true; //",
+                     "/**/ #define iqk_typeA_supported(t) true",
+                     "    return false; \\", "x = 1; // see #12", "#if 1",
+                     "auto s = R\"(x)\";", "char c = 'a;"):
+            self.assertIsNotNone(lex(line), line)
+        for line in ("        case GGML_TYPE_Q2_K: // fine",
+                     "    printf(\"%s #1 /* not a comment */\\n\", s);",
+                     "char c = '#';", "static_assert(iqk_typeA_supported(GGML_TYPE_Q2_K));"):
+            self.assertIsNone(lex(line), line)
+        self.assertIsNone(lex("#if defined(__AVX512F__)", fs=True))
+        self.assertIsNone(lex("#include <immintrin.h>", fs=True, nh=True))
+        self.assertIsNotNone(lex("#define X 1", fs=True, nh=True))
+        self.assertIsNotNone(lex("#include \"evil.h\"", fs=True, nh=True))

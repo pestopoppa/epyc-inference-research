@@ -3374,8 +3374,8 @@ def main(argv: list[str] | None = None) -> int:
             passed, verdicts = gate(hypothesis, paths)
             entry = keep_numerics.setdefault(hypothesis.mechanism_id, {"class": "reference"})
             entry["passed"] = bool(passed)
-            entry["oracle"] = hashlib.sha256(json.dumps(
-                [v.to_dict() for v in verdicts], sort_keys=True).encode()).hexdigest()
+            entry["verdict_digests"] = [hashlib.sha256(json.dumps(
+                v.to_dict(), sort_keys=True).encode()).hexdigest() for v in verdicts]
             return passed, verdicts
         return wrapped
 
@@ -3610,7 +3610,10 @@ def main(argv: list[str] | None = None) -> int:
                 if (admitted_route is not None and admitted_route.numerics == "bit_exact"
                         and witness is not None
                         and witness.reference in ("model_identity", "fa_anchor_bits")):
-                    keep_numerics[hypothesis.mechanism_id] = {"class": "bit_exact"}
+                    keep_numerics[hypothesis.mechanism_id] = {
+                        "class": "bit_exact", "route": admitted_route.route,
+                        "oracle_name": witness.reference,
+                        "changed": sorted(set(changed + untracked))}
                 elif admitted_route is not None and admitted_route.numerics == "ppl_contract":
                     keep_numerics[hypothesis.mechanism_id] = {"class": "ppl_contract"}
             if screen_confirmation is not None:
@@ -4985,7 +4988,7 @@ def main(argv: list[str] | None = None) -> int:
             # Round-3 review: provenance from HISTORY -- a trailer, or any change to a
             # ppl_contract path not positively classified non-ppl -- requires the gate.
             trailer = gates.ppl_contract_range_requires_gate(args.worktree, cor_commit[0],
-                                                             tip_commit)
+                                                             tip_commit, store=args.store)
             if not gates.ppl_contract_fold_required(bundle[0].keeps, changed, ledger,
                                                     trailer=trailer):
                 return None
@@ -5758,15 +5761,37 @@ def main(argv: list[str] | None = None) -> int:
             _gate_record = keep_numerics.get(hypothesis.mechanism_id) or {}
             ppl_keep = (_ledger is None or hypothesis.mechanism_id in _ledger
                         or _gate_record.get("class") == "ppl_contract")
-            bit_exact_oracle = (_gate_record.get("oracle")
-                                if not ppl_keep and _gate_record.get("passed")
-                                and _gate_record.get("class") == "bit_exact" else None)
+            bit_exact_oracle = None
+            if not ppl_keep and _gate_record.get("passed") \
+                    and _gate_record.get("class") == "bit_exact":
+                # Round-7 resolution A: the exemption is a RECORD in this store, built
+                # from the gate's own passing bit-exact verdicts and bound to the
+                # commit's tree and parent; the trailer only names its digest.
+                try:
+                    bit_exact_oracle = gates.write_bit_exact_record(
+                        args.store, gates.bit_exact_record_bytes(
+                            tree=checked.tree,
+                            parent=_git(worker.worktree, "rev-parse", "HEAD"),
+                            route=str(_gate_record.get("route")),
+                            oracle=str(_gate_record.get("oracle_name")),
+                            verdict_digests=_gate_record.get("verdict_digests") or [],
+                            changed_files=_gate_record.get("changed") or [],
+                            mechanism_id=hypothesis.mechanism_id))
+                except (OSError, ValueError) as exc:
+                    print(f"warning: bit-exact record not written ({exc}); this keep "
+                          "will require the quality gate at fold", file=sys.stderr)
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch,
                                          expected_tree=checked.tree,
                                          ppl_contract=ppl_keep,
                                          bit_exact_oracle=bit_exact_oracle)
+            if bit_exact_oracle is not None:
+                try:
+                    gates.bind_bit_exact_record(args.store, head, bit_exact_oracle)
+                except (OSError, ValueError) as exc:
+                    print(f"warning: bit-exact record not bound ({exc}); this keep will "
+                          "require the quality gate at fold", file=sys.stderr)
             if cross_decision is not None:
                 # ONE-champion lineage (cross_target.py): ledger the decision, fold a
                 # non-regressing keep into THE champion (G0 first), or hold it and

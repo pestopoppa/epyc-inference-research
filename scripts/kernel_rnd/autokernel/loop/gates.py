@@ -1350,6 +1350,22 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
         admitted = ", ".join(f"{label} {first}-{last}" for label, first, last in old[0])
         return (f"hunk {where} lies outside every admitted body (HEAD lines: "
                 f"{admitted or 'none'})")
+    # Round-7 resolution C: lexical refusal FIRST, on every added line of every route,
+    # so no grammar ever sees a line whose meaning depends on another line: no block
+    # comment delimiter (`/*`, `*/`) anywhere, no line continuation, no raw string, no
+    # unterminated literal, and no `#` outside a string/char literal (comments
+    # included) except the documented file-scope new-helper directive lines.
+    for hunk, label in zip(hunks, labels):
+        for line in hunk[5]:
+            # A whole-line rewrite the route admits by a closed regex (e.g. the
+            # `/* .graph_optimize = */ <fn>,` slot) is fully determined by that regex.
+            if label is None and route.line_rewrites and any(
+                    re.fullmatch(new, line.strip()) for _old, new in route.line_rewrites):
+                continue
+            why = _lexical_refusal(line, file_scope_helper=(label is None),
+                                   new_helpers=route.new_helpers)
+            if why is not None:
+                return f"an added line is refused lexically ({why}): {line.strip()[:120]!r}"
     if route.forbidden_added is not None:
         pattern = re.compile(route.forbidden_added)
         for hunk, label in zip(hunks, labels):
@@ -1388,6 +1404,53 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
 
 
 _PREPROCESSOR_LINE = re.compile(r"^\s*#\s*([A-Za-z_]+)")
+_FILE_SCOPE_DIRECTIVES = ("if", "ifdef", "ifndef", "elif", "else", "endif")
+
+
+def _split_line_lexically(line: str) -> "tuple[str, str] | None":
+    """(code outside literals, trailing `//` comment text) for one source line, or None
+    when a string/char literal is unterminated. Literal CONTENTS are dropped."""
+    code, i, n = [], 0, len(line)
+    while i < n:
+        ch = line[i]
+        if ch in "\"'":
+            quote, i = ch, i + 1
+            while i < n and line[i] != quote:
+                i += 2 if line[i] == "\\" else 1
+            if i >= n:
+                return None
+            code.append(quote + quote)
+            i += 1
+            continue
+        if line.startswith("//", i):
+            return "".join(code), line[i + 2:]
+        code.append(ch)
+        i += 1
+    return "".join(code), ""
+
+
+def _lexical_refusal(line: str, *, file_scope_helper: bool, new_helpers: bool) -> "str | None":
+    if line.rstrip("\n").rstrip().endswith("\\"):
+        return "line continuation"
+    split = _split_line_lexically(line.rstrip("\n"))
+    if split is None:
+        return "unterminated string/char literal"
+    code, comment = split
+    for text in (code, comment):
+        if "/*" in text or "*/" in text:
+            return "block comment delimiter"
+    if re.search(r"\b(?:u8|u|U|L)?R\"\"", code):
+        return "raw string literal"
+    if "#" in comment:
+        return "`#` in a comment"
+    if "#" in code:
+        directive = _PREPROCESSOR_LINE.match(code)
+        stripped = code.strip()
+        if not (file_scope_helper and directive is not None and stripped.startswith("#")
+                and (directive.group(1) in _FILE_SCOPE_DIRECTIVES
+                     or (new_helpers and _SYSTEM_INCLUDE.fullmatch(line.rstrip("\n"))))):
+            return "`#` outside a string literal"
+    return None
 _SYSTEM_INCLUDE = re.compile(r"\s*#\s*include\s*<[^>\s]+>\s*")
 
 
@@ -2771,46 +2834,121 @@ def ppl_contract_relevant(path: str) -> bool:
             or path in ppl_contract_paths())
 
 
-def _bit_exact_stamped(body: str) -> bool:
-    lines = [line.strip() for line in body.splitlines()]
-    return PPL_CONTRACT_BIT_EXACT_TRAILER in lines and any(
-        re.fullmatch(re.escape(PPL_CONTRACT_ORACLE_PREFIX) + r"[0-9a-f]{64}", line)
-        for line in lines)
+#: Round-7 resolution A: commit text is never proof. A bit_exact exemption needs a
+#: RECORD in the loop's own store, written by the keep path from the gate's own
+#: passing bit-exact verdicts: content-addressed by the sha256 of its canonical bytes
+#: (the `AK-Oracle:` value) plus a by-commit index binding the commit SHA to it.
+BIT_EXACT_RECORD_DIR = Path("ppl_contract") / "bit_exact_records"
+BIT_EXACT_RECORD_SCHEMA = "epyc.autokernel.bit_exact_record.v1"
+_CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")
 
 
-def ppl_contract_range_requires_gate(worktree: Path, base: str, tip: str) -> bool:
-    """Round-5 resolution A: must base..tip pass the ppl_contract quality layers before
-    it reaches a champion? True when ANY commit carries PPL_CONTRACT_TRAILER, or when the
-    range touches a relevant file (whole-range diff, plus every commit's diff against
-    EACH parent, so a merge's conflict resolution is seen) and some commit touching one
-    is not bit-exact stamped (merges never are), or when git cannot answer."""
-    def run_git(*args):
-        done = subprocess.run(["git", "-C", str(worktree), *args], capture_output=True,
-                              text=True)
+def bit_exact_record_bytes(*, tree: str, parent: str, route: str, oracle: str,
+                           verdict_digests, changed_files, mechanism_id: str) -> bytes:
+    body = {"schema": BIT_EXACT_RECORD_SCHEMA, "route_class": "bit_exact", "tree": tree,
+            "parent": parent, "route": route, "oracle": oracle,
+            "verdict_digests": list(verdict_digests),
+            "changed_files": sorted(set(changed_files)), "mechanism_id": mechanism_id}
+    return json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+
+
+def write_bit_exact_record(store: Path, record: bytes) -> str:
+    digest = hashlib.sha256(record).hexdigest()
+    folder = Path(store) / BIT_EXACT_RECORD_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    tmp = folder / f".{digest}.{os.getpid()}.tmp"
+    tmp.write_bytes(record)
+    os.replace(tmp, folder / f"{digest}.json")
+    return digest
+
+
+def bind_bit_exact_record(store: Path, commit: str, digest: str) -> None:
+    if not re.fullmatch(r"[0-9a-f]{40}", commit) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError("bind_bit_exact_record needs a commit sha and a sha256 digest")
+    folder = Path(store) / BIT_EXACT_RECORD_DIR / "by-commit"
+    folder.mkdir(parents=True, exist_ok=True)
+    tmp = folder / f".{commit}.{os.getpid()}.tmp"
+    tmp.write_text(json.dumps({"commit": commit, "record": digest}), encoding="utf-8")
+    os.replace(tmp, folder / f"{commit}.json")
+
+
+def _bit_exact_record_valid(store: "Path | None", commit: str, oracle: str, *, tree: str,
+                            parent: str, files: list) -> bool:
+    """True only when the store holds the record `oracle` names, its bytes hash to
+    `oracle`, the by-commit index binds THIS commit to it, and the record's tree,
+    parent and changed-file list equal the commit's actual ones."""
+    if store is None or not re.fullmatch(r"[0-9a-f]{64}", oracle):
+        return False
+    folder = Path(store) / BIT_EXACT_RECORD_DIR
+    try:
+        index = json.loads((folder / "by-commit" / f"{commit}.json").read_text(encoding="utf-8"))
+        raw = (folder / f"{oracle}.json").read_bytes()
+        record = json.loads(raw)
+    except (OSError, ValueError):
+        return False
+    return (index.get("commit") == commit and index.get("record") == oracle
+            and hashlib.sha256(raw).hexdigest() == oracle
+            and record.get("schema") == BIT_EXACT_RECORD_SCHEMA
+            and record.get("route_class") == "bit_exact"
+            and record.get("tree") == tree and record.get("parent") == parent
+            and record.get("changed_files") == sorted(set(files))
+            and isinstance(record.get("verdict_digests"), list)
+            and bool(record.get("verdict_digests")))
+
+
+def ppl_contract_range_requires_gate(worktree: Path, base: str, tip: str,
+                                     store: "Path | None" = None) -> bool:
+    """Round-7 resolutions A/B: must base..tip pass the ppl_contract quality layers
+    before it reaches a champion? Framing-safe: commits come from `rev-list` (hex only),
+    and per commit the raw message (`cat-file`), the AK trailers (`%(trailers:...)`,
+    unit-separated) and the file list (`diff-tree -r -m --name-only -z`) are read by
+    SEPARATE commands bound by SHA. True when git cannot answer; when any message
+    carries a control character or mentions ppl_contract; or when the range touches a
+    relevant file and some commit touching one (every merge does) lacks a VALID store
+    record (`_bit_exact_record_valid`)."""
+    def run_git(*args) -> bytes:
+        done = subprocess.run(["git", "-C", str(worktree), *args], capture_output=True)
         if done.returncode != 0:
-            raise OSError(done.stderr.strip()[:200])
+            raise OSError(done.stderr.decode(errors="replace").strip()[:200])
         return done.stdout
     try:
-        whole = run_git("diff", "--name-only", "--no-renames", base, tip).splitlines()
-        log = run_git("log", "-m", "--format=%x00%H%x01%P%x01%B%x02", "--name-only",
-                      "--no-renames", f"{base}..{tip}")
-    except OSError:
+        whole = [n for n in run_git("diff", "--name-only", "--no-renames", "-z", base,
+                                    tip).decode().split("\x00") if n]
+        shas = run_git("rev-list", f"{base}..{tip}").decode().split()
+        range_relevant = any(ppl_contract_relevant(n) for n in whole)
+        for sha in shas:
+            if not re.fullmatch(r"[0-9a-f]{40}", sha):
+                return True
+            raw = run_git("cat-file", "commit", sha)
+            header, _, message = raw.partition(b"\n\n")
+            text = message.decode("utf-8", errors="replace")
+            if _CONTROL.search(text) or "\ufffd" in text or "ppl_contract" in text:
+                return True
+            parents = [line.split()[1].decode() for line in header.split(b"\n")
+                       if line.startswith(b"parent ")]
+            files = [n for n in run_git("diff-tree", "-r", "-m", "--root", "--no-commit-id",
+                                        "--name-only", "-z", sha).decode().split("\x00") if n]
+            touched = any(ppl_contract_relevant(n) for n in files)
+            if len(parents) > 1:
+                if touched or range_relevant:
+                    return True
+                continue
+            if not touched:
+                continue
+            numerics = run_git("log", "-1", "--format=%(trailers:key=AK-Numerics,valueonly,"
+                               "separator=%x1f)", sha).decode().rstrip("\n").split("\x1f")
+            oracle = run_git("log", "-1", "--format=%(trailers:key=AK-Oracle,valueonly,"
+                             "separator=%x1f)", sha).decode().rstrip("\n").split("\x1f")
+            if numerics != ["bit_exact"] or len(oracle) != 1 or \
+                    not oracle[0].startswith("sha256:"):
+                return True
+            tree = run_git("rev-parse", f"{sha}^{{tree}}").decode().strip()
+            if not _bit_exact_record_valid(store, sha, oracle[0][len("sha256:"):], tree=tree,
+                                           parent=parents[0] if parents else "",
+                                           files=files):
+                return True
+    except (OSError, UnicodeDecodeError, IndexError):
         return True
-    records = log.split("\x00")[1:]
-    range_relevant = any(ppl_contract_relevant(n.strip()) for n in whole)
-    for record in records:
-        try:
-            commit, parents, rest = record.split("\x01", 2)
-            body, names = rest.split("\x02", 1)
-        except ValueError:
-            return True
-        if any(line.strip() == PPL_CONTRACT_TRAILER for line in body.splitlines()):
-            return True
-        touched = any(ppl_contract_relevant(n.strip()) for n in names.splitlines())
-        is_merge = len(parents.split()) > 1
-        if (touched or (is_merge and range_relevant)) and \
-                (is_merge or not _bit_exact_stamped(body)):
-            return True
     return False
 
 
@@ -2851,6 +2989,19 @@ def _run_tool(argv: list[str], *, env: dict, log_dir: Path, label: str,
     return rc, out, err
 
 
+_SHA_MEMO: dict = {}
+
+
+def _file_sha256_memo(path: Path) -> str:
+    """`_file_sha256` memoized on (realpath, inode, size, mtime_ns, ctime_ns)."""
+    real = os.path.realpath(path)
+    st = os.stat(real)
+    key = (real, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+    if key not in _SHA_MEMO:
+        _SHA_MEMO[key] = _file_sha256(Path(real))
+    return _SHA_MEMO[key]
+
+
 def _file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -2871,8 +3022,11 @@ def _build_identity(build: Path, tool: str) -> str:
                       f"add PPL_CONTRACT_TOOL_TARGETS to its build targets)")
     parts = [f"{tool}:{_file_sha256(exe)}"]
     libs = [lib for lib in sorted(bin_dir.glob("lib*.so*")) if lib.is_file()]
-    for lib in libs:
-        parts.append(f"{lib.name}:{_file_sha256(lib)}")
+    # Round-7 resolution D: EVERY regular file in the LD_LIBRARY_PATH directory (the
+    # gate's only one), not only lib*.so* -- a dependency need not be named lib*.
+    for entry in sorted(bin_dir.iterdir()):
+        if entry.is_file():
+            parts.append(f"{entry.name}:{_file_sha256_memo(entry)}")
     # Round-3 review: bind the RESOLVED dependency closure (system libgomp/libstdc++,
     # anything reached through RPATH), not only what sits in build/bin.
     parts.extend(_resolved_closure([exe, *libs], lib_dir=bin_dir))
@@ -2934,19 +3088,18 @@ def _env_identity(env: dict) -> str:
     preload path over a replaced library changed execution without changing the key).
     A preload entry that cannot be hashed raises: never a key for an unknown binary."""
     loader = sorted(k for k in (env or {}) if k.startswith("LD_")
-                    and k not in ("LD_PRELOAD", "LD_LIBRARY_PATH"))
+                    and k != "LD_LIBRARY_PATH"
+                    and not (k == "LD_PRELOAD" and not str(env[k]).strip()))
     if loader:
         # Round-5 resolution E: LD_AUDIT and every other loader knob change what runs
         # without changing any hashed file; the gate refuses to run under them.
         raise OSError(f"launch env sets dynamic-loader variables {loader}; the ppl_contract "
                       "gate refuses to run under an unbound loader configuration")
+    # Round-7 resolution D: LD_PRELOAD is refused outright (above); the gate runs every
+    # tool with LD_LIBRARY_PATH = <build>/bin exactly, so the loader environment the
+    # closure is resolved under (`_resolved_closure`) IS the execution environment.
     items = sorted((k, v) for k, v in (env or {}).items() if k != "LD_LIBRARY_PATH")
-    preload = [entry for entry in re.split(r"[:\s]+", (env or {}).get("LD_PRELOAD", ""))
-               if entry]
-    contents = [(entry, _file_sha256(Path(entry))) for entry in preload]
-    closure = (_resolved_closure([Path(entry) for entry in preload], lib_dir=None)
-               if preload else [])
-    return hashlib.sha256(json.dumps([items, contents, closure]).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(items).encode()).hexdigest()
 
 
 def _cache_get(cache_dir: "Path | None", key: str):

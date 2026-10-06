@@ -66,7 +66,8 @@ def _ppl_contract_fold_blocked(args, bundle) -> bool:
         return gates.ppl_contract_fold_required(
             bundle.keeps, changed, gates.ppl_contract_ledger_read(Path(args.store)),
             trailer=gates.ppl_contract_range_requires_gate(
-                Path(args.champion_worktree), bundle.champion_of_record, bundle.tip))
+                Path(args.champion_worktree), bundle.champion_of_record, bundle.tip,
+                store=Path(args.store)))
     except Exception:  # noqa: BLE001 -- undecidable is blocked
         return True
 
