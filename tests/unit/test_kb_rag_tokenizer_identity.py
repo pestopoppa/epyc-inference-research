@@ -1,6 +1,7 @@
 """Tokenizer provenance guards: temporary bytes/SQLite and fake encoders only."""
 
 import hashlib
+import json
 import sqlite3
 import sys
 from types import SimpleNamespace
@@ -251,3 +252,129 @@ def test_loader_failure_clears_partial_session_and_identity(tmp_path, monkeypatc
     assert encoder._session is None
     assert encoder._tokenizer is None
     assert encoder._tokenizer_sha256 is None
+
+
+def _fake_loader_modules(monkeypatch, *, session, tokenizer):
+    session_options = Mock(return_value=SimpleNamespace())
+    inference_session = Mock(return_value=session)
+    tokenizer_from_str = Mock(return_value=tokenizer)
+    monkeypatch.setitem(
+        sys.modules,
+        "onnxruntime",
+        SimpleNamespace(
+            SessionOptions=session_options,
+            InferenceSession=inference_session,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tokenizers",
+        SimpleNamespace(Tokenizer=SimpleNamespace(from_str=tokenizer_from_str)),
+    )
+    return session_options, inference_session, tokenizer_from_str
+
+
+def _prepare_configured_loader(tmp_path, monkeypatch, config_files):
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+    for filename, config in config_files.items():
+        (model_dir / filename).write_text(json.dumps(config), encoding="utf-8")
+    tokenizer_path = model_dir / "tokenizer.json"
+    tokenizer_path.write_text('{"fixture": true}', encoding="utf-8")
+    monkeypatch.setattr(encoder, "_MODEL_DIR", model_dir)
+    monkeypatch.setattr(encoder, "_MODEL_PATH", model_dir / "model_int8.onnx")
+    monkeypatch.setattr(encoder, "_TOKENIZER_PATH", tokenizer_path)
+    monkeypatch.setattr(encoder, "is_available", lambda: True)
+    monkeypatch.setattr(encoder, "_load_declared_prefixes", lambda _: ("[Q] ", "[D] "))
+    monkeypatch.setattr(encoder, "_load_declared_prefix_ids", lambda _: {})
+    monkeypatch.setattr(encoder, "_prefix_encodes_to_one_token", lambda *args: True)
+    for name, value in {
+        "_session": None,
+        "_tokenizer": None,
+        "_tokenizer_sha256": "stale identity",
+        "_count_tokenizer": object(),
+        "_input_names": ("stale_input",),
+        "_do_lower_case": True,
+        "_prefix_tokens_ok": True,
+        "_query_prefix": "stale query prefix",
+        "_document_prefix": "stale document prefix",
+    }.items():
+        monkeypatch.setattr(encoder, name, value)
+    return model_dir
+
+
+@pytest.mark.parametrize(
+    "config_files",
+    [
+        {},
+        {"onnx_config.json": {"do_query_expansion": False}},
+        {"config_sentence_transformers.json": {"do_query_expansion": False}},
+        {
+            "config_sentence_transformers.json": {"do_query_expansion": True},
+            "onnx_config.json": {"do_query_expansion": False},
+        },
+    ],
+)
+def test_query_expansion_absent_or_false_keeps_loader_path(
+    tmp_path, monkeypatch, config_files,
+):
+    _prepare_configured_loader(tmp_path, monkeypatch, config_files)
+    session = SimpleNamespace(get_inputs=lambda: [])
+    tokenizer = SimpleNamespace(token_to_id=lambda _: 1)
+    session_options, inference_session, tokenizer_from_str = _fake_loader_modules(
+        monkeypatch, session=session, tokenizer=tokenizer,
+    )
+
+    assert encoder.ensure_loaded()
+
+    session_options.assert_called_once_with()
+    inference_session.assert_called_once()
+    tokenizer_from_str.assert_called_once()
+    assert encoder._session is session
+    assert encoder._tokenizer is tokenizer
+    assert encoder._input_names == ()
+    assert not encoder._do_lower_case
+
+
+@pytest.mark.parametrize(
+    "config_files",
+    [
+        {"onnx_config.json": {"do_query_expansion": True}},
+        {
+            "config_sentence_transformers.json": {"do_query_expansion": False},
+            "onnx_config.json": {"do_query_expansion": True},
+        },
+        {"onnx_config.json": {"do_query_expansion": "true"}},
+        {"onnx_config.json": {"do_query_expansion": None}},
+        {"onnx_config.json": {"do_query_expansion": 0}},
+    ],
+)
+def test_query_expansion_unsupported_or_malformed_refuses_before_constructors(
+    tmp_path, monkeypatch, caplog, config_files,
+):
+    _prepare_configured_loader(tmp_path, monkeypatch, config_files)
+    session_options, inference_session, tokenizer_from_str = _fake_loader_modules(
+        monkeypatch,
+        session=SimpleNamespace(get_inputs=lambda: []),
+        tokenizer=SimpleNamespace(token_to_id=lambda _: 1),
+    )
+
+    assert not encoder.ensure_loaded()
+
+    session_options.assert_not_called()
+    inference_session.assert_not_called()
+    tokenizer_from_str.assert_not_called()
+    assert "ColBERT encoder load failed" in caplog.text
+    if config_files.get("onnx_config.json", {}).get("do_query_expansion") is True:
+        assert "do_query_expansion=true is unsupported" in caplog.text
+    else:
+        assert "do_query_expansion must be a boolean" in caplog.text
+    assert encoder._session is None
+    assert encoder._tokenizer is None
+    assert encoder._tokenizer_sha256 is None
+    assert encoder._count_tokenizer is None
+    assert encoder._input_names == ()
+    assert not encoder._do_lower_case
+    assert not encoder._prefix_tokens_ok
+    assert encoder._query_prefix == "[Q] "
+    assert encoder._document_prefix == "[D] "
