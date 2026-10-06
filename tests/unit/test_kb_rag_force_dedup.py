@@ -154,18 +154,26 @@ def test_changed_identity_prunes_old_row_without_deleting_its_vector(
 def test_touched_duplicate_identity_converges_without_unlinking_active_vector(
     fake_encoder: Mock, corpus: tuple[kb_rag.CorpusConfig, Path], tmp_path: Path
 ) -> None:
-    config, _ = corpus
+    config, source = corpus
     index = tmp_path / "index"
     other_source = Path(config.roots[0]) / "two.md"
     other_source.write_text("# Other\n\nunrelated body text\n", encoding="utf-8")
     kb_rag.build_index(config, index_dir=index, force=True)
-    original = next(row for row in _rows(index) if row[1].endswith("one.md"))
-    unrelated = next(row for row in _rows(index) if row[1].endswith("two.md"))
+    source.write_text(
+        "# Fixture\n\n## Repeated\nshared body text\n\n## Repeated\nshared body text\n",
+        encoding="utf-8",
+    )
+    kb_rag.build_index(config, index_dir=index, force=True)
+    one_rows = [row for row in _rows(index) if row[1].endswith("one.md")]
+    assert len(one_rows) == 2
+    original, unrelated = one_rows
     active_vector = index / original[5]
+    assert original[2] == unrelated[2]
+    assert original[5] == unrelated[5]
     with sqlite3.connect(index / "catalog.sqlite") as conn:
-        conn.execute("UPDATE chunk SET emb_path=? WHERE chunk_id=?", (original[5], unrelated[0]))
-        conn.commit()
-    unrelated_before = next(row for row in _rows(index) if row[0] == unrelated[0])
+        unrelated_before = conn.execute(
+            "SELECT * FROM chunk WHERE chunk_id=?", (unrelated[0],)
+        ).fetchone()
     unrelated_fts_before = next(row for row in _fts_rows(index) if row[0] == unrelated[0])
     with sqlite3.connect(index / "catalog.sqlite") as conn:
         conn.execute(
@@ -185,14 +193,23 @@ def test_touched_duplicate_identity_converges_without_unlinking_active_vector(
                 (duplicate_id, original[0]),
             )
 
-    kb_rag.build_index(config, index_dir=index, force=True)
+    narrowed_config = kb_rag.CorpusConfig(
+        roots=config.roots,
+        include_globs=["one.md"],
+        exclude_patterns=config.exclude_patterns,
+        max_chunk_chars=config.max_chunk_chars,
+    )
+    kb_rag.build_index(narrowed_config, index_dir=index, force=True)
 
     rows_after = _rows(index)
     fts_after = _fts_rows(index)
     assert len(rows_after) == 2
     assert next(row for row in rows_after if row[0] == original[0])[0] == original[0]
-    unrelated_after = next(row for row in rows_after if row[0] == unrelated[0])
-    assert unrelated_after[:5] == unrelated_before[:5]
+    with sqlite3.connect(index / "catalog.sqlite") as conn:
+        unrelated_after = conn.execute(
+            "SELECT * FROM chunk WHERE chunk_id=?", (unrelated[0],)
+        ).fetchone()
+    assert unrelated_after == unrelated_before
     assert len(fts_after) == 2
     assert next(row for row in fts_after if row[0] == unrelated[0]) == unrelated_fts_before
     assert duplicate_id not in {row[0] for row in rows_after}
