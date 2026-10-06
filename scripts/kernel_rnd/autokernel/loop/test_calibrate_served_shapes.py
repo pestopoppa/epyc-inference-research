@@ -15,7 +15,8 @@ from . import served_shape_cases as ssc
 from . import status
 
 
-def _fake_build(tmp: Path, *, calibrated=True, values=None, skip=0, rc=0) -> Path:
+def _fake_build(tmp: Path, *, calibrated=True, values=None, skip=0, rc=0,
+                seeded=True, announce=True) -> Path:
     """A build whose bin/test-backend-ops is a python stub printing calibration lines."""
     build = tmp / "calib-build"
     (build / "bin").mkdir(parents=True)
@@ -25,6 +26,10 @@ def _fake_build(tmp: Path, *, calibrated=True, values=None, skip=0, rc=0) -> Pat
     payload = "\n".join(lines)
     literal = (f"# {ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER} "
                f"{ssc.BACKEND_THREADS_ENV}" if calibrated else "# nothing")
+    if seeded:
+        literal += f" {ssc.SEED_MARKER}"
+    announcement = (f"print({ssc.SEED_MARKER!r}, file=sys.stderr)" if announce
+                    else "pass")
     tool = build / "bin" / "test-backend-ops"
     check = (f'assert os.environ["AUTOKERNEL_CORRECTNESS_CASE_SET"] == '
              f'"{ssc.CALIBRATION_CASE_SET_ID}" and os.environ["AUTOKERNEL_BACKEND_THREADS"] '
@@ -37,6 +42,7 @@ def _fake_build(tmp: Path, *, calibrated=True, values=None, skip=0, rc=0) -> Pat
         {literal}
         import os, sys
         {check}
+        {announcement}
         print({payload!r})
         sys.exit({rc})
         """))
@@ -227,7 +233,7 @@ def test_build_calibration_uses_the_anchor_recipe_under_the_build_lock(tmp_path)
         #!/bin/bash
         echo "$@" > {tmp_path}/build.argv
         mkdir -p {tree}/build-ak-calib/bin
-        printf '{ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER} {ssc.BACKEND_THREADS_ENV}' \\
+        printf '{ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER} {ssc.BACKEND_THREADS_ENV} {ssc.SEED_MARKER}' \\
             > {tree}/build-ak-calib/bin/test-backend-ops
         """))
     lock.chmod(0o755)
@@ -352,3 +358,47 @@ def test_random_input_records_are_refused_for_baking(tmp_path):
     if real.is_file():
         assert "seed scheme" in cal.measurement_record_refusal(
             real, _launch(tmp_path), "ds41", "region-lock")
+
+
+def test_a_binary_built_before_seeding_refuses_everywhere(tmp_path, capsys):
+    """Round-17: a stale build-ak-calib (built before per-case seeding) would draw random
+    inputs and, without this check, get the new SEED_SCHEME label -- every path refuses."""
+    lock, store = _fake_region_lock(tmp_path), tmp_path / "s"
+    stale = _fake_build(tmp_path, seeded=False, announce=False)
+    assert ssc.binary_has_calibration(stale) is False
+    rc, out = _run("--store", store, "--anchor-build", stale, "--launch", _launch(tmp_path),
+                   "--region-lock", lock, "--execute", "--lane", "q38fn")
+    err = capsys.readouterr().err
+    assert rc == 2 and "--build-calibration" in err and "before deterministic" in err
+    assert not list((store / "served_shape").glob("calibration-*.json")) \
+        if (store / "served_shape").exists() else True
+    with pytest.raises(cal.Refused, match="--build-calibration"):
+        cal.execute(stale, store, {"cpu_list": "0-95", "threads": 48, "env": {}},
+                    str(lock), "q38fn")
+
+
+def test_a_run_that_does_not_announce_the_seed_scheme_refuses(tmp_path, capsys):
+    lock, store = _fake_region_lock(tmp_path), tmp_path / "s"
+    build = _fake_build(tmp_path, announce=False)
+    rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
+                   "--region-lock", lock, "--execute", "--lane", "q38fn")
+    assert rc == 2 and f"did not announce {ssc.SEED_MARKER}" in capsys.readouterr().err
+    assert not (store / "served_shape").exists() or not list(
+        (store / "served_shape").glob("calibration-*.json"))
+
+
+def test_a_record_whose_binary_predates_seeding_refuses_to_bake(tmp_path):
+    build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
+    launch = _launch(tmp_path)
+    assert _run("--store", store, "--anchor-build", build, "--launch", launch,
+                "--region-lock", lock, "--execute", "--lane", "q38fn")[0] == 0
+    record = next((store / "served_shape").glob("calibration-*.json"))
+    body = json.loads(record.read_text())
+    tool = build / "bin" / "test-backend-ops"
+    tool.write_text(tool.read_text().replace(ssc.SEED_MARKER, "AK_NO_SEED"))
+    body["provenance"]["binary_digests"]["test-backend-ops"] = cal._sha256(tool)
+    record.write_text(json.dumps(body))
+    from unittest import mock
+    with mock.patch.object(cal, "lane_profile_refusal", return_value=None):
+        why = cal.measurement_record_refusal(record, launch, "q38fn", str(lock))
+    assert why and "--build-calibration" in why

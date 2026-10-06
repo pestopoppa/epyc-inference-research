@@ -251,6 +251,9 @@ def test_binary_has_case_set_scans_for_the_literal(tmp_path):
     assert ssc.binary_has_case_set(build) is False   # round-12: thread control required
     binary.write_bytes(b"\0ELF" + ssc.CASE_SET_ID.encode() + b"\0"
                        + ssc.BACKEND_THREADS_ENV.encode())
+    assert ssc.binary_has_case_set(build) is False   # round-17: seed marker required
+    binary.write_bytes(b"\0ELF" + ssc.CASE_SET_ID.encode() + b"\0"
+                       + ssc.BACKEND_THREADS_ENV.encode() + ssc.SEED_MARKER.encode())
     assert ssc.binary_has_case_set(build) is True
     assert ssc.binary_has_case_set(tmp_path / "missing") is False
 
@@ -336,7 +339,7 @@ def test_check_served_shape_case_set_fails_closed_on_missing_binary_literal(tmp_
     verdict = gates.check_served_shape_case_set(
         build, resolved_recipe=_recipe(), manifest_path=manifest, lane="ds41")
     assert verdict.passed is False
-    assert "does not carry" in verdict.reason
+    assert "before deterministic" in verdict.reason   # round-17: seed marker first
 
 
 def test_check_served_shape_case_set_runs_op_correctness_when_available(tmp_path, monkeypatch):
@@ -346,7 +349,8 @@ def test_check_served_shape_case_set_runs_op_correctness_when_available(tmp_path
     build = tmp_path / "build"
     (build / "bin").mkdir(parents=True)
     (build / "bin" / "test-backend-ops").write_bytes(
-        b"\0ELF" + ssc.CASE_SET_ID.encode() + b"\0" + ssc.BACKEND_THREADS_ENV.encode())
+        b"\0ELF" + ssc.CASE_SET_ID.encode() + b"\0" + ssc.BACKEND_THREADS_ENV.encode()
+        + ssc.SEED_MARKER.encode())
     seen = {}
 
     def fake_op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter,
@@ -611,3 +615,68 @@ def test_the_same_case_key_and_seed_for_the_bound_and_calibrate_variants():
     assert len(seeds) == len(cases)    # distinct inputs per case
     # pinned value (the tree's suite_seed_hash_string offset basis, see case_seed_index)
     assert ssc.case_seed_index("abc") == 0xE16801510DB89EFD
+
+
+
+@pytest.mark.parametrize("routed", [False, True])
+def test_the_gate_refuses_a_test_backend_ops_built_before_seeding(tmp_path, routed):
+    """Round-17: both gate checks (candidate and routed corpus) refuse a stale binary
+    before running or judging anything."""
+    cases = ssc.case_set(ANCHOR_NMSE, routed=routed, lane="ds41") if not routed else None
+    manifest = tmp_path / "manifest.json"
+    if routed:
+        anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples("ds41")}
+        cases = ssc.case_set(anchor, routed=True, lane="ds41")
+    ssc.write_manifest(manifest, cases, routed=routed, lane="ds41")
+    build = tmp_path / "build"
+    (build / "bin").mkdir(parents=True)
+    set_id = ssc.ROUTED_CASE_SET_ID if routed else ssc.CASE_SET_ID
+    (build / "bin" / "test-backend-ops").write_bytes(
+        b"\0ELF" + set_id.encode() + b"\0" + ssc.BACKEND_THREADS_ENV.encode())
+    called = []
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(gates, "op_correctness", lambda *a, **k: called.append(1))
+    try:
+        verdict = gates.check_served_shape_case_set(
+            build, resolved_recipe=_served_recipe(), manifest_path=manifest,
+            routed=routed, lane="ds41")
+    finally:
+        monkey.undo()
+    assert verdict.passed is False and verdict.gate == "oracle_unavailable"
+    assert "before deterministic" in verdict.reason and not called
+
+
+def test_generated_cpp_carries_the_seed_marker_and_the_input_hash_mode():
+    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples("q38fn")}
+    final = ssc.backend_ops_patch_block(ssc.case_set(anchor, lane="q38fn"),
+                                        ssc.case_set(anchor, routed=True, lane="q38fn"))
+    for block in (final, ssc.calibration_patch_block("q38fn")):
+        assert f'"{ssc.SEED_MARKER}"' in block
+        assert f'std::getenv("{ssc.INPUT_HASH_ENV}")' in block
+        assert f'"{ssc.INPUT_HASH_MARKER}\\t%s\\t%016llx\\n"' in block
+        # each subclass hashes its inputs AFTER initialisation (and after the routed ids)
+        for body in re.findall(r"void initialize_tensors\(ggml_context \* ctx\) override "
+                               r"\{(.*?)\n    \}", block, re.S):
+            stmts = [s.strip() for s in body.strip().splitlines()]
+            assert stmts[0].startswith("autokernel_seed_case(")
+            assert stmts[-1].startswith("autokernel_report_inputs(ctx, ")
+            assert stmts[0][len("autokernel_seed_case("):] == \
+                stmts[-1][len("autokernel_report_inputs(ctx, "):]
+        assert block.count("autokernel_report_inputs(ctx, ") == 3
+
+
+def test_input_hashes_compare_by_case_key_regardless_of_order():
+    """Round-17 compiled-level check, stubbed: a calibration run and a gate run print
+    `AK_INPUT_HASH` per case in different orders; comparison is by key."""
+    calib = "\n".join(["noise", f"{ssc.INPUT_HASH_MARKER}\tk1\taaaa",
+                       f"{ssc.INPUT_HASH_MARKER}\tk2\tbbbb", "AK_SERVED_NMSE\tk1\t1e-6"])
+    gate = "\n".join([f"{ssc.INPUT_HASH_MARKER}\tk2\tbbbb", "  MUL_MAT(...): OK",
+                      f"{ssc.INPUT_HASH_MARKER}\tk1\taaaa"])
+    assert ssc.input_hash_mismatches(ssc.parse_input_hashes(calib),
+                                     ssc.parse_input_hashes(gate)) == []
+    drift = gate.replace("k1\taaaa", "k1\tcccc")
+    assert ssc.input_hash_mismatches(ssc.parse_input_hashes(calib),
+                                     ssc.parse_input_hashes(drift)) == ["k1"]
+    assert ssc.input_hash_mismatches({"k1": "a"}, {}) == ["k1"]
+    with pytest.raises(ValueError):
+        ssc.parse_input_hashes(calib + f"\n{ssc.INPUT_HASH_MARKER}\tk1\tdddd")

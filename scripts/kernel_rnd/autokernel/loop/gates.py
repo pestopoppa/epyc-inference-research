@@ -2390,6 +2390,12 @@ def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
     except ssc.ManifestRefused as exc:
         return Verdict("oracle_unavailable", False,
                        f"served-shape case set is not available: {exc}")
+    if not ssc.binary_has_seed_scheme(build_dir):
+        # Round-17: a binary built before per-case seeding draws random inputs; its
+        # NMSE is not comparable with a seeded calibration's bound.
+        return Verdict("oracle_unavailable", False,
+                       f"test-backend-ops at {build_dir} {ssc.SEED_REBUILD_HINT}; rebuild it "
+                       "with the current served-shape block before judging layer (a)")
     has = ssc.binary_has_routed_case_set if routed else ssc.binary_has_case_set
     if not has(build_dir):
         return Verdict("oracle_unavailable", False,

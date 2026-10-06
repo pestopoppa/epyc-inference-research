@@ -250,6 +250,9 @@ def lane_profile_refusal(launch_path: Path, lane: str) -> "str | None":
 
 def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
             timeout_s: int = CALIBRATION_TIMEOUT_S, out=sys.stdout) -> Path:
+    if not ssc.binary_has_seed_scheme(build):
+        raise Refused(f"{build}/bin/test-backend-ops {ssc.SEED_REBUILD_HINT}; re-stage with "
+                      "--stage-calibration-patch and rebuild with --build-calibration")
     if not ssc.binary_has_calibration(build):
         raise Refused(f"{build}/bin/test-backend-ops does not carry the calibration block "
                       f"({ssc.CALIBRATION_CASE_SET_ID}) with the backend-thread control; "
@@ -263,6 +266,9 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
     if done.returncode != 0:
         raise Refused(f"calibration run exited {done.returncode}: "
                       f"{(done.stderr or done.stdout)[-600:]}")
+    if ssc.SEED_MARKER not in (done.stderr or "").splitlines():
+        raise Refused(f"calibration run did not announce {ssc.SEED_MARKER}: the cases did "
+                      "not run through the seeded subclasses; rebuild with --build-calibration")
     measurements = ssc.parse_calibration(done.stdout, lane)
     folder = Path(store) / "served_shape"
     folder.mkdir(parents=True, exist_ok=True)
@@ -327,6 +333,10 @@ def measurement_record_refusal(path: Path, launch: Path, lane: str,
     if not binary.is_file() or _sha256(binary) != prov.get("binary_digests", {}).get(
             "test-backend-ops"):
         return f"{binary} is not the calibration binary the record measured"
+    if not ssc.binary_has_seed_scheme(build):
+        # Round-17: the record's own binary predates seeding (an execute against a stale
+        # build-ak-calib) -- its seed_scheme label is not evidence.
+        return f"{binary} {ssc.SEED_REBUILD_HINT}; rebuild with --build-calibration"
     return lane_profile_refusal(launch, lane)
 
 

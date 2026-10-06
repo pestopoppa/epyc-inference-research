@@ -109,6 +109,14 @@ BACKEND_THREADS_ENV = "AUTOKERNEL_BACKEND_THREADS"
 #: is refused).
 SEED_SCHEME = "ak-served-shape-fnv1a64-casekey-v1"
 AK_SERVED_SHAPE_SEED = 0x414B53455256
+#: Round-17: compiled into every generated block (and printed once per run on stderr);
+#: a test-backend-ops without it was built before seeding and draws random inputs.
+SEED_MARKER = "AK_SEED_SCHEME=" + SEED_SCHEME
+SEED_REBUILD_HINT = ("was built before deterministic per-case seeding (no "
+                     f"{SEED_MARKER} literal) and would measure random inputs")
+#: Round-17 debug mode: the env var / output marker of the per-case input hash.
+INPUT_HASH_ENV = "AUTOKERNEL_INPUT_HASH"
+INPUT_HASH_MARKER = "AK_INPUT_HASH"
 
 
 def case_key(shape: "ServedShape", type_a: str, n: int) -> str:
@@ -505,10 +513,43 @@ static std::string autokernel_served_shape_nmse_str(double v) {
 // seeds from AK_SERVED_SHAPE_SEED and the FNV-1a 64 hash of its bound-free case key, so
 // the calibration run and every candidate see byte-identical inputs -- list position
 // and --suite-seed play no part. The MUL_MAT_ID ids draw from the same seeded stream.
+// Round-17: the seed scheme is COMPILED IN -- the literal below is what
+// `binary_has_seed_scheme` looks for (a test-backend-ops built before seeding draws
+// random inputs, and the gate / calibration refuse it) -- and announced once per run
+// on stderr, which calibration also requires at run time.
 static void autokernel_seed_case(const std::string & key) {
+    static bool announced = false;
+    if (!announced) {
+        fprintf(stderr, "%s\\n", "AK_SEED_SCHEME=ak-served-shape-fnv1a64-casekey-v1");
+        announced = true;
+    }
     uint64_t h = 0x14650FB0739D0383ULL;
     for (unsigned char c : key) { h ^= c; h *= 0x100000001B3ULL; }
     suite_seed_begin(0x414b53455256ULL, (size_t) h, "AK_SERVED_SHAPE");
+}
+// Round-17 debug mode: AUTOKERNEL_INPUT_HASH=1 prints
+// `AK_INPUT_HASH\\t<case key>\\t<fnv1a64 of every leaf tensor's bytes>` after the inputs
+// are initialised, so a calibration run and a gate run (any case order) can be compared
+// case by case -- `served_shape_cases.input_hash_mismatches`.
+static void autokernel_report_inputs(ggml_context * ctx, const std::string & key) {
+    const char * v = std::getenv("AUTOKERNEL_INPUT_HASH");
+    if (v == nullptr || std::strcmp(v, "1") != 0) {
+        return;
+    }
+    uint64_t h = 0x14650FB0739D0383ULL;
+    std::vector<uint8_t> buf;
+    for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != NULL; t = ggml_get_next_tensor(ctx, t)) {
+        if (t->buffer == NULL || t->op != GGML_OP_NONE) { continue; }
+        const size_t nbytes = ggml_nbytes(t);
+        for (size_t off = 0; off < nbytes; off += ((size_t) 1 << 20)) {
+            const size_t len = std::min(((size_t) 1 << 20), nbytes - off);
+            buf.resize(len);
+            ggml_backend_tensor_get(t, buf.data(), off, len);
+            for (size_t i = 0; i < len; i++) { h ^= buf[i]; h *= 0x100000001B3ULL; }
+        }
+    }
+    fprintf(stdout, "AK_INPUT_HASH\\t%s\\t%016llx\\n", key.c_str(), (unsigned long long) h);
+    fflush(stdout);
 }
 // Round-12: the CPU backend thread count the tool ACTUALLY uses -- the served -t,
 // passed by the gate/calibration in AUTOKERNEL_BACKEND_THREADS (stock: hardware
@@ -553,6 +594,7 @@ struct test_mul_mat_served_shape : public test_mul_mat {
     void initialize_tensors(ggml_context * ctx) override {
         autokernel_seed_case(test_mul_mat::vars());
         test_mul_mat::initialize_tensors(ctx);
+        autokernel_report_inputs(ctx, test_mul_mat::vars());
     }
     std::string vars() override {
         return test_mul_mat::vars() + ",max_nmse=" + autokernel_served_shape_nmse_str(max_nmse);
@@ -570,6 +612,7 @@ struct test_mul_mat_id_served_shape : public test_mul_mat_id {
     void initialize_tensors(ggml_context * ctx) override {
         autokernel_seed_case(test_mul_mat_id::vars());
         test_mul_mat_id::initialize_tensors(ctx);
+        autokernel_report_inputs(ctx, test_mul_mat_id::vars());
     }
 };
 struct test_mul_mat_id_served_routed : public test_mul_mat_id {
@@ -585,6 +628,7 @@ struct test_mul_mat_id_served_routed : public test_mul_mat_id {
         autokernel_seed_case(test_mul_mat_id::vars() + ",routed=1");
         test_mul_mat_id::initialize_tensors(ctx);
         autokernel_route_ids(ctx, n_mats, n_used);
+        autokernel_report_inputs(ctx, test_mul_mat_id::vars() + ",routed=1");
     }
 };
 """
@@ -640,10 +684,43 @@ _COMMON_CPP = (
 // seeds from AK_SERVED_SHAPE_SEED and the FNV-1a 64 hash of its bound-free case key, so
 // the calibration run and every candidate see byte-identical inputs -- list position
 // and --suite-seed play no part. The MUL_MAT_ID ids draw from the same seeded stream.
+// Round-17: the seed scheme is COMPILED IN -- the literal below is what
+// `binary_has_seed_scheme` looks for (a test-backend-ops built before seeding draws
+// random inputs, and the gate / calibration refuse it) -- and announced once per run
+// on stderr, which calibration also requires at run time.
 static void autokernel_seed_case(const std::string & key) {
+    static bool announced = false;
+    if (!announced) {
+        fprintf(stderr, "%s\\n", "AK_SEED_SCHEME=ak-served-shape-fnv1a64-casekey-v1");
+        announced = true;
+    }
     uint64_t h = 0x14650FB0739D0383ULL;
     for (unsigned char c : key) { h ^= c; h *= 0x100000001B3ULL; }
     suite_seed_begin(0x414b53455256ULL, (size_t) h, "AK_SERVED_SHAPE");
+}
+// Round-17 debug mode: AUTOKERNEL_INPUT_HASH=1 prints
+// `AK_INPUT_HASH\\t<case key>\\t<fnv1a64 of every leaf tensor's bytes>` after the inputs
+// are initialised, so a calibration run and a gate run (any case order) can be compared
+// case by case -- `served_shape_cases.input_hash_mismatches`.
+static void autokernel_report_inputs(ggml_context * ctx, const std::string & key) {
+    const char * v = std::getenv("AUTOKERNEL_INPUT_HASH");
+    if (v == nullptr || std::strcmp(v, "1") != 0) {
+        return;
+    }
+    uint64_t h = 0x14650FB0739D0383ULL;
+    std::vector<uint8_t> buf;
+    for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != NULL; t = ggml_get_next_tensor(ctx, t)) {
+        if (t->buffer == NULL || t->op != GGML_OP_NONE) { continue; }
+        const size_t nbytes = ggml_nbytes(t);
+        for (size_t off = 0; off < nbytes; off += ((size_t) 1 << 20)) {
+            const size_t len = std::min(((size_t) 1 << 20), nbytes - off);
+            buf.resize(len);
+            ggml_backend_tensor_get(t, buf.data(), off, len);
+            for (size_t i = 0; i < len; i++) { h ^= buf[i]; h *= 0x100000001B3ULL; }
+        }
+    }
+    fprintf(stdout, "AK_INPUT_HASH\\t%s\\t%016llx\\n", key.c_str(), (unsigned long long) h);
+    fflush(stdout);
 }
 // Round-12: the CPU backend thread count the tool ACTUALLY uses -- the served -t,
 // passed by the gate/calibration in AUTOKERNEL_BACKEND_THREADS (stock: hardware
@@ -692,6 +769,7 @@ struct test_mul_mat_served_calib : public test_mul_mat {
     void initialize_tensors(ggml_context * ctx) override {
         autokernel_seed_case(test_mul_mat::vars());
         test_mul_mat::initialize_tensors(ctx);
+        autokernel_report_inputs(ctx, test_mul_mat::vars());
     }
     double err(const float * a, const float * b, size_t n) override {
         const double e = test_case::err(a, b, n);
@@ -709,6 +787,7 @@ struct test_mul_mat_id_served_calib : public test_mul_mat_id {
     void initialize_tensors(ggml_context * ctx) override {
         autokernel_seed_case(test_mul_mat_id::vars());
         test_mul_mat_id::initialize_tensors(ctx);
+        autokernel_report_inputs(ctx, test_mul_mat_id::vars());
     }
     double err(const float * a, const float * b, size_t n) override {
         const double e = test_case::err(a, b, n);
@@ -727,6 +806,7 @@ struct test_mul_mat_id_served_routed_calib : public test_mul_mat_id {
         autokernel_seed_case(test_mul_mat_id::vars() + ",routed=1");
         test_mul_mat_id::initialize_tensors(ctx);
         autokernel_route_ids(ctx, n_mats, n_used);
+        autokernel_report_inputs(ctx, test_mul_mat_id::vars() + ",routed=1");
     }
     double err(const float * a, const float * b, size_t n) override {
         const double e = test_case::err(a, b, n);
@@ -849,6 +929,37 @@ def apply_patch_block(test_backend_ops: Path, block: str) -> None:
     Path(test_backend_ops).write_text(text, encoding="utf-8")
 
 
+def binary_has_seed_scheme(build_dir: Path) -> bool:
+    """Round-17: True when the build's test-backend-ops carries the CURRENT seed-scheme
+    marker -- i.e. was built from a generated block that seeds every case from its key."""
+    binary = Path(build_dir) / "bin" / "test-backend-ops"
+    try:
+        data = binary.read_bytes()
+    except OSError:
+        return False
+    return SEED_MARKER.encode() in data
+
+
+def parse_input_hashes(output: str) -> dict:
+    """`{case key: input hash}` from an AUTOKERNEL_INPUT_HASH=1 run; a key printed twice
+    with different hashes is itself a nondeterminism finding (ValueError)."""
+    hashes: dict = {}
+    for line in output.splitlines():
+        parts = line.rstrip("\n").split("\t")
+        if len(parts) != 3 or parts[0] != INPUT_HASH_MARKER:
+            continue
+        if hashes.setdefault(parts[1], parts[2]) != parts[2]:
+            raise ValueError(f"case {parts[1]!r} printed two different input hashes")
+    return hashes
+
+
+def input_hash_mismatches(first: dict, second: dict) -> list:
+    """Case keys whose inputs differ between two runs (or that only one run measured).
+    Order-free: the comparison is by case key, never by position."""
+    return sorted(key for key in set(first) | set(second)
+                  if first.get(key) != second.get(key))
+
+
 def binary_has_calibration(build_dir: Path) -> bool:
     binary = Path(build_dir) / "bin" / "test-backend-ops"
     try:
@@ -856,7 +967,7 @@ def binary_has_calibration(build_dir: Path) -> bool:
     except OSError:
         return False
     return (CALIBRATION_CASE_SET_ID.encode() in data and CALIBRATION_MARKER.encode() in data
-            and BACKEND_THREADS_ENV.encode() in data)
+            and BACKEND_THREADS_ENV.encode() in data and SEED_MARKER.encode() in data)
 
 
 def binary_has_case_set(build_dir: Path) -> bool:
@@ -870,7 +981,8 @@ def binary_has_case_set(build_dir: Path) -> bool:
         data = binary.read_bytes()
     except OSError:
         return False
-    return CASE_SET_ID.encode() in data and BACKEND_THREADS_ENV.encode() in data
+    return (CASE_SET_ID.encode() in data and BACKEND_THREADS_ENV.encode() in data
+            and SEED_MARKER.encode() in data)
 
 
 def binary_has_routed_case_set(build_dir: Path) -> bool:
@@ -879,7 +991,8 @@ def binary_has_routed_case_set(build_dir: Path) -> bool:
         data = binary.read_bytes()
     except OSError:
         return False
-    return ROUTED_CASE_SET_ID.encode() in data and BACKEND_THREADS_ENV.encode() in data
+    return (ROUTED_CASE_SET_ID.encode() in data and BACKEND_THREADS_ENV.encode() in data
+            and SEED_MARKER.encode() in data)
 
 
 _SHAPES_BY_NAME: dict[str, ServedShape] = {shape.name: shape for shape in SERVED_SHAPES}
@@ -1010,4 +1123,6 @@ __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "candidate_experts", "lane_for_model", "moe_profile_from_gguf", "BLOCK_SIZE",
            "type_fits", "anchor_exceeds_generic", "SEED_SCHEME", "AK_SERVED_SHAPE_SEED",
            "case_key", "case_seed_index", "lane_served_shapes", "BACKEND_THREADS_ENV", "corpus",
-           "calibration_triples", "binary_has_routed_case_set", "THREADS_PATCHED"]
+           "calibration_triples", "binary_has_routed_case_set", "THREADS_PATCHED",
+           "SEED_MARKER", "binary_has_seed_scheme", "INPUT_HASH_ENV", "INPUT_HASH_MARKER",
+           "parse_input_hashes", "input_hash_mismatches"]
