@@ -266,6 +266,7 @@ def test_alias_roles_inherit_host_full_fleet_ports(monkeypatch: pytest.MonkeyPat
         assert _declared_aliases.get(alias, host) == host, alias
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_serving_record_projects_alias_host_fleet_full_url() -> None:
     """WP-13: _serving_record over an alias launch record emits the full host
     fleet as serving.ports, and stack_prior_serving_url_value emits the
@@ -297,6 +298,7 @@ def test_serving_record_projects_alias_host_fleet_full_url() -> None:
     )
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_regenerated_worker_math_url_byte_equals_fix_a_delegated_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -586,6 +588,7 @@ def test_runtime_stack_prior_policy_helpers_project_launch_and_memory(tmp_path: 
     )
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_compile_prefers_server_mode_for_shared_role_memory_and_serving(tmp_path: Path) -> None:
     registry_path = _write_yaml(
         tmp_path / "registry.yaml",
@@ -740,6 +743,7 @@ def test_compile_prefers_server_mode_for_shared_role_memory_and_serving(tmp_path
     assert coder["serving"]["shared_mmap"] is True
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_compile_maps_model_role_server_binding(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -928,6 +932,7 @@ def test_compile_maps_model_role_server_binding(
     assert worker["priors"]["memory_cost"] == 1.0
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_compile_prefers_server_mode_launch_requirement_paths(tmp_path: Path) -> None:
     registry_path = _write_yaml(
         tmp_path / "registry.yaml",
@@ -988,6 +993,7 @@ def test_compile_prefers_server_mode_launch_requirement_paths(tmp_path: Path) ->
         assert spec["draft_model_path"] == launch["requirements"]["draft_model_path"]
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_compile_shared_aliases_use_runtime_descriptor(tmp_path: Path) -> None:
     registry_path = _write_yaml(
         tmp_path / "registry.yaml",
@@ -1091,6 +1097,7 @@ def test_compile_shared_aliases_use_runtime_descriptor(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_launch_runtime_record_canonicalizes_worker_explore_kv_types() -> None:
     runtime = _launch_runtime_record(
         role="worker_explore",
@@ -1111,6 +1118,7 @@ def test_launch_runtime_record_canonicalizes_worker_explore_kv_types() -> None:
     assert runtime["cache"]["kv_type_v"] == "q8_0"
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_launch_runtime_record_derives_reasoning_off_from_thinking_prior() -> None:
     runtime = _launch_runtime_record(
         role="frontdoor",
@@ -1139,6 +1147,7 @@ def test_launch_runtime_record_derives_reasoning_off_from_thinking_prior() -> No
     assert runtime["flags"]["reasoning"] == "off"
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_launch_runtime_record_does_not_force_reasoning_when_template_ignores_toggle() -> None:
     runtime = _launch_runtime_record(
         role="ingest_long_context",
@@ -1173,6 +1182,7 @@ def test_launch_runtime_record_does_not_force_reasoning_when_template_ignores_to
     assert runtime["cache"]["slots"] == 2
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_launch_runtime_record_projects_ap3b_spec_numeric_controls() -> None:
     runtime = _launch_runtime_record(
         role="worker_general",
@@ -1220,6 +1230,7 @@ def test_launch_runtime_record_projects_ap3b_spec_numeric_controls() -> None:
     assert spec["ngram_mod_n_match"] == 16
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_launch_runtime_record_does_not_inject_vision_escalation_override() -> None:
     launch_cfg = {
         "launch": {
@@ -1328,6 +1339,7 @@ def test_server_mode_requirement_overrides_keep_shared_alias_on_served_model() -
     )
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_compile_preserves_conflicts_as_gaps_when_allowed(tmp_path: Path) -> None:
     registry_path = _write_yaml(
         tmp_path / "registry.yaml",
@@ -1373,6 +1385,7 @@ def test_compile_preserves_conflicts_as_gaps_when_allowed(tmp_path: Path) -> Non
     )
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_compile_uses_stack_manifest_when_server_mode_is_absent(tmp_path: Path) -> None:
     registry_path = _write_yaml(
         tmp_path / "registry.yaml",
@@ -1572,6 +1585,7 @@ def _worker_math_conflict_paths(tmp_path: Path) -> tuple[Path, Path]:
     return registry_path, descriptor_path
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_compile_require_realized_mode_derives_quarter_lineup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1620,6 +1634,7 @@ def test_compile_require_realized_mode_refuses_without_signal(tmp_path: Path) ->
         )
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_compile_default_does_not_probe_realized_fleet(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1681,6 +1696,7 @@ def test_policy_hints_flag_heavy_high_cost_role() -> None:
     assert hints["high_cost"] is True
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_compile_projects_ctx_model_max_and_policy_hints(tmp_path: Path) -> None:
     registry_path = _write_yaml(
         tmp_path / "registry.yaml",
@@ -1786,3 +1802,53 @@ def test_draft_kv_types_prior_reads_only_serving_shape(server_cfg, expected) -> 
     from src.registry.stack_priors import _draft_kv_types_prior
 
     assert _draft_kv_types_prior(server_cfg, None) == expected
+
+
+@pytest.fixture
+def _declared_backend_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
+    """Owned path metadata for pure compilation; no binary or store evidence."""
+    import subprocess
+    from src.registry import kernel_paths
+
+    directories = {}
+    for backend in ("cpu", "gpu"):
+        directory = tmp_path / "declared-backends" / backend
+        directory.mkdir(mode=0o700, parents=True)
+        directories[backend] = directory
+
+    def declared_backend_dir(backend):
+        if backend not in directories:
+            raise AssertionError(f"unexpected metadata backend: {backend!r}")
+        return directories[backend]
+
+    original_popen = subprocess.Popen
+    provenance_children = []
+    expected_git = ["git", "-C", str(Path(__file__).resolve().parents[2]),
+                    "rev-parse", "--short", "HEAD"]
+    expected_options = {"text": True, "stderr": subprocess.DEVNULL,
+                        "stdout": subprocess.PIPE}
+
+    def refuse_child(*args, **kwargs):
+        if len(args) != 1 or args[0] != expected_git or kwargs != expected_options:
+            raise AssertionError("pure metadata fixture permits only readonly Git provenance")
+        child = original_popen(*args, **kwargs)
+        provenance_children.append(child)
+        return child
+
+    monkeypatch.setattr(kernel_paths, "backend_dir", declared_backend_dir)
+    # Preserve real CPU [] and GPU vendor-path library policy.
+    monkeypatch.setattr(subprocess, "Popen", refuse_child)
+    # Existing assertions compare absent binary path metadata only.
+    def declared_server_binary(backend):
+        path = declared_backend_dir(backend) / "llama-server"
+        assert not path.exists() and not path.is_symlink()
+        return path
+
+    monkeypatch.setattr(kernel_paths, "server_binary", declared_server_binary)
+    yield directories
+    compiler_consumers = ('test_compile_default_does_not_probe_realized_fleet', 'test_compile_maps_model_role_server_binding', 'test_compile_prefers_server_mode_for_shared_role_memory_and_serving', 'test_compile_prefers_server_mode_launch_requirement_paths', 'test_compile_preserves_conflicts_as_gaps_when_allowed', 'test_compile_projects_ctx_model_max_and_policy_hints', 'test_compile_require_realized_mode_derives_quarter_lineup', 'test_compile_shared_aliases_use_runtime_descriptor', 'test_compile_uses_stack_manifest_when_server_mode_is_absent')
+    if request.node.originalname in compiler_consumers:
+        assert provenance_children, "compiler consumer did not capture readonly Git provenance"
+    assert all(child.poll() == 0 for child in provenance_children)
+    for directory in directories.values():
+        assert not list(directory.iterdir()), "metadata fixture acquired a binary or output"
