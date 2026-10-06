@@ -74,37 +74,40 @@ def _write_kb_jobs_file(path: Path, *, index_dir: Path | None = None) -> None:
     path.write_text(yaml.safe_dump(doc, sort_keys=False))
 
 
-def _write_native_catalog(index_dir: Path) -> tuple[Path, dict]:
+def _write_catalog(index_dir: Path, *, with_dependency: bool) -> tuple[Path, dict | None]:
     index_dir.mkdir(parents=True, exist_ok=True)
     catalog = index_dir / "catalog.sqlite"
     conn = sqlite3.connect(catalog)
     try:
-        conn.executescript(
-            "CREATE TABLE chunk ("
-            "chunk_id INTEGER PRIMARY KEY, file_path TEXT, heading_path TEXT, "
-            "line_start INTEGER, line_end INTEGER, content_hash TEXT, mtime REAL, "
-            "emb_path TEXT, text_preview TEXT, token_count INTEGER);"
-            "CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+        conn.executescript(run_job.kb_rag._CATALOG_SCHEMA)
+        conn.execute(
+            "INSERT INTO chunk (chunk_id, file_path, heading_path, line_start, line_end, "
+            "content_hash, mtime, emb_path, text_preview, token_count) "
+            "VALUES (1, ?, '[]', 1, 1, 'fixture-hash', 1, '', 'fixture evidence', 1)",
+            (str(index_dir / "evidence.md"),),
         )
+        conn.commit()
+    finally:
+        conn.close()
+    if not with_dependency:
+        return catalog, None
+    conn = sqlite3.connect(catalog)
+    with run_job.kb_catalog_dependency.writer_connection(conn):
         record = run_job.kb_catalog_dependency.commit_completed_writer(
             conn, "build_index", loaded=None
         )
-    finally:
-        conn.close()
+    return catalog, record
+
+
+def _write_native_catalog(index_dir: Path) -> tuple[Path, dict]:
+    catalog, record = _write_catalog(index_dir, with_dependency=True)
+    assert record is not None
     return catalog, record
 
 
 def _write_legacy_catalog(index_dir: Path) -> Path:
-    index_dir.mkdir(parents=True, exist_ok=True)
-    catalog = index_dir / "catalog.sqlite"
-    with sqlite3.connect(catalog) as conn:
-        conn.executescript(
-            "CREATE TABLE chunk ("
-            "chunk_id INTEGER PRIMARY KEY, file_path TEXT, heading_path TEXT, "
-            "line_start INTEGER, line_end INTEGER, content_hash TEXT, mtime REAL, "
-            "emb_path TEXT, text_preview TEXT, token_count INTEGER);"
-            "CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
-        )
+    catalog, record = _write_catalog(index_dir, with_dependency=False)
+    assert record is None
     return catalog
 
 
@@ -384,15 +387,26 @@ def test_invalid_kb_catalog_dependency_refuses_before_query_backend_or_publicati
         else:
             conn.execute("INSERT INTO chunk(file_path) VALUES ('changed-after-record.md')")
 
+    events: list[str] = []
+    read_dependency = run_job.kb_catalog_dependency.read_dependency
+
+    def observe_dependency(path):
+        events.append("read_dependency")
+        return read_dependency(path)
+
     def forbidden_query(*args, **kwargs):
+        events.append("query")
         raise AssertionError("KB query must not run after dependency refusal")
 
     def forbidden_chat(**kwargs):
+        events.append("chat")
         raise AssertionError("chat backend must not run after dependency refusal")
 
     def forbidden_command(**kwargs):
+        events.append("command")
         raise AssertionError("command backend must not run after dependency refusal")
 
+    monkeypatch.setattr(run_job.kb_catalog_dependency, "read_dependency", observe_dependency)
     monkeypatch.setattr(run_job.kb_rag, "query", forbidden_query)
     monkeypatch.setattr(run_job, "call_chat_api", forbidden_chat)
     monkeypatch.setattr(run_job, "run_deterministic_command", forbidden_command)
@@ -410,6 +424,7 @@ def test_invalid_kb_catalog_dependency_refuses_before_query_backend_or_publicati
         )
 
     assert not (tmp_path / "queue").exists()
+    assert events == ["read_dependency"]
 
 
 def test_valid_kb_catalog_dependency_is_attached_at_collection_time(
@@ -419,18 +434,26 @@ def test_valid_kb_catalog_dependency_is_attached_at_collection_time(
     jobs_file = tmp_path / "lab_jobs.yaml"
     _write_kb_jobs_file(jobs_file)
     _, expected_record = _write_native_catalog(tmp_path / "kb-index")
-    monkeypatch.setattr(
-        run_job.kb_rag,
-        "query",
-        lambda *args, **kwargs: [
+    events: list[str] = []
+    read_dependency = run_job.kb_catalog_dependency.read_dependency
+
+    def observe_dependency(path):
+        events.append("read_dependency")
+        return read_dependency(path)
+
+    def fake_query(*args, **kwargs):
+        events.append("query")
+        return [
             {
                 "file": "/fixture/kb.md",
                 "line_range": (1, 2),
                 "snippet": "synthetic KB context",
                 "content_hash": "fixture-hash",
             }
-        ],
-    )
+        ]
+
+    monkeypatch.setattr(run_job.kb_catalog_dependency, "read_dependency", observe_dependency)
+    monkeypatch.setattr(run_job.kb_rag, "query", fake_query)
 
     result = run_job.run_from_args(
         _args(tmp_path, jobs_file, allow_disabled=False, max_context_chars=1000)
@@ -441,6 +464,7 @@ def test_valid_kb_catalog_dependency_is_attached_at_collection_time(
         "catalog_path": str((tmp_path / "kb-index" / "catalog.sqlite").resolve()),
         "record": expected_record,
     }
+    assert events == ["read_dependency", "query"]
 
 
 def test_legacy_kb_catalog_has_unknown_dependency_at_collection_time(
