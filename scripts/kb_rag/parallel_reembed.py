@@ -253,25 +253,25 @@ def _encode_task(task: tuple[str, str, str]) -> tuple[str, int, str]:
             except Exception:  # noqa: BLE001 — truncated by a crash; re-encode
                 pass
         emb = enc.encode(text, _WORKER_STATE["max_tokens"], role=role)
-    if emb is None:
-        return emb_rel, 0, "failed"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(out.parent), suffix=".npz.tmp")
-    try:
-        # Write through the open fd: np.savez_compressed would otherwise append
-        # ".npz" to a path that does not already end in it, and the atomic
-        # rename would then move a file that does not exist.
-        with os.fdopen(fd, "wb") as fh:
-            np.savez_compressed(fh, emb=emb)
-        os.replace(tmp, out)
-    except Exception as e:  # noqa: BLE001
-        for leftover in (tmp, tmp + ".npz"):
-            try:
-                os.unlink(leftover)
-            except OSError:
-                pass
-        return emb_rel, 0, f"error:{e}"
-    return emb_rel, int(emb.shape[0]), "encoded"
+        if emb is None:
+            return emb_rel, 0, "failed"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(out.parent), suffix=".npz.tmp")
+        try:
+            # Write through the open fd: np.savez_compressed would otherwise append
+            # ".npz" to a path that does not already end in it, and the atomic
+            # rename would then move a file that does not exist.
+            with os.fdopen(fd, "wb") as fh:
+                np.savez_compressed(fh, emb=emb)
+            os.replace(tmp, out)
+        except Exception as e:  # noqa: BLE001
+            for leftover in (tmp, tmp + ".npz"):
+                try:
+                    os.unlink(leftover)
+                except OSError:
+                    pass
+            return emb_rel, 0, f"error:{e}"
+        return emb_rel, int(emb.shape[0]), "encoded"
 
 
 def encode_missing(

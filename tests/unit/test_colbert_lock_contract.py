@@ -67,10 +67,28 @@ def contend(operation, refresh):
     """Events prove a competing refresh cannot acquire during the operation."""
     entered, attempted, released = (threading.Event() for _ in range(3))
     errors = []
+    original_lock = encoder._state_lock
+    contender_id = None
+    class ObservedLock:
+        def __enter__(self):
+            if threading.get_ident() == contender_id and not attempted.is_set():
+                # Prove this thread attempted acquisition while the operation
+                # owns the lock, rather than relying on scheduler timing.
+                acquired = original_lock.acquire(blocking=False)
+                if acquired:
+                    original_lock.release()
+                    raise AssertionError('competing refresh acquired during transaction')
+                attempted.set()
+            original_lock.acquire()
+            return self
+        def __exit__(self, *exc):
+            original_lock.release()
+    encoder._state_lock = ObservedLock()
     def competitor():
+        nonlocal contender_id
+        contender_id = threading.get_ident()
         try:
             assert entered.wait(5)
-            attempted.set()
             refresh()
             released.set()
         except BaseException as exc:
@@ -82,6 +100,7 @@ def contend(operation, refresh):
     finally:
         entered.set()
         thread.join(5)
+        encoder._state_lock = original_lock
     assert not thread.is_alive()
     assert not errors
     assert released.is_set()
@@ -278,34 +297,20 @@ def test_pool_construction_occurs_outside_encoder_lock(fake, monkeypatch, tmp_pa
 
 def test_two_encodes_cannot_interleave_tokenizer_settings(fake):
     tok, session = fake
-    entered, attempted = threading.Event(), threading.Event()
-    second_done = threading.Event()
-    shapes, errors = [], []
-    def run(_, feed):
-        n = feed['input_ids'].shape[1]
-        if n == 7:
-            entered.set()
-            assert attempted.wait(5)
-            assert not second_done.is_set()
-            assert tok.length == 7
-        return [np.ones((1, n, 2))]
-    session.run = run
-    def other():
-        try:
-            assert entered.wait(5)
-            attempted.set()
-            shapes.append(encoder.encode('other', 3, role=encoder.ROLE_NONE).shape)
-            second_done.set()
-        except BaseException as exc:
-            errors.append(exc)
-    thread = threading.Thread(target=other)
-    thread.start()
-    try:
+    shapes = []
+    def operation(entered, attempted, released):
+        def run(_, feed):
+            n = feed['input_ids'].shape[1]
+            if n == 7:
+                entered.set()
+                assert attempted.wait(5)
+                assert not released.is_set()
+                assert tok.length == 7
+            return [np.ones((1, n, 2))]
+        session.run = run
         shapes.append(encoder.encode('first', 7, role=encoder.ROLE_NONE).shape)
-    finally:
-        entered.set()
-        thread.join(5)
-    assert not thread.is_alive() and not errors
+    contend(operation, lambda: shapes.append(
+        encoder.encode('other', 3, role=encoder.ROLE_NONE).shape))
     assert sorted(shapes) == [(3, 2), (7, 2)]
 
 
@@ -323,4 +328,24 @@ def test_worker_initializer_captures_contract_under_lock(fake, monkeypatch, tmp_
         assert parallel._WORKER_STATE['max_tokens'] == 300
         assert parallel._WORKER_STATE['role'] == encoder.ROLE_DOCUMENT
         assert parallel._WORKER_STATE['generation'] == 10
+    contend(operation, encoder.refresh_model_dir)
+
+
+def test_worker_output_publication_holds_same_generation(fake, monkeypatch, tmp_path, parallel):
+    monkeypatch.setattr(parallel, '_set_pdeathsig', lambda: None)
+    monkeypatch.setattr(parallel, '_parallel_contract', lambda *a, **k: (256, encoder.ROLE_NONE))
+    parallel._encode_init(str(tmp_path), 1, [])
+    monkeypatch.setattr(encoder, 'resolve_model_dir', lambda: (tmp_path / 'next', 'next'))
+    replace = parallel.os.replace
+    def operation(entered, attempted, released):
+        def publish(source, destination):
+            entered.set()
+            assert attempted.wait(5)
+            assert not released.is_set()
+            assert encoder.generation() == 10
+            replace(source, destination)
+        monkeypatch.setattr(parallel.os, 'replace', publish)
+        assert parallel._encode_task(('emb/new.npz', 'text', encoder.ROLE_NONE)) == (
+            'emb/new.npz', 256, 'encoded')
+        assert (tmp_path / 'emb/new.npz').is_file()
     contend(operation, encoder.refresh_model_dir)
