@@ -170,7 +170,9 @@ def test_actual_runner_accepts_valid_binary_and_keeps_confidence_observational(t
     )
     record = json.loads(path.read_text(encoding="utf-8"))
     assert record["decisions"][0]["value"] == "ORCH"
-    assert record["decisions"][0]["confidence"] == pytest.approx(0.65)
+    # The runner derives its local confidence from the probability margin;
+    # the supplied 0.65 field is not copied as calibrated confidence.
+    assert record["decisions"][0]["confidence"] == pytest.approx(0.30)
     assert record["incumbent"] == {"route": "host-route", "confidence": 0.01}
     assert incumbent == {"route": "host-route", "confidence": 0.01}
 
