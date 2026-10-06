@@ -50,10 +50,33 @@ def test_short_incidental_containment_is_reported_but_not_structural() -> None:
     assert [h["severity"] for h in hits] == ["incidental"]
 
 
-def test_non_substring_scorers_are_left_alone() -> None:
-    """An exact or programmatic scorer is not made vacuous by containment."""
+def test_exact_scorer_is_not_made_vacuous_by_containment() -> None:
+    """An exact scorer does not inherit substring containment semantics."""
     assert cvs.vacuous_rows(
         [_row(expected="x" * 80, prompt="x" * 200, scoring_method="exact")]) == []
+
+
+def test_programmatic_echo_uses_the_existing_verifier() -> None:
+    row = _row(expected="", scoring_method="programmatic",
+               scoring_config={"verifier": "non_empty"}, prompt="copy this input")
+    hits = cvs.vacuous_rows([row])
+    assert [hit["severity"] for hit in hits] == ["structural"]
+    assert hits[0]["reason"] == "programmatic_verifier_accepts_input_echo"
+
+
+def test_programmatic_echo_that_fails_the_verifier_is_not_flagged() -> None:
+    row = _row(expected="unused", scoring_method="programmatic",
+               scoring_config={"verifier": "word_count_min", "threshold": 3},
+               prompt="only two")
+    assert cvs.vacuous_rows([row]) == []
+
+
+def test_programmatic_verifier_errors_are_unresolved_not_safe() -> None:
+    row = _row(expected="unused", scoring_method="programmatic",
+               scoring_config={"verifier": "future_unknown"}, prompt="copy this input")
+    hits = cvs.vacuous_rows([row])
+    assert [hit["severity"] for hit in hits] == ["unresolved"]
+    assert hits[0]["reason_type"] == "ValueError"
 
 
 def test_a_longer_prefix_is_not_a_fix() -> None:

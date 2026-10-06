@@ -432,9 +432,11 @@ def vacuous_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     scored suite, which is why it belongs at pool-build time rather than in a
     suite-specific fixup.
 
-    Deliberately limited to substring-family scoring: an `exact` or programmatic scorer
-    is not made vacuous by containment, and flagging those would train readers to
-    ignore this.
+    Substring-family scoring is checked by containment. Programmatic rows are checked
+    by the orchestrator's existing deterministic scorer, but only when the configured
+    method is exactly `programmatic`; no other scorer path is loaded or called. A
+    verifier error is reported as unresolved rather than treated as a pass or as proof
+    that the row is safe.
 
     RETRIEVAL SUITES ARE NOT EXEMPTED, on purpose. Needle-in-a-haystack PUTS the answer
     in the context — that is the task — so a NIAH row appears here legitimately. It is
@@ -449,19 +451,58 @@ def vacuous_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for row in rows:
         expected = row.get("expected")
         method = str(row.get("scoring_method") or "").lower()
-        if not isinstance(expected, str) or not expected.strip():
-            continue
-        if "substring" not in method and "contains" not in method:
-            continue
         haystack = " ".join(
             str(row.get(f)) for f in _MODEL_INPUT_FIELDS if isinstance(row.get(f), str))
-        if expected in haystack:
+        if "substring" in method or "contains" in method:
+            if not isinstance(expected, str) or not expected.strip() or expected not in haystack:
+                continue
             bad.append({"id": row.get("id"), "suite": row.get("suite"),
                         "scoring_method": row.get("scoring_method"),
                         "expected_len": len(expected),
                         "severity": ("structural" if len(expected) >= _STRUCTURAL_MIN
                                      else "incidental")})
+            continue
+        if method != "programmatic":
+            continue
+        try:
+            # Match seeding_scoring.score_answer_deterministic's exact sibling-file
+            # scorer identity, while keeping the import lazy and the method gate local.
+            scorer = _load_orchestrator_debug_scorer()
+            echo_passes = scorer.score_answer(
+                haystack, expected, "programmatic", row.get("scoring_config") or {})
+        except Exception as exc:
+            bad.append({"id": row.get("id"), "suite": row.get("suite"),
+                        "scoring_method": row.get("scoring_method"),
+                        "severity": "unresolved",
+                        "reason_type": type(exc).__name__})
+            continue
+        if echo_passes:
+            bad.append({"id": row.get("id"), "suite": row.get("suite"),
+                        "scoring_method": row.get("scoring_method"),
+                        "expected_len": len(expected) if isinstance(expected, str) else None,
+                        "severity": "structural",
+                        "reason": "programmatic_verifier_accepts_input_echo"})
     return bad
+
+
+_ORCH_SCORER_KEY = "epyc_orch_debug_scorer"
+
+
+def _load_orchestrator_debug_scorer():
+    """Load the same local scorer file used by seeding_scoring, without its package imports."""
+    import importlib.util
+
+    cached = sys.modules.get(_ORCH_SCORER_KEY)
+    if cached is not None:
+        return cached
+    scorer_path = ORCH_ROOT / "scripts" / "benchmark" / "debug_scorer.py"
+    spec = importlib.util.spec_from_file_location(_ORCH_SCORER_KEY, scorer_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load orchestrator debug scorer from {scorer_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_ORCH_SCORER_KEY] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 #: A suite needs at least this many rows before "every row shares one `expected`" means
@@ -571,6 +612,8 @@ def write_core_jsonl(
     vacuous = vacuous_rows(emitted)
     report["vacuous_rows"] = vacuous
     structural = [v for v in vacuous if v["severity"] == "structural"]
+    incidental = [v for v in vacuous if v["severity"] == "incidental"]
+    unresolved_vacuity = [v for v in vacuous if v["severity"] == "unresolved"]
     if structural:
         suites = sorted({str(v.get("suite")) for v in structural})
         print(
@@ -578,8 +621,14 @@ def write_core_jsonl(
             f"VACUOUS ORACLE — `expected` is a long contiguous span already present in the "
             f"input the model is given, so echoing the input scores a pass. Suites: "
             f"{', '.join(suites)}. Retire these rows or rebuild their oracle before trusting "
-            f"this pool. ({len(vacuous) - len(structural)} further rows show short/incidental "
-            f"containment; see `vacuous_rows` in the selection report.)",
+            f"this pool. ({len(incidental)} further rows show short/incidental containment; "
+            f"see `vacuous_rows` in the selection report.)",
+            file=sys.stderr,
+        )
+    if unresolved_vacuity:
+        print(
+            f"WARNING: {len(unresolved_vacuity)} programmatic row(s) could not be checked "
+            f"for input-echo acceptance; inspect `vacuous_rows` in the selection report.",
             file=sys.stderr,
         )
 
