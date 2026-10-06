@@ -70,7 +70,7 @@ class C5RocmOracleConfigTest(unittest.TestCase):
         mutations.append(document)
 
         for document in mutations:
-            with self.subTest(scoring=document["scoring"]), self.assertRaisesRegex(
+            with self.assertRaisesRegex(
                 C.OracleRefusal, "scoring|constants"
             ):
                 C._parse_config(copy.deepcopy(document))

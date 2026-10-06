@@ -123,7 +123,7 @@ class C5SeedCorpusTest(unittest.TestCase):
     def test_unknown_duplicate_and_empty_selections_refuse(self):
         corpus = self.metadata_corpus()
         for selected in ((), ("k138", "k138"), ("k999",)):
-            with self.subTest(selected=selected), self.assertRaises(C.SeedCorpusError):
+            with self.assertRaises(C.SeedCorpusError):
                 corpus.select(selected)
 
     def test_nvidia_attestation_cannot_be_relabelled_as_gfx90a_evidence(self):
@@ -160,7 +160,7 @@ class C5SeedCorpusTest(unittest.TestCase):
         mutations.append((document, "re-author/re-attest"))
 
         for document, message in mutations:
-            with self.subTest(message=message), self.assertRaisesRegex(C.SeedCorpusError, message):
+            with self.assertRaisesRegex(C.SeedCorpusError, message):
                 self.parse(copy.deepcopy(document))
 
     def test_sol_execbench_problem_join_is_required_unique_and_slug_bound(self):
@@ -223,7 +223,7 @@ class C5SeedCorpusTest(unittest.TestCase):
         mutations.append((document, "correctness oracle must stay eligible"))
 
         for document, message in mutations:
-            with self.subTest(message=message), self.assertRaisesRegex(C.SeedCorpusError, message):
+            with self.assertRaisesRegex(C.SeedCorpusError, message):
                 self.parse(copy.deepcopy(document))
 
     def test_policy_evidence_path_hash_and_schema_are_fail_closed(self):
