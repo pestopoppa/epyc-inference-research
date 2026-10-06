@@ -114,7 +114,7 @@ def _ensure_private_dir(path: Path) -> None:
 
 def _seal_report(report: dict, repo_root: str, inputs: list[dict], report_path: str,
                  missing_inputs: list[str] | None = None) -> dict:
-    """Bind the analysis to immutable snapshots of the exact parsed inputs/source."""
+    """Bind the report to private create-once snapshots of parsed inputs/source."""
     if not inputs:
         return report
     root = Path(repo_root).resolve()

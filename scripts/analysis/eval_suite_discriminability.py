@@ -121,7 +121,7 @@ def _ensure_private_dir(path: Path) -> None:
 
 def _seal_report(report: dict[str, Any], inputs: list[dict[str, Any]],
                  report_path: Path) -> dict[str, Any]:
-    """Bind the report to immutable snapshots of the exact parsed inputs/source."""
+    """Bind the report to private create-once snapshots of parsed inputs/source."""
     if not inputs:
         return report
     producer = Path(__file__).resolve()
