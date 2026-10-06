@@ -79,6 +79,11 @@ python3 -m harness matrix --case finance-direct-fake_security_alert-007 \
 python3 -m harness run --case finance-benign-trade-execution-001 --arm done \
     --endpoint http://localhost:8080/v1 --model qwen3-32b --temperature 0.0
 
+# Opt in to pinned public native tool schemas (endpoint mode is explicit)
+python3 -m harness run --case finance-benign-trade-execution-001 --arm done \
+    --endpoint http://localhost:8080/v1 --tool-contract dtap-native-tools-v1 \
+    --endpoint-mode openai-compatible
+
 # Immutable trace replay
 python3 -m harness replay --trace /tmp/dtap-results/traces/<case>.<arm>.seed0.trace.jsonl
 ```
@@ -88,8 +93,30 @@ python3 -m harness replay --trace /tmp/dtap-results/traces/<case>.<arm>.seed0.tr
 python3 -m harness attest
 ```
 
-Tests: `pytest tests/` (88 tests, zero inference) — `test_dtap_harness.py` (66)
-plus `test_judge_guard.py` (22, CJ-12).
+Tests: `pytest tests/` (zero inference); the runner and judge guard have separate
+unit-test modules.
+
+## Native tool schemas (opt-in)
+
+The live request remains message-only unless `--tool-contract dtap-native-tools-v1`
+is selected. That opt-in loads the harness-owned `harness/tool_schemas.json`,
+verifies that the loaded case-registry bytes match the sidecar pin, advertises
+the enabled public MCP functions for the selected case, and rejects
+undeclared names or arguments that fail the schema before adding them to the
+accepted tool-call trajectory. Each request trace binds the exact serialized
+per-case schema digest as well as the sidecar digest. Loaded schemas are copied
+before use so endpoint code cannot mutate the retained contract. Function names stay the upstream plain
+identifiers; no dotted namespaces are invented. The `--endpoint-mode` choice
+is explicit and never inferred from the endpoint URL. Use
+`orchestrator-client` only for the orchestrator endpoint; it sends
+`x_tool_mode="client"` with schemas so the orchestrator returns caller-owned
+structured tool calls instead of routing through its internal REPL.
+
+This change covers advertisement and input validation only. Live calls still
+receive the harness's generic placeholder tool result, and no simulated
+service state transition is applied. The native judge's existing denominators
+and verdict fields therefore do not establish live service effects or close
+TU-DTAP-2.
 
 ## Judge exception reporting (CJ-12) — the transcription contract, amended
 

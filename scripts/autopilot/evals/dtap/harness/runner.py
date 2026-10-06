@@ -27,6 +27,11 @@ from .env_state import StateStore
 from .judge_guard import scan_judge
 from .outcomes import HarnessFailure, JudgeFailure, ModelFailure, RunFailure
 from .trace import TraceRecorder, extract_run_snapshot, verify_trace
+from .tool_contract import (
+    LEGACY_REQUEST_VERSION,
+    NativeToolContract,
+    validate_tool_calls,
+)
 
 JUDGES_DIR = Path(__file__).resolve().parent.parent / "judges"
 POLICY_VERSION = "injection-render-policy-v1"
@@ -280,6 +285,9 @@ def run_case(
     arm_config: ArmConfig = DEFAULT_ARM_CONFIG,
     results_dir: Optional[Path] = None,
     registry: Optional[CaseRegistry] = None,
+    *,
+    native_tool_contract: Optional[NativeToolContract] = None,
+    endpoint_mode: str = "openai-compatible",
 ) -> RunResult:
     """Execute one case/arm/seed and return a typed RunResult. Never raises:
     every failure is folded into the typed failure field."""
@@ -297,6 +305,9 @@ def run_case(
             for key in ("model", "temperature", "max_tokens", "retries", "timeout")}
     try:
         case = registry.get(case_id)
+        if (native_tool_contract is not None
+                and endpoint_mode not in ("openai-compatible", "orchestrator-client")):
+            raise HarnessFailure(f"unsupported explicit endpoint mode: {endpoint_mode!r}")
         rec.record(
             "session_start",
             {
@@ -307,6 +318,14 @@ def run_case(
                 "injection_families": case.get("injection_families", []),
                 "arm_config": arm_config.as_dict(),
                 "registry_meta": registry.meta,
+                "request_contract_version": (
+                    native_tool_contract.version if native_tool_contract is not None
+                    else LEGACY_REQUEST_VERSION
+                ),
+                **({
+                    "tool_schema_sha256": native_tool_contract.sha256,
+                    "endpoint_mode": endpoint_mode,
+                } if native_tool_contract is not None else {}),
             },
         )
         store = StateStore()
@@ -330,9 +349,37 @@ def run_case(
         turn = 0
         while turn < arm_config.max_turns:
             turn += 1
-            rec.record("endpoint_request", {"turn": turn, "messages": messages})
+            request_event = {
+                "turn": turn,
+                "messages": messages,
+                "request_contract_version": LEGACY_REQUEST_VERSION,
+            }
+            case_tools = None
+            if native_tool_contract is not None:
+                case_tools = native_tool_contract.for_case(case_id)
+                request_tools_sha256 = native_tool_contract.tools_sha256(case_id)
+                request_event.update({
+                    "request_contract_version": native_tool_contract.version,
+                    "tool_schema_sha256": native_tool_contract.sha256,
+                    "request_tools_sha256": request_tools_sha256,
+                    "advertised_tool_names": [entry["function"]["name"] for entry in case_tools],
+                    "endpoint_mode": endpoint_mode,
+                    "tool_choice": "auto",
+                })
+            rec.record("endpoint_request", request_event)
             try:
-                chat: ChatResult = endpoint.complete(messages, seed=seed)
+                if case_tools is None:
+                    # Preserve the original call and request shape when the
+                    # opt-in native-tool catalog is omitted.
+                    chat: ChatResult = endpoint.complete(messages, seed=seed)
+                else:
+                    chat = endpoint.complete(
+                        messages,
+                        seed=seed,
+                        tools=case_tools,
+                        tool_choice="auto",
+                        endpoint_mode=endpoint_mode,
+                    )
             except RunFailure:
                 raise
             except Exception as exc:
@@ -343,6 +390,10 @@ def run_case(
                  "finish_reason": chat.finish_reason, "transport_detail": chat.transport_detail},
             )
             if chat.tool_calls:
+                if case_tools is not None:
+                    # Validate the whole response before recording any call as
+                    # accepted or appending it to the judge trajectory.
+                    validate_tool_calls(chat.tool_calls, case_tools)
                 for tc in chat.tool_calls:
                     env = tc.get("env", "")
                     rec.record(
@@ -771,6 +822,8 @@ def run_matrix(
     native_capture_root: Optional[Path] = None,
     capture_applicability: Optional[Dict[str, Any]] = None,
     capture_fixture_paths: Optional[List[Path]] = None,
+    native_tool_contract: Optional[NativeToolContract] = None,
+    endpoint_mode: str = "openai-compatible",
 ) -> Dict[str, Any]:
     """Run a seed-repeat matrix; aggregate verdicts with Wilson CIs.
 
@@ -804,7 +857,9 @@ def run_matrix(
                 runs = []
                 for seed in seeds:
                     run = run_case(case_id, arm, seed, endpoint_factory(case_id, arm, seed),
-                                   arm_config, results_dir, registry)
+                                   arm_config, results_dir, registry,
+                                   native_tool_contract=native_tool_contract,
+                                   endpoint_mode=endpoint_mode)
                     runs.append(run)
                     if native is not None:
                         _retain_timeout_trace(native, run)

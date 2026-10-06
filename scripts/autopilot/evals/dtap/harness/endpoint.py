@@ -19,7 +19,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .outcomes import EndpointFailure, ModelFailure, OverflowFailure, ParseFailure
 
@@ -56,6 +56,7 @@ class ChatEndpoint:
         max_tokens: int = 1024,
         retries: int = 2,
         timeout: float = 60.0,
+        opener: Optional[Callable[..., Any]] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -64,14 +65,35 @@ class ChatEndpoint:
         self.max_tokens = max_tokens
         self.retries = retries
         self.timeout = timeout
+        # Optional deterministic fake-transport seam; None preserves the
+        # existing late-bound urllib opener (including monkeypatch callers).
+        self._opener = opener
 
-    def complete(self, messages: List[Dict[str, Any]], seed: int = 0) -> ChatResult:
+    def complete(
+        self,
+        messages: List[Dict[str, Any]],
+        seed: int = 0,
+        *,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = None,
+        endpoint_mode: Optional[str] = None,
+    ) -> ChatResult:
         body = {
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
         }
+        # Keep the pre-contract message-only request byte-compatible by making
+        # every tool-specific body field conditional on an explicit contract.
+        if tools is not None:
+            if endpoint_mode not in ("openai-compatible", "orchestrator-client"):
+                raise ValueError("tool schemas require an explicit endpoint mode")
+            body["tools"] = tools
+            if tool_choice is not None:
+                body["tool_choice"] = tool_choice
+            if endpoint_mode == "orchestrator-client":
+                body["x_tool_mode"] = "client"
         request = urllib.request.Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(body).encode("utf-8"),
@@ -82,7 +104,8 @@ class ChatEndpoint:
         timeout_attempts = 0
         for attempt in range(self.retries + 1):
             try:
-                with urllib.request.urlopen(request, timeout=self.timeout) as resp:
+                opener = self._opener or urllib.request.urlopen
+                with opener(request, timeout=self.timeout) as resp:
                     raw = json.loads(resp.read().decode("utf-8"))
                 parsed = self._parse(raw)
                 parsed.transport_detail = {"terminal_native_timeout": False,
@@ -166,7 +189,19 @@ class DryRunStub:
         self._pending = list(enumerate(fixture.get("script") or []))
         self._max_calls_per_turn = 8
 
-    def complete(self, messages: List[Dict[str, Any]], seed: int = 0) -> ChatResult:
+    def complete(
+        self,
+        messages: List[Dict[str, Any]],
+        seed: int = 0,
+        *,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = None,
+        endpoint_mode: Optional[str] = None,
+    ) -> ChatResult:
+        # The stub remains a fixture player; accepting the optional transport
+        # keywords keeps endpoint substitution compatible without pretending to
+        # advertise schemas or execute live service effects.
+        del tools, tool_choice, endpoint_mode
         self._turns += 1
         envelope = {"id": f"stub-{self._rng.randint(0, 10**9):010d}", "object": "chat.completion"}
         if self._pending:
