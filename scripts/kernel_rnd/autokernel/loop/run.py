@@ -3554,7 +3554,8 @@ def main(argv: list[str] | None = None) -> int:
                         # either is a refusal, never an exception out of the gate.
                         try:
                             anchor_for_gate = ppl_contract_anchor_for_gate()
-                            reference = gates.pinned_production_reference(args.store)
+                            reference = gates.pinned_production_reference(
+                                args.store, env=dict(arm.launch_env))
                         except Exception as exc:  # noqa: BLE001 -- fail CLOSED
                             return gates.Verdict("ppl_contract", False,
                                                  f"ppl_contract preconditions unmet: "
@@ -4910,10 +4911,20 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(f"{slot} has no library objects to prove a tools build against")
         dest = Path(args.store) / "ppl_contract" / f"tools-{commit[:12]}"
         marker = dest / "ak_ppl_tools_build.json"
+        def artifact_digest(build: Path) -> str:
+            return hashlib.sha256("\n".join(
+                gates._build_identity(build, tool)
+                for tool in gates.PPL_CONTRACT_TOOL_TARGETS).encode()).hexdigest()
+
         if marker.is_file():
+            # Round-3 review: the marker is never trusted alone -- the directory's
+            # objects AND its linked tools/DSOs are re-hashed on every reuse.
             body = json.loads(marker.read_text(encoding="utf-8"))
-            if body.get("commit") != commit or body.get("object_digest") != slot_digest:
-                raise ValueError(f"{marker} does not match {slot} at {commit[:12]}")
+            if (body.get("commit") != commit or body.get("object_digest") != slot_digest
+                    or anchor_integrity.object_digest(dest) != slot_digest
+                    or body.get("artifact_digest") != artifact_digest(dest)):
+                raise ValueError(f"{dest} no longer matches its marker / {slot} at "
+                                 f"{commit[:12]}; refusing the stale tools build")
             return dest
         head = _git(args.worktree, "rev-parse", "HEAD")
         dirty = _git(args.worktree, "status", "--porcelain", "--untracked-files=no")
@@ -4932,6 +4943,7 @@ def main(argv: list[str] | None = None) -> int:
         if built_digest != slot_digest:
             raise ValueError(f"tools build of {commit[:12]} is not object-identical to {slot}")
         marker.write_text(json.dumps({"commit": commit, "object_digest": slot_digest,
+                                      "artifact_digest": artifact_digest(dest),
                                       "slot": str(slot)}), encoding="utf-8")
         return dest
 
@@ -4946,8 +4958,10 @@ def main(argv: list[str] | None = None) -> int:
             changed = _git(args.worktree, "diff", "--name-only", cor_commit[0],
                            tip_commit).splitlines()
             ledger = gates.ppl_contract_ledger_read(args.store)
-            trailer = gates.ppl_contract_commits_in_range(args.worktree, cor_commit[0],
-                                                          tip_commit)
+            # Round-3 review: provenance from HISTORY -- a trailer, or any change to a
+            # ppl_contract path not positively classified non-ppl -- requires the gate.
+            trailer = gates.ppl_contract_range_requires_gate(args.worktree, cor_commit[0],
+                                                             tip_commit)
             if not gates.ppl_contract_fold_required(bundle[0].keeps, changed, ledger,
                                                     trailer=trailer):
                 return None
@@ -4956,7 +4970,8 @@ def main(argv: list[str] | None = None) -> int:
                                      "ppl_contract bundle on a non-CPU target")
             from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
             arm = _cpu_arm(direct_launch, anchor_build[0])
-            reference = gates.pinned_production_reference(args.store)
+            reference = gates.pinned_production_reference(args.store,
+                                                          env=dict(arm.launch_env))
             tip_tools = ppl_contract_anchor_for_gate()
             # The champion of record's build predates the tools when it was promoted
             # before the obligation; it cannot be rebuilt here (the champion tree is at

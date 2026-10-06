@@ -256,6 +256,17 @@ def fold_onto_champion(repo: Path, champion_branch: str, commits: Sequence[str],
     every commit applies and G0 passes."""
     from .kernel_mutation_guard import ensure_kernel_mutation_allowed
     ensure_kernel_mutation_allowed(repo, champion_branch)
+    # Round-3 review: the quality hold is enforced AT THE FOLD BOUNDARY, for every
+    # caller and every record (legacy ledger rows included): a commit that carries the
+    # ppl_contract trailer, or changes a ppl_contract path without being positively
+    # classified non-ppl, never folds into the global champion -- no cross-lane quality
+    # gate (layers a-d on every peer model) exists. Kernel-coverage G0 is not one.
+    from . import gates
+    held_ppl = [c for c in commits if gates.ppl_contract_range_requires_gate(
+        repo, f"{c}^", c)]
+    if held_ppl:
+        return {"result": "ppl_contract_held", "commit": None, "picked": [],
+                "held": list(held_ppl)}
     ref = f"refs/heads/{champion_branch}"
     old = _out(repo, "rev-parse", "--verify", ref)
     tip, picked = old, []

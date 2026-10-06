@@ -613,8 +613,18 @@ CPU_SOURCE_ROUTES = (
         # Re-review 2026-10-06: the served-shape oracle covers exactly
         # served_shape_cases.WITNESS_TYPES; a whitelist edit naming any OTHER type could
         # route it into iqk with no served-shape evidence, so it is refused outright.
-        forbidden_added=(r"GGML_TYPE_(?!(?:Q4_0|Q4_1|Q5_0|Q5_1|Q8_0|IQ4_NL|Q2_K|Q3_K|Q4_K|"
-                         r"Q5_K|Q6_K|IQ4_XS|IQ2_XXS|IQ2_XS|IQ2_S|IQ3_XXS|IQ3_S)\b)\w+"),
+        # Round-3 review: a NAME check cannot stop `return true;` / `default: return true;`.
+        # Every added line must be one of the closed grammar below -- a `case` label of
+        # a served-corpus type, a `static_assert`, `return false;`, a comment, or blank --
+        # so the admitted set can only change by naming served-corpus types. The MMID
+        # shape gate is exempt: it is an AND-ed refusal after iqk_typeA_supported
+        # (iqk_dispatch.cpp: `if (!iqk_typeA_supported(tA)) return false;` precedes
+        # `if (!iqk_mmid_shape_supported(...)) return false;`), so it cannot admit a type.
+        forbidden_added=(r"^\+(?!\s*(?:(?:case\s+GGML_TYPE_(?:Q4_0|Q4_1|Q5_0|Q5_1|Q8_0|"
+                         r"IQ4_NL|Q2_K|Q3_K|Q4_K|Q5_K|Q6_K|IQ4_XS|IQ2_XXS|IQ2_XS|IQ2_S|"
+                         r"IQ3_XXS|IQ3_S)\s*:\s*)+(?://.*)?|static_assert\(.*\);\s*(?://.*)?"
+                         r"|return\s+false\s*;\s*(?://.*)?|//.*|)\s*$)"),
+        forbidden_exempt_bodies=("iqk_mmid_shape_supported",),
         numerics="ppl_contract",
         admitted_text=("case additions/removals inside the three constexpr whitelists, each with a "
                        "matching static_assert; the dispatch bodies, kernels and the disabled-build "
@@ -2556,12 +2566,15 @@ def production_cpu_reference_build() -> Path:
 PPL_CONTRACT_REFERENCE_PIN = Path("ppl_contract") / "reference_pin.json"
 
 
-def _reference_identity(build: Path) -> str:
+def _reference_identity(build: Path, env: "dict | None" = None) -> str:
+    """Both tools + every DSO + the resolved closure + the EFFECTIVE environment
+    (LD_PRELOAD contents and closure included; round-3 review)."""
     return hashlib.sha256("\n".join(
-        _build_identity(build, tool) for tool in PPL_CONTRACT_TOOL_TARGETS).encode()).hexdigest()
+        [*(_build_identity(build, tool) for tool in PPL_CONTRACT_TOOL_TARGETS),
+         _env_identity(env or {})]).encode()).hexdigest()
 
 
-def pinned_production_reference(store: Path) -> Path:
+def pinned_production_reference(store: Path, env: "dict | None" = None) -> Path:
     """The campaign's FIXED reference build: pinned on first use (resolved path +
     content identity of both tools and every DSO), verified on every later use.
     Raises ValueError on a moved symlink, a changed build, or an unreadable pin."""
@@ -2576,10 +2589,11 @@ def pinned_production_reference(store: Path) -> Path:
         if pinned != current:
             raise ValueError(f"production reference moved: pinned {pinned}, symlink now "
                              f"resolves to {current}; delete {pin} to re-baseline explicitly")
-        if _reference_identity(pinned) != digest:
-            raise ValueError(f"pinned production reference {pinned} changed content")
+        if _reference_identity(pinned, env) != digest:
+            raise ValueError(f"pinned production reference {pinned} changed content or "
+                             "effective environment (LD_PRELOAD / launch env)")
         return pinned
-    identity = _reference_identity(current)
+    identity = _reference_identity(current, env)
     pin.parent.mkdir(parents=True, exist_ok=True)
     tmp = pin.with_name(f".{pin.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps({"path": str(current), "identity": identity}), encoding="utf-8")
@@ -2715,6 +2729,70 @@ def ppl_contract_commits_in_range(worktree: Path, base: str, tip: str) -> "bool 
     return any(line.strip() == PPL_CONTRACT_TRAILER for line in done.stdout.splitlines())
 
 
+def _commit_positively_non_ppl(worktree: Path, commit: str, path: str) -> bool:
+    """True only when `commit`'s change to `path` is ADMITTED by a non-ppl_contract
+    rule: a bit-exact/reference `CpuSourceRoute` on that path, or the ad-hoc Q4_K/Q5_K
+    dot rule on iqk_gemm_kquants.cpp. Route bodies of the two numerics contracts are
+    disjoint symbols, so admission here proves the hunks touch no ppl_contract body.
+    Anything else (unreadable history, an added/deleted file, no admitting rule) is
+    False -- unknown provenance is never treated as proof that no gate is needed."""
+    def run_git(*args):
+        done = subprocess.run(["git", "-C", str(worktree), *args], capture_output=True,
+                              text=True)
+        if done.returncode != 0:
+            raise OSError(done.stderr.strip()[:200])
+        return done.stdout
+    try:
+        pre = run_git("show", f"{commit}^:{path}")
+        post = run_git("show", f"{commit}:{path}")
+        patch = run_git("diff", "-U0", f"{commit}^", commit, "--", path)
+    except OSError:
+        return False
+    if not patch.strip():
+        return True
+    if path == "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp":
+        try:
+            if _iqk_q45_dot_scope_refusal(post, pre, patch) is None:
+                return True
+        except Exception:  # noqa: BLE001 -- a classifier fault is "unknown"
+            pass
+    for route in CPU_SOURCE_ROUTES:
+        if route.path == path and route.numerics != "ppl_contract":
+            try:
+                if _cpu_route_scope_refusal(route, post, pre, patch) is None:
+                    return True
+            except Exception:  # noqa: BLE001 -- a classifier fault is "unknown"
+                continue
+    return False
+
+
+def ppl_contract_range_requires_gate(worktree: Path, base: str, tip: str) -> bool:
+    """Round-3 review (C2): does base..tip carry ANY change that must be judged by the
+    ppl_contract quality layers before it may reach a champion? True when a commit
+    carries PPL_CONTRACT_TRAILER, when a commit touches a ppl_contract path and its
+    change there is not POSITIVELY classified non-ppl (`_commit_positively_non_ppl`),
+    or when git cannot answer. Ledger-independent: provenance comes from history."""
+    paths = ppl_contract_paths()
+    done = subprocess.run(["git", "-C", str(worktree), "log",
+                           "--format=%x00%H%x01%B%x02", "--name-only", "--no-renames",
+                           f"{base}..{tip}"], capture_output=True, text=True)
+    if done.returncode != 0:
+        return True
+    for record in done.stdout.split("\x00")[1:]:
+        try:
+            commit, rest = record.split("\x01", 1)
+            body, names = rest.split("\x02", 1)
+        except ValueError:
+            return True
+        if any(line.strip() == PPL_CONTRACT_TRAILER for line in body.splitlines()):
+            return True
+        for name in (n.strip() for n in names.splitlines()):
+            if name in paths and not _commit_positively_non_ppl(worktree, commit.strip(),
+                                                                name):
+                return True
+    return False
+
+
 def ppl_contract_fold_required(keeps, changed_paths, ledger: "set[str] | None",
                                trailer: "bool | None" = False) -> bool:
     """Does a champion-of-record fold of this bundle need `ppl_contract_bundle_gate`?
@@ -2771,10 +2849,47 @@ def _build_identity(build: Path, tool: str) -> str:
         raise OSError(f"{exe} does not exist (the build lacks {tool!r}; "
                       f"add PPL_CONTRACT_TOOL_TARGETS to its build targets)")
     parts = [f"{tool}:{_file_sha256(exe)}"]
-    for lib in sorted(bin_dir.glob("lib*.so*")):
-        if lib.is_file():
-            parts.append(f"{lib.name}:{_file_sha256(lib)}")
+    libs = [lib for lib in sorted(bin_dir.glob("lib*.so*")) if lib.is_file()]
+    for lib in libs:
+        parts.append(f"{lib.name}:{_file_sha256(lib)}")
+    # Round-3 review: bind the RESOLVED dependency closure (system libgomp/libstdc++,
+    # anything reached through RPATH), not only what sits in build/bin.
+    parts.extend(_resolved_closure([exe, *libs], lib_dir=bin_dir))
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def _resolved_closure(objects, *, lib_dir: "Path | None") -> list[str]:
+    """`name:resolved-path:sha256` for every shared object the dynamic loader resolves
+    for `objects` (ldd, with LD_LIBRARY_PATH as the gate runs set it). Raises OSError
+    when the closure cannot be established -- an unresolved ("not found") dependency,
+    a failed ldd -- so no cache key or pin is ever computed over an unknown closure."""
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+    if lib_dir is not None:
+        env["LD_LIBRARY_PATH"] = str(lib_dir)
+    resolved: dict[str, str] = {}
+    for obj in objects:
+        try:
+            done = subprocess.run(["ldd", str(obj)], capture_output=True, text=True,
+                                  timeout=60, env=env, stdin=subprocess.DEVNULL)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise OSError(f"ldd {obj} could not run: {exc}") from exc
+        if done.returncode != 0:
+            raise OSError(f"ldd {obj} failed: {done.stderr.strip()[:200]}")
+        for line in done.stdout.splitlines():
+            line = line.strip()
+            if not line or line.startswith(("linux-vdso", "linux-gate")):
+                continue
+            if "not found" in line:
+                raise OSError(f"{obj}: unresolved dependency ({line})")
+            match = re.match(r"(\S+)\s+=>\s+(\S+)\s+\(0x[0-9a-f]+\)", line) or \
+                re.match(r"(/\S+)\s+\(0x[0-9a-f]+\)", line)
+            if match is None:
+                continue
+            path = match.group(match.lastindex)
+            if path.startswith("/"):
+                resolved[os.path.realpath(path)] = match.group(1)
+    return [f"{name}:{path}:{_file_sha256(Path(path))}"
+            for path, name in sorted(resolved.items())]
 
 
 def _model_identity(model: Path) -> str:
@@ -2794,7 +2909,9 @@ def _env_identity(env: dict) -> str:
     preload = [entry for entry in re.split(r"[:\s]+", (env or {}).get("LD_PRELOAD", ""))
                if entry]
     contents = [(entry, _file_sha256(Path(entry))) for entry in preload]
-    return hashlib.sha256(json.dumps([items, contents]).encode()).hexdigest()
+    closure = (_resolved_closure([Path(entry) for entry in preload], lib_dir=None)
+               if preload else [])
+    return hashlib.sha256(json.dumps([items, contents, closure]).encode()).hexdigest()
 
 
 def _cache_get(cache_dir: "Path | None", key: str):
@@ -2960,71 +3077,129 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
                                           if served_shape_manifest is not None else ""))
 
 
-def prefix_token_agreement(candidate_text: str, anchor_text: str, *,
-                           tokenize: "Callable[[str], list[str]] | None" = None
-                           ) -> tuple[float, "int | None"]:
-    """Prefix token-agreement ratio between two greedy completions of the SAME prompt.
-
-    Agreement = matching prefix length / the LONGER output, so a candidate that stops
-    early (or produces nothing) is a divergence, never a pass. Two empty outputs are 0.0:
-    nothing generated is not agreement. `tokenize` defaults to CHARACTERS (re-review
-    2026-10-06: a whitespace split equated texts differing only in whitespace, so it
-    could OVERSTATE agreement; a character prefix is strictly conservative -- any byte
-    difference is a divergence at that point -- and over a 512-token generation the
-    0.98 floor still admits a difference only in roughly the last ten tokens).
-    Returns (ratio, first divergence index or None when the outputs are identical)."""
-    tok = tokenize or list
-    candidate_tokens, anchor_tokens = tok(candidate_text), tok(anchor_text)
-    denom = max(len(candidate_tokens), len(anchor_tokens))
+def _prefix_agreement(candidate, anchor) -> tuple[float, "int | None"]:
+    """Prefix agreement between two sequences: matching prefix length / the LONGER
+    length, so an early stop is a divergence, never a pass; two empty sequences are 0.0.
+    Returns (ratio, first divergence index or None when identical)."""
+    candidate, anchor = list(candidate), list(anchor)
+    denom = max(len(candidate), len(anchor))
     if denom == 0:
         return 0.0, 0
     first_divergence = next(
-        (i for i, (a, b) in enumerate(zip(candidate_tokens, anchor_tokens)) if a != b),
-        None)
-    if first_divergence is None and len(candidate_tokens) != len(anchor_tokens):
-        first_divergence = min(len(candidate_tokens), len(anchor_tokens))
+        (i for i, (a, b) in enumerate(zip(candidate, anchor)) if a != b), None)
+    if first_divergence is None and len(candidate) != len(anchor):
+        first_divergence = min(len(candidate), len(anchor))
     agree = denom if first_divergence is None else first_divergence
     return agree / denom, first_divergence
 
 
+def prefix_token_agreement(candidate_text: str, anchor_text: str, *,
+                           tokenize: "Callable[[str], list[str]] | None" = None
+                           ) -> tuple[float, "int | None"]:
+    """Text-level prefix agreement (diagnostic only since the 2026-10-06 round-3 review:
+    no character or whitespace metric is conservative w.r.t. token IDs, because two
+    different token sequences can render identical bytes). The GATES compare generated
+    token IDs (`prefix_id_agreement`)."""
+    tok = tokenize or list
+    return _prefix_agreement(tok(candidate_text), tok(anchor_text))
+
+
+def prefix_id_agreement(candidate_ids, anchor_ids) -> tuple[float, "int | None"]:
+    """Greedy agreement over GENERATED TOKEN IDS -- the layer (c)/(d) metric."""
+    return _prefix_agreement(tuple(candidate_ids), tuple(anchor_ids))
+
+
+LLAMA_SESSION_MAGIC, LLAMA_SESSION_VERSION = 0x6767736E, 10
+
+
+def _session_tokens(path: Path) -> "list[int] | None":
+    """The token list `llama_state_save_file` writes at the head of a session file
+    (u32 magic 'ggsn', u32 version, u32 n, n x int32), or None on any mismatch."""
+    import struct
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(12)
+            if len(head) != 12:
+                return None
+            magic, version, count = struct.unpack("<III", head)
+            if magic != LLAMA_SESSION_MAGIC or version != LLAMA_SESSION_VERSION:
+                return None
+            raw = handle.read(4 * count)
+            if len(raw) != 4 * count:
+                return None
+            return list(struct.unpack(f"<{count}i", raw))
+    except OSError:
+        return None
+
+
+_SESSION_SAVE_LINE = re.compile(r"\n?[\w:]*: saving final output to session file '[^'\n]*'\n?")
+
+
 def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Path,
                 threads: int, env: dict, cpu_list: str, log_dir: Path,
-                cache_dir: "Path | None", label: str) -> "tuple[str, int] | None":
-    """Greedy raw completion on `build`: (generated text, prompt token count) or None.
+                cache_dir: "Path | None", label: str
+                ) -> "tuple[str, int, tuple[int, ...]] | None":
+    """Greedy raw completion on `build`: (generated text, prompt token count, GENERATED
+    TOKEN IDS) or None.
 
     `llama-completion -no-cnv` (raw text, no chat template, no REPL), stdin closed, the
-    prompt from a file and NOT echoed, EOS ignored so every build generates exactly
-    `n_predict` tokens; the prompt token count is the tool's own (--verbose-prompt) and
-    the GENERATED count is the context's own decode count (--perf): a run that
-    generated fewer than `n_predict - 1` decodes (the last sampled token is never
-    decoded) is refused, so a short or aborted generation can never be compared."""
+    prompt from a file and NOT echoed, EOS ignored. Token IDs come from the session file
+    `--prompt-cache --prompt-cache-all` writes (the tool's own decoded token list; a
+    fresh, unique path that cannot pre-exist, so no stale state is ever LOADED). The
+    run is refused unless the session holds exactly prompt + (n_predict-1 or n_predict)
+    tokens, the prompt count matches --verbose-prompt, and --perf reports the decodes:
+    a prompt-only or short session can never be read as agreement (round-3 review)."""
+    import uuid
     prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
-    key = _key(kind="completion-v2", build=_build_identity(build, "llama-completion"),
+    key = _key(kind="completion-v3", build=_build_identity(build, "llama-completion"),
                model=_model_identity(model), prompt=prompt_sha, n_predict=n_predict,
                ctx=ctx, threads=threads, cpu_list=cpu_list, env=_env_identity(env))
     cached = _cache_get(cache_dir, key)
-    if isinstance(cached, list) and len(cached) == 2:
-        return str(cached[0]), int(cached[1])
+    if isinstance(cached, list) and len(cached) == 3 and isinstance(cached[2], list):
+        return str(cached[0]), int(cached[1]), tuple(int(t) for t in cached[2])
     log_dir.mkdir(parents=True, exist_ok=True)
     prompt_file = log_dir / f"prompt-{prompt_sha[:16]}.txt"
     prompt_file.write_text(prompt, encoding="utf-8")
+    session = log_dir / f"session-{uuid.uuid4().hex}.bin"
+    if session.exists():
+        return None
     argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
             str(Path(build) / "bin" / "llama-completion"), "-m", str(model),
             "-f", str(prompt_file), "-n", str(n_predict), "-c", str(ctx),
             "-t", str(threads), "--temp", "0", "--top-k", "1", "--seed", "0",
             "-no-cnv", "--no-display-prompt", "--ignore-eos", "--verbose-prompt",
-            "--perf", "--no-mmap"]
-    rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": str(Path(build) / "bin")},
-                             log_dir=log_dir, label=f"{label}_{Path(build).name}")
+            "--perf", "--prompt-cache", str(session), "--prompt-cache-all", "--no-mmap"]
+    try:
+        rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": str(Path(build) / "bin")},
+                                 log_dir=log_dir, label=f"{label}_{Path(build).name}")
+        tokens = _session_tokens(session) if rc == 0 else None
+    finally:
+        try:
+            session.unlink()
+        except OSError:
+            pass
     found = re.search(r"number of tokens in prompt = (\d+)", err + out)
     decoded = re.search(r"(?<!prompt )eval time =\s*[0-9.]+ ms /\s*(\d+) runs", err + out)
-    if rc != 0 or found is None or decoded is None or not out.strip():
+    if rc != 0 or found is None or decoded is None or tokens is None:
         return None
-    if int(decoded.group(1)) < max(1, n_predict - 1):
+    n_prompt = int(found.group(1))
+    generated = tokens[n_prompt:]
+    if (int(decoded.group(1)) < max(1, n_predict - 1)
+            or len(generated) not in (n_predict - 1, n_predict)):
         return None
-    result = (out, int(found.group(1)))
-    _cache_put(cache_dir, key, list(result), {"build": str(build), "label": label})
+    text = _SESSION_SAVE_LINE.sub("", out)
+    if not text.strip():
+        return None
+    result = (text, n_prompt, tuple(generated))
+    _cache_put(cache_dir, key, [text, n_prompt, list(generated)],
+               {"build": str(build), "label": label})
     return result
+
+
+def _valid_generation(result) -> bool:
+    return (isinstance(result, tuple) and len(result) == 3 and isinstance(result[0], str)
+            and result[0].strip() != "" and isinstance(result[1], int)
+            and isinstance(result[2], tuple) and len(result[2]) > 0)
 
 
 def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: Path,
@@ -3032,15 +3207,16 @@ def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: 
                            cpu_list: str, log_dir: Path, threads: int = 1,
                            reference_build: "Path | None" = None,
                            cache_dir: "Path | None" = None,
-                           _generate: "Callable[[Path, str], tuple[str, int] | None] | None" = None
+                           _generate: "Callable[[Path, str], tuple | None] | None" = None
                            ) -> Verdict:
-    """Layer (c): greedy token agreement on >= PPL_CONTRACT_PROD_PROMPT_COUNT_MIN prompts
-    of >= PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN tokens each (the tool's own count).
+    """Layer (c): greedy agreement over GENERATED TOKEN IDS on >=
+    PPL_CONTRACT_PROD_PROMPT_COUNT_MIN prompts of >= PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN
+    prompt tokens each (the tool's own count).
 
     Per prompt: agreement(candidate, anchor) >= floor, and with a fixed reference,
-    agreement(candidate, reference) >= min(floor, agreement(anchor, reference)) -- the
-    candidate may not diverge from the fixed reference earlier than the anchor already
-    does. `_generate(build, prompt) -> (text, prompt_tokens) | None` is a test seam."""
+    agreement(candidate, reference) >= min(floor, agreement(anchor, reference)).
+    Missing token evidence refuses. `_generate(build, prompt) -> (text, prompt_tokens,
+    generated_ids) | None` is a test seam."""
     def generate(build: Path, prompt: str):
         if _generate is not None:
             return _generate(build, prompt)
@@ -3059,11 +3235,11 @@ def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: 
         outputs = {}
         for name, build in builds:
             result = generate(build, prompt)
-            if (not isinstance(result, tuple) or len(result) != 2
-                    or not isinstance(result[0], str) or not result[0].strip()):
+            if not _valid_generation(result):
                 return Verdict("ppl_contract_coherence", False,
-                               f"prompt {index}: {name} build produced no generation "
-                               "(tool failed, missing, or empty output)")
+                               f"prompt {index}: {name} build produced no token-level "
+                               "generation evidence (tool failed, missing, short, or no "
+                               "generated token IDs)")
             outputs[name] = result
         tokens = {name: result[1] for name, result in outputs.items()}
         short = {name: n for name, n in tokens.items()
@@ -3072,13 +3248,16 @@ def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: 
             return Verdict("ppl_contract_coherence", False,
                            f"prompt {index} is not production-length: prompt tokens {short} "
                            f"< {PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN}")
-        ratio, first = prefix_token_agreement(outputs["candidate"][0], outputs["anchor"][0])
-        line = f"prompt {index} ({tokens['candidate']} tok): vs anchor {ratio:.4f} (div {first!r})"
+        if len(set(tokens.values())) != 1:
+            return Verdict("ppl_contract_coherence", False,
+                           f"prompt {index} tokenized differently across builds {tokens}")
+        ratio, first = prefix_id_agreement(outputs["candidate"][2], outputs["anchor"][2])
+        line = (f"prompt {index} ({tokens['candidate']} tok): vs anchor {ratio:.4f} "
+                f"(first differing generated token {first!r})")
         passed = ratio >= PPL_CONTRACT_AGREEMENT_FLOOR
         if reference_build is not None:
-            ratio_r, _ = prefix_token_agreement(outputs["candidate"][0],
-                                                outputs["reference"][0])
-            base_r, _ = prefix_token_agreement(outputs["anchor"][0], outputs["reference"][0])
+            ratio_r, _ = prefix_id_agreement(outputs["candidate"][2], outputs["reference"][2])
+            base_r, _ = prefix_id_agreement(outputs["anchor"][2], outputs["reference"][2])
             allowed = min(PPL_CONTRACT_AGREEMENT_FLOOR, base_r)
             passed = passed and ratio_r >= allowed
             line += f", vs reference {ratio_r:.4f} (allowed >= {allowed:.4f})"
@@ -3089,11 +3268,11 @@ def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: 
                            "\n".join(details))
         worst_ratio = ratio if worst_ratio is None else min(worst_ratio, ratio)
     return Verdict("ppl_contract_coherence", True,
-                   f"worst agreement vs anchor {worst_ratio:.4f} over {len(prompts)} "
+                   f"worst token-ID agreement vs anchor {worst_ratio:.4f} over {len(prompts)} "
                    f"production-length prompts; " + "; ".join(details))
 
 
-def _longest_exact_repeat_run(tokens: list[str]) -> int:
+def _longest_exact_repeat_run(tokens: list) -> int:
     best = run = 1 if tokens else 0
     for i in range(1, len(tokens)):
         run = run + 1 if tokens[i] == tokens[i - 1] else 1
@@ -3101,7 +3280,7 @@ def _longest_exact_repeat_run(tokens: list[str]) -> int:
     return best
 
 
-def _distinct_ngram_ratio(tokens: list[str], n: int = 4) -> float:
+def _distinct_ngram_ratio(tokens: list, n: int = 4) -> float:
     """Distinct n-grams / total n-grams: ~1.0 for prose, collapses in a degenerate loop
     (a repeated PHRASE, which a single-token run length never sees)."""
     grams = [tuple(tokens[i:i + n]) for i in range(len(tokens) - n + 1)]
@@ -3114,83 +3293,64 @@ def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
                              reference_build: "Path | None" = None, threads: int = 1,
                              cache_dir: "Path | None" = None,
                              n_predict: int = PPL_CONTRACT_CANARY_TOKENS,
-                             _generate: "Callable[[Path, str, int], str | None] | None" = None
+                             _generate: "Callable[[Path, str, int], tuple | None] | None" = None
                              ) -> Verdict:
-    """Layer (d): a >= 1024-token greedy generation (EOS ignored) on the candidate AND
-    the baselines. Refused when the candidate's output is truncated, when its
-    distinct-4gram ratio falls more than PPL_CONTRACT_CANARY_DISTINCT4_DROP below a
-    baseline's, or when its longest exact-repeat run exceeds
-    max(PPL_CONTRACT_CANARY_MAX_REPEAT_RUN, a baseline's). Base models loop under greedy
-    decoding on their own, so the bars are RELATIVE; without a baseline the absolute
-    run bar alone applies. `_generate(build, prompt, count) -> text|None` is a test seam."""
+    """Layer (d): a >= 1024-token greedy free generation (EOS ignored) on the candidate
+    AND both baselines, compared by GENERATED TOKEN IDS over the whole length (round-3
+    review: statistics alone accept an unrelated non-repetitive tail). Refused unless:
+    an anchor AND a reference are given (none is "no evidence"); every arm produced
+    the full token count; agreement(candidate, anchor) >= the agreement floor;
+    agreement(candidate, reference) >= min(floor, agreement(anchor, reference)); and
+    the token-level repetition statistics (longest repeat run, whole and last-quarter
+    distinct-4) are no worse than every baseline's by more than the set margins.
+    `_generate(build, prompt, count) -> (text, prompt_tokens, ids) | None` is a test seam."""
     if n_predict < PPL_CONTRACT_CANARY_TOKENS:
         raise ValueError(
             f"ppl_contract_long_canary requires >= {PPL_CONTRACT_CANARY_TOKENS} tokens")
+    if anchor_build is None or reference_build is None:
+        return Verdict("ppl_contract_long_canary", False,
+                       "the canary needs both an anchor and a fixed reference to compare "
+                       "against; a baseline-free canary is not evidence")
 
-    def generate(build: Path) -> str | None:
+    def generate(build: Path):
         if _generate is not None:
             return _generate(build, prompt, n_predict)
-        result = _completion(build, prompt, n_predict, PPL_CONTRACT_CANARY_CTX, model=model,
-                             threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
-                             cache_dir=cache_dir, label="canary")
-        return None if result is None else result[0]
+        return _completion(build, prompt, n_predict, PPL_CONTRACT_CANARY_CTX, model=model,
+                           threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
+                           cache_dir=cache_dir, label="canary")
 
-    def stats(text: str) -> tuple[int, float, int]:
-        tokens = text.split()
-        return len(tokens), _distinct_ngram_ratio(tokens), _longest_exact_repeat_run(tokens)
+    def stats(ids) -> tuple[float, float, int]:
+        ids = list(ids)
+        tail = ids[-max(16, len(ids) // 4):]
+        return (_distinct_ngram_ratio(ids), _distinct_ngram_ratio(tail),
+                _longest_exact_repeat_run(ids))
 
-    def tail_distinct(text: str) -> float:
-        """Distinct-4 over the LAST quarter: drift into a loop late in the generation
-        is diluted in a whole-text ratio (re-review 2026-10-06)."""
-        tokens = text.split()
-        return _distinct_ngram_ratio(tokens[-max(16, len(tokens) // 4):])
-
-    def garbage_share(text: str) -> float:
-        """Share of replacement/control characters (bytes that do not decode to text)."""
-        if not text:
-            return 1.0
-        bad = sum(1 for ch in text if ch == "\ufffd" or (ord(ch) < 32 and ch not in "\n\t\r"))
-        return bad / len(text)
-
-    text = generate(candidate_build)
-    if not isinstance(text, str) or not text.strip():
-        return Verdict("ppl_contract_long_canary", False,
-                       f"candidate did not complete a {n_predict}-token generation")
-    count, distinct, run = stats(text)
-    # Whitespace words per token is ~0.6-0.8 for prose; a quarter is a generous floor.
-    if count < n_predict // 4:
-        return Verdict("ppl_contract_long_canary", False,
-                       f"candidate produced only {count} words for {n_predict} tokens "
-                       "(truncated/aborted generation)")
-    reason = f"candidate {count} words, distinct-4 {distinct:.3f}, longest run {run}"
-    baselines, passed = 0, True
-    for name, build in (("anchor", anchor_build), ("reference", reference_build)):
-        if build is None:
-            continue
-        baselines += 1
-        base_text = generate(build)
-        if not isinstance(base_text, str) or not base_text.strip():
+    outputs = {}
+    for name, build in (("candidate", candidate_build), ("anchor", anchor_build),
+                        ("reference", reference_build)):
+        result = generate(build)
+        if not _valid_generation(result) or len(result[2]) < n_predict - 1:
             return Verdict("ppl_contract_long_canary", False,
-                           f"{name} build did not complete the canary generation")
-        base_count, base_distinct, base_run = stats(base_text)
-        if base_count < n_predict // 4:
-            return Verdict("ppl_contract_long_canary", False,
-                           f"{name} build produced only {base_count} words for {n_predict} "
-                           "tokens (truncated baseline: not a comparison)")
-        run_ok = run <= max(PPL_CONTRACT_CANARY_MAX_REPEAT_RUN, base_run)
-        distinct_ok = distinct >= base_distinct - PPL_CONTRACT_CANARY_DISTINCT4_DROP
-        tail_ok = (tail_distinct(text)
-                   >= tail_distinct(base_text) - PPL_CONTRACT_CANARY_DISTINCT4_DROP)
-        garbage_ok = garbage_share(text) <= garbage_share(base_text) + 0.01
-        passed = passed and run_ok and distinct_ok and tail_ok and garbage_ok
-        reason += (f"; {name} distinct-4 {base_distinct:.3f} (tail {tail_distinct(base_text):.3f} "
-                   f"vs candidate {tail_distinct(text):.3f}), longest run {base_run}, "
-                   f"garbage {garbage_share(base_text):.4f} vs {garbage_share(text):.4f}")
-    if baselines == 0:
-        passed = run <= PPL_CONTRACT_CANARY_MAX_REPEAT_RUN
-    return Verdict("ppl_contract_long_canary", passed,
-                   reason + f" (bars: distinct-4 drop <= {PPL_CONTRACT_CANARY_DISTINCT4_DROP}, "
-                   f"run <= max({PPL_CONTRACT_CANARY_MAX_REPEAT_RUN}, baseline))")
+                           f"{name} build did not complete a {n_predict}-token generation "
+                           "with token-level evidence")
+        outputs[name] = result[2]
+    cand = outputs["candidate"]
+    ratio_a, first_a = prefix_id_agreement(cand, outputs["anchor"])
+    ratio_r, _ = prefix_id_agreement(cand, outputs["reference"])
+    base_r, _ = prefix_id_agreement(outputs["anchor"], outputs["reference"])
+    allowed_r = min(PPL_CONTRACT_AGREEMENT_FLOOR, base_r)
+    passed = ratio_a >= PPL_CONTRACT_AGREEMENT_FLOOR and ratio_r >= allowed_r
+    distinct, tail, run = stats(cand)
+    reason = (f"agreement vs anchor {ratio_a:.4f} (first differing token {first_a!r}), "
+              f"vs reference {ratio_r:.4f} (allowed >= {allowed_r:.4f}); candidate "
+              f"distinct-4 {distinct:.3f} tail {tail:.3f} longest run {run}")
+    for name in ("anchor", "reference"):
+        b_distinct, b_tail, b_run = stats(outputs[name])
+        passed = (passed and run <= max(PPL_CONTRACT_CANARY_MAX_REPEAT_RUN, b_run)
+                  and distinct >= b_distinct - PPL_CONTRACT_CANARY_DISTINCT4_DROP
+                  and tail >= b_tail - PPL_CONTRACT_CANARY_DISTINCT4_DROP)
+        reason += f"; {name} distinct-4 {b_distinct:.3f} tail {b_tail:.3f} run {b_run}"
+    return Verdict("ppl_contract_long_canary", passed, reason)
 
 
 def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_name, resolved_recipe,
@@ -3337,6 +3497,7 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "ppl_contract_ledger_read", "ppl_contract_ledger_add", "ppl_contract_fold_required",
            "ppl_contract_anchor_obligated", "PPL_CONTRACT_TRAILER",
            "ppl_contract_commits_in_range", "PPL_CONTRACT_REFERENCE_PIN",
+           "ppl_contract_range_requires_gate", "prefix_id_agreement",
            "pinned_production_reference",
            "PPL_CONTRACT_SERVED_WIDTHS", "PPL_CONTRACT_AGREEMENT_FLOOR",
            "PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN", "PPL_CONTRACT_CANARY_TOKENS",
