@@ -331,7 +331,9 @@ def pack_to_budget(
 
     By descending priority, include each candidate at the richest mode (no richer than its
     `desired_mode`) whose cost fits the remaining budget; otherwise exclude it with a reason
-    ("fail closed" rather than overflow). Policy-excluded paths (binaries/secrets/...) are
+    ("fail closed" rather than overflow). A ColGREP candidate with hit line ranges cannot fall
+    back to signature-only CODEMAP_ONLY: if its allowed FULL/SLICES modes do not fit, it is
+    excluded with a missing-evidence reason. Policy-excluded paths (binaries/secrets/...) are
     recorded as EXCLUDED and never consume budget. Pure — no I/O.
     """
     effective_budget = budget if bands is None else budget - bands.output_reserve
@@ -359,7 +361,11 @@ def pack_to_budget(
             continue
 
         placed = False
-        for mode in _ladder_from(cand.desired_mode):
+        has_colgrep_spans = cand.source == SourceKind.COLGREP and bool(cand.line_ranges)
+        mode_ladder = _ladder_from(cand.desired_mode)
+        if has_colgrep_spans:
+            mode_ladder = [mode for mode in mode_ladder if mode != InclusionMode.CODEMAP_ONLY]
+        for mode in mode_ladder:
             cost = cand.cost_for(mode)
             if bundle.total_tokens() + cost <= effective_budget:
                 downgraded = mode != cand.desired_mode
@@ -390,7 +396,11 @@ def pack_to_budget(
                     line_ranges=list(cand.line_ranges),
                     symbol_ids=list(cand.symbol_ids),
                     content_sha256=cand.content_sha256,
-                    reason_downgraded_or_excluded="no mode fits remaining budget (fail-closed)",
+                    reason_downgraded_or_excluded=(
+                        "missing evidence: ColGREP hit spans cannot fit without codemap-only fallback"
+                        if has_colgrep_spans
+                        else "no mode fits remaining budget (fail-closed)"
+                    ),
                 )
             )
     return bundle
