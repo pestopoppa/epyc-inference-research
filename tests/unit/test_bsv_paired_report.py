@@ -179,13 +179,20 @@ def test_eval_result_pair_refuses_malformed_boolean_rows(outcome) -> None:  # no
     [
         [{"correct": True}],
         [{"qid": "   ", "correct": True}],
+        [{"qid": ["q1"], "correct": True}],
+        [{"qid": {"id": "q1"}, "correct": True}],
+        [{"qid": True, "correct": True}],
+        [{"qid": 17, "correct": True}],
+        [{"question_id": 17, "correct": True}],
         [
             {"qid": " q1 ", "correct": True},
             {"question_id": "q1", "correct": False},
         ],
     ],
 )
-def test_eval_result_pair_refuses_missing_or_duplicate_question_ids(outcomes) -> None:  # noqa: ANN001
+def test_eval_result_pair_refuses_missing_or_duplicate_question_ids(
+    outcomes,
+) -> None:  # noqa: ANN001
     valid = {"question_results": [{"qid": "q1", "correct": True}]}
     malformed = {"question_results": outcomes}
 
@@ -257,7 +264,10 @@ def test_eval_result_pair_accepts_identical_question_result_aliases() -> None:
     ]
     payload = {
         "question_results": outcomes,
-        "eval_details": {"details": {"question_results": outcomes}},
+        "eval_details": {
+            "question_results": outcomes,
+            "details": {"question_results": outcomes},
+        },
     }
 
     report = bsv_paired_report.build_eval_result_pair_report(
@@ -272,13 +282,29 @@ def test_eval_result_pair_accepts_identical_question_result_aliases() -> None:
     assert report["paired_stats"]["shared_qids"] == 2
 
 
-def test_eval_result_pair_cli_refusal_emits_no_report(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        {"eval_result": None},
+        {"eval_result": {"eval_details": None}},
+        {"eval_details": None},
+        {"eval_details": {"details": None}},
+        {"question_results": None},
+        {"question_results": []},
+        {"question_results": [{"qid": "q1", "correct": None}]},
+    ],
+)
+def test_eval_result_pair_cli_refusal_emits_no_report(
+    malformed, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:  # noqa: ANN001
     baseline = tmp_path / "baseline.json"
     candidate = tmp_path / "candidate.json"
     baseline.write_text(json.dumps({"question_results": [{"qid": "q1", "correct": True}]}))
-    candidate.write_text(json.dumps({"question_results": [{"qid": "q1", "correct": None}]}))
+    if "question_results" not in malformed and "eval_details" not in malformed:
+        malformed = {"question_results": [{"qid": "q1", "correct": None}], **malformed}
+    candidate.write_text(json.dumps(malformed))
 
-    with pytest.raises(ValueError, match="explicit boolean"):
+    with pytest.raises(ValueError):
         bsv_paired_report.main([
             "eval-result-pair",
             str(baseline),

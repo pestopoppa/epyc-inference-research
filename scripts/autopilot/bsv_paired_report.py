@@ -364,13 +364,24 @@ def _vector_from_eval_result_row(row: dict[str, Any], label: str) -> dict[str, Q
         for index, item in enumerate(raw):
             if not isinstance(item, dict):
                 raise ValueError(f"{location}[{index}] must be an object: {label}")
-            qid = str(item.get("qid") or "").strip()
-            if not qid:
-                qid = str(item.get("question_id") or "").strip()
+            qid = ""
+            for key in ("qid", "question_id"):
+                value = item.get(key)
+                if value is None:
+                    continue
+                if not isinstance(value, str):
+                    raise ValueError(
+                        f"{location}[{index}].{key} must be a string when present: {label}"
+                    )
+                qid = value.strip()
+                if qid:
+                    break
             if not qid:
                 raise ValueError(f"{location}[{index}] has no usable qid/question_id: {label}")
             if qid in normalized:
-                raise ValueError(f"{location} has duplicate normalized question id {qid!r}: {label}")
+                raise ValueError(
+                    f"{location} has duplicate normalized question id {qid!r}: {label}"
+                )
 
             if "correct" not in item or type(item["correct"]) is not bool:
                 raise ValueError(
@@ -387,7 +398,8 @@ def _vector_from_eval_result_row(row: dict[str, Any], label: str) -> dict[str, Q
                 raise ValueError(f"{location}[{index}] has unknown disposition: {label}")
             if not is_quality_admissible(disposition):
                 raise ValueError(
-                    f"{location}[{index}] disposition {disposition!r} has no quality verdict: {label}"
+                    f"{location}[{index}] disposition {disposition!r} "
+                    f"has no quality verdict: {label}"
                 )
             if disposition == DISPOSITION_TASK_FAILED and item["correct"]:
                 raise ValueError(
@@ -402,7 +414,9 @@ def _vector_from_eval_result_row(row: dict[str, Any], label: str) -> dict[str, Q
     canonical = vectors[0][1]
     for name, vector in vectors[1:]:
         if vector != canonical:
-            raise ValueError(f"conflicting question_results locations ({vectors[0][0]} and {name}): {label}")
+            raise ValueError(
+                f"conflicting question_results locations ({vectors[0][0]} and {name}): {label}"
+            )
 
     trial_id = _trial_id_or_none(row)
     return {
