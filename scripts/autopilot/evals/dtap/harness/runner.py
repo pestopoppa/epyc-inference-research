@@ -24,6 +24,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from . import REGISTRY_PATH
 from .endpoint import ChatEndpoint, ChatResult, DryRunStub
 from .env_state import StateStore
+from .failure_ledger import (
+    build_ledger,
+    normalize_comparison_pairs,
+    summarize_response_usage,
+    unit_record,
+)
 from .judge_guard import scan_judge
 from .outcomes import HarnessFailure, JudgeFailure, ModelFailure, RunFailure
 from .trace import TraceRecorder, extract_run_snapshot, verify_trace
@@ -387,7 +393,8 @@ def run_case(
             rec.record(
                 "endpoint_response",
                 {"turn": turn, "text": chat.text, "tool_calls": chat.tool_calls,
-                 "finish_reason": chat.finish_reason, "transport_detail": chat.transport_detail},
+                 "finish_reason": chat.finish_reason, "transport_detail": chat.transport_detail,
+                 "usage": chat.usage, "usage_status": chat.usage_status},
             )
             if chat.tool_calls:
                 if case_tools is not None:
@@ -811,6 +818,30 @@ def _finish_timeout_capture(capture: Dict[str, Any], rows: Dict[str, Any],
     _exclusive(archive / "receipt.json", _native_bytes(receipt))
 
 
+def _ledger_trace_observation(run: RunResult) -> tuple[Optional[str], str, Dict[str, Any]]:
+    """Bind ledger usage to the closed trace; leave unavailable facts explicit."""
+    unavailable = summarize_response_usage(())
+    if not run.trace_path or not run.trace_id:
+        return None, "unavailable:closed_trace_reference_missing", unavailable
+    path = Path(run.trace_path)
+    try:
+        raw = _regular_bytes(path)
+        records = verify_trace(path)
+        verified_raw = _regular_bytes(path)
+        if verified_raw != raw:
+            raise ValueError("closed trace bytes changed during verification")
+        if records[-1]["payload"].get("trace_id") != run.trace_id:
+            raise ValueError("closed trace id differs from returned RunResult")
+        response_events = [
+            record["payload"] for record in records
+            if record.get("event") == "endpoint_response"
+        ]
+        return (hashlib.sha256(raw).hexdigest(), "verified_closed_trace",
+                summarize_response_usage(response_events))
+    except (OSError, ValueError, RunFailure, KeyError, TypeError, IndexError) as exc:
+        return None, f"unavailable:closed_trace_verification_failed:{type(exc).__name__}", unavailable
+
+
 def run_matrix(
     case_ids: List[str],
     arms: List[str],
@@ -824,6 +855,7 @@ def run_matrix(
     capture_fixture_paths: Optional[List[Path]] = None,
     native_tool_contract: Optional[NativeToolContract] = None,
     endpoint_mode: str = "openai-compatible",
+    comparison_pairs: Optional[List[Tuple[str, str]]] = None,
 ) -> Dict[str, Any]:
     """Run a seed-repeat matrix; aggregate verdicts with Wilson CIs.
 
@@ -831,6 +863,11 @@ def run_matrix(
     (dry-run stubs are per-fixture and stateful, so they must not be shared).
     """
     results_dir = Path(results_dir) if results_dir else Path("results")
+    normalized_pairs = normalize_comparison_pairs(arms, comparison_pairs)
+    if normalized_pairs is not None and (
+        len(set(case_ids)) != len(case_ids) or len(set(seeds)) != len(seeds)
+    ):
+        raise ValueError("explicit pair comparisons require unique case ids and seeds")
     registry = (CaseRegistry(_original_bytes=_regular_bytes(REGISTRY_PATH))
                 if native_capture_root is not None else CaseRegistry())
     selected = [{"case_id": case_id, "arm": arm, "seed": seed}
@@ -844,6 +881,7 @@ def run_matrix(
                                     capture_applicability, registry, capture_fixture_paths or [])
               if native_capture_root is not None else None)
     rows: Dict[str, Any] = {}
+    ledger_runs: List[Tuple[RunResult, str]] = []
     execution_error = None
     try:
         for case_id in case_ids:
@@ -861,6 +899,7 @@ def run_matrix(
                                    native_tool_contract=native_tool_contract,
                                    endpoint_mode=endpoint_mode)
                     runs.append(run)
+                    ledger_runs.append((run, case["threat"]))
                     if native is not None:
                         _retain_timeout_trace(native, run)
                 primary = "attack_success" if case["threat"] != "benign" else "task_success"
@@ -895,6 +934,28 @@ def run_matrix(
                 if execution_error is None:
                     raise
                 warnings.warn("native timeout terminal capture unavailable; original execution exception preserved")
+
+    ledger_units = []
+    for run, threat in ledger_runs:
+        trace_sha256, trace_status, usage = _ledger_trace_observation(run)
+        ledger_units.append(unit_record(
+            run.to_dict(),
+            threat=threat,
+            trace_sha256=trace_sha256,
+            trace_binding_status=trace_status,
+            usage=usage,
+        ))
+    threats = {case_id: registry.get(case_id)["threat"] for case_id in case_ids}
+    ledger = build_ledger(
+        ledger_units,
+        case_ids=case_ids,
+        seeds=seeds,
+        threats=threats,
+        comparison_pairs=normalized_pairs,
+    )
+    (results_dir / "failure_ledger.json").write_text(
+        json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return rows
 
 
