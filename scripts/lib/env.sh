@@ -107,12 +107,14 @@ if [[ -z "${ORCHESTRATOR_PATHS_LLAMA_MTMD:-}" ]]; then
     "${LLM_ROOT}/llama.cpp/build-v2/bin/llama-mtmd-cli" \
     "${LLM_ROOT}/llama.cpp/build_libomp_pgo_bolt/bin/llama-mtmd-cli"; do
     [[ -x "${mtmd_candidate}" ]] || continue
-    if LD_LIBRARY_PATH="$(dirname "${mtmd_candidate}")${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
-      timeout 20 "${mtmd_candidate}" --version 2>&1 | grep -q 'version:'; then
-      export ORCHESTRATOR_PATHS_LLAMA_MTMD="${mtmd_candidate}"
-      break
+    if mtmd_probe_output="$("${_ENV_SH_DIR}/mtmd_probe.sh" "${mtmd_candidate}")"; then
+      if [[ "${mtmd_probe_output}" == *version:* ]]; then
+        export ORCHESTRATOR_PATHS_LLAMA_MTMD="${mtmd_candidate}"
+        break
+      fi
     fi
   done
+  unset mtmd_candidate mtmd_probe_output
 fi
 export ORCHESTRATOR_PATHS_LLAMA_MTMD="${ORCHESTRATOR_PATHS_LLAMA_MTMD:-${LLAMA_CPP_BIN}/llama-mtmd-cli}"
 export LLAMA_MTMD="${ORCHESTRATOR_PATHS_LLAMA_MTMD}"

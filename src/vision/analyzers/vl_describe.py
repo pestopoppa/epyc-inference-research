@@ -18,6 +18,7 @@ from typing import Any
 from PIL import Image
 
 from src.structured_output.repair import http_chat_completer, parse_with_repair
+from src.services.mtmd_probe import run_mtmd_probe
 from src.vision.analyzers.base import Analyzer, AnalyzerResult
 from src.vision.config import (
     LLAMA_MTMD_CLI,
@@ -273,32 +274,11 @@ class VLDescribeAnalyzer(Analyzer):
 
     @staticmethod
     def _mtmd_runs(path: Path) -> str | None:
-        """Return the version string if this binary actually RUNS, else None.
-
-        `exists()` is not a runnability check -- several build trees here carry an
-        `llama-mtmd-cli` that dies at startup on a missing `libomp.so`. The probe
-        sets the binary's own directory on LD_LIBRARY_PATH because these trees run
-        different ggml generations; probing without it makes good builds look broken.
-
-        NOTE: `services/lightonocr_llama_server.py::_probe_mtmd_cli` does the same
-        thing. Duplicated deliberately rather than refactored into a shared util
-        during a live-service change; unifying them is filed as follow-up.
-        """
-        if not (path.exists() and os.access(path, os.X_OK)):
+        """Return the first version line when the shared probe exits successfully."""
+        proc = run_mtmd_probe(path)
+        if proc is None or proc.returncode != 0:
             return None
-        env = {**os.environ}
-        lib_dir = str(path.resolve().parent)
-        parts = [p for p in env.get("LD_LIBRARY_PATH", "").split(":") if p]
-        if lib_dir not in parts:
-            env["LD_LIBRARY_PATH"] = ":".join([lib_dir, *parts])
-        try:
-            proc = subprocess.run(
-                [str(path), "--version"], env=env, capture_output=True,
-                text=True, timeout=20,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        for line in f"{proc.stdout}\n{proc.stderr}".splitlines():
+        for line in proc.stdout.splitlines():
             if "version:" in line:
                 return line.strip()
         return None

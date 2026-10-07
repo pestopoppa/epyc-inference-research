@@ -14,7 +14,6 @@ import io
 import logging
 import os
 import re
-import subprocess
 import tempfile
 import time
 from dataclasses import dataclass
@@ -38,6 +37,7 @@ logger = logging.getLogger("lightonocr-llama-server")
 
 # Configuration — centralized defaults, env vars take priority
 from src.config import get_config as _get_config
+from src.services.mtmd_probe import run_mtmd_probe
 
 _svc = _get_config().services
 _vis = _get_config().vision
@@ -57,35 +57,11 @@ _CONFIGURED_CLI_PATH = os.environ.get(
 
 
 def _probe_mtmd_cli(path: Path) -> str | None:
-    """Return the binary's version string if it actually RUNS, else None.
-
-    `exists() and access(X_OK)` is NOT a runnability check. Several llama.cpp build
-    trees on this host carry an executable `llama-mtmd-cli` that dies at startup on
-    a missing `libomp.so`; the old check selected them happily.
-
-    The probe MUST mirror the launch environment. `_mtmd_subprocess_env` prepends the
-    binary's own directory to LD_LIBRARY_PATH, because the trees here run different
-    ggml generations and a binary that inherits the wrong one fails. Probing without
-    that makes perfectly good builds look broken -- confirmed the hard way on
-    2026-08-03, when four working trees were misdiagnosed as dead for exactly this
-    reason.
-    """
-    if not (path.exists() and os.access(path, os.X_OK)):
+    """Return the strict build identity if the shared probe exits successfully."""
+    proc = run_mtmd_probe(path)
+    if proc is None or proc.returncode != 0:
         return None
-    env = {**os.environ}
-    lib_dir = str(path.resolve().parent)
-    parts = [p for p in env.get("LD_LIBRARY_PATH", "").split(":") if p]
-    if lib_dir not in parts:
-        env["LD_LIBRARY_PATH"] = ":".join([lib_dir, *parts])
-    try:
-        proc = subprocess.run(
-            [str(path), "--version"], env=env, capture_output=True,
-            text=True, timeout=20,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    blob = f"{proc.stdout}\n{proc.stderr}"
-    match = re.search(r"version: (\d+) \(([0-9a-f]+)\)", blob)
+    match = re.search(r"version: (\d+) \(([0-9a-f]+)\)", proc.stdout)
     return match.group(0) if match else None
 
 
