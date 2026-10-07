@@ -260,7 +260,7 @@ def test_json_binds_checker_and_scanned_source_to_git_snapshot(tmp_path: Path, m
     changed = scanner.inspect_tree(root)
     changed_checker = next(item for item in changed["source_file_identities"]
                            if item["path"] == "scripts/benchmark/check_pin_staleness.py")
-    assert changed["root_git"]["stable"] is True
+    assert changed["root_git"]["stable"] is False
     assert changed["root_git"]["after"]["tracked_dirty"] is True
     assert changed["checker_source"]["stable"] is False
     assert changed["checker_source"]["before"]["sha256"] != \
