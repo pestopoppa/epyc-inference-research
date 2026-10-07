@@ -9,7 +9,7 @@ from . import actors, bench, claims, gates, loop
 def test_keep_splits_verified_effect_from_hypothesis_mechanism():
     row = claims.keep_claims(
         status="kept", mechanism_id="akm-x", statement="x removes stalls",
-        comparison={"pairs": 5},
+        comparison={"pairs": 5, "decisive": True},
         gates=[{"gate": "compile", "passed": True},
                {"gate": "MUL_MAT", "passed": True}])
     assert row["effect"] == {"status": "verified", "basis": ["oracle", "paired_ab"]}
@@ -75,3 +75,34 @@ def test_planner_does_not_characterise_hypothesis_mechanisms():
     rendered = actors.render_context({"prior_experiments": [base, base, base]})
     assert "Characterised — do NOT re-measure" not in rendered
     assert "mechanism claim: hypothesis" in rendered
+
+
+def test_effect_requires_explicit_decisive_boolean_without_mutating_comparison():
+    for decisive in (False, None, 1, "true"):
+        comparison = {"pairs": 5, "decisive": decisive}
+        before = dict(comparison)
+        row = claims.keep_claims(
+            status="kept", mechanism_id="akm-x", statement="x",
+            comparison=comparison, gates=[{"gate": "oracle", "passed": True}])
+        assert row["effect"] == {"status": "unverified", "basis": []}
+        assert comparison == before
+    missing = claims.keep_claims(
+        status="kept", mechanism_id="akm-x", statement="x",
+        comparison={"pairs": 5}, gates=[{"gate": "oracle", "passed": True}])
+    assert missing["effect"]["status"] == "unverified"
+
+
+def test_actual_outcome_serialization_preserves_native_decisive_effect_boundary():
+    hypothesis = loop.Hypothesis("akm-x", "x", "no effect", "tg128", "x")
+    for effect, expected in ((.001, "unverified"), (.1, "verified")):
+        comparison = bench.Comparison("tg128", [1.0] * 5, [1.0 + effect] * 5,
+                                      effect, "median", 5, 1.0, {})
+        original = comparison.to_dict()
+        attempt = loop.Outcome(
+            "kept", hypothesis, comparison=comparison,
+            gate_verdicts=[gates.Verdict("oracle", True)],
+            champion_head="a" * 40).to_attempt()
+        assert attempt["comparison"] == original
+        assert comparison.to_dict() == original
+        assert attempt["claims"]["effect"]["status"] == expected
+        assert attempt["claims"]["mechanism"]["status"] == "hypothesis"
