@@ -83,7 +83,7 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
         comparisons = []
 
         @contextmanager
-        def hold():
+        def hold(*, gpu_quiet_path=None):
             assert cpu_held[-1] is True
             held.append(True)
             try:

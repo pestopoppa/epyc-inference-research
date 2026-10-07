@@ -48,7 +48,7 @@ def _prepared(tmp_path, *, backend="cpu", continuation_allowed=False):
     target = campaign.targets[0]
     target_digest = up._target_digest(target)
     anchors = fixtures.prepared(
-        campaign, {target_digest: fixtures.runtime_anchor(target, anchor)})
+        campaign, {target_digest: fixtures.runtime_anchor(target, anchor, tmp_path)})
     pair = up.enumerate_runtime_dimensions(
         anchors.recipes[target_digest], [fixtures.dimension()])[0]
     raw = plan_dict(n=1, instrument="serving", unit="process")

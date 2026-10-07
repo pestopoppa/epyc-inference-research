@@ -36,7 +36,7 @@ def _stack(tmp_path, *, version, backend="cpu", instrument_id_override=None,
     target = resolved.targets[0]
     digest = planner._target_digest(target)
     anchors = planner.prepare_runtime_anchors(
-        resolved, {digest: runtime_anchor(target, recipe)})
+        resolved, {digest: runtime_anchor(target, recipe, tmp_path)})
     pair = planner.enumerate_runtime_dimensions(anchors.recipes[digest], [dimension()])[0]
     scheduler_config, _ = scheduler(backend)
     scheduler_config = scheduling.SchedulerConfig.from_dict(

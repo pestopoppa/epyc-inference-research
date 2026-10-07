@@ -52,7 +52,7 @@ def _document(tmp_path):
         "scheduler_config": None,
         "scheduler_state": None,
         "runtime_anchors": {
-            target_digest: runtime_anchor(target, canonical_recipe())},
+            target_digest: runtime_anchor(target, canonical_recipe(), tmp_path)},
         "runtime_dimensions": {
             key: [item.to_dict() for item in value]
             for key, value in seed.runtime_dimensions.items()},

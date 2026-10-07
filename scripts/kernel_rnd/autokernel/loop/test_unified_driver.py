@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import copy
 import hashlib
+import tempfile
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -97,7 +99,8 @@ def runtime_driver(*, controller=None, git_source=False, with_execution_input=Tr
         enrolled = driver.campaign.ResolvedCampaign.from_dict(row)
     target = enrolled.targets[0]
     digest = planner._target_digest(target)
-    anchors = prepared(enrolled, {digest: runtime_anchor(target, recipe)})
+    with tempfile.TemporaryDirectory(prefix="_runtime_driver_anchor_") as anchor_dir:
+        anchors = prepared(enrolled, {digest: runtime_anchor(target, recipe, Path(anchor_dir))})
     pair = planner.enumerate_runtime_dimensions(anchors.recipes[digest], [dimension()])[0]
     _, engine = scheduler()
     if controller is None:

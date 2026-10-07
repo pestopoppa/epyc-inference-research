@@ -44,9 +44,11 @@ def _seed(*, shared=False, manifest_path=None):
         resolved = replace(resolved, targets=(target, replace(
             target, target_ids=("alias",), revision=target.revision + 1,
             spec_digests=("9" * 64,))))
-    anchors = prepared(resolved, {
-        catalog._digest(target.to_dict()): runtime_anchor(target, recipe)
-        for target in resolved.targets})
+    with tempfile.TemporaryDirectory(prefix="_seed_anchor_") as anchor_dir:
+        anchor_tmp_path = Path(anchor_dir)
+        anchors = prepared(resolved, {
+            catalog._digest(target.to_dict()): runtime_anchor(target, recipe, anchor_tmp_path)
+            for target in resolved.targets})
     preparations = {}
     for target_digest, recipe in anchors.recipes.items():
         inventory = {"model_id": recipe.model.path,
@@ -151,11 +153,11 @@ def test_snapshot_keyed_recipe_alias_retains_both_physical_executables():
             runtime_recipe_snapshots={target: {"f" * 64: alias}})
 
 
-def test_missing_model_inventory_is_explicit_coverage_debt():
+def test_missing_model_inventory_is_explicit_coverage_debt(tmp_path):
     recipe = canonical_recipe()
     resolved = campaign_for_recipe(recipe)
     anchors = prepared(resolved, {
-        catalog._digest(target.to_dict()): runtime_anchor(target, recipe)
+        catalog._digest(target.to_dict()): runtime_anchor(target, recipe, tmp_path)
         for target in resolved.targets})
     seed = catalog.build_seed(
         resolved, anchors, config_digest=campaign_control.resolved_config_digest(resolved))
@@ -163,11 +165,11 @@ def test_missing_model_inventory_is_explicit_coverage_debt():
                for item in seed.uncertain_scopes)
 
 
-def test_config_digest_is_rederived_not_shape_checked():
+def test_config_digest_is_rederived_not_shape_checked(tmp_path):
     recipe = canonical_recipe()
     resolved = campaign_for_recipe(recipe)
     anchors = prepared(resolved, {
-        catalog._digest(target.to_dict()): runtime_anchor(target, recipe)
+        catalog._digest(target.to_dict()): runtime_anchor(target, recipe, tmp_path)
         for target in resolved.targets})
     with pytest.raises(catalog.NativeRetentionCatalogRefused,
                        match="differs from resolved"):

@@ -157,7 +157,7 @@ else:
         seed, _, resolved, target, target_digest = runtime_driver(git_source=True, recipe=recipe)
     document = _document(tmp_path)
     (tmp_path / "resolved.json").write_text(json.dumps(resolved.to_dict()))
-    document["driver_config"].update({"runtime_anchors": {target_digest: runtime_anchor(target, recipe)},
+    document["driver_config"].update({"runtime_anchors": {target_digest: runtime_anchor(target, recipe, tmp_path)},
         "runtime_dimensions": {}, "experiment_plans": {}, "execution_inputs": {}, "profiles": {}})
     from . import unified_planner as up
     recipe = up.prepare_runtime_anchors(resolved,

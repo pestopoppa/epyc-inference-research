@@ -58,7 +58,7 @@ def _fixture(tmp_path, *, malformed=None, return_code=0, selected_provider=False
         seed, _, resolved, resolved_target, digest = runtime_driver(git_source=True, recipe=recipe)
         (tmp_path / "resolved.json").write_text(json.dumps(resolved.to_dict()))
         document["driver_config"].update({
-            "runtime_anchors": {digest: runtime_anchor(resolved_target, recipe)},
+            "runtime_anchors": {digest: runtime_anchor(resolved_target, recipe, tmp_path)},
             "profiles": {key: value.to_dict() for key, value in seed.profiles.items()},
             "runtime_dimensions": {}, "experiment_plans": {}, "execution_inputs": {}})
         document["manifest_digest"] = si._digest({key: value for key, value in document.items()
