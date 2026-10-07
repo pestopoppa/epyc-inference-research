@@ -3,6 +3,7 @@ manifest/patch staging, loop-alive and frozen-tree refusals -- with a stubbed to
 from __future__ import annotations
 
 import io
+import inspect
 import json
 from pathlib import Path
 import subprocess
@@ -19,8 +20,11 @@ from . import status, scratch
 def calibration_private_disk_budget(monkeypatch):
     """Synthetic tools use tiny private fixtures; production staging keeps its floor."""
     constructor = scratch.ScratchRegistry
+    signature = inspect.signature(constructor)
     def tiny_fixture(*args, **kwargs):
-        return constructor(*args, **{**kwargs, "min_free_bytes": 0})
+        bound = signature.bind_partial(*args, **kwargs)
+        bound.arguments["min_free_bytes"] = 0
+        return constructor(*bound.args, **bound.kwargs)
     monkeypatch.setattr(scratch, "ScratchRegistry", tiny_fixture)
     return constructor
 
