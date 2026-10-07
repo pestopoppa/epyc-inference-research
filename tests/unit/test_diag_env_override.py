@@ -12,14 +12,31 @@ from __future__ import annotations
 import json
 import types
 from argparse import Namespace
+from pathlib import Path
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 
 from scripts.server import embedder_env_override as eo
 from scripts.server import env_attestation as ea
 from scripts.server import env_override as dov
-from scripts.server import orchestrator_stack as osk
+
+# Importing orchestrator_stack validates the declared serving lineup at module
+# load. Keep this offline fixture independent of the runner's physical RAM:
+# only the exact host-fact path is synthetic, and the patch ends immediately
+# after the first import. Production capacity validation remains unchanged.
+_PATH_READ_TEXT = Path.read_text
+
+def _read_synthetic_meminfo(path, *args, **kwargs):
+    if path == Path("/proc/meminfo"):
+        return "MemTotal: 524288000 kB\n"
+    return _PATH_READ_TEXT(path, *args, **kwargs)
+
+
+with patch.object(Path, "read_text", _read_synthetic_meminfo):
+    from scripts.server import orchestrator_stack as osk
+
 from scripts.server import stack_commands
 from scripts.server.stack_env import _CANONICAL_OMP_ENV, _LLVM20_LIBDIR
 from tests.unit.test_launch_env_every_branch import harness  # noqa: F401  (pytest fixture)
