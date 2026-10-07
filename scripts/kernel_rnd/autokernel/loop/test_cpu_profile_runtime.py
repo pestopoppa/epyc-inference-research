@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 import shutil
 import socket
+import subprocess
 import sys
 import time
 from unittest.mock import patch
@@ -381,3 +382,24 @@ def test_natural_eos_is_completed_full_request_not_fixed_generated_length(tmp_pa
         runtime.close()
         controller.close()
     assert_children_gone(events)
+
+
+def test_installed_entry_pins_repo_before_foreign_pythonpath(tmp_path):
+    """Import the actual entry without executing a profile or model request."""
+    foreign = tmp_path / "foreign"
+    package = foreign / "scripts/lib"
+    package.mkdir(parents=True)
+    # Mirror the actual canonical clone: scripts is a namespace package.
+    (package / "__init__.py").write_text("")
+    (package / "canonical_recipe.py").write_text(
+        "raise AssertionError('foreign canonical recipe imported')\n")
+    root = Path(cp.__file__).resolve().parents[4]
+    entry = root / "scripts/benchmark/run_autokernel_cpu_profile.py"
+    code = ("import runpy,sys; runpy.run_path(sys.argv[1],run_name='import_only'); "
+            "from autokernel.evaluator import recipes; "
+            "print(recipes.canonical_recipe.__file__)")
+    environment = dict(os.environ, PYTHONPATH=str(foreign), PYTHONDONTWRITEBYTECODE="1")
+    completed = subprocess.run([sys.executable, "-c", code, str(entry)],
+        cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=30)
+    assert completed.returncode == 0, completed.stderr
+    assert Path(completed.stdout.strip()).resolve() == root / "scripts/lib/canonical_recipe.py"

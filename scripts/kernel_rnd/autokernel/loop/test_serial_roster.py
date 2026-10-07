@@ -97,7 +97,12 @@ def _inputs(tmp_path, *, backends=("cpu", "gpu"), unowned=False, missing=False,
     owned_path.write_text(json.dumps(owners))
     state = tmp_path / "router"
     argv = ["--resolved-campaign", str(resolved_path), "--owned-targets", str(owned_path),
-            "--state-dir", str(state), "--batch-iterations", "1", "--rounds", "2"]
+            "--state-dir", str(state), "--batch-iterations", "1", "--rounds", "2",
+            # These children only write tiny synthetic receipts; retention policy
+            # is covered independently, and must not depend on host disk use.
+            "--retention-hard-floor-free-gb", "0",
+            "--retention-trigger-free-gb", "0",
+            "--retention-target-free-gb", "0"]
     return resolved, owners, argv
 
 
