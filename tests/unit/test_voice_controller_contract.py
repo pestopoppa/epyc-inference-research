@@ -174,6 +174,48 @@ def test_explicit_retain_cancel_choice_keeps_or_cancels_named_turn():
     ]
 
 
+def test_sticky_cancel_choice_holds_owner_until_cleanup_before_same_id_replacement():
+    calls = []
+
+    class ReentrantBackend(_Interlocutor):
+        def __init__(self):
+            super().__init__()
+            self.stream = None
+            self.controller = None
+            self.turn = None
+            self.replacement_attempt = None
+            self.cancel_hooks = 0
+
+        def cancel_generation(self):
+            self.cancel_hooks += 1
+            self.calls.append(("cancel_generation",))
+            assert list(self.stream) == []
+            self.replacement_attempt = list(self.controller.respond(self.turn))
+
+    backend = ReentrantBackend()
+    backend.calls = calls
+    controller = VoiceController(
+        CascadeBackend(_Transcriber(), _VoiceTurn([]), _Synthesizer()),
+        _AudioQueue(calls), backend, interlocutor_languages=frozenset({"en"}),
+    )
+    backend.controller = controller
+    backend.turn = VoiceTurn("same-turn", "same-session", b"wav", language="en")
+    backend.stream = controller.respond(backend.turn)
+    assert next(backend.stream) == VoiceEvent("text_delta", "interlocutor")
+
+    assert controller.apply_retain_cancel_choice(
+        "same-session", "same-turn", RetainCancelChoice.CANCEL
+    ) is RetainCancelChoice.CANCEL
+    assert backend.replacement_attempt == [
+        VoiceEvent("error", "another voice turn is already active")
+    ]
+    assert list(backend.stream) == []
+    assert backend.cancel_hooks == 1
+    assert list(controller.respond(backend.turn)) == [
+        VoiceEvent("text_delta", "interlocutor"), VoiceEvent("end")
+    ]
+
+
 def test_retain_cancel_choice_requires_typed_choice_and_active_turn():
     controller = VoiceController(
         CascadeBackend(_Transcriber(), _VoiceTurn([]), _Synthesizer()), _AudioQueue([])
@@ -209,6 +251,30 @@ def test_cascade_passes_response_mode_and_exact_protected_values_to_speech_input
         "synthetic", "session-1", "turn-2", "verbatim", (literal,),
     )]
     assert synth.calls == [(f"Use {literal}.", None)]
+    assert events[-1] == VoiceEvent("end")
+
+
+def test_strict_turn_bypasses_healthy_interlocutor_without_preservation_contract():
+    literal = "--listen=127.0.0.1:9002"
+    route = _VoiceTurn([VoiceEvent("text_delta", f"Use {literal}."), VoiceEvent("end")])
+    synth = _Synthesizer()
+    interlocutor = _Interlocutor()
+    controller = VoiceController(
+        CascadeBackend(_Transcriber(), route, synth), _AudioQueue([]), interlocutor,
+        interlocutor_languages=frozenset({"en"}),
+    )
+    turn = VoiceTurn(
+        "strict-turn", "session-1", b"synthetic-wav", language="en",
+        response_mode="verbatim", must_preserve=(literal,),
+    )
+
+    events = list(controller.respond(turn))
+
+    assert interlocutor.calls == []
+    assert route.calls == [(
+        "synthetic transcript", "session-1", "strict-turn", "verbatim", (literal,),
+    )]
+    assert synth.calls == [(f"Use {literal}.", "en")]
     assert events[-1] == VoiceEvent("end")
 
 

@@ -144,17 +144,35 @@ class VoiceController:
             raise ValueError("session_id must be a non-empty string")
         if not isinstance(turn_id, str) or not turn_id.strip():
             raise ValueError("turn_id must be a non-empty string")
-        run_cleanup = False
         with self._state_lock:
             owner = self._matching_active(session_id, turn_id)
-            if owner is not None and not owner.cleanup_started:
+            if owner is not None:
+                owner.operations_in_flight += 1
+        try:
+            if owner is None:
+                try:
+                    self._audio_queue.stop_queued_audio(session_id, turn_id)
+                except Exception as exc:
+                    raise RuntimeError("voice cancellation incomplete: queued audio cancellation failed") from exc
+                return
+            self._cancel_owner(owner)
+        finally:
+            if owner is not None:
+                with self._state_lock:
+                    owner.operations_in_flight -= 1
+                    self._retire_if_finished(owner)
+
+    def _cancel_owner(self, owner: _ActiveTurn) -> None:
+        run_cleanup = False
+        with self._state_lock:
+            if self._active is owner and not owner.cleanup_started:
                 owner.cancelled = True
                 owner.cleanup_started = True
                 owner.cleanup_done = False
                 run_cleanup = True
         errors: list[Exception] = []
         operations = [("queued audio", lambda: self._audio_queue.stop_queued_audio(
-            session_id, turn_id
+            owner.session_id, owner.turn_id
         ))]
         if owner is not None and run_cleanup:
             operations.extend((
@@ -184,8 +202,15 @@ class VoiceController:
             owner = self._matching_active(session_id, turn_id)
             if owner is None or owner.cancelled:
                 raise ValueError("no active matching voice turn")
+            if choice is RetainCancelChoice.CANCEL:
+                owner.operations_in_flight += 1
         if choice is RetainCancelChoice.CANCEL:
-            self.cancel(session_id, turn_id)
+            try:
+                self._cancel_owner(owner)
+            finally:
+                with self._state_lock:
+                    owner.operations_in_flight -= 1
+                    self._retire_if_finished(owner)
         return choice
 
     def _retire_if_finished(self, owner: _ActiveTurn) -> None:
@@ -248,6 +273,8 @@ class VoiceController:
 
     def _can_use_interlocutor(self, turn: VoiceTurn) -> bool:
         backend = self._interlocutor
+        if turn.response_mode == "verbatim" or turn.must_preserve:
+            return False
         if backend is None or not backend.health():
             return False
         if turn.language is None:
