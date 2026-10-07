@@ -81,6 +81,8 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
         original_main, original_calibrate = run.main, serving.calibrate_floor
         real_compare = serving.compare
         comparisons = []
+        whole_comparisons = []
+        original_whole_rate = [None]
 
         @contextmanager
         def hold(*, gpu_quiet_path=None):
@@ -113,6 +115,8 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
                 return 10.0
             if Path(build).name == "lane0-build":
                 return 11.0
+            if original_whole_rate[0] is not None:
+                return original_whole_rate[0]
             return 12.0 if cor_wins else 9.0  # promoted and same-source guard both agree
 
         def calibrate_original(*args, **kwargs):
@@ -120,7 +124,21 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
             return original_calibrate(*args, **kwargs)
 
         def compare_original(*args, **kwargs):
-            row = real_compare(*args, **kwargs)
+            whole = (Path(args[1]) == fixture.startup_anchor
+                     and Path(args[2]) == fixture.store / "anchor-gen-002")
+            if whole:
+                whole_comparisons.append((args, kwargs, None))
+                # Both controls retain a positive ORIGINAL whole-bundle screen.
+                # The later serving gate is a separate original observation;
+                # divergence must not instead trigger the earlier twice-negative
+                # interaction rollback (which correctly restores the prior tip).
+                original_whole_rate[0] = (12.0 if len(whole_comparisons) == 1 or cor_wins else 9.0)
+            try:
+                row = real_compare(*args, **kwargs)
+            finally:
+                original_whole_rate[0] = None
+            if whole:
+                whole_comparisons[-1] = (args, kwargs, row)
             comparisons.append((args, kwargs, row))
             return row
 
@@ -145,7 +163,8 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
                     candidate_samples=[11.0] * 2, effect=.1, estimator="median_over_median",
                     pairs=2, noise_floor_pct=99.0, residency={}, calibrated=True)
 
-            argv += options + ["--out", str(fixture.root / "result")]
+            argv += options + ["--out", str(fixture.root / "result"),
+                               "--accumulate-bench-every-keeps", "1"]
             if calibrate:
                 argv += ["--gpu-calibrate-serving", "2"]
             with mock.patch.object(gates, "compiles", compile_gpu), \
@@ -207,7 +226,27 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
         assert result["target"]["original_target"] == resolved.targets[0].to_dict()
         assert result["target"]["scope"] == "gpu_serving_selected_workload"
         assert run.status.read(fixture.store)["gpu"]["device_seconds_under_load"] is None
-        assert bool(bench_calls) is (not experimental)
+        assert not bench_calls  # Selected serving COR uses the original serving instrument.
+        # Higher tokens/s is better. The ORIGINAL whole-bundle screen must clear
+        # its own bar before this fixture can exercise the later serving gate.
+        whole_row = whole_comparisons[0][2]
+        assert whole_row["anchor_tok_s"] == 10.0
+        assert whole_row["candidate_tok_s"] == 12.0
+        assert whole_row["effect"] == pytest.approx(.2)
+        assert whole_row["effect_pct"] >= whole_row["noise_floor_pct"]
+        assert whole_row["decisive"] is True
+        original_bundle = [json.loads(path.read_text()) for path in
+                           (fixture.store / "accumulator-comparisons").glob("*.json")]
+        initial, = [item for item in original_bundle if item.get("phase") == "initial"]
+        # The loop's ServingComparison retains the observation plus these two
+        # target-wrapper fields; neither changes the measured rates or effect.
+        retained = initial["comparison"]
+        assert {key: retained[key] for key in whole_row} == whole_row
+        assert set(retained) - set(whole_row) == {"surface", "baseline_scope"}
+        assert retained["surface"] == "serving:selected-gpu"
+        assert retained["baseline_scope"] == ("experimental_candidate_not_champion" if experimental
+                                               else "canonical_candidate_vs_current_anchor")
+        assert not [item for item in original_bundle if item.get("outcome") == "interaction_regression"]
         if experimental:
             # Experimental continuations record their COR too (2026-09-26): the next
             # batch resumes the protected serving A-arm, never the relabelled tip.
@@ -225,7 +264,13 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
             assert cor_comparison[1]["frozen_requests"] == requests
             cor = result["continuation"]["cor_anchor"]
             assert cor["commit"] == (run._git(fixture.repo, "rev-parse", "HEAD") if cor_wins else fixture.tip)
-            assert cor_comparison[2]["effect"] > 0 if cor_wins else cor_comparison[2]["effect"] < 0
+            assert len(whole_comparisons) == 2
+            gate_row = cor_comparison[2]
+            assert gate_row["anchor_tok_s"] == 10.0
+            assert gate_row["candidate_tok_s"] == (12.0 if cor_wins else 9.0)
+            assert gate_row["effect"] == pytest.approx(.2 if cor_wins else -.1)
+            assert abs(gate_row["effect_pct"]) >= gate_row["noise_floor_pct"]
+            assert gate_row["decisive"] is True
         assert len(builds) == 3
         assert measured and all(path.exists() for path, _ in measured)
     finally:

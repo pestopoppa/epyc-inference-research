@@ -2232,7 +2232,8 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
     selection = scheduling.Selection.from_dict(active["scheduler_selection"])
     if active["scheduler_selection_sha256"] != selection.digest:
         raise SerialRefused("active selection digest differs from original selection")
-    _refuse_cpu_segment_capture(batch_dir, selection, _selected_identity(original))
+    if (batch_dir / "loop-held-claims-refused.json").exists():
+        _refuse_cpu_segment_capture(batch_dir, selection, _selected_identity(original))
     try:
         reference, _sha = _json(batch_dir / "loop-held-claims.json", limit=64 * 1024)
     except FileNotFoundError:
