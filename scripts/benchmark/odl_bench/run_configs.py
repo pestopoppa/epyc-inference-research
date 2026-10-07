@@ -100,13 +100,19 @@ def _minimal_yaml(obj, indent: int = 0) -> str:
     return "\n".join(x for x in lines if x)
 
 
-def gt_image_basenames(gt_json: str | Path) -> list[str]:
-    """Read the GT JSON and return each page's ``page_info.image_path`` basename."""
+def _gt_pages(gt_json: str | Path, raw_bytes: bytes | None = None) -> list[dict]:
     import json
-    import os
+    if raw_bytes is None:
+        with open(gt_json, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    # The model-gated writer passes the exact bytes it hashes to this parser.
+    return json.loads(raw_bytes.decode("utf-8"))
 
-    with open(gt_json, "r", encoding="utf-8") as fh:
-        pages = json.load(fh)
+
+def gt_image_basenames(gt_json: str | Path, *, raw_bytes: bytes | None = None) -> list[str]:
+    """Read the GT JSON and return each page's ``page_info.image_path`` basename."""
+    import os
+    pages = _gt_pages(gt_json, raw_bytes)
     names = []
     for page in pages:
         img = page.get("page_info", {}).get("image_path", "")
@@ -115,7 +121,8 @@ def gt_image_basenames(gt_json: str | Path) -> list[str]:
     return names
 
 
-def gt_image_paths(gt_json: str | Path, image_root: str | Path | None = None) -> dict[str, Path]:
+def gt_image_paths(gt_json: str | Path, image_root: str | Path | None = None,
+                   *, raw_bytes: bytes | None = None) -> dict[str, Path]:
     """Resolve each GT image basename to the page image path a VL producer should read.
 
     OmniDocBench GT often stores a basename in ``page_info.image_path`` and keeps
@@ -125,13 +132,11 @@ def gt_image_paths(gt_json: str | Path, image_root: str | Path | None = None) ->
     Missing files are still returned as best-effort candidates so the caller can
     record a complete skip/error manifest instead of silently dropping the page.
     """
-    import json
     import os
 
     gt_path = Path(gt_json)
     root = Path(image_root) if image_root else None
-    with gt_path.open("r", encoding="utf-8") as fh:
-        pages = json.load(fh)
+    pages = _gt_pages(gt_path, raw_bytes)
 
     resolved: dict[str, Path] = {}
     for page in pages:

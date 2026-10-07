@@ -105,9 +105,9 @@ def process_blockers() -> list[str]:
     return blockers
 
 
-def image_data_url(path: Path) -> str:
+def image_data_url(path: Path, raw_bytes: bytes | None = None) -> str:
     mime_type = mimetypes.guess_type(path.name)[0] or "image/jpeg"
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    encoded = base64.b64encode(raw_bytes if raw_bytes is not None else path.read_bytes()).decode("ascii")
     return f"data:{mime_type};base64,{encoded}"
 
 
