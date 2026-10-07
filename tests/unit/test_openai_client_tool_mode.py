@@ -977,6 +977,14 @@ class _UsageBackend(_FakeBackend):
             cached_prompt_tokens=BACKEND_CACHED,
         )
 
+    def infer_stream_text(self, role_config, request, on_chunk=None):
+        # This fixture represents a streaming backend that still reports the
+        # same server-native usage as its batch response.
+        result = self.infer(role_config, request)
+        if result.output and on_chunk is not None:
+            on_chunk(result.output)
+        return result
+
 
 def _server_response(usage: dict[str, Any], timings: dict[str, Any] | None = None) -> Mock:
     response = Mock()

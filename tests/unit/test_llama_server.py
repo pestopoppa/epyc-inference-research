@@ -420,10 +420,8 @@ class TestLlamaServerBackend:
 
         with (
             patch.object(backend.client, "post", return_value=mock_response),
-            patch(
-                "src.backends.llama_server.time.time",
-                side_effect=[100.0, 140.0, 140.0, 140.0, 140.0, 140.0],
-            ),
+            patch("src.backends.serving_calls.log_path", return_value=None),
+            patch("src.backends.llama_server.time.time", side_effect=[100.0, 140.0]),
             patch("src.backends.llama_server.time.perf_counter", side_effect=[0.0, 40.0]),
         ):
             result = backend.infer(role_config, request)
@@ -584,7 +582,8 @@ class TestLlamaServerBackend:
 
         with (
             patch.object(backend.client, "stream", return_value=_StreamResponse()),
-            patch("src.backends.llama_server.time.time", side_effect=[100.0, 140.0, 140.0]),
+            patch("src.backends.serving_calls.log_path", return_value=None),
+            patch("src.backends.llama_server.time.time", side_effect=[100.0, 140.0]),
             patch("src.backends.llama_server.time.perf_counter", side_effect=[0.0, 40.0]),
         ):
             result = backend.infer_stream_text(role_config, request)
@@ -662,6 +661,7 @@ class TestLlamaServerBackend:
 
         with (
             patch.object(backend.client, "stream", return_value=_StreamResponse()),
+            patch("src.backends.serving_calls.log_path", return_value=None),
             patch("src.backends.llama_server.time.time", side_effect=[100.0, 101.0]),
         ):
             result = backend.infer_stream_text(role_config, request)

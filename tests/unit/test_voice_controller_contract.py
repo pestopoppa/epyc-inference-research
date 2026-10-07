@@ -150,6 +150,7 @@ def test_controller_rejects_a_second_active_turn_and_idle_cancel_only_stops_queu
             yield VoiceEvent("text_delta", turn.turn_id)
             while not self.release:
                 yield VoiceEvent("text_delta", "backend ignored cancellation")
+            yield VoiceEvent("text_delta", "backend resumed after idle cancel")
             yield VoiceEvent("end")
 
     backend = OpenBackend()
@@ -167,7 +168,10 @@ def test_controller_rejects_a_second_active_turn_and_idle_cancel_only_stops_queu
     controller.cancel("other-session", "other-turn")
     assert queue_calls == [("stop_queued_audio", "other-session", "other-turn")]
     backend.release = True
-    assert list(first) == [VoiceEvent("text_delta", "backend ignored cancellation"), VoiceEvent("end")]
+    assert list(first) == [
+        VoiceEvent("text_delta", "backend resumed after idle cancel"),
+        VoiceEvent("end"),
+    ]
 
 
 def test_cancel_marks_active_turn_before_cleanup_and_attempts_all_hooks_on_errors():
@@ -226,6 +230,7 @@ def test_inject_hook_can_reenter_cancel_without_holding_controller_lock():
     controller.inject("s1", "t1", "synthetic interrupt")
 
     assert calls == [
+        ("respond", "t1"),
         ("inject", "synthetic interrupt"),
         ("stop_queued_audio", "s1", "t1"),
         ("cancel_generation",), ("cancel_vocoder",), ("cancel_orchestrator",),

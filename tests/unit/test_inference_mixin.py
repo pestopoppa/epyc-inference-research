@@ -105,7 +105,9 @@ class TestInferenceMixinRealCall:
         monkeypatch.setattr("src.roles.get_fallback_roles", lambda _role: ["fallback_a", "fallback_b"])
         calls = []
 
-        def call_single(_prompt, role, **kwargs):
+        # _real_call_single receives prompt, role, token budget, and stop list
+        # positionally before its optional keyword arguments.
+        def call_single(_prompt, role, *_args, **kwargs):
             calls.append(role)
             if role == "primary":
                 raise RuntimeError("primary unavailable")
