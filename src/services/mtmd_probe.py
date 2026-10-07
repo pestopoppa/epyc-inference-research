@@ -9,9 +9,10 @@ _HELPER = Path(__file__).resolve().parents[2] / "scripts" / "lib" / "mtmd_probe.
 
 
 def run_mtmd_probe(path: Path) -> subprocess.CompletedProcess[str] | None:
-    """Run the shared 20-second, candidate-library-prefixed probe.
+    """Run the shared bounded, candidate-library-prefixed probe.
 
-    The Bash helper returns merged stdout/stderr and the actual `timeout`/binary status.
+    The Bash helper uses a 20-second timeout plus a 2-second KILL grace and
+    returns merged stdout/stderr with the actual `timeout`/binary status.
     Callers retain their own version-line parsing policy.
     """
     try:
@@ -21,7 +22,7 @@ def run_mtmd_probe(path: Path) -> subprocess.CompletedProcess[str] | None:
             stderr=subprocess.STDOUT,
             text=True,
             errors="replace",
-            timeout=22,
+            timeout=25,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Shared bounded llama-mtmd-cli probe used by sourced shell and Python callers.
 # stdout is the binary's merged --version output; the process status is returned unchanged.
-set -u
+set -euo pipefail
 
 if [[ $# -ne 1 || -z "$1" ]]; then
   printf 'usage: %s CANDIDATE_PATH\n' "${0##*/}"
@@ -13,10 +13,12 @@ if [[ ! -x "$candidate" ]]; then
   exit 126
 fi
 
-case "$candidate" in
-  */*) candidate_dir=${candidate%/*}; [[ -n "$candidate_dir" ]] || candidate_dir=/ ;;
-  *) candidate_dir=. ;;
-esac
+# Match Python Path.resolve().parent even when a configured executable is a
+# symlink whose target lives beside a different set of shared libraries.
+resolved_candidate=$(readlink -f -- "$candidate") || exit 126
+[[ -n "$resolved_candidate" && -x "$resolved_candidate" ]] || exit 126
+candidate_dir=${resolved_candidate%/*}
+[[ -n "$candidate_dir" ]] || candidate_dir=/
 candidate_dir=$(cd -- "$candidate_dir" 2>/dev/null && pwd -P) || exit 126
 
 # The candidate's own library directory must lead. Drop empty entries and repeated
@@ -32,7 +34,7 @@ fi
 
 probe_output=$(mktemp "${TMPDIR:-/tmp}/epyc-mtmd-probe.XXXXXX") || exit 125
 trap 'rm -f -- "$probe_output"' EXIT
-if LD_LIBRARY_PATH="$probe_ld_path" timeout 20 "$candidate" --version >"$probe_output" 2>&1; then
+if LD_LIBRARY_PATH="$probe_ld_path" timeout --kill-after=2 20 "$candidate" --version >"$probe_output" 2>&1; then
   probe_status=0
 else
   probe_status=$?

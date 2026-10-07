@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import signal
 import shutil
 import subprocess
+import time
+
+import pytest
 
 from src.services.mtmd_probe import run_mtmd_probe
 from src.services.lightonocr_llama_server import _probe_mtmd_cli
@@ -50,6 +54,21 @@ def test_shared_probe_moves_an_existing_candidate_dir_to_front_once(tmp_path, mo
     assert proc.stdout.strip() == f"{resolved}:/old/lib:/older/lib"
 
 
+def test_shared_probe_uses_symlink_target_directory_for_library_prefix(tmp_path, monkeypatch):
+    target = _candidate(tmp_path / "real-build" / "llama-mtmd-cli",
+                        'printf "ld=%s\\n" "$LD_LIBRARY_PATH"\n')
+    alias_dir = tmp_path / "configured"
+    alias_dir.mkdir()
+    alias = alias_dir / "llama-mtmd-cli"
+    alias.symlink_to(target)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/old/lib")
+
+    proc = run_mtmd_probe(alias)
+
+    assert proc is not None and proc.returncode == 0
+    assert proc.stdout.strip() == f"ld={target.parent.resolve()}:/old/lib"
+
+
 def test_shared_probe_preserves_nonzero_status_and_complete_merged_text(tmp_path):
     cli = _candidate(tmp_path / "bin" / "llama-mtmd-cli",
                      'printf "version: 10303 (abc123)\\n"\n'
@@ -79,6 +98,10 @@ def test_shared_probe_reports_nonexecutable_candidate(tmp_path):
 
 
 def test_vl_resolver_keeps_configured_then_production_candidate_order(monkeypatch, tmp_path):
+    # Hosted CI supplies an intentionally absent configured executable before eager
+    # config imports; remove that override locally so this test exercises fallback order.
+    monkeypatch.delenv("ORCHESTRATOR_PATHS_LLAMA_MTMD", raising=False)
+    monkeypatch.delenv("LLAMA_MTMD_CLI", raising=False)
     root = tmp_path / "llama.cpp"
     configured = root / "configured/bin/llama-mtmd-cli"
     successful = root / "build-hip/bin/llama-mtmd-cli"
@@ -101,14 +124,71 @@ def test_shared_probe_captures_timeout_status_and_output(tmp_path, monkeypatch):
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
     timeout = _candidate(fake_bin / "timeout",
-                         'printf "duration=%s command=%s\\n" "$1" "$2"\nexit 124\n')
+                         'printf "argv=%s\\n" "$*"\n'
+                         'exit 124\n')
     monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ.get('PATH', '')}")
 
     proc = run_mtmd_probe(cli)
 
     assert proc is not None and proc.returncode == 124
-    assert proc.stdout.strip() == f"duration=20 command={cli}"
+    assert proc.stdout.strip() == f"argv=--kill-after=2 20 {cli} --version"
     assert timeout.exists()
+
+
+@pytest.mark.skipif(
+    os.environ.get("EPYC_RUN_HOSTED_TIMEOUT_CONTROL") != "1",
+    reason="real 20-second timeout and child-death control is hosted-only",
+)
+def test_timeout_kills_term_ignoring_child_and_leaves_no_process(tmp_path):
+    pid_file = tmp_path / "child.pid"
+    cli = tmp_path / "bin" / "llama-mtmd-cli"
+    cli.parent.mkdir(parents=True)
+    cli.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, signal, time\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        f"open({str(pid_file)!r}, 'w', encoding='utf-8').write(str(os.getpid()))\n"
+        "while True: time.sleep(1)\n",
+        encoding="utf-8",
+    )
+    cli.chmod(0o755)
+
+    child_pid = int(pid_file.read_text(encoding="utf-8").strip())
+
+    def identity(pid):
+        """Return Linux PID plus start-time identity; zombies count as present."""
+        try:
+            stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+        except FileNotFoundError:
+            return None
+        # comm is parenthesized and may itself contain spaces or ')'.
+        fields_after_comm = stat_text[stat_text.rfind(")") + 2:].split()
+        return (pid, fields_after_comm[19])  # field 22: starttime
+
+    child_identity = identity(child_pid)
+    assert child_identity is not None
+
+    def wait_gone(expected, seconds=5):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if identity(expected[0]) != expected:
+                return True
+            time.sleep(0.05)
+        return identity(expected[0]) != expected
+
+    try:
+        proc = run_mtmd_probe(cli)
+        assert proc is not None and proc.returncode in (124, 137)
+        assert wait_gone(child_identity), (
+            f"timeout left captured TERM-ignoring child alive: {child_identity}"
+        )
+    finally:
+        # Cleanup is limited to the exact captured process instance, never a reused PID.
+        if identity(child_pid) == child_identity:
+            os.kill(child_pid, signal.SIGKILL)
+            assert wait_gone(child_identity), (
+                f"captured child survived SIGKILL or was not reaped: {child_identity}"
+            )
 
 
 def _copy_env_library(tmp_path: Path) -> Path:
