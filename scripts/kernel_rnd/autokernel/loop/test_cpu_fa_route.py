@@ -299,9 +299,9 @@ def test_real_mask_identity_defers_to_anchor_identity_once_everything_is_ready(m
     seen = {}
 
     def fake_check_anchor_identity(anchor_build, candidate_build, source_root, *, cases,
-                                   anchor_recipe=None, candidate_recipe=None, window=None):
+                                   capture_dir=None, anchor_recipe=None, candidate_recipe=None, window=None):
         seen.update(cases=cases, anchor_build=anchor_build, candidate_build=candidate_build,
-                   source_root=source_root)
+                   source_root=source_root, capture_dir=capture_dir)
         return fa.FaResult("pass", "ok")
 
     result = fa.check_real_mask_identity(
@@ -310,6 +310,7 @@ def test_real_mask_identity_defers_to_anchor_identity_once_everything_is_ready(m
         check_anchor_identity_fn=fake_check_anchor_identity)
     assert result.status == "pass"
     assert seen["cases"] == fa.ds41_real_mask_cases()
+    assert seen["capture_dir"] == capture_dir
     assert seen["source_root"] == tmp_path / "src"
 
 
@@ -390,23 +391,54 @@ def _recipe(prefix=("taskset", "-c", "0-47"), split="0"):
                            topology_prefix=prefix, template=SimpleNamespace(threads=48))
 
 
-def _fake_runner(builds, calls, *, cases=(SMALL,), diverge_on=None):
+def _fake_runner(builds, calls, *, cases=(SMALL,), diverge_on=None, capture_dir=None):
     def run(argv, **kwargs):
         calls.append((argv, kwargs.get("env")))
         if argv[0] == "c++":
             return subprocess.CompletedProcess(argv, 0, "", "")
         binary = next(a for a in argv if "fa-reference-probe-" in a)
         role = binary.rsplit("-", 1)[1]
+        positional = argv[argv.index(binary):argv.index(binary) + 13]
+        team = int(positional[10])
         case = next(c for c in cases
-                    if fa.probe_argv(Path(binary), c, int(argv[-3]))[1:] ==
+                    if fa.probe_argv(Path(binary), c, team,
+                                     mask_file=fa.real_mask_path(capture_dir, c)
+                                     if c.mask == "captured" else None)[1:] ==
                     argv[argv.index(binary) + 1:])
         digest = "a" * 16
         if role == "candidate" and diverge_on and diverge_on(case, kwargs["env"]):
             digest = "b" * 16
-        out = _probe_text(case, int(argv[-3]), lib=builds[role] / "bin/libggml-cpu.so",
+        out = _probe_text(case, team, lib=builds[role] / "bin/libggml-cpu.so",
                           digests=[digest] * fa.REPS)
         return subprocess.CompletedProcess(argv, 0, out, "")
     return run
+
+
+def test_real_mask_paths_reach_both_probe_arms(monkeypatch, tmp_path):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    builds, source = _builds(tmp_path)
+    capture_dir = tmp_path / "masks"
+    capture_dir.mkdir()
+    cases = fa.ds41_real_mask_cases()
+    for case in cases:
+        fa.real_mask_path(capture_dir, case).write_bytes(b"\x00" * (case.kv * case.nb * 2))
+    calls = []
+
+    def check(*args, **kwargs):
+        return fa.check_anchor_identity(*args, **kwargs,
+            runner=_fake_runner(builds, calls, cases=cases, capture_dir=capture_dir))
+
+    result = fa.check_real_mask_identity(builds["anchor"], builds["candidate"], source,
+        capture_dir=capture_dir, anchor_recipe=_recipe(), candidate_recipe=_recipe(),
+        check_anchor_identity_fn=check)
+    assert result.status == "pass", result
+    probes = [argv for argv, _env in calls if argv[0] != "c++"]
+    assert len(probes) == len(cases) * 3 * 2
+    for role in ("anchor", "candidate"):
+        selected = [argv for argv in probes if any(a.endswith(f"probe-{role}") for a in argv)]
+        assert {Path(argv[-1]) for argv in selected} == {
+            fa.real_mask_path(capture_dir, case) for case in cases}
+        assert all(argv[-2] == "--mask-file" for argv in selected)
 
 
 def test_anchor_identity_passes_and_covers_both_split_settings(tmp_path):

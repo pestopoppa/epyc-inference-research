@@ -360,7 +360,8 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
             again = serve_fn(anchor_recipe, selected)
     except Exception as exc:
         detail = {"anchor_first": [_row_record(r) for r in anchor],
-                  "candidate": [_row_record(r) for r in candidate]}
+                  "candidate_repeats" if repeats > 1 else "candidate":
+                      [_row_record(r) for r in candidate_all]}
         return IdentityResult("unavailable", f"anchor re-serve failed: {type(exc).__name__}: {exc}",
                               json.dumps(persist("anchor_reserve_failed", detail)))
     if [row[1] for row in again] != [row[1] for row in anchor]:
@@ -369,7 +370,8 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
         detail = {"first_divergent": first_divergent,
                   "anchor_first": [_row_record(r) for r in anchor],
                   "anchor_reserve": [_row_record(r) for r in again],
-                  "candidate": [_row_record(r) for r in candidate]}
+                  "candidate_repeats" if repeats > 1 else "candidate":
+                      [_row_record(r) for r in candidate_all]}
         return IdentityResult("unavailable", "the anchor's own greedy completions differ "
                               "between two launches; this instrument cannot judge identity",
                               json.dumps(persist("anchor_unstable", detail)))
@@ -381,7 +383,8 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
     detail = {"first_divergent": first_divergent,
               "anchor_first": [_row_record(r) for r in anchor],
               "anchor_reserve": [_row_record(r) for r in again],
-              "candidate": [_row_record(r) for r in candidate]}
+              "candidate_repeats" if repeats > 1 else "candidate":
+                  [_row_record(r) for r in candidate_all]}
     return IdentityResult("wrong", f"{len(differing)} of {len(selected)} greedy completion(s) "
                           f"differ from the reproducible anchor (first: {a[0]}, "
                           f"{divergence['level']} divergence at index {divergence['index']})",

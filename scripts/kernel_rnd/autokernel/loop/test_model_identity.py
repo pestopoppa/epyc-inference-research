@@ -25,6 +25,24 @@ def _recipe(build, port=8080):
 REQS = tuple((f"p{i}", json.dumps({"prompt": "x", "temperature": 0}).encode()) for i in range(3))
 
 
+@pytest.mark.parametrize("kind", ["wrong", "anchor_unstable", "anchor_reserve_failed"])
+def test_deterministic_failure_retains_all_candidate_repeats(tmp_path, kind):
+    anchor = [_row("p0", "a", "anchor"), _row("p1", "b", "same")]
+    candidate = [_row("p0", "x", "candidate"), _row("p1", "b", "same")] * 3
+    reserve = (RuntimeError("reserve failed") if kind == "anchor_reserve_failed" else
+               [_row("p0", "z", "unstable"), anchor[1]] if kind == "anchor_unstable" else
+               anchor)
+    serve_fn, _calls = _serve([anchor, candidate, reserve])
+    result = model_identity.check(anchor_recipe=_recipe("/a"), candidate_recipe=_recipe("/c"),
+                                  requests=REQS[:2], repeats=3, serve_fn=serve_fn,
+                                  record_dir=tmp_path)
+    detail = json.loads(result.detail)
+    payload = json.loads(Path(detail["record"]).read_text())
+    assert payload["kind"] == kind
+    assert len(payload["candidate_repeats"]) == 6
+    assert [row["content"] for row in payload["candidate_repeats"]] == ["candidate", "same"] * 3
+
+
 def _row(prompt_id, digest, content, tokens=None):
     return (prompt_id, digest, content[:80], {"content": content, "tokens": tokens})
 
@@ -300,4 +318,3 @@ def test_record_file_path_survives_the_600_char_gate_truncation(tmp_path):
     assert path.is_file()
     payload = json.loads(path.read_text())
     assert payload["anchor_first"][0]["content"] == "x" * 2000  # the full text, not the 80-char preview
-

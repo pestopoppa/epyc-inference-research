@@ -248,7 +248,7 @@ def check_real_mask_identity(anchor_build: Path, candidate_build: Path, source_r
             f"{len(missing)}/{len(cases)} real-mask case(s) have no captured mask file "
             f"under {capture_dir} yet: {missing[:3]}")
     run = check_anchor_identity_fn or check_anchor_identity
-    return run(anchor_build, candidate_build, source_root, cases=cases,
+    return run(anchor_build, candidate_build, source_root, cases=cases, capture_dir=capture_dir,
               anchor_recipe=anchor_recipe, candidate_recipe=candidate_recipe, window=window)
 
 
@@ -287,10 +287,13 @@ class ProbeRun:
 
 
 def probe_argv(binary: Path, case: FaCase, threads: int, reps: int = REPS,
-               seed: int = SEED) -> list[str]:
-    return [str(binary), str(case.hsk), str(case.hsv), str(case.n_kv_heads), str(case.gqa),
+               seed: int = SEED, *, mask_file: Path | None = None) -> list[str]:
+    if (case.mask == "captured") != (mask_file is not None):
+        raise ValueError("captured FA cases require a mask file; synthetic cases refuse one")
+    argv = [str(binary), str(case.hsk), str(case.hsv), str(case.n_kv_heads), str(case.gqa),
             str(case.kv), str(case.nb), str(int(case.sinks)), case.mask, case.layout,
             str(threads), str(reps), str(seed)]
+    return argv + ([PROBE_MASK_FILE_FLAG, str(mask_file)] if mask_file is not None else [])
 
 
 def parse_probe(output: str, case: FaCase, threads: int, reps: int = REPS,
@@ -396,6 +399,7 @@ def recipe_threads(recipe) -> int:
 def check_anchor_identity(anchor_build: Path, candidate_build: Path, source_root: Path, *,
                           anchor_recipe, candidate_recipe,
                           cases: Sequence[FaCase] = PROBE_CASES, reps: int = REPS,
+                          capture_dir: "Path | str | None" = None,
                           window: Callable[[], object] | None = None,
                           runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
                           ) -> FaResult:
@@ -410,6 +414,8 @@ def check_anchor_identity(anchor_build: Path, candidate_build: Path, source_root
         return FaResult("unavailable", "FA probe: a ggml library, header or the probe is "
                         "missing", ", ".join(missing))
     threads = recipe_threads(candidate_recipe)
+    if any(case.mask == "captured" for case in cases) and capture_dir is None:
+        return FaResult("unavailable", "captured FA cases require a capture_dir")
     if recipe_threads(anchor_recipe) != threads:
         return FaResult("unavailable", "anchor and candidate recipes use different teams")
     guard = window if window is not None else nullcontext
@@ -432,6 +438,8 @@ def check_anchor_identity(anchor_build: Path, candidate_build: Path, source_root
                 binaries[role] = binary
             with guard():
                 for case in cases:
+                    mask_file = (real_mask_path(capture_dir, case)
+                                 if case.mask == "captured" else None)
                     for label, split_kv, team in probe_configs(
                             _arm_env(candidate_recipe, candidate_build), threads):
                         runs = {}
@@ -441,7 +449,8 @@ def check_anchor_identity(anchor_build: Path, candidate_build: Path, source_root
                             env = _arm_env(recipe, build)
                             env["GGML_FA_SPLIT_KV"] = split_kv
                             prefix = tuple(getattr(recipe, "topology_prefix", ()) or ())
-                            done = runner([*prefix, *probe_argv(binaries[role], case, team, reps)],
+                            done = runner([*prefix, *probe_argv(binaries[role], case, team, reps,
+                                                              mask_file=mask_file)],
                                           capture_output=True, text=True,
                                           timeout=PROBE_TIMEOUT_S, env=env)
                             if done.returncode:
