@@ -64,6 +64,38 @@ class _FakeLogger:
         self.logged.append(entry)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_kernel_path_config(tmp_path, monkeypatch):
+    """Keep offline memory tests out of the runner's production kernel store.
+
+    Configuration normally derives these three defaults through
+    ``kernel_paths``. The selected tests only exercise metadata, fake embeddings,
+    and temporary SQLite/FAISS storage, so supply per-test placeholder paths at
+    the existing configuration boundary before any constructor reads them.
+    """
+    paths = tmp_path / "unused-kernel-paths"
+    expected = {
+        "ORCHESTRATOR_PATHS_LLAMA_CPP_BIN": str(paths / "cpu"),
+        "ORCHESTRATOR_PATHS_LLAMA_MTMD": str(paths / "mtmd"),
+        "ORCHESTRATOR_PATHS_LLAMA_SERVER": str(paths / "llama-server"),
+    }
+    for name, value in expected.items():
+        monkeypatch.setenv(name, value)
+
+    from src.config import get_config, reset_config
+    from src.features import reset_features
+
+    reset_config()
+    reset_features()
+    config = get_config()
+    assert str(config.paths.llama_cpp_bin) == expected["ORCHESTRATOR_PATHS_LLAMA_CPP_BIN"]
+    assert str(config.vision.llama_mtmd_cli) == expected["ORCHESTRATOR_PATHS_LLAMA_MTMD"]
+    assert str(config.worker_pool.llama_server_path) == expected["ORCHESTRATOR_PATHS_LLAMA_SERVER"]
+    yield
+    reset_features()
+    reset_config()
+
+
 @pytest.fixture
 def scorer(tmp_path, monkeypatch):
     monkeypatch.setenv("ORCHESTRATOR_Q_TD_WRITE", "0")
