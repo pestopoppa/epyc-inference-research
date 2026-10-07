@@ -400,15 +400,27 @@ def test_unavailable_task_rate_renders_na_and_keeps_valid_values() -> None:
     }
     bool_suite_count = {
         **_row(37, config={"type": "numeric_trial", "surface": "w8-bool-suite-count"}),
-        "eval_details": {"details": {"per_suite_counts": {"a": True}}, "eval_wall_s": 60.0},
+        "eval_details": {
+            "details": {"per_suite_counts": {"a": True}},
+            "eval_wall_s": 60.0,
+            "question_results": [{"qid": "q-bool-suite", "correct": True}],
+        },
     }
     negative_suite_counts = {
         **_row(38, config={"type": "numeric_trial", "surface": "w8-negative-suite-count"}),
-        "eval_details": {"details": {"per_suite_counts": {"a": -1}}, "eval_wall_s": 60.0},
+        "eval_details": {
+            "details": {"per_suite_counts": {"a": -1}},
+            "eval_wall_s": 60.0,
+            "question_results": [{"qid": "q-negative-suite", "correct": True}],
+        },
     }
     mixed_suite_counts = {
         **_row(39, config={"type": "numeric_trial", "surface": "w8-mixed-suite-count"}),
-        "eval_details": {"details": {"per_suite_counts": {"a": 10, "b": -2}}, "eval_wall_s": 60.0},
+        "eval_details": {
+            "details": {"per_suite_counts": {"a": 10, "b": -2}},
+            "eval_wall_s": 60.0,
+            "question_results": [{"qid": "q-mixed-suite", "correct": True}],
+        },
     }
     zero = {
         **_row(40, config={"type": "numeric_trial", "surface": "w8-zero"}),
