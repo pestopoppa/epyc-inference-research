@@ -26,7 +26,7 @@ from src.autopilot_core.tier_specs import (  # noqa: E402
     TASK_RATE_OBJECTIVE_POLICY,
     goodput_qph_from_row,
     task_rate_objectives_from_row,
-    task_rate_qph_from_row,
+    task_rate_qph_from_row_if_available,
 )
 from scripts.autopilot.journal_shards import resolve_journal_paths  # noqa: E402
 
@@ -229,7 +229,7 @@ def _row_table(
                 _fmt(row.get("speed"), 2),
                 _fmt(_eval_wall_s(row), 1),
                 str(_n_questions(row) or "n/a"),
-                _fmt(task_rate_qph_from_row(row), 2),
+                _fmt(task_rate_qph_from_row_if_available(row), 2),
                 _fmt(goodput_qph_from_row(row), 2),
                 _fmt(_tokens_per_solved_task(row), 1),
                 ", ".join(str(item) for item in dom) or "n/a",

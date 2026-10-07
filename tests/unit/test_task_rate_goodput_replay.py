@@ -198,3 +198,39 @@ def test_report_uses_dynamic_drop_threshold_and_quality_floor(tmp_path) -> None:
     assert "Raw Fable drop criterion (`>=3 of 6`) is met" in report
     assert "Task-rate promotion readiness is not ready" in report
     assert "1 quality-floor violation(s)" in report
+
+
+def test_row_table_renders_unavailable_rate_as_na_and_preserves_measured_values() -> None:
+    trials = list(range(1, 8))
+    rows_by_tid = {
+        1: {"trial_id": 1, "eval_details": {"question_results": [{"qid": "q1"}]}},
+        2: {"trial_id": 2, "n_questions": "invalid", "eval_wall_s": 60.0},
+        3: {"trial_id": 3, "n_questions": 0, "eval_wall_s": 60.0},
+        4: {"trial_id": 4, "n_questions": 50, "eval_wall_s": 600.0},
+        5: {
+            "trial_id": 5,
+            "eval_details": {"details": {"per_suite_counts": {}}, "eval_wall_s": 60.0},
+        },
+        6: {
+            "trial_id": 6,
+            "eval_details": {
+                "details": {"per_suite_counts": {"a": 10, "b": 5}},
+                "eval_wall_s": 300.0,
+            },
+        },
+        7: {"trial_id": 7, "n_questions": 10, "eval_wall_s": float("inf")},
+    }
+    entries = [{"trial_id": trial} for trial in trials]
+
+    rendered = replay._row_table(
+        "rate controls",
+        entries,
+        rows_by_tid,
+        [],
+        include_dominators=False,
+    )
+
+    rows = [line for line in rendered if line.startswith("| ") and not line.startswith("|---")]
+    cells = [[cell.strip() for cell in line.strip("|").split("|")] for line in rows]
+    assert [row[0] for row in cells] == [str(trial) for trial in trials]
+    assert [row[5] for row in cells] == ["n/a", "n/a", "0.00", "300.00", "n/a", "180.00", "n/a"]

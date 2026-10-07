@@ -22,7 +22,7 @@ from src.autopilot_core.tier_specs import (
     goodput_qph_from_row,
     quality_from_row,
     row_carries_eval_measurement,
-    task_rate_qph_from_row,
+    task_rate_qph_from_row_if_available,
 )
 
 
@@ -257,7 +257,7 @@ def _candidate_evidence_blocks(
         )
         vector_note = _vector_note(rows)
         seq_note = _seq_note(fingerprint, seq_observations, core_id=core_id)
-        task_rate = task_rate_qph_from_row(latest)
+        task_rate = task_rate_qph_from_row_if_available(dict(latest))
         # RTG-23: quality-derived metrics are None when quality was NOT MEASURED
         # (an eval that never ran journals a placeholder 0.0). Render the absence as
         # such — "goodput=0.0" would state a measured result the trial never produced.
@@ -265,12 +265,12 @@ def _candidate_evidence_blocks(
         quality = quality_from_row(latest)
         blocks.append(
             "- fp={fp} trials={trials} q={q} r={r} "
-            "task_rate={task_rate:.1f} goodput={goodput}; {vector}; {seq}".format(
+            "task_rate={task_rate} goodput={goodput}; {vector}; {seq}".format(
                 fp=fingerprint,
                 trials=_compact_trials(trial_ids),
                 q="n/a" if quality is None else f"{quality:.3f}",
                 r=_fmt_measured(_measured_axis_from_row(latest, "reliability"), 2),
-                task_rate=task_rate,
+                task_rate=_fmt_measured(task_rate, 1),
                 goodput=_fmt_measured(goodput, 1),
                 vector=vector_note,
                 seq=seq_note,
