@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import inspect
 import json
+import os
 from pathlib import Path
 import time
 
@@ -329,12 +330,28 @@ def test_cli_exposes_the_escape_hatch(capsys):
 # ---------------------------------------------------------------------------------
 
 def _sealed_without_guard(row):
-    """Simulate a floor sealed BEFORE `serving._apply_outlier_guard` existed: no
-    evidence it ever screened its A/A pairs, resealed so it still validates."""
+    """Simulate a floor sealed BEFORE `serving._apply_outlier_guard` existed (or by its
+    old, MAD-driven v1 semantics): no proof it ever screened its A/A pairs on
+    independent evidence, resealed so it still validates."""
     row = dict(row)
     row["outlier_guard"] = {
         "schema": "epyc.autokernel.serving_floor_outlier_guard.v1", "applied": False,
-        "note": "fixture: floor sealed before the outlier guard existed"}
+        "note": "fixture: floor sealed before the evidence-based outlier guard existed"}
+    row["suspect"] = False
+    row["content_sha256"] = serving._digest(
+        {k: v for k, v in row.items() if k not in {"content_sha256", "conditions"}})
+    return row
+
+
+def _sealed_suspect(row):
+    """Simulate a floor the (v2, evidence-based) guard itself marked `suspect`: an
+    unexplained MAD-outlier pair was kept, not dropped, and the row says so."""
+    row = dict(row)
+    row["suspect"] = True
+    row["outlier_guard"] = dict(row["outlier_guard"], suspect=True,
+                                unexplained_outliers=[{"pair_index": 0, "effect_pct": 9.9,
+                                                       "anchor_tok_s": 10.0,
+                                                       "candidate_tok_s": 11.0}])
     row["content_sha256"] = serving._digest(
         {k: v for k, v in row.items() if k not in {"content_sha256", "conditions"}})
     return row
@@ -369,7 +386,8 @@ def _contaminated_calibration(tmp_path, recipe, build):
                                       resolved_recipe=launch, frozen_requests=REQUESTS,
                                       **MODE)
     assert row["outlier_guard"]["applied"] is True
-    assert not row["outlier_guard"]["initial_outlier_pair_indices"]
+    assert not row["outlier_guard"]["initial_evidence_pair_indices"]
+    assert row["suspect"] is False
     floor_store = run._source_floor_store(tmp_path, recipe, launch,
                                           instrument=serving.MATCHED_INSTRUMENT)
     return launch, row, floor_store
@@ -423,9 +441,68 @@ def test_guarded_floor_more_than_3x_previous_still_carries_on_fresh_aa(tmp_path)
     assert carry["floor_pct"] == contaminated_row["floor_pct"]
 
 
+def test_a_floor_sealed_by_the_old_v1_mad_driven_guard_does_not_count_as_guarded(tmp_path):
+    """B's guard check requires v2 EVIDENCE-BASED semantics, not merely `applied:
+    True` -- a v1 (MAD-driven, selection-biased) guard record is treated the same as
+    no guard at all."""
+    recipe = _recipe()
+    _parent, prev_row, _prev_path = _calibrated(tmp_path, recipe, "/parent")
+    contaminated_launch, contaminated_row, floor_store = _contaminated_calibration(
+        tmp_path, recipe, "/contaminated")
+    assert contaminated_row["floor_pct"] > 3 * prev_row["floor_pct"]
+    v1_row = dict(contaminated_row)
+    v1_row["outlier_guard"] = {
+        "schema": "epyc.autokernel.serving_floor_outlier_guard.v1", "applied": True}
+    v1_row["content_sha256"] = serving._digest(
+        {k: v for k, v in v1_row.items() if k not in {"content_sha256", "conditions"}})
+    run._write_new_source_floor(floor_store, recipe, contaminated_launch, v1_row,
+                               frozen_requests=REQUESTS,
+                               instrument=serving.MATCHED_INSTRUMENT, pairs=5)
+
+    tip = _launch(recipe, BUILD)
+    carried, reason = run._carry_forward_floor(
+        tmp_path, recipe, tip, frozen_requests=REQUESTS,
+        instrument=serving.MATCHED_INSTRUMENT, pairs=5, anchor_commits=(TIP,))
+    assert carried is None and "outlier guard" in reason and ">3x" in reason
+
+
+def test_a_suspect_floor_refuses_the_carry_regardless_of_ratio(tmp_path):
+    """A floor the guard itself marked `suspect` (an unexplained MAD-outlier pair kept,
+    not dropped) never carries -- independent of the >3x ratio check, and even when it
+    otherwise has fresh admitting A/A evidence."""
+    recipe = _recipe()
+    _parent, row, _path = _calibrated(tmp_path, recipe, "/parent")
+    suspect_row = _sealed_suspect(row)
+    floor_store = run._source_floor_store(tmp_path, recipe, _parent,
+                                          instrument=serving.MATCHED_INSTRUMENT)
+    # Overwrite the identity floor `_calibrated` already wrote with the suspect version
+    # (same identity, same content except the suspect flag -- a floor record may be
+    # amended by its own writer in this fixture; production floors are immutable once
+    # written, but the test only needs ONE sealed, suspect, validating row on disk).
+    target = serving.floor_path(floor_store, recipe, frozen_requests=REQUESTS, **MODE)
+    target.unlink()
+    run._write_new_source_floor(floor_store, recipe, _parent, suspect_row,
+                               frozen_requests=REQUESTS,
+                               instrument=serving.MATCHED_INSTRUMENT, pairs=5)
+    _aa(tmp_path, recipe, effect_pct=-row["floor_pct"] / 2, recorded_at=_later(row))
+
+    tip = _launch(recipe, BUILD)
+    carried, reason = run._carry_forward_floor(
+        tmp_path, recipe, tip, frozen_requests=REQUESTS,
+        instrument=serving.MATCHED_INSTRUMENT, pairs=5, anchor_commits=(TIP,))
+    assert carried is None and "suspect" in reason
+
+    _store, reading, carry = _select(tmp_path, recipe, tip)
+    assert reading.floor_pct is None and reading.provenance == "absent" and carry is None
+
+
 # ---------------------------------------------------------------------------------
 # AKX-FLOOR-REMEASURE-1 (C): a one-shot REMEASURE_REQUEST.json forces the matched
 # floor absent -- bypassing even an admissible carry -- for exactly one calibration.
+# Consumption is RACE-SAFE: selection ATOMICALLY CLAIMS the request
+# (`REMEASURE_REQUEST.json` -> `REMEASURE_REQUEST.claimed-<utc>-<pid>.json`) and the
+# claim is carried through to the write (by PID, not by a threaded Path -- see
+# `run._find_claimed_remeasure_request`).
 # ---------------------------------------------------------------------------------
 
 def _drop_remeasure_request(tmp_path, recipe, **extra):
@@ -437,8 +514,9 @@ def _drop_remeasure_request(tmp_path, recipe, **extra):
 
 def _force_fresh_floor(tmp_path, recipe, launch, build):
     """What `ensure_source_floor` does once `_select_source_floor` reports the floor
-    absent: calibrate, write, and (for the matched instrument) consume any pending
-    request -- the exact sequence AKX-FLOOR-REMEASURE-1 (C) hooks into."""
+    absent (which, for the matched instrument, has already ATOMICALLY CLAIMED any
+    pending request): calibrate, write, and consume the claim -- the exact sequence
+    AKX-FLOOR-REMEASURE-1 (C) hooks into."""
     row = serving.calibrate_floor(recipe, Path(build), samples=24, resolved_recipe=launch,
                                   frozen_requests=REQUESTS, **MODE)
     floor_store = run._source_floor_store(tmp_path, recipe, launch,
@@ -470,10 +548,15 @@ def test_remeasure_request_forces_absent_bypassing_an_admissible_carry(tmp_path)
     request_path = _drop_remeasure_request(tmp_path, recipe)
     floor_store, reading, carry = _select(tmp_path, recipe, tip)
     assert reading.floor_pct is None and reading.provenance == "absent" and carry is None
-    assert request_path.is_file()  # not yet consumed -- only a successful write does that
+    # Selection CLAIMS it atomically: the original name is gone, a claimed-* file
+    # carrying this process's PID stands in its place.
+    assert not request_path.exists()
+    claimed = run._find_claimed_remeasure_request(tmp_path, recipe)
+    assert claimed is not None and claimed.name.startswith("REMEASURE_REQUEST.claimed-")
+    assert claimed.name.endswith(f"-{os.getpid()}.json")
 
     row, written, done = _force_fresh_floor(tmp_path, recipe, tip, BUILD)
-    assert not request_path.exists()
+    assert not claimed.exists()
     assert done is not None and done.name.startswith("REMEASURE_REQUEST.done-")
     assert done.parent == request_path.parent
     recorded = json.loads(done.read_text())
@@ -497,7 +580,7 @@ def test_remeasure_request_consumed_exactly_once(tmp_path):
     assert done is not None
 
     # A second attempt to consume (e.g. a racing second caller in the same keep) is a
-    # clean no-op: nothing is pending any more, so nothing is renamed or overwritten.
+    # clean no-op: nothing is claimed any more, so nothing is renamed or overwritten.
     again = run.consume_remeasure_request(tmp_path, recipe, new_floor_path=written)
     assert again is None
     assert len(list(done.parent.glob("REMEASURE_REQUEST.done-*.json"))) == 1
@@ -527,5 +610,105 @@ def test_remeasure_request_is_scoped_to_its_own_recipe_hash(tmp_path):
     recipe_b = _recipe(name="matched-b")
     assert recipe_a.recipe_hash != recipe_b.recipe_hash
     _drop_remeasure_request(tmp_path, recipe_a)
-    assert run._pending_remeasure_request(tmp_path, recipe_a) is not None
-    assert run._pending_remeasure_request(tmp_path, recipe_b) is None
+    claimed_a = run._claim_remeasure_request(tmp_path, recipe_a)
+    assert claimed_a is not None
+    assert run._claim_remeasure_request(tmp_path, recipe_b) is None
+
+
+def test_a_late_request_arriving_after_the_claim_survives_untouched(tmp_path):
+    """A request dropped WHILE an earlier one is already claimed (in flight) is not
+    touched by that earlier claim's own consume/fail -- it stands ready to be claimed
+    by the NEXT selection, i.e. it triggers the next re-measure."""
+    recipe = _recipe()
+    tip = _launch(recipe, BUILD)
+    pending = _drop_remeasure_request(tmp_path, recipe, requested_by="operator-1")
+    claimed = run._claim_remeasure_request(tmp_path, recipe)
+    assert claimed is not None and not pending.exists()
+
+    # A second, LATER request arrives while the first is still being processed.
+    late = _drop_remeasure_request(tmp_path, recipe, requested_by="operator-2")
+    assert late.exists()
+
+    # The in-flight claim finishes successfully; it must not disturb the late request.
+    _row = serving.calibrate_floor(recipe, BUILD, samples=24, resolved_recipe=tip,
+                                   frozen_requests=REQUESTS, **MODE)
+    floor_store = run._source_floor_store(tmp_path, recipe, tip,
+                                          instrument=serving.MATCHED_INSTRUMENT)
+    written = run._write_new_source_floor(floor_store, recipe, tip, _row,
+                                          frozen_requests=REQUESTS,
+                                          instrument=serving.MATCHED_INSTRUMENT, pairs=5)
+    done = run.consume_remeasure_request(tmp_path, recipe, new_floor_path=written)
+    assert done is not None and json.loads(done.read_text())["requested_by"] == "operator-1"
+    assert late.exists() and json.loads(late.read_text())["requested_by"] == "operator-2"
+
+    # The late request is what the NEXT selection claims.
+    next_claim = run._claim_remeasure_request(tmp_path, recipe)
+    assert next_claim is not None and not late.exists()
+    assert json.loads(next_claim.read_text())["requested_by"] == "operator-2"
+
+
+def test_a_failed_calibration_restores_the_request_to_pending(tmp_path):
+    recipe = _recipe()
+    pending = _drop_remeasure_request(tmp_path, recipe)
+    claimed = run._claim_remeasure_request(tmp_path, recipe)
+    assert claimed is not None and not pending.exists()
+    original = json.loads(claimed.read_text())
+
+    restored = run.fail_remeasure_request(tmp_path, recipe)
+    assert restored == pending and pending.is_file()
+    assert json.loads(pending.read_text()) == original
+    assert not claimed.exists()
+    assert run._find_claimed_remeasure_request(tmp_path, recipe) is None
+
+    # A no-op when nothing is claimed.
+    assert run.fail_remeasure_request(tmp_path, recipe) is None
+
+
+def test_a_failed_calibration_with_a_newer_request_retires_the_stale_claim(tmp_path):
+    """If a NEWER request has already been dropped by the time the claimed one fails,
+    restoring the claim verbatim would clobber the newer one -- so the stale claim is
+    retired as `.failed-<utc>.json` instead, and the newer request is left to be
+    claimed next."""
+    recipe = _recipe()
+    _drop_remeasure_request(tmp_path, recipe, requested_by="operator-1")
+    claimed = run._claim_remeasure_request(tmp_path, recipe)
+    assert claimed is not None
+
+    newer = _drop_remeasure_request(tmp_path, recipe, requested_by="operator-2")
+    failed = run.fail_remeasure_request(tmp_path, recipe)
+    assert failed is not None and failed.name.startswith("REMEASURE_REQUEST.failed-")
+    assert json.loads(failed.read_text())["requested_by"] == "operator-1"
+    assert "failed_at" in json.loads(failed.read_text())
+    assert newer.is_file() and json.loads(newer.read_text())["requested_by"] == "operator-2"
+    assert not claimed.exists()
+
+
+def test_two_concurrent_claimers_exactly_one_wins(tmp_path):
+    recipe = _recipe()
+    _drop_remeasure_request(tmp_path, recipe)
+    first = run._claim_remeasure_request(tmp_path, recipe)
+    second = run._claim_remeasure_request(tmp_path, recipe)
+    assert first is not None
+    assert second is None  # "proceed as if no request exists" -- the first claimer won
+    assert first.is_file()
+    assert len(list(first.parent.glob("REMEASURE_REQUEST.claimed-*.json"))) == 1
+
+
+def test_claim_rename_failure_proceeds_as_if_no_request_exists(tmp_path, monkeypatch):
+    """`os.rename` can fail for reasons other than a losing race (e.g. a permissions
+    fault); either way the contract is the same -- proceed as if nothing is pending,
+    never raise out of selection."""
+    recipe = _recipe()
+    tip = _launch(recipe, BUILD)
+    pending = _drop_remeasure_request(tmp_path, recipe)
+
+    def raising_rename(*_args, **_kwargs):
+        raise OSError("fixture: rename blocked")
+
+    monkeypatch.setattr(run.os, "rename", raising_rename)
+    assert run._claim_remeasure_request(tmp_path, recipe) is None
+    assert pending.is_file()  # untouched by the failed rename attempt
+
+    monkeypatch.undo()
+    _store, reading, carry = _select(tmp_path, recipe, tip)
+    assert reading.floor_pct is None  # the still-pending request claims normally next

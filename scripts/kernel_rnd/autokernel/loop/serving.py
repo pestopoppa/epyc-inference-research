@@ -1707,27 +1707,62 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
 # in the per-launch serving path itself would ever refuse a degraded launch. Honest-but-
 # fallible threat model: the response to a flagged pair is RE-MEASURE, bounded, never a
 # silent drop -- a floor must never get SMALLER by quietly discarding inconvenient data.
+#
+# SELECTION BIAS (review correction, Codex Astra, 2026-10-07): the first revision of
+# this guard excluded/replaced a pair because ITS OWN |effect| was a MAD outlier. That
+# is backwards -- a pair's own effect being unusual is exactly the thing a floor exists
+# to characterize, so replacing it on that basis alone biases the floor LOW and can
+# admit real noise as if it were a kernel effect. A pair is now excluded or replaced
+# ONLY on INDEPENDENT evidence that ITS OWN launch was compromised -- never on the
+# magnitude of what it measured. A MAD outlier with no such evidence is KEPT in the
+# floor untouched and reported as a diagnostic (`unexplained_outliers`, `suspect`),
+# so an operator can choose to file a REMEASURE_REQUEST rather than have the guard
+# decide FOR them from the number alone.
 # ---------------------------------------------------------------------------
 
+#: The v2, evidence-based outlier-guard schema/semantics tag (see the correction note
+#: above). `run._carry_forward_floor` (B) only counts a floor as "guarded" when BOTH
+#: match -- a v1 (MAD-driven) guard record is treated as unguarded.
+OUTLIER_GUARD_SCHEMA_V2 = "epyc.autokernel.serving_floor_outlier_guard.v2"
+OUTLIER_GUARD_EVIDENCE_BASED = "evidence_based"
+
 #: Modified z-score threshold (Iglewicz & Hoaglin 1993) a pair's |effect| must exceed,
-#: against the OTHER pairs' own median-absolute-deviation, to be flagged. k=5 is
-#: deliberately generous -- this guards against a genuinely degraded launch, not against
-#: ordinary between-process spread (R23-55's own ~13x unit story already lives here).
+#: against the OTHER pairs' own median-absolute-deviation, to be flagged as a
+#: DIAGNOSTIC (`unexplained_outliers`) -- never, on its own, grounds for exclusion.
 OUTLIER_MAD_K = 5.0
-#: At most this many pairs may be re-measured in one calibration. More than this many
-#: flagged pairs is not "a few noisy launches"; it is refused outright, unmeasured.
+#: At most this many EVIDENCE-BACKED pairs may be re-measured in one calibration. More
+#: than this many is not "a few compromised launches"; it is refused outright,
+#: unmeasured.
 MAX_OUTLIER_REPLACEMENT_PAIRS = 6
-#: After the bounded re-measurement pass, more than this many pairs still flagged means
-#: the host did not recover DURING this calibration -- refuse rather than file a floor
-#: built on it (persistence, not a point-in-time glitch, the same two-sample discipline
-#: `_carry_forward_floor`'s DS41-C79 excursion check already applies elsewhere).
+#: After the bounded re-measurement pass, more than this many EVIDENCE-BACKED pairs
+#: still flagged means the host did not recover DURING this calibration -- refuse
+#: rather than file a floor built on it (persistence, not a point-in-time glitch, the
+#: same two-sample discipline `_carry_forward_floor`'s DS41-C79 excursion check already
+#: applies elsewhere).
 OUTLIER_PERSISTENT_REFUSAL_LIMIT = 2
+
+#: The per-launch evidence sources this guard actually reads, named so a reader of a
+#: sealed floor row can see exactly what was checked without reading the code. ONLY
+#: fields the serving harness already records about a launch's OWN window,
+#: independent of the throughput number it measured:
+#:   * `cpu_lifecycle_invalid` -- `measurement_validity.status == "invalid"`, the same
+#:     CPU affinity/identity contradiction the per-launch serving path already treats
+#:     as a hard invalidity (`residency.cpu_lifecycle_invalidity`).
+#:   * `gpu_clock_unstable` -- `clock_stable is False` (`sclk_min_mhz != sclk_max_mhz`):
+#:     the GPU's own clock governor moved during the launch window.
+#: PSI and non-target-activity census fields exist in the residency/cpu_lifecycle
+#: record but carry NO established threshold anywhere in this codebase --
+#: `residency.cpu_lifecycle_invalidity`'s own docstring is explicit that "no pressure,
+#: load, process name...is a veto" -- so they are deliberately NOT used here.
+#: Inventing a threshold for this guard would be exactly the selection-bias defect it
+#: exists to avoid, aimed at the host's ambient state instead of the measured number.
+OUTLIER_EVIDENCE_SOURCES = ("cpu_lifecycle_invalid", "gpu_clock_unstable")
 
 
 def _pair_effects_pct(anchor: Sequence[float], candidate: Sequence[float]) -> list[float]:
     """|effect| per pair, percent -- the per-PAIR analogue of the floor's own statistic
-    (`_matched_summary`'s resampled median effect), so the outlier test is in the exact
-    unit it protects."""
+    (`_matched_summary`'s resampled median effect), reported as a DIAGNOSTIC only (see
+    `OUTLIER_MAD_K`)."""
     return [abs(c / a - 1.0) * 100.0 for a, c in zip(anchor, candidate)]
 
 
@@ -1735,7 +1770,11 @@ def _mad_outlier_pairs(effects: Sequence[float], *, k: float = OUTLIER_MAD_K) ->
     """Indices of `effects` that are robust outliers against the OTHER pairs' own
     median, via the median-absolute-deviation modified z-score: 0.6745*(x-median)/MAD,
     flagged past `k`. A degenerate MAD (every pair identical) flags nothing -- there is
-    no scale to divide by, and that is a suspiciously clean host, not an outlier."""
+    no scale to divide by, and that is a suspiciously clean host, not an outlier.
+
+    DIAGNOSTIC ONLY: this is never, on its own, grounds to exclude or replace a pair
+    (see the module-level selection-bias note above). Its callers route the result
+    into `unexplained_outliers`/`suspect`, not into exclusion."""
     if len(effects) < 2:
         return []
     med = statistics.median(effects)
@@ -1745,33 +1784,46 @@ def _mad_outlier_pairs(effects: Sequence[float], *, k: float = OUTLIER_MAD_K) ->
     return [i for i, e in enumerate(effects) if abs(0.6745 * (e - med) / mad) > k]
 
 
-def _degraded_window_pairs(anchor_windows: Sequence[Mapping],
-                           candidate_windows: Sequence[Mapping]) -> list[int]:
-    """Pair indices whose anchor OR candidate launch carries a RECORDED degraded-host
-    verdict: `measurement_validity.status == "invalid"`, the same CPU-lifecycle
-    invalidity a per-launch keep already raises on (`residency.cpu_lifecycle_invalidity`
-    via `_measure_once`). Never inferred from the throughput numbers themselves -- this
-    reads evidence the launch already recorded about its OWN window. A backend/harness
-    that records no such field (GPU, or no CPU observer) contributes nothing here; that
-    is a limitation of what evidence exists, not a false "clean" verdict."""
-    flagged: set[int] = set()
+def _independent_evidence(record: Mapping) -> str | None:
+    """One evidence code (`OUTLIER_EVIDENCE_SOURCES`) for a single launch's residency
+    record if it carries independent proof of a compromised launch, else `None`.
+    Never derived from the measured throughput value itself."""
+    if not isinstance(record, Mapping):
+        return None
+    validity = record.get("measurement_validity")
+    if isinstance(validity, Mapping) and validity.get("status") == "invalid":
+        return "cpu_lifecycle_invalid"
+    if record.get("clock_stable") is False:
+        return "gpu_clock_unstable"
+    return None
+
+
+def _evidence_pairs(anchor_windows: Sequence[Mapping],
+                    candidate_windows: Sequence[Mapping]) -> dict[int, str]:
+    """`{pair_index: evidence_code}` for every pair whose anchor OR candidate launch
+    carries independent evidence of a compromised launch."""
+    flagged: dict[int, str] = {}
     for windows in (anchor_windows, candidate_windows):
         for i, record in enumerate(windows):
-            if not isinstance(record, Mapping):
+            if i in flagged:
                 continue
-            validity = record.get("measurement_validity")
-            if isinstance(validity, Mapping) and validity.get("status") == "invalid":
-                flagged.add(i)
-    return sorted(flagged)
+            code = _independent_evidence(record)
+            if code is not None:
+                flagged[i] = code
+    return flagged
 
 
 def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: dict,
                          plan: dict, values: dict, windows: dict) -> dict:
-    """Flag, bounded-remeasure, and (if still contaminated) REFUSE a matched A/A
-    calibration. Mutates `values`/`windows` IN PLACE for every successfully replaced
-    pair, so the summary computed after this call sees only the surviving/replaced
-    pairs -- never a trimmed-down count, so `calibration_pairs`/`process_launches`
-    keep their existing meaning untouched.
+    """Exclude/bounded-remeasure ONLY the pairs with INDEPENDENT evidence of a
+    compromised launch, and (if still contaminated) REFUSE the calibration. A pair
+    flagged ONLY by its own |effect| (no evidence) is left completely untouched and
+    reported as a diagnostic (see the module-level selection-bias note).
+
+    Mutates `values`/`windows` IN PLACE for every successfully replaced pair, so the
+    summary computed after this call sees only the surviving/replaced pairs -- never a
+    trimmed-down count, so `calibration_pairs`/`process_launches` keep their existing
+    meaning untouched.
 
     Returns the `outlier_guard` record the floor row carries (a new, optional field: a
     reader or `_validate_matched_floor` that does not know it is unaffected, and an
@@ -1781,27 +1833,27 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     anchor, candidate = values["anchor"], values["candidate"]
     n = len(anchor)
 
-    def flagged_now():
+    def evaluate():
         effects = _pair_effects_pct(anchor, candidate)
+        evidence = _evidence_pairs(windows["anchor"], windows["candidate"])
         mad = set(_mad_outlier_pairs(effects))
-        degraded = set(_degraded_window_pairs(windows["anchor"], windows["candidate"]))
-        return effects, mad, degraded
+        return effects, evidence, mad
 
-    effects, mad_flagged, degraded_flagged = flagged_now()
-    initial_flagged = sorted(mad_flagged | degraded_flagged)
-    excluded = [{"pair_index": i,
-                "reason": "degraded_residency_window" if i in degraded_flagged else "mad_outlier",
+    effects, evidence, mad_flagged = evaluate()
+    initial_evidence = sorted(evidence)
+    excluded = [{"pair_index": i, "reason": evidence[i],
                 "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i],
-                "effect_pct": round(effects[i], 3)} for i in initial_flagged]
-    if len(initial_flagged) > MAX_OUTLIER_REPLACEMENT_PAIRS:
+                "effect_pct": round(effects[i], 3)} for i in initial_evidence]
+    if len(initial_evidence) > MAX_OUTLIER_REPLACEMENT_PAIRS:
         raise HostDegradedDuringCalibration(
-            f"host degraded during floor calibration: {len(initial_flagged)} of {n} A/A "
-            f"pairs are robust |effect| outliers (MAD k={OUTLIER_MAD_K}) or overlap a "
-            f"recorded degraded window, exceeding the {MAX_OUTLIER_REPLACEMENT_PAIRS}-pair "
-            f"bounded replacement budget. Re-measure once the host is quiet; refusing "
-            f"rather than filing a floor built on a degraded host.")
+            f"host degraded during floor calibration: {len(initial_evidence)} of {n} A/A "
+            f"pairs carry independent evidence of a compromised launch "
+            f"({sorted(set(evidence.values()))}), exceeding the "
+            f"{MAX_OUTLIER_REPLACEMENT_PAIRS}-pair bounded replacement budget. "
+            f"Re-measure once the host is quiet; refusing rather than filing a floor "
+            f"built on a degraded host.")
     replaced = []
-    for i in initial_flagged:
+    for i in initial_evidence:
         order = plan["orders"][i]
         fresh_values: dict[str, float] = {}
         fresh_windows: dict[str, list] = {"anchor": [], "candidate": []}
@@ -1812,22 +1864,33 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
         windows["anchor"][i] = fresh_windows["anchor"][0] if fresh_windows["anchor"] else {}
         windows["candidate"][i] = fresh_windows["candidate"][0] if fresh_windows["candidate"] else {}
         replaced.append(i)
-    final_effects, final_mad, final_degraded = flagged_now()
-    still_flagged = sorted(final_mad | final_degraded)
+    final_effects, final_evidence, final_mad = evaluate()
+    still_flagged = sorted(final_evidence)
     if replaced and len(still_flagged) > OUTLIER_PERSISTENT_REFUSAL_LIMIT:
         raise HostDegradedDuringCalibration(
             f"host degraded during floor calibration: {len(still_flagged)} of {n} A/A "
-            f"pairs remain robust outliers after re-measuring {len(replaced)} flagged "
-            f"pair(s), exceeding the {OUTLIER_PERSISTENT_REFUSAL_LIMIT}-pair persistence "
-            f"bound. The host did not recover during this calibration; re-measure once "
-            f"it is quiet.")
-    return {"schema": "epyc.autokernel.serving_floor_outlier_guard.v1", "applied": True,
+            f"pairs still carry independent evidence of a compromised launch after "
+            f"re-measuring {len(replaced)} flagged pair(s), exceeding the "
+            f"{OUTLIER_PERSISTENT_REFUSAL_LIMIT}-pair persistence bound. The host did "
+            f"not recover during this calibration; re-measure once it is quiet.")
+    # Diagnostics only, from the FINAL (post-remeasurement) data: a MAD outlier with no
+    # corroborating evidence is NEVER excluded or replaced -- it stays in the floor
+    # exactly as measured, and is surfaced so an operator can decide, not the guard.
+    unexplained = sorted(final_mad - set(final_evidence))
+    unexplained_outliers = [{"pair_index": i, "effect_pct": round(final_effects[i], 3),
+                             "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i]}
+                            for i in unexplained]
+    return {"schema": OUTLIER_GUARD_SCHEMA_V2, "applied": True,
+            "semantics": OUTLIER_GUARD_EVIDENCE_BASED,
             "mad_k": OUTLIER_MAD_K, "max_replacement_pairs": MAX_OUTLIER_REPLACEMENT_PAIRS,
             "persistent_refusal_limit": OUTLIER_PERSISTENT_REFUSAL_LIMIT,
-            "initial_outlier_pair_indices": initial_flagged,
+            "evidence_sources": list(OUTLIER_EVIDENCE_SOURCES),
+            "initial_evidence_pair_indices": initial_evidence,
             "replaced_pair_indices": replaced,
-            "final_outlier_pair_indices": still_flagged,
-            "excluded": excluded}
+            "final_evidence_pair_indices": still_flagged,
+            "excluded": excluded,
+            "unexplained_outliers": unexplained_outliers,
+            "suspect": bool(unexplained_outliers)}
 
 
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
@@ -1876,6 +1939,11 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                "anchor_residency": windows["anchor"], "candidate_residency": windows["candidate"],
                "residency": _residency_fold(windows["anchor"] + windows["candidate"]),
                "outlier_guard": outlier_guard,
+               # Top-level, not just nested, so a reader (and `run._carry_forward_floor`
+               # (B)) never has to know the outlier_guard schema to see this: `True`
+               # means an unexplained MAD-outlier A/A pair was KEPT in the floor with no
+               # independent evidence it was compromised -- file a REMEASURE_REQUEST.
+               "suspect": outlier_guard["suspect"],
                **_matched_summary(values["anchor"], values["candidate"], pairs)}
         row["content_sha256"] = _digest(row)
         return row
@@ -2229,7 +2297,8 @@ def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
 
 
 __all__ = ["CALIBRATION_UNIT", "COMPARE_EFFECT_UNIT", "FLOOR_KEY_MAX", "FLOOR_UNITS",
-           "LOADER_OWNED_ENV", "MAX_OUTLIER_REPLACEMENT_PAIRS", "OUTLIER_MAD_K",
+           "LOADER_OWNED_ENV", "MAX_OUTLIER_REPLACEMENT_PAIRS", "OUTLIER_EVIDENCE_SOURCES",
+           "OUTLIER_GUARD_EVIDENCE_BASED", "OUTLIER_GUARD_SCHEMA_V2", "OUTLIER_MAD_K",
            "OUTLIER_PERSISTENT_REFUSAL_LIMIT", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
            "SPEC_EXACT_ENV", "SPEC_EXACT_MODES", "verify_process_environ",
            "RESIDENCY_NOT_APPLICABLE", "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN",
