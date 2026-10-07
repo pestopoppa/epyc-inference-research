@@ -253,7 +253,8 @@ def check_real_mask_identity(anchor_build: Path, candidate_build: Path, source_r
                              capture_dir: "Path | str | None" = None,
                              anchor_recipe=None, candidate_recipe=None,
                              window: Callable[[], object] | None = None,
-                             check_anchor_identity_fn: "Callable | None" = None) -> FaResult:
+                             check_anchor_identity_fn: "Callable | None" = None,
+                             native_record_hook: "Callable | None" = None) -> FaResult:
     """Bit identity between the ANCHOR and CANDIDATE probe on DS41's N=2..5 cases under
     the REAL top-k attention mask (not the probe's fixed sparse approximation) -- the
     coverage gap `DS41_REAL_MASK_QUERY_ROWS`'s module comment names.
@@ -289,9 +290,35 @@ def check_real_mask_identity(anchor_build: Path, candidate_build: Path, source_r
         validate_real_mask_corpus(capture_dir, cases)
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         return FaResult("unavailable", f"real-mask capture provenance refused: {exc}")
-    run = check_anchor_identity_fn or check_anchor_identity
-    return run(anchor_build, candidate_build, source_root, cases=cases, capture_dir=capture_dir,
-              anchor_recipe=anchor_recipe, candidate_recipe=candidate_recipe, window=window)
+    from .cpu_fa_verifier_record import NativeVerifierRecord
+    try:
+        record = NativeVerifierRecord(capture_dir, anchor_build, candidate_build, source_root,
+            cases, probe_configs(_arm_env(candidate_recipe, candidate_build),
+                                 recipe_threads(candidate_recipe)), REPS,
+            {role: {"env": _arm_env(recipe, build),
+                    "prefix": list(getattr(recipe, "topology_prefix", ()) or ()),
+                    "threads": recipe_threads(recipe)}
+             for role, recipe, build in (("anchor", anchor_recipe, anchor_build),
+                                         ("candidate", candidate_recipe, candidate_build))})
+        run = check_anchor_identity_fn or check_anchor_identity
+        fatal = None
+        try:
+            result = run(anchor_build, candidate_build, source_root, cases=cases, capture_dir=capture_dir,
+                anchor_recipe=anchor_recipe, candidate_recipe=candidate_recipe, window=window,
+                native_record=record)
+        except BaseException as exc:
+            result = FaResult("unavailable", f"original real-mask execution refused: {exc}")
+            if not isinstance(exc, Exception):
+                fatal = exc
+        path = record.finish(result)
+        if fatal is not None:
+            raise fatal
+        if native_record_hook is not None:
+            native_record_hook(path)
+        return FaResult(result.status, result.reason,
+                        json.dumps({"native_record": str(path), "original_detail": result.detail}))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return FaResult("unavailable", f"prospective real-mask verifier record refused: {exc}")
 
 
 def backend_ops_patch_block() -> str:
@@ -443,9 +470,12 @@ def check_anchor_identity(anchor_build: Path, candidate_build: Path, source_root
                           cases: Sequence[FaCase] = PROBE_CASES, reps: int = REPS,
                           capture_dir: "Path | str | None" = None,
                           window: Callable[[], object] | None = None,
+                          native_record=None,
                           runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
                           ) -> FaResult:
     """Compile the probe against both arms and require bit identity on every case."""
+    if native_record is not None:
+        runner = native_record.runner(runner)
     anchor_build, candidate_build = Path(anchor_build), Path(candidate_build)
     source_root = Path(source_root)
     needed = [build / "bin" / name for build in (anchor_build, candidate_build)

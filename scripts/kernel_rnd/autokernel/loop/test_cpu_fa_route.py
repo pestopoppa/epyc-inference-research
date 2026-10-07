@@ -234,12 +234,34 @@ def test_split_kv_semantics_and_configs():
 # -------------------------------------------- real-mask coverage (N>1, review item 1)
 
 def _write_capture_fixture(root, cases):
+    import hashlib
+    from .cpu_fa_verifier_record import PROPOSITION, SCHEMA, canonical
     root.mkdir(exist_ok=True)
+    (root / "prompt.txt").write_bytes(b"synthetic fixture prompt\n")
+    (root / "recipe.json").write_bytes(b'{"mode":"synthetic_fixture"}\n')
+    capture_source = root / "capture-src"
+    for name in ("src/models/deepseek41.cpp", "src/models/deepseek4-fa-mask-capture.h", "ggml/src/ggml-cpu/ops.cpp"):
+        path = capture_source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"synthetic capture source\n")
+    capture_image = root / "capture-lib.bin"
+    capture_image.write_bytes(b"synthetic capture build\n")
+    env = {"LD_LIBRARY_PATH": "/synthetic/fixture"}
     manifest = {"schema": "epyc.autokernel.ds41_fa_capture.v1", "architecture": "deepseek41",
                 "capture_contract": "ds41_real_mask_n2_5_v1", "source_commit": "a" * 40,
                 "model": "/engineering-fixture.gguf", "model_sha256": "b" * 64,
-                "recipe_sha256": "c" * 64, "prompt_sha256": "d" * 64,
-                "run_id": "engineering-fixture", "started_at": "2026-10-07T00:00:00Z"}
+                "recipe_sha256": hashlib.sha256((root / "recipe.json").read_bytes()).hexdigest(),
+                "prompt_sha256": hashlib.sha256((root / "prompt.txt").read_bytes()).hexdigest(),
+                "run_id": "engineering-fixture", "started_at": "2026-10-07T00:00:00Z",
+                "verifier_schema": SCHEMA, "evidence_mode": "synthetic_source_control",
+                "decided_proposition": "Synthetic source-conformance fixture only: " + PROPOSITION,
+                "source_root": str(capture_source.resolve()), "launch_env": env,
+                "launch_env_sha256": hashlib.sha256(canonical(env)).hexdigest(),
+                "binary_sha256": hashlib.sha256(capture_image.read_bytes()).hexdigest(),
+                "libllama_sha256": hashlib.sha256(capture_image.read_bytes()).hexdigest(),
+                "capture_sources": {name: hashlib.sha256((capture_source / name).read_bytes()).hexdigest()
+                    for name in ("src/models/deepseek41.cpp", "src/models/deepseek4-fa-mask-capture.h", "ggml/src/ggml-cpu/ops.cpp")},
+                "build_images": {str(capture_image.resolve()): hashlib.sha256(capture_image.read_bytes()).hexdigest()}}
     (root / "capture-manifest.json").write_text(json.dumps(manifest))
     for case in cases:
         data = b"\x00" * (case.kv * case.nb * 2)
@@ -341,23 +363,25 @@ def test_real_mask_identity_fails_closed_on_a_partial_capture(monkeypatch, tmp_p
 
 
 def test_real_mask_identity_defers_to_anchor_identity_once_everything_is_ready(monkeypatch, tmp_path):
-    """Once the probe supports it and every case's mask is captured, this is exactly
-    `check_anchor_identity` run on the real-mask case set -- zero further Python needed."""
+    """Validated native inputs reach the anchor check with a prospective observer."""
     monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
     capture_dir = tmp_path / "masks"
     capture_dir.mkdir()
     cases = fa.ds41_real_mask_cases()
     _write_capture_fixture(capture_dir, cases)
+    builds, source = _builds(tmp_path)
     seen = {}
 
     def fake_check_anchor_identity(anchor_build, candidate_build, source_root, *, cases,
-                                   capture_dir=None, anchor_recipe=None, candidate_recipe=None, window=None):
+                                   capture_dir=None, anchor_recipe=None, candidate_recipe=None, window=None,
+                                   native_record=None):
+        assert native_record.request["cases"] == [vars(case) for case in cases]
         seen.update(cases=cases, anchor_build=anchor_build, candidate_build=candidate_build,
                    source_root=source_root, capture_dir=capture_dir)
         return fa.FaResult("pass", "ok")
 
     result = fa.check_real_mask_identity(
-        tmp_path / "a", tmp_path / "c", tmp_path / "src", capture_dir=capture_dir,
+        builds["anchor"], builds["candidate"], source, capture_dir=capture_dir,
         anchor_recipe=_recipe(), candidate_recipe=_recipe(),
         check_anchor_identity_fn=fake_check_anchor_identity)
     assert result.status == "pass"
@@ -447,6 +471,7 @@ def _fake_runner(builds, calls, *, cases=(SMALL,), diverge_on=None, capture_dir=
     def run(argv, **kwargs):
         calls.append((argv, kwargs.get("env")))
         if argv[0] == "c++":
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"synthetic injected compiler output")
             return subprocess.CompletedProcess(argv, 0, "", "")
         binary = next(a for a in argv if "fa-reference-probe-" in a)
         role = binary.rsplit("-", 1)[1]
