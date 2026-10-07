@@ -470,6 +470,8 @@ def inspect_tree(root: Path) -> dict[str, Any]:
             "source_file_identities": source_file_identities,
             "checker_source": checker_source,
             "root_git": {"before": before, "after": after, "stable": git_stable},
+            "stability_scope": "observed Git HEAD/status snapshots and per-file safe reads; "
+                               "not an atomic whole-checkout snapshot or proof of loaded code bytes",
             "complete": (counts["unresolved"] == 0 and counts["missing"] == 0
                          and metadata_stable)}
 

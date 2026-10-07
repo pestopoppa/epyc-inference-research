@@ -244,6 +244,7 @@ def test_json_binds_checker_and_scanned_source_to_git_snapshot(tmp_path: Path, m
     assert first["checker_source"]["before"]["status"] == "read"
     assert first["checker_source"]["after"]["status"] == "read"
     assert first["checker_source"]["matches_scanned_copy"] is True
+    assert "not an atomic whole-checkout snapshot" in first["stability_scope"]
     source_identity = next(item for item in first["source_file_identities"]
                            if item["path"] == relative)
     assert source_identity["sha256"] == hashlib.sha256(
