@@ -18,12 +18,16 @@ Two defects, one root cause (the registry is ONE object per API process —
 """
 from __future__ import annotations
 
+from collections import deque
+from threading import Event, Thread, get_ident
+
 import pytest
 
 from src.registry.tool_registry import (
     INVOCATION_LOG_MAX_DEFAULT,
     Tool,
     ToolCategory,
+    ToolInvocation,
     ToolPermissions,
     ToolRegistry,
 )
@@ -196,6 +200,88 @@ def test_get_invocation_log_returns_a_snapshot():
     snapshot = registry.get_invocation_log()
     snapshot.clear()
     assert len(registry.get_invocation_log()) == 1
+
+
+@pytest.mark.parametrize("writer_operation", ["append", "clear"], ids=["append", "clear"])
+def test_snapshot_serializes_concurrent_ring_writes(writer_operation):
+    """A reader holds a snapshot while append/clear reach the same lock."""
+    reader_entered = Event()
+    release_reader = Event()
+    writer_lock_attempted = Event()
+    writer_finished = Event()
+    writer_ident = [None]
+    thread_errors = []
+
+    class InstrumentedLock:
+        """A real lock with an event marking the writer's acquisition attempt."""
+
+        def __init__(self):
+            from threading import Lock
+
+            self._lock = Lock()
+
+        def __enter__(self):
+            if get_ident() == writer_ident[0]:
+                writer_lock_attempted.set()
+            self._lock.acquire()
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            self._lock.release()
+
+    class PausingDeque(deque):
+        def __iter__(self):
+            reader_entered.set()
+            assert release_reader.wait(timeout=2)
+            return super().__iter__()
+
+    registry = ToolRegistry()
+    first = ToolInvocation("first", {}, "worker", True, "ok")
+    second = ToolInvocation("second", {}, "worker", True, "ok")
+    registry._invocation_log = PausingDeque([first], maxlen=2)
+    registry._invocation_log_lock = InstrumentedLock()
+
+    def capture_reader():
+        try:
+            reader_snapshot.extend(registry.get_invocation_log())
+        except BaseException as exc:  # transfer thread failures to the test thread
+            thread_errors.append(exc)
+
+    def write_from_thread():
+        writer_ident[0] = get_ident()
+        try:
+            if writer_operation == "append":
+                registry._record_invocation(second)
+            else:
+                registry.clear_invocation_log()
+        except BaseException as exc:  # transfer thread failures to the test thread
+            thread_errors.append(exc)
+        finally:
+            writer_finished.set()
+
+    reader_snapshot = []
+    reader = Thread(target=capture_reader)
+    writer = Thread(target=write_from_thread)
+    reader.start()
+    try:
+        assert reader_entered.wait(timeout=2)
+        writer.start()
+        assert writer_lock_attempted.wait(timeout=2)
+        # The reader is deliberately paused inside deque iteration. The writer
+        # has reached the same real lock and cannot mutate until the snapshot ends.
+        assert not writer_finished.is_set()
+    finally:
+        release_reader.set()
+        reader.join(timeout=2)
+        if writer.ident is not None:
+            writer.join(timeout=2)
+
+    assert not reader.is_alive()
+    assert not writer.is_alive()
+    assert thread_errors == []
+    assert [entry.tool_name for entry in reader_snapshot] == ["first"]
+    expected = ["first", "second"] if writer_operation == "append" else []
+    assert [entry.tool_name for entry in registry.get_invocation_log()] == expected
 
 
 # ── No route may read the shared log for per-request telemetry ──────────────
