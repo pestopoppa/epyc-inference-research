@@ -76,13 +76,16 @@ def test_default_divergence_is_hold_with_planner_evidence():
     assert "revert" in ev["hint"] or "revis" in ev["hint"]
 
 
-def test_rollback_action_still_available_when_selected():
-    p = A.AccumulatorPolicy(on_divergence=A.DivergenceAction.ROLLBACK)
+def test_unsupported_rollback_refuses_before_resolving_or_mutating_bundle():
+    with pytest.raises(ValueError):
+        A.DivergenceAction("rollback")
     b = _bundle(cor="cor0", keeps=["m1"], pct=9.0)
-    r = A.resolve(b, {"decisive": True, "effect": -0.02, "effect_pct": -2.0,
-                      "noise_floor_pct": 3.536}, p)
-    assert r["action"] is A.DivergenceAction.ROLLBACK
-    assert r["new_champion_of_record"] == "cor0"
+    before = dict(b.__dict__)
+    for action in ("rollback", "hold", None):
+        with pytest.raises(ValueError, match="only implemented divergence action HOLD"):
+            A.AccumulatorPolicy(on_divergence=action)
+        assert b.__dict__ == before
+    assert list(A.DivergenceAction) == [A.DivergenceAction.HOLD]
 
 
 def test_promote_carries_no_planner_evidence():
