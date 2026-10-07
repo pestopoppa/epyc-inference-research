@@ -47,6 +47,9 @@ from src.registry.drafter_selection import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_MASTER_PATH = Path(
+    "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"
+)
 
 log = logging.getLogger("registry.compiler")
 
@@ -345,18 +348,28 @@ def _format_header_banner(
     """Top-of-file comment block for the compiled output."""
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     role_list = ", ".join(sorted(active_roles))
+    resolved_master = master_path.expanduser().resolve(strict=False)
+    canonical_master = DEFAULT_MASTER_PATH.resolve(strict=False)
+    if resolved_master == canonical_master:
+        master_source = f"# canonical master registry at {resolved_master}\n"
+    else:
+        master_source = (
+            f"# noncanonical master input at {resolved_master}\n"
+            f"# canonical source of truth: {canonical_master}\n"
+        )
     return (
         "# =============================================================================\n"
         "# AUTO-GENERATED — MASTER-COMPILED RUNTIME VIEW.\n"
         "#\n"
         "# This file is compiled at every `orchestrator_stack.py start` from the master\n"
-        f"# registry at {master_path}\n"
-        f"# with drafter selection from {topology_path or DEFAULT_TOPOLOGY_PATH}\n"
+        + master_source
+        + f"# with drafter selection from {topology_path or DEFAULT_TOPOLOGY_PATH}\n"
         "# by src/registry/registry_compiler.py.\n"
         "#\n"
         "# Runtime stack truth lives in the MASTER registry. The next start detects master\n"
         "# changes by cache-key mismatch and regenerates this lean runtime view. To\n"
-        "# temporarily skip the compile (e.g. during a master schema change), set\n"
+        "# edit registry data, change the master source; this generated view is disposable.\n"
+        "# To temporarily skip the compile (e.g. during a master schema change), set\n"
         "# ORCHESTRATOR_REGISTRY_NO_COMPILE=1.\n"
         "#\n"
         f"# Compiled at: {now}\n"
@@ -443,9 +456,7 @@ def _main() -> int:
     p.add_argument(
         "--master",
         type=Path,
-        default=Path(
-            "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"
-        ),
+        default=DEFAULT_MASTER_PATH,
     )
     p.add_argument(
         "--output",

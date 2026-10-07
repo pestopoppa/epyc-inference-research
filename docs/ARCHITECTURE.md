@@ -627,7 +627,7 @@ Statistics counters in `AppState` are protected by `threading.Lock`:
    }
    ```
 
-4. **Add to model registry** (`orchestration/model_registry.yaml`):
+4. **Add to the master model registry** (`epyc-inference-research/orchestration/model_registry.yaml`); the local `orchestration/model_registry.yaml` is a generated runtime view, so edit the master:
    ```yaml
    roles:
      my_new_role:

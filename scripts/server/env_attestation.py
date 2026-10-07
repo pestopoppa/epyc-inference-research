@@ -205,6 +205,19 @@ def attest(state: dict, *, aux_services: dict | None = None, pids_on_port=None,
             if covers(override_record, pid=pid, key=key, live_value=got):
                 out.expected.append(f"{tag} ({role}): undeclared {key}={got!r} -- EXPECTED under "
                                     f"experiment {override_record.get('experiment_id')!r}")
+                continue
+            failure = (f"{tag} ({role}): undeclared {key}={got!r} is live without a valid covering "
+                       "override record")
+            if (override_record
+                    and (override_record.get("env") or {}).get(key) == got):
+                if is_expired(override_record):
+                    failure += (f" -- override record {override_record.get('experiment_id')!r} EXPIRED at "
+                                f"{override_record.get('expires_at')}: restore with `reload embedders`")
+                else:
+                    recorded_pids = sorted({int(value) for value in (override_record.get("pids") or {}).values()})
+                    failure += (f" -- override record {override_record.get('experiment_id')!r} does not cover "
+                                f"pid {pid} (recorded pids: {recorded_pids}); restore with `reload embedders`")
+            out.errors.append(failure)
         if is_llama:
             # Diagnostic keys are never declared: any one live on a llama-server must be explained
             # by an unexpired record naming this pid and value, or it is drift.
