@@ -68,13 +68,24 @@ Each row carries `session_id`, `turn_id`, `role`, `text`, `spoken_text`, a
 structured `display` payload, and `created_at`/`updated_at` timestamps. Rows
 are append-only in this phase. The store returns at most the newest 200 rows in
 chronological order for context assembly; that read cap does not delete older
-history.
+history. An explicit summary-refresh call accepts a caller-supplied summarizer,
+passes it the previous compact state plus the ordered messages after that
+state's `through_message_id`, and stores the returned state with the new
+frontier. If the unseen suffix exceeds the 200-message cap, refresh refuses
+instead of silently omitting context. The store never generates semantic
+summaries itself; a failed or empty refresh leaves the prior summary and source
+messages intact.
 
 Retention follows the existing session lifecycle: ordinary and archived
-sessions retain their message history; explicit session deletion removes the
-messages in the same transaction. No time-based expiry or background pruning
-is introduced. Transcript writes do not change the legacy `sessions.message_count`,
+sessions retain their message history and latest summary; explicit session
+deletion removes both in the same transaction. No time-based expiry or
+background pruning is introduced. Transcript writes do not change the legacy `sessions.message_count`,
 which remains the REPL checkpoint/turn counter.
+
+Transcript append and summary-refresh writes accept the current session lease
+fencing token. When a live lease exists, an absent or stale token is refused;
+the lease check and each SQLite write share the same `BEGIN IMMEDIATE`
+transaction. Unleased sessions keep the existing no-token call shape.
 
 ## Boundaries
 

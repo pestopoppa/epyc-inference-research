@@ -68,6 +68,16 @@ class SessionMessage:
 
 
 @dataclass
+class SessionConversationSummary:
+    """Latest caller-produced compact state and the message frontier it covers."""
+
+    session_id: str
+    through_message_id: int
+    summary: str
+    updated_at: datetime
+
+
+@dataclass
 class SessionDocument:
     """A document processed within a session.
 

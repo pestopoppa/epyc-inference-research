@@ -71,6 +71,7 @@ class MockSessionStore(BaseSessionStore):
         self.findings = {}
         self.checkpoints = {}
         self.messages = []
+        self.conversation_summaries = {}
 
     def create_session(self, session: Session) -> Session:
         if session.id in self.sessions:
@@ -91,11 +92,13 @@ class MockSessionStore(BaseSessionStore):
         if session_id in self.sessions:
             del self.sessions[session_id]
             self.messages = [m for m in self.messages if m.session_id != session_id]
+            self.conversation_summaries.pop(session_id, None)
             return True
         return False
 
     def append_message(
-        self, session_id, turn_id, role, text, *, spoken_text=None, display=None, created_at=None
+        self, session_id, turn_id, role, text, *, spoken_text=None, display=None,
+        created_at=None, fencing_token=None
     ) -> SessionMessage:
         if session_id not in self.sessions:
             raise ValueError(f"Session {session_id} not found")
@@ -118,6 +121,31 @@ class MockSessionStore(BaseSessionStore):
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 200:
             raise ValueError("limit must be between 1 and 200")
         return [m for m in self.messages if m.session_id == session_id][-limit:]
+
+    def save_conversation_summary(
+        self, session_id, through_message_id, summary, *, updated_at=None,
+        fencing_token=None
+    ):
+        from src.session.models import SessionConversationSummary
+
+        value = SessionConversationSummary(
+            session_id, through_message_id, summary, updated_at or datetime.now(timezone.utc)
+        )
+        self.conversation_summaries[session_id] = value
+        return value
+
+    def get_conversation_summary(self, session_id):
+        return self.conversation_summaries.get(session_id)
+
+    def refresh_conversation_summary(self, session_id, summarize, *, fencing_token=None):
+        messages = self.get_messages(session_id)
+        if not messages:
+            return self.get_conversation_summary(session_id)
+        previous = self.get_conversation_summary(session_id)
+        return self.save_conversation_summary(
+            session_id, messages[-1].id, summarize(previous, messages),
+            fencing_token=fencing_token,
+        )
 
     def list_sessions(
         self,

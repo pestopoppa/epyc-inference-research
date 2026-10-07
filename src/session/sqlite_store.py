@@ -16,7 +16,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
 
@@ -29,6 +29,7 @@ from src.session.models import (
     Finding,
     FindingSource,
     Session,
+    SessionConversationSummary,
     SessionMessage,
     SessionDocument,
     SessionStatus,
@@ -38,6 +39,10 @@ from src.session.protocol import BaseSessionStore, WhereFilter
 
 logger = logging.getLogger(__name__)
 MAX_CONVERSATION_MESSAGES = 200
+
+
+class SummaryBacklogExceeded(ValueError):
+    """Raised rather than silently omitting messages during summary refresh."""
 
 
 def _json_col(row: Any, name: str) -> dict:
@@ -219,6 +224,14 @@ class SQLiteSessionStore(BaseSessionStore):
                 "CREATE INDEX IF NOT EXISTS idx_session_messages_session_created "
                 "ON session_messages(session_id, created_at, id)"
             )
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS session_conversation_summaries (
+                    session_id TEXT PRIMARY KEY,
+                    through_message_id INTEGER NOT NULL,
+                    summary TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
 
             # Graph snapshots (D-f3): append-only per-run TaskState snapshots
             # written by the graph layer. Deliberately NOT the checkpoints
@@ -558,6 +571,10 @@ class SQLiteSessionStore(BaseSessionStore):
             # Remove transcript rows explicitly. Existing SQLite connections do
             # not globally enable foreign-key enforcement.
             conn.execute("DELETE FROM session_messages WHERE session_id = ?", (session_id,))
+            conn.execute(
+                "DELETE FROM session_conversation_summaries WHERE session_id = ?",
+                (session_id,),
+            )
             conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
             conn.commit()
 
@@ -574,6 +591,7 @@ class SQLiteSessionStore(BaseSessionStore):
         spoken_text: str | None = None,
         display: dict[str, Any] | None = None,
         created_at: datetime | None = None,
+        fencing_token: int | None = None,
     ) -> SessionMessage:
         """Append a message without changing the legacy REPL message_count."""
         if not isinstance(session_id, str) or not session_id.strip():
@@ -599,6 +617,7 @@ class SQLiteSessionStore(BaseSessionStore):
         stamp_text = stamp.isoformat()
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            check_fence(conn, session_id, fencing_token)
             exists = conn.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone()
             if exists is None:
                 raise ValueError(f"Session {session_id} does not exist")
@@ -658,6 +677,179 @@ class SQLiteSessionStore(BaseSessionStore):
             )
             for row in rows
         ]
+
+    def save_conversation_summary(
+        self,
+        session_id: str,
+        through_message_id: int,
+        summary: str,
+        *,
+        updated_at: datetime | None = None,
+        fencing_token: int | None = None,
+    ) -> SessionConversationSummary:
+        """Store caller-produced semantic state without changing source messages."""
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError("session_id must be a non-empty string")
+        if (
+            isinstance(through_message_id, bool)
+            or not isinstance(through_message_id, int)
+            or through_message_id <= 0
+        ):
+            raise ValueError("through_message_id must be a positive message id")
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError("summary must be a non-empty string")
+        stamp = updated_at or datetime.now(timezone.utc)
+        if not isinstance(stamp, datetime) or stamp.tzinfo is None:
+            raise ValueError("updated_at must be a timezone-aware datetime")
+        stamp = stamp.astimezone(timezone.utc)
+        stamp_text = stamp.isoformat()
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            check_fence(conn, session_id, fencing_token)
+            session_exists = conn.execute(
+                "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if session_exists is None:
+                raise ValueError(f"Session {session_id} does not exist")
+            message_exists = conn.execute(
+                "SELECT 1 FROM session_messages WHERE session_id = ? AND id = ?",
+                (session_id, through_message_id),
+            ).fetchone()
+            if message_exists is None:
+                raise ValueError("through_message_id does not belong to the session")
+            current = conn.execute(
+                "SELECT through_message_id, summary, updated_at "
+                "FROM session_conversation_summaries WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            if current is not None and int(current["through_message_id"]) > through_message_id:
+                result = SessionConversationSummary(
+                    session_id=session_id,
+                    through_message_id=int(current["through_message_id"]),
+                    summary=str(current["summary"]),
+                    updated_at=datetime.fromisoformat(str(current["updated_at"])),
+                )
+                conn.rollback()
+                return result
+            conn.execute(
+                """INSERT INTO session_conversation_summaries (
+                       session_id, through_message_id, summary, updated_at
+                   ) VALUES (?, ?, ?, ?)
+                   ON CONFLICT(session_id) DO UPDATE SET
+                       through_message_id = excluded.through_message_id,
+                       summary = excluded.summary,
+                       updated_at = excluded.updated_at""",
+                (session_id, through_message_id, summary.strip(), stamp_text),
+            )
+            conn.commit()
+        return SessionConversationSummary(
+            session_id=session_id,
+            through_message_id=through_message_id,
+            summary=summary.strip(),
+            updated_at=stamp,
+        )
+
+    def get_conversation_summary(
+        self, session_id: str
+    ) -> SessionConversationSummary | None:
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError("session_id must be a non-empty string")
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """SELECT session_id, through_message_id, summary, updated_at
+                   FROM session_conversation_summaries WHERE session_id = ?""",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return SessionConversationSummary(
+            session_id=str(row["session_id"]),
+            through_message_id=int(row["through_message_id"]),
+            summary=str(row["summary"]),
+            updated_at=datetime.fromisoformat(str(row["updated_at"])),
+        )
+
+    def refresh_conversation_summary(
+        self,
+        session_id: str,
+        summarize: Callable[
+            [SessionConversationSummary | None, list[SessionMessage]], str
+        ],
+        *,
+        fencing_token: int | None = None,
+    ) -> SessionConversationSummary | None:
+        """Refresh semantic state from prior summary plus all unseen messages.
+
+        A single read snapshot obtains the prior frontier and every message
+        after it. If that unseen suffix exceeds the retention cap, refuse the
+        refresh rather than silently dropping context. The callback receives
+        the previous compact state and only the new suffix; it is caller-owned
+        and this method performs no model call or message mutation.
+        """
+        if not callable(summarize):
+            raise ValueError("summarize must be callable")
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError("session_id must be a non-empty string")
+        with self._get_connection() as conn:
+            conn.execute("BEGIN")
+            if conn.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone() is None:
+                raise ValueError(f"Session {session_id} does not exist")
+            prior_row = conn.execute(
+                "SELECT session_id, through_message_id, summary, updated_at "
+                "FROM session_conversation_summaries WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            previous = (
+                SessionConversationSummary(
+                    session_id=str(prior_row["session_id"]),
+                    through_message_id=int(prior_row["through_message_id"]),
+                    summary=str(prior_row["summary"]),
+                    updated_at=datetime.fromisoformat(str(prior_row["updated_at"])),
+                )
+                if prior_row is not None else None
+            )
+            frontier = previous.through_message_id if previous is not None else 0
+            unseen_count = conn.execute(
+                "SELECT COUNT(*) FROM session_messages WHERE session_id = ? AND id > ?",
+                (session_id, frontier),
+            ).fetchone()[0]
+            if unseen_count > MAX_CONVERSATION_MESSAGES:
+                conn.rollback()
+                raise SummaryBacklogExceeded(
+                    f"{unseen_count} unseen messages exceed refresh cap "
+                    f"{MAX_CONVERSATION_MESSAGES}; prior summary retained"
+                )
+            rows = conn.execute(
+                """SELECT id, session_id, turn_id, role, text, spoken_text,
+                          display_json, created_at, updated_at
+                   FROM session_messages WHERE session_id = ? AND id > ?
+                   ORDER BY created_at ASC, id ASC""",
+                (session_id, frontier),
+            ).fetchall()
+            conn.commit()
+        messages = [
+            SessionMessage(
+                id=row["id"], session_id=row["session_id"], turn_id=row["turn_id"],
+                role=row["role"], text=row["text"], spoken_text=row["spoken_text"],
+                display=json.loads(row["display_json"]) if row["display_json"] else None,
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
+            for row in rows
+        ]
+        if not messages:
+            return previous
+        summary = summarize(previous, messages)
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError("summary callback must return non-empty text")
+        return self.save_conversation_summary(
+            session_id,
+            # IDs are the monotonic append frontier even when caller-supplied
+            # timestamps make chronological output order differ from insert order.
+            through_message_id=max(message.id for message in messages),
+            summary=summary,
+            fencing_token=fencing_token,
+        )
 
     # Valid column names for ORDER BY (whitelist to prevent SQL injection)
     _VALID_ORDER_COLUMNS = frozenset(

@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -23,6 +23,7 @@ from src.session.models import (
     Finding,
     ResumeContext,
     Session,
+    SessionConversationSummary,
     SessionMessage,
     SessionDocument,
 )
@@ -196,12 +197,41 @@ class SessionStore(Protocol):
         spoken_text: str | None = None,
         display: dict[str, Any] | None = None,
         created_at: datetime | None = None,
+        fencing_token: int | None = None,
     ) -> SessionMessage:
         """Append one conversation message to an existing session."""
         ...
 
     def get_messages(self, session_id: str, *, limit: int = 200) -> list[SessionMessage]:
         """Return the newest bounded message window in chronological order."""
+        ...
+
+    def save_conversation_summary(
+        self,
+        session_id: str,
+        through_message_id: int,
+        summary: str,
+        *,
+        updated_at: datetime | None = None,
+        fencing_token: int | None = None,
+    ) -> SessionConversationSummary:
+        """Persist caller-produced summary state through one message frontier."""
+        ...
+
+    def get_conversation_summary(self, session_id: str) -> SessionConversationSummary | None:
+        """Return the latest compact state for a session, if one was saved."""
+        ...
+
+    def refresh_conversation_summary(
+        self,
+        session_id: str,
+        summarize: Callable[
+            [SessionConversationSummary | None, list[SessionMessage]], str
+        ],
+        *,
+        fencing_token: int | None = None,
+    ) -> SessionConversationSummary | None:
+        """Refresh prior state using the bounded unseen suffix via a caller."""
         ...
 
     def delete_session(self, session_id: str) -> bool:
@@ -541,6 +571,62 @@ class BaseSessionStore(ABC):
     @abstractmethod
     def update_session(self, session: Session) -> Session:
         """Update an existing session."""
+        ...
+
+    @abstractmethod
+    def append_message(
+        self,
+        session_id: str,
+        turn_id: str,
+        role: str,
+        text: str,
+        *,
+        spoken_text: str | None = None,
+        display: dict[str, Any] | None = None,
+        created_at: datetime | None = None,
+        fencing_token: int | None = None,
+    ) -> SessionMessage:
+        """Append a transcript message, honoring any active session lease."""
+        ...
+
+    @abstractmethod
+    def get_messages(
+        self, session_id: str, *, limit: int = 200
+    ) -> list[SessionMessage]:
+        """Read a bounded transcript window in chronological order."""
+        ...
+
+    @abstractmethod
+    def save_conversation_summary(
+        self,
+        session_id: str,
+        through_message_id: int,
+        summary: str,
+        *,
+        updated_at: datetime | None = None,
+        fencing_token: int | None = None,
+    ) -> SessionConversationSummary:
+        """Persist caller-produced state through one message frontier."""
+        ...
+
+    @abstractmethod
+    def get_conversation_summary(
+        self, session_id: str
+    ) -> SessionConversationSummary | None:
+        """Read the latest compact transcript state."""
+        ...
+
+    @abstractmethod
+    def refresh_conversation_summary(
+        self,
+        session_id: str,
+        summarize: Callable[
+            [SessionConversationSummary | None, list[SessionMessage]], str
+        ],
+        *,
+        fencing_token: int | None = None,
+    ) -> SessionConversationSummary | None:
+        """Refresh compact state from the bounded unseen message suffix."""
         ...
 
     @abstractmethod
