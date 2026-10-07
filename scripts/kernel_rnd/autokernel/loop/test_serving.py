@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 
 from autokernel.loop import serving
+from autokernel.loop.loop import ActorStopped
 
 
 RECIPE = serving.Recipe(
@@ -222,14 +223,15 @@ class PlannedObservationSeam(unittest.TestCase):
             {"stop": True, "timings": {"predicted_n": 4,
                                          "predicted_per_second": float("inf")}},
         )
+        failures = []
         for payload in malformed:
-            with self.subTest(payload=payload):
-                observations = []
+            observations = []
 
-                def malformed_urlopen(request, timeout):
-                    return Response(b"ok" if isinstance(request, str)
-                                    else json.dumps(payload).encode())
+            def malformed_urlopen(request, timeout):
+                return Response(b"ok" if isinstance(request, str)
+                                else json.dumps(payload).encode())
 
+            try:
                 with mock.patch.object(serving.subprocess, "Popen",
                                        return_value=FakeProcess()), \
                         mock.patch.object(serving.residency, "Sampler",
@@ -245,6 +247,9 @@ class PlannedObservationSeam(unittest.TestCase):
                                     in observations[0]["requests"]))
                 self.assertTrue(all(row["predicted_n"] is None for row
                                     in observations[0]["requests"]))
+            except Exception as exc:
+                failures.append(f"{payload!r}: {type(exc).__name__}: {exc}")
+        self.assertEqual(failures, [], "malformed payload subcases failed")
 
 
 class LifecycleObservationHook(unittest.TestCase):
@@ -455,6 +460,118 @@ class ServerAffinity(unittest.TestCase):
         self.assertIn("cpu=unpinned", serving.Recipe(name="r", model="/m").describe())
         self.assertIn("cpu=184-191",
                       serving.Recipe(name="r", model="/m", cpu_list="184-191").describe())
+
+class CalibrationCancellation(unittest.TestCase):
+    def test_legacy_calibration_stops_before_the_next_launch(self):
+        stop = [False]
+        launches = []
+
+        def measure(*_args, **_kwargs):
+            launches.append("launch")
+            stop[0] = True
+            return 100.0
+
+        with mock.patch.object(serving, "_measure_once", side_effect=measure):
+            with self.assertRaises(ActorStopped):
+                serving.calibrate_floor(RECIPE, Path("/b"), samples=3,
+                                        should_stop=lambda: stop[0])
+        self.assertEqual(launches, ["launch"])
+
+    def test_completed_launch_is_reaped_before_stop_blocks_successor(self):
+        recipe = dataclasses.replace(RECIPE, device="none", ngl=0,
+                                     spec_decode={"type": "none"})
+        stop = [False]
+        launches, terminated, waited = [], [], []
+
+        class FakeProcess:
+            pid = 8742
+            returncode = None
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                terminated.append(self.pid)
+                stop[0] = True
+
+            def wait(self, timeout):
+                waited.append((self.pid, timeout))
+                return 0
+
+            def kill(self):
+                raise AssertionError("normal serving teardown must not kill")
+
+        class FakeSampler:
+            proof = {"samples": 2, "vram_reads": 2, "resident": False,
+                     "peak_vram_bytes": 0, "median_vram_bytes": 0,
+                     "peak_kfd_processes": 0, "sclk_min_mhz": 0,
+                     "sclk_max_mhz": 0, "clock_stable": True}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+        class Response:
+            def __init__(self, body=b"ok"):
+                self.body = body
+
+            def read(self):
+                return self.body
+
+        def urlopen(request, timeout):
+            if isinstance(request, str):
+                return Response()
+            return Response(json.dumps({"stop": True, "timings": {
+                "predicted_n": recipe.n_predict // 2, "predicted_per_second": 5.0}}).encode())
+
+        def popen(*_args, **_kwargs):
+            launches.append("launch")
+            return FakeProcess()
+
+        with mock.patch.object(serving.subprocess, "Popen", side_effect=popen), \
+                mock.patch.object(serving.residency, "Sampler", return_value=FakeSampler()), \
+                mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
+                mock.patch.object(serving, "verify_env_readback"), \
+                mock.patch.object(serving.procguard, "measurement_watch", return_value=None):
+            with self.assertRaises(ActorStopped):
+                serving.calibrate_floor(recipe, Path("/b"), samples=2,
+                                        should_stop=lambda: stop[0])
+        self.assertEqual(launches, ["launch"])
+        self.assertEqual(terminated, [8742])
+        self.assertEqual(waited, [(8742, 180)])
+
+    def test_matched_replacement_launch_checks_stop_too(self):
+        plan = {"orders": [["anchor", "candidate"]]}
+        values = {"anchor": [10.0], "candidate": [11.0]}
+        windows = {"anchor": [{"clock_stable": False}], "candidate": [{}]}
+        with mock.patch.object(serving, "_measure_once",
+                               side_effect=AssertionError("replacement launch must not start")):
+            with self.assertRaises(ActorStopped):
+                serving._apply_outlier_guard(
+                    RECIPE, Path("/b"), 18311, {}, plan, values, windows,
+                    should_stop=lambda: True)
+
+    def test_matched_calibration_stops_before_the_next_launch(self):
+        stop = [False]
+        launches = []
+        plan = {"orders": [["anchor", "candidate"]]}
+
+        def measure(*_args, **_kwargs):
+            launches.append("launch")
+            stop[0] = True
+            return 100.0
+
+        with mock.patch.object(serving, "_matched_frame", return_value={}), \
+                mock.patch.object(serving, "_matched_plan", return_value=plan), \
+                mock.patch.object(serving, "_measure_once", side_effect=measure):
+            with self.assertRaises(ActorStopped):
+                serving.calibrate_floor(RECIPE, Path("/b"), samples=24,
+                    instrument=serving.MATCHED_INSTRUMENT, pairs=1,
+                    should_stop=lambda: stop[0])
+        self.assertEqual(launches, ["launch"])
+
 
 if __name__ == "__main__":
     unittest.main()

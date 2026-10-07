@@ -47,7 +47,7 @@ import urllib.error
 from . import (headline_admissibility, hip_launch_proof, kernel_coverage,
                lifecycle_observation, procguard, residency, status)
 from . import native_server_response as server_response
-from .loop import MeasurementFailed, MeasurementInvalid
+from .loop import ActorStopped, MeasurementFailed, MeasurementInvalid
 
 if TYPE_CHECKING:
     from .resolved_recipe import ResolvedRecipe
@@ -1814,7 +1814,8 @@ def _evidence_pairs(anchor_windows: Sequence[Mapping],
 
 
 def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: dict,
-                         plan: dict, values: dict, windows: dict) -> dict:
+                         plan: dict, values: dict, windows: dict,
+                         should_stop=None) -> dict:
     """Exclude/bounded-remeasure ONLY the pairs with INDEPENDENT evidence of a
     compromised launch, and (if still contaminated) REFUSE the calibration. A pair
     flagged ONLY by its own |effect| (no evidence) is left completely untouched and
@@ -1858,6 +1859,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
         fresh_values: dict[str, float] = {}
         fresh_windows: dict[str, list] = {"anchor": [], "candidate": []}
         for arm in order:
+            if should_stop is not None and should_stop():
+                raise ActorStopped("stop requested before serving-floor calibration launch")
             fresh_values[arm] = _measure_once(recipe, build_dir, port,
                                               evidence=fresh_windows[arm], **options)
         anchor[i], candidate[i] = fresh_values["anchor"], fresh_values["candidate"]
@@ -1895,10 +1898,13 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
 
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
                     resolved_recipe=None, frozen_requests=None,
-                    instrument=LEGACY_INSTRUMENT, pairs=None, longctx=None) -> dict:
+                    instrument=LEGACY_INSTRUMENT, pairs=None, longctx=None,
+                    should_stop=None) -> dict:
     """A/A the serving metric `samples` times on ONE build: the run-to-run spread IS the
     noise floor a keep must clear. floor = p95 of |pairwise effect| against the median,
     reported at a few sample counts so a keep at N pairs is judged against the N-pair bar."""
+    if should_stop is None:
+        should_stop = lambda: False
     frozen_requests = _frozen_requests(recipe, frozen_requests)
     options = _resolved_launch_options(recipe, build_dir, port, resolved_recipe)
     if frozen_requests is not None:
@@ -1914,10 +1920,13 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
         windows = {"anchor": [], "candidate": []}
         for order in plan["orders"]:
             for arm in order:
+                if should_stop():
+                    raise ActorStopped("stop requested before serving-floor calibration launch")
                 values[arm].append(_measure_once(recipe, build_dir, port,
                                    evidence=windows[arm], **options))
         outlier_guard = _apply_outlier_guard(recipe, build_dir, port, options,
-                                             plan, values, windows)
+                                             plan, values, windows,
+                                             should_stop=should_stop)
         row = {"schema": "epyc.autokernel.serving_floor.v2", "instrument": instrument,
                "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
                "recipe_env": dict(recipe.env or {}), "recipe_describe": recipe.describe(),
@@ -1948,8 +1957,11 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
         row["content_sha256"] = _digest(row)
         return row
     launch_residency: list[dict] = []
-    runs = [_measure_once(recipe, build_dir, port, evidence=launch_residency, **options)
-            for _ in range(samples)]
+    runs = []
+    for _ in range(samples):
+        if should_stop():
+            raise ActorStopped("stop requested before serving-floor calibration launch")
+        runs.append(_measure_once(recipe, build_dir, port, evidence=launch_residency, **options))
     # `floor_pct` IS this arm's p95 deviation from its own median -- taken from `_spread`
     # so the floor and the per-arm spread reported by `compare` can never drift apart.
     sp = _spread(runs)
