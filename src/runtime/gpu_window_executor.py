@@ -87,6 +87,11 @@ from src.runtime import gpu_window as gw
 logger = logging.getLogger(__name__)
 
 MAX_WINDOW_S = 3600
+# Standing approval (operator, 2026-10-06/07): scheduled entries from approved consumers may run
+# up to the policy's max_window_s without a per-entry operator_approved. The code ceiling below
+# bounds whatever the policy file says; anything longer still needs operator_approved + token.
+STANDING_CEILING_S = 10800
+POLICY_ENV = "ORCHESTRATOR_GPU_WINDOW_POLICY"
 RESTORE_GRACE_S = 600
 DRAIN_TIMEOUT_S = 600
 DRAIN_POLL_S = 5.0
@@ -262,8 +267,39 @@ def clear_pending() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def validate_schedule(data: Any) -> list[str]:
+def standing_policy(path: Path | None = None) -> dict[str, Any]:
+    """The standing-approval policy: ``{"max_window_s": int, "consumers": [str]}``.
+
+    Fails CLOSED: a missing, unreadable or malformed file yields no standing approval
+    (cap = MAX_WINDOW_S, no consumers). The cap is clamped to STANDING_CEILING_S.
+    """
+    closed: dict[str, Any] = {"max_window_s": MAX_WINDOW_S, "consumers": []}
+    p = Path(path or os.environ.get(POLICY_ENV) or ORCH_ROOT / "orchestration" / "gpu_window_policy.yaml")
+    try:
+        import yaml
+
+        doc = yaml.safe_load(p.read_text()) or {}
+        sa = doc["standing_approval"]
+        cap = int(sa["max_window_s"])
+        consumers = [str(c) for c in sa["consumers"]]
+    except Exception:  # noqa: BLE001 - any defect means no standing approval
+        return closed
+    if not consumers or cap <= MAX_WINDOW_S:
+        return closed
+    return {"max_window_s": min(cap, STANDING_CEILING_S), "consumers": consumers}
+
+
+def entry_cap_s(entry: dict[str, Any], policy: dict[str, Any] | None = None) -> int:
+    """Longest window this entry may run without operator_approved."""
+    policy = standing_policy() if policy is None else policy
+    if str(entry.get("consumer") or "") in policy["consumers"]:
+        return int(policy["max_window_s"])
+    return MAX_WINDOW_S
+
+
+def validate_schedule(data: Any, policy: dict[str, Any] | None = None) -> list[str]:
     """Errors in a schedule document (empty list = valid)."""
+    policy = standing_policy() if policy is None else policy
     if not isinstance(data, dict):
         return ["top level is not an object"]
     errors: list[str] = []
@@ -296,8 +332,8 @@ def validate_schedule(data: Any) -> list[str]:
             continue
         if end <= start:
             errors.append(f"{where}: end must be after start")
-        elif end - start > MAX_WINDOW_S and entry.get("operator_approved") is not True:
-            errors.append(f"{where}: longer than {MAX_WINDOW_S}s needs operator_approved: true")
+        elif end - start > entry_cap_s(entry, policy) and entry.get("operator_approved") is not True:
+            errors.append(f"{where}: longer than {entry_cap_s(entry, policy)}s needs operator_approved: true")
         spans.setdefault(str(entry.get("device_id")), []).append((start, end, eid))
     for device, items in spans.items():
         items.sort()
@@ -738,9 +774,9 @@ class Executor:
         end = gw._parse_ts(expected_end)
         if end is None or end <= now:
             raise WindowRefused("bad_expected_end", str(expected_end))
-        if end - now > MAX_WINDOW_S + 5:
+        if end - now > STANDING_CEILING_S + 5:
             raise WindowRefused("window_too_long",
-                                f"{end - now:.0f}s > {MAX_WINDOW_S}s; longer needs the operator")
+                                f"{end - now:.0f}s > {STANDING_CEILING_S}s; longer needs the operator")
         if not ports or not components:
             raise WindowRefused("bad_request", "open needs --ports and --components")
         if len(set(ports)) != len(ports):
@@ -766,6 +802,11 @@ class Executor:
                 raise WindowRefused("lease_open", f"window {lease.get('window_id')} "
                                     f"state={lease.get('state')}")
             entry = resolve_schedule_entry(schedule_path(self.window), schedule_ref, now, end)
+            cap = entry_cap_s(entry)
+            if end - now > cap + 5:
+                raise WindowRefused("window_too_long",
+                                    f"{end - now:.0f}s > {cap}s for entry {schedule_ref!r}; "
+                                    "longer needs the operator")
             busy = self.device_busy(ports)
             if busy:
                 raise WindowRefused("device_busy",

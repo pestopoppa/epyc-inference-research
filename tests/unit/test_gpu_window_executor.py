@@ -98,6 +98,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv(gwe.KFD_PROC_ENV, str(tmp_path / "kfd_proc"))
     monkeypatch.setenv(gwe.PENDING_ENV, str(tmp_path / "stack_change_pending.json"))
     monkeypatch.setenv(gwe.TOKENS_ENV, str(tmp_path / "tokens"))
+    monkeypatch.setenv(gwe.POLICY_ENV, str(tmp_path / "no_policy.yaml"))  # fail-closed default
     clock = [1_900_000_000.0]
     fake = FakeStack(clock)
     schedule = window.with_name("schedule.json")
@@ -143,6 +144,61 @@ def test_open_caps_window_at_60_min(env):
         _open(env, minutes=90)
     assert exc.value.reason == "window_too_long"
     assert not env.window.exists() and env.fake.calls == []
+
+
+def _standing(env, monkeypatch, *, cap=10800, consumers=("workspace-ec",), entry_min=170,
+              consumer="workspace-ec", approved=False):
+    pol = env.tmp / "policy.yaml"
+    pol.write_text("standing_approval:\n  max_window_s: %d\n  consumers: [%s]\n"
+                   % (cap, ", ".join(consumers)))
+    monkeypatch.setenv(gwe.POLICY_ENV, str(pol))
+    e = json.loads(env.schedule.read_text())
+    e["entries"][0].update(end=_iso(env.clock[0] + entry_min * 60), consumer=consumer)
+    if approved:
+        e["entries"][0]["operator_approved"] = True
+    env.schedule.write_text(json.dumps(e))
+
+
+def test_standing_approval_opens_170_min_for_approved_consumer(env, monkeypatch):
+    _standing(env, monkeypatch)
+    assert _open(env, minutes=165)["state"] == "open"
+
+
+def test_standing_approval_refuses_unlisted_consumer(env, monkeypatch):
+    _standing(env, monkeypatch, consumer="mainB")
+    with pytest.raises(gwe.WindowRefused) as exc:
+        _open(env, minutes=90)
+    assert exc.value.reason == "schedule_invalid" or exc.value.reason == "window_too_long"
+    assert env.fake.calls == []
+
+
+def test_standing_approval_caps_at_180_min(env, monkeypatch):
+    _standing(env, monkeypatch, entry_min=200, approved=True)
+    with pytest.raises(gwe.WindowRefused) as exc:
+        _open(env, minutes=190)
+    assert exc.value.reason == "window_too_long" and env.fake.calls == []
+
+
+def test_standing_policy_fails_closed_and_clamps(env, monkeypatch):
+    assert gwe.standing_policy() == {"max_window_s": gwe.MAX_WINDOW_S, "consumers": []}
+    bad = env.tmp / "bad.yaml"
+    bad.write_text("standing_approval: [")
+    assert gwe.standing_policy(bad)["consumers"] == []
+    _standing(env, monkeypatch, cap=99999)
+    assert gwe.standing_policy()["max_window_s"] == gwe.STANDING_CEILING_S
+
+
+def test_standing_approval_keeps_busy_checks(env, monkeypatch):
+    _standing(env, monkeypatch)
+    env.fake.device_held = True
+    with pytest.raises(gwe.WindowRefused):
+        _open(env, minutes=165, drain_timeout_s=1)
+    assert not env.window.exists()
+
+
+def test_repo_policy_file_is_valid():
+    pol = gwe.standing_policy(gwe.ORCH_ROOT / "orchestration" / "gpu_window_policy.yaml")
+    assert pol == {"max_window_s": 10800, "consumers": ["workspace-ec"]}
 
 
 def test_one_window_at_a_time(env):

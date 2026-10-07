@@ -1,0 +1,10 @@
+# GPU window standing approval (operator: "yes, extend to 180 minutes", 2026-10-06/07).
+# Read by src/runtime/gpu_window_executor.standing_policy(); fails CLOSED (missing or
+# malformed file = 3600 s cap, no consumers). A scheduled entry whose `consumer` is listed
+# here may run up to max_window_s without a per-entry operator_approved. The code clamps
+# max_window_s to 10800. All other open checks (device busy, KFD, AK flock, overlap, drain,
+# stop, restore proof) are unchanged. Longer windows still need operator_approved + token.
+schema: epyc.orchestrator.gpu_window_policy.v1
+standing_approval:
+  max_window_s: 10800
+  consumers: [workspace-ec]
