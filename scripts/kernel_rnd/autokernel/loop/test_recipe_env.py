@@ -91,7 +91,10 @@ class EnvReachesTheProcess(unittest.TestCase):
             seen["argv"], seen["env"] = argv, kw["env"]
             return _Proc()
 
-        with mock.patch.object(serving.subprocess, "Popen", _popen), \
+        # Synthetic launch fixture; actual socket ownership has separate real-child controls.
+        with mock.patch.object(serving, "require_free_port"), \
+                mock.patch.object(serving, "ServerPortOwner"), \
+                mock.patch.object(serving.subprocess, "Popen", _popen), \
              mock.patch.object(serving.urllib.request, "urlopen",
                                side_effect=RuntimeError("no server in a unit test")):
             with self.assertRaises(serving.ServerDied):

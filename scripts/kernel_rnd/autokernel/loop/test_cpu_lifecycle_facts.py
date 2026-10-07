@@ -202,7 +202,10 @@ def test_actual_measure_path_invalidates_observed_outside_affinity_after_owned_t
     process = mock.Mock(pid=4321)
     process.poll.return_value = None
     evidence = []
-    with mock.patch.object(serving.residency, "CpuLifecycleSampler", return_value=sampler), \
+    # Synthetic launch fixture; actual socket ownership has separate real-child controls.
+    with mock.patch.object(serving, "require_free_port"), \
+            mock.patch.object(serving, "ServerPortOwner"), \
+            mock.patch.object(serving.residency, "CpuLifecycleSampler", return_value=sampler), \
             mock.patch.object(sampler, "start", side_effect=sampler.phase), \
             mock.patch.object(serving.subprocess, "Popen", return_value=process), \
             mock.patch.object(serving.urllib.request, "urlopen", return_value=Response()), \

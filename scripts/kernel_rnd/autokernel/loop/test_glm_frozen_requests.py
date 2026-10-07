@@ -3,6 +3,7 @@ from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
 import json
+from unittest import mock
 from pathlib import Path
 import threading
 
@@ -168,6 +169,9 @@ def test_actual_http_payload_and_cpu_depth3_launch_unchanged(monkeypatch):
         recipe, resolved = _canonical_launch(port)
         manifest = _manifest(_request())
         requests = manifest.requests(("glm-fixed2029",), recipe)
+        # The in-process HTTP fixture has no launched child socket identity.
+        monkeypatch.setattr(serving, "require_free_port", lambda *_a, **_k: None)
+        monkeypatch.setattr(serving, "ServerPortOwner", lambda *_a, **_k: mock.Mock())
         monkeypatch.setattr(serving.subprocess, "Popen", popen)
         monkeypatch.setattr(serving.residency, "Sampler", _sampler_class(_proof(peak=0, median=0, kfd=0)))
         monkeypatch.setattr(serving, "verify_env_readback", lambda *_a, **_k: None)

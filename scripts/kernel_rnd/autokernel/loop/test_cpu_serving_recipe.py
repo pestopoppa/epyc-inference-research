@@ -39,7 +39,10 @@ def _launch(recipe, resolved, proof, evidence=None):
                 "predicted_n": recipe.n_predict,
                 "predicted_per_second": 25.0}}).encode()
 
-    with mock.patch.object(serving.subprocess, "Popen", side_effect=popen), \
+    # Synthetic launch fixture; actual socket ownership has separate real-child controls.
+    with mock.patch.object(serving, "require_free_port"), \
+            mock.patch.object(serving, "ServerPortOwner"), \
+            mock.patch.object(serving.subprocess, "Popen", side_effect=popen), \
             mock.patch.object(serving.urllib.request, "urlopen", return_value=Response()), \
             mock.patch.object(serving.residency, "Sampler", _sampler_class(proof)), \
             mock.patch.object(serving, "verify_env_readback") as verify:

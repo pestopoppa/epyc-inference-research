@@ -269,7 +269,10 @@ def test_canonical_cpu_and_gpu_roundtrip_validate_and_reach_measure_once(
             "predicted_n": 256, "predicted_per_second": 10.0}}).encode())
 
     requests = (("p0", b'{"prompt":"a"}'), ("p1", b'{"prompt":"b"}'))
-    with mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()) as popen, \
+    # Synthetic launch fixture; actual socket ownership has separate real-child controls.
+    with mock.patch.object(serving, "require_free_port"), \
+            mock.patch.object(serving, "ServerPortOwner"), \
+            mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()) as popen, \
          mock.patch.object(serving.residency, "Sampler", return_value=FakeSampler()), \
          mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
          mock.patch.object(serving, "verify_env_readback"):

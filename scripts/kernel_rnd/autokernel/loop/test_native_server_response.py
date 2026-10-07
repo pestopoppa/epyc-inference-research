@@ -6,6 +6,7 @@ import json
 import threading
 import time
 import urllib.error
+from unittest import mock
 
 import pytest
 
@@ -153,6 +154,9 @@ def test_failed_http_retains_explicit_invalid_evidence_and_closes(original, monk
             raise urllib.error.HTTPError(request.full_url, 503, "unavailable", {}, stream)
         return stream
     monkeypatch.setattr(serving.urllib.request, "urlopen", urlopen)
+    # This response fixture uses a synthetic process identity.
+    monkeypatch.setattr(serving, "require_free_port", mock.Mock())
+    monkeypatch.setattr(serving, "ServerPortOwner", mock.Mock())
     monkeypatch.setattr(serving.subprocess, "Popen", lambda *a, **k: Process())
     monkeypatch.setattr(serving, "verify_env_readback", lambda *a, **k: None)
     monkeypatch.setattr(serving.residency, "Sampler", _sampler_class(_proof(peak=0, kfd=0)))
@@ -441,6 +445,9 @@ def test_real_http_raw_capture_persists_after_requests_before_owned_teardown(tmp
             events.append("persist")
         return write(namespace, body)
     monkeypatch.setattr(store, "write", tracked_write)
+    # This response fixture uses a synthetic process identity.
+    monkeypatch.setattr(serving, "require_free_port", mock.Mock())
+    monkeypatch.setattr(serving, "ServerPortOwner", mock.Mock())
     monkeypatch.setattr(serving.subprocess, "Popen", lambda *a, **k: Process())
     monkeypatch.setattr(serving, "verify_env_readback", lambda *a, **k: None)
     monkeypatch.setattr(serving.residency, "Sampler", _sampler_class(_proof(peak=0, kfd=0)))
