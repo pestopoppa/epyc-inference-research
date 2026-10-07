@@ -5,11 +5,25 @@ from pathlib import Path
 import yaml
 
 from src.registry.registry_compiler import (
+    DEFAULT_MASTER_PATH,
+    _format_header_banner,
     active_roles_from_launch_meta,
     cache_key,
     compile_lean,
     load_or_compile,
 )
+
+
+def test_generated_banner_labels_canonical_and_worktree_master_inputs(tmp_path: Path) -> None:
+    canonical = _format_header_banner(DEFAULT_MASTER_PATH, set(), "abc123")
+    assert f"# canonical master registry at {DEFAULT_MASTER_PATH.resolve()}\n" in canonical
+    assert "# edit registry data, change the master source; this generated view is disposable.\n" in canonical
+    assert "# noncanonical master input" not in canonical
+
+    worktree_master = tmp_path / "orchestration" / "model_registry.yaml"
+    worktree_banner = _format_header_banner(worktree_master, set(), "def456")
+    assert f"# noncanonical master input at {worktree_master.resolve()}\n" in worktree_banner
+    assert f"# canonical source of truth: {DEFAULT_MASTER_PATH.resolve()}\n" in worktree_banner
 
 
 def test_active_roles_from_launch_meta_includes_shared_aliases() -> None:
