@@ -3788,6 +3788,7 @@ def main(argv: list[str] | None = None) -> int:
                             candidate_recipe=arm, window=cpu_measurement_window),
                         lambda arm: gates.check_cpu_fa_real_mask_identity(
                             anchor_build[0], worker.build_dir, worker.worktree,
+                            capture_dir=Path(args.store) / "cpu_fa_real_masks",
                             anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
                             candidate_recipe=arm, window=cpu_measurement_window),
                         lambda arm: gates.check_cpu_fa_perf_screen(

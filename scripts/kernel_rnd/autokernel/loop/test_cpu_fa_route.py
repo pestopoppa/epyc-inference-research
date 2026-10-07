@@ -251,15 +251,13 @@ def test_ds41_real_mask_cases_cover_nb_2_through_5_at_every_served_kv_depth():
     assert 1 not in {c.nb for c in cases}
 
 
-def test_probe_supports_mask_file_is_false_for_the_probe_as_shipped():
-    """The probe source genuinely has no `--mask-file`/`mask="captured"` support yet --
-    this is a real capability check, not a hardcoded stub, so it will flip to True the
-    moment the described C++ change lands with no Python change needed here."""
-    assert fa.PROBE_MASK_FILE_FLAG not in fa.PROBE.read_text(encoding="utf-8")
-    assert fa.probe_supports_mask_file() is False
+def test_probe_supports_mask_file_is_true_for_the_probe_as_shipped():
+    assert fa.PROBE_MASK_FILE_FLAG in fa.PROBE.read_text(encoding="utf-8")
+    assert fa.probe_supports_mask_file() is True
 
 
-def test_real_mask_identity_fails_closed_without_probe_support(tmp_path):
+def test_real_mask_identity_fails_closed_without_probe_support(monkeypatch, tmp_path):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: False)
     result = fa.check_real_mask_identity(tmp_path / "a", tmp_path / "c", tmp_path / "src",
                                          capture_dir=tmp_path / "masks")
     assert result.status == "unavailable"
@@ -318,7 +316,7 @@ def test_gates_wraps_real_mask_identity_as_oracle_unavailable_by_default(tmp_pat
     verdict = gates.check_cpu_fa_real_mask_identity(tmp_path / "a", tmp_path / "c",
                                                     tmp_path / "src")
     assert verdict.gate == "oracle_unavailable" and not verdict.passed
-    assert fa.PROBE_MASK_FILE_FLAG in verdict.reason
+    assert "no capture_dir" in verdict.reason
 
 
 # ------------------------------------------------------------------ anchor identity

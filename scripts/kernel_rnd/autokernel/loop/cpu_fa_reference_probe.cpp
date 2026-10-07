@@ -3,8 +3,8 @@
 // both on identical inputs and requires the output bits to agree. It prints digests,
 // never judges: the anchor is the reference (the route admits only bit-exact changes).
 //
-//   probe <hsk> <hsv> <n_kv_heads> <gqa> <kv> <nb> <sinks 0|1> <mask causal|sparse>
-//         <layout cache|plain> <threads> <reps> <seed>
+//   probe <hsk> <hsv> <n_kv_heads> <gqa> <kv> <nb> <sinks 0|1> <mask causal|sparse|captured>
+//         <layout cache|plain> <threads> <reps> <seed> [--mask-file <path>]
 //
 // layout cache: Q is [D, n_q_heads, nb] and K/V are [D, n_kv_heads, kv], each permuted
 // (0, 2, 1, 3) as llama-graph does, so a KV cell's heads are interleaved exactly like the
@@ -60,7 +60,7 @@ static bool parse_i64(const char * text, int64_t & out, int64_t lo, int64_t hi) 
 }
 
 int main(int argc, char ** argv) {
-    if (argc != 13) return 2;
+    if (argc != 13 && argc != 15) return 2;
     int64_t hsk, hsv, nkvh, gqa, kv, nb, sinks, threads, reps, seed;
     if (!parse_i64(argv[1], hsk, 1, 1024) || !parse_i64(argv[2], hsv, 1, 1024) ||
         !parse_i64(argv[3], nkvh, 1, 64) || !parse_i64(argv[4], gqa, 1, 256) ||
@@ -72,11 +72,28 @@ int main(int argc, char ** argv) {
     const char * mask_mode = argv[8];
     const char * layout = argv[9];
     const bool sparse = std::strcmp(mask_mode, "sparse") == 0;
-    if (!sparse && std::strcmp(mask_mode, "causal") != 0) return 2;
+    const bool captured = std::strcmp(mask_mode, "captured") == 0;
+    if (!sparse && !captured && std::strcmp(mask_mode, "causal") != 0) return 2;
+    if (captured != (argc == 15) || (captured && std::strcmp(argv[13], "--mask-file") != 0)) return 2;
     const bool cache = std::strcmp(layout, "cache") == 0;
     if (!cache && std::strcmp(layout, "plain") != 0) return 2;
     const int64_t nqh = nkvh * gqa;
     if (nb > kv) return 2;
+    std::vector<ggml_fp16_t> captured_mask;
+    if (captured) {
+        FILE * file = std::fopen(argv[14], "rb");
+        if (!file) return 10;
+        const size_t count = (size_t) kv * nb;
+        std::vector<unsigned char> bytes(count * sizeof(ggml_fp16_t));
+        const bool valid = std::fread(bytes.data(), 1, bytes.size(), file) == bytes.size()
+                        && std::fgetc(file) == EOF && !std::ferror(file);
+        const bool closed = std::fclose(file) == 0;
+        if (!valid || !closed) return 10;
+        captured_mask.resize(count);
+        for (size_t i = 0; i < count; ++i) {
+            captured_mask[i] = (ggml_fp16_t) (bytes[2*i] | (uint16_t) bytes[2*i + 1] << 8);
+        }
+    }
 
     ggml_init_params params = {16 * 1024 * 1024, nullptr, true};
     ggml_context * ctx = ggml_init(params);
@@ -126,21 +143,27 @@ int main(int argc, char ** argv) {
         input_hash = fnv1a(h.data(), h.size() * sizeof(ggml_fp16_t), input_hash);
     }
     {
-        // Causal: row t sees cells [0, kv - nb + t]. Sparse (a DS41 top-k stand-in): also
-        // drop ~1/4 of the visible cells, never the row's last one.
-        std::vector<float> f((size_t) kv * nb);
-        for (int64_t t = 0; t < nb; ++t) {
-            const int64_t last = kv - nb + t;
-            for (int64_t c = 0; c < kv; ++c) {
-                bool hidden = c > last;
-                if (sparse && c != last) hidden = hidden || (mix((uint64_t) seed * 31 + c) & 3) == 0;
-                f[t * kv + c] = hidden ? -INFINITY : 0.0f;
+        if (captured) {
+            ggml_backend_tensor_set(m, captured_mask.data(), 0,
+                                    captured_mask.size() * sizeof(ggml_fp16_t));
+            input_hash = fnv1a(captured_mask.data(), captured_mask.size() * sizeof(ggml_fp16_t), input_hash);
+        } else {
+            // Causal: row t sees cells [0, kv - nb + t]. Sparse (a DS41 top-k stand-in): also
+            // drop ~1/4 of the visible cells, never the row's last one.
+            std::vector<float> f((size_t) kv * nb);
+            for (int64_t t = 0; t < nb; ++t) {
+                const int64_t last = kv - nb + t;
+                for (int64_t c = 0; c < kv; ++c) {
+                    bool hidden = c > last;
+                    if (sparse && c != last) hidden = hidden || (mix((uint64_t) seed * 31 + c) & 3) == 0;
+                    f[t * kv + c] = hidden ? -INFINITY : 0.0f;
+                }
             }
+            std::vector<ggml_fp16_t> h(f.size());
+            ggml_fp32_to_fp16_row(f.data(), h.data(), (int64_t) f.size());
+            ggml_backend_tensor_set(m, h.data(), 0, h.size() * sizeof(ggml_fp16_t));
+            input_hash = fnv1a(h.data(), h.size() * sizeof(ggml_fp16_t), input_hash);
         }
-        std::vector<ggml_fp16_t> h(f.size());
-        ggml_fp32_to_fp16_row(f.data(), h.data(), (int64_t) f.size());
-        ggml_backend_tensor_set(m, h.data(), 0, h.size() * sizeof(ggml_fp16_t));
-        input_hash = fnv1a(h.data(), h.size() * sizeof(ggml_fp16_t), input_hash);
     }
     if (s) {
         std::vector<float> f(nqh);
