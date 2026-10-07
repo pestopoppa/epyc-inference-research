@@ -616,7 +616,7 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
 class TestCompleteTaskDenominator(unittest.TestCase):
     def test_empty_or_negative_repeat_count_is_refused_before_server_launch(self):
         for count in ("0", "-1"):
-            with self.subTest(count=count), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
                 runner.parse_args(["--runs", count])
             self.assertEqual(refused.exception.code, 2)
         self.assertIs(runner.summarize_task_pass([], 0, True), False)
