@@ -102,9 +102,9 @@ def test_wrong_verdict_persists_full_rows_and_the_first_divergence_token_index(t
     assert payload["anchor_first"][0]["content"] == "hello world"
     # ALL observations, not just the differing pair: the confirming anchor re-serve too.
     assert payload["anchor_reserve"][0]["content"] == "hello world"
-    # The fake serve_fn ignores `selected` and returns its whole 3-row scripted list for
-    # `anchor` (never sliced); `candidate` IS sliced to `n` (n_requests defaults to 2).
-    assert len(payload["anchor_first"]) == 3 and len(payload["candidate"]) == 2
+    # The fake serve_fn returns three rows even though two requests were selected;
+    # persistence retains every observed row from both arms.
+    assert len(payload["anchor_first"]) == 3 and len(payload["candidate"]) == 3
     # detail itself also carries the locator for a quick look without opening the file.
     assert detail["first_divergent"]["divergence_index"] == 2
 
