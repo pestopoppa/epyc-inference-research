@@ -45,7 +45,7 @@ def prepare(*, source_root: Path, build_dir: Path, model: Path, recipe_file: Pat
     capture_dir.mkdir(parents=True, exist_ok=True)
     if any(capture_dir.iterdir()):
         raise ValueError("capture directory must be new and empty")
-    manifest = {"schema": "epyc.autokernel.ds41_fa_capture.v1", "architecture": "deepseek4",
+    manifest = {"schema": "epyc.autokernel.ds41_fa_capture.v1", "architecture": "deepseek41",
                 "capture_contract": "ds41_real_mask_n2_5_v1", "source_commit": commit,
                 "source_root": str(source_root), "build_dir": str(build_dir), "model": str(model),
                 "model_sha256": sha256(model), "recipe_sha256": sha256(recipe_file),

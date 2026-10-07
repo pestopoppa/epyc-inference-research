@@ -235,7 +235,7 @@ def test_split_kv_semantics_and_configs():
 
 def _write_capture_fixture(root, cases):
     root.mkdir(exist_ok=True)
-    manifest = {"schema": "epyc.autokernel.ds41_fa_capture.v1", "architecture": "deepseek4",
+    manifest = {"schema": "epyc.autokernel.ds41_fa_capture.v1", "architecture": "deepseek41",
                 "capture_contract": "ds41_real_mask_n2_5_v1", "source_commit": "a" * 40,
                 "model": "/engineering-fixture.gguf", "model_sha256": "b" * 64,
                 "recipe_sha256": "c" * 64, "prompt_sha256": "d" * 64,
@@ -251,14 +251,17 @@ def _write_capture_fixture(root, cases):
                     ("source_commit", "model", "model_sha256", "run_id", "recipe_sha256", "prompt_sha256")}
         metadata.update(schema="epyc.autokernel.ds41_fa_mask.v1", type="f16", byte_order="little",
                         layout="token_kv", ne=[case.kv, case.nb, 1, 1], hsk=case.hsk, hsv=case.hsv,
-                        n_q_heads=case.n_q_heads, n_kv_heads=case.n_kv_heads, mask_kind="raw_plus_csa_top_k",
+                        n_q_heads=case.n_q_heads, n_kv_heads=case.n_kv_heads, mask_kind="raw_plus_compressed_top_k",
                         mask_hash_algorithm="fnv1a64", mask_bytes=len(data), mask_hash=f"{digest:016x}",
-                        captured_at=manifest["started_at"])
+                        captured_at=manifest["started_at"], original_ne=[case.kv, case.nb, 1, 1],
+                        original_nb=[2, case.kv*2, case.kv*case.nb*2, case.kv*case.nb*2],
+                        slice={"row_start": 0, "row_count": case.nb, "head_index": 0, "stream_index": 0},
+                        layer=0, compressed_ratio=1)
         (root / f"{case.name}.mask.json").write_text(json.dumps(metadata))
 
 
 @pytest.mark.parametrize("defect", ["no_manifest", "no_sidecar", "shape", "model", "run",
-                                    "digest", "short", "source", "stale"])
+                                    "digest", "short", "source", "stale", "slice", "stride"])
 def test_real_mask_native_provenance_refuses_before_probe(monkeypatch, tmp_path, defect):
     monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
     cases = fa.ds41_real_mask_cases()
@@ -276,6 +279,8 @@ def test_real_mask_native_provenance_refuses_before_probe(monkeypatch, tmp_path,
         key, value = {"shape": ("ne", [case.kv, case.nb, 2, 1]),
                       "model": ("model_sha256", "e" * 64), "run": ("run_id", "another-run"),
                       "digest": ("mask_hash", "0" * 16), "source": ("source_commit", "e" * 40),
+                      "slice": ("slice", {"row_start": 1, "row_count": case.nb}),
+                      "stride": ("original_nb", [4, case.kv*4, case.kv*case.nb*4, case.kv*case.nb*4]),
                       "stale": ("captured_at", "2026-10-06T23:59:59Z")}[defect]
         metadata[key] = value
         sidecar.write_text(json.dumps(metadata))

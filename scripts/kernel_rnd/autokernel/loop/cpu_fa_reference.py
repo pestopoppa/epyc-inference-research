@@ -197,7 +197,7 @@ def validate_real_mask_corpus(capture_dir: "Path | str", cases: Sequence[FaCase]
     root = Path(capture_dir)
     manifest = json.loads((root / "capture-manifest.json").read_text(encoding="utf-8"))
     if manifest.get("schema") != "epyc.autokernel.ds41_fa_capture.v1" or \
-            manifest.get("architecture") != "deepseek4" or \
+            manifest.get("architecture") != "deepseek41" or \
             manifest.get("capture_contract") != "ds41_real_mask_n2_5_v1":
         raise ValueError("capture manifest schema/architecture is invalid")
     for key, length in (("source_commit", 40), ("model_sha256", 64),
@@ -214,13 +214,26 @@ def validate_real_mask_corpus(capture_dir: "Path | str", cases: Sequence[FaCase]
                     "byte_order": "little", "layout": "token_kv",
                     "ne": [case.kv, case.nb, 1, 1], "hsk": case.hsk, "hsv": case.hsv,
                     "n_q_heads": case.n_q_heads, "n_kv_heads": case.n_kv_heads,
-                    "mask_kind": "raw_plus_csa_top_k", "mask_hash_algorithm": "fnv1a64",
+                    "mask_kind": "raw_plus_compressed_top_k", "mask_hash_algorithm": "fnv1a64",
                     "mask_bytes": case.kv * case.nb * 2}
         expected.update({key: manifest[key] for key in
                          ("source_commit", "model", "model_sha256", "run_id",
                           "recipe_sha256", "prompt_sha256")})
         if any(metadata.get(key) != value for key, value in expected.items()):
             raise ValueError(f"{case.name}: native mask metadata does not match its case/run")
+        original_ne = metadata.get("original_ne")
+        if not isinstance(original_ne, list) or len(original_ne) != 4 or \
+                original_ne[0] != case.kv or original_ne[2:] != [1, 1] or \
+                not isinstance(original_ne[1], int) or original_ne[1] < case.nb:
+            raise ValueError(f"{case.name}: original mask dimensions cannot supply its query rows")
+        row_bytes = case.kv * 2
+        if metadata.get("original_nb") != [2, row_bytes, row_bytes * original_ne[1],
+                                           row_bytes * original_ne[1]] or \
+                metadata.get("slice") != {"row_start": 0, "row_count": case.nb,
+                                          "head_index": 0, "stream_index": 0} or \
+                metadata.get("compressed_ratio") not in (1, 2) or \
+                not isinstance(metadata.get("layer"), int) or metadata["layer"] < 0:
+            raise ValueError(f"{case.name}: original contiguous mask layout/slice is invalid")
         if datetime.strptime(metadata["captured_at"], "%Y-%m-%dT%H:%M:%SZ") < started_at:
             raise ValueError(f"{case.name}: capture predates its native run manifest")
         path = real_mask_path(root, case)

@@ -14,10 +14,15 @@ the input digest includes the captured bytes. Q/K/V and sinks remain determinist
 probe inputs; this is representative mask-pattern coverage, not a replay of an
 entire serving computation.
 
-The experimental DS41 hook observes the **combined raw plus compressed CSA mask**
+The experimental DS41 hook observes the **combined raw plus compressed top-k mask**
 immediately before FLASH_ATTN_EXT. It refuses other head widths, multiple mask
 streams, GPU residency and non-FA contexts. It captures only actual tensor widths
-4096/8192/32768/65536 and query-row counts 2..5. DS41 compresses CSA by four, so
+4096/8192/32768/65536 and query-row counts 2..5, taken from Q's token dimension
+before its FA permutation. A padded mask keeps every original row in the graph;
+the dump extracts precisely its first consumed N rows. Sidecars preserve the full
+original dimensions/strides, row slice, source layer and compressed-group ratio.
+The reader validates the single broadcast mask head/stream and contiguous slice.
+DS41 has compressed groups with ratios two and one, so
 an original prompt length of 4096 does not imply a 4096-column FA operand.
 Never resize, pad, tile, truncate or relabel a mask to fill the corpus.
 
