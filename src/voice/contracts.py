@@ -8,12 +8,20 @@ with deterministic in-process fakes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Iterable, Literal, Protocol
 
 
 VoiceEventKind = Literal[
     "text_delta", "display", "preserve", "audio_chunk", "tool_call", "end", "error"
 ]
+
+
+class RetainCancelChoice(str, Enum):
+    """Explicit caller-selected disposition for an in-flight turn."""
+
+    RETAIN = "retain"
+    CANCEL = "cancel"
 
 
 @dataclass(frozen=True)
@@ -25,6 +33,8 @@ class VoiceTurn:
     transcript: str | None = None
     conversation_context: tuple[dict[str, Any], ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
+    response_mode: Literal["normal", "verbatim"] = "normal"
+    must_preserve: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

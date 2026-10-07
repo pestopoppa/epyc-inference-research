@@ -155,6 +155,79 @@ def test_voice_route_streams_native_chunks_and_persists_only_completed_answer(mo
     assert store.leases.released == [17]
 
 
+def test_voice_response_verbatim_preserves_literal_values_before_emitting(monkeypatch):
+    class CapturingPrimitives(_Primitives):
+        prompt = ""
+
+        def llm_call(self, prompt, *, role, n_tokens, skip_suffix, on_chunk):
+            type(self).prompt = prompt
+            on_chunk("The release is ")
+            on_chunk("v10.2.")
+            return "The release is v10.2."
+
+    store = _Store()
+    response = _client(monkeypatch, store, inference=CapturingPrimitives).post(
+        "/v1/voice/turn", json={
+            "session_id": "session-a", "user_request": "State the release",
+            "response_mode": "verbatim", "must_preserve": ["v10.2"],
+        }
+    )
+
+    assert response.status_code == 200
+    assert '"text": "The release is v10.2."' in response.text
+    assert 'event: preserve\n' in response.text
+    assert '"values": ["v10.2"]' in response.text
+    assert 'event: done\n' in response.text
+    assert '"v10.2"' in CapturingPrimitives.prompt
+    assert "verbatim" in CapturingPrimitives.prompt
+    assert store.rows[-1][1] == "The release is v10.2."
+    assert store.rows[-1][2]["spoken_text"] == "The release is v10.2."
+
+
+def test_display_goal_emits_a_nonspoken_payload_and_persists_it_separately(monkeypatch):
+    class DisplayPrimitives(_Primitives):
+        def llm_call(self, prompt, *, role, n_tokens, skip_suffix, on_chunk):
+            on_chunk("```sh\nrun --flag\n```\n")
+            return "```sh\nrun --flag\n```\n"
+
+    store = _Store()
+    response = _client(monkeypatch, store, inference=DisplayPrimitives).post(
+        "/v1/voice/turn", json={
+            "session_id": "session-a", "user_request": "Show the command",
+            "response_goal": "display",
+        }
+    )
+
+    assert response.status_code == 200
+    assert "event: display\ndata: " in response.text
+    assert '"payload": {"text": "```sh\\nrun --flag\\n```\\n"}' in response.text
+    assert "event: answer.delta" not in response.text
+    assert '"spoken_text": null' in response.text or store.rows[-1][2]["spoken_text"] is None
+    assert store.rows[-1][2]["display"] == {"text": "```sh\nrun --flag\n```\n"}
+
+
+def test_missing_protected_value_fails_closed_without_emitting_or_persisting_answer(monkeypatch):
+    class OmittingPrimitives(_Primitives):
+        def llm_call(self, prompt, *, role, n_tokens, skip_suffix, on_chunk):
+            on_chunk("The release is ready.")
+            return "The release is ready."
+
+    store = _Store()
+    response = _client(monkeypatch, store, inference=OmittingPrimitives).post(
+        "/v1/voice/turn", json={
+            "session_id": "session-a", "user_request": "State the release",
+            "must_preserve": ["v10.2"],
+        }
+    )
+
+    assert response.status_code == 200
+    assert "event: error\ndata: " in response.text
+    assert "event: answer.delta" not in response.text
+    assert "event: preserve" not in response.text
+    assert "event: done" not in response.text
+    assert [row[0] for row in store.rows] == ["user"]
+
+
 def test_voice_route_refuses_header_identity_mismatch_before_write(monkeypatch):
     store = _Store()
     client = _client(monkeypatch, store)

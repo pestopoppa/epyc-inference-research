@@ -34,6 +34,8 @@ class VoiceTurnRequest(BaseModel):
     user_request: str = Field(min_length=1)
     conversation_context: str | None = None
     response_goal: Literal["spoken", "display"] = "spoken"
+    response_mode: Literal["normal", "verbatim"] = "normal"
+    must_preserve: list[str] = Field(default_factory=list)
     language: str | None = None
     max_spoken_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     cancel_token: str | None = Field(default=None, max_length=256)
@@ -163,6 +165,8 @@ async def voice_turn(
         not math.isfinite(body.max_spoken_seconds) or body.max_spoken_seconds <= 0
     ):
         raise HTTPException(status_code=422, detail="max_spoken_seconds must be finite and positive")
+    if any(not value.strip() for value in body.must_preserve):
+        raise HTTPException(status_code=422, detail="must_preserve values must be non-empty strings")
     if store.get_session(body.session_id) is None:
         raise HTTPException(status_code=404, detail="session not found")
     if state.registry is None:
@@ -230,6 +234,20 @@ async def voice_turn(
                 )
         else:
             context_lines.append("Give a concise display-oriented answer; do not assume it will be spoken.")
+        if body.response_mode == "verbatim":
+            context_lines.append(
+                "Response mode is verbatim: preserve literal wording and formatting; do not "
+                "paraphrase, normalize, or shorten requested content."
+            )
+        else:
+            context_lines.append(
+                "Response mode is normal: answer naturally while honoring every protected value."
+            )
+        if body.must_preserve:
+            context_lines.append(
+                "Protected values must appear exactly, character for character, in the response: "
+                + json.dumps(body.must_preserve, ensure_ascii=False)
+            )
         context = "\n\n".join(context_lines)
         prompt = (f"{context}\n\n" if context else "") + f"User: {body.user_request}"
         prompt = _direct_call_prompt(prompt, Role.FRONTDOOR, state.registry)
@@ -238,6 +256,8 @@ async def voice_turn(
         raise
     cancel_event = threading.Event()
     lease_released = False
+    buffer_response = (body.response_goal == "display" or body.response_mode == "verbatim"
+                       or bool(body.must_preserve))
 
     async def release_lease() -> None:
         nonlocal lease_released
@@ -278,8 +298,9 @@ async def voice_turn(
                             safe_text = reasoning_filter.feed(value)
                             if safe_text:
                                 answer.append(safe_text)
-                                sequence += 1
-                                yield _event(turn_id, sequence, "answer.delta", text=safe_text)
+                                if not buffer_response:
+                                    sequence += 1
+                                    yield _event(turn_id, sequence, "answer.delta", text=safe_text)
                         elif kind == "result":
                             full_answer = value
                         elif kind == "timeout":
@@ -296,14 +317,29 @@ async def voice_turn(
             remainder = public_answer[len(streamed):]
             if remainder:
                 answer.append(remainder)
-                sequence += 1
-                yield _event(turn_id, sequence, "answer.delta", text=remainder)
+                if not buffer_response:
+                    sequence += 1
+                    yield _event(turn_id, sequence, "answer.delta", text=remainder)
             complete = "".join(answer)
             if not complete.strip():
                 raise RuntimeError("inference completed without a non-empty answer")
+            missing = [value for value in body.must_preserve if value not in complete]
+            if missing:
+                raise RuntimeError("response omitted a protected value")
+            display = {"text": complete} if body.response_goal == "display" else None
+            if buffer_response and body.response_goal == "display":
+                sequence += 1
+                yield _event(turn_id, sequence, "display", payload=display)
+            elif buffer_response:
+                sequence += 1
+                yield _event(turn_id, sequence, "answer.delta", text=complete)
+            if body.must_preserve:
+                sequence += 1
+                yield _event(turn_id, sequence, "preserve", values=body.must_preserve)
             store.append_message(
                 body.session_id, turn_id, "assistant", complete,
-                spoken_text=complete, fencing_token=lease_guard.token,
+                spoken_text=complete if body.response_goal == "spoken" else None,
+                display=display, fencing_token=lease_guard.token,
             )
             sequence += 1
             yield _event(turn_id, sequence, "done", cancel_token=body.cancel_token)
