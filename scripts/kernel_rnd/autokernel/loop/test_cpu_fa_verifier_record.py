@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import subprocess
+import tempfile
 
 import pytest
 
@@ -28,8 +29,24 @@ def reader():
 
 
 @pytest.fixture(scope="module")
-def native(tmp_path_factory):
-    base = tmp_path_factory.mktemp("prospective-real-mask-source-controls")
+def private_native_test_root():
+    # The strict reader already accepts root-owned /tmp with exact sticky 1777
+    # permissions. A custom pytest basetemp may have writable RAID ancestors;
+    # keep these synthetic archives and every mutated clone in private custody.
+    with tempfile.TemporaryDirectory(prefix="epyc-real-mask-fixtures-", dir="/tmp") as directory:
+        yield Path(directory)
+
+
+@pytest.fixture
+def tmp_path(private_native_test_root):
+    with tempfile.TemporaryDirectory(prefix="case-", dir=private_native_test_root) as directory:
+        yield Path(directory)
+
+
+@pytest.fixture(scope="module")
+def native(private_native_test_root):
+    base = private_native_test_root / "prospective-real-mask-source-controls"
+    base.mkdir(mode=0o700)
     builds, source = _builds(base)
     capture = base / "masks"
     cases = fa.ds41_real_mask_cases()
@@ -56,6 +73,15 @@ def test_original_native_roundtrip_uses_shared_verifier_ladder(native):
     assert adapter.verify_and_grade(native)[0][:2] == ("Judged", "Located")
     assert len(rows[0]["record"]["observations"]) == 2 + 16 * 3 * 2
     assert len(rows[0]["request"]["cases"]) == 16
+
+
+def test_native_archive_under_writable_ancestor_is_refused(native, tmp_path):
+    unsafe = tmp_path / "writable-ancestor"
+    unsafe.mkdir()
+    unsafe.chmod(0o777)
+    path = clone(native, unsafe)
+    with pytest.raises(ValueError, match="native custody ancestor is symlink/nonowned/writable"):
+        reader().native_rows(path)
 
 
 def clone(native, tmp_path):

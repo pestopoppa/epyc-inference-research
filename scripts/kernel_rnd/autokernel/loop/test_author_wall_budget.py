@@ -376,8 +376,9 @@ class PanelWallBudgets(tb.Fixture):
         early = row["walls"]["early_cancel"]
         self.assertEqual((early["label"], early["cancelled"]), ("a0-off", ["a1-medium"]))
         self.assertAlmostEqual(early["threshold_s"], 2 * early["wall_s"], places=6)
-        # Ended past 2x the finisher's wall, long before its own 5 s budget.
-        self.assertGreater(medium["wall_s"], early["threshold_s"])
+        # Cancellation compares unrounded duration > threshold; the archived
+        # duration is rounded to milliseconds, so it may equal that threshold.
+        self.assertGreaterEqual(medium["wall_s"], early["threshold_s"])
         self.assertLess(medium["wall_s"], 3.0)
         # Its partial edit is retained for the record; it was not a selection candidate.
         self.assertTrue(medium["patch"]["patch_file"].endswith(".patch"))
