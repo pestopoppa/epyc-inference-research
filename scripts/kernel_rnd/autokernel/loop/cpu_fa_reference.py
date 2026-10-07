@@ -156,14 +156,14 @@ CASE_SET_REGEX = "^(" + "|".join(re.escape(case.vars()) for case in CASE_SET) + 
 DS41_REAL_MASK_QUERY_ROWS = (2, 3, 4, 5)
 #: A literal `cpu_fa_reference_probe.cpp` would carry once it accepts an externally
 #: captured mask file (see `check_real_mask_identity`'s docstring for the exact change);
-#: absent from the probe's actual source today, so `probe_supports_mask_file` is False.
+#: accepted by the probe's captured mode; capability is checked before each corpus run.
 PROBE_MASK_FILE_FLAG = "--mask-file"
 
 
 def ds41_real_mask_cases() -> tuple[FaCase, ...]:
     """DS41 shapes at `DS41_REAL_MASK_QUERY_ROWS`, the same served long-KV depths as
-    CASE_SET. `mask="captured"`: the probe does not synthesize these -- it has no
-    `"captured"` mode yet (`probe_supports_mask_file`) -- and `backend_ops=False`: these
+    CASE_SET. `mask="captured"`: the probe loads native capture bytes instead of
+    synthesizing these; `backend_ops=False`: these
     never run through test-backend-ops (which has no concept of an externally supplied
     mask either); they exist only for `check_real_mask_identity`'s standalone probe."""
     return tuple(
@@ -258,33 +258,14 @@ def check_real_mask_identity(anchor_build: Path, candidate_build: Path, source_r
     the REAL top-k attention mask (not the probe's fixed sparse approximation) -- the
     coverage gap `DS41_REAL_MASK_QUERY_ROWS`'s module comment names.
 
-    FAILS CLOSED, unconditionally today, because of two C++ changes neither written
-    here (per the ak-longctx-identity-oracle-20261007 review, item 1):
-
-    1. `cpu_fa_reference_probe.cpp` needs a NEW `mask="captured"` mode (alongside the
-       existing `causal`/`sparse`) selected by a `--mask-file <path>` flag: instead of
-       synthesizing `f[t * kv + c]` (the causal/sparse branch around the mask-build
-       loop), read exactly `kv * nb` little-endian `ggml_fp16_t` values from that file
-       into the same buffer, and refuse (a distinct non-zero return code, never a
-       fabricated digest) if the file size does not match `kv * nb *
-       sizeof(ggml_fp16_t)` bytes exactly. `probe_supports_mask_file` detects this the
-       moment it lands (a literal-string check against the probe source, same idiom as
-       `cpu_fa_reference.binary_has_case_set`'s literal check against a compiled
-       binary).
-    2. Something upstream needs to CAPTURE that file from an actual DS41 server: a debug
-       hook in llama.cpp's DS41 attention-graph build, at the point the top-k sparse
-       mask tensor is populated just before `ggml_flash_attn_ext` consumes it, guarded
-       by an env var (e.g. `AUTOKERNEL_DUMP_FA_MASK=<dir>`) that dumps that tensor's
-       buffer via `ggml_backend_tensor_get` to `real_mask_path(dir, case)` the first
-       time a decode or MTP-verify step presents that exact (kv, nb) shape. One capture
-       per served shape from one live run is enough; `capture_dir` here then points at
-       that directory.
-
-    Once both land, this function's own logic already does the right thing without
-    further Python changes: it checks `probe_supports_mask_file()`, then that
-    `capture_dir` is given, then that EVERY case's file exists (never a silent partial
-    corpus), and only then defers to `check_anchor_identity` (compile once per arm, run
-    the probe, require bit identity) exactly as the approximate-mask cases already do."""
+    Fail closed unless the probe supports captured inputs and the complete native
+    corpus passes provenance/geometry/digest validation. The experimental DS41 hook
+    records the consumed rows of the real raw-plus-compressed top-k mask; the native
+    run manifest is prepared prospectively by cpu_fa_mask_capture.prepare. Both probe
+    arms receive the same case-specific mask path. See CPU_FA_MASK_CAPTURE.md for the
+    capture contract and the separate governed capture run. No source build or capture
+    is performed by this check.
+    """
     cases = ds41_real_mask_cases()
     if not probe_supports_mask_file():
         return FaResult("unavailable",
@@ -292,9 +273,8 @@ def check_real_mask_identity(anchor_build: Path, candidate_build: Path, source_r
             "new mask=\"captured\" mode that reads an externally captured real DS41 "
             f"attention mask instead of synthesizing mask=sparse); {len(cases)} "
             f"real-mask case(s) at nb={sorted(DS41_REAL_MASK_QUERY_ROWS)} cannot be "
-            "judged yet. See check_real_mask_identity's docstring for the exact C++ "
-            "change (the probe's --mask-file flag, and llama.cpp's capture hook that "
-            "would produce the file) -- not written here by design")
+            "judged yet. Restore the captured-input probe from the reviewed OP80 "
+            "instrument; CPU_FA_MASK_CAPTURE.md documents its native capture contract")
     if capture_dir is None:
         return FaResult("unavailable",
             f"the probe supports {PROBE_MASK_FILE_FLAG} but no capture_dir was given; a "

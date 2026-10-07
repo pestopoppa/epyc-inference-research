@@ -2357,10 +2357,10 @@ def check_cpu_fa_real_mask_identity(anchor_build: Path, candidate_build: Path,
     """`cpu_fa_schedule`: bit identity with the ANCHOR on DS41's N=2..5 cases under the
     REAL top-k attention mask (review 2026-10-07, ak-longctx-identity-oracle item 1) --
     `check_cpu_fa_reference` covers the same shapes only under the probe's fixed
-    approximate mask. FAILS CLOSED unconditionally today (`oracle_unavailable`, never a
-    silent pass): see `cpu_fa_reference.check_real_mask_identity`'s docstring for the two
-    C++ changes this needs (a probe `--mask-file` mode, and a capture hook in llama.cpp's
-    DS41 attention-graph build), neither written here by design."""
+    approximate mask. Fail closed (`oracle_unavailable`) without a complete native
+    capture corpus whose metadata and byte digests match its prospective run manifest.
+    CPU_FA_MASK_CAPTURE.md documents the experimental hook and capture contract.
+    """
     from . import cpu_fa_reference
 
     result = cpu_fa_reference.check_real_mask_identity(
