@@ -6,8 +6,8 @@ Use this runbook whenever model, role, serving-topology, or stack-prior truth ch
 
 1. Edit the source of truth:
 
-   - Full model registry: `/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml`
-   - Lean orchestrator registry: `orchestration/model_registry.yaml`
+   - Canonical full model-registry master: `/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml`
+   - Generated lean orchestrator view: `orchestration/model_registry.yaml` (do not edit; the pipeline regenerates it from the master)
    - Stack manifest / launch helpers only when serving topology changes require it
 
 2. Regenerate descriptors and derived stack priors:

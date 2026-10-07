@@ -386,7 +386,7 @@ The system has evolved through 8 phases, from manual YAML-based routing all the 
 
 | Phase | Capability | Status |
 |-------|------------|--------|
-| 1 | Manual routing via `model_registry.yaml` | Production |
+| 1 | Manual routing via the canonical research master (`epyc-inference-research/orchestration/model_registry.yaml`); the orchestrator registry is generated lean output | Production |
 | 2 | Episodic store with embeddings | Production (2714 memories at 2026-01-31) |
 | 3 | Two-phase retrieval (semantic + Q-value) | Production |
 | 4 | Learned routing (HybridRouter) | Production |
@@ -567,7 +567,7 @@ DesignCandidate --> ReplayEngine --> ReplayMetrics
 - **No live embedder calls**: Replay uses pre-computed embeddings from `TrajectoryExtractor`. A `NullEmbedder` safety guard raises if the engine ever tries to call the live embedder.
 - **Isolated stores**: Each candidate gets a fresh `EpisodicStore(tmp_dir)` — no cross-contamination between evaluations. Cleaned up after run.
 - **No graph integration in v1**: FailureGraph/HypothesisGraph deferred (Kuzu per-candidate too expensive).
-- **Human-in-the-loop promotion**: Meta-agent recommends but never auto-promotes. Human reviews markdown report, manually updates `model_registry.yaml`.
+- **Human-in-the-loop promotion**: Meta-agent recommends but never auto-promotes. Human reviews markdown report, then edits the canonical `epyc-inference-research/orchestration/model_registry.yaml` master; the orchestrator's `model_registry.yaml` is generated lean runtime output.
 - **Stratified sampling**: Default 1000 trajectories, proportional by task_type, reproducible via fixed seed.
 
 </details>
