@@ -321,11 +321,13 @@ def test_missing_native_callback_closes_provider_and_preserves_child_refusal(tmp
 
 @pytest.mark.parametrize("route", ["ordinary", "author"])
 @pytest.mark.parametrize("outcome", ["success", "error", "timeout", "cleanup_uncertain",
-                                     "survivor_retry", "census_retry", "live_diagnostic_failure"])
+                                     "survivor_retry", "census_retry", "live_diagnostic_failure", "dead_census_retry"])
 def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
         native, tmp_path, monkeypatch, route, outcome):
     """Real subprocess forks, native cookie cleanup and original CPU owner on both routes."""
     import ast
+    import json
+    import time
     import subprocess
     import sys
     from pathlib import Path
@@ -334,6 +336,7 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
         {"campaign": "private-compiler-cookie", "state_dir": str(tmp_path), "run_id": "compile"}, 0)
     guard = procguard.Guard(store=tmp_path, grace_s=.1)
     original_sweep, original_cpu = guard.sweep_scope_checked, native[1].cpu_region_lock
+    original_state = guard.scope_state
     original_terminate, original_listdir = guard._terminate, procguard.os.listdir
     cleanup_attempts = [0]
     census_failures = [0]
@@ -341,7 +344,10 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
     original_journal = registry._journal
     original_close = claim.HeldCpuClaim._closing
     events, cookies = [], []
+    sweep_records, state_records = [], []
+    actual_unknown_refusal = [False]
     child_pid = [None]
+    child_identity = [None]
     pid_file = tmp_path / "captured-background-compiler.pid"
     script = tmp_path / "fixture-cmake"
     script.write_text("#!/usr/bin/python3\n"
@@ -375,6 +381,34 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
             child = procguard.read_proc(Path("/proc"), child_pid[0])
             assert child is None or child.state == "Z", child
 
+    def child_dead():
+        child = procguard.read_proc(Path("/proc"), child_pid[0]) if child_pid[0] is not None else None
+        return child_identity[0] is not None and (child is None or
+            (child.identity == child_identity[0] and child.state == "Z"))
+
+    def persist(kind, observation):
+        with (tmp_path / "strict-compiler-cleanup-records.jsonl").open("a") as trace:
+            trace.write(json.dumps({"kind": kind, **observation}, sort_keys=True) + "\n")
+
+    def state(token):
+        assert_held()
+        row = original_state(token)
+        observation = {"scope": token, "monotonic_s": time.monotonic(), "record": row,
+                       "original_child_dead": child_dead(), "original_native_held": True}
+        state_records.append(observation)
+        persist("scope_state", observation)
+        return row
+
+    def unknown_after_child_death(observation):
+        row = observation["record"]
+        return (observation["original_child_dead"] and observation["original_native_held"]
+            and row.get("census_verified") is False and bool(row.get("census_errors"))
+            and not row["survivors"] and row["owner"] ==
+                {"pid": guard.pid, "start_ticks": guard.start_ticks}
+            and row["scope"] in cookies
+            and any((item["pid"], item["start_ticks"]) == child_identity[0]
+                    for item in row["captured"]))
+
     @contextmanager
     def cpu(*args, **kwargs):
         with original_cpu(*args, **kwargs) as receipt:
@@ -392,16 +426,27 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
             child = procguard.read_proc(Path("/proc"), child_pid[0])
             assert child is not None and child.state != "Z"
             assert child.cwd == str(tmp_path) and child.scope == token
+            child_identity[0] = child.identity
         for path in protected:
             marker = scratch.read_marker("dir", path)
             assert marker["release_block_token"] == token
             assert "release_blocked" in marker
         record = original_sweep(token)  # Actual captured PID/start-identity cleanup.
+        # Preserve the original strict result before any diagnostic assertion.
+        observation = {"scope": token, "monotonic_s": time.monotonic(), "record": record,
+                       "original_child_dead": child_dead(), "original_native_held": True}
+        sweep_records.append(observation)
+        persist("sweep", observation)
         if record["survivors"] or record.get("census_verified") is not True:
             assert_held()
-            child = procguard.read_proc(Path("/proc"), child_pid[0])
-            assert child is not None and child.state != "Z"
-            events.append("live_cleanup_refusal_held")
+            if any((row["pid"], row["start_ticks"]) == child_identity[0]
+                   for row in record["survivors"]):
+                child = procguard.read_proc(Path("/proc"), child_pid[0])
+                assert child is not None and child.identity == child_identity[0] and child.state != "Z"
+                events.append("live_cleanup_refusal_held")
+            else:
+                # An unknown census can remain refused after this child has died.
+                events.append("unknown_cleanup_census_held")
             return record
         assert not record["survivors"]
         assert_dead()
@@ -432,6 +477,16 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
             raise PermissionError("injected unavailable live process census")
         return original_listdir(path)
 
+    def temporary_dead_census_failure(path):
+        if Path(path) == Path("/proc") and census_failures[0] < 2 and child_pid[0] is not None:
+            child = procguard.read_proc(Path("/proc"), child_pid[0])
+            if child is None or child.state == "Z":
+                assert_held()
+                census_failures[0] += 1
+                events.append("unknown_census_after_child_dead_held")
+                raise PermissionError("injected unavailable census after captured child death")
+        return original_listdir(path)
+
     def failing_live_hold_diagnostic(row):
         if row.get("event") == "child_cleanup_safety_hold":
             assert_held()
@@ -444,18 +499,30 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
 
     def closing(receipt):
         assert_held()
-        assert "descendant_verified_dead" in events
         assert_dead()
+        # The actual cleanup manager requires two empty observations, even when
+        # uncertainty was resolved directly through scope_state without a new sweep.
+        assert len(state_records) >= 2
+        first, second = state_records[-2:]
+        for sample in (first, second):
+            assert sample["original_native_held"] and sample["original_child_dead"]
+            assert sample["record"]["census_verified"] and not sample["record"]["survivors"]
+            assert sample["scope"] == cookies[0]
+        assert second["monotonic_s"] - first["monotonic_s"] >= .1
+        events.append("physical_two_empty_barrier_held")
         events.append("close_observed")
         return original_close(receipt)
 
     monkeypatch.setattr(native[1], "cpu_region_lock", cpu)
     monkeypatch.setattr(guard, "sweep_scope_checked", sweep)
+    monkeypatch.setattr(guard, "scope_state", state)
     monkeypatch.setattr(claim.HeldCpuClaim, "_closing", closing)
     if outcome in {"survivor_retry", "live_diagnostic_failure"}:
         monkeypatch.setattr(guard, "_terminate", temporary_survivor)
     if outcome == "census_retry":
         monkeypatch.setattr(procguard.os, "listdir", temporary_census_failure)
+    if outcome == "dead_census_retry":
+        monkeypatch.setattr(procguard.os, "listdir", temporary_dead_census_failure)
     if outcome == "live_diagnostic_failure":
         monkeypatch.setattr(registry, "_journal", failing_live_hold_diagnostic)
     scratch.install(registry)
@@ -483,25 +550,43 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
                     return namespace["local_compiles"](source, build, cmake_defines=(), jobs=1,
                         cpu_list=None, cmake=str(script), targets=("original-target",),
                         env=dict(gp.os.environ))
-            if outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure"}:
+            if outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure", "dead_census_retry"}:
                 with pytest.raises(scratch.ScratchRefused, match="cleanup uncertain"):
                     invoke()
-            elif outcome == "timeout" and route == "ordinary":
-                with pytest.raises(subprocess.TimeoutExpired):
-                    invoke()
             else:
-                result = invoke()
-                if route == "ordinary":
-                    assert result.passed == (outcome == "success")
+                try:
+                    if outcome == "timeout" and route == "ordinary":
+                        with pytest.raises(subprocess.TimeoutExpired):
+                            invoke()
+                    else:
+                        result = invoke()
+                except scratch.ScratchRefused as exc:
+                    # Real /proc uncertainty remains a permanent refusal. Accept
+                    # that behavior only with the exact original durable evidence.
+                    assert "compiler cleanup uncertain" in str(exc)
+                    assert any(unknown_after_child_death(row) for row in sweep_records), sweep_records
+                    assert "physical_two_empty_barrier_held" in events
+                    assert_dead()
+                    actual_unknown_refusal[0] = True
                 else:
-                    assert result[2] == (outcome == "timeout")
-                    assert (result[0] == 0) == (outcome == "success")
+                    if not (outcome == "timeout" and route == "ordinary"):
+                        if route == "ordinary":
+                            assert result.passed == (outcome == "success")
+                        else:
+                            assert result[2] == (outcome == "timeout")
+                            assert (result[0] == 0) == (outcome == "success")
             if outcome in {"survivor_retry", "live_diagnostic_failure"}:
                 assert events.count("captured_live_survivor_held") == 2
                 assert cleanup_attempts[0] >= 3
             if outcome == "census_retry":
                 assert events.count("unknown_census_with_live_child_held") == 2
                 assert census_failures[0] == 2
+            if outcome == "dead_census_retry":
+                assert events.count("unknown_census_after_child_dead_held") == 2
+                assert census_failures[0] == 2
+                assert "unknown_cleanup_census_held" in events
+                assert any(unknown_after_child_death(row) for row in sweep_records)
+                assert_dead()
             if outcome == "live_diagnostic_failure":
                 assert diagnostic_failures[0] >= 1
                 assert "diagnostic_failed_while_live_and_held" in events
@@ -511,21 +596,21 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
             assert events[-2:] == ["close_observed", "native_released"]
             assert_dead()
             if route == "author":
-                if outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure"}:
+                if actual_unknown_refusal[0] or outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure", "dead_census_retry"}:
                     assert list(phase_dir.glob("*.pending")) and not list(phase_dir.glob("*.json"))
                 else:
                     assert not list(phase_dir.glob("*.pending")) and len(list(phase_dir.glob("*.json"))) == 1
-            elif outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure"}:
+            elif actual_unknown_refusal[0] or outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure", "dead_census_retry"}:
                 with pytest.raises(claim.ClaimRefused, match="capture failed"):
                     local.closed_phases()
             else:
                 assert len(local.closed_phases()) == 1
-            if outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure"}:
+            if actual_unknown_refusal[0] or outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure", "dead_census_retry"}:
                 for path in protected:
                     assert "release_blocked" in scratch.read_marker("dir", path)
                 # A stale parent retention write cannot erase the child's disk fence.
                 scope.retain("parent handles uncertain compiler cleanup")
-        if outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure"}:
+        if actual_unknown_refusal[0] or outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure", "dead_census_retry"}:
             assert all(path.exists() and "release_blocked" in scratch.read_marker("dir", path)
                        for path in protected)
             later = scratch.ScratchRegistry(tmp_path / "scratch",
