@@ -565,9 +565,13 @@ def test_identity_targets_restore_the_anchor_slot_before_every_request(tmp_path,
          "identity_tokens": spec.body["identity_tokens"]}))
     targets = surface.identity_targets(anchor, candidate)
     assert len(targets) == 1
-    label, a_arm, c_arm, requests, prepare = targets[0]
+    label, a_arm, c_arm, requests, prepare, record_dir = targets[0]
+    # Neither fixture launch carries speculative decoding, so `_oracle_arm` is a
+    # no-op pass-through (identity preserved) -- see test_identity_targets_strips_* below
+    # for the drafter-present case this fixes (INC root cause, 2026-10-07).
     assert label == "longctx" and a_arm is anchor and c_arm is candidate
     assert requests == spec.requests(anchor.template) and callable(prepare)
+    assert record_dir == surface.root / "identity-divergence"
 
     served = []
 
@@ -608,3 +612,103 @@ def test_run_registers_the_long_surface_into_the_keep_dimensions_and_long_identi
                      r"is not None:\n(?:.*\n){1,5}?\s+long_gate = longctx_runtime_gate\(", body)
     assert re.search(r'long_dims & set\(keep_dims\) and longctx_surface is None:\n\s+parser\.error',
                      body)
+
+
+# -------------------------------------------- identity oracle: strip speculative decoding
+
+def _mtp_launch(build: Path, *, port=18656, drafter="/models/drafter-mtp-shared-q8.gguf",
+                ngld=40, draft_n_max=4):
+    """A CPU launch with an EXTERNAL drafter (`q38fn-...-mtp-d4` / `drafter-mtp-shared-
+    q8`, the live target that diagnosed INC root cause 2026-10-07): the perf/ensure_floor
+    launches must keep this; the identity oracle (`_oracle_arm`) must strip it."""
+    base = replace(_template(), spec_decode={"type": "draft-mtp", "drafter": drafter,
+                                              "ngld": ngld, "draft_n_max": draft_n_max})
+    command = base.server_argv(build, port) + ["--no-mmap", "--no-webui"]
+    template = rr.canonical_recipe_projection(
+        name=base.name, command_argv=command, topology_prefix=(), n_predict=8,
+        temperature=0.0, top_k=1)
+    return rr.resolve_canonical_launch(
+        template, build_dir=build, command_argv=command, topology_prefix=(),
+        launch_environment={"LD_LIBRARY_PATH": str(build / "bin")},
+        artifact_identities=_artifacts(template, build=build), backend="cpu",
+        environment_policy=_policy(), port=port, runtime_binary_dir=str(build / "bin"),
+        runtime_ld_paths=(str(build / "bin"),),
+        provenance={"export_sha256": "a" * 64, "instance_mode": "full",
+                    "source:fixture": "b" * 64})
+
+
+def test_strip_speculative_decoding_removes_every_draft_flag_and_nothing_else():
+    build = Path("/build")
+    launch = _mtp_launch(build)
+    stripped = longctx._strip_speculative_decoding(launch.command_argv)
+    assert "-md" not in stripped and "-ngld" not in stripped
+    assert "--spec-type" not in stripped and "--spec-draft-n-max" not in stripped
+    # Everything else (model, ctx, port, --no-mmap...) survives untouched and in order.
+    kept = [tok for tok in launch.command_argv
+           if tok not in longctx.SPECULATIVE_DECODING_FLAGS]
+    # the value tokens that followed a stripped flag must also be gone
+    _exe, parsed = rr._canonical_command(launch.command_argv)
+    drafter_value = parsed["-md"]
+    assert drafter_value not in stripped
+    assert "--no-mmap" in stripped and "-m" in stripped
+
+
+def test_strip_speculative_decoding_is_a_noop_without_any_draft_flags(tmp_path):
+    launch = _launch(tmp_path / "plain")
+    stripped = longctx._strip_speculative_decoding(launch.command_argv)
+    assert stripped == tuple(launch.command_argv)
+
+
+def test_strip_speculative_decoding_fails_closed_on_an_unparseable_command():
+    command = ("/build/bin/llama-server", "-m", "/m.gguf", "--host", "127.0.0.1",
+              "--port", "9", "-np", "1", "-c", "512", "-t", "4", "--bogus-draft-knob", "x")
+    with pytest.raises(longctx.LongCtxRefused, match="does not parse"):
+        longctx._strip_speculative_decoding(command)
+
+
+def test_oracle_arm_strips_the_drafter_and_keeps_the_arm_otherwise_identical():
+    build = Path("/build")
+    launch = _mtp_launch(build)
+    oracle = longctx._oracle_arm(launch)
+    assert oracle is not launch
+    assert oracle.drafter is None
+    assert oracle.template.spec_decode == {"type": "none"}
+    assert "-md" not in oracle.command_argv and "--spec-type" not in oracle.command_argv
+    # Everything that is NOT about speculation is unchanged: model, build, port, topology.
+    assert oracle.model == launch.model
+    assert oracle.build_dir == launch.build_dir
+    assert oracle.port == launch.port
+    assert oracle.backend == launch.backend
+    assert oracle.topology_prefix == launch.topology_prefix
+
+
+def test_oracle_arm_is_a_passthrough_when_there_is_nothing_to_strip(tmp_path):
+    launch = _launch(tmp_path / "plain")
+    assert longctx._oracle_arm(launch) is launch
+
+
+def test_identity_targets_strips_speculative_decoding_from_both_oracle_arms(tmp_path):
+    """The INC root cause this fixes: the live q38fn-...-mtp-d4 target's own drafter made
+    the unmodified anchor's 3 repeated greedy completions disagree with themselves inside
+    the identity gate, so every candidate saw oracle_unavailable. The oracle launches here
+    must carry no drafter; `derive_launch`'s own launches (not exercised by this test)
+    keep it for the perf/ensure_floor path."""
+    spec = _spec(tmp_path)
+    surface = longctx.Surface(spec, store=tmp_path / "store")
+    anchor = surface.launch_for(_mtp_launch(tmp_path / "anchor", port=18700))
+    candidate = surface.launch_for(_mtp_launch(tmp_path / "candidate", port=18700))
+    surface.slot_dir.mkdir(parents=True)
+    (surface.slot_dir / surface.slot_name(anchor)).write_bytes(b"slot")
+    surface._identity_path(anchor).write_text(json.dumps(
+        {"schema": longctx.IDENTITY_SCHEMA, "passed": True, "slot": surface.slot_name(anchor),
+         "prefix_digest": spec.prefix_digest, "spec_digest": spec.digest,
+         "identity_tokens": spec.body["identity_tokens"]}))
+    targets = surface.identity_targets(anchor, candidate)
+    assert len(targets) == 1
+    label, a_arm, c_arm, requests, prepare, record_dir = targets[0]
+    assert label == "longctx"
+    assert a_arm is not anchor and c_arm is not candidate    # stripped, so NOT the originals
+    assert a_arm.drafter is None and c_arm.drafter is None
+    assert "-md" not in a_arm.command_argv and "-md" not in c_arm.command_argv
+    assert requests == spec.requests(anchor.template) and callable(prepare)
+    assert record_dir == surface.root / "identity-divergence"

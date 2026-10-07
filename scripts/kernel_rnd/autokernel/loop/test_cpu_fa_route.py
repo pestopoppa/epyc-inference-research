@@ -153,15 +153,24 @@ def test_planner_surfaces_and_run_wiring_name_the_route():
 # ------------------------------------------------------------------ case set (C3)
 
 def test_case_set_shapes():
+    # 2026-10-07 (ak-longctx-identity-oracle, part C): widened from {1, 5} to every
+    # query-row count a decode/verify step can present (route admitted text: "Decode/
+    # verify steps have N <= 5 query rows") so N=2,3,4 get bit-exact FA coverage too, not
+    # only whatever query-row count the identity gate's greedy serving requests happen
+    # to produce.
+    assert fa.SERVED_QUERY_ROWS == (1, 2, 3, 4, 5)
     q38 = [c for c in fa.CASE_SET if c.name.startswith("q38fn")]
     ds41 = [c for c in fa.CASE_SET if c.name.startswith("ds41")]
-    assert len(q38) == 6 and len(ds41) == 8
+    assert len(q38) == 3 * len(fa.SERVED_QUERY_ROWS)
+    assert len(ds41) == 4 * len(fa.SERVED_QUERY_ROWS)
     assert {(c.hsk, c.n_kv_heads, c.gqa, c.sinks) for c in q38} == {(256, 2, 12, False)}
-    assert {c.kv for c in q38} == {8192, 65536, 131072} and {c.nb for c in q38} == {1, 5}
+    assert {c.kv for c in q38} == {8192, 65536, 131072}
+    assert {c.nb for c in q38} == set(fa.SERVED_QUERY_ROWS)
     assert {(c.hsk, c.n_kv_heads, c.n_q_heads, c.sinks) for c in ds41} == {(512, 1, 64, True)}
-    assert {c.nb for c in ds41} == {1, 3}
+    assert {c.nb for c in ds41} == set(fa.SERVED_QUERY_ROWS)
     assert all(c.backend_ops for c in fa.CASE_SET)
     assert not any(c.backend_ops for c in fa.GUARD_CASES)
+    assert len({c.name for c in fa.CASE_SET}) == len(fa.CASE_SET)  # every name unique
 
 
 def test_vars_regex_and_patch_block_agree():
@@ -181,7 +190,37 @@ def test_vars_regex_and_patch_block_agree():
                  "test-backend-ops-cpu-fa-longctx-v1.patch")
     if patch.is_file():   # the llama-tree patch is generated from CASE_SET
         text = patch.read_text(encoding="utf-8")
-        assert all(c.cpp() in text for c in fa.CASE_SET) and fa.THREADS_ENV in text
+        assert fa.THREADS_ENV in text
+        # 2026-10-07 (ak-longctx-identity-oracle, part C): CASE_SET widened its query-row
+        # coverage to nb 1..5; this on-disk patch predates that widening (it was
+        # generated from the pre-widening set) and is therefore a SUBSET of today's
+        # CASE_SET, not an exact match, until it is regenerated and reapplied to the
+        # llama tree and test-backend-ops rebuilt (reported separately -- no new source
+        # line here was produced by writing C++, only by adding Python FaCase entries
+        # that the SAME generator (`backend_ops_patch_block`) will turn into one when
+        # that follow-up runs). What this still must catch: no line in the on-disk patch
+        # may claim a case this module no longer generates (that would be real drift,
+        # e.g. an edited shape the patch was never updated for).
+        # The patch may also carry an unrelated precedent case set (odd_gqa7_d64_q1_v1)
+        # further down the same file; scope the search to THIS module's generated
+        # helper body only (every "+"-added line up to its closing "+}").
+        marker = "autokernel_add_cpu_fa_longctx_cases"
+        assert marker in text, "expected this module's generated helper in the patch"
+        body_lines = []
+        for ln in text[text.index(marker):].splitlines()[1:]:
+            if ln.strip() == "+}":
+                break
+            body_lines.append(ln)
+        patch_lines = {ln.strip().lstrip("+").strip() for ln in body_lines
+                      if "test_cases.emplace_back" in ln}
+        current_cpp = {c.cpp() for c in fa.CASE_SET}
+        assert patch_lines, "expected at least one case line in the on-disk patch"
+        orphaned = patch_lines - current_cpp
+        assert not orphaned, f"on-disk patch claims case(s) CASE_SET no longer generates: " \
+                             f"{sorted(orphaned)[:3]}"
+        pending = current_cpp - patch_lines
+        assert pending, ("expected the on-disk patch to predate the 2026-10-07 nb "
+                        "widening (nb=2,3,4 should be pending regeneration)")
 
 
 def test_split_kv_semantics_and_configs():
@@ -190,6 +229,148 @@ def test_split_kv_semantics_and_configs():
     assert not fa.split_kv_enabled({"GGML_FA_SPLIT_KV": "junk"})
     configs = fa.probe_configs({"GGML_FA_SPLIT_KV": "0"}, 48)
     assert [(v, t) for _l, v, t in configs] == [("0", 7), ("0", 48), ("1", 48)]
+
+
+# -------------------------------------------- real-mask coverage (N>1, review item 1)
+
+def _write_capture_fixture(root, cases):
+    root.mkdir(exist_ok=True)
+    manifest = {"schema": "epyc.autokernel.ds41_fa_capture.v1", "architecture": "deepseek41",
+                "capture_contract": "ds41_real_mask_n2_5_v1", "source_commit": "a" * 40,
+                "model": "/engineering-fixture.gguf", "model_sha256": "b" * 64,
+                "recipe_sha256": "c" * 64, "prompt_sha256": "d" * 64,
+                "run_id": "engineering-fixture", "started_at": "2026-10-07T00:00:00Z"}
+    (root / "capture-manifest.json").write_text(json.dumps(manifest))
+    for case in cases:
+        data = b"\x00" * (case.kv * case.nb * 2)
+        fa.real_mask_path(root, case).write_bytes(data)
+        digest = 0xcbf29ce484222325
+        for byte in data:
+            digest = ((digest ^ byte) * 0x100000001b3) & ((1 << 64) - 1)
+        metadata = {key: manifest[key] for key in
+                    ("source_commit", "model", "model_sha256", "run_id", "recipe_sha256", "prompt_sha256")}
+        metadata.update(schema="epyc.autokernel.ds41_fa_mask.v1", type="f16", byte_order="little",
+                        layout="token_kv", ne=[case.kv, case.nb, 1, 1], hsk=case.hsk, hsv=case.hsv,
+                        n_q_heads=case.n_q_heads, n_kv_heads=case.n_kv_heads, mask_kind="raw_plus_compressed_top_k",
+                        mask_hash_algorithm="fnv1a64", mask_bytes=len(data), mask_hash=f"{digest:016x}",
+                        captured_at=manifest["started_at"], original_ne=[case.kv, case.nb, 1, 1],
+                        original_nb=[2, case.kv*2, case.kv*case.nb*2, case.kv*case.nb*2],
+                        slice={"row_start": 0, "row_count": case.nb, "head_index": 0, "stream_index": 0},
+                        layer=0, compressed_ratio=1)
+        (root / f"{case.name}.mask.json").write_text(json.dumps(metadata))
+
+
+@pytest.mark.parametrize("defect", ["no_manifest", "no_sidecar", "shape", "model", "run",
+                                    "digest", "short", "source", "stale", "slice", "stride"])
+def test_real_mask_native_provenance_refuses_before_probe(monkeypatch, tmp_path, defect):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    cases = fa.ds41_real_mask_cases()
+    _write_capture_fixture(tmp_path, cases)
+    case = cases[0]
+    sidecar = tmp_path / f"{case.name}.mask.json"
+    metadata = json.loads(sidecar.read_text())
+    if defect == "no_manifest":
+        (tmp_path / "capture-manifest.json").unlink()
+    elif defect == "no_sidecar":
+        sidecar.unlink()
+    elif defect == "short":
+        fa.real_mask_path(tmp_path, case).write_bytes(b"\x00")
+    else:
+        key, value = {"shape": ("ne", [case.kv, case.nb, 2, 1]),
+                      "model": ("model_sha256", "e" * 64), "run": ("run_id", "another-run"),
+                      "digest": ("mask_hash", "0" * 16), "source": ("source_commit", "e" * 40),
+                      "slice": ("slice", {"row_start": 1, "row_count": case.nb}),
+                      "stride": ("original_nb", [4, case.kv*4, case.kv*case.nb*4, case.kv*case.nb*4]),
+                      "stale": ("captured_at", "2026-10-06T23:59:59Z")}[defect]
+        metadata[key] = value
+        sidecar.write_text(json.dumps(metadata))
+    result = fa.check_real_mask_identity(tmp_path / "a", tmp_path / "c", tmp_path / "src",
+        capture_dir=tmp_path, check_anchor_identity_fn=lambda *a, **k: pytest.fail("probe ran"))
+    assert result.status == "unavailable" and "provenance refused" in result.reason
+
+def test_ds41_real_mask_cases_cover_nb_2_through_5_at_every_served_kv_depth():
+    cases = fa.ds41_real_mask_cases()
+    assert len(cases) == 4 * len(fa.DS41_REAL_MASK_QUERY_ROWS)
+    assert all(c.name.startswith("ds41_realmask_") for c in cases)
+    assert {c.nb for c in cases} == set(fa.DS41_REAL_MASK_QUERY_ROWS) == {2, 3, 4, 5}
+    assert {c.kv for c in cases} == {4096, 8192, 32768, 65536}
+    assert all((c.hsk, c.n_kv_heads, c.n_q_heads, c.sinks, c.mask) ==
+              (512, 1, 64, True, "captured") for c in cases)
+    # Never registered in test-backend-ops (which has no concept of an external mask),
+    # and never swept into the approximate-mask corpora.
+    assert not any(c.backend_ops for c in cases)
+    assert not (set(c.name for c in cases) & set(c.name for c in fa.CASE_SET))
+    assert not (set(c.name for c in cases) & set(c.name for c in fa.GUARD_CASES))
+    # 1 is deliberately excluded: live serving already covers N=1 under the REAL mask
+    # (model_identity.check, after longctx._oracle_arm strips speculative decoding).
+    assert 1 not in {c.nb for c in cases}
+
+
+def test_probe_supports_mask_file_is_true_for_the_probe_as_shipped():
+    assert fa.PROBE_MASK_FILE_FLAG in fa.PROBE.read_text(encoding="utf-8")
+    assert fa.probe_supports_mask_file() is True
+
+
+def test_real_mask_identity_fails_closed_without_probe_support(monkeypatch, tmp_path):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: False)
+    result = fa.check_real_mask_identity(tmp_path / "a", tmp_path / "c", tmp_path / "src",
+                                         capture_dir=tmp_path / "masks")
+    assert result.status == "unavailable"
+    assert fa.PROBE_MASK_FILE_FLAG in result.reason
+    assert "cannot be judged yet" in result.reason
+
+
+def test_real_mask_identity_fails_closed_without_a_capture_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    result = fa.check_real_mask_identity(tmp_path / "a", tmp_path / "c", tmp_path / "src")
+    assert result.status == "unavailable" and "no capture_dir was given" in result.reason
+
+
+def test_real_mask_identity_fails_closed_on_a_partial_capture(monkeypatch, tmp_path):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    capture_dir = tmp_path / "masks"
+    capture_dir.mkdir()
+    cases = fa.ds41_real_mask_cases()
+    # Only the first case's mask file exists -- never a silent partial corpus.
+    fa.real_mask_path(capture_dir, cases[0]).write_bytes(b"\x00" * (cases[0].kv * cases[0].nb * 2))
+    result = fa.check_real_mask_identity(tmp_path / "a", tmp_path / "c", tmp_path / "src",
+                                         capture_dir=capture_dir,
+                                         check_anchor_identity_fn=lambda *a, **k: pytest.fail("ran"))
+    assert result.status == "unavailable"
+    assert f"{len(cases) - 1}/{len(cases)}" in result.reason
+
+
+def test_real_mask_identity_defers_to_anchor_identity_once_everything_is_ready(monkeypatch, tmp_path):
+    """Once the probe supports it and every case's mask is captured, this is exactly
+    `check_anchor_identity` run on the real-mask case set -- zero further Python needed."""
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    capture_dir = tmp_path / "masks"
+    capture_dir.mkdir()
+    cases = fa.ds41_real_mask_cases()
+    _write_capture_fixture(capture_dir, cases)
+    seen = {}
+
+    def fake_check_anchor_identity(anchor_build, candidate_build, source_root, *, cases,
+                                   capture_dir=None, anchor_recipe=None, candidate_recipe=None, window=None):
+        seen.update(cases=cases, anchor_build=anchor_build, candidate_build=candidate_build,
+                   source_root=source_root, capture_dir=capture_dir)
+        return fa.FaResult("pass", "ok")
+
+    result = fa.check_real_mask_identity(
+        tmp_path / "a", tmp_path / "c", tmp_path / "src", capture_dir=capture_dir,
+        anchor_recipe=_recipe(), candidate_recipe=_recipe(),
+        check_anchor_identity_fn=fake_check_anchor_identity)
+    assert result.status == "pass"
+    assert seen["cases"] == fa.ds41_real_mask_cases()
+    assert seen["capture_dir"] == capture_dir
+    assert seen["source_root"] == tmp_path / "src"
+
+
+def test_gates_wraps_real_mask_identity_as_oracle_unavailable_by_default(tmp_path):
+    verdict = gates.check_cpu_fa_real_mask_identity(tmp_path / "a", tmp_path / "c",
+                                                    tmp_path / "src")
+    assert verdict.gate == "oracle_unavailable" and not verdict.passed
+    assert "no capture_dir" in verdict.reason
 
 
 # ------------------------------------------------------------------ anchor identity
@@ -262,23 +443,53 @@ def _recipe(prefix=("taskset", "-c", "0-47"), split="0"):
                            topology_prefix=prefix, template=SimpleNamespace(threads=48))
 
 
-def _fake_runner(builds, calls, *, cases=(SMALL,), diverge_on=None):
+def _fake_runner(builds, calls, *, cases=(SMALL,), diverge_on=None, capture_dir=None):
     def run(argv, **kwargs):
         calls.append((argv, kwargs.get("env")))
         if argv[0] == "c++":
             return subprocess.CompletedProcess(argv, 0, "", "")
         binary = next(a for a in argv if "fa-reference-probe-" in a)
         role = binary.rsplit("-", 1)[1]
+        positional = argv[argv.index(binary):argv.index(binary) + 13]
+        team = int(positional[10])
         case = next(c for c in cases
-                    if fa.probe_argv(Path(binary), c, int(argv[-3]))[1:] ==
+                    if fa.probe_argv(Path(binary), c, team,
+                                     mask_file=fa.real_mask_path(capture_dir, c)
+                                     if c.mask == "captured" else None)[1:] ==
                     argv[argv.index(binary) + 1:])
         digest = "a" * 16
         if role == "candidate" and diverge_on and diverge_on(case, kwargs["env"]):
             digest = "b" * 16
-        out = _probe_text(case, int(argv[-3]), lib=builds[role] / "bin/libggml-cpu.so",
+        out = _probe_text(case, team, lib=builds[role] / "bin/libggml-cpu.so",
                           digests=[digest] * fa.REPS)
         return subprocess.CompletedProcess(argv, 0, out, "")
     return run
+
+
+def test_real_mask_paths_reach_both_probe_arms(monkeypatch, tmp_path):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    builds, source = _builds(tmp_path)
+    capture_dir = tmp_path / "masks"
+    capture_dir.mkdir()
+    cases = fa.ds41_real_mask_cases()
+    _write_capture_fixture(capture_dir, cases)
+    calls = []
+
+    def check(*args, **kwargs):
+        return fa.check_anchor_identity(*args, **kwargs,
+            runner=_fake_runner(builds, calls, cases=cases, capture_dir=capture_dir))
+
+    result = fa.check_real_mask_identity(builds["anchor"], builds["candidate"], source,
+        capture_dir=capture_dir, anchor_recipe=_recipe(), candidate_recipe=_recipe(),
+        check_anchor_identity_fn=check)
+    assert result.status == "pass", result
+    probes = [argv for argv, _env in calls if argv[0] != "c++"]
+    assert len(probes) == len(cases) * 3 * 2
+    for role in ("anchor", "candidate"):
+        selected = [argv for argv in probes if any(a.endswith(f"probe-{role}") for a in argv)]
+        assert {Path(argv[-1]) for argv in selected} == {
+            fa.real_mask_path(capture_dir, case) for case in cases}
+        assert all(argv[-2] == "--mask-file" for argv in selected)
 
 
 def test_anchor_identity_passes_and_covers_both_split_settings(tmp_path):

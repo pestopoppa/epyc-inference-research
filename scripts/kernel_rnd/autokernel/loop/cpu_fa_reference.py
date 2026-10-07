@@ -27,11 +27,15 @@ change is bit-exact by construction, so its reference is the ANCHOR itself:
    the loop then skips both uses with a recorded reason (the probe above covers the
    same shapes) instead of reading 0/0 as evidence.
 
-   - Q38FN: D=256, 2 KV heads, 12 query heads per KV head, kv 8k/64k/128k, nb 1 and 5.
+   - Q38FN: D=256, 2 KV heads, 12 query heads per KV head, kv 8k/64k/128k, nb 1..5 (every
+     decode/verify query-row count the route's own admitted-text names -- "Decode/verify
+     steps have N <= 5 query rows", `gates.CPU_SOURCE_ROUTES` cpu_fa_schedule -- 2026-10-07
+     widened from {1, 5} so N=2,3,4 are not only covered by the identity gate's greedy
+     serving requests, which never pin a query-row count).
    - DS41: D=512, 1 KV head, 64 query heads, attention sinks, kv n/2..n for n = 8k and
-     64k (4k/8k/32k/64k), nb 1 and 3. The stock mask cannot model DS41's sparse top-k
-     mask; the probe approximates it with a fixed sparse mask, and the long serving
-     surface (audit C1) is DS41's real judge.
+     64k (4k/8k/32k/64k), nb 1..5 (same widening). The stock mask cannot model DS41's
+     sparse top-k mask; the probe approximates it with a fixed sparse mask, and the long
+     serving surface (audit C1) is DS41's real judge.
 
 3. **Paired perf screen** (`perf_screen`): `test-backend-ops perf` on the case set,
    anchor and candidate alternated ABAB on the recipe's thread team
@@ -44,6 +48,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import math
 import os
@@ -107,12 +112,17 @@ class FaCase:
                 "GGML_TYPE_F16));")
 
 
+#: Every query-row count a CPU decode/verify step can present (the route's own admitted
+#: text: "Decode/verify steps have N <= 5 query rows" -- MTP/dflash verification batches
+#: 2..5 draft tokens in one eval; greedy serving alone never exercises nb 2-4).
+SERVED_QUERY_ROWS = (1, 2, 3, 4, 5)
+
 CASE_SET = (
     *(FaCase(f"q38fn_kv{kv // 1024}k_nb{nb}", 256, 256, 2, 12, kv, nb)
-      for kv in (8192, 65536, 131072) for nb in (1, 5)),
+      for kv in (8192, 65536, 131072) for nb in SERVED_QUERY_ROWS),
     *(FaCase(f"ds41_kv{kv // 1024}k_nb{nb}", 512, 512, 1, 64, kv, nb, sinks=True,
              mask="sparse")
-      for kv in (4096, 8192, 32768, 65536) for nb in (1, 3)),
+      for kv in (4096, 8192, 32768, 65536) for nb in SERVED_QUERY_ROWS),
 )
 #: Probe-only guards: the plain (non-view) layout test-backend-ops uses, and a 64-row
 #: prefill that takes the tiled path, so a dispatch change cannot reroute it unseen.
@@ -127,6 +137,161 @@ PROBE_CASES = (*CASE_SET, *GUARD_CASES)
 #: `test-backend-ops -p` selects by `std::regex_search` over vars(): anchored exact
 #: alternation, so no other FLASH_ATTN_EXT case can ride along.
 CASE_SET_REGEX = "^(" + "|".join(re.escape(case.vars()) for case in CASE_SET) + ")$"
+
+# --------------------------------------------------------------- real-mask coverage (N>1)
+
+#: DS41's CASE_SET/GUARD_CASES entries run the probe's FIXED pseudo-random sparse mask
+#: (module docstring: "a DS41 top-k stand-in"), never DS41's actual learned top-k
+#: selection. At N=1, the real mask IS already exercised -- by LIVE greedy decode inside
+#: `model_identity.check`, which since 2026-10-07 (`longctx._oracle_arm`) serves the
+#: identity oracle with speculative decoding stripped, i.e. genuine one-row-at-a-time
+#: decode under the model's own real mask. The surviving gap is N=2..5 (an MTP/dflash
+#: verify step's query-row counts) UNDER THE REAL mask -- not covered by the approximate
+#: probe (N=2..5, fake mask) nor by live serving (real mask, but only N=1). This is
+#: exactly where an error that needs BOTH could hide.
+#:
+#: Q38FN needs none of this: its probe mask (`mask="causal"`, a stock lower-triangular
+#: window) already IS its real mask -- Q38FN has no learned/dynamic selection, so
+#: CASE_SET's N=1..5 coverage of it is already bit-exact under the real pattern.
+DS41_REAL_MASK_QUERY_ROWS = (2, 3, 4, 5)
+#: A literal `cpu_fa_reference_probe.cpp` would carry once it accepts an externally
+#: captured mask file (see `check_real_mask_identity`'s docstring for the exact change);
+#: accepted by the probe's captured mode; capability is checked before each corpus run.
+PROBE_MASK_FILE_FLAG = "--mask-file"
+
+
+def ds41_real_mask_cases() -> tuple[FaCase, ...]:
+    """DS41 shapes at `DS41_REAL_MASK_QUERY_ROWS`, the same served long-KV depths as
+    CASE_SET. `mask="captured"`: the probe loads native capture bytes instead of
+    synthesizing these; `backend_ops=False`: these
+    never run through test-backend-ops (which has no concept of an externally supplied
+    mask either); they exist only for `check_real_mask_identity`'s standalone probe."""
+    return tuple(
+        FaCase(f"ds41_realmask_kv{kv // 1024}k_nb{nb}", 512, 512, 1, 64, kv, nb,
+              sinks=True, mask="captured", backend_ops=False)
+        for kv in (4096, 8192, 32768, 65536) for nb in DS41_REAL_MASK_QUERY_ROWS)
+
+
+def probe_supports_mask_file() -> bool:
+    """True once `cpu_fa_reference_probe.cpp` accepts `--mask-file <path>` and a
+    `mask="captured"` mode. Checked against the probe's SOURCE text, not a compiled
+    binary: `check_anchor_identity` compiles it fresh per call (module docstring) from
+    the one `.cpp` file at `PROBE`, so there is no persistent build to inspect the way
+    `binary_has_case_set` inspects test-backend-ops."""
+    try:
+        return PROBE_MASK_FILE_FLAG in PROBE.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+def real_mask_path(capture_dir: "Path | str", case: FaCase) -> Path:
+    """Where a captured real attention-mask file for `case` would live: `kv * nb`
+    little-endian `ggml_fp16_t` values in `[token][kv-cell]` row-major order, matching
+    the probe's own `m` tensor layout exactly -- see `check_real_mask_identity`'s
+    docstring for how such a file would be produced (not written here)."""
+    return Path(capture_dir) / f"{case.name}.mask.f16"
+
+
+def validate_real_mask_corpus(capture_dir: "Path | str", cases: Sequence[FaCase]) -> None:
+    """Validate native write-side provenance and byte identity before using captures."""
+    root = Path(capture_dir)
+    manifest = json.loads((root / "capture-manifest.json").read_text(encoding="utf-8"))
+    if manifest.get("schema") != "epyc.autokernel.ds41_fa_capture.v1" or \
+            manifest.get("architecture") != "deepseek41" or \
+            manifest.get("capture_contract") != "ds41_real_mask_n2_5_v1":
+        raise ValueError("capture manifest schema/architecture is invalid")
+    for key, length in (("source_commit", 40), ("model_sha256", 64),
+                        ("recipe_sha256", 64), ("prompt_sha256", 64)):
+        if not re.fullmatch(f"[0-9a-f]{{{length}}}", str(manifest.get(key, ""))):
+            raise ValueError(f"capture manifest {key} is invalid")
+    if not isinstance(manifest.get("model"), str) or not Path(manifest["model"]).is_absolute() or \
+            not isinstance(manifest.get("run_id"), str) or not manifest["run_id"]:
+        raise ValueError("capture manifest model/run identity is invalid")
+    started_at = datetime.strptime(manifest["started_at"], "%Y-%m-%dT%H:%M:%SZ")
+    for case in cases:
+        metadata = json.loads((root / f"{case.name}.mask.json").read_text(encoding="utf-8"))
+        expected = {"schema": "epyc.autokernel.ds41_fa_mask.v1", "type": "f16",
+                    "byte_order": "little", "layout": "token_kv",
+                    "ne": [case.kv, case.nb, 1, 1], "hsk": case.hsk, "hsv": case.hsv,
+                    "n_q_heads": case.n_q_heads, "n_kv_heads": case.n_kv_heads,
+                    "mask_kind": "raw_plus_compressed_top_k", "mask_hash_algorithm": "fnv1a64",
+                    "mask_bytes": case.kv * case.nb * 2}
+        expected.update({key: manifest[key] for key in
+                         ("source_commit", "model", "model_sha256", "run_id",
+                          "recipe_sha256", "prompt_sha256")})
+        if any(metadata.get(key) != value for key, value in expected.items()):
+            raise ValueError(f"{case.name}: native mask metadata does not match its case/run")
+        original_ne = metadata.get("original_ne")
+        if not isinstance(original_ne, list) or len(original_ne) != 4 or \
+                original_ne[0] != case.kv or original_ne[2:] != [1, 1] or \
+                not isinstance(original_ne[1], int) or original_ne[1] < case.nb:
+            raise ValueError(f"{case.name}: original mask dimensions cannot supply its query rows")
+        row_bytes = case.kv * 2
+        if metadata.get("original_nb") != [2, row_bytes, row_bytes * original_ne[1],
+                                           row_bytes * original_ne[1]] or \
+                metadata.get("slice") != {"row_start": 0, "row_count": case.nb,
+                                          "head_index": 0, "stream_index": 0} or \
+                metadata.get("compressed_ratio") not in (1, 2) or \
+                not isinstance(metadata.get("layer"), int) or metadata["layer"] < 0:
+            raise ValueError(f"{case.name}: original contiguous mask layout/slice is invalid")
+        if datetime.strptime(metadata["captured_at"], "%Y-%m-%dT%H:%M:%SZ") < started_at:
+            raise ValueError(f"{case.name}: capture predates its native run manifest")
+        path = real_mask_path(root, case)
+        if path.stat().st_size != expected["mask_bytes"]:
+            raise ValueError(f"{case.name}: captured byte count does not match the case")
+        data = path.read_bytes()
+        if len(data) != expected["mask_bytes"]:
+            raise ValueError(f"{case.name}: captured byte count does not match the case")
+        digest = 0xcbf29ce484222325
+        for byte in data:
+            digest = ((digest ^ byte) * 0x100000001b3) & ((1 << 64) - 1)
+        if metadata.get("mask_hash") != f"{digest:016x}":
+            raise ValueError(f"{case.name}: captured bytes do not match their native digest")
+
+
+def check_real_mask_identity(anchor_build: Path, candidate_build: Path, source_root: Path, *,
+                             capture_dir: "Path | str | None" = None,
+                             anchor_recipe=None, candidate_recipe=None,
+                             window: Callable[[], object] | None = None,
+                             check_anchor_identity_fn: "Callable | None" = None) -> FaResult:
+    """Bit identity between the ANCHOR and CANDIDATE probe on DS41's N=2..5 cases under
+    the REAL top-k attention mask (not the probe's fixed sparse approximation) -- the
+    coverage gap `DS41_REAL_MASK_QUERY_ROWS`'s module comment names.
+
+    Fail closed unless the probe supports captured inputs and the complete native
+    corpus passes provenance/geometry/digest validation. The experimental DS41 hook
+    records the consumed rows of the real raw-plus-compressed top-k mask; the native
+    run manifest is prepared prospectively by cpu_fa_mask_capture.prepare. Both probe
+    arms receive the same case-specific mask path. See CPU_FA_MASK_CAPTURE.md for the
+    capture contract and the separate governed capture run. No source build or capture
+    is performed by this check.
+    """
+    cases = ds41_real_mask_cases()
+    if not probe_supports_mask_file():
+        return FaResult("unavailable",
+            f"cpu_fa_reference_probe.cpp has no {PROBE_MASK_FILE_FLAG} support yet (a "
+            "new mask=\"captured\" mode that reads an externally captured real DS41 "
+            f"attention mask instead of synthesizing mask=sparse); {len(cases)} "
+            f"real-mask case(s) at nb={sorted(DS41_REAL_MASK_QUERY_ROWS)} cannot be "
+            "judged yet. Restore the captured-input probe from the reviewed OP80 "
+            "instrument; CPU_FA_MASK_CAPTURE.md documents its native capture contract")
+    if capture_dir is None:
+        return FaResult("unavailable",
+            f"the probe supports {PROBE_MASK_FILE_FLAG} but no capture_dir was given; a "
+            "captured real DS41 attention-mask file is required per (kv, nb) case and "
+            "none has been supplied")
+    missing = [case.name for case in cases if not real_mask_path(capture_dir, case).is_file()]
+    if missing:
+        return FaResult("unavailable",
+            f"{len(missing)}/{len(cases)} real-mask case(s) have no captured mask file "
+            f"under {capture_dir} yet: {missing[:3]}")
+    try:
+        validate_real_mask_corpus(capture_dir, cases)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        return FaResult("unavailable", f"real-mask capture provenance refused: {exc}")
+    run = check_anchor_identity_fn or check_anchor_identity
+    return run(anchor_build, candidate_build, source_root, cases=cases, capture_dir=capture_dir,
+              anchor_recipe=anchor_recipe, candidate_recipe=candidate_recipe, window=window)
 
 
 def backend_ops_patch_block() -> str:
@@ -164,10 +329,13 @@ class ProbeRun:
 
 
 def probe_argv(binary: Path, case: FaCase, threads: int, reps: int = REPS,
-               seed: int = SEED) -> list[str]:
-    return [str(binary), str(case.hsk), str(case.hsv), str(case.n_kv_heads), str(case.gqa),
+               seed: int = SEED, *, mask_file: Path | None = None) -> list[str]:
+    if (case.mask == "captured") != (mask_file is not None):
+        raise ValueError("captured FA cases require a mask file; synthetic cases refuse one")
+    argv = [str(binary), str(case.hsk), str(case.hsv), str(case.n_kv_heads), str(case.gqa),
             str(case.kv), str(case.nb), str(int(case.sinks)), case.mask, case.layout,
             str(threads), str(reps), str(seed)]
+    return argv + ([PROBE_MASK_FILE_FLAG, str(mask_file)] if mask_file is not None else [])
 
 
 def parse_probe(output: str, case: FaCase, threads: int, reps: int = REPS,
@@ -273,6 +441,7 @@ def recipe_threads(recipe) -> int:
 def check_anchor_identity(anchor_build: Path, candidate_build: Path, source_root: Path, *,
                           anchor_recipe, candidate_recipe,
                           cases: Sequence[FaCase] = PROBE_CASES, reps: int = REPS,
+                          capture_dir: "Path | str | None" = None,
                           window: Callable[[], object] | None = None,
                           runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
                           ) -> FaResult:
@@ -287,6 +456,8 @@ def check_anchor_identity(anchor_build: Path, candidate_build: Path, source_root
         return FaResult("unavailable", "FA probe: a ggml library, header or the probe is "
                         "missing", ", ".join(missing))
     threads = recipe_threads(candidate_recipe)
+    if any(case.mask == "captured" for case in cases) and capture_dir is None:
+        return FaResult("unavailable", "captured FA cases require a capture_dir")
     if recipe_threads(anchor_recipe) != threads:
         return FaResult("unavailable", "anchor and candidate recipes use different teams")
     guard = window if window is not None else nullcontext
@@ -309,6 +480,8 @@ def check_anchor_identity(anchor_build: Path, candidate_build: Path, source_root
                 binaries[role] = binary
             with guard():
                 for case in cases:
+                    mask_file = (real_mask_path(capture_dir, case)
+                                 if case.mask == "captured" else None)
                     for label, split_kv, team in probe_configs(
                             _arm_env(candidate_recipe, candidate_build), threads):
                         runs = {}
@@ -318,7 +491,8 @@ def check_anchor_identity(anchor_build: Path, candidate_build: Path, source_root
                             env = _arm_env(recipe, build)
                             env["GGML_FA_SPLIT_KV"] = split_kv
                             prefix = tuple(getattr(recipe, "topology_prefix", ()) or ())
-                            done = runner([*prefix, *probe_argv(binaries[role], case, team, reps)],
+                            done = runner([*prefix, *probe_argv(binaries[role], case, team, reps,
+                                                              mask_file=mask_file)],
                                           capture_output=True, text=True,
                                           timeout=PROBE_TIMEOUT_S, env=env)
                             if done.returncode:
@@ -454,4 +628,7 @@ def perf_screen(anchor_build: Path, candidate_build: Path, *, anchor_recipe,
 __all__ = ["CASE_SET", "CASE_SET_ENV", "CASE_SET_ID", "CASE_SET_REGEX", "FaCase", "FaResult",
            "GUARD_CASES", "PROBE_CASES", "THREADS_ENV", "backend_ops_patch_block",
            "binary_has_case_set", "check_anchor_identity", "compare_runs", "parse_perf",
-           "parse_probe", "perf_screen", "probe_configs", "split_kv_enabled"]
+           "parse_probe", "perf_screen", "probe_configs", "split_kv_enabled",
+           "DS41_REAL_MASK_QUERY_ROWS", "PROBE_MASK_FILE_FLAG", "SERVED_QUERY_ROWS",
+           "check_real_mask_identity", "ds41_real_mask_cases", "probe_supports_mask_file",
+           "real_mask_path"]

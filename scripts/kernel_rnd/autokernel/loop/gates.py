@@ -2350,6 +2350,26 @@ def check_cpu_fa_reference(anchor_build: Path, candidate_build: Path, source_roo
                    "oracle_unavailable", result.status == "pass", result.reason, result.detail)
 
 
+def check_cpu_fa_real_mask_identity(anchor_build: Path, candidate_build: Path,
+                                    source_root: Path, *, capture_dir=None,
+                                    anchor_recipe=None, candidate_recipe=None,
+                                    window=None) -> Verdict:
+    """`cpu_fa_schedule`: bit identity with the ANCHOR on DS41's N=2..5 cases under the
+    REAL top-k attention mask (review 2026-10-07, ak-longctx-identity-oracle item 1) --
+    `check_cpu_fa_reference` covers the same shapes only under the probe's fixed
+    approximate mask. Fail closed (`oracle_unavailable`) without a complete native
+    capture corpus whose metadata and byte digests match its prospective run manifest.
+    CPU_FA_MASK_CAPTURE.md documents the experimental hook and capture contract.
+    """
+    from . import cpu_fa_reference
+
+    result = cpu_fa_reference.check_real_mask_identity(
+        anchor_build, candidate_build, source_root, capture_dir=capture_dir,
+        anchor_recipe=anchor_recipe, candidate_recipe=candidate_recipe, window=window)
+    return Verdict("reference_comparison" if result.status != "unavailable" else
+                   "oracle_unavailable", result.status == "pass", result.reason, result.detail)
+
+
 def check_cpu_fa_perf_screen(anchor_build: Path, candidate_build: Path, *, anchor_recipe,
                              candidate_recipe, window=None) -> Verdict:
     """`cpu_fa_schedule`: paired anchor/candidate `test-backend-ops perf` screen on the
@@ -2482,14 +2502,14 @@ def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
 
 
 def check_model_output_identity(*, anchor_recipe, candidate_recipe, requests,
-                                window=None, repeats: int = 1) -> Verdict:
+                                window=None, repeats: int = 1, record_dir=None) -> Verdict:
     """Whole-model gate for a `model_identity` route (`cpu_weight_placement`)."""
     from . import model_identity
 
     result = model_identity.check(anchor_recipe=anchor_recipe,
                                   candidate_recipe=candidate_recipe,
                                   requests=tuple(requests or ()), window=window,
-                                  repeats=repeats)
+                                  repeats=repeats, record_dir=record_dir)
     return Verdict("reference_comparison" if result.status != "unavailable" else
                    "oracle_unavailable", result.status == "pass",
                    result.reason, result.detail)
@@ -2500,13 +2520,17 @@ def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
                                  architecture=None) -> Verdict:
     """Whole-model identity on every target of a route (2026-10-04 structural routes).
 
-    `targets` is [(label, anchor recipe, candidate recipe, frozen requests[, prepare])]:
-    this lane's own target first, then the lane binding's peer targets when the route
-    asks for them (`CpuSourceRoute.identity_targets`); the optional fifth element is a
-    per-request `prepare(port)` hook (the long-context surface's slot restore). Every target must pass; any `wrong` is a
-    verdict, otherwise any `unavailable` makes the gate unavailable. `required_arch`: at
-    least one target must serve a GGUF of one of these architectures, or the edited
-    model-specific code would never run under the gate (unavailable, not a pass)."""
+    `targets` is [(label, anchor recipe, candidate recipe, frozen requests[, prepare[,
+    record_dir]])]: this lane's own target first, then the lane binding's peer targets
+    when the route asks for them (`CpuSourceRoute.identity_targets`); the optional fifth
+    element is a per-request `prepare(port)` hook (the long-context surface's slot
+    restore), and the optional sixth is a directory `model_identity.check` persists the
+    full per-repeat divergence record into when the target's verdict is not `pass` (no
+    divergence position was previously kept anywhere -- a future refusal can then be
+    localized instead of re-run blind). Every target must pass; any `wrong` is a verdict,
+    otherwise any `unavailable` makes the gate unavailable. `required_arch`: at least one
+    target must serve a GGUF of one of these architectures, or the edited model-specific
+    code would never run under the gate (unavailable, not a pass)."""
     from . import model_identity
 
     targets = tuple(targets)
@@ -2523,10 +2547,12 @@ def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
                            "or with it as a peer")
     rows, wrong, unavailable = [], [], []
     for label, anchor, candidate, requests, *extra in targets:
+        prepare = extra[0] if len(extra) > 0 else None
+        record_dir = extra[1] if len(extra) > 1 else None
         result = model_identity.check(anchor_recipe=anchor, candidate_recipe=candidate,
                                       requests=tuple(requests or ()), window=window,
-                                      repeats=repeats,
-                                      **({"prepare": extra[0]} if extra and extra[0] else {}))
+                                      repeats=repeats, record_dir=record_dir,
+                                      **({"prepare": prepare} if prepare else {}))
         rows.append({"target": label, "status": result.status, "reason": result.reason,
                      "detail": result.detail[:600]})
         if result.status == "wrong":
@@ -4033,7 +4059,8 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "affected_op_scope", "check_cpu_fa_case_set", "check_cpu_fa_perf_screen",
            "check_served_shape_case_set", "op_correctness_sharded",
            "SERVED_SHAPE_CASE_SET_DEFAULT_SHARDS",
-           "check_cpu_fa_reference", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
+           "check_cpu_fa_reference", "check_cpu_fa_real_mask_identity",
+           "check_cpu_gdn_reference", "check_cpu_iqk_reference",
            "check_cpu_route_reference", "gpu_graph_pool_hold_refusal",
            "no_fallback_dispatch", "op_correctness", "run_all",
            "PPL_CORPUS", "PPL_CORPUS_SHA256", "PPL_CHUNKS", "PPL_CTX", "PPL_BATCH",
