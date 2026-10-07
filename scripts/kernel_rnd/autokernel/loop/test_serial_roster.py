@@ -238,12 +238,38 @@ def test_single_target_batched_schedule_drives_children_and_accounts_each_stage(
     assert len((state_dir / "seen.jsonl").read_text().splitlines()) == 2
 
 
-@pytest.mark.parametrize("experimental_gpu", [False, True])
-def test_generated_roster_drives_actual_children_and_completed_restart(tmp_path, monkeypatch, experimental_gpu):
+@pytest.mark.parametrize(("experimental_gpu", "first_seed"),
+                         [(False, None), (True, "cpu"), (True, "gpu")])
+def test_generated_roster_drives_actual_children_and_completed_restart(
+        tmp_path, monkeypatch, experimental_gpu, first_seed):
     owned_cpus = sorted(os.sched_getaffinity(0))
     # Preserve the campaign's full virtual CPU geometry. The fixture taskset shim
     # confines tiny children to this runner's narrower native CPU claim.
-    _, _, argv = _inputs(tmp_path, experimental_gpu=experimental_gpu)
+    # Target IDs include recipe paths. Exercise both genuine seed-ID orderings
+    # without replacing the production scheduler or changing its tie-break rule.
+    for attempt in range(128):
+        inputs = tmp_path / f"seed-order-{attempt}"
+        inputs.mkdir()
+        resolved, _, argv = _inputs(inputs, experimental_gpu=experimental_gpu)
+        ordered = sorted(resolved.targets, key=lambda row: sr._digest(row.to_dict()))
+        if first_seed is None or ordered[0].execution.backend == first_seed:
+            break
+    else:
+        pytest.fail("could not construct the requested enrolled seed ordering")
+
+    derived_manifest = sr._derived_scheduler_manifest
+
+    def fixture_manifest(*args, **kwargs):
+        manifest = derived_manifest(*args, **kwargs)
+        body = manifest.to_dict()
+        # CHILD publishes synthetic CPU=3s/GPU=5s held-stage intervals. Use those
+        # honest fixture estimates from admission, rather than a 12,600s build
+        # bound that drops to 3s only for whichever random seed executes first.
+        for proposal in body["targets"].values():
+            proposal["estimated_duration_seconds"] = 3.0 if proposal["backend"] == "cpu" else 5.0
+        return type(manifest).from_dict(body)
+
+    monkeypatch.setattr(sr, "_derived_scheduler_manifest", fixture_manifest)
     child = tmp_path / "tiny.py"
     child.write_text(CHILD.replace('"pid": __import__(\'os\').getpid()',
         '"pid": __import__(\'os\').getpid(), "affinity": sorted(__import__(\'os\').sched_getaffinity(0))')
@@ -261,12 +287,25 @@ def test_generated_roster_drives_actual_children_and_completed_restart(tmp_path,
     here = Path(sr.__file__).resolve()
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
     assert sr.main(argv) == 0
-    state = tmp_path / "router"
+    state = Path(sr.option(argv, "--state-dir"))
     seen = [json.loads(line) for line in (state / "seen.jsonl").read_text().splitlines()]
     # Distinct recipe artifacts keep these as two distinct enrolled targets.
     assert len(seen) == 4
     assert all(set(row["affinity"]) == set(owned_cpus) for row in seen)
     assert {sr.option(row["argv"], "--target-id") for row in seen} == {"cpu-0", "gpu-1"}
+    if first_seed is not None:
+        assert sr.option(seen[0]["argv"], "--target-id").startswith(first_seed + "-")
+    settled = json.loads((state / "serial-state.json").read_text())["scheduler_state"]
+    assert settled["campaign_attempts"] == 4
+    for number in range(4):
+        selection = json.loads((state / "batches" / f"batch-{number:06d}"
+                                / "scheduler-selection.json").read_text())
+        proposal = selection["proposal"]
+        receipts = [row for row in settled["receipts"]
+                    if row["proposal_id"] == proposal["proposal_id"]]
+        assert receipts
+        held_seconds = max(row["ended_at"] for row in receipts) - min(row["started_at"] for row in receipts)
+        assert held_seconds == proposal["estimated_duration_seconds"] == (3.0 if proposal["backend"] == "cpu" else 5.0)
     resumed = [row for row in seen if sr.option(row["argv"], "--resume-run")]
     assert resumed
     for row in resumed:
