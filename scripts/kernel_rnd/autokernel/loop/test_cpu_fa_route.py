@@ -233,6 +233,56 @@ def test_split_kv_semantics_and_configs():
 
 # -------------------------------------------- real-mask coverage (N>1, review item 1)
 
+def _write_capture_fixture(root, cases):
+    root.mkdir(exist_ok=True)
+    manifest = {"schema": "epyc.autokernel.ds41_fa_capture.v1", "architecture": "deepseek4",
+                "capture_contract": "ds41_real_mask_n2_5_v1", "source_commit": "a" * 40,
+                "model": "/engineering-fixture.gguf", "model_sha256": "b" * 64,
+                "recipe_sha256": "c" * 64, "prompt_sha256": "d" * 64,
+                "run_id": "engineering-fixture", "started_at": "2026-10-07T00:00:00Z"}
+    (root / "capture-manifest.json").write_text(json.dumps(manifest))
+    for case in cases:
+        data = b"\x00" * (case.kv * case.nb * 2)
+        fa.real_mask_path(root, case).write_bytes(data)
+        digest = 0xcbf29ce484222325
+        for byte in data:
+            digest = ((digest ^ byte) * 0x100000001b3) & ((1 << 64) - 1)
+        metadata = {key: manifest[key] for key in
+                    ("source_commit", "model", "model_sha256", "run_id", "recipe_sha256", "prompt_sha256")}
+        metadata.update(schema="epyc.autokernel.ds41_fa_mask.v1", type="f16", byte_order="little",
+                        layout="token_kv", ne=[case.kv, case.nb, 1, 1], hsk=case.hsk, hsv=case.hsv,
+                        n_q_heads=case.n_q_heads, n_kv_heads=case.n_kv_heads, mask_kind="raw_plus_csa_top_k",
+                        mask_hash_algorithm="fnv1a64", mask_bytes=len(data), mask_hash=f"{digest:016x}",
+                        captured_at=manifest["started_at"])
+        (root / f"{case.name}.mask.json").write_text(json.dumps(metadata))
+
+
+@pytest.mark.parametrize("defect", ["no_manifest", "no_sidecar", "shape", "model", "run",
+                                    "digest", "short", "source", "stale"])
+def test_real_mask_native_provenance_refuses_before_probe(monkeypatch, tmp_path, defect):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    cases = fa.ds41_real_mask_cases()
+    _write_capture_fixture(tmp_path, cases)
+    case = cases[0]
+    sidecar = tmp_path / f"{case.name}.mask.json"
+    metadata = json.loads(sidecar.read_text())
+    if defect == "no_manifest":
+        (tmp_path / "capture-manifest.json").unlink()
+    elif defect == "no_sidecar":
+        sidecar.unlink()
+    elif defect == "short":
+        fa.real_mask_path(tmp_path, case).write_bytes(b"\x00")
+    else:
+        key, value = {"shape": ("ne", [case.kv, case.nb, 2, 1]),
+                      "model": ("model_sha256", "e" * 64), "run": ("run_id", "another-run"),
+                      "digest": ("mask_hash", "0" * 16), "source": ("source_commit", "e" * 40),
+                      "stale": ("captured_at", "2026-10-06T23:59:59Z")}[defect]
+        metadata[key] = value
+        sidecar.write_text(json.dumps(metadata))
+    result = fa.check_real_mask_identity(tmp_path / "a", tmp_path / "c", tmp_path / "src",
+        capture_dir=tmp_path, check_anchor_identity_fn=lambda *a, **k: pytest.fail("probe ran"))
+    assert result.status == "unavailable" and "provenance refused" in result.reason
+
 def test_ds41_real_mask_cases_cover_nb_2_through_5_at_every_served_kv_depth():
     cases = fa.ds41_real_mask_cases()
     assert len(cases) == 4 * len(fa.DS41_REAL_MASK_QUERY_ROWS)
@@ -292,8 +342,7 @@ def test_real_mask_identity_defers_to_anchor_identity_once_everything_is_ready(m
     capture_dir = tmp_path / "masks"
     capture_dir.mkdir()
     cases = fa.ds41_real_mask_cases()
-    for case in cases:
-        fa.real_mask_path(capture_dir, case).write_bytes(b"\x00" * (case.kv * case.nb * 2))
+    _write_capture_fixture(capture_dir, cases)
     seen = {}
 
     def fake_check_anchor_identity(anchor_build, candidate_build, source_root, *, cases,
@@ -418,8 +467,7 @@ def test_real_mask_paths_reach_both_probe_arms(monkeypatch, tmp_path):
     capture_dir = tmp_path / "masks"
     capture_dir.mkdir()
     cases = fa.ds41_real_mask_cases()
-    for case in cases:
-        fa.real_mask_path(capture_dir, case).write_bytes(b"\x00" * (case.kv * case.nb * 2))
+    _write_capture_fixture(capture_dir, cases)
     calls = []
 
     def check(*args, **kwargs):

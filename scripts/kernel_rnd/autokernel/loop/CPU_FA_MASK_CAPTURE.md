@@ -2,7 +2,8 @@
 
 OP80 installs the real-mask check between the synthetic FA identity check and the
 FA performance screen. The gate refuses with `oracle_unavailable` until the probe
-supports captured masks and all sixteen files exist in `<store>/cpu_fa_real_masks`.
+supports captured masks, all sixteen masks/sidecars exist in `<store>/cpu_fa_real_masks`,
+and the native run manifest agrees with every sidecar and byte digest.
 Installing the C++ hook alone does not unblock candidates. No live lane inputs or
 kernel anchors are changed by these preparations.
 
@@ -20,9 +21,17 @@ streams, GPU residency and non-FA contexts. It captures only actual tensor width
 an original prompt length of 4096 does not imply a 4096-column FA operand.
 Never resize, pad, tile, truncate or relabel a mask to fill the corpus.
 
+Prepare `capture-manifest.json` before starting the capture process, using
+`python3 -m autokernel.loop.cpu_fa_mask_capture --source-root <experimental tree>
+--build-dir <fresh reviewed build> --model <DS41 GGUF> --recipe-file <native launch JSON>
+--prompt-file <actual fixed prompt> --capture-dir <new dir> --run-id <unique ID>`
+under the narrow build claim. This hashes the original model, prompt, recipe and
+build images, copies the prompt/recipe, and returns the exact launch environment.
+No metadata is reconstructed when the oracle reads the files.
+
 Each mask has an adjacent `.mask.json` recording its original UTC capture time,
 actual dimensions, F16 layout, 64 query heads / one KV head, byte count and FNV1a64
-byte digest, source commit, model path/model SHA256 and run ID. First publication
+byte digest, source commit, model path/model SHA256, prompt/recipe digests and run ID. First publication
 uses an atomic exclusive link, so later layers cannot overwrite an earlier mask.
 Use one capture process and one new directory per source/model/run. The mask
 file and sidecar are separately published; inspect both after that process ends.
@@ -47,6 +56,8 @@ recipe, not evidence of a completed capture or permission to alter a live lane.
    AUTOKERNEL_FA_MASK_MODEL=<absolute model path>
    AUTOKERNEL_FA_MASK_MODEL_SHA256=<verified model digest>
    AUTOKERNEL_FA_MASK_RUN_ID=<unique run identifier>
+   AUTOKERNEL_FA_MASK_RECIPE_SHA256=<original native recipe digest>
+   AUTOKERNEL_FA_MASK_PROMPT_SHA256=<original prompt digest>
    ```
 
 3. Evaluate an actual fixed prompt in that server with query batches of 2, 3, 4

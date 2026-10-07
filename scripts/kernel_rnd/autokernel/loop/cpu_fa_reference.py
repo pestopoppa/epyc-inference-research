@@ -48,6 +48,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import math
 import os
@@ -191,6 +192,47 @@ def real_mask_path(capture_dir: "Path | str", case: FaCase) -> Path:
     return Path(capture_dir) / f"{case.name}.mask.f16"
 
 
+def validate_real_mask_corpus(capture_dir: "Path | str", cases: Sequence[FaCase]) -> None:
+    """Validate native write-side provenance and byte identity before using captures."""
+    root = Path(capture_dir)
+    manifest = json.loads((root / "capture-manifest.json").read_text(encoding="utf-8"))
+    if manifest.get("schema") != "epyc.autokernel.ds41_fa_capture.v1" or \
+            manifest.get("architecture") != "deepseek4" or \
+            manifest.get("capture_contract") != "ds41_real_mask_n2_5_v1":
+        raise ValueError("capture manifest schema/architecture is invalid")
+    for key, length in (("source_commit", 40), ("model_sha256", 64),
+                        ("recipe_sha256", 64), ("prompt_sha256", 64)):
+        if not re.fullmatch(f"[0-9a-f]{{{length}}}", str(manifest.get(key, ""))):
+            raise ValueError(f"capture manifest {key} is invalid")
+    if not isinstance(manifest.get("model"), str) or not Path(manifest["model"]).is_absolute() or \
+            not isinstance(manifest.get("run_id"), str) or not manifest["run_id"]:
+        raise ValueError("capture manifest model/run identity is invalid")
+    started_at = datetime.strptime(manifest["started_at"], "%Y-%m-%dT%H:%M:%SZ")
+    for case in cases:
+        metadata = json.loads((root / f"{case.name}.mask.json").read_text(encoding="utf-8"))
+        expected = {"schema": "epyc.autokernel.ds41_fa_mask.v1", "type": "f16",
+                    "byte_order": "little", "layout": "token_kv",
+                    "ne": [case.kv, case.nb, 1, 1], "hsk": case.hsk, "hsv": case.hsv,
+                    "n_q_heads": case.n_q_heads, "n_kv_heads": case.n_kv_heads,
+                    "mask_kind": "raw_plus_csa_top_k", "mask_hash_algorithm": "fnv1a64",
+                    "mask_bytes": case.kv * case.nb * 2}
+        expected.update({key: manifest[key] for key in
+                         ("source_commit", "model", "model_sha256", "run_id",
+                          "recipe_sha256", "prompt_sha256")})
+        if any(metadata.get(key) != value for key, value in expected.items()):
+            raise ValueError(f"{case.name}: native mask metadata does not match its case/run")
+        if datetime.strptime(metadata["captured_at"], "%Y-%m-%dT%H:%M:%SZ") < started_at:
+            raise ValueError(f"{case.name}: capture predates its native run manifest")
+        data = real_mask_path(root, case).read_bytes()
+        if len(data) != expected["mask_bytes"]:
+            raise ValueError(f"{case.name}: captured byte count does not match the case")
+        digest = 0xcbf29ce484222325
+        for byte in data:
+            digest = ((digest ^ byte) * 0x100000001b3) & ((1 << 64) - 1)
+        if metadata.get("mask_hash") != f"{digest:016x}":
+            raise ValueError(f"{case.name}: captured bytes do not match their native digest")
+
+
 def check_real_mask_identity(anchor_build: Path, candidate_build: Path, source_root: Path, *,
                              capture_dir: "Path | str | None" = None,
                              anchor_recipe=None, candidate_recipe=None,
@@ -247,6 +289,10 @@ def check_real_mask_identity(anchor_build: Path, candidate_build: Path, source_r
         return FaResult("unavailable",
             f"{len(missing)}/{len(cases)} real-mask case(s) have no captured mask file "
             f"under {capture_dir} yet: {missing[:3]}")
+    try:
+        validate_real_mask_corpus(capture_dir, cases)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        return FaResult("unavailable", f"real-mask capture provenance refused: {exc}")
     run = check_anchor_identity_fn or check_anchor_identity
     return run(anchor_build, candidate_build, source_root, cases=cases, capture_dir=capture_dir,
               anchor_recipe=anchor_recipe, candidate_recipe=candidate_recipe, window=window)
