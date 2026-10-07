@@ -683,6 +683,43 @@ def test_a_failed_calibration_with_a_newer_request_retires_the_stale_claim(tmp_p
     assert not claimed.exists()
 
 
+def test_a_request_arriving_exactly_between_the_restore_check_and_write_is_not_clobbered(
+        tmp_path, monkeypatch):
+    """The restore is `os.link` (create-if-absent), not a presence check followed by a
+    separate rename -- there is no window for a race to land IN. This drives a newer
+    request into existence from INSIDE the monkeypatched `os.link` call itself, so it
+    appears at the most adversarial possible instant, and confirms the real `os.link`
+    would raise `FileExistsError` for it exactly as this fixture does -- the newer
+    request is never clobbered either way."""
+    recipe = _recipe()
+    _drop_remeasure_request(tmp_path, recipe, requested_by="operator-1")
+    claimed = run._claim_remeasure_request(tmp_path, recipe)
+    assert claimed is not None
+
+    real_link = run.os.link
+    landed = []
+
+    def racing_link(source, target, *args, **kwargs):
+        # Simulate a second process's `_claim_remeasure_request` dropping (someone
+        # else's fresh request lands as THIS instruction executes, before our own
+        # restore's link would otherwise have created it).
+        if not landed:
+            landed.append(True)
+            Path(target).write_text(
+                json.dumps({"requested_by": "operator-2"}), encoding="utf-8")
+        return real_link(source, target, *args, **kwargs)
+
+    monkeypatch.setattr(run.os, "link", racing_link)
+    failed = run.fail_remeasure_request(tmp_path, recipe)
+
+    assert failed is not None and failed.name.startswith("REMEASURE_REQUEST.failed-")
+    assert json.loads(failed.read_text())["requested_by"] == "operator-1"
+    pending = run._remeasure_request_path(tmp_path, recipe)
+    assert pending.is_file()
+    assert json.loads(pending.read_text())["requested_by"] == "operator-2"
+    assert not claimed.exists()
+
+
 def test_two_concurrent_claimers_exactly_one_wins(tmp_path):
     recipe = _recipe()
     _drop_remeasure_request(tmp_path, recipe)
@@ -694,16 +731,16 @@ def test_two_concurrent_claimers_exactly_one_wins(tmp_path):
     assert len(list(first.parent.glob("REMEASURE_REQUEST.claimed-*.json"))) == 1
 
 
-def test_claim_rename_failure_proceeds_as_if_no_request_exists(tmp_path, monkeypatch):
-    """`os.rename` can fail for reasons other than a losing race (e.g. a permissions
-    fault); either way the contract is the same -- proceed as if nothing is pending,
-    never raise out of selection."""
+def test_claim_lost_race_filenotfounderror_proceeds_as_if_no_request_exists(tmp_path, monkeypatch):
+    """`FileNotFoundError` from `os.rename` means a CONCURRENT CLAIMER already
+    renamed the source away -- the only case where losing the race is the right
+    reading. Proceed as if nothing is pending, never raise out of selection."""
     recipe = _recipe()
     tip = _launch(recipe, BUILD)
     pending = _drop_remeasure_request(tmp_path, recipe)
 
     def raising_rename(*_args, **_kwargs):
-        raise OSError("fixture: rename blocked")
+        raise FileNotFoundError("fixture: source already claimed by someone else")
 
     monkeypatch.setattr(run.os, "rename", raising_rename)
     assert run._claim_remeasure_request(tmp_path, recipe) is None
@@ -712,3 +749,22 @@ def test_claim_rename_failure_proceeds_as_if_no_request_exists(tmp_path, monkeyp
     monkeypatch.undo()
     _store, reading, carry = _select(tmp_path, recipe, tip)
     assert reading.floor_pct is None  # the still-pending request claims normally next
+
+
+def test_claim_other_oserror_raises_rather_than_silently_skipping(tmp_path, monkeypatch):
+    """Any `os.rename` failure OTHER than `FileNotFoundError` (permissions, I/O, a
+    full disk) is NOT a lost race -- the request is still sitting there, unclaimed.
+    Silently treating it as "no request" would leave an outstanding operator ask
+    permanently un-actioned with no signal anything went wrong, so this raises."""
+    recipe = _recipe()
+    pending = _drop_remeasure_request(tmp_path, recipe)
+
+    def raising_rename(*_args, **_kwargs):
+        raise PermissionError("fixture: rename blocked by a permissions fault")
+
+    monkeypatch.setattr(run.os, "rename", raising_rename)
+    with pytest.raises(run.RemeasureClaimFailed) as caught:
+        run._claim_remeasure_request(tmp_path, recipe)
+    assert "PermissionError" in str(caught.value)
+    assert recipe.recipe_hash[:12] in str(caught.value)
+    assert pending.is_file()  # the request was never silently dropped

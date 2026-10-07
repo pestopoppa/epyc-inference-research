@@ -1405,14 +1405,26 @@ def _read_json_tolerant(path: Path) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+class RemeasureClaimFailed(RuntimeError):
+    """`_claim_remeasure_request`'s `os.rename` failed for a reason OTHER than losing
+    the race to another claimer (a permissions fault, a full/read-only filesystem,
+    etc). Only `FileNotFoundError` means "someone else already claimed it" -- every
+    other `OSError` is a real fault, and silently treating it as a lost race would
+    leave an outstanding operator request permanently un-actioned with no signal that
+    anything went wrong."""
+
+
 def _claim_remeasure_request(store: Path, recipe) -> Path | None:
     """Atomically claim a pending request for THIS process: `os.rename`
     `REMEASURE_REQUEST.json` -> `REMEASURE_REQUEST.claimed-<utc>-<pid>.json`.
 
     `os.rename` on the same filesystem is atomic, so of two concurrent claimers
-    exactly one observes success; the other's rename raises (the source is already
-    gone) and this returns `None` -- "proceed as if no request exists", never an
-    error, because the other claimer is already handling it.
+    exactly one observes success; the other's rename raises `FileNotFoundError` (the
+    source is already gone) and this returns `None` -- "proceed as if no request
+    exists", never an error, because the other claimer is already handling it. Any
+    OTHER `OSError` (permissions, I/O, a full disk) is NOT a lost race -- it means the
+    request is still sitting there, unclaimed, and the caller must know rather than
+    silently skip it (`RemeasureClaimFailed`).
     """
     path = _remeasure_request_path(store, recipe)
     if not path.is_file():
@@ -1420,8 +1432,12 @@ def _claim_remeasure_request(store: Path, recipe) -> Path | None:
     claimed = path.with_name(f"REMEASURE_REQUEST.claimed-{_remeasure_timestamp()}-{os.getpid()}.json")
     try:
         os.rename(path, claimed)
-    except OSError:
+    except FileNotFoundError:
         return None
+    except OSError as exc:
+        raise RemeasureClaimFailed(
+            f"could not claim {path} for recipe_hash {recipe.recipe_hash[:12]}: "
+            f"{type(exc).__name__}: {exc}") from exc
     return claimed
 
 
@@ -1445,27 +1461,41 @@ def consume_remeasure_request(store: Path, recipe, *, new_floor_path: Path) -> P
     return done_path
 
 
+def _retire_claim_as_failed(claimed: Path) -> Path:
+    from datetime import datetime, timezone
+    failed_path = claimed.with_name(f"REMEASURE_REQUEST.failed-{_remeasure_timestamp()}.json")
+    payload = _read_json_tolerant(claimed)
+    payload["failed_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    payload["reason"] = "calibration failed, and a newer request superseded this claim"
+    status.write_json(failed_path.parent, failed_path.name, payload,
+                      prefix=".remeasure-failed-")
+    claimed.unlink()
+    return failed_path
+
+
 def fail_remeasure_request(store: Path, recipe) -> Path | None:
     """A failed calibration returns THIS process's claimed request to pending -- unless
     a NEWER request already exists (an operator re-asked while this one was in
     flight), in which case the stale claim is retired as `.failed-<utc>.json` rather
     than clobbering the fresh one. A no-op when nothing is claimed.
+
+    The restore is ATOMIC and NO-CLOBBER: `os.link` creates the destination link only
+    if it does not already exist, so a request that lands in the window between a
+    presence CHECK and a separate rename can never be overwritten -- there is no such
+    window here, because there is no separate check. `os.link` itself either creates
+    `REMEASURE_REQUEST.json` or raises `FileExistsError`; both outcomes are handled
+    the same way whether the newer request appeared a minute ago or one instruction
+    before this call.
     """
     claimed = _find_claimed_remeasure_request(store, recipe)
     if claimed is None:
         return None
     pending = _remeasure_request_path(store, recipe)
-    if pending.is_file():
-        from datetime import datetime, timezone
-        failed_path = claimed.with_name(f"REMEASURE_REQUEST.failed-{_remeasure_timestamp()}.json")
-        payload = _read_json_tolerant(claimed)
-        payload["failed_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        payload["reason"] = "calibration failed, and a newer request superseded this claim"
-        status.write_json(failed_path.parent, failed_path.name, payload,
-                          prefix=".remeasure-failed-")
-        claimed.unlink()
-        return failed_path
-    os.rename(claimed, pending)
+    try:
+        os.link(claimed, pending)
+    except FileExistsError:
+        return _retire_claim_as_failed(claimed)
+    claimed.unlink()
     return pending
 
 
