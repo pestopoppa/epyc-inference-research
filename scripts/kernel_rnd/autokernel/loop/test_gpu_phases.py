@@ -525,7 +525,7 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
                     assert "release_blocked" in scratch.read_marker("dir", path)
                 # A stale parent retention write cannot erase the child's disk fence.
                 scope.retain("parent handles uncertain compiler cleanup")
-        if outcome == "cleanup_uncertain":
+        if outcome in {"cleanup_uncertain", "survivor_retry", "census_retry", "live_diagnostic_failure"}:
             assert all(path.exists() and "release_blocked" in scratch.read_marker("dir", path)
                        for path in protected)
             later = scratch.ScratchRegistry(tmp_path / "scratch",

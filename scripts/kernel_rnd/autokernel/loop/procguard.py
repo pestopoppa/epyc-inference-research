@@ -491,6 +491,9 @@ class Guard:
                     "census_errors": [f"scope census: {type(exc).__name__}: {exc}"],
                     "captured": []}
         prefix = ENV_SCOPE.encode() + b"="
+        owner = parse_scope(token)
+        own_cookie = (owner is not None and owner[:3] ==
+                      (self.key, self.pid, self.start_ticks) and self.start_ticks > 0)
         for name in names:
             if not name.isdigit():
                 continue
@@ -508,6 +511,13 @@ class Guard:
                 errors.append(f"unknown scope process uid: {pid}")
                 continue
             if proc.uid != self.uid:
+                continue
+            # A process born before this owner cannot have inherited a cookie
+            # minted by it. Same-UID boot daemons can deny /proc/environ reads;
+            # their known older identity proves exclusion without provenance.
+            # Equal/newer starts and foreign/unbound cookies remain fail-closed.
+            # Already captured identities are still verified independently below.
+            if own_cookie and proc.start_ticks < self.start_ticks:
                 continue
             try:
                 with open(root / "environ", "rb") as stream:

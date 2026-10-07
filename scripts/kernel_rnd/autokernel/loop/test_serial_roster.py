@@ -53,7 +53,10 @@ def _inputs(tmp_path, *, backends=("cpu", "gpu"), unowned=False, missing=False,
         build = root / "original-build"
         template = _recipe()
         if backend == "gpu":
-            template = replace(template, device="ROCm0", ngl=99, cpu_list="0-7", threads=8)
+            owned_cpus = sorted(os.sched_getaffinity(0))
+            template = replace(template, device="ROCm0", ngl=99,
+                               cpu_list=",".join(str(cpu) for cpu in owned_cpus),
+                               threads=len(owned_cpus))
         command = template.server_argv(build, 18311)[3:]
         template = rr.canonical_recipe_projection(name=template.name, command_argv=command,
             topology_prefix=["taskset", "-c", template.cpu_list], n_predict=512,
@@ -238,7 +241,9 @@ def test_single_target_batched_schedule_drives_children_and_accounts_each_stage(
 @pytest.mark.parametrize("experimental_gpu", [False, True])
 def test_generated_roster_drives_actual_children_and_completed_restart(tmp_path, monkeypatch, experimental_gpu):
     owned_cpus = sorted(os.sched_getaffinity(0))
-    _, _, argv = _inputs(tmp_path, experimental_gpu=experimental_gpu, cpu_logical=owned_cpus)
+    # Preserve the campaign's full virtual CPU geometry. The fixture taskset shim
+    # confines tiny children to this runner's narrower native CPU claim.
+    _, _, argv = _inputs(tmp_path, experimental_gpu=experimental_gpu)
     child = tmp_path / "tiny.py"
     child.write_text(CHILD.replace('"pid": __import__(\'os\').getpid()',
         '"pid": __import__(\'os\').getpid(), "affinity": sorted(__import__(\'os\').sched_getaffinity(0))')

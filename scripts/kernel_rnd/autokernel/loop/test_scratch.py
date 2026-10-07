@@ -935,6 +935,40 @@ if __name__ == "__main__":
 
 
 class NewWriterScratchBoundaries(Base):
+    def test_checked_cookie_excludes_only_proven_older_unreadable_processes(self):
+        from . import procguard
+        from .test_procguard import FakeProc
+        fake = FakeProc(self.tmp / "proc")
+        fake.add(100, start=5000)
+        fake.add(200, start=4999)
+        guard = procguard.Guard(proc_root=fake.root, identity=(100, 5000))
+        token = guard.new_scope()
+        real_open = open
+        def denied(path, *args, **kwargs):
+            if Path(path) == fake.root / "200" / "environ":
+                raise PermissionError("synthetic same-uid daemon provenance refusal")
+            return real_open(path, *args, **kwargs)
+        with mock.patch("builtins.open", side_effect=denied):
+            state = guard.scope_state(token)
+            self.assertTrue(state["census_verified"], state)
+            self.assertEqual(state["survivors"], [])
+            # Chronology is valid only for this guard's own minted cookie.
+            foreign = guard.scope_state("none.999.5000.foreign-cookie")
+            self.assertFalse(foreign["census_verified"], foreign)
+            for start in (5000, 5001):
+                fake.add(200, start=start)
+                state = guard.scope_state(token)
+                self.assertFalse(state["census_verified"], state)
+                self.assertTrue(any("unreadable scope provenance: 200" in error
+                                    for error in state["census_errors"]))
+            # A captured child remains a survivor even after its cookie is hidden.
+            fake.add(200, start=5001, scope=token)
+            original = procguard.read_proc(fake.root, 200)
+            guard._scope_captured[token] = {original.identity: original}
+            state = guard.scope_state(token)
+            self.assertFalse(state["census_verified"], state)
+            self.assertEqual([row["pid"] for row in state["survivors"]], [200])
+
     def test_no_force_worktree_removal_refuses_dirty_tree_and_releases_clean_tree(self):
         repo, head = _make_repo(self.tmp)
         reg = self.reg()
