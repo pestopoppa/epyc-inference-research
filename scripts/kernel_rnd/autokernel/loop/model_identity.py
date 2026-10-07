@@ -34,6 +34,7 @@ import time
 import urllib.error
 import urllib.request
 from contextlib import nullcontext
+from pathlib import Path
 from typing import Callable, Sequence
 
 #: How many frozen requests each arm serves. Two already exercise every weight the
@@ -51,17 +52,22 @@ class IdentityResult:
     detail: str = ""
 
 
-def _completion_digest(raw: bytes) -> tuple[str, str]:
-    """(digest of the generated content and token ids, short preview)."""
+def _completion_digest(raw: bytes) -> tuple[str, str, dict]:
+    """(digest of the generated content and token ids, short preview, full record).
+
+    The full record (`{"content": ..., "tokens": ...}`) is what a divergence receipt
+    persists (`_row_record`/`_persist_divergence`); the digest/preview pair is what every
+    existing caller already keyed its comparisons on and stays unchanged."""
     body = json.loads(raw)
     content = body.get("content")
     tokens = body.get("tokens")
     if not isinstance(content, str):
         raise ValueError("completion has no content string")
-    payload = {"content": content,
-               **({"tokens": tokens} if isinstance(tokens, list) and tokens else {})}
+    tokens = tokens if isinstance(tokens, list) and tokens else None
+    payload = {"content": content, **({"tokens": tokens} if tokens else {})}
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(canonical).hexdigest(), content[:80]
+    return (hashlib.sha256(canonical).hexdigest(), content[:80],
+            {"content": content, "tokens": tokens})
 
 
 def _launch_shape(recipe) -> tuple:
@@ -84,7 +90,8 @@ def serve(recipe, requests: Sequence[tuple[str, bytes]], *,
 
     `prepare(port)`, when given, runs before EVERY request (the long-context surface
     restores its saved slot there, so each completion extends the same prefix).
-    Returns [(prompt_id, digest, preview)]. Raises on any launch/request failure."""
+    Returns [(prompt_id, digest, preview, full)], `full` = {"content", "tokens"} (the
+    divergence receipt's raw material). Raises on any launch/request failure."""
     recipe.validate_launch(recipe.template, recipe.build_dir, recipe.port)
     server = subprocess.Popen(list(recipe.argv), env=dict(recipe.launch_env),
                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -111,8 +118,8 @@ def serve(recipe, requests: Sequence[tuple[str, bytes]], *,
                 headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(request, timeout=request_timeout_s) as response:
                 raw = response.read()
-            digest, preview = _completion_digest(raw)
-            out.append((prompt_id, digest, preview))
+            digest, preview, full = _completion_digest(raw)
+            out.append((prompt_id, digest, preview, full))
         return out
     finally:
         if server.poll() is None:
@@ -158,18 +165,63 @@ def _inconsistent(rows: list, n: int) -> list[int]:
     return [i for i in range(n) if len({rows[r * n + i][1] for r in range(len(rows) // n)}) > 1]
 
 
+def _row_record(row: tuple) -> dict:
+    """A persistable projection of one `serve()` row; `full` is absent for a test double
+    that returns bare `(prompt_id, digest, preview)` rows, never a hard failure."""
+    full = row[3] if len(row) > 3 and isinstance(row[3], dict) else {}
+    return {"prompt_id": row[0], "digest": row[1],
+           "content": full.get("content"), "tokens": full.get("tokens")}
+
+
+def _divergence(row_a: tuple, row_b: tuple) -> dict:
+    """The first index at which two rows' completions disagree: token ids when both rows
+    carry them, else the raw content characters. `index: None` with equal records means
+    the rows carry no comparable material (a test double with no `full`)."""
+    ra, rb = _row_record(row_a), _row_record(row_b)
+    ta, tb = ra.get("tokens"), rb.get("tokens")
+    if isinstance(ta, list) and isinstance(tb, list) and ta and tb:
+        level, seq_a, seq_b = "token", ta, tb
+    else:
+        level, seq_a, seq_b = "char", ra.get("content") or "", rb.get("content") or ""
+    index = next((i for i, (x, y) in enumerate(zip(seq_a, seq_b)) if x != y), None)
+    if index is None and len(seq_a) != len(seq_b):
+        index = min(len(seq_a), len(seq_b))
+    return {"level": level, "index": index}
+
+
+def _persist_divergence(record_dir, *, kind: str, **rows) -> str:
+    """Persist the full per-repeat records behind an inconsistent identity verdict so a
+    future refusal can be localized instead of re-run blind (no divergence position was
+    previously kept anywhere, and `IdentityResult.detail` is truncated to 600 chars by
+    `gates.check_model_identity_targets`). Returns the written file's path."""
+    record_dir = Path(record_dir)
+    record_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"schema": "epyc.autokernel.model_identity_divergence.v1", "kind": kind, **rows}
+    blob = json.dumps(payload, indent=1, sort_keys=True) + "\n"
+    digest = hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+    path = record_dir / f"identity-divergence-{kind}-{digest}.json"
+    path.write_text(blob, encoding="utf-8")
+    return str(path)
+
+
 def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, bytes]],
           n_requests: int = DEFAULT_REQUESTS,
           window: Callable[[], object] | None = None,
           serve_fn: Callable[..., list] = serve, repeats: int = 1,
-          prepare: Callable[[int], object] | None = None) -> IdentityResult:
+          prepare: Callable[[int], object] | None = None,
+          record_dir: "Path | str | None" = None) -> IdentityResult:
     """Anchor vs candidate greedy completions on the first `n_requests` frozen requests.
 
     `window` is the caller's CPU measurement window (a context-manager factory), so the
     two model loads never overlap another CPU measurement on this host. `repeats > 1`
     adds the repetition-identity race detector (module docstring). `prepare(port)` runs
     before every request on both arms; it resets the server state itself (a slot
-    restore), so repetitions keep the prompt cache instead of `_uncached`."""
+    restore), so repetitions keep the prompt cache instead of `_uncached`.
+
+    `record_dir`, when given, persists the full per-repeat token ids and content behind
+    any non-`pass` verdict (`_persist_divergence`) and puts the written file's path first
+    in `detail`, so a future refusal can be localized instead of re-run blind. Absent
+    (the default) nothing is written and every verdict is exactly as before."""
     if not requests:
         return IdentityResult("unavailable", "no frozen requests to serve")
     if anchor_recipe.backend != "cpu" or candidate_recipe.backend != "cpu":
@@ -214,13 +266,24 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
                                   f"{type(exc).__name__}: {exc}")
         if _inconsistent(anchor_all, n) or [row[1] for row in anchor_all[:n]] != \
                 [row[1] for row in anchor]:
+            detail: dict = {"anchor_first": [_row_record(r) for r in anchor],
+                            "anchor_repeats": [_row_record(r) for r in anchor_all],
+                            "candidate_repeats": [_row_record(r) for r in candidate_all]}
+            if record_dir is not None:
+                detail = {"record": _persist_divergence(
+                    record_dir, kind="anchor_self_inconsistent", **detail), **detail}
             return IdentityResult("unavailable", "the anchor's own repeated greedy "
                                   "completions differ; this instrument cannot judge a race",
-                                  json.dumps({"anchor": anchor_all}))
+                                  json.dumps(detail))
+        detail = {"candidate_repeats": [_row_record(r) for r in candidate_all],
+                  "anchor": [_row_record(r) for r in anchor]}
+        if record_dir is not None:
+            detail = {"record": _persist_divergence(record_dir, kind="race", **detail),
+                      **detail}
         return IdentityResult("wrong", f"{len(racy)} of {n} request(s) gave different greedy "
                               f"completions across {repeats} candidate repetitions while the "
                               "anchor reproduces itself (a scheduling race)",
-                              json.dumps({"candidate": candidate_all}))
+                              json.dumps(detail))
     differing = [(a, c) for a, c in zip(anchor, candidate) if a[1] != c[1]]
     if not differing:
         return IdentityResult("pass", f"{len(selected)} greedy completion(s) byte-identical "
@@ -234,13 +297,25 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
     except Exception as exc:
         return IdentityResult("unavailable", f"anchor re-serve failed: {type(exc).__name__}: {exc}")
     if [row[1] for row in again] != [row[1] for row in anchor]:
+        detail = {"first": [_row_record(r) for r in anchor], "second": [_row_record(r) for r in again]}
+        if record_dir is not None:
+            detail = {"record": _persist_divergence(record_dir, kind="anchor_unstable",
+                                                     **detail), **detail}
         return IdentityResult("unavailable", "the anchor's own greedy completions differ "
                               "between two launches; this instrument cannot judge identity",
-                              json.dumps({"first": anchor, "second": again}))
+                              json.dumps(detail))
     (a, c), = differing[:1]
+    divergence = _divergence(a, c)
+    detail = {"divergence": divergence, "anchor": _row_record(a), "candidate": _row_record(c)}
+    if record_dir is not None:
+        detail = {"record": _persist_divergence(
+            record_dir, kind="wrong", divergence=divergence,
+            anchor=[_row_record(r) for r in anchor],
+            candidate=[_row_record(r) for r in candidate]), **detail}
     return IdentityResult("wrong", f"{len(differing)} of {len(selected)} greedy completion(s) "
-                          f"differ from the reproducible anchor (first: {a[0]})",
-                          json.dumps({"anchor": a, "candidate": c}))
+                          f"differ from the reproducible anchor (first: {a[0]}, "
+                          f"{divergence['level']} divergence at index {divergence['index']})",
+                          json.dumps(detail))
 
 
 __all__ = ["IdentityResult", "check", "serve", "model_architecture", "DEFAULT_REQUESTS"]

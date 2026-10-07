@@ -27,11 +27,15 @@ change is bit-exact by construction, so its reference is the ANCHOR itself:
    the loop then skips both uses with a recorded reason (the probe above covers the
    same shapes) instead of reading 0/0 as evidence.
 
-   - Q38FN: D=256, 2 KV heads, 12 query heads per KV head, kv 8k/64k/128k, nb 1 and 5.
+   - Q38FN: D=256, 2 KV heads, 12 query heads per KV head, kv 8k/64k/128k, nb 1..5 (every
+     decode/verify query-row count the route's own admitted-text names -- "Decode/verify
+     steps have N <= 5 query rows", `gates.CPU_SOURCE_ROUTES` cpu_fa_schedule -- 2026-10-07
+     widened from {1, 5} so N=2,3,4 are not only covered by the identity gate's greedy
+     serving requests, which never pin a query-row count).
    - DS41: D=512, 1 KV head, 64 query heads, attention sinks, kv n/2..n for n = 8k and
-     64k (4k/8k/32k/64k), nb 1 and 3. The stock mask cannot model DS41's sparse top-k
-     mask; the probe approximates it with a fixed sparse mask, and the long serving
-     surface (audit C1) is DS41's real judge.
+     64k (4k/8k/32k/64k), nb 1..5 (same widening). The stock mask cannot model DS41's
+     sparse top-k mask; the probe approximates it with a fixed sparse mask, and the long
+     serving surface (audit C1) is DS41's real judge.
 
 3. **Paired perf screen** (`perf_screen`): `test-backend-ops perf` on the case set,
    anchor and candidate alternated ABAB on the recipe's thread team
@@ -107,12 +111,17 @@ class FaCase:
                 "GGML_TYPE_F16));")
 
 
+#: Every query-row count a CPU decode/verify step can present (the route's own admitted
+#: text: "Decode/verify steps have N <= 5 query rows" -- MTP/dflash verification batches
+#: 2..5 draft tokens in one eval; greedy serving alone never exercises nb 2-4).
+SERVED_QUERY_ROWS = (1, 2, 3, 4, 5)
+
 CASE_SET = (
     *(FaCase(f"q38fn_kv{kv // 1024}k_nb{nb}", 256, 256, 2, 12, kv, nb)
-      for kv in (8192, 65536, 131072) for nb in (1, 5)),
+      for kv in (8192, 65536, 131072) for nb in SERVED_QUERY_ROWS),
     *(FaCase(f"ds41_kv{kv // 1024}k_nb{nb}", 512, 512, 1, 64, kv, nb, sinks=True,
              mask="sparse")
-      for kv in (4096, 8192, 32768, 65536) for nb in (1, 3)),
+      for kv in (4096, 8192, 32768, 65536) for nb in SERVED_QUERY_ROWS),
 )
 #: Probe-only guards: the plain (non-view) layout test-backend-ops uses, and a 64-row
 #: prefill that takes the tiled path, so a dispatch change cannot reroute it unseen.

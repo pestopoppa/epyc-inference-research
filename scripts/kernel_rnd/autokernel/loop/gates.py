@@ -2482,14 +2482,14 @@ def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
 
 
 def check_model_output_identity(*, anchor_recipe, candidate_recipe, requests,
-                                window=None, repeats: int = 1) -> Verdict:
+                                window=None, repeats: int = 1, record_dir=None) -> Verdict:
     """Whole-model gate for a `model_identity` route (`cpu_weight_placement`)."""
     from . import model_identity
 
     result = model_identity.check(anchor_recipe=anchor_recipe,
                                   candidate_recipe=candidate_recipe,
                                   requests=tuple(requests or ()), window=window,
-                                  repeats=repeats)
+                                  repeats=repeats, record_dir=record_dir)
     return Verdict("reference_comparison" if result.status != "unavailable" else
                    "oracle_unavailable", result.status == "pass",
                    result.reason, result.detail)
@@ -2500,13 +2500,17 @@ def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
                                  architecture=None) -> Verdict:
     """Whole-model identity on every target of a route (2026-10-04 structural routes).
 
-    `targets` is [(label, anchor recipe, candidate recipe, frozen requests[, prepare])]:
-    this lane's own target first, then the lane binding's peer targets when the route
-    asks for them (`CpuSourceRoute.identity_targets`); the optional fifth element is a
-    per-request `prepare(port)` hook (the long-context surface's slot restore). Every target must pass; any `wrong` is a
-    verdict, otherwise any `unavailable` makes the gate unavailable. `required_arch`: at
-    least one target must serve a GGUF of one of these architectures, or the edited
-    model-specific code would never run under the gate (unavailable, not a pass)."""
+    `targets` is [(label, anchor recipe, candidate recipe, frozen requests[, prepare[,
+    record_dir]])]: this lane's own target first, then the lane binding's peer targets
+    when the route asks for them (`CpuSourceRoute.identity_targets`); the optional fifth
+    element is a per-request `prepare(port)` hook (the long-context surface's slot
+    restore), and the optional sixth is a directory `model_identity.check` persists the
+    full per-repeat divergence record into when the target's verdict is not `pass` (no
+    divergence position was previously kept anywhere -- a future refusal can then be
+    localized instead of re-run blind). Every target must pass; any `wrong` is a verdict,
+    otherwise any `unavailable` makes the gate unavailable. `required_arch`: at least one
+    target must serve a GGUF of one of these architectures, or the edited model-specific
+    code would never run under the gate (unavailable, not a pass)."""
     from . import model_identity
 
     targets = tuple(targets)
@@ -2523,10 +2527,12 @@ def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
                            "or with it as a peer")
     rows, wrong, unavailable = [], [], []
     for label, anchor, candidate, requests, *extra in targets:
+        prepare = extra[0] if len(extra) > 0 else None
+        record_dir = extra[1] if len(extra) > 1 else None
         result = model_identity.check(anchor_recipe=anchor, candidate_recipe=candidate,
                                       requests=tuple(requests or ()), window=window,
-                                      repeats=repeats,
-                                      **({"prepare": extra[0]} if extra and extra[0] else {}))
+                                      repeats=repeats, record_dir=record_dir,
+                                      **({"prepare": prepare} if prepare else {}))
         rows.append({"target": label, "status": result.status, "reason": result.reason,
                      "detail": result.detail[:600]})
         if result.status == "wrong":

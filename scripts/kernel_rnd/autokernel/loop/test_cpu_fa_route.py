@@ -153,15 +153,24 @@ def test_planner_surfaces_and_run_wiring_name_the_route():
 # ------------------------------------------------------------------ case set (C3)
 
 def test_case_set_shapes():
+    # 2026-10-07 (ak-longctx-identity-oracle, part C): widened from {1, 5} to every
+    # query-row count a decode/verify step can present (route admitted text: "Decode/
+    # verify steps have N <= 5 query rows") so N=2,3,4 get bit-exact FA coverage too, not
+    # only whatever query-row count the identity gate's greedy serving requests happen
+    # to produce.
+    assert fa.SERVED_QUERY_ROWS == (1, 2, 3, 4, 5)
     q38 = [c for c in fa.CASE_SET if c.name.startswith("q38fn")]
     ds41 = [c for c in fa.CASE_SET if c.name.startswith("ds41")]
-    assert len(q38) == 6 and len(ds41) == 8
+    assert len(q38) == 3 * len(fa.SERVED_QUERY_ROWS)
+    assert len(ds41) == 4 * len(fa.SERVED_QUERY_ROWS)
     assert {(c.hsk, c.n_kv_heads, c.gqa, c.sinks) for c in q38} == {(256, 2, 12, False)}
-    assert {c.kv for c in q38} == {8192, 65536, 131072} and {c.nb for c in q38} == {1, 5}
+    assert {c.kv for c in q38} == {8192, 65536, 131072}
+    assert {c.nb for c in q38} == set(fa.SERVED_QUERY_ROWS)
     assert {(c.hsk, c.n_kv_heads, c.n_q_heads, c.sinks) for c in ds41} == {(512, 1, 64, True)}
-    assert {c.nb for c in ds41} == {1, 3}
+    assert {c.nb for c in ds41} == set(fa.SERVED_QUERY_ROWS)
     assert all(c.backend_ops for c in fa.CASE_SET)
     assert not any(c.backend_ops for c in fa.GUARD_CASES)
+    assert len({c.name for c in fa.CASE_SET}) == len(fa.CASE_SET)  # every name unique
 
 
 def test_vars_regex_and_patch_block_agree():
@@ -181,7 +190,37 @@ def test_vars_regex_and_patch_block_agree():
                  "test-backend-ops-cpu-fa-longctx-v1.patch")
     if patch.is_file():   # the llama-tree patch is generated from CASE_SET
         text = patch.read_text(encoding="utf-8")
-        assert all(c.cpp() in text for c in fa.CASE_SET) and fa.THREADS_ENV in text
+        assert fa.THREADS_ENV in text
+        # 2026-10-07 (ak-longctx-identity-oracle, part C): CASE_SET widened its query-row
+        # coverage to nb 1..5; this on-disk patch predates that widening (it was
+        # generated from the pre-widening set) and is therefore a SUBSET of today's
+        # CASE_SET, not an exact match, until it is regenerated and reapplied to the
+        # llama tree and test-backend-ops rebuilt (reported separately -- no new source
+        # line here was produced by writing C++, only by adding Python FaCase entries
+        # that the SAME generator (`backend_ops_patch_block`) will turn into one when
+        # that follow-up runs). What this still must catch: no line in the on-disk patch
+        # may claim a case this module no longer generates (that would be real drift,
+        # e.g. an edited shape the patch was never updated for).
+        # The patch may also carry an unrelated precedent case set (odd_gqa7_d64_q1_v1)
+        # further down the same file; scope the search to THIS module's generated
+        # helper body only (every "+"-added line up to its closing "+}").
+        marker = "autokernel_add_cpu_fa_longctx_cases"
+        assert marker in text, "expected this module's generated helper in the patch"
+        body_lines = []
+        for ln in text[text.index(marker):].splitlines()[1:]:
+            if ln.strip() == "+}":
+                break
+            body_lines.append(ln)
+        patch_lines = {ln.strip().lstrip("+").strip() for ln in body_lines
+                      if "test_cases.emplace_back" in ln}
+        current_cpp = {c.cpp() for c in fa.CASE_SET}
+        assert patch_lines, "expected at least one case line in the on-disk patch"
+        orphaned = patch_lines - current_cpp
+        assert not orphaned, f"on-disk patch claims case(s) CASE_SET no longer generates: " \
+                             f"{sorted(orphaned)[:3]}"
+        pending = current_cpp - patch_lines
+        assert pending, ("expected the on-disk patch to predate the 2026-10-07 nb "
+                        "widening (nb=2,3,4 should be pending regeneration)")
 
 
 def test_split_kv_semantics_and_configs():

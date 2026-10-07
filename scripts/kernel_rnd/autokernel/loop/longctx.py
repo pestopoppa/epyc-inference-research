@@ -286,6 +286,98 @@ def derive_launch(launch, spec: Spec, slot_dir: Path):
                     "longctx_parent_snapshot": launch.snapshot_digest})
 
 
+#: Every speculative-decoding flag the canonical launch grammar admits
+#: (`resolved_recipe._CANONICAL_VALUE_FLAGS`), discovered from that closed grammar rather
+#: than guessed: `-md`/`-ngld` name and place an EXTERNAL drafter, `--spec-type` turns
+#: speculation on (self-drafting MTP sets this without `-md`: `serving.Recipe.server_argv`
+#: never emits `-md` for a self-drafting model), `--spec-draft-n-max`/
+#: `--spec-draft-p-min`/`--draft-p-min`/`--threads-draft` tune it, `--device-draft` places
+#: it on GPU. The live q38fn-...-mtp-d4 target carries an EXTERNAL drafter
+#: (drafter-mtp-shared-q8), so `-md`/`-ngld` are exactly what must come off it too.
+SPECULATIVE_DECODING_FLAGS = frozenset({
+    "--spec-type", "--spec-draft-n-max", "--spec-draft-p-min", "--device-draft",
+    "-md", "-ngld", "--draft-p-min", "--threads-draft",
+})
+
+
+def _strip_speculative_decoding(command_argv: Sequence[str]) -> tuple[str, ...]:
+    """`command_argv` with every speculative-decoding flag (and its value) removed.
+
+    FAILS CLOSED: the command must first parse against the resolved-launch closed
+    grammar (`resolved_recipe._canonical_command`, the same parser
+    `_validate_canonical_consistency` holds every launch to -- an unsupported flag
+    raises there), and after stripping, a second parse must show zero
+    `SPECULATIVE_DECODING_FLAGS` remaining. A command this function cannot confidently
+    read, or one that still carries a draft flag afterwards, refuses (`LongCtxRefused`)
+    rather than ship an identity oracle that might still be running speculative decoding."""
+    from . import resolved_recipe as rr
+
+    command = tuple(command_argv)
+    try:
+        rr._canonical_command(command)
+    except rr.ResolutionError as exc:
+        raise LongCtxRefused(
+            "identity oracle cannot strip speculative decoding: the launch command does "
+            f"not parse against the canonical launch grammar: {exc}") from exc
+    out: list[str] = []
+    skip_value = False
+    for token in command:
+        if skip_value:
+            skip_value = False
+            continue
+        if token in SPECULATIVE_DECODING_FLAGS:
+            skip_value = True
+            continue
+        out.append(token)
+    stripped = tuple(out)
+    try:
+        _executable, parsed = rr._canonical_command(stripped)
+    except rr.ResolutionError as exc:
+        raise LongCtxRefused(
+            "identity oracle cannot strip speculative decoding: the command no longer "
+            f"parses once the draft flags are removed: {exc}") from exc
+    leftover = sorted(set(parsed) & SPECULATIVE_DECODING_FLAGS)
+    if leftover:
+        raise LongCtxRefused(
+            "identity oracle could not confidently strip speculative-decoding flag(s) "
+            f"{leftover} from the launch command")
+    return stripped
+
+
+def _oracle_arm(arm):
+    """`arm` (a resolved CPU launch) with speculative decoding stripped, for the identity
+    oracle ONLY. `derive_launch` deliberately keeps the target's own drafter so the perf
+    compare and `ensure_floor` launches measure the arm production actually serves
+    (module docstring); the identity gate is bit-exact by construction, and MTP
+    speculative decoding puts a second, drafter-dependent code path inside the judge
+    (INC root cause, 2026-10-07: the live q38fn target's own drafter made the unmodified
+    anchor's 3 repeated greedy completions disagree with themselves, so every candidate
+    saw `oracle_unavailable`). Stripping it makes the oracle judge the target model's own
+    decode, never the drafter's agreement with it. A launch with no speculative decoding
+    to strip is returned unchanged (identity preserved, same object)."""
+    from . import resolved_recipe as rr
+
+    stripped = _strip_speculative_decoding(arm.command_argv)
+    if stripped == tuple(arm.command_argv):
+        return arm
+    template = rr.canonical_recipe_projection(
+        name=f"{arm.template.name}-identity-oracle", command_argv=stripped,
+        topology_prefix=arm.topology_prefix, n_predict=arm.template.n_predict,
+        temperature=arm.template.temperature, top_p=arm.template.top_p,
+        top_k=arm.template.top_k, metric=arm.template.metric)
+    return rr.resolve_canonical_launch(
+        template, build_dir=Path(arm.build_dir), command_argv=stripped,
+        topology_prefix=arm.topology_prefix, launch_environment=dict(arm.launch_env),
+        artifact_identities={"model": arm.model.to_dict(), "drafter": None,
+                             "executable": arm.executable.to_dict(),
+                             "dsos": [item.to_dict() for item in arm.dsos]},
+        backend=arm.backend, environment_policy=arm.environment_policy,
+        port=arm.port, runtime_binary_dir=arm.runtime_binary_dir,
+        runtime_ld_paths=arm.runtime_ld_paths,
+        provenance={**dict(arm.provenance),
+                   "identity_oracle": "speculative_decoding_stripped"})
+
+
 def _http_post(port: int, path: str, body: bytes, timeout: float) -> bytes:
     request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=body,
                                      headers={"Content-Type": "application/json"})
@@ -682,12 +774,23 @@ class Surface:
         return row
 
     def identity_targets(self, anchor_arm, candidate_arm) -> list[tuple]:
-        """The `long_identity` route target (gates.check_model_identity_targets 5-tuple):
+        """The `long_identity` route target (gates.check_model_identity_targets 6-tuple):
         both arms restore the ANCHOR's saved slot before every greedy request B, so the
-        identity gate judges the attention path at depth and across repetitions."""
+        identity gate judges the attention path at depth and across repetitions.
+
+        The two oracle launches strip speculative decoding (`_oracle_arm`): the perf
+        compare and `ensure_floor` keep the target's own drafter unchanged (they measure
+        what production serves), but the identity oracle must not have MTP's
+        drafter-dependent verification path inside its bit-exact comparison -- see
+        `_oracle_arm`'s docstring for the incident this fixes. The sixth element is where
+        `model_identity.check` persists a full divergence record on any non-`pass`
+        verdict, so a future refusal can be localized instead of re-run blind."""
         launch = self.ensure_slot(anchor_arm)
-        return [("longctx", anchor_arm, candidate_arm,
-                 self.spec.requests(anchor_arm.template), launch._restore)]
+        anchor_oracle = _oracle_arm(anchor_arm)
+        candidate_oracle = _oracle_arm(candidate_arm)
+        return [("longctx", anchor_oracle, candidate_oracle,
+                 self.spec.requests(anchor_arm.template), launch._restore,
+                 self.root / "identity-divergence")]
 
 
 def prefill_dimension_row(row: Mapping) -> dict:
