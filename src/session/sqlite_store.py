@@ -29,6 +29,7 @@ from src.session.models import (
     Finding,
     FindingSource,
     Session,
+    SessionMessage,
     SessionDocument,
     SessionStatus,
 )
@@ -36,6 +37,7 @@ from src.session.lease import SessionLeaseManager, check_fence
 from src.session.protocol import BaseSessionStore, WhereFilter
 
 logger = logging.getLogger(__name__)
+MAX_CONVERSATION_MESSAGES = 200
 
 
 def _json_col(row: Any, name: str) -> dict:
@@ -197,6 +199,26 @@ class SQLiteSessionStore(BaseSessionStore):
                     pickled_globals TEXT DEFAULT '{}'
                 )
             """)
+
+            # Voice/chat transcript persistence is additive; existing session
+            # metadata and the read-only trace event store remain separate.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS session_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    turn_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    spoken_text TEXT,
+                    display_json TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_session_messages_session_created "
+                "ON session_messages(session_id, created_at, id)"
+            )
 
             # Graph snapshots (D-f3): append-only per-run TaskState snapshots
             # written by the graph layer. Deliberately NOT the checkpoints
@@ -533,12 +555,109 @@ class SQLiteSessionStore(BaseSessionStore):
             if not existing:
                 return False
 
-            # Cascade deletes handle related data
+            # Remove transcript rows explicitly. Existing SQLite connections do
+            # not globally enable foreign-key enforcement.
+            conn.execute("DELETE FROM session_messages WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
             conn.commit()
 
         logger.info(f"Deleted session {session_id}")
         return True
+
+    def append_message(
+        self,
+        session_id: str,
+        turn_id: str,
+        role: str,
+        text: str,
+        *,
+        spoken_text: str | None = None,
+        display: dict[str, Any] | None = None,
+        created_at: datetime | None = None,
+    ) -> SessionMessage:
+        """Append a message without changing the legacy REPL message_count."""
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError("session_id must be a non-empty string")
+        if not isinstance(turn_id, str) or not turn_id.strip():
+            raise ValueError("turn_id must be a non-empty string")
+        if not isinstance(role, str) or not role.strip():
+            raise ValueError("role must be a non-empty string")
+        if not isinstance(text, str):
+            raise ValueError("text must be a string")
+        if spoken_text is not None and not isinstance(spoken_text, str):
+            raise ValueError("spoken_text must be a string or None")
+        if display is not None and not isinstance(display, dict):
+            raise ValueError("display must be a JSON object or None")
+        stamp = created_at or datetime.now(timezone.utc)
+        if not isinstance(stamp, datetime) or stamp.tzinfo is None:
+            raise ValueError("created_at must be a timezone-aware datetime")
+        stamp = stamp.astimezone(timezone.utc)
+        display_json = (
+            json.dumps(display, ensure_ascii=False, allow_nan=False, sort_keys=True)
+            if display is not None else None
+        )
+        stamp_text = stamp.isoformat()
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            exists = conn.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone()
+            if exists is None:
+                raise ValueError(f"Session {session_id} does not exist")
+            cursor = conn.execute(
+                """INSERT INTO session_messages (
+                       session_id, turn_id, role, text, spoken_text, display_json,
+                       created_at, updated_at
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (session_id, turn_id, role, text, spoken_text, display_json,
+                 stamp_text, stamp_text),
+            )
+            conn.commit()
+            message_id = int(cursor.lastrowid)
+        return SessionMessage(
+            id=message_id,
+            session_id=session_id,
+            turn_id=turn_id,
+            role=role,
+            text=text,
+            spoken_text=spoken_text,
+            display=json.loads(display_json) if display_json else None,
+            created_at=stamp,
+            updated_at=stamp,
+        )
+
+    def get_messages(
+        self, session_id: str, *, limit: int = MAX_CONVERSATION_MESSAGES
+    ) -> list[SessionMessage]:
+        """Return the newest message window for a session, oldest first."""
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError("session_id must be a non-empty string")
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= MAX_CONVERSATION_MESSAGES
+        ):
+            raise ValueError(f"limit must be between 1 and {MAX_CONVERSATION_MESSAGES}")
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """SELECT id, session_id, turn_id, role, text, spoken_text,
+                          display_json, created_at, updated_at
+                   FROM (
+                       SELECT id, session_id, turn_id, role, text, spoken_text,
+                              display_json, created_at, updated_at
+                       FROM session_messages WHERE session_id = ?
+                       ORDER BY created_at DESC, id DESC LIMIT ?
+                   ) ORDER BY created_at ASC, id ASC""",
+                (session_id, limit),
+            ).fetchall()
+        return [
+            SessionMessage(
+                id=row["id"], session_id=row["session_id"], turn_id=row["turn_id"],
+                role=row["role"], text=row["text"], spoken_text=row["spoken_text"],
+                display=json.loads(row["display_json"]) if row["display_json"] else None,
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
+            for row in rows
+        ]
 
     # Valid column names for ORDER BY (whitelist to prevent SQL injection)
     _VALID_ORDER_COLUMNS = frozenset(

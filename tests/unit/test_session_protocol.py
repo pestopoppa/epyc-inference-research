@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Unit tests for src/session/protocol.py."""
 
+from datetime import datetime, timezone
+
 import numpy as np
 import pytest
 
@@ -9,6 +11,7 @@ from src.session.models import (
     Finding,
     FindingSource,
     Session,
+    SessionMessage,
     SessionDocument,
 )
 from src.session.protocol import (
@@ -67,6 +70,7 @@ class MockSessionStore(BaseSessionStore):
         self.documents = {}
         self.findings = {}
         self.checkpoints = {}
+        self.messages = []
 
     def create_session(self, session: Session) -> Session:
         if session.id in self.sessions:
@@ -86,8 +90,34 @@ class MockSessionStore(BaseSessionStore):
     def delete_session(self, session_id: str) -> bool:
         if session_id in self.sessions:
             del self.sessions[session_id]
+            self.messages = [m for m in self.messages if m.session_id != session_id]
             return True
         return False
+
+    def append_message(
+        self, session_id, turn_id, role, text, *, spoken_text=None, display=None, created_at=None
+    ) -> SessionMessage:
+        if session_id not in self.sessions:
+            raise ValueError(f"Session {session_id} not found")
+        stamp = created_at or datetime.now(timezone.utc)
+        message = SessionMessage(
+            id=len(self.messages) + 1,
+            session_id=session_id,
+            turn_id=turn_id,
+            role=role,
+            text=text,
+            spoken_text=spoken_text,
+            display=display,
+            created_at=stamp,
+            updated_at=stamp,
+        )
+        self.messages.append(message)
+        return message
+
+    def get_messages(self, session_id, *, limit=200) -> list[SessionMessage]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 200:
+            raise ValueError("limit must be between 1 and 200")
+        return [m for m in self.messages if m.session_id == session_id][-limit:]
 
     def list_sessions(
         self,

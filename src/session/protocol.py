@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
@@ -22,6 +23,7 @@ from src.session.models import (
     Finding,
     ResumeContext,
     Session,
+    SessionMessage,
     SessionDocument,
 )
 
@@ -182,6 +184,24 @@ class SessionStore(Protocol):
         Raises:
             ValueError: If session does not exist
         """
+        ...
+
+    def append_message(
+        self,
+        session_id: str,
+        turn_id: str,
+        role: str,
+        text: str,
+        *,
+        spoken_text: str | None = None,
+        display: dict[str, Any] | None = None,
+        created_at: datetime | None = None,
+    ) -> SessionMessage:
+        """Append one conversation message to an existing session."""
+        ...
+
+    def get_messages(self, session_id: str, *, limit: int = 200) -> list[SessionMessage]:
+        """Return the newest bounded message window in chronological order."""
         ...
 
     def delete_session(self, session_id: str) -> bool:
