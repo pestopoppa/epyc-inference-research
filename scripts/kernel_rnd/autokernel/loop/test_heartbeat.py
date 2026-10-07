@@ -20,6 +20,29 @@ def _publisher(writer, payload=lambda: {}, *, interval=3600.0, timeout=1.0,
         error_sink=errors.append), errors
 
 
+def _ast_name(node):
+    """Return a dotted name for an AST name, attribute, or call target."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        prefix = _ast_name(node.value)
+        return f"{prefix}.{node.attr}" if prefix else node.attr
+    if isinstance(node, ast.Call):
+        return _ast_name(node.func)
+    return None
+
+
+def _calls(node):
+    if isinstance(node, (list, tuple)):
+        return [item for statement in node for item in _calls(statement)]
+    return [item for item in ast.walk(node) if isinstance(item, ast.Call)]
+
+
+def _has_raise_to(node, target):
+    return any(isinstance(item, ast.Raise) and item.exc is not None
+               and _ast_name(item.exc) == target for item in ast.walk(node))
+
+
 def test_blocked_inflight_heartbeat_finishes_before_terminal_publication():
     entered = threading.Event()
     release = threading.Event()
@@ -327,36 +350,123 @@ def test_progress_writes_and_last_step_updates_are_serialized():
 
 
 def test_real_main_consumes_lifecycle_across_failures_and_artifact_write():
-    """AST/source guard: the helper is wired into the actual pooled run, not orphaned."""
+    """The actual main path brackets work and artifact writing with terminal states."""
     source = (Path(__file__).resolve().parent / "run.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     main = next(node for node in tree.body
                 if isinstance(node, ast.FunctionDef) and node.name == "main")
-    names = {node.attr for node in ast.walk(main) if isinstance(node, ast.Attribute)}
-    assert {"WorkerStatusPublisher", "start", "close", "close_failed"} <= names
-    assert "publish = status_publisher.publish" in source
+    main_assignments = [node for node in main.body if isinstance(node, ast.Assign)]
+    publisher_assignment = next(node for node in main_assignments
+                                if any(isinstance(target, ast.Name)
+                                       and target.id == "status_publisher"
+                                       for target in node.targets))
+    publish_binding = next(node for node in main_assignments
+                           if any(isinstance(target, ast.Name) and target.id == "publish"
+                                  for target in node.targets))
+    assert isinstance(publisher_assignment.value, ast.Call)
+    assert _ast_name(publisher_assignment.value.func) == "heartbeat.WorkerStatusPublisher"
+    assert _ast_name(publish_binding.value) == "status_publisher.publish"
 
-    protected = source.split("    try:\n        publish(\"starting\")", 1)[1]
-    body, failure = protected.split("    except BaseException as exc:", 1)
-    for operation in ("claim.hold()", "reprofile()", "run_pooled()",
-                      'status.write_json(args.out, "loop-run.json"'):
-        assert operation in body
-    assert "status_publisher.close_failed(" in failure
-    assert source.index('status.write_json(args.out, "loop-run.json"') < source.index(
-        'status_publisher.close("complete"')
-    assert "exc, list(latest), hotspot_rows=list(hotspot_rows)" in failure
+    lifecycle = [node for node in ast.walk(main) if isinstance(node, ast.Try)
+                 and any(_ast_name(handler.type) == "BaseException"
+                         for handler in node.handlers if handler.type)
+                 and any(_ast_name(call.func) == "status_publisher.close_failed"
+                         for handler in node.handlers for call in _calls(handler))]
+    assert len(lifecycle) == 1
+    lifecycle = lifecycle[0]
+    assert publisher_assignment.lineno < publish_binding.lineno < lifecycle.lineno
+
+    body_calls = _calls(lifecycle.body)
+    starting = [call for call in body_calls
+                if _ast_name(call.func) == "publish"
+                and call.args and isinstance(call.args[0], ast.Constant)
+                and call.args[0].value == "starting"]
+    starts = [call for call in body_calls
+              if _ast_name(call.func) == "status_publisher.start"]
+    claims = [call for call in body_calls if _ast_name(call.func) == "claim.hold"]
+    profiling = [call for call in body_calls if _ast_name(call.func) == "reprofile"]
+    pooled_runs = [call for call in body_calls if _ast_name(call.func) == "run_pooled"]
+    artifact_writes = [call for call in body_calls
+                       if _ast_name(call.func) == "status.write_json"
+                       and len(call.args) >= 2
+                       and isinstance(call.args[1], ast.Constant)
+                       and call.args[1].value == "loop-run.json"]
+    assert len(starting) == len(starts) == len(pooled_runs) == len(artifact_writes) == 1
+    assert claims and profiling
+    assert starting[0].lineno < starts[0].lineno < pooled_runs[0].lineno
+    assert starts[0].lineno < claims[0].lineno < profiling[0].lineno
+    assert pooled_runs[0].lineno < artifact_writes[0].lineno
+
+    failures = [handler for handler in lifecycle.handlers
+                if _ast_name(handler.type) == "BaseException"]
+    assert len(failures) == 1
+    failed_closes = [call for call in _calls(failures[0])
+                     if _ast_name(call.func) == "status_publisher.close_failed"]
+    assert len(failed_closes) == 1
+    assert any(isinstance(arg, ast.Name) and arg.id == failures[0].name
+               for arg in failed_closes[0].args)
+    assert any(isinstance(item, ast.Raise) and item.exc is None
+               for item in ast.walk(failures[0]))
+
+    success_closes = [call for call in _calls(lifecycle.orelse)
+                      if _ast_name(call.func) == "status_publisher.close"
+                      and call.args and isinstance(call.args[0], ast.Constant)
+                      and call.args[0].value == "complete"]
+    assert len(success_closes) == 1
+    assert artifact_writes[0].lineno < success_closes[0].lineno
 
 
 def test_accumulator_projection_is_validity_gated_and_recovery_refuses_startup():
     source = (Path(__file__).resolve().parent / "run.py").read_text(encoding="utf-8")
-    projection = source.split("    def accumulator_state(", 1)[1].split(
-        "\n    def actor_health", 1)[0]
-    assert '"measurement_validity": validity' in projection
-    assert '"historical_compounded_bench_pct": historical_comp' in projection
-    assert "if measurement_current else None" in projection
-    recovery = source.split("except accumulate.BundleRecoveryRequired as exc:", 1)[1]
-    assert "champion.StartupRefused" in recovery
-    assert "seed_bundle" in recovery
-    assert "not a repair for a corrupt journal" in recovery
-    assert "genuinely new explicit baseline" in recovery
-    assert "no champion-of-record was inferred" in recovery
+    tree = ast.parse(source)
+    main = next(node for node in tree.body
+                if isinstance(node, ast.FunctionDef) and node.name == "main")
+    accumulator = next(node for node in ast.walk(main)
+                       if isinstance(node, ast.FunctionDef)
+                       and node.name == "accumulator_state")
+    projection = next(node.value for node in ast.walk(accumulator)
+                      if isinstance(node, ast.Return)
+                      and isinstance(node.value, ast.Dict))
+    projected = {key.value: value for key, value in zip(projection.keys, projection.values)
+                 if isinstance(key, ast.Constant) and isinstance(key.value, str)}
+
+    assert isinstance(projected["measurement_validity"], ast.Name)
+    assert projected["measurement_validity"].id == "validity"
+    current_gain = projected["compounded_bench_pct"]
+    historical_gain = projected["historical_compounded_bench_pct"]
+    assert isinstance(current_gain, ast.Name) and current_gain.id == "comp"
+    assert isinstance(historical_gain, ast.Name) and historical_gain.id == "historical_comp"
+    assignments = {target.id: node.value for node in ast.walk(accumulator)
+                   if isinstance(node, ast.Assign)
+                   for target in node.targets if isinstance(target, ast.Name)}
+    validity_gate = assignments["measurement_current"]
+    assert isinstance(validity_gate, ast.Compare)
+    assert isinstance(validity_gate.left, ast.Name) and validity_gate.left.id == "validity"
+    assert _ast_name(validity_gate.comparators[0]) == "accumulate.MEASUREMENT_CURRENT"
+    assert isinstance(validity_gate.ops[0], ast.Eq)
+    current_gain = assignments[current_gain.id]
+    historical_gain = assignments[historical_gain.id]
+    assert isinstance(current_gain, ast.IfExp)
+    assert _ast_name(current_gain.test) == "measurement_current"
+    assert isinstance(current_gain.orelse, ast.Constant) and current_gain.orelse.value is None
+    assert isinstance(historical_gain, ast.IfExp)
+    assert _ast_name(historical_gain.test) == "measurement_current"
+    assert isinstance(historical_gain.body, ast.Constant) and historical_gain.body.value is None
+    assert isinstance(historical_gain.orelse, ast.Call)
+    assert _ast_name(historical_gain.orelse.func) == "round"
+
+    recovery = [node for node in ast.walk(main) if isinstance(node, ast.Try)
+                and any(_ast_name(call.func) == "accumulate.load_bundle"
+                        for call in _calls(node))
+                and any(_ast_name(handler.type) == "accumulate.BundleRecoveryRequired"
+                        for handler in node.handlers if handler.type)]
+    assert len(recovery) == 1
+    handler = next(handler for handler in recovery[0].handlers
+                   if _ast_name(handler.type) == "accumulate.BundleRecoveryRequired")
+    explicit_epoch = next(node for node in handler.body if isinstance(node, ast.If)
+                          and _ast_name(node.test) == "args.new_anchor_epoch")
+    assert any(_ast_name(call.func) == "new_epoch.start_new_anchor_epoch"
+               for call in _calls(explicit_epoch.body))
+    assert _has_raise_to(explicit_epoch, "champion.StartupRefused")
+    assert _has_raise_to(ast.Module(body=explicit_epoch.orelse, type_ignores=[]),
+                         "champion.StartupRefused")

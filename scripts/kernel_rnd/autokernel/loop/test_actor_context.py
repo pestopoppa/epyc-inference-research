@@ -39,8 +39,17 @@ CONTROL_FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-planner-prom
 #: control fixture -- built by wrapping the SAME recorded context in the live template
 #: -- carries that new suffix too. Only the trailing sentence changed; everything
 #: before it, including the recorded run-8 bytes the fixture wraps, is unchanged.
-CONTROL_SHA256 = "559f7a29e6eab717e10f494cdcd18dfccee35053da412c11f717f28fa76f1fb4"
-NODE_PROFILE_SECTION_CHARS = 3878
+HISTORICAL_CONTROL_SHA256 = "559f7a29e6eab717e10f494cdcd18dfccee35053da412c11f717f28fa76f1fb4"
+#: 0e9e0b4a added this limitation to the prospective renderer. Preserve the
+#: original historical control bytes and reconcile the current renderer by
+#: applying this ONE explicit prose delta in memory, never rewriting run 8.
+PATH_AGGREGATE_LIMITATION = (
+    "Per-call PATH aggregates above pool every node shape and phase "
+    "that hits one weight path, prefill included -- their bandwidth is "
+    "NOT a roofline reading. The ROOFLINE GAP table below is the "
+    "per-node replacement for that framing.")
+CONTROL_SHA256 = "e2fb5be1fe090be9e4c47171b510f0769b6841ca24ab5b5721ba710e9c4b5d8a"
+NODE_PROFILE_SECTION_CHARS = 3878 + len(PATH_AGGREGATE_LIMITATION) + 1
 RUN8_RECORDED_SHA256 = "72c8677850d955b2598bd9d7254460b0fdead5c0ee2f150c80e897ae0ce47b99"
 CPU_FORMAT = dict(
     platform="the CPUs in the selected original serving launch",
@@ -71,8 +80,11 @@ def _recorded_prompt() -> str:
 
 
 def _real_prompt() -> str:
-    """The A/B control: run 8's prompt as the node_profile-rendering code builds it."""
-    return CONTROL_FIXTURE.read_text(encoding="utf-8")
+    """Prospective engineering control, derived from immutable historical bytes."""
+    historical = CONTROL_FIXTURE.read_text(encoding="utf-8")
+    marker = "\n\n### Host phases, share of decode"
+    assert historical.count(marker) == 1
+    return historical.replace(marker, "\n" + PATH_AGGREGATE_LIMITATION + marker, 1)
 
 
 def _run8_node_profile() -> dict:
@@ -127,10 +139,12 @@ class NodeProfileIsExactlyOneInsertedSection(unittest.TestCase):
 
     def test_control_fixture_is_the_recorded_prompt_plus_exactly_the_node_profile(self):
         """Two deliberate deltas from the recorded bytes now, not one: the inserted
-        node-profile section (this class's whole point), and (DS41 audit fix 1,
-        2026-10) the abstain-clause extension appended at the very end by the SAME
-        template edit `test_the_template_still_wraps_...` exercises directly."""
+        current node-profile section (including its PATH aggregation warning),
+        and the abstain-clause extension at the end. The historical prompt and
+        historical node-profile control remain hash-pinned original bytes."""
         recorded, control, block = _recorded_prompt(), _real_prompt(), _node_profile_block()
+        self.assertEqual(hashlib.sha256(CONTROL_FIXTURE.read_bytes()).hexdigest(),
+                         HISTORICAL_CONTROL_SHA256)
         self.assertEqual(hashlib.sha256(control.encode()).hexdigest(), CONTROL_SHA256)
         self.assertEqual(len(block), NODE_PROFILE_SECTION_CHARS)
         self.assertEqual(len(control) - len(recorded),
@@ -381,7 +395,7 @@ class VariableModeIsLossless(unittest.TestCase):
         rel = f"sections/{n:02d}-node_profile.md"
         self.assertEqual((self.bundle.directory / rel).read_text(encoding="utf-8"),
                          _node_profile_block())
-        self.assertRegex(index, rf"\| {n} \| node_profile \| `{rel}` \| 3,878 \| \d+ \| "
+        self.assertRegex(index, rf"\| {n} \| node_profile \| `{rel}` \| {NODE_PROFILE_SECTION_CHARS:,} \| \d+ \| "
                                 r"file \+ summary \|")
         required = index.split("Read these before you propose")[1].split("| # |")[0]
         self.assertIn(f"`{rel}` — node_profile", required)

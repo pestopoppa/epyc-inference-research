@@ -291,6 +291,77 @@ def test_reopen_accepts_gpu_only_interval_with_device_claim_and_gpu_quiet(tmp_pa
                                         outcome="failed")
 
 
+def _phase_bundle(tmp_path, phases):
+    source = manifest()
+    state = scheduling.initial_state(source.config, source.scheduler_id)
+    state, selected, _ = ss.select_target(source, state, ("gpu",), now=1, stage_number=0)
+    target = {"selected_id": "gpu"}
+    device = _component("mi210_0", 1, 10, fraction=0, claim="gpu-flock")
+    body = {"schema": ss.INTERVAL_SCHEMA_V2, "selection": selected.to_dict(),
+            "selection_digest": selected.digest, "target": target,
+            "components": [device], "phases": phases}
+    store = ArtifactStore(tmp_path / "held-claim-artifacts")
+    try:
+        artifact = store.write("direct-held-intervals", body).to_dict()
+    finally:
+        store.close()
+    reference = {"schema": ss.REFERENCE_SCHEMA, "selection_digest": selected.digest,
+                 "evidence": artifact}
+    return source, state, selected, target, reference
+
+
+def _phase(kind, start, end):
+    cpu = kind == "build"
+    row = _component("cpu" if cpu else "gpu_quiet", start, end,
+                     fraction=.25 if cpu else 0., claim="cpu-flock" if cpu else "quiet-flock")
+    row["gpu_device_ids"] = []
+    return {"kind": kind, "component": row}
+
+
+def test_gpu_phase_partition_charges_only_original_cpu_holds_and_preserves_device_gaps(tmp_path):
+    source, state, selected, target, ref = _phase_bundle(
+        tmp_path, [_phase("build", 2, 4), _phase("gpu_compute", 6, 8)])
+    receipts = ss.reopen_held_receipts(tmp_path, ref, selection=selected, target=target)
+    assert [(row.started_at, row.ended_at, row.physical_region_fraction) for row in receipts] \
+        == [(1, 2, 0), (2, 4, .25), (4, 6, 0), (6, 8, 0), (8, 10, 0)]
+    assert all(row.schema == scheduling.RECEIPT_SCHEMA_V2 for row in receipts)
+    view = scheduling.charge_receipts(receipts)
+    assert view.physical_region_seconds == .5
+    assert view.gpu_device_seconds == {"mi210_0": 9.}
+    assert view.held_seconds == 9.
+    assert len(receipts[2].physical_claim_ids) == 1  # hosted gap owns only the device
+    assert len(receipts[3].physical_claim_ids) == 2  # compute also owns quiet
+    settled = scheduling.account_stage_components(source.config, state, selected,
+                                                  receipts, outcome="failed")
+    assert scheduling.SchedulerState.from_dict(settled.to_dict()) == settled
+
+
+@pytest.mark.parametrize("defect", ["overlap", "outside", "lost", "quiet_cpu", "gpu_on_cpu"])
+def test_gpu_phase_partition_refuses_unowned_or_overlapping_phases(tmp_path, defect):
+    phases = [_phase("build", 2, 4), _phase("gpu_compute", 6, 8)]
+    if defect == "overlap":
+        phases[1] = _phase("gpu_compute", 3, 5)
+    elif defect == "outside":
+        phases[1] = _phase("gpu_compute", 9, 11)
+    elif defect == "lost":
+        phases[1]["component"]["close"]["status"] = "lost"
+    elif defect == "quiet_cpu":
+        phases[1]["component"]["physical_region_fraction"] = .25
+    else:
+        phases[0]["component"]["gpu_device_ids"] = ["mi210_0"]
+    _, _, selected, target, ref = _phase_bundle(tmp_path, phases)
+    with pytest.raises(ss.SerialSchedulingRefused):
+        ss.reopen_held_receipts(tmp_path, ref, selection=selected, target=target)
+
+
+def test_v1_device_only_receipt_remains_refused_while_v2_is_explicit(tmp_path):
+    _, _, selected, target, ref = _phase_bundle(tmp_path, [])
+    (receipt,) = ss.reopen_held_receipts(tmp_path, ref, selection=selected, target=target)
+    assert receipt.physical_region_fraction == 0.
+    with pytest.raises(scheduling.SchedulingRefused, match="host CPU"):
+        replace(receipt, schema=scheduling.RECEIPT_SCHEMA)
+
+
 @pytest.mark.parametrize("quiet, match", [
     (None, "gpu-quiet EXCLUSIVE"),
     ({"open": _quiet_observation(mode="shared"), "close": _quiet_observation()},

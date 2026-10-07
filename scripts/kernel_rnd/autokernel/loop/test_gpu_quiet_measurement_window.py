@@ -240,7 +240,8 @@ def fake_owner(tmp_path, monkeypatch):
 
     @contextmanager
     def gpu_quiet_then_regions(role, regs, *, gpu_quiet, timeout_s, cancel_check=None,
-                               request_tag=None):
+                               request_tag=None, region_attempt_s=None):
+        assert region_attempt_s == 0.25
         events.append(f"gpu-quiet {gpu_quiet}")
         try:
             with regions() as held:
@@ -340,15 +341,17 @@ def test_real_exclusive_measurement_waits_for_a_shared_cpu_holder(real_gpu_quiet
 def test_gpu_only_run_wires_launcher_gpu_quiet_into_its_device_claim():
     """`--gpu-cpu-region-claim off`: the device claim observes the launcher's run-wide
     gpu-quiet EXCLUSIVE hold (its host resource receipt for serial settlement); the
-    per-measurement policy is refused at startup, and a missing hold refuses before a build."""
+    off policy retains that path; lock policy uses original local owner intervals."""
     body = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
-    assert re.search(r"if gpu_skip_cpu_claim:\n\s+if args\.cpu_measurement_gpu_quiet != "
-                     r"CPU_MEASUREMENT_GPU_QUIET_OFF:\n\s+parser\.error\(", body)
+    assert re.search(r"if gpu_skip_cpu_claim and args\.cpu_measurement_gpu_quiet == "
+                     r"CPU_MEASUREMENT_GPU_QUIET_OFF:", body)
     assert "gpu_only_quiet_path = claim.gpu_quiet_preflight()" in body
     assert re.search(r"claim\.hold\(\n\s+gpu_quiet_path=gpu_only_quiet_path if gpu_skip_cpu_claim "
                      r"else None\)\)", body)
-    assert re.search(r"if gpu_skip_cpu_claim and claim\.gpu_quiet_exclusive_holder\(\n\s+"
+    assert re.search(r"if gpu_only_quiet_path is not None and claim\.gpu_quiet_exclusive_holder\(\n\s+"
                      r"receipt\.gpu_quiet_open\(\)\) is None:\n\s+raise claim\.ClaimRefused", body)
+    assert "return gpu_local.compute()" in body
+    assert "gpu_local.closed_phases()" in body
 
 
 def test_real_owner_exclusive_hold_is_a_gpu_only_device_receipt(real_gpu_quiet, tmp_path):

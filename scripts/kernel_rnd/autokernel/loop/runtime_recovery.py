@@ -51,6 +51,7 @@ def _verify(body):
     selection = scheduling.Selection.from_dict(active.get("scheduler_selection"))
     if active.get("scheduler_selection_sha256") != selection.digest:
         raise sr.SerialRefused("runtime recovery original selection differs")
+    sr._refuse_cpu_segment_capture(directory, selection, target)
     serial_scheduling.reopen_held_receipts(directory, body["held_claim_evidence"],
         selection=selection, target=target)
     reference = body["held_claim_evidence"]["evidence"]
@@ -60,6 +61,12 @@ def _verify(body):
     finally:
         store.close()
     cpu = next((row for row in intervals["components"] if row["device_id"] == "cpu"), None)
+    if (target["scope"] == "cpu_serving_selected_workload"
+            and intervals["schema"] == serial_scheduling.INTERVAL_SCHEMA_V2):
+        # The validated outer frame joins runtime holder identity and clock
+        # boundaries only. Original native CPU segments were proved above;
+        # this frame carries no CPU fraction or acquisition permission.
+        cpu = dict(intervals["stage_elapsed"])
     gpu = None
     if target["scope"] == "gpu_serving_selected_workload":
         from .claim import DEVICE_ID

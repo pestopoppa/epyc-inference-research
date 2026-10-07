@@ -48,6 +48,16 @@ def reopen(case, receipt=None):
         expected_requests=case["requests"], expected_pid=101)
 
 
+def test_source_identity_v2_is_independent_of_response_payload_schema():
+    identity = ob._plain(ns.source_identity())
+
+    assert ns.RESPONSE_SCHEMA == "epyc.autokernel.native_server_response.v1"
+    assert identity["schema"] == ns.SOURCE_IDENTITY_SCHEMA_V2
+    assert identity["schema"] != ns.RESPONSE_SCHEMA
+    assert identity["direct_schemas"] == list(ns.DIRECT_SCHEMA_IDS)
+    assert len(identity["callables"]) == 18
+
+
 def test_original_every_phase_slot_request_response_byte_reopens(original):
     rows = reopen(original)
     assert len(rows) == 4

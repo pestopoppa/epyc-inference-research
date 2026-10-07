@@ -26,7 +26,7 @@ import subprocess
 
 from .. import schemas
 from ..evaluator import correctness
-from . import bench, census, residency
+from . import bench, census, residency, scratch
 
 #: One op suite, on the backend under test. 53 seconds measured, and it is the gate
 #: that decides whether a candidate is CORRECT -- everything downstream assumes it.
@@ -112,21 +112,21 @@ class Verdict:
 
 def compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
              jobs: int, cpu_list: str | None, targets: tuple = DEFAULT_TARGETS,
-             cmake: str = "cmake") -> Verdict:
+             cmake: str = "cmake", env: dict | None = None) -> Verdict:
     """Configure and build. A compile failure is cheap, automatic planner feedback."""
     prefix = ("taskset", "-c", cpu_list) if cpu_list else ()
     configure = [*prefix, cmake, "-S", str(source_root), "-B", str(build_dir),
                  "-DCMAKE_BUILD_TYPE=Release",
                  *[f"-D{name}={value}" for name, value in cmake_defines]]
     done = subprocess.run(configure, capture_output=True, text=True,
-                          timeout=BUILD_TIMEOUT_S)
+                          timeout=BUILD_TIMEOUT_S, env=env)
     if done.returncode != 0:
         return Verdict("configure", False, "cmake configure failed", done.stderr[-2000:])
 
     build = [*prefix, cmake, "--build", str(build_dir), "-j", str(jobs)]
     for target in targets:
         build += ["--target", target]
-    done = subprocess.run(build, capture_output=True, text=True, timeout=BUILD_TIMEOUT_S)
+    done = subprocess.run(build, capture_output=True, text=True, timeout=BUILD_TIMEOUT_S, env=env)
     if done.returncode != 0:
         return Verdict("compile", False, "build failed", done.stderr[-2000:])
     # Exit code alone is not enough: a pipe can lose the compiler's status, and a
@@ -3182,7 +3182,7 @@ def ppl_contract_fold_required(keeps, changed_paths, ledger: "set[str] | None",
 
 
 def _run_tool(argv: list[str], *, env: dict, log_dir: Path, label: str,
-              timeout: int = 3600) -> tuple["int | None", str, str]:
+              timeout: int = 3600, lifecycle_environment: dict | None = None) -> tuple["int | None", str, str]:
     """Run `argv` with stdin closed; persist stdout/stderr; return (rc, stdout, stderr).
 
     rc is None when the tool could not run or timed out. Callers MUST treat any rc != 0
@@ -3196,7 +3196,10 @@ def _run_tool(argv: list[str], *, env: dict, log_dir: Path, label: str,
         rc, out, err = None, "", f"{type(exc).__name__}: {exc}"
     try:
         (log_dir / f"{label}.log").write_text(
-            f"argv: {argv!r}\nrc: {rc!r}\n--- stdout ---\n{out[-100_000:]}\n"
+            f"argv: {argv!r}\nrc: {rc!r}\n"
+            + (f"lifecycle-environment: {json.dumps(lifecycle_environment, sort_keys=True)}\n"
+               if lifecycle_environment is not None else "")
+            + f"--- stdout ---\n{out[-100_000:]}\n"
             f"--- stderr ---\n{err[-100_000:]}", encoding="utf-8")
     except OSError:
         pass
@@ -3644,6 +3647,9 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
     prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
     ld_path = _rebind_ld(env, build, candidate_build)
     prefix, run_threads, extra = _launch_argv(launch, cpu_list, threads, batch_ok=True)
+    # Cache identity retains EVERY caller-declared environment value. Native-owned
+    # temp locations and the procguard cookie are a recorded lifecycle overlay,
+    # never a fresh timing/performance observation or a new numerical treatment.
     key = _key(kind="completion-v6", build=_build_identity(build, "llama-completion", ld_path),
                model=_model_identity(model), prompt=prompt_sha, n_predict=n_predict,
                ctx=ctx, threads=run_threads, prefix=prefix, extra=extra,
@@ -3653,27 +3659,34 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
             and isinstance(cached[3], list):
         return (str(cached[0]), int(cached[1]), tuple(int(t) for t in cached[2]),
                 tuple(int(t) for t in cached[3]))
-    log_dir.mkdir(parents=True, exist_ok=True)
-    prompt_file = log_dir / f"prompt-{prompt_sha[:16]}.txt"
-    prompt_file.write_text(prompt, encoding="utf-8")
-    session = log_dir / f"session-{uuid.uuid4().hex}.bin"
-    if session.exists():
-        return None
-    argv = [*prefix,
-            str(Path(build) / "bin" / "llama-completion"), "-m", str(model),
-            "-f", str(prompt_file), "-n", str(n_predict), "-c", str(ctx),
-            "-t", str(run_threads), *extra, "--temp", "0", "--top-k", "1", "--seed", "0",
-            "-no-cnv", "--no-display-prompt", "--ignore-eos", "--verbose-prompt",
-            "--perf", "--prompt-cache", str(session), "--prompt-cache-all", "--no-mmap"]
-    try:
-        rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": ld_path},
-                                 log_dir=log_dir, label=f"{label}_{Path(build).name}")
+    with scratch.registry_for(log_dir.parent / "scratch").scope("call", name="ppl-completion") as scope:
+        inputs = scope.dir("ppl-completion-inputs", f"{scope.registry.instance}-{scope.id}")
+        prompt_file = inputs / f"prompt-{prompt_sha[:16]}.txt"
+        prompt_file.write_text(prompt, encoding="utf-8")
+        session = inputs / f"session-{uuid.uuid4().hex}.bin"
+        if session.exists():
+            return None
+        argv = [*prefix,
+                str(Path(build) / "bin" / "llama-completion"), "-m", str(model),
+                "-f", str(prompt_file), "-n", str(n_predict), "-c", str(ctx),
+                "-t", str(run_threads), *extra, "--temp", "0", "--top-k", "1", "--seed", "0",
+                "-no-cnv", "--no-display-prompt", "--ignore-eos", "--verbose-prompt",
+                "--perf", "--prompt-cache", str(session), "--prompt-cache-all", "--no-mmap"]
+        declared_effective = {**env, "LD_LIBRARY_PATH": ld_path}
+        with scratch.owned_child_env(scope, declared_effective) as child_env:
+            from .procguard import ENV_SCOPE
+            injected = {k: v for k, v in child_env.items() if declared_effective.get(k) != v}
+            if (set(injected) - {"TMPDIR", "TMP", "TEMP", ENV_SCOPE}
+                    or set(declared_effective) - set(child_env)):
+                raise scratch.ScratchRefused("completion lifecycle overlay changed a declared treatment variable")
+            lifecycle = {"schema": "epyc.autokernel.lifecycle_environment.v1",
+                         "declared_env_sha256": _key(environment=env),
+                         "actual_env_sha256": _key(environment=child_env),
+                         "injected": injected}
+            rc, out, err = _run_tool(argv, env=child_env,
+                                     log_dir=log_dir, label=f"{label}_{Path(build).name}",
+                                     lifecycle_environment=lifecycle)
         tokens = _session_tokens(session) if rc == 0 else None
-    finally:
-        try:
-            session.unlink()
-        except OSError:
-            pass
     found = re.search(r"number of tokens in prompt = (\d+)", err + out)
     decoded = re.search(r"(?<!prompt )eval time =\s*[0-9.]+ ms /\s*(\d+) runs", err + out)
     if rc != 0 or found is None or decoded is None or tokens is None:

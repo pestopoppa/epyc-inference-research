@@ -26,15 +26,28 @@ def _source(tmp_path: Path) -> tuple[Path, Path]:
     (source / accumulate.Bundle.FILENAME).write_text(json.dumps(legacy), encoding="utf-8")
     (source / "config.json").write_text(json.dumps({"recipe": "unknown"}), encoding="utf-8")
     (source / "artifact.bin").write_bytes(b"immutable legacy artifact")
-    with ExperimentStore(source) as store:
-        store.record({"proposal_sha256": "a" * 64, "status": "kept",
-                      "mechanism_id": "cpu", "recipe": "legacy-cpu",
-                      "instrument_id": "unknown"}, epoch="e1",
-                     recorded_at="2026-01-01T00:00:00Z", campaign_id="old")
-        store.record({"proposal_sha256": "b" * 64, "status": "measured_null",
-                      "mechanism_id": "gpu", "recipe": None,
-                      "instrument_id": "legacy-gpu"}, epoch="e1",
-                     recorded_at="2026-01-01T00:01:00Z", campaign_id="old")
+    # Freeze the historical v1 input. Today's ExperimentStore creates/migrates
+    # v2 lineage columns and must never stand in for a historical database.
+    with sqlite3.connect(source / "experiments.db") as connection:
+        connection.execute("""CREATE TABLE experiments (
+            attempt_id TEXT PRIMARY KEY, recorded_at TEXT NOT NULL,
+            campaign_id TEXT NOT NULL, deployment TEXT, epoch_sha256 TEXT NOT NULL,
+            hypothesis_id TEXT, mechanism_id TEXT, target_surface TEXT,
+            target_symbol TEXT, statement TEXT, falsifier TEXT, status TEXT NOT NULL,
+            effect_fraction REAL, exact_effect REAL, target_effect REAL,
+            refusal_reason TEXT, result_sha256 TEXT, payload TEXT NOT NULL)""")
+        for proposal, status, mechanism, recipe, instrument, recorded in (
+            ("a", "kept", "cpu", "legacy-cpu", "unknown", "2026-01-01T00:00:00Z"),
+            ("b", "measured_null", "gpu", None, "legacy-gpu", "2026-01-01T00:01:00Z"),
+        ):
+            payload = {"proposal_sha256": proposal * 64, "status": status,
+                       "mechanism_id": mechanism, "recipe": recipe,
+                       "instrument_id": instrument}
+            connection.execute("""INSERT INTO experiments
+                (attempt_id, recorded_at, campaign_id, epoch_sha256,
+                 mechanism_id, status, payload) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (proposal * 64, recorded, "old", "e1", mechanism, status,
+                 json.dumps(payload)))
     repo = tmp_path / "repo"
     repo.mkdir()
     return source, repo
@@ -59,10 +72,35 @@ def test_dry_run_is_noncreating_and_preserves_real_legacy_consumers(tmp_path):
     assert result.snapshot["history"]["accumulator"]["original_snapshot"]["keeps"] == [
         "cpu-keep", "gpu-keep"]
     records = result.snapshot["history"]["experiments"]["records"]
+    assert result.snapshot["history"]["experiments"]["schema_version"] == 1
+    assert result.snapshot["engine_compatibility"]["experiment_store_schema"] == 1
     assert [row["payload"]["recipe"] for row in records] == ["legacy-cpu", None]
     assert result.snapshot["source"]["campaign_ids"] == ["old"]
     assert result.snapshot["authority"]["validated"] is False
     assert result.snapshot["authority"]["measurement"] == "unknown_legacy"
+
+
+@pytest.mark.parametrize("schema_change", ["current_store", "unknown_column", "missing_column"])
+def test_unsupported_experiment_schema_refuses_without_mutation(tmp_path, schema_change):
+    request = _request(tmp_path)
+    if schema_change == "current_store":
+        # Exercise the actual installed writer's upgrade; it is not a legacy reader.
+        with ExperimentStore(request.source_root):
+            pass
+    else:
+        with sqlite3.connect(request.source_root / "experiments.db") as connection:
+            if schema_change == "unknown_column":
+                connection.execute("ALTER TABLE experiments ADD COLUMN future_authority TEXT")
+            else:
+                connection.execute("ALTER TABLE experiments RENAME COLUMN falsifier TO missing_falsifier")
+    before = {path.relative_to(request.source_root).as_posix(): path.read_bytes()
+              for path in request.source_root.rglob("*") if path.is_file()}
+    with pytest.raises(M.MigrationRefused, match="unsupported ExperimentStore schema"):
+        M.migrate(request, is_ancestor=_linear("cor", "tip"), dry_run=False)
+    after = {path.relative_to(request.source_root).as_posix(): path.read_bytes()
+             for path in request.source_root.rglob("*") if path.is_file()}
+    assert before == after
+    assert not request.destination_root.exists()
 
 
 def test_import_is_exactly_idempotent_and_inspect_never_falls_back_to_anchor(tmp_path):

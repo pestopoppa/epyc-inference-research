@@ -2109,6 +2109,94 @@ class TheToolRunnerNeverTreatsAFailureAsOutput(unittest.TestCase):
             self.assertEqual(list(Path(tmp).glob("session-*.bin")), [],
                              "session files are removed after parsing")
 
+    def test_completion_inputs_and_child_tmp_release_when_runner_raises(self):
+        from . import scratch
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            model = root / "model.gguf"
+            model.write_bytes(b"synthetic model identity only")
+            reg = scratch.ScratchRegistry(root / "scratch", owner={}, min_free_bytes=0)
+            seen = []
+            def fail(argv, **kwargs):
+                prompt = Path(argv[argv.index("-f") + 1])
+                session = Path(argv[argv.index("--prompt-cache") + 1])
+                temp = Path(kwargs["env"]["TMPDIR"])
+                assert prompt.read_text() == "prompt"
+                assert scratch.read_marker("dir", prompt.parent) is not None
+                assert scratch.read_marker("dir", temp) is not None
+                session.write_bytes(b"partial child output")
+                seen.extend([prompt.parent, temp])
+                raise RuntimeError("synthetic child-runner exception after partial write")
+            scratch.install(reg)
+            try:
+                with mock.patch.object(gates, "_build_identity", return_value="synthetic-tool"), \
+                        mock.patch.object(gates, "_run_tool", side_effect=fail):
+                    with self.assertRaisesRegex(RuntimeError, "synthetic child-runner"):
+                        gates._completion(root / "build", "prompt", 8, 64, model=model,
+                            threads=1, env={}, cpu_list="0", log_dir=root / "logs",
+                            cache_dir=None, label="test")
+                self.assertEqual(len(seen), 2)
+                self.assertFalse(any(path.exists() for path in seen))
+                self.assertEqual(reg.stats()["released"], 2)
+            finally:
+                scratch.uninstall(reg)
+                reg.close()
+
+    def test_completion_lifecycle_overlay_and_declared_environment_cache_identity(self):
+        import json, struct, sys
+        from . import scratch, procguard
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            model = root / "model.gguf"
+            model.write_bytes(b"synthetic model identity only")
+            reg = scratch.ScratchRegistry(root / "scratch", owner={}, min_free_bytes=0)
+            keys, declared_envs = [], []
+            real_run = gates._run_tool
+            outputs = "import sys;print('generated');print('number of tokens in prompt = 5\\nllama_perf_context_print: eval time = 2.0 ms / 7 runs',file=sys.stderr)"
+            def tool(argv, **kwargs):
+                session = Path(argv[argv.index("--prompt-cache") + 1])
+                tokens = tuple(range(13))
+                session.write_bytes(struct.pack("<III", gates.LLAMA_SESSION_MAGIC,
+                                               gates.LLAMA_SESSION_VERSION, len(tokens))
+                                    + struct.pack("<13i", *tokens))
+                actual = kwargs["env"]
+                lifecycle = kwargs["lifecycle_environment"]
+                declared = declared_envs[-1]
+                self.assertEqual(lifecycle["declared_env_sha256"], gates._key(environment=declared))
+                self.assertEqual(lifecycle["actual_env_sha256"], gates._key(environment=actual))
+                self.assertEqual(set(lifecycle["injected"]), {"TMPDIR", "TMP", "TEMP", procguard.ENV_SCOPE})
+                for key, value in declared.items():
+                    if key not in {"TMPDIR", "TMP", "TEMP", procguard.ENV_SCOPE}:
+                        self.assertEqual(actual[key], value)
+                result = real_run([sys.executable, "-c", outputs], **kwargs)
+                transcript = (kwargs["log_dir"] / f'{kwargs["label"]}.log').read_text()
+                row = next(line for line in transcript.splitlines() if line.startswith("lifecycle-environment: "))
+                self.assertEqual(json.loads(row.partition(": ")[2]), lifecycle)
+                self.assertNotIn("synthetic-secret-value", transcript)
+                return result
+            def put(_dir, key, _value, _meta):
+                keys.append(key)
+            scratch.install(reg)
+            try:
+                with mock.patch.object(gates, "_build_identity", return_value="synthetic-tool"), \
+                        mock.patch.object(gates, "_cache_get", return_value=None), \
+                        mock.patch.object(gates, "_cache_put", side_effect=put), \
+                        mock.patch.object(gates, "_run_tool", side_effect=tool):
+                    for env in ({"GGML_IQK": "0"}, {"GGML_IQK": "1"},
+                                {"ARBITRARY_FLAG": "0"}, {"ARBITRARY_FLAG": "1"},
+                                {"TMPDIR": "/declared-one"}, {"TMPDIR": "/declared-two"}):
+                        env = {**env, "SECRET": "synthetic-secret-value"}
+                        declared_envs.append(env)
+                        self.assertIsNotNone(gates._completion(root / "build", "prompt", 8, 64,
+                            model=model, threads=1, env=env, cpu_list="0", log_dir=root / "logs",
+                            cache_dir=root / "cache", label="test"))
+                self.assertEqual(len(keys), 6)
+                self.assertEqual(len(set(keys)), 6)
+                self.assertEqual(reg.stats()["release_failures"], 0)
+            finally:
+                scratch.uninstall(reg)
+                reg.close()
+
     def test_resolved_closure_binds_real_dependencies_and_refuses_unresolved(self):
         closure = gates._resolved_closure([Path("/bin/ls")], lib_dir=None)
         self.assertTrue(any("libc" in row for row in closure), closure)

@@ -161,7 +161,9 @@ class HeldCpuClaim(dict):
     """
 
     def __init__(self, receipt, lock_paths, *, region_fraction=0.0, affinity=(),
-                 gpu_quiet_path=None):
+                 gpu_quiet_path=None, ownership_generation=1):
+        if type(ownership_generation) is not int or ownership_generation < 1:
+            raise ClaimRefused("original ownership generation must be positive")
         super().__init__(receipt)
         self._receipt = dict(receipt)
         self._owner_pid = os.getpid()
@@ -173,6 +175,7 @@ class HeldCpuClaim(dict):
         self._closed = None
         self._region_fraction = region_fraction
         self._affinity = tuple(affinity)
+        self._ownership_generation = ownership_generation
         # These are the first acquisition/allocation of THIS direct context, not
         # controller generations. Nothing can reconstruct a live context from it.
         self._domain = {"kind": "direct_loop", "clock": "monotonic",
@@ -264,20 +267,20 @@ class HeldCpuClaim(dict):
                  else {"gpu_quiet": {"open": self._gpu_quiet["open"],
                                      "close": self._gpu_quiet["close"]}})
         return {**quiet, "context_id": self._context_id, "domain": dict(self._domain),
-                "ownership_generation": 1, "allocation_generation": 1,
+                "ownership_generation": self._ownership_generation, "allocation_generation": 1,
                 "started_at": self._started_at, "ended_at": self._ended_at,
                 "device_id": self._receipt["device_id"],
                 "physical_claim_ids": [
                     f"{self._domain['boot_id']}:flock:{row['device']}:{row['inode']}"
                     for row in locks],
                 "physical_region_fraction": self._region_fraction,
-                "gpu_device_ids": ([] if self._receipt["device_id"] == "cpu"
+                "gpu_device_ids": ([] if self._receipt["device_id"] in {"cpu", "gpu_quiet"}
                                    else [self._receipt["device_id"]]),
                 "memory_reservation_bytes": 0, "affinity_cores": list(self._affinity),
                 "open": self._opened, "close": self._closed, "released": True}
 
 
-def publish_intervals(store, selection, contexts, *, target):
+def publish_intervals(store, selection, contexts, *, target, phases=None, cpu_segments=False):
     """Retain original component intervals; the scheduler owns their partition.
 
     A GPU run's CPU prefix and suffix must not be flattened into its GPU interval.
@@ -289,12 +292,32 @@ def publish_intervals(store, selection, contexts, *, target):
         raise ClaimRefused("original artifact store and selected accounting identity are required")
     if not 1 <= len(contexts) <= 2 or any(type(row) is not HeldCpuClaim for row in contexts):
         raise ClaimRefused("original CPU/GPU owning contexts are required")
-    components = [row.retained_interval() for row in contexts]
+    if cpu_segments and phases is not None:
+        raise ClaimRefused("CPU native segments and GPU local phases cannot share a bundle")
+    if cpu_segments:
+        if len(contexts) != 1 or contexts[0].get("device_id") != "cpu":
+            raise ClaimRefused("CPU segments require one original CPU owning context")
+        lease = yield_lease(contexts[0])
+        if lease is None:
+            raise ClaimRefused("original CPU context has no native segment capture")
+        components = lease.retained_components()
+    else:
+        components = [row.retained_interval() for row in contexts]
     if len({row["context_id"] for row in components}) != len(components):
         raise ClaimRefused("duplicate original held context")
-    body = {"schema": "epyc.autokernel.direct_held_intervals.v1",
+    body = {"schema": ("epyc.autokernel.direct_held_intervals.v2" if cpu_segments
+                       else "epyc.autokernel.direct_held_intervals.v1"),
             "selection": selection.to_dict(), "selection_digest": selection.digest,
             "target": target, "components": components}
+    if phases is not None:
+        body.update(schema="epyc.autokernel.direct_held_intervals.v2",
+                    phases=list(phases))
+    if cpu_segments:
+        scope = contexts[0]
+        body["phases"] = []
+        body["stage_elapsed"] = {"context_id": scope._context_id,
+            "domain": dict(scope._domain), "started_at": scope._started_at,
+            "ended_at": scope._ended_at, "completed": scope._released}
     return store.write("direct-held-intervals", body)
 
 
@@ -366,7 +389,8 @@ def _gpu_quiet_module():
 
 
 @contextmanager
-def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False) -> Iterator[dict]:
+def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False, role: str = "autokernel-cpu",
+             capture_segments=False, on_acquired=None) -> Iterator[dict]:
     """Use the installed orchestrator's physical region owner, never a new flock.
 
     `gpu_quiet=True` (a CPU MEASUREMENT run under `--cpu-measurement-gpu-quiet lock`)
@@ -391,7 +415,8 @@ def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False) -> Iterator[dict]:
     reason = _preflight(strict=True)
     if reason:
         raise ClaimRefused(reason)
-    regions = cpu_list_to_regions(cpu_list)
+    regions = (cpu_list_to_regions(cpu_list, smt_siblings="fold") if role == "build"
+               else cpu_list_to_regions(cpu_list))
     if not regions:
         raise ClaimRefused("CPU affinity maps to no physical regions")
     quiet = _gpu_quiet_module() if gpu_quiet else None
@@ -399,12 +424,17 @@ def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False) -> Iterator[dict]:
     def provider(timeout_s, cancel_check=None):
         """The owner context: the regions, preceded by gpu-quiet SHARED when asked."""
         if quiet is None:
-            return cpu_region_lock("autokernel-cpu", regions, timeout_s=timeout_s,
+            return cpu_region_lock(role, regions, timeout_s=timeout_s,
                                    cancel_check=cancel_check,
                                    request_tag="autokernel-experimental-serving")
         return _regions_of(quiet.gpu_quiet_then_regions(
-            "autokernel-cpu", regions, gpu_quiet=quiet.GPU_QUIET_SHARED, timeout_s=timeout_s,
-            cancel_check=cancel_check, request_tag="autokernel-experimental-serving"))
+            role, regions, gpu_quiet=quiet.GPU_QUIET_SHARED, timeout_s=timeout_s,
+            cancel_check=cancel_check, request_tag="autokernel-experimental-serving",
+            # A five-second region attempt exhausts the lease's five-second
+            # budget before the provider's quiet-free backoff. Short attempts
+            # let that original provider release quiet between occupied-region
+            # retries, without changing the quiet hold of an acquired CPU tail.
+            region_attempt_s=0.25))
 
     receipt = None
     lease = None
@@ -419,8 +449,8 @@ def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False) -> Iterator[dict]:
         def close_original(*error):
             try:
                 if receipt is not None:
-                    if slot[0] is None and lease is not None:
-                        # Yielded at close: take the same regions back so the close
+                    if slot[0] is None and lease is not None and not capture_segments:
+                        # V1 only: yielded at close: take the same regions back so the close
                         # observation is a real one. A failure leaves it "lost".
                         try:
                             lease.reacquire(reason="close")
@@ -434,7 +464,10 @@ def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False) -> Iterator[dict]:
             finally:
                 current = slot[0]
                 slot[0] = None
-                result = current.__exit__(*error) if current is not None else False
+                if lease is not None:
+                    result = lease.close_owner(current, error)
+                else:
+                    result = current.__exit__(*error) if current is not None else False
             # Reached only after the original provider's exit returned. An
             # uncertain release never produces completed interval evidence.
             if receipt is not None:
@@ -442,6 +475,8 @@ def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False) -> Iterator[dict]:
             return result
 
         release.push(close_original)
+        if on_acquired is not None:
+            on_acquired()  # The original native provider entered; not a cost receipt.
         if set(held) != set(regions):
             raise ClaimRefused("CPU owner did not acquire the requested physical regions")
         body = {"device_id": "cpu", "cpu_list": cpu_list, "regions": sorted(held),
@@ -457,11 +492,24 @@ def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False) -> Iterator[dict]:
                [*held.values(), *(global_region_lock_path(region) for region in sorted(held))],
                region_fraction=len(regions) / len(ATOMIC_REGIONS),
                affinity=tuple(str(cpu) for cpu in sorted(_cpu_numbers(cpu_list))))
+        def capture(owned, generation):
+            # This callback runs only after this context's native provider has
+            # acquired the same enrolled resources; it never acquires from a receipt.
+            body = dict(receipt, regions=sorted(owned),
+                        lock_paths={key: str(value) for key, value in owned.items()})
+            return HeldCpuClaim(body,
+                [*owned.values(), *(global_region_lock_path(region) for region in sorted(owned))],
+                region_fraction=len(regions) / len(ATOMIC_REGIONS),
+                affinity=tuple(str(cpu) for cpu in sorted(_cpu_numbers(cpu_list))),
+                ownership_generation=generation)
+
         lease = CpuClaimLease(
             receipt, slot, regions=regions,
             acquire=provider,
-            preflight=lambda: _preflight(strict=True))
+            preflight=lambda: _preflight(strict=True),
+            capture=capture if capture_segments else None)
         receipt._yield_lease = lease
+        lease.begin_capture(held, 1)
         yield receipt
 
 
@@ -491,7 +539,8 @@ def gpu_quiet_preflight() -> Path:
 
 
 @contextmanager
-def hold_gpu_quiet_measurement(timeout_s: float = 1.0) -> Iterator[dict]:
+def hold_gpu_quiet_measurement(timeout_s: float = 1.0, *, retain: bool = False,
+                               on_acquired=None) -> Iterator[dict]:
     """Hold gpu-quiet EXCLUSIVE through the orchestrator's owner for ONE GPU measurement.
 
     Raises the provider's `CpuRegionLockTimeout` while a CPU measurement holds it
@@ -499,12 +548,25 @@ def hold_gpu_quiet_measurement(timeout_s: float = 1.0) -> Iterator[dict]:
     attempts, never pre-empting the holder. Takes no CPU region.
     """
     quiet = _gpu_quiet_module()
-    with quiet.gpu_quiet_lock(quiet.GPU_QUIET_EXCLUSIVE, role=GPU_QUIET_ROLE,
-                              timeout_s=timeout_s,
-                              request_tag="autokernel-gpu-measurement") as record:
-        yield {"device_id": "host", "purpose": "gpu_measurement_quiet",
+    with ExitStack() as release:
+        record = release.enter_context(quiet.gpu_quiet_lock(
+            quiet.GPU_QUIET_EXCLUSIVE, role=GPU_QUIET_ROLE, timeout_s=timeout_s,
+            request_tag="autokernel-gpu-measurement"))
+        if on_acquired is not None:
+            on_acquired()  # Original native entry, before any receipt construction.
+        body = {"device_id": "host", "purpose": "gpu_measurement_quiet",
                "gpu_quiet": quiet.GPU_QUIET_EXCLUSIVE, "lock_path": record["lock_path"],
                "pid": os.getpid()}
+        if not retain:
+            yield body
+            return
+        receipt = HeldCpuClaim(dict(body, device_id="gpu_quiet"), [record["lock_path"]])
+        try:
+            yield receipt
+        finally:
+            receipt._closing()
+            release.close()
+            receipt._released_now()
 
 
 def region_lock_busy(error: BaseException) -> bool:
@@ -527,7 +589,9 @@ class CpuClaimLease:
     holds the regions. What a lease adds is honesty about the gaps: every
     release/re-acquire is a numbered `segments` row (`generation` counts
     acquisitions), published beside the held-claim evidence by the loop, so the
-    envelope interval is never read as continuous ownership.
+    envelope interval is never read as continuous ownership. The default v1
+    settlement still charges that envelope; opt-in native v2 capture retains
+    fresh original owner observations for each generation instead.
 
     Release is the provider's own exit (the region-lock protocol has no other
     release: closing the flock fds IS the release, exactly as `region-lock run`
@@ -536,7 +600,7 @@ class CpuClaimLease:
     held by this process before it is reported held.
     """
 
-    def __init__(self, receipt, slot, *, regions, acquire, preflight=None,
+    def __init__(self, receipt, slot, *, regions, acquire, preflight=None, capture=None,
                  clock=time.time, monotonic=time.monotonic, sleep=time.sleep):
         self._receipt = receipt
         self._slot = slot
@@ -546,6 +610,10 @@ class CpuClaimLease:
         self._clock, self._monotonic, self._sleep = clock, monotonic, sleep
         self._mutex = threading.RLock()
         self.generation = 1
+        self._capture = capture
+        self._current_capture = None
+        self._closed_captures = []
+        self._capture_error = None
         self.segments = [{"generation": 1, "acquired_at": clock(), "released_at": None,
                           "release_reason": None, "acquire_reason": "initial",
                           "waited_s": 0.0, "wait_exceeded_bound": False}]
@@ -553,6 +621,65 @@ class CpuClaimLease:
     @property
     def held(self) -> bool:
         return self._slot[0] is not None
+
+    def begin_capture(self, owned, generation):
+        if self._capture is None:
+            return
+        try:
+            if len(self._closed_captures) >= 4096:
+                raise ClaimRefused("original CPU segment bound exceeded")
+            self._current_capture = self._capture(owned, generation)
+            if self._current_capture.observe()["status"] != "held":
+                raise ClaimRefused("original CPU segment does not observe as held")
+        except BaseException as exc:
+            self._capture_error = f"{type(exc).__name__}: {exc}"
+            raise
+
+    def close_owner(self, owner, error=(None, None, None)):
+        """Observe before the native owner's exit, complete only after it returns."""
+        if owner is None:
+            return False
+        capture = self._current_capture
+        observation_failure = None
+        try:
+            try:
+                if capture is not None:
+                    try:
+                        capture._closing()
+                        if capture._closed.get("status") != "held" or capture._closed.get("error"):
+                            self._capture_error = "original CPU segment close observation unavailable"
+                    except BaseException as exc:
+                        observation_failure = exc
+                        self._capture_error = f"{type(exc).__name__}: {exc}"
+                        try:
+                            capture._close_observation_failed(exc)
+                        except BaseException:
+                            pass  # The original native owner must still exit below.
+            finally:
+                result = owner.__exit__(*error)
+            if capture is not None:
+                capture._released_now()
+                self._closed_captures.append(capture)
+            if observation_failure is not None and not isinstance(observation_failure, Exception):
+                raise observation_failure
+            return result
+        except BaseException as exc:
+            if self._capture is not None:
+                self._capture_error = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            self._current_capture = None
+
+    def retained_components(self):
+        """The original native captures, never the separate CPU-window hint ledger."""
+        with self._mutex:
+            if self._capture is None or self._capture_error is not None:
+                raise ClaimRefused(f"CPU native segment capture unavailable: {self._capture_error}")
+            if self.held or self._current_capture is not None or not self._receipt._released:
+                raise ClaimRefused("original CPU context has not completed a proved release")
+            if not 1 <= len(self._closed_captures) <= 4096:
+                raise ClaimRefused("original CPU segment count is unavailable or exceeded")
+            return [capture.retained_interval() for capture in self._closed_captures]
 
     def release(self, *, reason: str) -> bool:
         """Exit the current provider context. False when already released."""
@@ -562,7 +689,7 @@ class CpuClaimLease:
                 return False
             self._slot[0] = None
             try:
-                owner.__exit__(None, None, None)
+                self.close_owner(owner)
             finally:
                 self.segments[-1]["released_at"] = self._clock()
                 self.segments[-1]["release_reason"] = reason
@@ -606,17 +733,22 @@ class CpuClaimLease:
                     if on_wait is not None:
                         on_wait(waited)
                     continue
-                if set(held) != set(self._regions) or {
-                        key: str(value) for key, value in held.items()} != self._receipt["lock_paths"]:
-                    owner.__exit__(None, None, None)
-                    raise ClaimRefused("re-acquired CPU regions are not the original lock files")
                 self._slot[0] = owner
-                observed = self._receipt.observe()
-                if observed["status"] != "held":
+                try:
+                    if set(held) != set(self._regions) or {
+                            key: str(value) for key, value in held.items()} != self._receipt["lock_paths"]:
+                        raise ClaimRefused("re-acquired CPU regions are not the original lock files")
+                    observed = self._receipt.observe()
+                    if observed["status"] != "held":
+                        raise ClaimRefused(
+                            f"re-acquired CPU claim does not observe as held: {observed['error']}")
+                    self.begin_capture(held, self.generation + 1)
+                except BaseException as exc:
+                    if self._capture is not None:
+                        self._capture_error = f"{type(exc).__name__}: {exc}"
                     self._slot[0] = None
-                    owner.__exit__(None, None, None)
-                    raise ClaimRefused(
-                        f"re-acquired CPU claim does not observe as held: {observed['error']}")
+                    self.close_owner(owner)
+                    raise
                 waited = round(self._monotonic() - started, 3)
                 self.generation += 1
                 self.segments.append({

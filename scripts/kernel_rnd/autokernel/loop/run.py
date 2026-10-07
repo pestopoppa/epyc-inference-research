@@ -27,6 +27,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Any
 
 from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
                           workload_contract)
@@ -271,6 +272,19 @@ def _publish_early_preclaim_failure(args, original_argv, error) -> None:
         _read_cpu_document(args.scheduler_selection))
     _publish_preclaim_failure(
         args.out, selection, serial_run._selected_identity(original_argv), error)
+
+
+def _publish_cpu_native_acquired(out, scheduler_selection, target):
+    """Original provider-entry event before constructing a CPU v2 observer.
+
+    Empty components are not a zero-cost receipt. This marker only prevents a
+    failed post-acquisition observer from being settled through the preclaim path.
+    """
+    status.write_json(out, "loop-claim-acquired.json", {
+        "schema": "epyc.autokernel.claim_acquired.v1",
+        "selection_digest": scheduler_selection.digest, "target": target,
+        "components": [], "native_cpu_provider_entered": True,
+    }, prefix=".claim-acquired-")
 
 
 def _publish_claim_acquired(out, scheduler_selection, target, contexts) -> None:
@@ -2403,6 +2417,10 @@ def main(argv: list[str] | None = None) -> int:
                              "alone; anything else = an argv with {worktree}/{base}/{paths}/"
                              "{scratch}/{build_dir} placeholders (exit 0 passes, 2 is "
                              "inconclusive) (default: %(default)r)")
+    parser.add_argument("--cpu-held-intervals-v2", choices=("on", "off"), default="off",
+                        help="Capture original closed CPU ownership generations for settlement. "
+                             "Requires a new compatible parent/worker epoch; off preserves v1 "
+                             "receipts (default: %(default)s)")
     parser.add_argument("--cpu-window-yield", choices=("on", "off"), default="on",
                         help="CPU windows (operator proposal 2026-09-26): release the CPU-region "
                              "claim while every lane is in an actor phase (planner, critics, "
@@ -2425,9 +2443,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gpu-cpu-region-claim", choices=("on", "off"), default="on",
                         help="selected GPU serving target only: off = take NO orchestrator CPU "
                              "region claim for the batch (the mi210_0 device claim is still "
-                             "held; builds stay confined to resources.cpu_logical by affinity). "
-                             "For a GPU window agreed with the stack owner as 'no region "
-                             "claims' (27B GPU slot 6b, 2026-10-04); implies no CPU window "
+                             "held; each host build takes a narrow role=build claim with "
+                             "affinity confined to four declared host CPUs; GPU compute "
+                             "takes quiet EXCLUSIVE). "
+                             "lock policy records actual local phases; off requires the "
+                             "legacy launcher-held continuous quiet hold; no CPU window "
                              "(default: %(default)s)")
     parser.add_argument("--cpu-window-wait-bound-s", type=float,
                         default=cpu_window.DEFAULT_WAIT_BOUND_S,
@@ -2838,17 +2858,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--gpu-cpu-region-claim off applies to a selected GPU serving target only")
     #: GPU window without a CPU region claim (device claim only, like the legacy GPU route).
     gpu_skip_cpu_claim = args.gpu_cpu_region_claim == "off"
-    #: A GPU-only run's host-side resource receipt is its launcher's run-wide gpu-quiet
-    #: EXCLUSIVE hold (`region-lock run --gpu-quiet exclusive -- serial_run ...`), observed
-    #: beside the mi210_0 device flock at open and close. Serial settlement refuses a GPU
-    #: interval with neither a CPU region nor that hold, so refuse here, before a build.
+    # Legacy off-policy launchers retain their continuous quiet receipts. Under
+    # lock, original local build/compute owners publish separate v2 intervals.
     gpu_only_quiet_path = None
-    if gpu_skip_cpu_claim:
-        if args.cpu_measurement_gpu_quiet != CPU_MEASUREMENT_GPU_QUIET_OFF:
-            parser.error("--gpu-cpu-region-claim off requires --cpu-measurement-gpu-quiet off "
-                         "under a launcher-held run-wide gpu-quiet EXCLUSIVE hold (region-lock "
-                         "run --gpu-quiet exclusive); per-measurement holds leave the host "
-                         "unaccounted between measurements and serial settlement refuses them")
+    if gpu_skip_cpu_claim and args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_OFF:
         try:
             gpu_only_quiet_path = claim.gpu_quiet_preflight()
         except (claim.ClaimRefused, ImportError, OSError) as exc:
@@ -2874,6 +2887,14 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"target resources refused: {exc}")
         build_cpu_list = owned_cpu_list
         build_jobs = min(build_jobs, resolved_campaign.resources.build_jobs)
+    if gpu_skip_cpu_claim:
+        # The declared GPU resources include the historical 96-183 build lane;
+        # claiming that entire list would occupy every physical CPU region. Use
+        # four declared host CPUs instead, with the native build owner folding SMT.
+        from ..execution.cpu_region_claim import parse_cpu_list as _build_cpu_numbers
+        host_cpus = _build_cpu_numbers(direct_launch.template.cpu_list or build_cpu_list)
+        build_cpu_list = ",".join(str(cpu) for cpu in sorted(host_cpus)[-4:])
+        build_jobs = min(build_jobs, 4)
 
     # Select BOTH source arms' common conditions before the actual region claim,
     # scheduler join, floor lookup or actor call. The enrolled full target is kept.
@@ -3604,7 +3625,7 @@ def main(argv: list[str] | None = None) -> int:
                         pair.candidate.template.cpu_list).issubset(parse_cpu_list(build_cpu_list)):
                     return False, [gates.Verdict("runtime_treatment", False,
                                                 "runtime treatment exceeds the owned CPU allocation")]
-                return gates.run_all(lambda: gates.op_correctness(
+                return gates.run_all(lambda: local_op_correctness(
                     anchor_build[0], backend="CPU" if cpu_launch else direct_launch.template.device,
                     resolved_recipe=pair.candidate))
             # The diff first: a build that fails still leaves a patch worth reading,
@@ -3813,7 +3834,7 @@ def main(argv: list[str] | None = None) -> int:
                 # Original candidate executable/DSOs already proved, source restored
                 # exactly. Re-run the ordinary oracle at FULL conditions, no rebuild.
                 arm = _cpu_arm(direct_launch, worker.build_dir)
-                checks = [lambda op=op: gates.op_correctness(
+                checks = [lambda op=op: local_op_correctness(
                     worker.build_dir, op=op, backend="CPU", resolved_recipe=arm)
                     for op in scope]
                 if "GATED_DELTA_NET" in scope:
@@ -3838,14 +3859,14 @@ def main(argv: list[str] | None = None) -> int:
             # Operator tiering: the candidate runs only layer (a) (test-backend-ops), so
             # its build needs no extra tools; the anchor carries them for the fold.
             checks = [
-                lambda: gates.compiles(worker.worktree, worker.build_dir,
+                lambda: local_compiles(worker.worktree, worker.build_dir,
                                        cmake_defines=recipe.cmake_defines(),
                                        jobs=build_jobs, cpu_list=build_cpu_list,
                                        **({"targets": gates.PROMOTION_TARGETS}
                                           if direct_launch else {})),
             ]
             if cpu_launch:
-                checks.extend(lambda op=op: gates.op_correctness(worker.build_dir, op=op,
+                checks.extend(lambda op=op: local_op_correctness(worker.build_dir, op=op,
                               require_reference=False, backend="CPU",
                               resolved_recipe=_cpu_arm(direct_launch, worker.build_dir))
                               for op in scope)
@@ -3854,7 +3875,7 @@ def main(argv: list[str] | None = None) -> int:
                 # the identical gate once per (anchor, op) and, if it fails too, the
                 # refusal is the harness's oracle_unavailable, not a wrong patch.
                 checks.extend(lambda op=op: gates.anchor_relative_correctness(
-                    gates.op_correctness(worker.build_dir, op=op, require_reference=True),
+                    local_op_correctness(worker.build_dir, op=op, require_reference=True),
                     lambda: _anchor_gate(op)) for op in scope)
             if cpu_launch and "GATED_DELTA_NET" in scope:
                 checks.append(lambda: gates.check_cpu_gdn_reference(
@@ -3874,6 +3895,15 @@ def main(argv: list[str] | None = None) -> int:
                     lambda: gates.no_fallback_dispatch(
                         worker.build_dir, args.model, pp=pp, tg=tg, ubatch=ubatch),
                 ))
+            # Build owns only its narrow CPU claim. Every GPU correctness /
+            # dispatch invocation owns quiet separately, including anchor fallback.
+            if not cpu_launch:
+                compiled = checks.pop(0)()
+                if not compiled.passed:
+                    return False, [compiled]
+                with cpu_measurement_window():
+                    passed, verdicts = gates.run_all(*checks)
+                return passed, [compiled, *verdicts]
             return gates.run_all(*checks)
         return _recorded_gate(gate)
 
@@ -3896,7 +3926,7 @@ def main(argv: list[str] | None = None) -> int:
     def _anchor_gate(op):
         key = (str(anchor_build[0]), op)
         if key not in anchor_gate_cache:
-            anchor_gate_cache[key] = gates.op_correctness(anchor_build[0], op=op,
+            anchor_gate_cache[key] = local_op_correctness(anchor_build[0], op=op,
                                                           require_reference=True)
             print(f"gate      anchor {Path(anchor_build[0]).name} seeded {op}: "
                   f"{anchor_gate_cache[key].gate} passed={anchor_gate_cache[key].passed}")
@@ -4354,7 +4384,7 @@ def main(argv: list[str] | None = None) -> int:
         build_dir = node_profile.profiling_build_dir(anchor_build[0])
         publish("running", latest, step="instrumented sibling node/host/engram profiling")
         try:
-            verdict = gates.compiles(
+            verdict = local_compiles(
                 args.worktree, build_dir,
                 cmake_defines=build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.cmake_defines(),
                 # Only the server: this sibling is never benched and never validated,
@@ -4456,7 +4486,7 @@ def main(argv: list[str] | None = None) -> int:
         build_dir = node_profile.profiling_build_dir(anchor_build[0])
         publish("running", latest, step="long-context node profile at depth (slot restored)")
         try:
-            verdict = gates.compiles(
+            verdict = local_compiles(
                 args.worktree, build_dir,
                 cmake_defines=build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.cmake_defines(),
                 jobs=build_jobs, cpu_list=build_cpu_list, targets=("llama-server",))
@@ -4561,8 +4591,9 @@ def main(argv: list[str] | None = None) -> int:
                   f"primary {view['primary_window']}; {len(rows)} kernels; record {view['record']}")
             return
         try:
-            rows = hotspots.profile(anchor_build[0] / "bin" / "llama-bench",
-                                    args.model, pp=pp, tg=tg)
+            with cpu_measurement_window():
+                rows = hotspots.profile(anchor_build[0] / "bin" / "llama-bench",
+                                        args.model, pp=pp, tg=tg)
         except hotspots.ProfileFailed as exc:
             print(f"profile   UNAVAILABLE ({exc}); the planner is told so rather than "
                   f"left to guess")
@@ -4599,6 +4630,27 @@ def main(argv: list[str] | None = None) -> int:
     #: another's window must not re-acquire a flock this process already holds (flock
     #: conflicts between open file descriptions of ONE process: a self-deadlock).
     quiet_depth = threading.local()
+    from .gpu_phases import LocalPhases
+    gpu_local = (LocalPhases(
+        cpu_list=build_cpu_list,
+        quiet=args.cpu_measurement_gpu_quiet != CPU_MEASUREMENT_GPU_QUIET_OFF,
+        should_stop=should_stop,
+        on_wait=lambda kind: publish("running", latest, step=f"GPU {kind} waiting for claim"))
+        if gpu_skip_cpu_claim else None)
+
+    def local_compiles(*positional, **keyword):
+        if gpu_local is None:
+            return gates.compiles(*positional, **keyword)
+        with gpu_local.build() if gpu_local is not None else nullcontext():
+            paths = (*positional[:2], *(keyword[name] for name in ("source_root", "build_dir")
+                                        if name in keyword))
+            with gpu_local.compile_env(keyword.get("env"), paths=paths) as child_env:
+                keyword["env"] = child_env
+                return gates.compiles(*positional, **keyword)
+
+    def local_op_correctness(*positional, **keyword):
+        with cpu_measurement_window() if not cpu_launch else nullcontext():
+            return gates.op_correctness(*positional, **keyword)
 
     def cpu_measurement_window():
         """The measurement window of THIS run, CPU or GPU (quiet-window ruling above).
@@ -4606,6 +4658,8 @@ def main(argv: list[str] | None = None) -> int:
         A CPU run's half of the quiet window is the SHARED gpu-quiet hold that rides
         with its region claim (`hold_cpu_claim`), so its window is the CPU step alone.
         """
+        if gpu_local is not None:
+            return gpu_local.compute()
         quiet = _gpu_quiet_measurement_window(
             not cpu_launch, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
             on_wait=lambda: publish("running", latest,
@@ -4628,6 +4682,10 @@ def main(argv: list[str] | None = None) -> int:
         # Legacy GPU bench A/Bs are GPU measurements too: same q3 window.
         with cpu_measurement_window():
             return bench.compare(*args_, **kwargs_)
+
+    def measured_bench_measure(*args_, **kwargs_):
+        with cpu_measurement_window():
+            return bench.measure(*args_, **kwargs_)
 
     anchor_guard_seen: list = []
     #: (monotonic time, inside-floor) of this run's last MEASURED anchor-guard A/A;
@@ -4654,7 +4712,7 @@ def main(argv: list[str] | None = None) -> int:
         # build bit-identical; R23-41 (hipcc determinism at -j64) is still open.
         # C46 (2026-09-27): CPU/gcc recipes ARE reproducible at -j64, so they take the
         # run's normal `build_jobs`. `anchor_build_jobs` owns the split.
-        return gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
+        return local_compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
                               jobs=anchor_build_jobs(recipe, build_jobs),
                               cpu_list=build_cpu_list,
                               # Review 2026-10-06: a direct launch always carries
@@ -4684,7 +4742,7 @@ def main(argv: list[str] | None = None) -> int:
                                  f"{production.BASELINE_TREE} is at {head[:12]}, not "
                                  f"the frozen production kernel {commit[:12]}; "
                                  f"refresh the copy to follow the promotion")
-        return gates.compiles(production.BASELINE_TREE, dest,
+        return local_compiles(production.BASELINE_TREE, dest,
                               cmake_defines=recipe.cmake_defines(),
                               jobs=build_jobs, cpu_list=build_cpu_list)
 
@@ -4714,7 +4772,7 @@ def main(argv: list[str] | None = None) -> int:
             # Carry-over (2026-10-04): with a matching recorded production baseline
             # the champion is measured ALONE, under exactly this protocol -- the same
             # model, surface and llama-bench argv `bench.compare` would run.
-            measure=lambda champ: bench.measure(
+            measure=lambda champ: measured_bench_measure(
                 bench.Arm("champion", champ / "bin" / "llama-bench"),
                 headline_model, pp=pp, tg=tg, launches=args.pairs,
                 surface=bench_surface, ubatch=ubatch),
@@ -5145,7 +5203,8 @@ def main(argv: list[str] | None = None) -> int:
         slot_digest = anchor_integrity.object_digest(slot)
         if slot_digest is None:
             raise ValueError(f"{slot} has no library objects to prove a tools build against")
-        dest = Path(args.store) / "ppl_contract" / f"tools-{commit[:12]}"
+        owner = scratch.current("run") or scratch.active_scope(args.store / "scratch")
+        dest = Path(args.store) / "ppl_contract" / f"tools-{commit[:12]}-{owner.registry.instance}-{owner.id}"
         marker = dest / "ak_ppl_tools_build.json"
         def artifact_digest(build: Path) -> str:
             return hashlib.sha256("\n".join(
@@ -5153,6 +5212,8 @@ def main(argv: list[str] | None = None) -> int:
                 for tool in gates.PPL_CONTRACT_TOOL_TARGETS).encode()).hexdigest()
 
         if marker.is_file():
+            if not any(Path(r["path"]) == dest.absolute() for r in owner.resources):
+                raise ValueError(f"{dest} is not owned by this run; refusing a foreign tools build")
             # Round-3 review: the marker is never trusted alone -- the directory's
             # objects AND its linked tools/DSOs are re-hashed on every reuse.
             body = json.loads(marker.read_text(encoding="utf-8"))
@@ -5167,10 +5228,16 @@ def main(argv: list[str] | None = None) -> int:
         if head != commit or dirty:
             raise ValueError(f"champion tree is not clean at {commit[:12]} (HEAD {head[:12]}"
                              f"{', dirty' if dirty else ''}); cannot build its tools")
-        verdict = gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
-                                 jobs=anchor_build_jobs(recipe, build_jobs),
-                                 cpu_list=build_cpu_list,
-                                 targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
+        dest = owner.dir("ppl-tools-build", commit[:12], at=dest)
+        with owner.scope("call", name=f"ppl-tools-compile-{commit[:12]}") as command_scope:
+            # The original CPU owner outlives the cookie-owned compiler sweep.
+            # local_compiles reuses this same-kind owner instead of acquiring again.
+            with (gpu_local.build() if gpu_local is not None else nullcontext()), \
+                    scratch.owned_child_env(command_scope, protect=((owner, (dest,)),)) as child_env:
+                verdict = local_compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
+                                         jobs=anchor_build_jobs(recipe, build_jobs),
+                                         cpu_list=build_cpu_list, env=child_env,
+                                         targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
         if not verdict.passed:
             raise ValueError(f"tools build of {commit[:12]} failed: {verdict.reason}")
         if _git(args.worktree, "rev-parse", "HEAD") != commit:
@@ -5195,22 +5262,28 @@ def main(argv: list[str] | None = None) -> int:
         if commit == cor_commit[0] and all((Path(cor_build[0]) / "bin" / tool).is_file()
                                            for tool in gates.PPL_CONTRACT_TOOL_TARGETS):
             return Path(cor_build[0])
-        base = Path(args.store) / "ppl_contract" / "bisect"
+        owner = scratch.current("run") or scratch.active_scope(args.store / "scratch")
+        base = Path(args.store) / "ppl_contract" / "bisect" / owner.registry.instance / owner.id
         src, dest = base / f"src-{commit[:12]}", base / f"build-{commit[:12]}"
         marker = dest / "ak_bisect_build.json"
         if marker.is_file() and json.loads(marker.read_text(encoding="utf-8")).get(
                 "commit") == commit:
+            if not any(Path(r["path"]) == dest.absolute() for r in owner.resources):
+                raise ValueError(f"{dest} is not owned by this run; refusing a foreign bisect build")
             return dest
-        if not (src / ".git").exists():
-            base.mkdir(parents=True, exist_ok=True)
-            _git(args.worktree, "worktree", "add", "--detach", str(src), commit)
+        src = owner.worktree(args.worktree, commit, f"ppl-bisect-{commit[:12]}", at=src,
+                             force_remove=False)
+        dest = owner.dir("ppl-bisect-build", commit[:12], at=dest)
         if _git(src, "rev-parse", "HEAD") != commit or \
                 _git(src, "status", "--porcelain", "--untracked-files=no"):
             raise ValueError(f"bisect source {src} is not clean at {commit[:12]}")
-        verdict = gates.compiles(src, dest, cmake_defines=recipe.cmake_defines(),
-                                 jobs=anchor_build_jobs(recipe, build_jobs),
-                                 cpu_list=build_cpu_list,
-                                 targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
+        with owner.scope("call", name=f"ppl-bisect-compile-{commit[:12]}") as command_scope:
+            with (gpu_local.build() if gpu_local is not None else nullcontext()), \
+                    scratch.owned_child_env(command_scope, protect=((owner, (src, dest)),)) as child_env:
+                verdict = local_compiles(src, dest, cmake_defines=recipe.cmake_defines(),
+                                         jobs=anchor_build_jobs(recipe, build_jobs),
+                                         cpu_list=build_cpu_list, env=child_env,
+                                         targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
         if not verdict.passed:
             raise ValueError(f"bisect build of {commit[:12]} failed: {verdict.reason}")
         marker.write_text(json.dumps({"commit": commit}), encoding="utf-8")
@@ -6209,14 +6282,14 @@ def main(argv: list[str] | None = None) -> int:
                     if cross_target.apply_in_worktree(worker.worktree, commit) is None:
                         return {"error": f"{commit[:12]} does not apply onto this lane's "
                                          "working branch"}
-                built = gates.compiles(worker.worktree, worker.build_dir,
+                built = local_compiles(worker.worktree, worker.build_dir,
                                        cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
                                        cpu_list=build_cpu_list,
                                        targets=gates.PROMOTION_TARGETS)
                 if not built.passed:
                     return {"error": f"build failed: {built.reason}"}
                 arm = _cpu_arm(direct_launch, worker.build_dir)
-                oracle = gates.op_correctness(worker.build_dir, op="MUL_MAT", backend="CPU",
+                oracle = local_op_correctness(worker.build_dir, op="MUL_MAT", backend="CPU",
                                               resolved_recipe=arm)
                 if not oracle.passed:
                     return {"error": f"MUL_MAT oracle: {oracle.reason}"}
@@ -6595,17 +6668,24 @@ def main(argv: list[str] | None = None) -> int:
     held_claim_evidence = None
     held_claim_error = None
     held_claim_attempted = False
+    cpu_native_acquired = False
+    preclaim_failure_published = False
 
     def publish_preclaim_failure(error):
-        if scheduler_selection is None or original_claims:
+        nonlocal preclaim_failure_published
+        if scheduler_selection is None or original_claims or cpu_native_acquired:
             return
         _publish_preclaim_failure(args.out, scheduler_selection, selected_identity, error)
+        preclaim_failure_published = True
 
     def publish_held_claims():
         nonlocal held_claim_evidence, held_claim_error, held_claim_attempted
         if scheduler_selection is None or held_claim_attempted:
             return
         held_claim_attempted = True
+        if (args.cpu_held_intervals_v2 == "on" and preclaim_failure_published
+                and not cpu_native_acquired and not original_claims):
+            return  # Proved before-native failure, never a post-acquire discount.
         from .measurement_capture import ArtifactStore
         original_store = None
         try:
@@ -6613,7 +6693,10 @@ def main(argv: list[str] | None = None) -> int:
             original_store = ArtifactStore(args.out / "held-claim-artifacts")
             artifact = claim.publish_intervals(
                 original_store, scheduler_selection, original_claims,
-                target=selected_identity).to_dict()
+                target=selected_identity,
+                phases=(gpu_local.closed_phases() if gpu_local is not None and gpu_local.quiet
+                        else None),
+                cpu_segments=args.cpu_held_intervals_v2 == "on").to_dict()
             held_claim_evidence = {
                 "schema": "epyc.autokernel.direct_held_reference.v1",
                 "selection_digest": scheduler_selection.digest,
@@ -6630,6 +6713,12 @@ def main(argv: list[str] | None = None) -> int:
             # archived comparison or replace the original operational exception.
             held_claim_error = f"{type(capture_error).__name__}: {capture_error}"
             print(f"held-resource evidence unavailable: {held_claim_error}", file=sys.stderr)
+            if args.cpu_held_intervals_v2 == "on":
+                status.write_json(args.out, "loop-held-claims-refused.json", {
+                    "schema": "epyc.autokernel.cpu_segment_refusal.v1",
+                    "selection_digest": scheduler_selection.digest, "target": selected_identity,
+                    "error": held_claim_error},
+                    prefix=".held-claims-refused-")
         finally:
             if original_store is not None:
                 original_store.close()
@@ -6738,6 +6827,15 @@ def main(argv: list[str] | None = None) -> int:
             gpu_quiet_kw = ({"gpu_quiet": True} if cpu_launch and args.cpu_measurement_gpu_quiet
                             != CPU_MEASUREMENT_GPU_QUIET_OFF else {})
 
+            if args.cpu_held_intervals_v2 == "on":
+                if not cpu_launch or scheduler_selection is None:
+                    raise ValueError("CPU interval v2 requires a selected scheduled CPU run")
+                def native_cpu_acquired():
+                    nonlocal cpu_native_acquired
+                    cpu_native_acquired = True
+                    _publish_cpu_native_acquired(args.out, scheduler_selection, selected_identity)
+                gpu_quiet_kw.update(capture_segments=True, on_acquired=native_cpu_acquired)
+
             def hold_cpu_claim(cpu_list):
                 if cpu_win is None:
                     return ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw))
@@ -6768,13 +6866,13 @@ def main(argv: list[str] | None = None) -> int:
                     receipt = ownership.enter_context(claim.hold(
                         gpu_quiet_path=gpu_only_quiet_path if gpu_skip_cpu_claim else None))
                     original_claims.append(receipt)
-                    if gpu_skip_cpu_claim and claim.gpu_quiet_exclusive_holder(
+                    if gpu_only_quiet_path is not None and claim.gpu_quiet_exclusive_holder(
                             receipt.gpu_quiet_open()) is None:
                         raise claim.ClaimRefused(
                             "GPU-only run: gpu-quiet is not held EXCLUSIVE by this process "
                             "or its launcher at device-claim open; no host resource receipt")
-                if cpu_win is not None:
-                    # Runs FIRST on unwind: the claim's close observation needs it held.
+                if cpu_win is not None and args.cpu_held_intervals_v2 != "on":
+                    # V1 only: the envelope close observation needs it held.
                     ownership.callback(cpu_win.teardown)
             except BaseException as acquisition_error:
                 try:
@@ -6784,6 +6882,19 @@ def main(argv: list[str] | None = None) -> int:
                 raise
             _publish_claim_acquired(
                 args.out, scheduler_selection, selected_identity, original_claims)
+            if gpu_local is not None:
+                from .gpu_phases import CHILD_PHASE_DIR
+                phase_root = args.out or args.store / "gpu-local-phases" / scratch_run_id
+                gpu_local.child_dir = phase_root / "gpu-local-phase-events"
+                gpu_local.child_dir.mkdir(parents=True, exist_ok=False)
+                prior_phase_dir = os.environ.get(CHILD_PHASE_DIR)
+                os.environ[CHILD_PHASE_DIR] = str(gpu_local.child_dir)
+                def restore_child_phase_environment():
+                    if prior_phase_dir is None:
+                        os.environ.pop(CHILD_PHASE_DIR, None)
+                    else:
+                        os.environ[CHILD_PHASE_DIR] = prior_phase_dir
+                ownership.callback(restore_child_phase_environment)
             claim_started = time.time()
             if selected_target is not None:
                 # Same original invocation bound used by serial scheduling. This
@@ -6986,11 +7097,11 @@ def main(argv: list[str] | None = None) -> int:
                         raise surface_validation.SurfaceValidationRefused(
                             "shared source tree changed before target build")
                     build_ok, build_verdicts = gates.run_all(
-                        lambda: gates.compiles(
+                        lambda: local_compiles(
                             checked_source, validation_candidate_build,
                             cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
                             cpu_list=build_cpu_list, targets=gates.PROMOTION_TARGETS),
-                        lambda: gates.op_correctness(
+                        lambda: local_op_correctness(
                             validation_candidate_build, op="MUL_MAT",
                             **({"backend": "CPU",
                                 "resolved_recipe": _cpu_arm(
@@ -6999,7 +7110,7 @@ def main(argv: list[str] | None = None) -> int:
                     if build_ok and direct_launch.backend == "cpu":
                         validation_arm = _cpu_arm(direct_launch, validation_candidate_build)
                         gdn_ok, gdn_verdicts = gates.run_all(
-                            lambda: gates.op_correctness(
+                            lambda: local_op_correctness(
                                 validation_candidate_build, op="GATED_DELTA_NET",
                                 backend="CPU", resolved_recipe=validation_arm),
                             lambda: gates.check_cpu_gdn_reference(

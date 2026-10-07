@@ -19,6 +19,7 @@ CONFIG_SCHEMA = "epyc.autokernel.scheduler_config.v1"
 VECTOR_SCHEMA = "epyc.autokernel.resource_vector.v1"
 PROPOSAL_SCHEMA = "epyc.autokernel.stage_proposal.v1"
 RECEIPT_SCHEMA = "epyc.autokernel.held_claim_receipt.v1"
+RECEIPT_SCHEMA_V2 = "epyc.autokernel.held_claim_receipt.v2"
 OUTAGE_SCHEMA = "epyc.autokernel.scheduler_outage.v1"
 SEED_SCHEMA = "epyc.autokernel.seed_account.v1"
 STATE_SCHEMA = "epyc.autokernel.scheduler_state.v1"
@@ -452,7 +453,7 @@ class HeldClaimReceipt:
     schema: str = RECEIPT_SCHEMA
 
     def __post_init__(self) -> None:
-        if self.schema != RECEIPT_SCHEMA:
+        if self.schema not in {RECEIPT_SCHEMA, RECEIPT_SCHEMA_V2}:
             raise SchedulingRefused("held receipt schema is unsupported")
         for name in ("receipt_id", "proposal_id", "backend"):
             object.__setattr__(self, name, _text(getattr(self, name), name))
@@ -477,7 +478,8 @@ class HeldClaimReceipt:
         object.__setattr__(self, "memory_reservation_bytes", _integer(
             self.memory_reservation_bytes, "memory_reservation_bytes"))
         object.__setattr__(self, "affinity_cores", _texts(self.affinity_cores, "affinity_cores"))
-        if self.gpu_device_ids and self.physical_region_fraction <= 0:
+        if self.gpu_device_ids and self.physical_region_fraction <= 0 \
+                and self.schema == RECEIPT_SCHEMA:
             raise SchedulingRefused("GPU receipt must include its host CPU claim")
         if ((self.physical_region_fraction > 0 or self.gpu_device_ids
              or self.memory_reservation_bytes > 0) and not self.physical_claim_ids):
@@ -1062,6 +1064,28 @@ def _check_receipt_overlaps(receipts: Sequence[HeldClaimReceipt]) -> None:
             if current[0] < prior[1]:
                 raise SchedulingRefused(
                     f"overlapping reuse of physical claim {claim}: {prior[2]}/{current[2]}")
+
+
+def validate_cpu_stage_elapsed(value):
+    """Original completed CPU scope clock frame; never a physical claim receipt."""
+    row = _exact(value, frozenset({"context_id", "domain", "started_at", "ended_at", "completed"}),
+                 "CPU stage elapsed")
+    domain = _exact(row["domain"], frozenset({"kind", "clock", "pid", "boot_id",
+        "process_start_ticks", "error"}), "CPU stage domain")
+    context = row["context_id"]
+    if (not isinstance(context, str) or len(context) != 64
+            or any(char not in "0123456789abcdef" for char in context)
+            or row["completed"] is not True or domain["kind"] != "direct_loop"
+            or domain["clock"] != "monotonic" or domain["error"] is not None
+            or type(domain["pid"]) is not int or domain["pid"] <= 0
+            or type(domain["process_start_ticks"]) is not int or domain["process_start_ticks"] <= 0
+            or not isinstance(domain["boot_id"], str) or not domain["boot_id"]):
+        raise SchedulingRefused("CPU original elapsed scope is unavailable")
+    start = _number(row["started_at"], "CPU stage elapsed start")
+    end = _number(row["ended_at"], "CPU stage elapsed end")
+    if end <= start:
+        raise SchedulingRefused("CPU stage elapsed interval must be positive")
+    return dict(row, domain=dict(domain), started_at=start, ended_at=end)
 
 
 def charge_receipts(receipts: Sequence[HeldClaimReceipt | Mapping[str, Any]]) -> AccountingView:
@@ -1791,13 +1815,25 @@ class SchedulerEngine:
 
     def account_stage_components(
             self, selection: Selection | Mapping[str, Any],
-            receipts: Sequence[HeldClaimReceipt | Mapping[str, Any]], *, outcome: str) -> bool:
+            receipts: Sequence[HeldClaimReceipt | Mapping[str, Any]], *, outcome: str,
+            cpu_stage_elapsed=None) -> bool:
         """Account one selected stage from exact non-overlapping held intervals."""
         selection = _normalize(selection, Selection)
         receipts = tuple(_normalize(receipt, HeldClaimReceipt) for receipt in receipts)
         if not receipts:
             raise SchedulingRefused("stage accounting requires at least one held receipt")
         outcome = _enum(outcome, OUTCOMES, "stage outcome")
+        cpu_segments = all(receipt.schema == RECEIPT_SCHEMA_V2 and receipt.backend == "cpu"
+                           and not receipt.gpu_device_ids for receipt in receipts)
+        if cpu_segments:
+            elapsed = validate_cpu_stage_elapsed(cpu_stage_elapsed)
+            prefix = "direct-cpu-generation:" + digest(elapsed) + ":"
+            if any(not receipt.receipt_id.startswith(prefix)
+                   or not elapsed["started_at"] <= receipt.started_at < receipt.ended_at <= elapsed["ended_at"]
+                   for receipt in receipts):
+                raise SchedulingRefused("CPU elapsed scope differs from original receipt binding")
+        elif cpu_stage_elapsed is not None:
+            raise SchedulingRefused("CPU elapsed scope is valid only for CPU v2 components")
         records = tuple(AccountedReceipt(
             receipt_id=receipt.receipt_id, receipt_digest=receipt.digest,
             selection_digest=selection.digest, outcome=outcome) for receipt in receipts)
@@ -1832,9 +1868,12 @@ class SchedulerEngine:
         ordered = tuple(sorted(receipts, key=lambda item: (item.started_at, item.ended_at,
                                                             item.receipt_id)))
         if ordered != receipts or any(
-                left.ended_at != right.started_at for left, right in zip(receipts, receipts[1:])):
+                (left.ended_at > right.started_at if cpu_segments
+                 else left.ended_at != right.started_at)
+                for left, right in zip(receipts, receipts[1:])):
             raise SchedulingRefused(
-                "component receipts must form one ordered contiguous held interval")
+                "component receipts must form ordered original CPU v2 segments "
+                "or one contiguous held interval")
         if any(receipt.beneficiary_shares != receipts[0].beneficiary_shares
                for receipt in receipts[1:]):
             raise SchedulingRefused("component beneficiary shares differ")
@@ -1863,7 +1902,8 @@ class SchedulerEngine:
             _check_receipt_overlaps(receipts)
         for receipt in receipts:
             self._check_new_intervals(receipt)
-        duration = receipts[-1].ended_at - receipts[0].started_at
+        duration = (elapsed["ended_at"] - elapsed["started_at"] if cpu_segments
+                    else receipts[-1].ended_at - receipts[0].started_at)
         violations = []
         # D is an admission forecast, not a reason to poison an otherwise valid
         # continuous campaign after the resources have already been released.
@@ -1997,10 +2037,11 @@ def account_stage(config: SchedulerConfig | Mapping[str, Any],
 def account_stage_components(
         config: SchedulerConfig | Mapping[str, Any], state: SchedulerState | Mapping[str, Any],
         selection: Selection, receipts: Sequence[HeldClaimReceipt | Mapping[str, Any]], *,
-        outcome: str) -> SchedulerState:
+        outcome: str, cpu_stage_elapsed=None) -> SchedulerState:
     """Pure one-selection transition for exact chronological resource components."""
     engine = SchedulerEngine(config, state)
-    engine.account_stage_components(selection, receipts, outcome=outcome)
+    engine.account_stage_components(selection, receipts, outcome=outcome,
+                                    cpu_stage_elapsed=cpu_stage_elapsed)
     return engine.export_state()
 
 
@@ -2024,6 +2065,13 @@ def recover_abstained_overrun_fence(
         groups.setdefault(records[receipt.receipt_id].selection_digest, []).append(receipt)
     found_abstained_overrun = False
     for receipts in groups.values():
+        outcomes = {records[item.receipt_id].outcome for item in receipts}
+        if (all(item.schema == RECEIPT_SCHEMA_V2 and item.backend == "cpu"
+                and not item.gpu_device_ids for item in receipts)
+                and not outcomes <= {"valid_comparison", "abstained"}):
+            # This legacy migration has no original outer wall frame. Gapped
+            # CPU v2 receipt spans cannot exonerate a failed-stage wall overrun.
+            return state
         duration = max(item.ended_at for item in receipts) - min(
             item.started_at for item in receipts)
         if duration <= config.max_stage_seconds:

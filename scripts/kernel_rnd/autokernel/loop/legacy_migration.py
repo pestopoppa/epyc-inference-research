@@ -17,7 +17,6 @@ import stat
 from typing import Any, Callable, Iterable, Mapping
 
 from .. import journal
-from ..controller import experiments
 from ..controller.discovery_supervisor_secure import (
     SecureRuntimeError,
     open_beneath,
@@ -298,7 +297,9 @@ def _load_experiments(request: MigrationRequest) -> dict[str, Any]:
                 raise MigrationRefused("ExperimentStore contains invalid payload JSON") from exc
             records.append({key: row[key] for key in expected if key != "payload"})
             records[-1]["payload"] = parsed
-        return {"schema_version": experiments.SCHEMA_VERSION, "records": records,
+        # The closed column set above identifies the historical v1 format,
+        # independently of the version used by today's live ExperimentStore.
+        return {"schema_version": 1, "records": records,
                 "status": "historical_records"}
     except sqlite3.Error as exc:
         raise MigrationRefused(f"ExperimentStore read failed: {exc}") from exc

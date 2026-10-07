@@ -113,6 +113,23 @@ def test_full_cpu_without_statistics_probes_but_never_keeps():
         False, runtime_only=True, runtime_declaration=False)
 
 
+def test_actual_main_refuses_renamed_repeated_runtime_treatment():
+    from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
+
+    def repeated(result, _measured, builds, fixture, _selected):
+        rows = result["iterations"]
+        assert not builds
+        assert run.status.read(fixture.store)["measurements_reached"] == 1
+        assert rows[0]["status"] == "runtime_observed"
+        assert [row["status"] for row in rows[1:]] == ["refused_duplicate"] * 4
+        assert len({row["mechanism_id"] for row in rows}) == 5
+        assert all(row["refusal_gate"] == "runtime_treatment_identity" for row in rows[1:])
+        assert all("comparison" not in row for row in rows[1:])
+
+    test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+        False, runtime_only=True, repeat_runtime_treatment=True, result_expectation=repeated)
+
+
 def test_reduced_cpu_screen_never_exposes_runtime_probe(tmp_path):
     pair, _, _ = _fixture(tmp_path)
     assert run._runtime_serving_capable(pair.anchor, None,

@@ -15,6 +15,7 @@ from . import experiment_plan as ep
 from . import lifecycle_observation as lo
 from . import native_parent_evidence as npe
 from . import native_parent_receipt_replay as replay
+from . import native_producer_source as producer_source
 from . import native_scientific_witness as scientific
 from . import native_server_response as raw
 from . import native_server_t0_witness as server
@@ -24,6 +25,79 @@ from . import worker_lifecycle as wl
 from . import test_native_parent_evidence as native_fixture
 from .test_planned_serving import _prompts
 from .test_resolved_recipe import _resolve, _policy
+
+
+def _server_source_record():
+    issuer = scientific.NativeT0WitnessAdapter(max_units=4)
+    adapter = server.NativeServerT0WitnessAdapter(max_units=4, owning_issuer=issuer)
+    return ob._plain(adapter.source_identity())
+
+
+def _legacy_raw_source_v1():
+    # Grammar-only synthetic record. It preserves the exact pre-direct-capture
+    # field shape and makes no assertion that these fixture identities were loaded.
+    callables = [{"module": "legacy_fixture", "qualname": f"raw_callable_{index}",
+        "kind": "python", "implementation_status": "unproven",
+        "implementation_sha256": None, "configuration_status": "unproven",
+        "configuration_sha256": None} for index in range(14)]
+    return {"schema": raw.SOURCE_IDENTITY_SCHEMA_V1,
+        "max_response_bytes": raw.MAX_RESPONSE_BYTES,
+        "max_request_bytes": raw.MAX_REQUEST_BYTES,
+        "max_slots": raw.MAX_SLOTS,
+        "max_total_raw_bytes": raw.MAX_TOTAL_RAW_BYTES,
+        "callables": callables}
+
+
+def test_server_source_identity_accepts_current_v2_and_exact_legacy_v1_grammar():
+    row = _server_source_record()
+    current_raw = row["owning_source_pins"]["raw_source"]
+    assert current_raw["schema"] == raw.SOURCE_IDENTITY_SCHEMA_V2
+    assert current_raw["direct_schemas"] == list(raw.DIRECT_SCHEMA_IDS)
+    assert len(current_raw["callables"]) == 18
+    assert ob._plain(server.validate_server_source(row)) == row
+
+    row["owning_source_pins"]["raw_source"] = _legacy_raw_source_v1()
+    validated = ob._plain(server.validate_server_source(row))
+    legacy = validated["owning_source_pins"]["raw_source"]
+    assert legacy == _legacy_raw_source_v1()
+    assert len(server.server_source_identities(row)) >= 14
+
+
+@pytest.mark.parametrize("mutation", [
+    "unknown_schema_value", "wrong_order", "missing_value", "missing_field", "unknown_field",
+])
+def test_server_source_identity_v2_refuses_noncanonical_direct_schema_set(mutation):
+    row = _server_source_record()
+    raw_source = row["owning_source_pins"]["raw_source"]
+    if mutation == "unknown_schema_value":
+        raw_source["direct_schemas"][1] = "epyc.autokernel.direct_server_response.unknown"
+    elif mutation == "wrong_order":
+        raw_source["direct_schemas"] = list(reversed(raw_source["direct_schemas"]))
+    elif mutation == "missing_value":
+        raw_source["direct_schemas"].pop()
+    elif mutation == "missing_field":
+        del raw_source["direct_schemas"]
+    else:
+        raw_source["unrecognized"] = True
+
+    if mutation in {"missing_field", "unknown_field"}:
+        with pytest.raises(producer_source.ProducerSourceRefused,
+                           match="missing or unknown fields"):
+            server.validate_server_source(row)
+    else:
+        with pytest.raises(scientific.ScientificWitnessRefused,
+                           match="direct schema set differs"):
+            server.validate_server_source(row)
+
+
+def test_legacy_v1_raw_source_rejects_v2_fields_instead_of_relabeling():
+    row = _server_source_record()
+    legacy = _legacy_raw_source_v1()
+    legacy["direct_schemas"] = list(raw.DIRECT_SCHEMA_IDS)
+    row["owning_source_pins"]["raw_source"] = legacy
+    with pytest.raises(producer_source.ProducerSourceRefused,
+                       match="missing or unknown fields"):
+        server.validate_server_source(row)
 
 
 def _owning_run(_self, argv, *, env, cwd, timeout_s):

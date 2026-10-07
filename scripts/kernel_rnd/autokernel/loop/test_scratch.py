@@ -4,6 +4,7 @@ safety, the disk guard, the prune/gc ban, stats."""
 from __future__ import annotations
 
 import ast
+from contextlib import contextmanager, nullcontext
 import io
 import json
 import os
@@ -12,11 +13,13 @@ import signal
 import subprocess
 import tempfile
 import unittest
+import pytest
 from pathlib import Path
 from unittest import mock
 
 from autokernel.loop import scratch
 from autokernel.loop.scratch import ScratchRefused, ScratchRegistry
+from .test_cpu_quiet_region_backoff import native
 
 PKG = Path(__file__).resolve().parent
 
@@ -764,12 +767,46 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "resume.py:_scratch_tree:write_bytes": (1, _IN_SCOPE + " (resume-apply pre-image)"),
     "resume.py:preview_op_scope:write_text": (1, _IN_SCOPE + " (resume-apply pre-image)"),
     "resume.py:ClaimLedger.__init__:mkdir": (1, "state: resume claim ledger (sqlite)"),
+    # -- prospective original FA capture inputs (OP80 source integration only) -----------
+    'cpu_fa_mask_capture.py:prepare:mkdir': (1, 'evidence: explicit capture-dir for prospective original FA masks; refuses nonempty prior captures and retains inputs/manifests'),
+    'cpu_fa_mask_capture.py:prepare:open-write': (2, 'evidence: exclusive recipe/prompt snapshots and capture manifest bind run/source/model/tool/input hashes before governed FA capture'),
+    # -- reviewed quality/calibration writers: scratch owners remain native -------------
+    'calibrate_served_shapes.py:build_calibration:write_text': (1, 'writes inside registered staged calibration scratch (provenance for the separate CLI execute phase)'),
+    'calibrate_served_shapes.py:execute:mkdir': (1, 'evidence: served_shape calibration record directory, read back and recipe/binary/seed validated before apply'),
+    'calibrate_served_shapes.py:execute:write_text': (1, 'evidence: complete seeded/sharded NMSE record with launch, binary and region-claim provenance'),
+    'calibrate_served_shapes.py:apply:mkdir': (1, 'evidence: retained served-shape manifests and generated test patch, used by the source gate'),
+    'calibrate_served_shapes.py:apply:write_text': (1, 'evidence: served_shape/patch.cpp generated from the validated calibration corpus'),
+    'gates.py:_cache_put:mkdir': (1, 'state: reusable PPL/token cache keyed by tool/DSO/model/prompt/launch/environment content identities'),
+    'gates.py:_cache_put:write_text': (1, 'state: atomic PPL/token cache value and metadata; readers require matching content key'),
+    'gates.py:_completion:write_text': (1, 'writes inside a registry-allocated completion input directory; prompt and session released together'),
+    'gates.py:_run_tool:mkdir': (1, 'evidence: retained PPL/quality tool transcript directory in the caller-provided gate log root'),
+    'gates.py:_run_tool:write_text': (1, 'evidence: bounded PPL/quality tool argv, return code and stdout/stderr transcript, retained on failure too'),
+    'gates.py:bind_bit_exact_record:mkdir': (1, 'evidence: commit-to-bit-exact-record binding directory in the campaign store'),
+    'gates.py:bind_bit_exact_record:write_text': (1, 'evidence: atomic commit binding to the retained oracle record digest'),
+    'gates.py:pinned_production_reference:mkdir': (1, 'state: campaign production-reference pin directory; no production kernel write'),
+    'gates.py:pinned_production_reference:write_text': (1, 'state: atomic fixed production tool/DSO/environment identity pin, revalidated on reuse'),
+    'gates.py:ppl_contract_ledger_add:mkdir': (1, 'state: admitted PPL mechanism ledger directory used to keep bundle quality obligations'),
+    'gates.py:ppl_contract_ledger_add:write_text': (1, 'state: atomic admitted-mechanism ledger, read before anchor target selection and bundle gating'),
+    'gates.py:write_bit_exact_record:mkdir': (1, 'evidence: digest-addressed bit-exact oracle records in the campaign store'),
+    'gates.py:write_bit_exact_record:write_bytes': (1, 'evidence: atomic retained bit-exact source/tree/oracle/verdict/mechanism record'),
+    'new_epoch.py:start_new_anchor_epoch:mkdir': (1, 'evidence: new-epoch archive root retaining the previous bundle and journal under the existing owner lock'),
+    'new_epoch.py:start_new_anchor_epoch:shutil.move': (2, 'evidence: previous bundle and journal archived under the owner lock before starting a fresh epoch'),
+    'roofline_coverage.py:write_scope_gap:mkdir': (1, 'evidence: campaign scope_gap.json parent; durable stagnation report for route review'),
+    'roofline_coverage.py:write_scope_gap:write_text': (1, 'evidence: durable schema/timestamp/coverage-gap report, emitted only by the stagnation hook'),
+    'run.py:main.ppl_contract_bisect_build:write_text': (1, 'writes inside a run-scope registered bisect build (commit marker); build and source released with the run'),
+    'run.py:main.ppl_contract_tools_build:write_text': (1, 'writes inside a run-scope registered tools build; object/artifact identity marker revalidated on reuse'),
+    'run.py:fail_remeasure_request:os.link': (1, "state: atomic no-clobber restore of this process's claimed REMEASURE_REQUEST, preserving a newer request"),
+    'served_shape_cases.py:apply_patch_block:write_text': (1, 'source: explicit calibration tool stages the generated case block in experimental tests/test-backend-ops.cpp'),
+    'served_shape_cases.py:write_manifest:mkdir': (1, 'evidence: served-shape manifest directory, consumed and checked by the candidate source gate'),
+    'served_shape_cases.py:write_manifest:write_text': (1, 'evidence: atomic retained served-shape case/bound/profile/seed manifest, used by the source gate'),
     # -- store evidence / state ----------------------------------------------------------
     "archive.py:_retain_bytes:mkstemp": (1, "evidence: immutable retention (temp + link in the destination dir)"),
     "archive.py:_retain_bytes:os.link": (1, "evidence: immutable retention (temp + link in the destination dir)"),
     "archive.py:retain_patch_bytes:mkdir": (1, "evidence: retained candidate patches"),
     "census.py:store_census:mkdir": (1, "evidence: GGUF census in the store"),
     "census.py:store_census:write_text": (1, "evidence: GGUF census in the store (atomic)"),
+    "model_identity.py:_persist_divergence:mkdir": (1, "evidence: caller-selected retained original per-repeat model-identity divergence records"),
+    "model_identity.py:_persist_divergence:write_text": (1, "evidence: content-named full original anchor/candidate observation arrays behind an identity refusal; no grading projection"),
     "claim.py:hold:mkdir": (1, "state: device claim lock file"),
     "claim.py:hold:open-write": (1, "state: device claim lock file"),
     "cpu_profile.py:CpuProfileCapture._initialize:mkdir": (1, "evidence: cpu-raw capture dir, retained and referenced"),
@@ -805,7 +842,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "recal_serving_floor.py:main:copy2": (1, "evidence: operator CLI backup of the replaced floor"),
     "run.py:_publish_preclaim_failure:mkdir": (1, "evidence: batch --out dir (pre-claim failure marker)"),
     "run.py:main.publish_held_claims:mkdir": (1, "evidence: batch --out dir (held-claim evidence)"),
-    "run.py:main:mkdir": (1, "evidence: batch --out dir (loop-run.json)"),
+    "run.py:main:mkdir": (2, "evidence: batch --out and original GPU child phase event directory; pending markers retain failed release refusal"),
+    "gpu_phases.py:child_build:write_text": (2, "evidence: pending native child-owner marker and completed original CPU build interval; release errors retain pending refusal"),
     "runtime_calibration.py:neutral_material:mkdir": (1, "evidence: direct-neutral executable keyed by launch snapshot"),
     "runtime_calibration.py:neutral_material:os-open-create": (1, "evidence: direct-neutral executable (O_EXCL)"),
     "seed.py:install:copyfile": (1, "state: operator seed placed in the inbox"),
@@ -894,3 +932,428 @@ class ScratchInventory(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NewWriterScratchBoundaries(Base):
+    def test_no_force_worktree_removal_refuses_dirty_tree_and_releases_clean_tree(self):
+        repo, head = _make_repo(self.tmp)
+        reg = self.reg()
+        with reg.scope("run", name="bisect") as owner:
+            tree = owner.worktree(repo, head, "clean-bisect", force_remove=False)
+            (tree / "a.txt").write_text("dirty fixture\n")
+        self.assertTrue(tree.exists())
+        self.assertIn(str(tree), _worktrees(repo))
+        self.assertEqual(reg.stats()["release_failures"], 1)
+        self.assertFalse(scratch.read_marker("worktree", tree)["force_remove"])
+        _git(tree, "restore", "a.txt")
+        reg.remove_worktree(repo, tree)
+        self.assertFalse(tree.exists())
+        self.assertNotIn(str(tree), _worktrees(repo))
+
+    def test_cookie_owned_descendant_is_dead_before_scratch_release_after_timeout(self):
+        import sys
+        from . import procguard
+        reg = self.reg()
+        pid_file = self.tmp / "captured-child.pid"
+        script = ("import os,subprocess,sys,time; "
+                  "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
+                  "open(sys.argv[1],'w').write(str(child.pid)); time.sleep(60)")
+        with self.assertRaises(subprocess.TimeoutExpired):
+            with reg.scope("call", name="timeout") as scope:
+                directory = scope.dir("owned-inputs", "timeout")
+                with scratch.owned_child_env(scope) as env:
+                    subprocess.run([sys.executable, "-c", script, str(pid_file)],
+                                   env=env, cwd=directory, timeout=0.5,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        child_pid = int(pid_file.read_text())  # exact child PID captured by this fixture
+        proc = procguard.read_proc(Path("/proc"), child_pid)
+        self.assertTrue(proc is None or proc.state == "Z", proc)
+        self.assertFalse(directory.exists())
+        self.assertTrue(scope._tmp is None or not scope._tmp.exists())
+        self.assertEqual(reg.stats()["release_failures"], 0)
+
+    def test_uncertain_child_cleanup_holds_marked_paths_even_under_later_keep_none_sweep(self):
+        from . import procguard
+        reg = self.reg()
+        class Guard:
+            @staticmethod
+            def call_scope(env):
+                from contextlib import contextmanager
+                @contextmanager
+                def scope():
+                    yield {**env, procguard.ENV_SCOPE: "only-this-fixture"}
+                return scope()
+            @staticmethod
+            def sweep_scope(token):
+                assert token == "only-this-fixture"
+                return {"survivors": [{"pid": -1}]}  # no real signals in this control
+        with mock.patch.object(procguard, "current", return_value=Guard()):
+            with self.assertRaises(ScratchRefused):
+                with reg.scope("call", name="uncertain") as scope:
+                    directory = scope.dir("owned-inputs", "uncertain")
+                    with scratch.owned_child_env(scope):
+                        pass
+        marker = scratch.read_marker("dir", directory)
+        self.assertIn("release_blocked", marker)
+        self.assertTrue(directory.exists())
+        self.assertEqual(self.reg(run_id="next").sweep()["removed"], [])
+        self.assertTrue(directory.exists())
+
+    def test_registry_instance_names_prevent_same_root_same_scope_name_collisions(self):
+        first, second = self.reg(), self.reg()
+        with first.scope("call", name="ppl-completion") as a, \
+                second.scope("call", name="ppl-completion") as b:
+            self.assertEqual(a.id, b.id)  # the sequence alone is only registry-local
+            path_a = a.dir("inputs", f"{a.registry.instance}-{a.id}")
+            path_b = b.dir("inputs", f"{b.registry.instance}-{b.id}")
+            self.assertNotEqual(path_a, path_b)
+            self.assertNotEqual(a.tmpdir(), b.tmpdir())
+            self.assertTrue(path_a.exists() and path_b.exists())
+        self.assertFalse(path_a.exists() or path_b.exists())
+
+    def test_real_compile_forwarder_preserves_owned_env_and_build_context(self):
+        from autokernel.loop import gates
+        tree = ast.parse((PKG / "run.py").read_text())
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                    and node.name == "main")
+        forwarder = next(node for node in main.body if isinstance(node, ast.FunctionDef)
+                         and node.name == "local_compiles")
+        events = []
+        @contextmanager
+        def build():
+            events.append("acquired")
+            try:
+                yield
+            finally:
+                events.append("released")
+        from types import SimpleNamespace
+        ns = {"gates": gates, "gpu_local": SimpleNamespace(build=build,
+              compile_env=lambda original, **kwargs: nullcontext(original)),
+              "nullcontext": nullcontext}
+        exec(compile(ast.Module(body=[forwarder], type_ignores=[]),
+                     "real-compile-forwarder", "exec"), ns)
+        env = {"TMPDIR": "/owned/synthetic-scratch", "AK_PROC_SCOPE": "original-cookie"}
+        def compiler(*args, **kwargs):
+            self.assertEqual(events, ["acquired"])
+            self.assertEqual(args, (Path("/source"), Path("/owned/build")))
+            self.assertIs(kwargs["env"], env)
+            self.assertEqual(kwargs["targets"], ("llama-ppl-contract",))
+            raise ValueError("compile failure")
+        with mock.patch.object(gates, "compiles", side_effect=compiler):
+            with self.assertRaisesRegex(ValueError, "compile failure"):
+                ns["local_compiles"](Path("/source"), Path("/owned/build"),
+                    env=env, targets=("llama-ppl-contract",))
+        self.assertEqual(events, ["acquired", "released"])
+
+    def test_run_ppl_helpers_register_builds_and_clean_bisect_source_before_release(self):
+        import hashlib
+        from types import SimpleNamespace
+        from . import gates, anchor_integrity
+        repo, earlier = _make_repo(self.tmp)
+        (repo / "a.txt").write_text("second\n")
+        _git(repo, "commit", "-qam", "second")
+        head = _git(repo, "rev-parse", "HEAD")
+        store, slot = self.tmp / "state", self.tmp / "slot"
+        slot.mkdir()
+        reg = self.reg()
+        source = ast.parse((PKG / "run.py").read_text())
+        main = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+        names = ("local_compiles", "ppl_contract_tools_build", "ppl_contract_anchor_for_gate", "ppl_contract_bisect_build")
+        functions = [node for node in main.body if isinstance(node, ast.FunctionDef) and node.name in names]
+        ns = {"Path": Path, "scratch": scratch, "gates": gates, "anchor_integrity": anchor_integrity,
+              "json": json, "hashlib": hashlib, "_git": _git,
+              "args": SimpleNamespace(store=store, worktree=repo),
+              "recipe": SimpleNamespace(cmake_defines=lambda: ()),
+              "anchor_build_jobs": lambda _recipe, _jobs: 1,
+              "build_jobs": 1, "build_cpu_list": "0", "anchor_build": [slot],
+              "gpu_local": None, "nullcontext": nullcontext,
+              "current_anchor_commit": [head], "cor_build": [slot], "cor_commit": [head]}
+        exec(compile(ast.Module(body=functions, type_ignores=[]), "real-run-ppl-helpers", "exec"), ns)
+        calls = []
+        def synthetic_compile(src, dest, **kwargs):
+            self.assertIsNotNone(scratch.read_marker("dir", dest))
+            self.assertIn("release_blocked", scratch.read_marker("dir", dest))
+            self.assertIn("AK_PROC_SCOPE", kwargs["env"])
+            self.assertIsNotNone(scratch.read_marker("dir", Path(kwargs["env"]["TMPDIR"])))
+            (dest / "bin").mkdir()
+            for tool in gates.PPL_CONTRACT_TOOL_TARGETS:
+                (dest / "bin" / tool).write_bytes(b"synthetic compiled fixture tool")
+            calls.append((src, dest))
+            return gates.Verdict("compile", True)
+        def synthetic_artifact(build, tool):
+            return hashlib.sha256((build / "bin" / tool).read_bytes()).hexdigest()
+        scratch.install(reg)
+        try:
+            with mock.patch.object(gates, "compiles", side_effect=synthetic_compile), \
+                    mock.patch.object(gates, "_build_identity", side_effect=synthetic_artifact), \
+                    mock.patch.object(anchor_integrity, "object_digest", return_value="synthetic-object-identity"):
+                with reg.scope("run", name="ppl") as owner:
+                    tools = ns["ppl_contract_tools_build"](slot, head)
+                    self.assertEqual(ns["ppl_contract_tools_build"](slot, head), tools)
+                    bisect = ns["ppl_contract_bisect_build"](earlier)
+                    self.assertEqual(ns["ppl_contract_bisect_build"](earlier), bisect)
+                    source_tree = calls[-1][0]
+                    self.assertIn(str(source_tree), _worktrees(repo))
+                    self.assertFalse(scratch.read_marker("worktree", source_tree)["force_remove"])
+                    self.assertEqual(len(calls), 2)
+                    (tools / "bin" / gates.PPL_CONTRACT_TOOL_TARGETS[0]).write_bytes(b"changed tool")
+                    with self.assertRaisesRegex(ValueError, "no longer matches"):
+                        ns["ppl_contract_tools_build"](slot, head)
+                self.assertFalse(tools.exists() or bisect.exists() or source_tree.exists())
+                self.assertNotIn(str(source_tree), _worktrees(repo))
+                self.assertTrue(slot.exists())
+                self.assertEqual(reg.stats()["release_failures"], 0)
+                import sys
+                from . import procguard
+                pid_file = self.tmp / "compile-child.pid"
+                timed_paths = []
+                def timed_compile(src, dest, **kwargs):
+                    timed_paths.extend([src, dest])
+                    self.assertIn("release_blocked", scratch.read_marker("worktree", src))
+                    script = ("import subprocess,sys,time; "
+                              "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']); "
+                              "open(sys.argv[1],'w').write(str(child.pid));time.sleep(60)")
+                    subprocess.run([sys.executable, "-c", script, str(pid_file)],
+                                   env=kwargs["env"], cwd=self.tmp, timeout=0.5,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    self.fail("synthetic compiler should have timed out")
+                with mock.patch.object(gates, "compiles", side_effect=timed_compile):
+                    with self.assertRaises(subprocess.TimeoutExpired):
+                        with reg.scope("run", name="ppl-compile-timeout"):
+                            ns["ppl_contract_bisect_build"](earlier)
+                child = procguard.read_proc(Path("/proc"), int(pid_file.read_text()))
+                self.assertTrue(child is None or child.state == "Z", child)
+                self.assertTrue(timed_paths and all(not path.exists() for path in timed_paths))
+                self.assertNotIn(str(timed_paths[0]), _worktrees(repo))
+                class UncertainGuard:
+                    @staticmethod
+                    def call_scope(env):
+                        from contextlib import contextmanager
+                        @contextmanager
+                        def scope():
+                            yield {**env, procguard.ENV_SCOPE: "synthetic-compile-cookie"}
+                        return scope()
+                    @staticmethod
+                    def sweep_scope(token):
+                        assert token == "synthetic-compile-cookie"
+                        return {"survivors": [{"pid": -1}]}
+                held_paths = []
+                def uncertain_compile(src, dest, **kwargs):
+                    held_paths.extend([src, dest])
+                    return synthetic_compile(src, dest, **kwargs)
+                with mock.patch.object(procguard, "current", return_value=UncertainGuard()), \
+                        mock.patch.object(gates, "compiles", side_effect=uncertain_compile):
+                    with self.assertRaises(ScratchRefused):
+                        with reg.scope("run", name="ppl-compile-uncertain"):
+                            ns["ppl_contract_bisect_build"](earlier)
+                self.assertTrue(held_paths and all(path.exists() for path in held_paths))
+                self.assertIn("release_blocked", scratch.read_marker("worktree", held_paths[0]))
+                self.assertIn("release_blocked", scratch.read_marker("dir", held_paths[1]))
+                self.assertEqual(self.reg(run_id="later").sweep()["removed"], [])
+        finally:
+            scratch.uninstall(reg)
+            reg.close()
+
+
+    def test_a_new_cookie_cannot_clear_an_existing_scope_or_disk_safety_hold(self):
+        reg = self.reg()
+        with reg.scope("run", name="already-held") as owner:
+            directory = owner.dir("held", "existing")
+            owner.block_release("older unresolved child", "older-cookie")
+            original = scratch.read_marker("dir", directory)
+            with reg.scope("call", name="unrelated") as current:
+                with self.assertRaisesRegex(ScratchRefused, "already has"):
+                    with scratch.owned_child_env(current, protect=(owner,)):
+                        self.fail("a child cannot launch against an existing hold")
+            self.assertEqual(scratch.read_marker("dir", directory), original)
+            self.assertFalse(owner.release(directory))
+        self.assertTrue(directory.exists())
+        self.assertEqual(self.reg(run_id="later").sweep()["removed"], [])
+
+    def test_failed_preflight_marker_write_never_launches_a_child(self):
+        reg = self.reg()
+        writes = reg._write_marker
+        entered = []
+        def fail_hold(resource, path, marker):
+            if marker.get("release_blocked"):
+                raise OSError("synthetic durable-marker write failure")
+            return writes(resource, path, marker)
+        with reg.scope("call", name="failed-preflight") as scope:
+            directory = scope.dir("owned-inputs", "preflight")
+            with mock.patch.object(reg, "_write_marker", side_effect=fail_hold):
+                with self.assertRaisesRegex(OSError, "durable-marker"):
+                    with scratch.owned_child_env(scope):
+                        entered.append("launched")
+            self.assertEqual(entered, [])
+        self.assertFalse(directory.exists())
+
+    def test_failed_post_run_marker_write_keeps_the_pre_spawn_durable_hold(self):
+        reg = self.reg()
+        writes = reg._write_marker
+        with self.assertRaises(ScratchRefused):
+            with reg.scope("call", name="failed-clear") as scope:
+                directory = scope.dir("owned-inputs", "clear")
+                scope.tmpdir()  # complete allocation before injecting the post-run write fault
+                def fail_clear(resource, path, marker):
+                    if not marker.get("release_blocked"):
+                        raise OSError("synthetic durable-fence clear failure")
+                    # Also simulate the pre-existing best-effort retention write failing.
+                    if marker.get("retained"):
+                        raise OSError("synthetic retention marker failure")
+                    return writes(resource, path, marker)
+                with mock.patch.object(reg, "_write_marker", side_effect=fail_clear):
+                    with scratch.owned_child_env(scope):
+                        self.assertIn("release_blocked", scratch.read_marker("dir", directory))
+        self.assertTrue(directory.exists())
+        self.assertIn("release_blocked", scratch.read_marker("dir", directory))
+        self.assertEqual(self.reg(run_id="later").sweep()["removed"], [])
+
+
+@pytest.mark.parametrize("helper", ["ppl_contract_tools_build", "ppl_contract_bisect_build"])
+@pytest.mark.parametrize("cleanup", ["timeout", "uncertain"])
+def test_original_cpu_owner_outlives_ppl_cookie_cleanup(native, tmp_path, monkeypatch, helper, cleanup):
+    """The actual helpers keep native CPU ownership through the original cookie sweep."""
+    import hashlib
+    import sys
+    from types import SimpleNamespace
+    from . import claim, gates, anchor_integrity, gpu_phases, procguard
+    repo, earlier = _make_repo(tmp_path)
+    (repo / "a.txt").write_text("second\n")
+    _git(repo, "commit", "-qam", "second")
+    head = _git(repo, "rev-parse", "HEAD")
+    store, slot = tmp_path / "state", tmp_path / "slot"
+    slot.mkdir()
+    registry = ScratchRegistry(store / "scratch",
+        {"campaign": "private-ppl-owner", "state_dir": str(store), "run_id": "original-owner"}, 0)
+    local = gpu_phases.LocalPhases(cpu_list="0", quiet=False, should_stop=lambda: False,
+                                   on_wait=lambda kind: pytest.fail("unexpected native wait"))
+    source = ast.parse((PKG / "run.py").read_text())
+    main = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+    names = {"local_compiles", "ppl_contract_tools_build", "ppl_contract_anchor_for_gate",
+             "ppl_contract_bisect_build"}
+    functions = [node for node in main.body if isinstance(node, ast.FunctionDef) and node.name in names]
+    namespace = {"Path": Path, "scratch": scratch, "gates": gates, "anchor_integrity": anchor_integrity,
+        "json": json, "hashlib": hashlib, "_git": _git,
+        "args": SimpleNamespace(store=store, worktree=repo),
+        "recipe": SimpleNamespace(cmake_defines=lambda: ()), "anchor_build_jobs": lambda *_: 1,
+        "build_jobs": 1, "build_cpu_list": "0", "anchor_build": [slot],
+        "gpu_local": local, "nullcontext": nullcontext,
+        "current_anchor_commit": [head], "cor_build": [slot], "cor_commit": [head]}
+    exec(compile(ast.Module(body=functions, type_ignores=[]), "original-ppl-owner-helper", "exec"), namespace)
+    guard = procguard.Guard(store=store)
+    original_sweep = guard.sweep_scope
+    original_cpu_owner = native[1].cpu_region_lock
+    original_close = claim.HeldCpuClaim._closing
+    events, paths, tokens = [], [], []
+    pid_file = tmp_path / "captured-compiler-descendant.pid"
+    child_pid = [None]
+
+    def assert_native_held():
+        owners = claim.observe_gpu_quiet(native[1].global_region_lock_path("q0"))["owners"]
+        assert [row["pid"] for row in owners] == [os.getpid()]
+        assert events.count("native_acquired") == 1 and "native_released" not in events
+
+    def assert_child_dead():
+        if child_pid[0] is not None:
+            child = procguard.read_proc(Path("/proc"), child_pid[0])
+            assert child is None or child.state == "Z", child
+
+    @contextmanager
+    def cpu_owner(*args, **kwargs):
+        with original_cpu_owner(*args, **kwargs) as receipt:
+            events.append("native_acquired")
+            yield receipt
+        assert_child_dead()
+        events.append("native_released")
+
+    def closing(receipt):
+        assert_native_held()
+        assert "sweep_done" in events
+        assert_child_dead()
+        events.append("close_observed")
+        return original_close(receipt)
+
+    def sweep(token):
+        assert_native_held()
+        assert tokens == [token]  # Only the original compiler's exact cookie.
+        for kind, path in paths:
+            assert path.exists()
+            marker = scratch.read_marker(kind, path)
+            assert "release_blocked" in marker
+        events.append("sweep_held")
+        if cleanup == "uncertain":
+            result = {"survivors": [{"pid": -1}]}
+        else:
+            result = original_sweep(token)
+            assert not result["survivors"]
+            assert_child_dead()
+        events.append("sweep_done")
+        return result
+
+    def compile_timeout(src, dest, **kwargs):
+        assert_native_held()
+        events.append("compile_held")
+        assert kwargs["cpu_list"] == "0" and kwargs["jobs"] == 1
+        assert kwargs["targets"] == gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS
+        env = kwargs["env"]
+        tokens.append(env[procguard.ENV_SCOPE])
+        paths.append(("dir", dest))
+        if helper == "ppl_contract_bisect_build":
+            paths.append(("worktree", src))
+            assert scratch.read_marker("worktree", src)["force_remove"] is False
+        assert scratch.read_marker("dir", Path(env["TMPDIR"])) is not None
+        if cleanup == "uncertain":
+            return gates.Verdict("compile", True)
+        # The cookie selects the descendant even though its cwd is outside scratch.
+        script = ("import subprocess,sys,time; "
+                  "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']); "
+                  "open(sys.argv[1],'w').write(str(child.pid));time.sleep(60)")
+        try:
+            subprocess.run([sys.executable, "-c", script, str(pid_file)], env=env,
+                           cwd=tmp_path, timeout=.5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except subprocess.TimeoutExpired:
+            child_pid[0] = int(pid_file.read_text())
+            child = procguard.read_proc(Path("/proc"), child_pid[0])
+            assert child is not None and child.state != "Z"
+            assert child.cwd == str(tmp_path) and child.scope == tokens[0]
+            raise
+        pytest.fail("compiler should time out")
+
+    monkeypatch.setattr(native[1], "cpu_region_lock", cpu_owner)
+    monkeypatch.setattr(claim.HeldCpuClaim, "_closing", closing)
+    monkeypatch.setattr(guard, "sweep_scope", sweep)
+    monkeypatch.setattr(procguard, "current", lambda: guard)
+    monkeypatch.setattr(gates, "compiles", compile_timeout)
+    monkeypatch.setattr(anchor_integrity, "object_digest", lambda _: "synthetic-slot-object-identity")
+    scratch.install(registry)
+    try:
+        with pytest.raises(subprocess.TimeoutExpired if cleanup == "timeout" else ScratchRefused):
+            with registry.scope("run", name="ppl-owner-order"):
+                namespace[helper](slot, head) if helper == "ppl_contract_tools_build" else namespace[helper](earlier)
+        assert events[0:2] == ["native_acquired", "compile_held"]
+        assert events[-2:] == ["close_observed", "native_released"]
+        assert_child_dead()
+        if cleanup == "timeout":
+            assert len(local.closed_phases()) == 1
+        else:
+            with pytest.raises(claim.ClaimRefused, match="capture failed"):
+                local.closed_phases()
+        assert native[0].lock_owners() == {}
+        with original_cpu_owner("private-release-probe", {"q0"}, timeout_s=.1):
+            pass
+        if cleanup == "timeout":
+            assert all(not path.exists() for _, path in paths)
+        else:
+            assert all(path.exists() and "release_blocked" in scratch.read_marker(kind, path)
+                       for kind, path in paths)
+            later = ScratchRegistry(store / "scratch",
+                {"campaign": "private-ppl-owner", "state_dir": str(store), "run_id": "later"}, 0)
+            try:
+                assert later.sweep()["removed"] == []
+            finally:
+                later.close()
+            assert all(path.exists() for _, path in paths)
+        assert slot.exists() and _git(repo, "status", "--porcelain", "--untracked-files=no") == ""
+    finally:
+        scratch.uninstall(registry)
+        registry.close()

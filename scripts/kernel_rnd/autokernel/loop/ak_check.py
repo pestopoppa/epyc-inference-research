@@ -1424,25 +1424,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise Refused(
                         "a peer measurement holds the CPU region covering ak-check's "
                         "cores; not evidence about the patch -- retry later")
-                if degraded:
-                    reason = off.partition(":")[2] or "disabled by the loop"
-                    result = compile_check(lane=lane, build_dir=args.build_dir,
-                                           db_path=db_path, scratch=scratch, base=args.base,
-                                           cpus=cpus)
-                    result["notes"] = [f"op test SKIPPED ({reason}); compile check only"] \
-                        + result.get("notes", [])
-                    result["op_test_skipped"] = reason
-                    mode = row["mode"] = "op-test-degraded"
-                elif args.op_test:
-                    result = op_test(lane=lane, build_dir=args.build_dir, db_path=db_path,
-                                     scratch=scratch, base=args.base, cpus=cpus,
-                                     deadline=time.monotonic() + OP_TEST_TIMEOUT_S,
-                                     types=args.types.split(",") if args.types else None,
-                                     ops=args.ops.split(",") if args.ops else None)
-                else:
-                    result = compile_check(lane=lane, build_dir=args.build_dir,
-                                           db_path=db_path, scratch=scratch, base=args.base,
-                                           cpus=cpus, syntax_only=args.syntax_only)
+                # GPU run2 sandboxes inherit this per-batch capture destination.
+                # They own a real narrow build claim, including SMT sibling folding.
+                from contextlib import nullcontext
+                local_build = nullcontext()
+                if os.environ.get("AK_GPU_LOCAL_PHASE_DIR"):
+                    from scripts.kernel_rnd.autokernel.loop.gpu_phases import child_build
+                    local_build = child_build(_cpu_text(cpus), paths=(scratch,))
+                with local_build:
+                    if degraded:
+                        reason = off.partition(":")[2] or "disabled by the loop"
+                        result = compile_check(lane=lane, build_dir=args.build_dir,
+                                               db_path=db_path, scratch=scratch, base=args.base,
+                                               cpus=cpus)
+                        result["notes"] = [f"op test SKIPPED ({reason}); compile check only"] \
+                            + result.get("notes", [])
+                        result["op_test_skipped"] = reason
+                        mode = row["mode"] = "op-test-degraded"
+                    elif args.op_test:
+                        result = op_test(lane=lane, build_dir=args.build_dir, db_path=db_path,
+                                         scratch=scratch, base=args.base, cpus=cpus,
+                                         deadline=time.monotonic() + OP_TEST_TIMEOUT_S,
+                                         types=args.types.split(",") if args.types else None,
+                                         ops=args.ops.split(",") if args.ops else None)
+                    else:
+                        result = compile_check(lane=lane, build_dir=args.build_dir,
+                                               db_path=db_path, scratch=scratch, base=args.base,
+                                               cpus=cpus, syntax_only=args.syntax_only)
                 result["cpus"] = _cpu_text(cpus)
     except Refused as exc:
         result = {"status": "refused", "reason": f"REFUSED: {exc}"}

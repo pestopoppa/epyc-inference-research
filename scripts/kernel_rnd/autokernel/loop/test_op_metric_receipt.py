@@ -1,9 +1,13 @@
 """Fixture-only checks for the source-selected GPU reference-metric gate."""
 
+import ast
+import copy
 import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+import pytest
 
 from autokernel.loop import gates
 
@@ -81,6 +85,89 @@ def test_cpu_candidate_reference_cannot_be_accepted_as_independent():
     invoke.assert_not_called()
 
 
+def _is_source_gate(call):
+    return isinstance(call, ast.Call) and (
+        isinstance(call.func, ast.Name) and call.func.id == "local_op_correctness"
+        or isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "gates" and call.func.attr == "op_correctness")
+
+
+def _assert_reference_forwarder(source):
+    wrappers = [node for node in ast.walk(ast.parse(source))
+                if isinstance(node, ast.FunctionDef) and node.name == "local_op_correctness"]
+    assert len(wrappers) == 1
+    wrapper = wrappers[0]
+    assert wrapper.args.vararg.arg == "positional"
+    assert wrapper.args.kwarg.arg == "keyword"
+    assert len(wrapper.body) == 1 and isinstance(wrapper.body[0], ast.With)
+    returns = wrapper.body[0].body
+    assert len(returns) == 1 and isinstance(returns[0], ast.Return)
+    call = returns[0].value
+    assert isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+    assert isinstance(call.func.value, ast.Name) and call.func.value.id == "gates"
+    assert call.func.attr == "op_correctness"
+    assert len(call.args) == 1 and isinstance(call.args[0], ast.Starred)
+    assert isinstance(call.args[0].value, ast.Name) and call.args[0].value.id == "positional"
+    assert len(call.keywords) == 1 and call.keywords[0].arg is None
+    assert isinstance(call.keywords[0].value, ast.Name) and call.keywords[0].value.id == "keyword"
+
+
+def _source_reference_branch(source):
+    branches = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.If) or not isinstance(node.test, ast.Name) \
+                or node.test.id != "cpu_launch":
+            continue
+        if len(node.body) != 1 or len(node.orelse) != 1:
+            continue
+        calls = [item for item in ast.walk(node) if _is_source_gate(item)]
+        if len(calls) == 2:
+            branches.append(node)
+    assert len(branches) == 1, "expected the original CPU/GPU source candidate gate"
+    return branches[0]
+
+
+def _assert_source_reference_branch(branch):
+    for rows, expected in ((branch.body, False), (branch.orelse, True)):
+        calls = [item for row in rows for item in ast.walk(row)
+                 if _is_source_gate(item)]
+        assert len(calls) == 1
+        flags = [kw.value for kw in calls[0].keywords if kw.arg == "require_reference"]
+        assert len(flags) == 1 and isinstance(flags[0], ast.Constant)
+        assert flags[0].value is expected
+
+
 def test_live_source_gate_requests_metric_only_for_gpu():
     source = Path(gates.__file__).with_name("run.py").read_text()
-    assert "require_reference=not cpu_launch" in source
+    _assert_reference_forwarder(source)
+    _assert_source_reference_branch(_source_reference_branch(source))
+
+
+@pytest.mark.parametrize("arm", ["cpu", "gpu"])
+def test_source_reference_guard_rejects_wrong_backend_requirement(arm):
+    source = Path(gates.__file__).with_name("run.py").read_text()
+    branch = copy.deepcopy(_source_reference_branch(source))
+    rows = branch.body if arm == "cpu" else branch.orelse
+    flags = [kw for row in rows for item in ast.walk(row)
+             if _is_source_gate(item) for kw in item.keywords
+             if kw.arg == "require_reference"]
+    assert len(flags) == 1
+    flags[0].value = ast.Constant(value=arm == "cpu")
+    with pytest.raises(AssertionError):
+        _assert_source_reference_branch(branch)
+
+
+@pytest.mark.parametrize("mutation", ["drop_keywords", "override_reference", "wrong_gate"])
+def test_source_reference_guard_rejects_forwarder_mutation(mutation):
+    tree = ast.parse(Path(gates.__file__).with_name("run.py").read_text())
+    wrapper = next(node for node in ast.walk(tree)
+                   if isinstance(node, ast.FunctionDef) and node.name == "local_op_correctness")
+    call = wrapper.body[0].body[0].value
+    if mutation == "drop_keywords":
+        call.keywords = []
+    elif mutation == "override_reference":
+        call.keywords.insert(0, ast.keyword(arg="require_reference", value=ast.Constant(False)))
+    else:
+        call.func.attr = "compiles"
+    with pytest.raises(AssertionError):
+        _assert_reference_forwarder(ast.unparse(tree))

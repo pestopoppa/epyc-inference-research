@@ -164,7 +164,14 @@ def test_missing_gpu_control_supplier_cannot_launch_cpu_controls_or_calibration(
         owner._controls(pair.anchor, 0)
 
 
-def test_gpu_oracle_uses_actual_backend_and_original_launch_environment(tmp_path, monkeypatch):
+@pytest.mark.parametrize("output,passed", [
+    ("Backend 1/1: ROCm0\n  MUL_MAT(type=f32): OK\n  1/1 tests passed\n"
+     "  Backend ROCm0: OK\n1/1 backends passed\n", True),
+    ("1/1 backends passed", False),
+    ("Backend 1/1: ROCm0\n  0/0 tests passed\n  Backend ROCm0: OK\n"
+     "1/1 backends passed\n", False),
+], ids=["nonempty-suite", "summary-only", "empty-suite"])
+def test_gpu_oracle_uses_actual_backend_and_original_launch_environment(tmp_path, monkeypatch, output, passed):
     pair, _, _ = gpu_pair(tmp_path)
     oracle = Path(pair.anchor.build_dir) / "bin/test-backend-ops"
     oracle.write_text("fixture-not-executed")
@@ -172,17 +179,20 @@ def test_gpu_oracle_uses_actual_backend_and_original_launch_environment(tmp_path
     calls = []
     def original(*args, **kwargs):
         calls.append((args, kwargs))
-        return type("Result", (), {"returncode": 0, "stdout": "1/1 backends passed", "stderr": ""})()
+        return type("Result", (), {"returncode": 0, "stdout": output, "stderr": ""})()
     monkeypatch.setattr(gates.subprocess, "run", original)
     result = gates.op_correctness(Path(pair.anchor.build_dir), backend="ROCm0", resolved_recipe=pair.anchor)
     assert calls and calls[0][0][0][calls[0][0][0].index("-b") + 1] == "ROCm0"
     assert calls[0][1]["env"] == dict(pair.anchor.launch_env)
-    assert result.gate != "oracle_unavailable"
+    assert result.passed is passed
+    assert (result.gate != "oracle_unavailable") is passed
     with pytest.raises(ValueError, match="backend differs"):
         gates.op_correctness(Path(pair.anchor.build_dir), backend="CPU", resolved_recipe=pair.anchor)
 
 
-def test_actual_gpu_main_runtime_observation_preserves_source_and_skips_unavailable_setup():
+@pytest.mark.parametrize("runtime_statistics", [True, False])
+def test_actual_gpu_main_runtime_observation_preserves_source_and_skips_unavailable_setup(
+        runtime_statistics, capsys):
     from . import loop, run
     from . import test_existing_gpu_serving_run as gpu_inputs
     from .test_promotion_targets import TheKeepBuildsAProductionCompleteAnchor
@@ -193,21 +203,34 @@ def test_actual_gpu_main_runtime_observation_preserves_source_and_skips_unavaila
         with mock.patch.object(gpu_inputs, "_campaign", lambda **kwargs:
                 {**manifest_factory(**kwargs), "campaign_id": "ak-gpu-runtime-fixture"}):
             selected, manifest, _resolved, options, _install = gpu_inputs._inputs(fixture, experimental=True)
+        if runtime_statistics:
+            # Prospective synthetic inputs, not successful calibration evidence.
+            # The unavailable GPU controls below must still prevent admission.
+            with closing(mc.ArtifactStore(fixture.root / "statistics-material")) as store:
+                statistical = rc.declare_statistics(store=store,
+                    campaign_id="ak-gpu-runtime-fixture", epoch="fixture-prospective-statistics")
+            statistical_file = fixture.root / "runtime-statistics.json"
+            statistical_file.write_text(json.dumps(statistical.to_dict()))
+            options += ["--runtime-statistics", str(statistical_file),
+                        "--runtime-calibration-max-launches", "800"]
         requests = manifest.requests(("glm-fixed2029",), selected.template)
         serving.write_floor(fixture.store, selected.template, {
             "floor_pct": 7.8, "n": 5, "recipe_hash": selected.template.recipe_hash,
             "request_digest": serving.request_digest(selected.template, requests)},
             frozen_requests=requests, unit=serving.CALIBRATION_UNIT)
         actual_main, actual_gpu_hold = run.main, claim.hold
-        observed, proposed = [], []
+        observed, proposed, held = [], [], []
 
         @contextmanager
         def host(_cpus):
+            held.append("host")
             with original_claim(fixture.root / "private-host.lock") as holder:
                 yield holder
 
         @contextmanager
-        def gpu():
+        def gpu(*, gpu_quiet_path=None):
+            assert gpu_quiet_path is None
+            held.append("gpu")
             with actual_gpu_hold(fixture.root / "private-device.lock") as holder:
                 yield holder
 
@@ -249,6 +272,16 @@ def test_actual_gpu_main_runtime_observation_preserves_source_and_skips_unavaila
 
         before = run._git(fixture.repo, "rev-parse", "HEAD")
         with mock.patch.object(run, "main", gpu_main):
+            if not runtime_statistics:
+                with pytest.raises(SystemExit, match="2"):
+                    fixture._run_one_keep()
+                assert "runtime calibration requires explicit prospective --runtime-statistics" \
+                    in capsys.readouterr().err
+                assert not held and not proposed and not observed
+                assert not (fixture.store / "runtime-preparation").exists()
+                assert not (fixture.root / "result/loop-run.json").exists()
+                assert run._git(fixture.repo, "rev-parse", "HEAD") == before
+                return
             result, builds, _planners, _scratch, output = fixture._run_one_keep()
         body = json.loads((fixture.root / "result/loop-run.json").read_text())
         assert result == 0, output
@@ -257,6 +290,9 @@ def test_actual_gpu_main_runtime_observation_preserves_source_and_skips_unavaila
         assert run._git(fixture.repo, "rev-parse", "HEAD") == before
         assert "runtime calibration not started:" in output
         assert body["runtime_preparation"]["status"] == "observed_not_admitted"
+        assert body["runtime_preparation"]["statistics"] == statistical.to_dict()
+        assert body["runtime_preparation"]["calibration_launches"] == 800
+        assert held == ["host", "gpu"]
         assert body["iterations"][0]["status"] == "runtime_observed"
         assert body["iterations"][0]["comparison"]["decisive"] is None
     finally:

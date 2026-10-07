@@ -644,7 +644,7 @@ class NativeServerT0WitnessAdapter:
 
 
 def validate_server_source(value: Any) -> Mapping[str, Any]:
-    """Closed historical v1 server adapter grammar, not today's source equality."""
+    """Validate closed historical adapter/source grammars without current-code equality."""
     from .native_producer_source import _closed, _callables, _identity
     row = _closed(value, ("adapter_id", "configuration", "callables", "helpers",
                          "owning_issuer", "owning_source_pins"), "server T0 adapter source")
@@ -670,13 +670,35 @@ def validate_server_source(value: Any) -> Mapping[str, Any]:
     if type(pins["callables"]) not in (list, tuple) or len(pins["callables"]) != 19:
         raise scientific.ScientificWitnessRefused("server T0 owning callable set differs")
     pins["callables"] = [_identity(item) for item in pins["callables"]]
-    retained = _closed(pins["raw_source"], ("schema", "max_response_bytes", "max_request_bytes",
-        "max_slots", "max_total_raw_bytes", "callables"), "original raw server source")
-    if retained["schema"] != raw.RESPONSE_SCHEMA or any(type(retained[name]) is not int
-            or retained[name] <= 0 for name in ("max_response_bytes", "max_request_bytes",
-                                               "max_slots", "max_total_raw_bytes")):
+    raw_source = pins["raw_source"]
+    base_raw_fields = ("schema", "max_response_bytes", "max_request_bytes",
+                       "max_slots", "max_total_raw_bytes", "callables")
+    raw_source_schema = raw_source.get("schema") if isinstance(raw_source, Mapping) else None
+    if raw_source_schema == raw.SOURCE_IDENTITY_SCHEMA_V1:
+        # Exact historical source identity: its `schema` reused the unchanged
+        # response payload schema and had no direct-mode grammar.
+        retained = _closed(raw_source, base_raw_fields, "original raw server source")
+        raw_callable_count = 14
+    elif raw_source_schema == raw.SOURCE_IDENTITY_SCHEMA_V2:
+        retained = _closed(raw_source, base_raw_fields + ("direct_schemas",),
+                           "original raw server source v2")
+        raw_callable_count = 18
+        direct_schemas = retained["direct_schemas"]
+        if (type(direct_schemas) not in (list, tuple)
+                or any(type(item) is not str for item in direct_schemas)
+                or tuple(direct_schemas) != raw.DIRECT_SCHEMA_IDS):
+            raise scientific.ScientificWitnessRefused(
+                "original raw server direct schema set differs")
+        retained["direct_schemas"] = list(direct_schemas)
+    else:
+        raise scientific.ScientificWitnessRefused(
+            "original raw server source identity schema is unsupported")
+    if any(type(retained[name]) is not int or retained[name] <= 0
+           for name in ("max_response_bytes", "max_request_bytes",
+                        "max_slots", "max_total_raw_bytes")):
         raise scientific.ScientificWitnessRefused("original raw server source configuration differs")
-    if type(retained["callables"]) not in (list, tuple) or len(retained["callables"]) != 14:
+    if (type(retained["callables"]) not in (list, tuple)
+            or len(retained["callables"]) != raw_callable_count):
         raise scientific.ScientificWitnessRefused("original raw server callable set differs")
     retained["callables"] = [_identity(item) for item in retained["callables"]]
     pins["raw_source"] = retained

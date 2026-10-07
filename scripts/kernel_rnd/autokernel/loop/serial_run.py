@@ -339,8 +339,10 @@ LONGCTX_SURFACE_FLAGS = frozenset({"--longctx-surface"})
 #: window's claim posture (27B GPU slot 6b, 2026-10-04): keep POLICY and host hygiene,
 #: never a target/workload identity, so like the long-context surface they are shared
 #: argv that a batch boundary may turn on without orphaning the lineage.
+#: CPU capture v2 additionally requires a new compatible parent/worker epoch;
+#: allowlisting it does not make activation safe in an already imported v1 parent.
 KEEP_POLICY_FLAGS = frozenset({"--keep-dimensions", "--keep-capacity-limit-gib",
-                               "--gpu-cpu-region-claim"})
+                               "--gpu-cpu-region-claim", "--cpu-held-intervals-v2"})
 
 
 def resume_binding(argv) -> dict:
@@ -2099,7 +2101,8 @@ def _selected_identity(argv):
             "original_target": selected.to_dict()}
 
 
-def _cost_body_scope(body, proposal, scheduler_state, *, preview=None, source_body=None):
+def _cost_body_scope(body, proposal, scheduler_state, *, preview=None, source_body=None,
+                     cpu_capture_mode=None):
     from . import serial_scheduling
     prospective = preview is not None
     geometry = (preview["scope"] if prospective else
@@ -2107,13 +2110,18 @@ def _cost_body_scope(body, proposal, scheduler_state, *, preview=None, source_bo
     if geometry == "full_confirmation":
         return None  # One retained candidate, not another ordinary search batch.
     argv = body["input_argv"]
+    preparation = {
+        "cpu_calibration": None if prospective else option(argv, "--cpu-calibrate-serving"),
+        "gpu_calibration": None if prospective else option(argv, "--gpu-calibrate-serving"),
+        "runtime_calibration": "--calibrate-runtime" in argv}
+    capture_mode = cpu_capture_mode or option(argv, "--cpu-held-intervals-v2") or "off"
+    if proposal.backend == "cpu" and capture_mode == "on":
+        preparation["cpu_duration_capture"] = "original_native_generations.v2"
     return serial_scheduling.cost_scope(
         binding=resume_binding(argv),
         anchor=(source_body or body)["current_anchor"], cor_anchor=body["cor_anchor"],
         runtime_recipe=body.get("runtime_recipe_reference"), geometry=geometry,
-        preparation={"cpu_calibration": None if prospective else option(argv, "--cpu-calibrate-serving"),
-                     "gpu_calibration": None if prospective else option(argv, "--gpu-calibrate-serving"),
-                     "runtime_calibration": "--calibrate-runtime" in argv},
+        preparation=preparation,
         proposal=proposal, state=scheduler_state)
 
 
@@ -2140,7 +2148,8 @@ def _cost_forecasts(state, manifest, scheduler_state, available, previews):
                     raise SerialRefused("cost forecast original source continuation changed")
             proposal = cpu_screen.scoped_proposal(manifest.proposals[selected_id], previews[selected_id])
             scope = _cost_body_scope(body, proposal, scheduler_state,
-                                     preview=previews[selected_id], source_body=source_body)
+                                     preview=previews[selected_id], source_body=source_body,
+                                     cpu_capture_mode=option(original, "--cpu-held-intervals-v2") or "off")
             forecast = (serial_scheduling.duration_forecast(
                 state["cost_forecast"], selected_id, scope, proposal=proposal,
                 max_stage_seconds=manifest.config.max_stage_seconds) if scope is not None else None)
@@ -2152,6 +2161,29 @@ def _cost_forecasts(state, manifest, scheduler_state, available, previews):
     return forecasts
 
 
+def _refuse_cpu_segment_capture(batch_dir, selection, target):
+    path = batch_dir / "loop-held-claims-refused.json"
+    if not path.exists():
+        return
+    marker, _sha = _json(path, limit=64 * 1024)
+    if (not isinstance(marker, dict)
+            or set(marker) != {"schema", "selection_digest", "target", "error"}
+            or marker["schema"] != "epyc.autokernel.cpu_segment_refusal.v1"
+            or marker["selection_digest"] != selection.digest or marker["target"] != target
+            or not isinstance(marker["error"], str) or not marker["error"]):
+        raise SerialRefused("CPU segment refusal differs from original selection")
+    raise SerialRefused("original CPU segment capture refused: " + marker["error"][:400])
+
+
+def _original_cpu_stage_elapsed(batch_dir, reference, selection, target, receipts):
+    from . import scheduling, serial_scheduling
+    if all(row.schema == scheduling.RECEIPT_SCHEMA_V2 and row.backend == "cpu"
+           and not row.gpu_device_ids for row in receipts):
+        return serial_scheduling.reopen_cpu_stage_elapsed(
+            batch_dir, reference, selection=selection, target=target)
+    return None
+
+
 def _scheduled_account(state, manifest, active, body, batch_dir):
     from . import scheduling, serial_scheduling
     selection = scheduling.Selection.from_dict(active["scheduler_selection"])
@@ -2159,6 +2191,7 @@ def _scheduled_account(state, manifest, active, body, batch_dir):
         raise SerialRefused("active selection digest differs from original selection")
     if body.get("schema") != CONTINUATION_SCHEMA_V2:
         raise SerialRefused("scheduled child lacks original held-resource evidence")
+    _refuse_cpu_segment_capture(batch_dir, selection, body["selected_target"])
     receipts = serial_scheduling.reopen_held_receipts(
         batch_dir, body["held_claim_evidence"], selection=selection,
         target=body["selected_target"])
@@ -2168,7 +2201,9 @@ def _scheduled_account(state, manifest, active, body, batch_dir):
     outcome = serial_scheduling.stage_outcome(
         body["terminal"], body["outcome_counts"], body.get("iterations_requested", 1))
     settled = scheduling.account_stage_components(
-        manifest.config, scheduler_state, selection, receipts, outcome=outcome)
+        manifest.config, scheduler_state, selection, receipts, outcome=outcome,
+        cpu_stage_elapsed=_original_cpu_stage_elapsed(batch_dir, body["held_claim_evidence"],
+            selection, body["selected_target"], receipts))
     # Only a NEW, completed measured search with unchanged source/runtime anchor
     # trains the forecast (a multi-iteration child never matches the exact
     # one-iteration counts below, so it charges but never trains). A keep changes future setup; failures/invalids remain
@@ -2197,6 +2232,7 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
     selection = scheduling.Selection.from_dict(active["scheduler_selection"])
     if active["scheduler_selection_sha256"] != selection.digest:
         raise SerialRefused("active selection digest differs from original selection")
+    _refuse_cpu_segment_capture(batch_dir, selection, _selected_identity(original))
     try:
         reference, _sha = _json(batch_dir / "loop-held-claims.json", limit=64 * 1024)
     except FileNotFoundError:
@@ -2230,7 +2266,9 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
         batch_dir, reference, selection=selection, target=_selected_identity(original))
     return scheduling.account_stage_components(
         manifest.config, scheduling.SchedulerState.from_dict(state["scheduler_state"]),
-        selection, receipts, outcome="failed")
+        selection, receipts, outcome="failed",
+        cpu_stage_elapsed=_original_cpu_stage_elapsed(
+            batch_dir, reference, selection, _selected_identity(original), receipts))
 
 
 def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),

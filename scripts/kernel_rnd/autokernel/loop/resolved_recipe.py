@@ -520,6 +520,9 @@ _CANONICAL_VALUE_FLAGS = frozenset({
 _CANONICAL_SWITCH_FLAGS = frozenset({
     "--jinja", "--mlock", "--no-mmap", "--kv-unified", "--no-kv-unified",
     "--metrics", "--slots", "--no-webui",
+    # Explicit production idle-slot cache policy; preserve the switch in both
+    # the exact argv and its normalized execution identity.
+    "--no-cache-idle-slots",
 })
 
 
@@ -632,6 +635,8 @@ def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
     for flag in ("--draft-p-min", "--threads-draft", "--log-colors", "--load-threads"):
         if flag in parsed:
             extra += (flag, str(parsed[flag]))
+    if "--no-cache-idle-slots" in parsed:
+        extra += ("--no-cache-idle-slots",)
     if "-tb" in parsed and _canonical_int(parsed, "-tb") != _canonical_int(parsed, "-t"):
         raise ResolutionError("canonical -tb differs from -t")
     if "--flash-attn" in parsed and "-fa" in parsed:

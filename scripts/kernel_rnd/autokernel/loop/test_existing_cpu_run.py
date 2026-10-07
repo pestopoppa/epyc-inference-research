@@ -21,7 +21,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
         invalid_once=False, enrolled_pair=False, runtime_transition=None,
         expected_claim_cycles=None, result_expectation=None, runtime_declaration=True,
-        reference_verdict=None, route_verdict=None):
+        reference_verdict=None, route_verdict=None, repeat_runtime_treatment=False):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -188,8 +188,15 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                         assert enrolled_pair and not runtime_only \
                             and runtime_transition is None
                     if runtime_only or (runtime_transition is not None and not issued):
+                        # The formation guard identifies treatments by recipe,
+                        # not mechanism wording. Exercise five prospective settings;
+                        # an interference retry retains the original pair without
+                        # asking the planner for another proposal.
+                        candidate_threads = template.threads + (
+                            1 if repeat_runtime_treatment else len(issued) + 1)
+                        assert candidate_threads <= len(claim._cpu_numbers(template.cpu_list))
                         treatment = run.actors._runtime_pair(
-                            {"kind": "threads", "candidate": template.threads + 1},
+                            {"kind": "threads", "candidate": candidate_threads},
                             context, hypothesis.mechanism_id)
                         hypothesis = replace(hypothesis, runtime_pair=treatment)
                     issued.append(hypothesis)
@@ -211,7 +218,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 # ROCm reference-metric gate never applies to a CPU route.
                 assert held[-1] is True and backend == "CPU" and require_reference is False
                 if runtime_only:
-                    assert resolved_recipe.template.threads == template.threads + 1
+                    assert resolved_recipe.template.threads == (
+                        issued[len(oracles)].runtime_pair.candidate.template.threads)
                     assert Path(build) == fixture.startup_anchor
                 oracles.append(str(build))
                 return gates.Verdict("correctness", True, "synthetic observation")
@@ -269,7 +277,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         else:
             assert len(issued) == (5 if result_expectation is not None else
                                    4 if invalid_once else 10 if enrolled_pair else 5)
-            assert len(oracles) == len(issued)
+            assert len(oracles) == (1 if repeat_runtime_treatment else len(issued))
             claim_cycles = (2 if enrolled_pair else 1) \
                 if expected_claim_cycles is None else expected_claim_cycles
             assert held == [value for _ in range(claim_cycles) for value in (True, False)]

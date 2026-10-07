@@ -24,6 +24,11 @@ UNIT_SCHEMA = "epyc.autokernel.native_server_response_unit.v1"
 DIRECT_FRAME_SCHEMA = "epyc.autokernel.direct_server_response_frame.v1"
 DIRECT_RESPONSE_SCHEMA = "epyc.autokernel.direct_server_response.v1"
 DIRECT_UNIT_SCHEMA = "epyc.autokernel.direct_server_response_unit.v1"
+# Source-identity grammar is versioned independently from the retained payloads:
+# RESPONSE_SCHEMA remains the v1 raw response bytes format.
+SOURCE_IDENTITY_SCHEMA_V1 = RESPONSE_SCHEMA  # exact legacy source-identity label
+SOURCE_IDENTITY_SCHEMA_V2 = "epyc.autokernel.native_server_response_source.v2"
+DIRECT_SCHEMA_IDS = (DIRECT_FRAME_SCHEMA, DIRECT_RESPONSE_SCHEMA, DIRECT_UNIT_SCHEMA)
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_TOTAL_RAW_BYTES = 64 * 1024 * 1024
@@ -54,7 +59,8 @@ def _clock(value: Any) -> float:
 
 def source_identity() -> Mapping[str, Any]:
     from . import serving
-    return ob._freeze({"schema": RESPONSE_SCHEMA, "max_response_bytes": MAX_RESPONSE_BYTES,
+    return ob._freeze({"schema": SOURCE_IDENTITY_SCHEMA_V2,
+        "max_response_bytes": MAX_RESPONSE_BYTES,
         "max_request_bytes": MAX_REQUEST_BYTES, "max_slots": MAX_SLOTS,
         "max_total_raw_bytes": MAX_TOTAL_RAW_BYTES,
         "callables": [lo.callable_identity(item) for item in (
@@ -64,7 +70,7 @@ def source_identity() -> Mapping[str, Any]:
             reopen_unit, _bytes, _clock, _same, _frame, _instrument_source,
             source_identity, ServerResponseCapture.for_direct.__func__, _direct_frame,
             reopen_direct_unit, _reopen_rows)],
-        "direct_schemas": [DIRECT_FRAME_SCHEMA, DIRECT_RESPONSE_SCHEMA, DIRECT_UNIT_SCHEMA]})
+        "direct_schemas": list(DIRECT_SCHEMA_IDS)})
 
 
 def _direct_frame(context, recipe, prompts):

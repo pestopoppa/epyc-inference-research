@@ -138,6 +138,31 @@ def test_production_optional_flags_reject_invalid_values(tmp_path: Path, extra):
                                        topology_prefix=["taskset", "-c", "0-3"])
 
 
+def test_gpu_idle_slot_cache_switch_is_preserved_and_changes_execution_identity(tmp_path):
+    export = _export(tmp_path, backend="gpu")
+    target = export["targets"][0]
+    target["command_argv"].extend(["--cache-ram", "0"])
+    target["argv"] = target["topology"]["argv_prefix"] + target["command_argv"]
+    export = _seal_recipe_artifacts(export, tmp_path)
+    original = CanonicalResolvedRecipe.from_dict(resolve_exported_recipes(
+        export, environment_policy=_policy())["targets"][0]["resolved_recipe"])
+    target["command_argv"].append("--no-cache-idle-slots")
+    target["argv"] = target["topology"]["argv_prefix"] + target["command_argv"]
+    target["artifacts"] = [row for row in target["artifacts"] if row["use"] != "recipe"]
+    export = _seal_recipe_artifacts(export, tmp_path)
+    resolved = CanonicalResolvedRecipe.from_dict(resolve_exported_recipes(
+        export, environment_policy=_policy())["targets"][0]["resolved_recipe"])
+    assert list(resolved.command_argv) == target["command_argv"]
+    assert resolved.command_argv[-1] == "--no-cache-idle-slots"
+    assert "--no-cache-idle-slots" in resolved.template.extra_flags
+    assert resolved.execution_digest != original.execution_digest
+    assert CanonicalResolvedRecipe.from_dict(resolved.to_dict()) == resolved
+    with pytest.raises(rr.ResolutionError, match="repeats"):
+        rr.canonical_recipe_projection(
+            name="duplicate", command_argv=resolved.command_argv + ("--no-cache-idle-slots",),
+            topology_prefix=resolved.topology_prefix)
+
+
 def test_split_model_entry_is_not_overwritten_by_last_shard(tmp_path: Path):
     export = _export(tmp_path)
     target = export["targets"][0]

@@ -130,6 +130,16 @@ class TheCampaignWritesWhatTheLoopReads(unittest.TestCase):
 
     PAIRS = 6
 
+    def test_omitted_anchor_refuses_before_claim_or_measurement(self):
+        aa = _load_aa_campaign()
+        with mock.patch.object(aa.claim, "hold") as hold, \
+             mock.patch.object(aa.bench, "compare") as compare:
+            with self.assertRaises(SystemExit) as refused:
+                aa.main(["--out", "/unused-output"])
+        self.assertEqual(refused.exception.code, 2)
+        hold.assert_not_called()
+        compare.assert_not_called()
+
     def _fake_compare(self, anchor, candidate, model, *, pp, tg, pairs,
                       noise_floor_pct=None, warmup_pairs=1, surface=None,
                       ubatch=None, calibrated=True, reps=9):
@@ -168,6 +178,7 @@ class TheCampaignWritesWhatTheLoopReads(unittest.TestCase):
                                    lambda *a, **k: types.SimpleNamespace(
                                        stdout="feedcafe\n", returncode=0)):
                 rc = aa.main(["--surface", "dec-b4", "--pairs", str(self.PAIRS),
+                              "--anchor-build", str(Path(tmp) / "anchor-build"),
                               "--worktree", tmp, "--model", model,
                               "--out", str(store / "calibration" / "aa-dec-b4.m"),
                               "--write-calibration", str(store)])

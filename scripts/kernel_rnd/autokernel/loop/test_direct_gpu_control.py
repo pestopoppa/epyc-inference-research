@@ -52,7 +52,7 @@ def test_declared_range_is_exact_original_pairs_not_confidence_or_ratio_of_media
     assert body["original_paired_effect_median"] != body["original_ratio_of_medians"]
 
 
-def test_original_bench_actual_tiny_child_capture_keeps_argv_and_raw_mean(tmp_path, monkeypatch):
+def test_original_bench_actual_tiny_child_capture_preserves_refused_summary_and_argv(tmp_path, monkeypatch):
     from .test_serving_residency import _proof, _sampler_class
     binary = tmp_path / "llama-bench"
     binary.write_text('#!/usr/bin/python3\nprint(\'[ {"n_prompt":0,"n_gen":128,"avg_ts":21.25} ]\')\n')
@@ -74,13 +74,17 @@ def test_original_bench_actual_tiny_child_capture_keeps_argv_and_raw_mean(tmp_pa
     with closing(ArtifactStore(tmp_path / "artifacts")) as store, claims(tmp_path) as pair:
         actual = owner.OriginalClaims(*pair, store=store, cpu_list="184-191")
         capture = owner.NativeCapture(store, actual, None, membership=["fixture", 0, "anchor"], deadline=None)
-        value, _proof_value = owner.bench.run_once(binary, Path("/unused-model"), pp=0, tg=128,
-            reps=9, timeout_s=5, capture=capture)
+        # This child is an execution/capture fixture, not a hardened benchmark.
+        # Its summary cannot become an accepted number by inventing sample or
+        # invariant observations on read; retain the original bytes on refusal.
+        with pytest.raises(owner.bench.BenchFailed, match="missing.*samples_ts.*n_threads.*build_commit"):
+            owner.bench.run_once(binary, Path("/unused-model"), pp=0, tg=128,
+                reps=9, timeout_s=5, capture=capture, hardening_seed=77)
         raw = owner._read(store, "direct-gpu-bench-launch", capture.reference.to_dict())
-        assert value == 21.25 == json.loads(raw["stdout"])[0]["avg_ts"]
+        assert json.loads(raw["stdout"]) == [{"n_prompt": 0, "n_gen": 128, "avg_ts": 21.25}]
         assert raw["argv"] == ["taskset", "-c", "184-191", "numactl", "--interleave=all",
             str(binary), "-m", "/unused-model", "-p", "0", "-n", "128", "-r", "9",
-            "-ngl", "99", "-fa", "1", "-o", "json"]
+            "-ngl", "99", "-fa", "1", "-o", "json", "--autokernel-harden", "77"]
         assert raw["returncode"] == 0 and raw["error"] is None and raw["shutdown_resolved"]
         assert raw["started_monotonic_s"] < raw["ended_monotonic_s"]
         assert raw["claim_open"] != raw["claim_close"]

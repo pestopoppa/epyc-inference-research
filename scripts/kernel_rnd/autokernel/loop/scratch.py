@@ -45,6 +45,8 @@ Stdlib only.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager, nullcontext
+
 import fcntl
 import itertools
 import json
@@ -181,6 +183,14 @@ def read_marker(resource: str, path: Path) -> dict | None:
     return data if isinstance(data, dict) and data.get("schema") == SCHEMA else None
 
 
+def _write_child_marker(resource: str, path: Path, marker: dict) -> None:
+    """The existing atomic marker writer, also used by a child holding its parent's path."""
+    target = _marker_path(resource, path)
+    tmp = target.with_name(target.name + f".tmp-{os.getpid()}-{threading.get_ident()}")
+    tmp.write_text(json.dumps(marker, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, target)
+
+
 class Scope:
     """One `with registry.scope(...)` block. Allocators live here; everything allocated
     is released when the block exits (innermost scope first)."""
@@ -195,6 +205,7 @@ class Scope:
         self.children: list[Scope] = []
         self.resources: list[dict] = []
         self.failed = False
+        self.retention_reason: str | None = None
         self.closed = False
         self._tmp: Path | None = None
 
@@ -214,6 +225,46 @@ class Scope:
         """Flag this scope failed without raising (e.g. an iteration that returned a
         failure outcome) so `--scratch-keep failed` retains it."""
         self.failed = True
+
+    def block_release(self, reason: str, token: str, paths: tuple[Path, ...] | None = None) -> None:
+        """Durably fence allocated paths BEFORE spawn; never replace another hold."""
+        if self.retention_reason:
+            raise ScratchRefused("scratch: scope already has an unresolved safety hold")
+        resources = [r for r in self.resources
+                     if paths is None or Path(r["path"]) in {Path(p).absolute() for p in paths}]
+        if paths is not None and len(resources) != len(paths):
+            raise ScratchRefused("scratch: protected path is not allocated to its owner scope")
+        for resource in resources:
+            marker = read_marker(resource["resource"], Path(resource["path"]))
+            if resource.get("release_blocked") or (marker and marker.get("release_blocked")):
+                raise ScratchRefused("scratch: resource already has an unresolved safety hold")
+        for resource in resources:
+            marker = dict(resource, release_blocked=reason, release_block_token=token)
+            self.registry._write_marker(resource["resource"], Path(resource["path"]), marker)
+            resource.update(marker)
+
+    def clear_release_block(self, token: str) -> None:
+        """Clear ONLY this call's fence after its cookie-bound children are dead."""
+        for resource in self.resources:
+            if resource.get("release_block_token") != token:
+                continue
+            current = read_marker(resource["resource"], Path(resource["path"]))
+            if current is None or current.get("release_block_token") != token:
+                raise ScratchRefused("scratch: durable safety fence no longer belongs to this call")
+            marker = dict(resource)
+            marker.pop("release_blocked")
+            marker.pop("release_block_token")
+            self.registry._write_marker(resource["resource"], Path(resource["path"]), marker)
+            resource.pop("release_blocked")
+            resource.pop("release_block_token")
+
+    def retain(self, reason: str) -> None:
+        """Hold this scope's resources when a child's death could not be proved.
+
+        The hold is marked and is never automatically swept; an explicit owner
+        recovery must resolve it before any resource can be collected.
+        """
+        self.retention_reason = reason
 
     def close(self, *, failed: bool = False) -> None:
         self.registry._close(self, failed=failed or self.failed)
@@ -253,7 +304,7 @@ class Scope:
         """This scope's system-temp directory (`<root>/tmp/<scope id>`), allocated once
         per scope and released with it."""
         if self._tmp is None:
-            self._tmp = self.dir("tmp", self.id + (f"-{_safe(name)}" if name else ""))
+            self._tmp = self.dir("tmp", f"{self.registry.instance}-{self.id}" + (f"-{_safe(name)}" if name else ""))
         return self._tmp
 
     def tmp_env(self, base: dict | None = None) -> dict:
@@ -270,11 +321,12 @@ class Scope:
         return self.registry._allocate(self, "file", kind, name, at=at)
 
     def worktree(self, repo: Path | str, base_commit: str, name: str, *,
-                 at: Path | str | None = None) -> Path:
+                 at: Path | str | None = None, force_remove: bool = True) -> Path:
         """`git worktree add --detach <path> <base_commit>` in `repo`, marked by a
         sidecar; released by `git worktree remove --force` (dirty trees included)."""
         return self.registry._allocate(self, "worktree", "worktrees", name, at=at,
-                                       repo=Path(repo), base_commit=base_commit)
+                                       repo=Path(repo), base_commit=base_commit,
+                                       force_remove=force_remove)
 
 
 class ScratchRegistry:
@@ -373,7 +425,7 @@ class ScratchRegistry:
         # is closed before this scope's own resources go.
         for child in reversed(list(scope.children)):
             child.close(failed=failed)
-        retain = self.keep == "all" or (self.keep == "failed" and failed)
+        retain = bool(scope.retention_reason) or self.keep == "all" or (self.keep == "failed" and failed)
         for res in reversed(list(scope.resources)):
             if retain:
                 self._retain(res, scope, failed=failed)
@@ -391,7 +443,7 @@ class ScratchRegistry:
 
     def _allocate(self, scope: Scope, resource: str, kind: str, name: str, *,
                   at: Path | str | None = None, repo: Path | None = None,
-                  base_commit: str | None = None) -> Path:
+                  base_commit: str | None = None, force_remove: bool = True) -> Path:
         if scope.closed:
             raise ScratchError(f"scratch: scope {scope.id} is closed")
         path = Path(at).absolute() if at is not None else self._default_path(resource, kind, name)
@@ -413,6 +465,7 @@ class ScratchRegistry:
             assert repo is not None and base_commit
             marker["repo"] = str(Path(repo).resolve())
             marker["base_commit"] = base_commit
+            marker["force_remove"] = force_remove
             # Marker FIRST: a crash between the two leaves a marked, collectible path.
             self._write_marker(resource, path, marker)
             done = _git("-C", str(repo), "worktree", "add", "--detach", str(path),
@@ -453,15 +506,20 @@ class ScratchRegistry:
             raise FileExistsError(f"scratch: could not reclaim {path}")
 
     def _write_marker(self, resource: str, path: Path, marker: dict) -> None:
-        target = _marker_path(resource, path)
-        tmp = target.with_name(target.name + f".tmp-{os.getpid()}-{threading.get_ident()}")
-        tmp.write_text(json.dumps(marker, indent=1, sort_keys=True) + "\n", encoding="utf-8")
-        os.replace(tmp, target)
+        _write_child_marker(resource, path, marker)
 
     # -- release ----------------------------------------------------------------------
     def _retain(self, res: dict, scope: Scope, *, failed: bool) -> None:
         path = Path(res["path"])
         res = dict(res, retained=True, retained_at=_now(), retained_failed=failed)
+        # An author child may have fenced this original marked path while this
+        # parent's in-memory resource was unchanged. Never erase that disk hold.
+        disk = read_marker(res["resource"], path)
+        if disk and disk.get("release_blocked"):
+            res.update(release_blocked=disk["release_blocked"],
+                       release_block_token=disk.get("release_block_token"))
+        if scope.retention_reason:
+            res["release_blocked"] = scope.retention_reason
         try:
             self._write_marker(res["resource"], path, res)
         except OSError:
@@ -479,6 +537,9 @@ class ScratchRegistry:
         resource = res["resource"]
         size = _tree_bytes(path)
         try:
+            marker = read_marker(resource, path)
+            if marker is not None and marker.get("release_blocked"):
+                raise ScratchRefused(f"scratch: {path} has an unresolved child safety hold")
             if resource == "dir":
                 self._release_dir(path)
             elif resource == "file":
@@ -552,7 +613,7 @@ class ScratchRegistry:
 
     def remove_worktree(self, repo: Path | str | None, path: Path | str) -> None:
         """Remove ONE registry-owned worktree. Refuses anything without this registry's
-        sidecar marker. `git worktree remove --force` when the directory exists; when it
+        sidecar marker. Removal honors its force_remove policy (default True); when it
         is already gone, the single admin entry recorded in the marker is removed after
         its `gitdir` is verified to point at `path` -- never `prune`."""
         path = Path(path).absolute()
@@ -561,10 +622,15 @@ class ScratchRegistry:
                 or marker.get("registry_root") != str(self.root)
                 or Path(marker.get("path", "")) != path):
             raise ScratchRefused(f"scratch: {path} is not a marked worktree of this registry")
+        if marker.get("release_blocked"):
+            raise ScratchRefused(f"scratch: {path} has an unresolved child safety hold")
         repo = Path(repo or marker.get("repo") or "")
         if os.path.lexists(path):
             self._vacate(path)
-            done = _git("-C", str(repo), "worktree", "remove", "--force", str(path))
+            remove = ["-C", str(repo), "worktree", "remove"]
+            if marker.get("force_remove", True):
+                remove.append("--force")
+            done = _git(*remove, str(path))
             if done.returncode != 0 and os.path.lexists(path):
                 raise ScratchError(f"scratch: git worktree remove failed for {path}: "
                                    f"{(done.stderr or done.stdout).strip()[-400:]}")
@@ -599,6 +665,8 @@ class ScratchRegistry:
         """Why a marked resource may be collected now, or None to leave it."""
         if not marker or marker.get("registry_root") != str(self.root):
             return None
+        if marker.get("release_blocked"):
+            return None  # uncertain descendants: no automatic deletion, even under keep=none
         owner = marker.get("owner") or {}
         pid, start = owner.get("pid", marker.get("pid")), owner.get("pid_start")
         alive = pid_alive(pid, start)
@@ -849,6 +917,123 @@ class adopt_tempfile:
 
 
 # -- CLI knobs --------------------------------------------------------------------------
+@contextmanager
+def captured_child_env(base: dict | None = None, *, paths: tuple[Path, ...] = ()):
+    """Sweep the original compiler cookie before its resource owner can close.
+
+    Reuse a supplied environment only when its cookie is open in the actual guard.
+    Its enclosing owned_child_env keeps its existing fences; every sweep here still
+    runs inside the compiler's native owner. Fresh calls fence marked original paths
+    before spawn, including an author scratch path owned by the parent process.
+    """
+    from . import procguard
+    guard = procguard.current()
+    inherited = base is not None and guard.scope_is_open(base.get(procguard.ENV_SCOPE))
+    context = nullcontext(base) if inherited else guard.call_scope(base)
+    token = None
+    fenced = []
+    body_failure = None
+    scope_failure = None
+    try:
+        try:
+            with context as env:
+                token = env[procguard.ENV_SCOPE]
+                for path in dict.fromkeys(Path(p).absolute() for p in paths):
+                    for kind in ("dir", "worktree", "file"):
+                        marker = read_marker(kind, path)
+                        if marker is None:
+                            continue
+                        if Path(marker.get("path", "")) != path or marker.get("resource") != kind:
+                            raise ScratchRefused("compiler path marker does not bind its original path")
+                        if marker.get("release_blocked"):
+                            if not inherited or marker.get("release_block_token") != token:
+                                raise ScratchRefused("compiler path already has an unresolved safety hold")
+                        else:
+                            held = dict(marker, release_blocked="compiler cleanup not yet verified",
+                                        release_block_token=token)
+                            _write_child_marker(kind, path, held)
+                            fenced.append((kind, path, marker))
+                        break
+                try:
+                    yield env
+                except BaseException as exc:
+                    body_failure = exc
+                    raise
+        except BaseException as exc:
+            if exc is not body_failure:
+                scope_failure = exc
+            raise
+    finally:
+        if token is not None:
+            try:
+                record = guard.sweep_scope(token)
+                if record["survivors"] or scope_failure is not None:
+                    raise ScratchRefused("compiler cookie cleanup could not be verified")
+                # Validate ALL exact tokens before clearing ANY original path fence.
+                for kind, path, _original in fenced:
+                    marker = read_marker(kind, path)
+                    if marker is None or marker.get("release_block_token") != token:
+                        raise ScratchRefused("compiler path safety-fence token changed")
+                for kind, path, original in fenced:
+                    _write_child_marker(kind, path, original)
+            except BaseException as exc:
+                # Before-spawn fences remain durable; never clear another cookie.
+                # A partial fence-clear failure must also retain paths already cleared.
+                for kind, path, original in fenced:
+                    marker = read_marker(kind, path)
+                    if marker is not None and marker.get("release_block_token") in (None, token):
+                        try:
+                            _write_child_marker(kind, path, dict(original,
+                                release_blocked="compiler cleanup or fence release uncertain",
+                                release_block_token=token))
+                        except BaseException:
+                            pass  # Same-process owner also retains in memory below.
+                owner = current()
+                while owner is not None:
+                    if any(Path(resource["path"]) == path for resource in owner.resources
+                           for _kind, path, _original in fenced):
+                        owner.retain("compiler cleanup or fence release uncertain")
+                    owner = owner.parent
+                raise ScratchRefused("compiler cleanup uncertain; retaining original owned paths") from exc
+
+
+@contextmanager
+def owned_child_env(scope: Scope, base: dict | None = None, *,
+                    protect: tuple[Scope | tuple[Scope, tuple[Path, ...]], ...] = ()):
+    """Fence this call's descendants before releasing their native scratch paths.
+
+    Safety holds are durable BEFORE spawn, so even marker-write failure at cleanup
+    cannot leave an automatically collectible path under uncertain descendants.
+    A bound second sweep returns the exact call's result (global records can race).
+    This uses the native cookie/pidfd guard; the cookie only selects captured PIDs.
+    """
+    from . import procguard
+    guard = procguard.current()
+    child = None
+    protected = [(scope, None), *[(item, None) if isinstance(item, Scope) else item for item in protect]]
+    temporary = scope.tmp_env(base)
+    try:
+        with guard.call_scope(temporary) as env:
+            child = env
+            for owner, paths in protected:
+                owner.block_release("owned child active or cleanup not yet verified",
+                                    env[procguard.ENV_SCOPE], paths)
+            yield env
+    finally:
+        try:
+            if child is not None:
+                record = guard.sweep_scope(child[procguard.ENV_SCOPE])
+                if record["survivors"]:
+                    raise ScratchRefused("owned child survived its cookie-bound cleanup")
+            if child is not None:
+                for owner, _paths in protected:
+                    owner.clear_release_block(child[procguard.ENV_SCOPE])
+        except BaseException as exc:
+            for owner, _paths in protected:
+                owner.retain("child cleanup or durable safety-fence release could not be verified")
+            raise ScratchRefused("scratch: child cleanup could not be verified; retaining owned paths") from exc
+
+
 def add_arguments(parser) -> None:
     """`--scratch-min-free-gb` and `--scratch-keep` for run.py."""
     parser.add_argument("--scratch-min-free-gb", type=float, default=DEFAULT_MIN_FREE_GB,
@@ -871,4 +1056,4 @@ __all__ = ["DEFAULT_MIN_FREE_BYTES", "DEFAULT_MIN_FREE_GB", "FALLBACK_DIRNAME", 
            "JOURNAL", "KEEP_MODES", "LEVELS", "MARKER", "SIDECAR_SUFFIX", "Scope",
            "ScratchError", "ScratchRefused", "ScratchRegistry", "active_scope",
            "add_arguments", "adopt_tempfile", "ambient", "current", "from_args", "install",
-           "pid_alive", "read_marker", "registry_for", "uninstall"]
+           "owned_child_env", "pid_alive", "read_marker", "registry_for", "uninstall"]

@@ -10,7 +10,8 @@ User=@SERVICE_USER@
 Group=@SERVICE_GROUP@
 WorkingDirectory=@PINNED_CHECKOUT@
 EnvironmentFile=@SECRET_ENVIRONMENT_FILE@
-ExecStart=@PYTHON@ -m scripts.kernel_rnd.autokernel.loop.campaign_service --resolved-campaign @RESOLVED_CAMPAIGN@ --store @CAMPAIGN_STORE@ --config-generation @CONFIG_GENERATION@ --snapshot-version @SNAPSHOT_VERSION@ --listen 127.0.0.1:@PORT@
+Environment=PYTHONPATH=@PINNED_CHECKOUT@/scripts/kernel_rnd
+ExecStart=@PYTHON@ -m autokernel.loop.campaign_service --resolved-campaign @RESOLVED_CAMPAIGN@ --store @CAMPAIGN_STORE@ --config-generation @CONFIG_GENERATION@ --snapshot-version @SNAPSHOT_VERSION@ --listen 127.0.0.1:@PORT@
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s

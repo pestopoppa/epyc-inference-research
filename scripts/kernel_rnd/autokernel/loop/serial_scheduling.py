@@ -27,6 +27,7 @@ INVALID_OUTCOMES = frozenset({
 FAILED_OUTCOMES = frozenset({"bench_failed", "lane_error", "planner_transient",
                              "authoring_harness_failure"})
 INTERVAL_SCHEMA = "epyc.autokernel.direct_held_intervals.v1"
+INTERVAL_SCHEMA_V2 = "epyc.autokernel.direct_held_intervals.v2"
 REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
 COST_FORECAST_POLICY = "original-held-stage-p75-last8.v1"
 COST_SAMPLE_LIMIT = 8
@@ -229,8 +230,13 @@ def _cost_samples(history, selected_id, scope_digest):
 def retain_cost_sample(history, selected_id, scope_digest, selection, receipts):
     """After NEW owning settlement only; keep at most eight samples/current target scope."""
     samples = _cost_samples(history, selected_id, scope_digest)
-    sample = {"selection_digest": selection.digest,
-              "held_seconds": receipts[-1].ended_at - receipts[0].started_at}
+    cpu_segments = (receipts and all(item.schema == scheduling.RECEIPT_SCHEMA_V2
+        and item.backend == "cpu" and not item.gpu_device_ids for item in receipts))
+    # CPU v2 captures only actual native generations. The v1 envelope and GPU
+    # device-held stage forecast retain their historical wall-span semantics.
+    duration = (sum(item.ended_at - item.started_at for item in receipts) if cpu_segments
+                else receipts[-1].ended_at - receipts[0].started_at)
+    sample = {"selection_digest": selection.digest, "held_seconds": duration}
     if sample["held_seconds"] <= 0:
         raise SerialSchedulingRefused("original held duration must be positive")
     prior = next((row for row in samples if row["selection_digest"] == selection.digest), None)
@@ -362,7 +368,7 @@ def _gpu_quiet_claim(value: Any, domain: Mapping[str, Any]) -> str:
     return f"{domain['boot_id']}:flock:{rows[0][1]}:{rows[0][2]}"
 
 
-def _component(value: Any) -> dict[str, Any]:
+def _component(value: Any, *, cpu_generations=False) -> dict[str, Any]:
     fields = set(_COMPONENT_FIELDS) | ({"gpu_quiet"} if isinstance(value, Mapping)
                                        and "gpu_quiet" in value else set())
     row = _closed(value, fields, "held component")
@@ -396,8 +402,11 @@ def _component(value: Any) -> dict[str, Any]:
         observations.append(observation)
     start = _number(row["started_at"], "held component start")
     end = _number(row["ended_at"], "held component end")
+    generation = row["ownership_generation"]
+    original_generation = (type(generation) is int and generation >= 1
+                           if cpu_generations and row["device_id"] == "cpu" else generation == 1)
     if end <= start or row["released"] is not True \
-            or row["ownership_generation"] != 1 or row["allocation_generation"] != 1:
+            or not original_generation or row["allocation_generation"] != 1:
         raise SerialSchedulingRefused("held component interval/release is invalid")
     for name in ("physical_claim_ids", "gpu_device_ids", "affinity_cores"):
         if not isinstance(row[name], list) or not all(
@@ -424,10 +433,9 @@ def _component(value: Any) -> dict[str, Any]:
     return dict(row, started_at=start, ended_at=end, physical_region_fraction=fraction)
 
 
-def reopen_held_receipts(batch_dir: Path, reference: Mapping[str, Any], *,
-                         selection: scheduling.Selection, target: Mapping[str, Any]
-                         ) -> tuple[scheduling.HeldClaimReceipt, ...]:
-    """Reopen original direct-owner intervals and partition one selected stage."""
+def _held_bundle(batch_dir: Path, reference: Mapping[str, Any], *,
+                 selection: scheduling.Selection, target: Mapping[str, Any]):
+    """Reopen the exact sealed original bundle and validate its identity."""
     reference = _closed(reference, {"schema", "selection_digest", "evidence"},
                         "held reference")
     if reference["schema"] != REFERENCE_SCHEMA \
@@ -443,19 +451,67 @@ def reopen_held_receipts(batch_dir: Path, reference: Mapping[str, Any], *,
         body = _plain(store.read(artifact["locator"], artifact["sha256"]))
     finally:
         store.close()
-    body = _closed(body, {"schema", "selection", "selection_digest", "target", "components"},
+    phase_mode = body.get("schema") == INTERVAL_SCHEMA_V2
+    body = _closed(body, {"schema", "selection", "selection_digest", "target", "components"}
+                   | ({"phases"} if phase_mode else set())
+                   | ({"stage_elapsed"} if phase_mode and "stage_elapsed" in body else set()),
                    "held interval bundle")
-    if body["schema"] != INTERVAL_SCHEMA or body["selection_digest"] != selection.digest \
+    if body["schema"] not in {INTERVAL_SCHEMA, INTERVAL_SCHEMA_V2} or body["selection_digest"] != selection.digest \
             or body["selection"] != selection.to_dict() or body["target"] != dict(target):
         raise SerialSchedulingRefused("held interval bundle identity differs")
-    if not isinstance(body["components"], list) or not 1 <= len(body["components"]) <= 2:
+    if not isinstance(body["components"], list) \
+            or not 1 <= len(body["components"]) <= (4096 if phase_mode else 2):
         raise SerialSchedulingRefused("held interval bundle component count is invalid")
-    components = tuple(_component(item) for item in body["components"])
-    cpu = [item for item in components if item["device_id"] == "cpu"]
-    gpu = [item for item in components if item["device_id"] != "cpu"]
+    components = tuple(_component(item, cpu_generations=phase_mode) for item in body["components"])
     proposal = selection.proposal
     if proposal is None:
         raise SerialSchedulingRefused("held interval selection has no proposal")
+    return body, components, proposal, phase_mode
+
+
+def _cpu_stage_elapsed(body, components):
+    if "stage_elapsed" not in body:
+        raise SerialSchedulingRefused("CPU v2 lacks original completed stage wall boundary")
+    try:
+        elapsed = scheduling.validate_cpu_stage_elapsed(body["stage_elapsed"])
+    except scheduling.SchedulingRefused as exc:
+        raise SerialSchedulingRefused(str(exc)) from exc
+    if elapsed["domain"] != components[0]["domain"] or any(
+            not elapsed["started_at"] <= row["started_at"] < row["ended_at"] <= elapsed["ended_at"]
+            for row in components):
+        raise SerialSchedulingRefused("CPU original stage domain or bounds differ")
+    return elapsed
+
+
+def reopen_cpu_stage_elapsed(batch_dir, reference, *, selection, target):
+    """Read the SAME sealed original bundle; this scope warrants elapsed time only."""
+    body, components, proposal, phase_mode = _held_bundle(
+        batch_dir, reference, selection=selection, target=target)
+    if not phase_mode or not all(row["device_id"] == "cpu" for row in components):
+        raise SerialSchedulingRefused("CPU stage elapsed boundary requires CPU v2 components")
+    if body["phases"] != []:
+        raise SerialSchedulingRefused("CPU native generations carry no GPU local phases")
+    elapsed = _cpu_stage_elapsed(body, components)
+    _cpu_segment_receipts(components, proposal, selection, elapsed)
+    return elapsed
+
+
+def reopen_held_receipts(batch_dir: Path, reference: Mapping[str, Any], *,
+                         selection: scheduling.Selection, target: Mapping[str, Any]
+                         ) -> tuple[scheduling.HeldClaimReceipt, ...]:
+    """Reopen original direct-owner intervals and partition one selected stage."""
+    body, components, proposal, phase_mode = _held_bundle(
+        batch_dir, reference, selection=selection, target=target)
+    cpu = [item for item in components if item["device_id"] == "cpu"]
+    gpu = [item for item in components if item["device_id"] != "cpu"]
+    if phase_mode:
+        if cpu and not gpu:
+            if body["phases"] != []:
+                raise SerialSchedulingRefused("CPU native generations carry no GPU local phases")
+            return _cpu_segment_receipts(cpu, proposal, selection, _cpu_stage_elapsed(body, cpu))
+        if "stage_elapsed" in body or cpu or len(gpu) != 1 or "gpu_quiet_claim_id" in gpu[0]:
+            raise SerialSchedulingRefused("phase intervals need one original device-only owner")
+        return _gpu_phase_receipts(gpu[0], body["phases"], proposal, selection)
     if not cpu and len(gpu) == 1:
         return _gpu_only_receipts(gpu[0], proposal, selection)
     if len(cpu) != 1 or len(gpu) > 1:
@@ -509,6 +565,105 @@ def reopen_held_receipts(batch_dir: Path, reference: Mapping[str, Any], *,
         affinity_cores=affinity, beneficiary_shares={proposal.proposal_id: 1.0})
         for index, (start, end, physical, devices, fraction, affinity, memory)
         in enumerate(segments))
+
+
+def _cpu_segment_receipts(components, proposal, selection, stage_elapsed):
+    """Settle only completed original native CPU generations; yielded gaps own nothing."""
+    if proposal.backend != "cpu" or proposal.estimated_claims.gpu_devices:
+        raise SerialSchedulingRefused("CPU native segments require a CPU selection")
+    first = components[0]
+    previous_end = None
+    context_ids = set()
+    receipts = []
+    for generation, component in enumerate(components, 1):
+        if component["ownership_generation"] != generation \
+                or type(component["ownership_generation"]) is not int \
+                or type(component["allocation_generation"]) is not int \
+                or component["allocation_generation"] != 1:
+            raise SerialSchedulingRefused("CPU original native generations are not sequential")
+        if component["gpu_device_ids"] or component["physical_region_fraction"] <= 0 \
+                or component["physical_region_fraction"] != proposal.estimated_claims.physical_region_fraction \
+                or component["memory_reservation_bytes"] != proposal.estimated_claims.memory_reservation_bytes:
+            raise SerialSchedulingRefused("CPU native generation resource ownership differs")
+        if component["domain"] != first["domain"] \
+                or component["physical_claim_ids"] != first["physical_claim_ids"] \
+                or component["affinity_cores"] != first["affinity_cores"]:
+            raise SerialSchedulingRefused("CPU native generation original owner/allocation differs")
+        if component["context_id"] in context_ids \
+                or (previous_end is not None and component["started_at"] < previous_end):
+            raise SerialSchedulingRefused("CPU native generations repeat or overlap")
+        context_ids.add(component["context_id"])
+        previous_end = component["ended_at"]
+        receipts.append(scheduling.HeldClaimReceipt(
+            schema=scheduling.RECEIPT_SCHEMA_V2,
+            receipt_id="direct-cpu-generation:" + scheduling.digest(stage_elapsed) + ":"
+                + _digest({"selection": selection.digest,
+                "generation": generation, "context": component["context_id"]}),
+            proposal_id=proposal.proposal_id,
+            backend="cpu", stage_class=proposal.stage_class,
+            ownership_generation=generation, allocation_generation=1,
+            physical_claim_ids=tuple(component["physical_claim_ids"]),
+            physical_region_fraction=component["physical_region_fraction"], gpu_device_ids=(),
+            memory_reservation_bytes=component["memory_reservation_bytes"],
+            started_at=component["started_at"], ended_at=component["ended_at"],
+            affinity_cores=tuple(component["affinity_cores"]),
+            beneficiary_shares={proposal.proposal_id: 1.0}))
+    return tuple(receipts)
+
+
+def _gpu_phase_receipts(device, phases, proposal, selection):
+    """Partition real device ownership at local owner boundaries; charge no gaps
+    as CPU or quiet ownership. Predictions are not actual held fractions."""
+    if proposal.backend != "gpu" or tuple(device["gpu_device_ids"]) \
+            != proposal.estimated_claims.gpu_devices or device["physical_region_fraction"] != 0.:
+        raise SerialSchedulingRefused("phase device differs from selected GPU resources")
+    if device["memory_reservation_bytes"] != proposal.estimated_claims.memory_reservation_bytes:
+        raise SerialSchedulingRefused("phase device memory differs from selected resources")
+    if not isinstance(phases, list) or len(phases) > 4096:
+        raise SerialSchedulingRefused("local phase count is invalid")
+    local = []
+    for item in phases:
+        item = _closed(item, {"kind", "component"}, "local phase")
+        component = _component(item["component"])
+        if item["kind"] not in {"build", "gpu_compute"}:
+            raise SerialSchedulingRefused("local phase kind is unsupported")
+        cpu = item["kind"] == "build"
+        if component["device_id"] != ("cpu" if cpu else "gpu_quiet") \
+                or component["gpu_device_ids"] or "gpu_quiet_claim_id" in component \
+                or (component["physical_region_fraction"] <= 0 if cpu
+                    else component["physical_region_fraction"] != 0) \
+                or component["memory_reservation_bytes"] != 0 \
+                or component["domain"]["boot_id"] != device["domain"]["boot_id"] \
+                or not (device["started_at"] <= component["started_at"]
+                        < component["ended_at"] <= device["ended_at"]):
+            raise SerialSchedulingRefused("local phase resources or bounds differ")
+        local.append(component)
+    local.sort(key=lambda row: row["started_at"])
+    if len({row["context_id"] for row in local}) != len(local) \
+            or any(b["started_at"] < a["ended_at"] for a, b in zip(local, local[1:])):
+        raise SerialSchedulingRefused("duplicate or overlapping local phase owners")
+    cuts = sorted({device["started_at"], device["ended_at"],
+                   *(t for row in local for t in (row["started_at"], row["ended_at"]))})
+    result = []
+    for start, end in zip(cuts, cuts[1:]):
+        phase = next((row for row in local if row["started_at"] <= start
+                      and end <= row["ended_at"]), None)
+        contexts = [device["context_id"]] + ([phase["context_id"]] if phase else [])
+        result.append(scheduling.HeldClaimReceipt(
+            schema=scheduling.RECEIPT_SCHEMA_V2,
+            receipt_id=_digest({"selection_digest": selection.digest,
+                               "context_ids": contexts, "start": start, "end": end}),
+            proposal_id=proposal.proposal_id, backend=proposal.backend,
+            stage_class=proposal.stage_class, started_at=start, ended_at=end,
+            ownership_generation=1, allocation_generation=1,
+            physical_claim_ids=tuple(device["physical_claim_ids"]
+                                     + (phase["physical_claim_ids"] if phase else [])),
+            physical_region_fraction=phase["physical_region_fraction"] if phase else 0.,
+            gpu_device_ids=tuple(device["gpu_device_ids"]),
+            memory_reservation_bytes=device["memory_reservation_bytes"],
+            affinity_cores=tuple(phase["affinity_cores"] if phase else []),
+            beneficiary_shares={proposal.proposal_id: 1.}))
+    return tuple(result)
 
 
 def _gpu_only_receipts(device: Mapping[str, Any], proposal: Any,

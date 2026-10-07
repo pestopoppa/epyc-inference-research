@@ -12,7 +12,17 @@ import pytest
 
 from . import calibrate_served_shapes as cal
 from . import served_shape_cases as ssc
-from . import status
+from . import status, scratch
+
+
+@pytest.fixture(autouse=True)
+def calibration_private_disk_budget(monkeypatch):
+    """Synthetic tools use tiny private fixtures; production staging keeps its floor."""
+    constructor = scratch.ScratchRegistry
+    def tiny_fixture(*args, **kwargs):
+        return constructor(*args, **{**kwargs, "min_free_bytes": 0})
+    monkeypatch.setattr(scratch, "ScratchRegistry", tiny_fixture)
+    return constructor
 
 
 def _fake_build(tmp: Path, *, calibrated=True, values=None, skip=0, rc=0,
@@ -530,13 +540,19 @@ def test_build_calibration_uses_the_anchor_recipe_under_the_build_lock(tmp_path)
     rc, _ = _run("--store", store, "--tree", tree, "--build-calibration", "--cpu-list", "0-95")
     assert rc == 2   # no calibration block staged yet
     assert _run("--store", store, "--tree", tree, "--stage-calibration-patch", "--lane", "q38fn")[0] == 0
+    foreign_fixed = tree / "build-ak-calib"
+    foreign_fixed.mkdir()
+    (foreign_fixed / "foreign.txt").write_text("previous staging owned elsewhere")
     lock = tmp_path / "region-lock"
     lock.write_text(textwrap.dedent(f"""\
-        #!/bin/bash
-        echo "$@" > {tmp_path}/build.argv
-        mkdir -p {tree}/build-ak-calib/bin
-        printf '{ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER} {ssc.BACKEND_THREADS_ENV} {ssc.SEED_MARKER}' \\
-            > {tree}/build-ak-calib/bin/test-backend-ops
+        #!/usr/bin/python3
+        import pathlib, shlex, sys
+        pathlib.Path({str(tmp_path / 'build.argv')!r}).write_text(" ".join(sys.argv[1:]))
+        command = shlex.split(sys.argv[-1])
+        build = pathlib.Path(command[command.index("-B") + 1])
+        (build / "bin").mkdir(parents=True)
+        (build / "bin" / "test-backend-ops").write_text(
+            {f'{ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER} {ssc.BACKEND_THREADS_ENV} {ssc.SEED_MARKER}'!r})
         """))
     lock.chmod(0o755)
     rc, out = _run("--store", store, "--tree", tree, "--build-calibration",
@@ -547,7 +563,29 @@ def test_build_calibration_uses_the_anchor_recipe_under_the_build_lock(tmp_path)
     for define in cal.ANCHOR_RECIPE_DEFINES:
         assert define in argv
     assert "--target test-backend-ops" in argv
-    assert json.loads((tree / "build-ak-calib" / "provenance.json").read_text())["recipe"]
+    builds = sorted(tree.glob("build-ak-calib-*"))
+    assert len(builds) == 1
+    build = builds[0]
+    assert str(build) in out
+    assert json.loads((build / "provenance.json").read_text())["recipe"]
+    marker = scratch.read_marker("dir", build)
+    assert marker["retained"] is True
+    assert marker["kind"] == "calibration-build"
+    journal = [json.loads(line) for line in
+               (tree / ".ak-calib-scratch" / scratch.JOURNAL).read_text().splitlines()]
+    compiler_tmp = [row["path"] for row in journal
+                    if row["event"] == "allocate" and row["path"] != str(build)]
+    assert compiler_tmp and all(not Path(path).exists() for path in compiler_tmp)
+    saved = (build / "provenance.json").read_bytes()
+    # A separate invocation may still need this staged binary to validate a record.
+    rc, _ = _run("--store", store, "--tree", tree, "--build-calibration",
+                  "--cpu-list", "0-95", "--region-lock", lock)
+    assert rc == 0
+    builds = sorted(tree.glob("build-ak-calib-*"))
+    assert len(builds) == 2 and all(p.is_dir() for p in builds)
+    assert (build / "provenance.json").read_bytes() == saved
+    assert scratch.read_marker("dir", build) == marker
+    assert (foreign_fixed / "foreign.txt").read_text() == "previous staging owned elsewhere"
 
 
 def test_build_calibration_refuses_other_tree_changes_and_a_live_loop(tmp_path):
@@ -761,3 +799,70 @@ def test_a_record_whose_binary_predates_seeding_refuses_to_bake(tmp_path):
     with mock.patch.object(cal, "lane_profile_refusal", return_value=None):
         why = cal.measurement_record_refusal(record, launch, "q38fn", str(lock))
     assert why and "--build-calibration" in why
+
+
+def test_failed_staging_releases_owned_build_and_compiler_tmp(tmp_path):
+    tree = _tree(tmp_path)
+    store = tmp_path / "store"
+    assert _run("--store", store, "--tree", tree, "--stage-calibration-patch",
+                "--lane", "q38fn")[0] == 0
+    lock = tmp_path / "failed-build"
+    lock.write_text("#!/bin/sh\nexit 9\n")
+    lock.chmod(0o755)
+    assert _run("--store", store, "--tree", tree, "--build-calibration",
+                "--cpu-list", "0-95", "--region-lock", lock)[0] == 2
+    assert not list(tree.glob("build-ak-calib-*"))
+    rows = [json.loads(line) for line in
+            (tree / ".ak-calib-scratch" / scratch.JOURNAL).read_text().splitlines()]
+    allocated = [row["path"] for row in rows if row["event"] == "allocate"]
+    assert len(allocated) == 2 and all(not Path(path).exists() for path in allocated)
+    assert {row["path"] for row in rows if row["event"] == "release"} == set(allocated)
+
+
+def test_staging_refuses_explicit_unique_path_collision_without_touching_it(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    tree = _tree(tmp_path)
+    store = tmp_path / "store"
+    assert _run("--store", store, "--tree", tree, "--stage-calibration-patch",
+                "--lane", "q38fn")[0] == 0
+    reg = scratch.ScratchRegistry(tree / ".ak-calib-scratch", owner={}, min_free_bytes=0)
+    with reg.scope("run", name="collision") as scope:
+        foreign = tree / f"build-ak-calib-{reg.instance}-{scope.id}"
+        foreign.mkdir()
+        note = foreign / "foreign.txt"
+        note.write_text("another session owns this")
+        @contextmanager
+        def existing_scope(_tree):
+            yield scope
+        monkeypatch.setattr(cal, "_calibration_build_scope", existing_scope)
+        assert _run("--store", store, "--tree", tree, "--build-calibration",
+                    "--cpu-list", "0-95", "--region-lock", "/nonexistent")[0] == 2
+        assert note.read_text() == "another session owns this"
+        assert not (foreign / scratch.MARKER).exists()
+    assert note.read_text() == "another session owns this"
+    reg.close()
+
+
+def test_low_disk_refuses_before_allocation_or_launch_and_preserves_retained_stage(
+        tmp_path, monkeypatch, calibration_private_disk_budget):
+    tree = _tree(tmp_path)
+    store = tmp_path / "store"
+    assert _run("--store", store, "--tree", tree, "--stage-calibration-patch",
+                "--lane", "q38fn")[0] == 0
+    constructor = calibration_private_disk_budget
+    earlier = constructor(tree / ".ak-calib-scratch", owner={}, min_free_bytes=0, keep="all")
+    with earlier.scope("run", name="earlier-stage") as scope:
+        saved = scope.dir("calibration-build", "earlier", at=tree / "build-ak-calib-earlier")
+        (saved / "provenance.json").write_text("earlier legitimate phase")
+    marker = scratch.read_marker("dir", saved)
+    monkeypatch.setattr(scratch, "ScratchRegistry", constructor)  # production constructor
+    monkeypatch.setattr(constructor, "free_bytes", lambda self: 0)
+    assert _run("--store", store, "--tree", tree, "--build-calibration",
+                "--cpu-list", "0-95", "--region-lock", "/nonexistent")[0] == 2
+    assert (saved / "provenance.json").read_text() == "earlier legitimate phase"
+    assert scratch.read_marker("dir", saved) == marker
+    rows = [json.loads(line) for line in
+            (tree / ".ak-calib-scratch" / scratch.JOURNAL).read_text().splitlines()]
+    refusals = [row for row in rows if row["event"] == "guard_refused"]
+    assert refusals[-1]["min_free_bytes"] >= 100 * scratch.GB
+    assert len([row for row in rows if row["event"] == "allocate"]) == 1

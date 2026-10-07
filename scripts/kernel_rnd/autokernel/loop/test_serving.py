@@ -377,14 +377,14 @@ class LifecycleObservationHook(unittest.TestCase):
             ("observer.phase", "measurement"), ("request.measurement",),
             ("observer.checkpoint", "measurement_end"),
             ("observer.phase", "teardown"), ("process.terminate",),
-            ("process.wait", 30), ("observer.finish",)]
+            ("process.wait", 180), ("observer.finish",)]
         self.assertEqual(events, expected)
 
     def test_observer_failure_does_not_skip_cleanup_or_replace_success(self):
         value, events = self._run(observer_fail="observer.phase")
         self.assertEqual(value, 10.0)
         self.assertIn(("process.terminate",), events)
-        self.assertIn(("process.wait", 30), events)
+        self.assertIn(("process.wait", 180), events)
         self.assertEqual(events[-1], ("observer.finish",))
 
     def test_popen_failure_still_finishes_observer_and_preserves_original(self):
@@ -408,7 +408,7 @@ class LifecycleObservationHook(unittest.TestCase):
     def test_request_failure_tears_down_and_finishes_observer(self):
         with self.assertRaises(serving.ServerDied):
             self._run(request_error=OSError("request failed"))
-        self.assertIn(("process.wait", 30), self.last_events)
+        self.assertIn(("process.wait", 180), self.last_events)
         self.assertEqual(self.last_events[-1], ("observer.finish",))
 
     def test_unresolved_observer_refuses_successor_after_owned_cleanup(self):
@@ -424,7 +424,7 @@ class LifecycleObservationHook(unittest.TestCase):
     def test_residency_export_failure_follows_cleanup_and_still_finishes_observer(self):
         with self.assertRaisesRegex(RuntimeError, "residency export"):
             self._run(residency_record_error=RuntimeError("residency export"))
-        self.assertIn(("process.wait", 30), self.last_events)
+        self.assertIn(("process.wait", 180), self.last_events)
         self.assertEqual(self.last_events[-1], ("observer.finish",))
 
 class ServerAffinity(unittest.TestCase):

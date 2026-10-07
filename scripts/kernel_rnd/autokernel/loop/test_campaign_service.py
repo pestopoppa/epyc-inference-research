@@ -799,8 +799,8 @@ import json
 from pathlib import Path
 import sys
 from _pytest.monkeypatch import MonkeyPatch
-from scripts.kernel_rnd.autokernel.loop import campaign_service
-from scripts.kernel_rnd.autokernel.loop.test_standalone_runtime import _runtime
+from autokernel.loop import campaign_service
+from autokernel.loop.test_standalone_runtime import _runtime
 
 root = Path(sys.argv[1])
 patch = MonkeyPatch()

@@ -268,9 +268,11 @@ def test_campaign_service_sigterm_durably_drains_and_exits_owned_child(
     resolved.write_text(json.dumps(_resolved().to_dict()), encoding="utf-8")
     store = tmp_path / "store"
     env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env["PYTHONPATH"] = str(Path(__file__).parents[2])
     env["AUTOKERNEL_CONTROL_TOKEN"] = "fixture-token"
     process = subprocess.Popen([
-        sys.executable, "-m", "scripts.kernel_rnd.autokernel.loop.campaign_service",
+        sys.executable, "-m", "autokernel.loop.campaign_service",
         "--resolved-campaign", str(resolved), "--store", str(store),
         "--snapshot-version", str(snapshot_version), "--listen", "127.0.0.1:0",
         "--shutdown-deadline", "1",

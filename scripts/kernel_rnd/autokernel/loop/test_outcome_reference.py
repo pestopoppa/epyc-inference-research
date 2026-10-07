@@ -17,7 +17,7 @@ def _root():
     return root
 
 
-def test_actual_source_owner_last_null_reopens_without_full_result_or_restart_dependency(monkeypatch):
+def test_actual_source_owner_last_regression_reopens_without_full_result_or_restart_dependency(monkeypatch):
     from .test_existing_cpu_run import (
         test_existing_main_cpu_five_iterations_preserves_canonical_champion as execute,
     )
@@ -29,7 +29,7 @@ def test_actual_source_owner_last_null_reopens_without_full_result_or_restart_de
         if name != "loop-continuation.json":
             return result
         reference = value["last_outcome_reference"]
-        assert reference["iteration_index"] == 4 and reference["status"] == "measured_null"
+        assert reference["iteration_index"] == 4 and reference["status"] == "regression"
         assert reference["runtime_result"] is None
         assert len(json.dumps(reference).encode()) <= 12 * 1024
         # Existing load_completed may stat the full result, never parse it.
@@ -59,7 +59,10 @@ def test_actual_source_owner_last_null_reopens_without_full_result_or_restart_de
                 assert reopened["last_outcome_reference"] == reference
             finally:
                 moved.rename(receipt)
-            for change in ({"iteration_index": 0}, {"status": "not_an_original_outcome"},
+            # A known status absent from this original completed batch also
+            # refuses; the diagnostic reader never regrades comparisons.
+            for change in ({"iteration_index": 0}, {"status": "runtime_observed"},
+                           {"status": "not_an_original_outcome"},
                            {"mechanism_id": "another-mechanism"}):
                 changed = copy.deepcopy(row)
                 changed["last_outcome_reference"].update(change)

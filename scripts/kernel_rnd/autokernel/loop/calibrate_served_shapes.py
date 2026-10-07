@@ -45,14 +45,14 @@ import json
 import os
 import re
 import shlex
-import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 import sys
 
 from . import served_shape_cases as ssc
-from . import status
+from . import status, scratch
 
 REGION_LOCK = "/mnt/raid0/llm/epyc-orchestrator/scripts/region-lock"
 FROZEN_TREE = "/mnt/raid0/llm/llama.cpp"
@@ -160,10 +160,39 @@ def build_calibration_argv(tree: Path, build: Path, cpu_list: str, region_lock: 
             "--", "bash", "-c", script]
 
 
+@contextmanager
+def _calibration_build_scope(tree: Path):
+    """A staged build is scratch retained between the tool's separate CLI phases.
+
+    In a loop it belongs to the existing run. Standalone success retains a native
+    marker/journal until its owner explicitly retires it; failed staging releases
+    immediately. Unmarked or live-owner collisions are refused by the registry.
+    """
+    if scratch.ambient() is not None:
+        yield scratch.current("run") or scratch.active_scope()
+        return
+    registry = scratch.ScratchRegistry(Path(tree) / ".ak-calib-scratch",
+        owner={"campaign": "served-shape-calibration", "state_dir": str(tree)},
+        min_free_bytes=max(scratch.DEFAULT_MIN_FREE_BYTES, 100 * scratch.GB), keep="all")
+    if not registry.ensure_free():
+        raise Refused("calibration staging would violate the native 100 GiB disk safety floor")
+    try:
+        with registry.scope("run", name="calibration-staging") as scope:
+            try:
+                yield scope
+            except BaseException as exc:
+                # A child that could not be verified dead still owns these paths.
+                if not isinstance(exc, scratch.ScratchRefused):
+                    registry.keep = "none"
+                raise
+    finally:
+        registry.close()
+
+
 def build_calibration(tree: Path, cpu_list: str, region_lock: str, jobs: int,
                       out=sys.stdout) -> Path:
     """Build test-backend-ops of `tree` (with the staged calibration block) into
-    `<tree>/build-ak-calib`. Refuses unless the tree's ONLY change is the staged
+    a unique native-owned `<tree>/build-ak-calib-<owner>` slot. Refuses unless the tree's ONLY change is the staged
     tests/test-backend-ops.cpp carrying the calibration block -- the build must be the
     anchor commit's code plus the test patch, nothing else."""
     test_file = Path(tree) / "tests" / "test-backend-ops.cpp"
@@ -176,25 +205,43 @@ def build_calibration(tree: Path, cpu_list: str, region_lock: str, jobs: int,
     if dirty.returncode != 0 or changed - {"tests/test-backend-ops.cpp"}:
         raise Refused(f"{tree} has changes besides tests/test-backend-ops.cpp: "
                       f"{sorted(changed - {'tests/test-backend-ops.cpp'})}")
-    build = Path(tree) / CALIBRATION_BUILD_DIRNAME
-    argv = build_calibration_argv(tree, build, cpu_list, region_lock, jobs)
-    print(f"build     {' '.join(argv[:11])} -- <configure + build test-backend-ops>",
-          file=out)
-    done = subprocess.run(argv, capture_output=True, text=True, stdin=subprocess.DEVNULL,
-                          timeout=BUILD_TIMEOUT_S + 600)
-    if done.returncode != 0:
-        raise Refused(f"calibration build exited {done.returncode}: "
-                      f"{(done.stderr or done.stdout)[-600:]}")
-    if not ssc.binary_has_calibration(build):
-        raise Refused(f"{build}/bin/test-backend-ops was built without the calibration block")
-    head = subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"],
-                          capture_output=True, text=True).stdout.strip()
-    (build / "provenance.json").write_text(json.dumps(
-        {"champion_commit": head, "built_for": "served-shape calibration",
-         "recipe": list(ANCHOR_RECIPE_DEFINES), "cpu_list": cpu_list}), encoding="utf-8")
-    print(f"built     {build} (tree HEAD {head[:12]}); next: --anchor-build {build} "
-          "--execute --apply", file=out)
-    return build
+    with _calibration_build_scope(tree) as scope:
+        # Previous phases can have readers; a new staging invocation never retires
+        # their builds or reuses a foreign fixed build-ak-calib directory.
+        target = Path(tree) / (f"{CALIBRATION_BUILD_DIRNAME}-"
+                               f"{scope.registry.instance}-{scope.id}")
+        if os.path.lexists(target):
+            raise Refused(f"{target} already exists; refusing to replace a staged/foreign build")
+        build = scope.dir("calibration-build", "staged", at=target)
+        argv = build_calibration_argv(tree, build, cpu_list, region_lock, jobs)
+        print(f"build     {' '.join(argv[:11])} -- <configure + build test-backend-ops>",
+              file=out)
+        try:
+            with scope.scope("call", name="calibration-build-command") as command_scope:
+                temporary_env = command_scope.tmp_env()
+                try:
+                    with scratch.owned_child_env(command_scope, temporary_env, protect=((scope, (build,)),)) as child_env:
+                        done = subprocess.run(argv, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                              timeout=BUILD_TIMEOUT_S + 600, env=child_env)
+                finally:
+                    if not command_scope.retention_reason:
+                        command_scope.release(Path(temporary_env["TMPDIR"]))
+        except scratch.ScratchRefused:
+            scope.retain("calibration command child cleanup could not be verified")
+            raise
+        if done.returncode != 0:
+            raise Refused(f"calibration build exited {done.returncode}: "
+                          f"{(done.stderr or done.stdout)[-600:]}")
+        if not ssc.binary_has_calibration(build):
+            raise Refused(f"{build}/bin/test-backend-ops was built without the calibration block")
+        head = subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+        (build / "provenance.json").write_text(json.dumps(
+            {"champion_commit": head, "built_for": "served-shape calibration",
+             "recipe": list(ANCHOR_RECIPE_DEFINES), "cpu_list": cpu_list}), encoding="utf-8")
+        print(f"built     {build} (tree HEAD {head[:12]}); next: --anchor-build {build} "
+              "--execute --apply", file=out)
+        return build
 
 
 def cpu_list_count(cpu_list: str) -> int:
@@ -436,17 +483,28 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
     print(f"execute   ONE region-lock claim ({' '.join(lock_argv)}) wraps {n_shards} "
           f"concurrent shard(s) over {len(triples)} case(s), affinity confined to "
           f"{recipe['prefix']}, {ssc.BACKEND_THREADS_ENV}={threads}", file=out)
-    with tempfile.TemporaryDirectory(prefix="ak-calib-shard-") as raw_tmp:
-        tmp = Path(raw_tmp)
+    with scratch.registry_for(Path(store) / "scratch").scope("call", name="calibration-shards") as scope:
+        tmp = scope.dir("calibration-shards", f"{scope.registry.instance}-{scope.id}")
         out_paths = [tmp / f"shard{i}.out" for i in range(n_shards)]
         err_paths = [tmp / f"shard{i}.err" for i in range(n_shards)]
         rc_paths = [tmp / f"shard{i}.rc" for i in range(n_shards)]
         script = fan_out_script(inner_argvs, out_paths, err_paths, rc_paths)
         full_argv = [*lock_argv, "--", "bash", "-c", script]
+        lifecycle_environment = None
         try:
-            claim = subprocess.run(full_argv, capture_output=True, text=True,
-                                   env=recipe["env"], stdin=subprocess.DEVNULL,
-                                   timeout=timeout_s)
+            with scratch.owned_child_env(scope, recipe["env"]) as child_env:
+                from .procguard import ENV_SCOPE
+                lifecycle_environment = {
+                    "schema": "epyc.autokernel.lifecycle_environment.v1",
+                    "actual_env_sha256": hashlib.sha256(json.dumps(child_env,
+                        sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+                    "injected": {k: v for k, v in child_env.items()
+                                 if recipe["env"].get(k) != v}}
+                if set(lifecycle_environment["injected"]) - {"TMPDIR", "TMP", "TEMP", ENV_SCOPE}:
+                    raise Refused("calibration lifecycle overlay changed a served treatment variable")
+                claim = subprocess.run(full_argv, capture_output=True, text=True,
+                                       env=child_env, stdin=subprocess.DEVNULL,
+                                       timeout=timeout_s)
         except subprocess.TimeoutExpired as exc:
             raise Refused(f"the correctness-mode region-lock claim timed out after "
                           f"{timeout_s}s (wraps all {n_shards} shards): {exc}") from exc
@@ -523,6 +581,7 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
                            "launch": recipe["launch"], "launch_sha256": recipe["launch_sha256"],
                            "served_env": {k: v for k, v in sorted(recipe["env"].items())
                                           if k != "PATH"},
+                           "lifecycle_environment": lifecycle_environment,
                            "lock_cpu_list": lock_cpu_list, "lock_role": "build",
                            "effective_prefix": recipe["prefix"],
                            "shards": n_shards,
@@ -731,7 +790,7 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
             print(f"staged    calibration block into {args.tree}/tests/test-backend-ops.cpp",
                   file=out)
             print("next      --build-calibration --cpu-list <served list> (builds "
-                  f"{args.tree}/{CALIBRATION_BUILD_DIRNAME} with the anchor recipe under the "
+                  f"a unique {args.tree}/{CALIBRATION_BUILD_DIRNAME}-<owner> with the anchor recipe under the "
                   "region lock), then --anchor-build <that dir> --execute --apply", file=out)
             return 0
         if args.build_calibration:
@@ -781,7 +840,7 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
                   f"{shard_note} shard(s) (speed is NOT measured here). "
                   "Pass --stage-calibration-patch / --execute / --apply.", file=out)
         return 0
-    except Refused as exc:
+    except (Refused, scratch.ScratchRefused) as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
 

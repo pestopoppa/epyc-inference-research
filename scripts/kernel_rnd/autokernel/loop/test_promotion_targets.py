@@ -237,6 +237,8 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
             {"champion_commit": self.tip, "build_recipe": {"name": "house-gpu"}}),
             encoding="utf-8")
         self.startup_anchor = startup_anchor
+        (startup_anchor / "bin").mkdir()
+        (startup_anchor / "bin/libggml-cpu.so").write_bytes(b"synthetic kernel library")
         (self.root / f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf").write_text("", encoding="utf-8")
 
         # R22-6's live shape, riding along: one good seed, two unreadable files.
@@ -246,7 +248,7 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         (inbox_dir / "bad-utf8.md").write_bytes(b"\xff\xfe\xfa")
         (inbox_dir / "dangling.md").symlink_to(inbox_dir / "no-such-target")
 
-    def _run_one_keep(self):
+    def _run_one_keep(self, *, candidate_symbols=None):
         """Drive `run.main` through exactly one kept iteration; return the record."""
         accumulate.Bundle(champion_of_record=self.tip, tip=self.tip).save(self.store)
         compile_calls: list[dict] = []
@@ -262,7 +264,16 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
             (Path(build_dir) / "bin").mkdir(parents=True, exist_ok=True)
             (Path(build_dir) / "bin" / "llama-bench").write_text("elf",
                                                                  encoding="utf-8")
+            (Path(build_dir) / "bin/libggml-cpu.so").write_bytes(b"synthetic kernel library")
             return gates.Verdict("compile", True)
+
+        def synthetic_symbols(path):
+            # Builds and serving observations in this harness are doubles. Supply
+            # their symbol observation too, but run the real preservation gate,
+            # source inventory, verdict persistence, and promotion/pruning owners.
+            if candidate_symbols is not None and Path(path).parent.parent == root / "lane0-build":
+                return candidate_symbols
+            return ["ggml_compute_forward_mul_mat"]
 
         class _Planner:
             def __init__(self, workspace):
@@ -328,6 +339,7 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
                 "--worker-build-root", str(self.root / "builds")]
         out = io.StringIO()
         with mock.patch.object(gates, "compiles", fake_compiles), \
+             mock.patch.object(run_mod.kernel_coverage, "_nm", synthetic_symbols), \
              mock.patch.object(gates, "op_correctness",
                                lambda _b, **_k: gates.Verdict("op_correctness", True)), \
              mock.patch.object(gates, "affected_op_scope", return_value=("MUL_MAT",)), \
@@ -385,6 +397,15 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         self.assertEqual(guard[0]["targets"], gates.DEFAULT_TARGETS)
         # Every build was compiled AT the directory it serves (never relocated).
         self.assertEqual(promotion[0]["source"], self.repo)
+
+    def test_synthetic_candidate_symbol_loss_still_vetoes_the_keep(self):
+        rc, calls, _planners, _scratch, log = self._run_one_keep(candidate_symbols=[])
+        self.assertEqual(rc, 0, log)
+        self.assertIn("KEEP_CANDIDATE-kernel-coverage", log)
+        self.assertIn("forward:ggml_compute_forward_mul_mat", log)
+        self.assertFalse((self.store / "anchor-gen-002").exists())
+        self.assertEqual([call["dest"] for call in calls], [self.root / "lane0-build"])
+        self.assertEqual(_sh(self.repo, "rev-parse", CANONICAL), self.tip)
 
     def test_legacy_keep_prunes_with_original_current_and_protected_anchor(self):
         """Legacy keeps must not select the intentionally disabled unified pruner.

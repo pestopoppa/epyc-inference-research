@@ -212,7 +212,7 @@ def test_actual_measure_path_invalidates_observed_outside_affinity_after_owned_t
             serving._measure_once(recipe, BUILD, 18311, evidence=evidence, resolved_recipe=resolved)
     assert reads == ["warmup", "measurement"]
     process.terminate.assert_called_once()
-    process.wait.assert_called_once_with(30)
+    process.wait.assert_called_once_with(180)
     assert failed.value.record["resolved_recipe"] == resolved.to_dict()
     assert failed.value.record["recipe"] == recipe.to_dict()
     assert failed.value.record["teardown"] == "terminated"

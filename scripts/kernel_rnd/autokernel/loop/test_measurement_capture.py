@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import fcntl
 import json
 import multiprocessing
 import os
@@ -20,7 +21,15 @@ from .test_planned_serving import _v2_plan
 def _process_exclusive(root, ready, acquired):
     store = mc.ArtifactStore(root)
     try:
-        ready.set()
+        # Prove the parent's original directory flock is held before reporting
+        # readiness; process startup time is not evidence of serialization.
+        try:
+            fcntl.flock(store._runtime.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            ready.set()
+        else:
+            fcntl.flock(store._runtime.fd, fcntl.LOCK_UN)
+            raise AssertionError("child did not observe the parent's exclusive flock")
         with store.exclusive():
             acquired.set()
     finally:
@@ -426,20 +435,33 @@ def test_public_exclusive_serializes_threads_and_processes_on_same_root(tmp_path
     context = multiprocessing.get_context("spawn")
     process_ready = context.Event()
     process_acquired = context.Event()
-    with store.exclusive():
-        thread = threading.Thread(target=thread_waiter)
-        thread.start()
-        process = context.Process(
-            target=_process_exclusive, args=(root, process_ready, process_acquired))
-        process.start()
-        assert thread_entered.wait(1.0) and process_ready.wait(1.0)
-        assert not thread_acquired.wait(0.05)
-        assert not process_acquired.wait(0.05)
-    thread.join(timeout=2.0)
-    process.join(timeout=2.0)
-    assert thread_acquired.is_set() and process_acquired.is_set()
-    assert process.exitcode == 0
-    store.close()
+    thread = threading.Thread(target=thread_waiter, daemon=True)
+    process = context.Process(
+        target=_process_exclusive, args=(root, process_ready, process_acquired))
+    try:
+        with store.exclusive():
+            thread.start()
+            process.start()
+            assert thread_entered.wait(30.0) and process_ready.wait(30.0)
+            assert not thread_acquired.wait(0.05)
+            assert not process_acquired.wait(0.05)
+        thread.join(timeout=30.0)
+        process.join(timeout=30.0)
+        assert not thread.is_alive() and not process.is_alive()
+        assert thread_acquired.is_set() and process_acquired.is_set()
+        assert process.exitcode == 0
+    finally:
+        # A failed assertion must still reap this fixture's captured child PID.
+        if process.pid is not None and process.is_alive():
+            process.terminate()
+            process.join(timeout=5.0)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5.0)
+            assert not process.is_alive()
+        if thread.ident is not None:
+            thread.join(timeout=5.0)
+        store.close()
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), {"not-json"}])

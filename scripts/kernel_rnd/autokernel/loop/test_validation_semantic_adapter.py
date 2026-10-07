@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import runpy
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 from types import ModuleType
 
@@ -30,7 +32,6 @@ from .test_validation_consumer import _consumer, _evidence
 
 
 ROOT = Path("/mnt/raid0/llm/worktrees/mains/autokernel-unified-20260908")
-TEAM2_ROOT = Path("/mnt/raid0/llm/worktrees/mains/autokernel-consumers-root-20260909")
 TEAM2_PIN = sa.ProjectionSourcePin(
     "519acd08c017d4011c74ccc5e56491bce181351b",
     sa.CLAIM_TUPLE_SHA256,
@@ -38,6 +39,37 @@ TEAM2_PIN = sa.ProjectionSourcePin(
     sa.ARM_ADAPTER_ID,
     "04cacacc8576048ff18a96e2c332ca2e2ea59bfdbfcc0acc451c1939f0ad3123",
     "00a880b3fa12dcd1cd2b06d4b9e30959ee14c38441cc5f28ae706d8e2ee68839")
+# The deleted team2 worktree held an unpublished intermediate projector, not
+# the bytes of its base commit. Use the published historical verifier for a
+# new synthetic compatibility test while keeping that original producer pin.
+COMPATIBILITY_PIN = replace(TEAM2_PIN, root_commit=sa.FINAL_V2_ROOT_COMMIT,
+    adapter_sha256=sa.FINAL_V2_ARM_PROJECTOR_SHA256)
+
+
+@pytest.fixture(scope="module")
+def team2_historical_root(tmp_path_factory):
+    root = tmp_path_factory.mktemp("team2-historical-semantic-root")
+    fixture_path = "tests/vidya/test_autokernel_unified_arm.py"
+    # Reopen the exact published Git objects; a removed or advanced worktree
+    # is not the identity of this intentionally compatibility-only projection.
+    archive = subprocess.run(["git", "archive", COMPATIBILITY_PIN.root_commit,
+        "scripts/vidya", fixture_path], cwd=ROOT, check=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
+    with tarfile.open(fileobj=io.BytesIO(archive)) as source:
+        for entry in source.getmembers():
+            if not entry.isfile():
+                continue
+            relative = Path(entry.name)
+            assert not relative.is_absolute() and ".." not in relative.parts
+            assert entry.name.startswith("scripts/vidya/") or entry.name == fixture_path
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.extractfile(entry).read())
+    for relative, expected in (
+            ("scripts/vidya/claim_tuple.py", COMPATIBILITY_PIN.claim_tuple_sha256),
+            ("scripts/vidya/adapters/autokernel_unified_arm.py", COMPATIBILITY_PIN.adapter_sha256)):
+        assert hashlib.sha256((root / relative).read_bytes()).hexdigest() == expected
+    return root
 
 
 @pytest.fixture(scope="module")
@@ -221,15 +253,24 @@ def test_real_adapter_keeps_candidate_row_unavailable(tmp_path, historical_root)
         controller.__exit__(None, None, None)
 
 
-def test_moving_team2_v2_receipt_reprojects_but_is_compatibility_only(tmp_path):
-    fixture_module = runpy.run_path(
-        str(TEAM2_ROOT / "tests/vidya/test_autokernel_unified_arm.py"))
+def test_prospective_compatibility_receipt_rejects_interim_pin_and_unratified_producer(
+        tmp_path, monkeypatch, team2_historical_root):
+    # Generate new synthetic bytes prospectively. Published historical source
+    # is the verifier fixture; no unavailable interim run is reconstructed.
     source_store = mc.ArtifactStore(tmp_path / "v2-source")
     receipt_store = mc.ArtifactStore(tmp_path / "v2-receipts")
-    carrier = fixture_module["v2_carrier_fixture"](source_store.root)
-    carrier_artifact = source_store.write("team2-v2-carrier", carrier)
+    # A fresh interpreter imports the original fixture's own historical
+    # adapters, independent of modules cached by other tests in this process.
+    carrier = json.loads(subprocess.run([sys.executable, "-c",
+        "import json, runpy, sys; from pathlib import Path; "
+        "fixture = runpy.run_path(sys.argv[1]); "
+        "print(json.dumps(fixture['v2_carrier_fixture'](Path(sys.argv[2]))))",
+        str(team2_historical_root / "tests/vidya/test_autokernel_unified_arm.py"),
+        str(source_store.root)], cwd=team2_historical_root, check=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout)
+    carrier_artifact = source_store.write("prospective-compatibility-v2-carrier", carrier)
     event = {"journal_schema": "epyc.autokernel.journal_entry.v1",
-             "event_id": "event-v2", "seq": 1,
+             "event_id": "prospective-compatibility-v2", "seq": 1,
              "kind": "PLANNED_SERVING_ARM_CAPTURED",
              "campaign_id": "campaign-1", "record_id": carrier["measurement_id"],
              "written_at": "2026-09-09T00:00:02Z",
@@ -237,7 +278,10 @@ def test_moving_team2_v2_receipt_reprojects_but_is_compatibility_only(tmp_path):
                  "measurement_id": carrier["measurement_id"], "carrier": carrier,
                  "artifact": carrier_artifact.to_dict()}}
     event_artifact = source_store.write("team2-v2-journal-event", event)
-    projection = sa.PinnedRootProjection(TEAM2_ROOT, source_pin=TEAM2_PIN)
+    with pytest.raises(sa.SemanticAdapterError, match="not the pinned version"):
+        sa.PinnedRootProjection(team2_historical_root, source_pin=TEAM2_PIN)
+    projection = sa.PinnedRootProjection(team2_historical_root, source_pin=COMPATIBILITY_PIN)
+    assert not projection.native_v2_available
     reference = projection.produce_receipt(
         source_store=source_store, source_locator=event_artifact.locator,
         source_sha256=event_artifact.sha256, receipt_store=receipt_store)
@@ -257,6 +301,19 @@ def test_moving_team2_v2_receipt_reprojects_but_is_compatibility_only(tmp_path):
         sa.ValidationSemanticAdapter(projection).reopen_receipt_pair(
             anchor=reference, candidate=reference, source_store=source_store,
             receipt_store=receipt_store)
+    # Exercise eligibility after the separately tested pair-identity boundary.
+    # This in-memory binding copy is not written as a carrier or receipt.
+    candidate_body = json.loads(json.dumps(body))
+    candidate_body["native_binding"]["arm"] = "candidate"
+    semantic = sa.ValidationSemanticAdapter(projection)
+    with monkeypatch.context() as eligibility:
+        eligibility.setattr(semantic, "reopen_receipt_pair", lambda **_kwargs: (body, candidate_body))
+        decision = semantic.evaluate_receipt_pair(
+            sa.ep.ExperimentPlan.from_dict(carrier["plan"]), anchor=reference,
+            candidate=reference, source_store=source_store, receipt_store=receipt_store)
+    assert not decision.permitted
+    assert "native-v2 projector/producer identity is compatibility-only" in decision.reasons
+    assert "native producer source identity is compatibility-only" in decision.reasons
     bad = cr.ClaimGradeReceiptReference(
         reference.receipt_id, reference.locator,
         schemas.content_hash({"replacement": "receipt"}))

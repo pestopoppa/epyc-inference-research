@@ -413,6 +413,11 @@ class Guard:
         return record
 
     # -- the three sweeps ---------------------------------------------------------------
+    def scope_is_open(self, token: str | None) -> bool:
+        """An existing cookie is reusable only under THIS guard's actual open scope."""
+        with self._lock:
+            return token is not None and token in self._open
+
     @contextmanager
     def call_scope(self, env: Mapping[str, str] | None = None):
         """`with guard.call_scope(env) as child_env: Popen(..., env=child_env)`.

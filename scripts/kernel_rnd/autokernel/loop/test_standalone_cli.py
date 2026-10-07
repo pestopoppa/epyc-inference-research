@@ -582,7 +582,8 @@ def test_packaging_is_parseable_pinned_and_deliberately_not_installable():
     environment = (root / "autokernel-campaign.env.example").read_text(encoding="utf-8")
     assert "[Unit]" in unit and "[Service]" in unit and "[Install]" not in unit
     assert "ConditionPathExists=@STATE_DIRECTORY@/launch-bridge-approved" in unit
-    assert "ExecStart=@PYTHON@ -m scripts.kernel_rnd.autokernel.loop.campaign_service" in unit
+    assert "Environment=PYTHONPATH=@PINNED_CHECKOUT@/scripts/kernel_rnd" in unit
+    assert "ExecStart=@PYTHON@ -m autokernel.loop.campaign_service" in unit
     assert "--snapshot-version @SNAPSHOT_VERSION@" in unit
     assert "EnvironmentFile=@SECRET_ENVIRONMENT_FILE@" in unit
     assert "SendSIGKILL=no" in unit and "KillMode=process" in unit

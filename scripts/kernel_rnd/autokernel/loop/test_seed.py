@@ -178,7 +178,7 @@ class TheProgramReachesTheActors(unittest.TestCase):
             {"program": loop.PROGRAM.read_text(encoding="utf-8")})
         for constraint in ("iqk_moe_fused_up_gate", "body-only edits",
                            "Q4_K and Q5_K", "0/0 CPU cases",
-                           "exact candidate-DSO helper hits", "v26 abstentions",
+                           "exact candidate-DSO helper hits", "supersede older abstentions",
                            "historical nulls and abstentions"):
             self.assertIn(constraint, text)
 
@@ -258,26 +258,25 @@ class SupersededCandidatesReachThePlannerFirst(unittest.TestCase):
         self.assertNotIn("Formed but never measured", text)
 
 
-class TheLoopMustNotReSampleUnchangedCode(unittest.TestCase):
-    """Run 15 spent 9 of its 10 measurements on two unchanged patches. A near-floor
-    result reads as "almost", so the planner re-proposed it -- but re-measuring
-    unchanged code redraws the same noise and tells you nothing new. The loop has to
-    notice this itself; a human spotting it in the disposition table is not autonomy.
-    """
+class LegacyRepeatEffectsDoNotVerifyAMechanism(unittest.TestCase):
+    """Attempt history requires exploration without verifying a causal claim."""
 
     ROWS = [{"mechanism_id": "akm-q4k-reuse-q8-sum", "status": "measured_null",
              "effect_fraction": e / 100} for e in (0.089, 0.971, 1.060, 0.596, 0.522)]
 
-    def test_a_repeatedly_measured_mechanism_is_marked_finished(self):
+    def test_legacy_repeats_require_escape_without_characterising_the_mechanism(self):
         text = actors.render_context({"prior_experiments": self.ROWS})
-        self.assertIn("do NOT re-measure", text)
-        self.assertIn("measured 5x", text)
+        self.assertIn("DIMINISHING-RETURNS ESCAPE", text)
+        self.assertIn("5 resolved failures", text)
+        self.assertNotIn("Characterised — do NOT re-measure", text)
+        self.assertEqual(text.count("mechanism claim: hypothesis"), 5)
 
-    def test_the_pooled_estimate_is_shown_not_just_the_count(self):
-        """5 positive out of 5 is a sign test the planner can reason about."""
+    def test_legacy_effects_are_shown_individually_and_never_pooled_as_verified(self):
         text = actors.render_context({"prior_experiments": self.ROWS})
-        self.assertIn("5/5 positive", text)
-        self.assertIn("median", text)
+        self.assertNotIn("5/5 positive", text)
+        self.assertNotIn("median", text)
+        for effect in (0.089, 0.971, 1.060, 0.596, 0.522):
+            self.assertIn(f"+{effect:.3f}% [mechanism claim: hypothesis]", text)
 
     def test_two_measurements_are_not_yet_characterised(self):
         """Repeating once is legitimate; a mechanism is only finished once it has
