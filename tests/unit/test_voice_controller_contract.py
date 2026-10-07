@@ -1,7 +1,7 @@
 """Synthetic controls for transport-neutral voice routing and cascade order."""
 
 from src.voice.cascade import CascadeBackend
-from src.voice.contracts import VoiceEvent, VoiceTurn
+from src.voice.contracts import RetainCancelChoice, VoiceEvent, VoiceTurn
 from src.voice.controller import VoiceController
 
 
@@ -56,8 +56,9 @@ class _VoiceTurn:
         self.events = events
         self.calls = []
 
-    def stream_turn(self, transcript, *, session_id, turn_id):
-        self.calls.append((transcript, session_id, turn_id))
+    def stream_turn(self, transcript, *, session_id, turn_id, response_mode="normal",
+                    must_preserve=()):
+        self.calls.append((transcript, session_id, turn_id, response_mode, must_preserve))
         yield from self.events
 
     def inject(self, text):
@@ -105,7 +106,7 @@ def test_interlocutor_falls_back_for_unsupported_language_and_unhealthy_backend(
 
     assert [event.kind for event in events] == ["text_delta", "audio_chunk", "audio_chunk", "end"]
     assert transcriber.calls == [(b"wav", "fr")]
-    assert voice_turn.calls[0] == ("synthetic transcript", "s1", "t1")
+    assert voice_turn.calls[0] == ("synthetic transcript", "s1", "t1", "normal", ())
     assert interlocutor.calls == []
 
     interlocutor.is_healthy = False
@@ -138,6 +139,92 @@ def test_healthy_supported_interlocutor_is_used_and_cancel_order_is_explicit():
     # event anyway; the controller suppresses every post-cancel event.
     assert list(stream) == []
     assert transcriber.calls == []
+
+
+def test_explicit_retain_cancel_choice_keeps_or_cancels_named_turn():
+    calls = []
+    backend = _Interlocutor()
+    backend.calls = calls
+    controller = VoiceController(
+        CascadeBackend(_Transcriber(), _VoiceTurn([]), _Synthesizer()),
+        _AudioQueue(calls), backend, interlocutor_languages=frozenset({"en"}),
+    )
+    turn = VoiceTurn("turn-1", "session-1", b"synthetic-wav", language="en")
+    retained_stream = controller.respond(turn)
+    assert next(retained_stream) == VoiceEvent("text_delta", "interlocutor")
+    assert controller.apply_retain_cancel_choice(
+        "session-1", "turn-1", RetainCancelChoice.RETAIN
+    ) is RetainCancelChoice.RETAIN
+    assert list(retained_stream) == [VoiceEvent("end")]
+    assert not any(call[0].startswith("cancel") for call in calls)
+
+    calls.clear()
+    cancelled_stream = controller.respond(turn)
+    assert next(cancelled_stream) == VoiceEvent("text_delta", "interlocutor")
+    assert controller.apply_retain_cancel_choice(
+        "session-1", "turn-1", RetainCancelChoice.CANCEL
+    ) is RetainCancelChoice.CANCEL
+    assert list(cancelled_stream) == []
+    assert calls == [
+        ("respond", "turn-1"),
+        ("stop_queued_audio", "session-1", "turn-1"),
+        ("cancel_generation",),
+        ("cancel_vocoder",),
+        ("cancel_orchestrator",),
+    ]
+
+
+def test_retain_cancel_choice_requires_typed_choice_and_active_turn():
+    controller = VoiceController(
+        CascadeBackend(_Transcriber(), _VoiceTurn([]), _Synthesizer()), _AudioQueue([])
+    )
+    try:
+        controller.apply_retain_cancel_choice("session-1", "turn-1", "cancel")
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("free text must not be treated as an explicit typed choice")
+    try:
+        controller.apply_retain_cancel_choice(
+            "session-1", "turn-1", RetainCancelChoice.RETAIN
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a choice cannot target a missing turn")
+
+
+def test_cascade_passes_response_mode_and_exact_protected_values_to_speech_input():
+    literal = "--port=9002 /srv/model/voice #42"
+    voice_turn = _VoiceTurn([VoiceEvent("text_delta", f"Use {literal}."), VoiceEvent("end")])
+    synth = _Synthesizer()
+    turn = VoiceTurn(
+        "turn-2", "session-1", b"synthetic-wav", transcript="synthetic",
+        response_mode="verbatim", must_preserve=(literal,),
+    )
+
+    events = list(CascadeBackend(_Transcriber(), voice_turn, synth).respond(turn))
+
+    assert voice_turn.calls == [(
+        "synthetic", "session-1", "turn-2", "verbatim", (literal,),
+    )]
+    assert synth.calls == [(f"Use {literal}.", None)]
+    assert events[-1] == VoiceEvent("end")
+
+
+def test_cascade_refuses_to_synthesize_when_a_protected_value_is_missing():
+    synth = _Synthesizer()
+    turn = VoiceTurn(
+        "turn-3", "session-1", b"synthetic-wav", transcript="synthetic",
+        must_preserve=("EXACT-42",),
+    )
+    events = list(CascadeBackend(
+        _Transcriber(), _VoiceTurn([VoiceEvent("text_delta", "approximate"), VoiceEvent("end")]),
+        synth,
+    ).respond(turn))
+
+    assert synth.calls == []
+    assert events[-1] == VoiceEvent("error", "voice-turn stream omitted a protected value")
 
 
 def test_controller_rejects_a_second_active_turn_and_idle_cancel_only_stops_queue():
@@ -293,6 +380,9 @@ def test_controller_rejects_malformed_turns_events_and_missing_terminal():
         VoiceTurn("t1", "s1", "not bytes", language="en"),
         VoiceTurn("t1", "s1", b"a", language=4),
         VoiceTurn("t1", "s1", b"a", conversation_context=[]),
+        VoiceTurn("t1", "s1", b"a", response_mode="unknown"),
+        VoiceTurn("t1", "s1", b"a", must_preserve=("",)),
+        VoiceTurn("t1", "s1", b"a", must_preserve=["literal"]),
     )
     for turn in malformed_turns:
         try:
@@ -328,7 +418,7 @@ def test_cascade_synthesizes_only_a_complete_text_turn_and_emits_pcm_order():
 
     events = list(cascade.respond(VoiceTurn("t1", "s1", b"wav", language="en")))
 
-    assert voice_turn.calls == [("synthetic transcript", "s1", "t1")]
+    assert voice_turn.calls == [("synthetic transcript", "s1", "t1", "normal", ())]
     assert synth.calls == [("hello there", "en")]
     assert [event.kind for event in events] == [
         "text_delta", "display", "text_delta", "audio_chunk", "audio_chunk", "end"
@@ -357,7 +447,7 @@ def test_empty_explicit_transcript_is_valid_and_malformed_route_data_fails_close
     empty_transcript_synth = _Synthesizer()
     backend = CascadeBackend(transcriber, empty_transcript_route, empty_transcript_synth)
     list(backend.respond(VoiceTurn("t1", "s1", b"wav", transcript="")))
-    assert empty_transcript_route.calls == [("", "s1", "t1")]
+    assert empty_transcript_route.calls == [("", "s1", "t1", "normal", ())]
     assert transcriber.calls == []
 
     for malformed in (

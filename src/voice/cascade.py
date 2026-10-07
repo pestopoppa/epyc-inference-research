@@ -19,7 +19,8 @@ class Transcriber(Protocol):
 
 class VoiceTurnService(Protocol):
     def stream_turn(
-        self, transcript: str, *, session_id: str, turn_id: str
+        self, transcript: str, *, session_id: str, turn_id: str,
+        response_mode: str, must_preserve: tuple[str, ...],
     ) -> Iterable[VoiceEvent]: ...
     def inject(self, text: str) -> None: ...
     def cancel_generation(self) -> None: ...
@@ -64,7 +65,8 @@ class CascadeBackend:
         terminal_seen = False
         route_failed = False
         for index, event in enumerate(self._voice_turn.stream_turn(
-            transcript, session_id=turn.session_id, turn_id=turn.turn_id
+            transcript, session_id=turn.session_id, turn_id=turn.turn_id,
+            response_mode=turn.response_mode, must_preserve=turn.must_preserve,
         )):
             if index >= MAX_ROUTE_EVENTS:
                 yield VoiceEvent("error", "voice-turn stream exceeded event limit")
@@ -126,6 +128,9 @@ class CascadeBackend:
         answer = "".join(answer_parts)
         if not answer.strip():
             yield VoiceEvent("error", "voice-turn stream contained no speakable text")
+            return
+        if any(value not in answer for value in turn.must_preserve):
+            yield VoiceEvent("error", "voice-turn stream omitted a protected value")
             return
         for index, chunk in enumerate(self._synthesizer.stream_pcm(answer, language=turn.language)):
             if index >= MAX_ROUTE_EVENTS:

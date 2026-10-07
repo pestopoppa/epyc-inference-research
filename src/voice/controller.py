@@ -9,6 +9,7 @@ import threading
 from src.voice.contracts import (
     AudioQueue,
     InterlocutorBackend,
+    RetainCancelChoice,
     VoiceBackend,
     VoiceEvent,
     VoiceTurn,
@@ -173,6 +174,20 @@ class VoiceController:
         if errors:
             raise RuntimeError("voice cancellation incomplete: " + "; ".join(map(str, errors))) from errors[0]
 
+    def apply_retain_cancel_choice(
+        self, session_id: str, turn_id: str, choice: RetainCancelChoice
+    ) -> RetainCancelChoice:
+        """Apply an explicit typed disposition; language/intent classification is external."""
+        if not isinstance(choice, RetainCancelChoice):
+            raise TypeError("choice must be a RetainCancelChoice")
+        with self._state_lock:
+            owner = self._matching_active(session_id, turn_id)
+            if owner is None or owner.cancelled:
+                raise ValueError("no active matching voice turn")
+        if choice is RetainCancelChoice.CANCEL:
+            self.cancel(session_id, turn_id)
+        return choice
+
     def _retire_if_finished(self, owner: _ActiveTurn) -> None:
         if (self._active is owner and owner.stream_done and owner.cleanup_done
                 and owner.operations_in_flight == 0):
@@ -197,6 +212,13 @@ class VoiceController:
             raise TypeError("turn.conversation_context must be a tuple of dictionaries")
         if not isinstance(turn.metadata, dict):
             raise TypeError("turn.metadata must be a dictionary")
+        if (not isinstance(turn.response_mode, str)
+                or turn.response_mode not in {"normal", "verbatim"}):
+            raise ValueError("turn.response_mode must be normal or verbatim")
+        if (not isinstance(turn.must_preserve, tuple)
+                or any(not isinstance(item, str) or not item.strip()
+                       for item in turn.must_preserve)):
+            raise TypeError("turn.must_preserve must be a tuple of non-empty strings")
 
     @staticmethod
     def _valid_event(event: VoiceEvent) -> bool:
