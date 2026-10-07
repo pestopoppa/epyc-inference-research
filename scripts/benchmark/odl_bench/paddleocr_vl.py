@@ -114,7 +114,7 @@ def image_data_url(path: Path) -> str:
 def build_server_argv(config: PaddleOcrVlConfig) -> list[str]:
     argv = [
         "env",
-        f"LD_LIBRARY_PATH={EXPERIMENTAL_BIN_DIR}",
+        f"LD_LIBRARY_PATH={config.binary.resolve().parent}",
         "GGML_IQK=1",
         "ROCR_VISIBLE_DEVICES=0",
         "HIP_VISIBLE_DEVICES=0",
