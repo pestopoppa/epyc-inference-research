@@ -420,6 +420,11 @@ def test_unavailable_task_rate_renders_na_and_keeps_valid_values() -> None:
         "n_questions": 50,
         "eval_wall_s": 600.0,
     }
+    underflow_wall = {
+        **_row(42, config={"type": "numeric_trial", "surface": "w8-underflow-wall"}),
+        "n_questions": 1,
+        "eval_wall_s": 1e-320,
+    }
 
     text = format_planner_evidence_section(
         [
@@ -435,6 +440,7 @@ def test_unavailable_task_rate_renders_na_and_keeps_valid_values() -> None:
             mixed_suite_counts,
             zero,
             positive,
+            underflow_wall,
         ]
     )
 
@@ -458,6 +464,7 @@ def test_unavailable_task_rate_renders_na_and_keeps_valid_values() -> None:
         39: "n/a",
         40: "0.0",
         41: "300.0",
+        42: "n/a",
     }
 
 

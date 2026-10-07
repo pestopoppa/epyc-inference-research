@@ -230,7 +230,16 @@ def test_row_table_renders_unavailable_rate_as_na_and_preserves_measured_values(
         include_dominators=False,
     )
 
-    rows = [line for line in rendered if line.startswith("| ") and not line.startswith("|---")]
+    header = next(line for line in rendered if line.startswith("| Trial |"))
+    assert header == (
+        "| Trial | Quality | Speed t/s | Wall s | N | task_rate q/h | "
+        "goodput q/h | Tokens/solved | Dominated by task-rate |"
+    )
+    rows = [
+        line
+        for line in rendered
+        if line.startswith("| ") and not line.startswith("|---") and line != header
+    ]
     cells = [[cell.strip() for cell in line.strip("|").split("|")] for line in rows]
     assert [row[0] for row in cells] == [str(trial) for trial in trials]
     assert [row[5] for row in cells] == ["n/a", "n/a", "0.00", "300.00", "n/a", "180.00", "n/a"]

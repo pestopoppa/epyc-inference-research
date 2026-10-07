@@ -294,7 +294,11 @@ def task_rate_qph_from_row_if_available(row: dict) -> float | None:
         or wall_value <= 0
     ):
         return None
-    return n_value / (wall_value / 3600.0)
+    try:
+        rate = n_value / (wall_value / 3600.0)
+    except (OverflowError, ZeroDivisionError):
+        return None
+    return rate if math.isfinite(rate) else None
 
 
 # ── SEQ-B: the paired rate measurement for the sequential non-inferiority axis ──
