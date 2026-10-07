@@ -333,9 +333,15 @@ speculative_decoding_policy:
     ngram_candidate_spec_type: >
       RETIRED 2026-07-31. This field previously carried `ngram-mod,draft-mtp`
       while `spec_type` carried `draft-mtp`, which read as "the real one is
-      elsewhere" and directly caused mis-launched measurement runs. The composed
-      recipe is now the value of `spec_type` itself. Any surviving occurrence of
-      this key is stale and MUST be deleted, not consulted.
+      elsewhere" and directly caused mis-launched measurement runs. Composition
+      moved into `spec_type` on 2026-07-31; operator receipt
+      `RATIFY-STACKCHG-DFLASH2-20261003` superseded that policy on 2026-10-03.
+      Current drafter eligibility lives in `roles.<model_role>.drafters` and the
+      actual per-server choice lives in orchestrator `stack_topology.yaml`
+      (`drafter_selection`). `default_spec_type` documents legacy rows only; it
+      is not a selector for roles with `drafters`. This retired-field entry is
+      historical documentation, not a live selector. Remove the key from active
+      configuration and do not consult it.
 
 # =============================================================================
 # Kernel audit history
