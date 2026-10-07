@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.autopilot_core.action_identity import config_fingerprint_from_row
 from src.autopilot_core.planner_evidence import format_planner_evidence_section
 
 
@@ -563,20 +564,21 @@ def test_seq_rate_display_distinguishes_absent_invalid_zero_and_positive() -> No
         (76, {"E_rate_noninf": 0.0}, "E_rate=0.000 combined=0.000"),
         (77, {"E_rate_noninf": 1.25}, "E_rate=1.250 combined="),
     ]
-    rows = [
-        _row(
+    rows = []
+    for trial, rate, _ in cases:
+        row = _row(
             trial,
             config={"type": "numeric_trial", "surface": f"w9-{trial}"},
             seq={
-                "candidate": f"candidate-{trial}",
+                "candidate": "",
                 "core_id": "core_v1",
                 "state": "accumulating",
                 "z": 1.0,
                 **rate,
             },
         )
-        for trial, rate, _ in cases
-    ]
+        row["seq"]["candidate"] = config_fingerprint_from_row(row)
+        rows.append(row)
 
     text = format_planner_evidence_section(rows, limit=len(rows))
     lines_by_trial = {}
@@ -597,12 +599,13 @@ def test_missing_replay_e_values_remain_blocked_and_measured_zero_stays_below_fl
         (82, {"E_quality": 2.0, "E_rate_noninf": 0.0}, "combined_E_below_replay_floor"),
         (83, {"E_quality": 2.0, "E_rate_noninf": 2.0}, None),
     ]
-    rows = [
-        _row(
+    rows = []
+    for trial, values, blocker in cases:
+        row = _row(
             trial,
             config={"type": "numeric_trial", "params": {"x": trial}},
             seq={
-                "candidate": f"candidate-{trial}",
+                "candidate": "",
                 "core_id": "core_v1",
                 "state": "accumulating",
                 "z": 1.0,
@@ -610,14 +613,16 @@ def test_missing_replay_e_values_remain_blocked_and_measured_zero_stays_below_fl
                 **values,
             },
         )
-        for trial, values, _ in cases
-    ]
+        row["seq"]["candidate"] = config_fingerprint_from_row(row)
+        rows.append(row)
 
     text = format_planner_evidence_section(rows, limit=len(rows))
 
-    for _, _, blocker in cases:
+    for row, (_, _, blocker) in zip(rows, cases):
         if blocker is not None:
-            assert blocker in text
+            # The mixed aggregate has a replayable candidate and intentionally omits
+            # the all-blocked reason list. Prove each native blocker on its own row.
+            assert blocker in format_planner_evidence_section([row], limit=1)
     assert "1/4 accumulating candidate(s) are replayable" in text
 
 
