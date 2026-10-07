@@ -426,23 +426,22 @@ def test_unavailable_task_rate_renders_na_and_keeps_valid_values() -> None:
         "eval_wall_s": 1e-320,
     }
 
-    text = format_planner_evidence_section(
-        [
-            missing,
-            malformed,
-            malformed_wall,
-            empty_counts,
-            nested_counts,
-            bool_false,
-            bool_true,
-            bool_suite_count,
-            negative_suite_counts,
-            mixed_suite_counts,
-            zero,
-            positive,
-            underflow_wall,
-        ]
-    )
+    control_rows = [
+        missing,
+        malformed,
+        malformed_wall,
+        empty_counts,
+        nested_counts,
+        bool_false,
+        bool_true,
+        bool_suite_count,
+        negative_suite_counts,
+        mixed_suite_counts,
+        zero,
+        positive,
+        underflow_wall,
+    ]
+    text = format_planner_evidence_section(control_rows, limit=len(control_rows))
 
     rates_by_trial = {}
     for line in text.splitlines():
