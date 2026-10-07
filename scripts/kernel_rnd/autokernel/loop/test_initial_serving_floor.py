@@ -132,7 +132,7 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                     quiet_preflight.assert_not_called()
                 if case in {"stop", "stop_matched"}:
                     if backend == "gpu" and case == "stop_matched":
-                        quiet_hold.assert_called_once_with()
+                        assert quiet_hold.call_args_list == [mock.call(), mock.call()]
                     provision.assert_not_called()
                     floor_write.assert_not_called()
                     output = fixture.root / "result"
