@@ -222,6 +222,85 @@ def task_rate_qph_from_row(row: dict) -> float:
     return n_questions / (eval_wall_s / 3600.0)
 
 
+def task_rate_qph_from_row_if_available(row: dict) -> float | None:
+    """Return the journal task rate only when its inputs are present and valid.
+
+    The legacy helper above keeps its 0.0 sentinel for archived objective history.
+    Display consumers use this optional form so missing or malformed inputs cannot
+    be presented as a measured zero. An explicitly recorded zero question count is
+    retained as 0.0 when it is paired with a valid positive wall time.
+    """
+    eval_details = row.get("eval_details") or {}
+    if not isinstance(eval_details, dict):
+        eval_details = {}
+    detail_counts = _nested(eval_details, "details")
+    if not isinstance(detail_counts, dict):
+        detail_counts = {}
+
+    count_candidates = (
+        row.get("n_questions"),
+        detail_counts.get("total"),
+        detail_counts.get("n_questions"),
+        detail_counts.get("per_suite_counts_total"),
+    )
+    n_questions = next((value for value in count_candidates if value), None)
+    if n_questions is None:
+        counts = detail_counts.get("per_suite_counts")
+        if isinstance(counts, dict) and counts:
+            parsed_counts: list[int] = []
+            for value in counts.values():
+                if isinstance(value, bool):
+                    return None
+                try:
+                    count = int(value)
+                    numeric_count = float(value)
+                except (TypeError, ValueError, OverflowError):
+                    return None
+                if not math.isfinite(numeric_count) or numeric_count != count or count < 0:
+                    return None
+                parsed_counts.append(count)
+            n_questions = sum(parsed_counts)
+        else:
+            # Preserve a numeric explicit zero; absence and booleans are unavailable.
+            n_questions = (
+                0
+                if any(
+                    not isinstance(value, bool) and value == 0
+                    for value in count_candidates
+                )
+                else None
+            )
+
+    wall_candidates = (
+        row.get("eval_wall_s"),
+        eval_details.get("eval_wall_s"),
+        detail_counts.get("eval_wall_s"),
+    )
+    eval_wall_s = next((value for value in wall_candidates if value), None)
+    if eval_wall_s is None and any(value == 0 for value in wall_candidates):
+        eval_wall_s = 0
+    if isinstance(n_questions, bool) or isinstance(eval_wall_s, bool):
+        return None
+    try:
+        n_value = float(n_questions)
+        wall_value = float(eval_wall_s)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if (
+        not math.isfinite(n_value)
+        or not n_value.is_integer()
+        or not math.isfinite(wall_value)
+        or n_value < 0
+        or wall_value <= 0
+    ):
+        return None
+    try:
+        rate = n_value / (wall_value / 3600.0)
+    except (OverflowError, ZeroDivisionError):
+        return None
+    return rate if math.isfinite(rate) else None
+
+
 # ── SEQ-B: the paired rate measurement for the sequential non-inferiority axis ──
 #
 # `task_rate_qph_from` / `task_rate_qph_from_row` above are the Pareto/goodput rate

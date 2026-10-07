@@ -358,15 +358,125 @@ def test_seq_rows_ignore_non_matching_core_ids() -> None:
     assert "trials=[24,25]" in text
 
 
-def test_missing_timing_fields_do_not_invent_task_rate() -> None:
-    row = _row(30)
-    row["eval_details"] = {
+def test_unavailable_task_rate_renders_na_and_keeps_valid_values() -> None:
+    missing = _row(30, config={"type": "numeric_trial", "surface": "w8-missing"})
+    missing["eval_details"] = {
         "question_results": [{"qid": "q1", "correct": True}],
     }
+    malformed = {
+        **_row(31, config={"type": "numeric_trial", "surface": "w8-malformed-count"}),
+        "n_questions": "not-a-count",
+        "eval_wall_s": 60.0,
+    }
+    malformed_wall = {
+        **_row(32, config={"type": "numeric_trial", "surface": "w8-malformed-wall"}),
+        "n_questions": 10,
+        "eval_wall_s": float("inf"),
+    }
+    empty_counts = {
+        **_row(33, config={"type": "numeric_trial", "surface": "w8-empty-counts"}),
+        "eval_details": {
+            "details": {"per_suite_counts": {}},
+            "eval_wall_s": 60.0,
+            "question_results": [{"qid": "q-empty-count", "correct": True}],
+        },
+    }
+    nested_counts = {
+        **_row(34, config={"type": "numeric_trial", "surface": "w8-nested-counts"}),
+        "eval_details": {
+            "details": {"per_suite_counts": {"a": 10, "b": 5}, "eval_wall_s": 300.0},
+            "question_results": [{"qid": "q-nested-count", "correct": True}],
+        },
+    }
+    bool_false = {
+        **_row(35, config={"type": "numeric_trial", "surface": "w8-bool-false"}),
+        "n_questions": False,
+        "eval_wall_s": 60.0,
+    }
+    bool_true = {
+        **_row(36, config={"type": "numeric_trial", "surface": "w8-bool-true"}),
+        "n_questions": True,
+        "eval_wall_s": 60.0,
+    }
+    bool_suite_count = {
+        **_row(37, config={"type": "numeric_trial", "surface": "w8-bool-suite-count"}),
+        "eval_details": {
+            "details": {"per_suite_counts": {"a": True}},
+            "eval_wall_s": 60.0,
+            "question_results": [{"qid": "q-bool-suite", "correct": True}],
+        },
+    }
+    negative_suite_counts = {
+        **_row(38, config={"type": "numeric_trial", "surface": "w8-negative-suite-count"}),
+        "eval_details": {
+            "details": {"per_suite_counts": {"a": -1}},
+            "eval_wall_s": 60.0,
+            "question_results": [{"qid": "q-negative-suite", "correct": True}],
+        },
+    }
+    mixed_suite_counts = {
+        **_row(39, config={"type": "numeric_trial", "surface": "w8-mixed-suite-count"}),
+        "eval_details": {
+            "details": {"per_suite_counts": {"a": 10, "b": -2}},
+            "eval_wall_s": 60.0,
+            "question_results": [{"qid": "q-mixed-suite", "correct": True}],
+        },
+    }
+    zero = {
+        **_row(40, config={"type": "numeric_trial", "surface": "w8-zero"}),
+        "n_questions": 0,
+        "eval_wall_s": 60.0,
+    }
+    positive = {
+        **_row(41, config={"type": "numeric_trial", "surface": "w8-positive"}),
+        "n_questions": 50,
+        "eval_wall_s": 600.0,
+    }
+    underflow_wall = {
+        **_row(42, config={"type": "numeric_trial", "surface": "w8-underflow-wall"}),
+        "n_questions": 1,
+        "eval_wall_s": 1e-320,
+    }
 
-    text = format_planner_evidence_section([row])
+    control_rows = [
+        missing,
+        malformed,
+        malformed_wall,
+        empty_counts,
+        nested_counts,
+        bool_false,
+        bool_true,
+        bool_suite_count,
+        negative_suite_counts,
+        mixed_suite_counts,
+        zero,
+        positive,
+        underflow_wall,
+    ]
+    text = format_planner_evidence_section(control_rows, limit=len(control_rows))
 
-    assert "task_rate=0.0 goodput=0.0" in text
+    rates_by_trial = {}
+    for line in text.splitlines():
+        if "trials=[" not in line:
+            continue
+        trial = line.split("trials=[", 1)[1].split("]", 1)[0]
+        rate = line.split("task_rate=", 1)[1].split(" ", 1)[0]
+        rates_by_trial[int(trial)] = rate
+    assert rates_by_trial == {
+        30: "n/a",
+        31: "n/a",
+        32: "n/a",
+        33: "n/a",
+        34: "180.0",
+        35: "n/a",
+        36: "n/a",
+        37: "n/a",
+        38: "n/a",
+        39: "n/a",
+        40: "0.0",
+        41: "300.0",
+        42: "n/a",
+    }
 
 
 def test_candidate_blocks_include_question_diff_and_provenance() -> None:
