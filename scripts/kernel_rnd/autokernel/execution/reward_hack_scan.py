@@ -157,6 +157,21 @@ def _code(text: str) -> str:
     return text.split("//", 1)[0]
 
 
+def _pointer_active_code(text: str) -> str:
+    """Mask C/C++ literals and comments only for pointer memo matching.
+
+    Keep newlines and offsets so the original added-line finding remains intact.
+    Environment/proc literal detectors intentionally retain their old input.
+    """
+    token = re.compile(
+        r'R"(?P<raw_delimiter>[^ ()\\\t\r\n]{0,16})\(.*?\)(?P=raw_delimiter)"'
+        r'|"(?:\\[^\r\n]|[^"\\\r\n])*"'
+        r"|'(?:\\[^\r\n]|[^'\\\r\n])*'"
+        r'|/\*.*?\*/|//[^\r\n]*', re.DOTALL)
+    return token.sub(lambda match: "".join(
+        "\n" if char == "\n" else " " for char in match.group()), text)
+
+
 def scan_unified_diff(diff_text: str) -> RewardHackScan:
     """Scan only added lines; deleted anchor code cannot indict a candidate."""
     if not isinstance(diff_text, str):
@@ -175,7 +190,17 @@ def scan_unified_diff(diff_text: str) -> RewardHackScan:
     timing_vars: dict[str, _AddedLine] = {}
     phase_vars: dict[str, _AddedLine] = {}
     structured_predicates: list[tuple[int, _AddedLine]] = []
-    for row in added:
+    pointer_code: list[str] = []
+    offset = 0
+    while offset < len(added):
+        end = offset + 1
+        while (end < len(added) and added[end].path == added[end - 1].path
+               and added[end].line == added[end - 1].line + 1):
+            end += 1
+        pointer_code.extend(_pointer_active_code("\n".join(
+            row.text for row in added[offset:end])).split("\n"))
+        offset = end
+    for row, active_pointer_code in zip(added, pointer_code):
         code = _code(row.text)
         if row.path in _INSTRUMENT_FRAME_PATHS and code.strip():
             instrument_frame.append(row.finding("instrument_frame_edit"))
@@ -185,7 +210,7 @@ def scan_unified_diff(diff_text: str) -> RewardHackScan:
             streams.append(row.finding("stream_creation"))
         if _ASYNC_ESCAPE.search(code):
             async_escape.append(row.finding("async_escape"))
-        if _POINTER_MEMO.search(code):
+        if _POINTER_MEMO.search(active_pointer_code):
             pointer_memo.append(row.finding("pointer_memoization"))
         if _STRUCTURED_PREDICATE.search(code):
             structured_predicates.append((row.line, row))
