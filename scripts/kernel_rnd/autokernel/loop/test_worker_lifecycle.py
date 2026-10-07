@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import ctypes
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
 import os
@@ -25,6 +27,19 @@ from . import scheduling
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+@contextmanager
+def _owned_child_subreaper():
+    """The PID-only mock must own its orphaned children to prove their reap."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    previous = ctypes.c_int()
+    assert libc.prctl(37, ctypes.byref(previous), 0, 0, 0) == 0
+    assert libc.prctl(36, 1, 0, 0, 0) == 0
+    try:
+        yield
+    finally:
+        assert libc.prctl(36, previous.value, 0, 0, 0) == 0
 
 
 class MockOwnedContainer:
@@ -102,6 +117,15 @@ class MockOwnedContainer:
     def wait_empty(self, timeout: float) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            # A local subreaper may adopt an exact owned bootstrap child.
+            # Reap only identities captured by this mock; live children return 0
+            # and children still parented elsewhere raise ChildProcessError.
+            for pid, identity in tuple(self._owned.items()):
+                if lifecycle.same_process(identity):
+                    try:
+                        os.waitpid(pid, os.WNOHANG)
+                    except (ChildProcessError, ProcessLookupError):
+                        pass
             if not self.populated():
                 return True
             time.sleep(0.005)
@@ -888,7 +912,8 @@ def test_timeout_kills_only_owned_identities_and_not_foreign_sibling():
     foreign_identity = lifecycle.process_identity(foreign.pid)
     harness = Harness()
     try:
-        with pytest.raises(lifecycle.LifecycleRefused, match="deadline expired"):
+        with _owned_child_subreaper(), pytest.raises(
+                lifecycle.LifecycleRefused, match="deadline expired"):
             harness.engine.run_stage(harness.request(
                 "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(5)",
                 stage_seconds=0.1, teardown_seconds=0.5))

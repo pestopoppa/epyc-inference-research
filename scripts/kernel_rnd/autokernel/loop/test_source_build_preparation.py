@@ -38,7 +38,7 @@ def selected_actor(tmp_path, *, kind="source", revision="a" * 40):
     enrolled = campaign.ResolvedCampaign.from_dict(raw)
     instance.runtime_anchors = prepared(
         enrolled, {target_digest: runtime_anchor(
-            target, instance.runtime_anchors.recipes[target_digest])})
+            target, instance.runtime_anchors.recipes[target_digest], tmp_path)})
     instance.resolved = enrolled
     base, _ = scheduler()
     config = scheduling.SchedulerConfig.from_dict(
