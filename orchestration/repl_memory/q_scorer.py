@@ -48,10 +48,9 @@ SPO_PLUS_MARGIN = float(os.environ.get("SPO_PLUS_MARGIN", "0.05"))
 # see scripts/analysis/dar_write_path_audit.py). When ORCHESTRATOR_Q_TD_WRITE is
 # set, the append branch first find-or-updates the existing (objective, action)
 # row in place. Default OFF keeps byte-identical legacy append behavior so
-# deployment is an explicit operator-boundary action.
-Q_TD_WRITE = os.environ.get("ORCHESTRATOR_Q_TD_WRITE", "0") == "1"
-# Candidate depth for the find-or-update similarity lookup on the append path.
-Q_TD_MATCH_K = int(os.environ.get("ORCHESTRATOR_Q_TD_MATCH_K", "10"))
+# deployment is an explicit operator-boundary action. These settings are
+# snapshotted by each QScorer when it is constructed; importing this module
+# does not freeze environment values for every scorer in the process.
 
 from src.autopilot_core.measurement_guards import (
     FAILURE_DISPOSITION_KEY,
@@ -1263,6 +1262,10 @@ class QScorer:
         self.config = config or ScoringConfig()
         self.staged_scorer = staged_scorer
         self._last_score_time: Optional[datetime] = None
+        self._q_td_write_enabled = os.environ.get("ORCHESTRATOR_Q_TD_WRITE", "0") == "1"
+        # Candidate depth for the find-or-update similarity lookup. Keep the
+        # existing integer parsing behavior while resolving it per instance.
+        self._q_td_match_k = int(os.environ.get("ORCHESTRATOR_Q_TD_MATCH_K", "10"))
 
     def score_pending_tasks(
         self,
@@ -1796,7 +1799,7 @@ class QScorer:
                 routing = routing_decision.data.get("routing", [])
                 action = ",".join(routing) if isinstance(routing, list) else str(routing)
 
-                if Q_TD_WRITE:
+                if self._q_td_write_enabled:
                     existing_id = self._find_existing_memory(
                         embedding, action, task_context.get("objective"),
                         action_type="routing",
@@ -1941,7 +1944,7 @@ class QScorer:
             return None
         try:
             candidates = self.store.retrieve_by_similarity(
-                embedding, k=Q_TD_MATCH_K, action_type=action_type,
+                embedding, k=self._q_td_match_k, action_type=action_type,
             )
         except Exception:
             return None
@@ -2003,7 +2006,7 @@ class QScorer:
             # The identity key is (reason, escalate:from->to) — `reason` is what
             # build_memory_record stores as `objective` below, so the finder's
             # exact-match rule keys on the same field it will later be stored under.
-            if Q_TD_WRITE:
+            if self._q_td_write_enabled:
                 existing_id = self._find_existing_memory(
                     embedding, action, escalation.data.get("reason"),
                     action_type="escalation",

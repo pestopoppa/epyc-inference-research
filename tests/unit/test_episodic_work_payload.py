@@ -23,7 +23,6 @@ import sqlite3
 import numpy as np
 import pytest
 
-from orchestration.repl_memory import q_scorer as q_scorer_mod
 from orchestration.repl_memory.episodic_store import EpisodicStore
 from orchestration.repl_memory.memory_record import (
     WORK_ITEM_MAX_CHARS,
@@ -65,8 +64,42 @@ class _FakeLogger:
         self.logged.append(entry)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_kernel_path_config(tmp_path, monkeypatch):
+    """Keep offline memory tests out of the runner's production kernel store.
+
+    Configuration normally derives these three defaults through
+    ``kernel_paths``. The selected tests only exercise metadata, fake embeddings,
+    and temporary SQLite/FAISS storage, so supply per-test placeholder paths at
+    the existing configuration boundary before any constructor reads them.
+    """
+    paths = tmp_path / "unused-kernel-paths"
+    expected = {
+        "ORCHESTRATOR_PATHS_LLAMA_CPP_BIN": str(paths / "cpu"),
+        "ORCHESTRATOR_PATHS_LLAMA_MTMD": str(paths / "mtmd"),
+        "ORCHESTRATOR_PATHS_LLAMA_SERVER": str(paths / "llama-server"),
+    }
+    for name, value in expected.items():
+        monkeypatch.setenv(name, value)
+
+    from src.config import get_config, reset_config
+    from src.features import reset_features
+
+    reset_config()
+    reset_features()
+    config = get_config()
+    assert str(config.paths.llama_cpp_bin) == expected["ORCHESTRATOR_PATHS_LLAMA_CPP_BIN"]
+    assert str(config.vision.llama_mtmd_cli) == expected["ORCHESTRATOR_PATHS_LLAMA_MTMD"]
+    assert str(config.worker_pool.llama_server_path) == expected["ORCHESTRATOR_PATHS_LLAMA_SERVER"]
+    yield
+    reset_features()
+    reset_config()
+
+
 @pytest.fixture
-def scorer(tmp_path):
+def scorer(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORCHESTRATOR_Q_TD_WRITE", "0")
+    monkeypatch.setenv("ORCHESTRATOR_Q_TD_MATCH_K", "10")
     store = EpisodicStore(db_path=tmp_path / "sessions", use_faiss=True)
     sc = QScorer(
         store=store,
@@ -121,8 +154,7 @@ def _task_completed(work: dict | None = None, **extra):
 
 
 class TestWorkReachesTheDatabase:
-    def test_routing_write_persists_the_work_payload(self, scorer, monkeypatch):
-        monkeypatch.setattr(q_scorer_mod, "Q_TD_WRITE", False)
+    def test_routing_write_persists_the_work_payload(self, scorer):
         outcome = _task_completed(
             work={
                 "answer": "sorted(x) is the builtin",
@@ -144,9 +176,8 @@ class TestWorkReachesTheDatabase:
         assert work["repl_steps"][0]["code"] == "print(sorted([2,1]))"
         assert work["reasoning"] == "the builtin already does this"
 
-    def test_work_is_not_embedded(self, scorer, monkeypatch):
+    def test_work_is_not_embedded(self, scorer):
         """Embedding the answer would make retrieval match solutions to solutions."""
-        monkeypatch.setattr(q_scorer_mod, "Q_TD_WRITE", False)
         scorer._update_routing_memory(
             "t1", _task_started("sort a list"), _routing_decision(), 0.6,
             task_outcome=_task_completed(work={"answer": "MAGIC_ANSWER_TOKEN"}),
@@ -154,9 +185,8 @@ class TestWorkReachesTheDatabase:
         rec = build_memory_record(objective="sort a list", task_type="chat")
         assert "MAGIC_ANSWER_TOKEN" not in rec.embedding_text()
 
-    def test_no_work_on_the_outcome_stores_no_work_key(self, scorer, monkeypatch):
+    def test_no_work_on_the_outcome_stores_no_work_key(self, scorer):
         """The pre-M-11a2b shape must still write cleanly, with no empty stub."""
-        monkeypatch.setattr(q_scorer_mod, "Q_TD_WRITE", False)
         scorer._update_routing_memory(
             "t1", _task_started("sort a list"), _routing_decision(), 0.6,
             task_outcome=_task_completed(answer_chars=17),
@@ -165,9 +195,8 @@ class TestWorkReachesTheDatabase:
         assert "work" not in ctx
         assert ctx["objective"] == "sort a list"
 
-    def test_missing_task_outcome_is_not_an_error(self, scorer, monkeypatch):
+    def test_missing_task_outcome_is_not_an_error(self, scorer):
         """Callers that predate the parameter must keep working."""
-        monkeypatch.setattr(q_scorer_mod, "Q_TD_WRITE", False)
         res = scorer._update_routing_memory(
             "t1", _task_started("sort a list"), _routing_decision(), 0.6,
         )
@@ -217,8 +246,7 @@ class TestExternalScorePath:
 
 
 class TestCapturePolicy:
-    def test_credentials_are_redacted_before_storage(self, scorer, monkeypatch):
-        monkeypatch.setattr(q_scorer_mod, "Q_TD_WRITE", False)
+    def test_credentials_are_redacted_before_storage(self, scorer):
         secret = "AKIAIOSFODNN7EXAMPLE"
         scorer._update_routing_memory(
             "t1", _task_started("deploy it"), _routing_decision(), 0.6,
@@ -245,8 +273,7 @@ class TestCapturePolicy:
             for _, _, repl in repo_redaction._CREDENTIAL_PATTERNS
         )
 
-    def test_oversize_answer_is_bounded_in_the_database(self, scorer, monkeypatch):
-        monkeypatch.setattr(q_scorer_mod, "Q_TD_WRITE", False)
+    def test_oversize_answer_is_bounded_in_the_database(self, scorer):
         scorer._update_routing_memory(
             "t1", _task_started("loop forever"), _routing_decision(), 0.6,
             task_outcome=_task_completed(work={"answer": "z" * 500_000}),
