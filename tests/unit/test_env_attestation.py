@@ -31,6 +31,37 @@ def test_matching_env_is_ok(fake_proc):
     assert r.verdict == "ok" and len(r.compared) == 1 and not r.errors
 
 
+def test_undeclared_override_requires_current_process_and_unexpired_record(fake_proc):
+    pid = 101
+    key, value = "KMP_LIBRARY", "INTEL"
+    fake_proc[pid] = ("/k/llama-server --port 8070", {**GOOD_LLAMA_ENV, key: value})
+    state = {"frontdoor": _info("frontdoor", pid, 8070)}
+
+    live = {
+        "experiment_id": "test-live",
+        "env": {key: value},
+        "expires_at": "2999-01-01T00:00:00+00:00",
+        "pids": {"8070": pid},
+    }
+    result = ea.attest(state, aux_services={}, override_record=live, diag_records=[])
+    assert result.verdict == "ok" and not result.errors
+    assert any("undeclared KMP_LIBRARY" in row for row in result.expected)
+
+    expired = {**live, "experiment_id": "test-expired", "expires_at": "2000-01-01T00:00:00+00:00"}
+    result = ea.attest(state, aux_services={}, override_record=expired, diag_records=[])
+    assert result.verdict == "failed"
+    assert any("undeclared KMP_LIBRARY" in row and "EXPIRED" in row and "reload embedders" in row
+               for row in result.errors)
+    assert not result.expected
+
+    wrong_pid = {**live, "experiment_id": "test-wrong-pid", "pids": {"8070": pid + 1}}
+    result = ea.attest(state, aux_services={}, override_record=wrong_pid, diag_records=[])
+    assert result.verdict == "failed"
+    assert any("undeclared KMP_LIBRARY" in row and f"pid {pid}" in row and "does not cover" in row
+               for row in result.errors)
+    assert not result.expected
+
+
 def test_declared_role_key_missing_live_fails(fake_proc, monkeypatch):
     # The b060dd56 shape: the role declares a knob, the process does not carry it.
     from scripts.server import stack_env
