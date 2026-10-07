@@ -216,7 +216,7 @@ def test_measure_once_child_exit_during_response_refuses_result_and_reaps_origin
         assert sampler.watched == ([child.pid] if backend == "mocked-gpu" else [])
         assert maps.call_count == (1 if backend == "mocked-gpu" else 0)
         assert observations and observations[0]["failure"]
-        assert any("already exited" in row["error"] for row in observations[0]["requests"])
+        assert any("already exited" in (row["error"] or "") for row in observations[0]["requests"])
 
 
 def test_measure_once_actual_owned_listener_accepts_complete_response_controls(backend_case):
