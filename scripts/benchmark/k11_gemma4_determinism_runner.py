@@ -250,6 +250,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     args = parser.parse_args(argv)
+    if args.runs < 1:
+        parser.error("--runs must be >= 1; an empty repeat set is not determinism evidence")
     if args.trace_n_probs < 0:
         parser.error("--trace-n-probs must be >= 0")
     for item in args.server_env:
@@ -895,6 +897,18 @@ def build_token_divergence_summary(
     }
 
 
+def summarize_task_pass(results: list[dict[str, Any]], expected_runs: int, requested: bool) -> bool | None:
+    """An absent task oracle is unknown; every requested repeat must pass it."""
+    if not requested:
+        return None
+    return expected_runs > 0 and len(results) == expected_runs and all(
+        record.get("status") == "ok"
+        and isinstance(record.get("task_eval"), dict)
+        and record["task_eval"].get("passed") is True
+        for record in results
+    )
+
+
 def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     runs_dir = output_dir / "runs"
@@ -1041,8 +1055,10 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     hashes = [r.get("output_sha256") for r in results if r.get("status") == "ok"]
     unique_hashes = sorted({h for h in hashes if h})
     deterministic = len(unique_hashes) <= 1 and len(hashes) == args.runs and all(r.get("status") == "ok" for r in results)
-    task_evals = [r.get("task_eval") for r in results if r.get("task_eval") is not None]
-    task_passed = all(e.get("passed") for e in task_evals) if task_evals else None
+    task_passed = summarize_task_pass(
+        results, args.runs,
+        args.expected_word is not None or args.expected_word_count is not None or args.schema_task != DEFAULT_SCHEMA_TASK,
+    )
     ok_results = [r for r in results if r.get("status") == "ok"]
     finish_reasons = count_values([r.get("finish_reason") for r in ok_results])
     content_word_counts = [r.get("content_word_count") for r in ok_results]

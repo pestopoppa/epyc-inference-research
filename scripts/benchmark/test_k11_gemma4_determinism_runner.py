@@ -461,6 +461,56 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             self.assertEqual(run_record["content_word_count"], 2)
             self.assertEqual(run_record["token_trace"]["token_count"], 2)
 
+    def _produce_complete_task_summary(self, *, task_oracle: bool, second_error: bool):
+        response = {"choices": [{"finish_reason": "stop", "message": {"content": "benchmark benchmark"}}],
+                    "usage": {"completion_tokens": 2}, "timings": {"draft_n": 2, "draft_n_accepted": 2}}
+        original = (response, json.dumps(response))
+        replies = [original, RuntimeError("synthetic requested repeat failed") if second_error else original]
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "producer"
+            argv = ["--execute", "--runs", "2", "--output-dir", str(output_dir)]
+            if task_oracle:
+                argv.extend(["--expected-word", "benchmark", "--expected-word-count", "2"])
+            args = runner.parse_args(argv)
+            with (
+                mock.patch.object(runner, "pick_ephemeral_port", side_effect=[18081, 18082]),
+                mock.patch.object(runner, "launch_server", side_effect=[_FakeProc(101), _FakeProc(102)]) as launched,
+                mock.patch.object(runner, "wait_for_health"),
+                mock.patch.object(runner, "query_chat", side_effect=replies) as queried,
+                mock.patch.object(runner, "terminate_server") as terminated,
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()),
+            ):
+                summary = runner.run_execute(args, output_dir)
+            self.assertEqual(launched.call_count, 2)
+            self.assertEqual(queried.call_count, 2)
+            self.assertEqual(terminated.call_count, 2)
+            persisted = json.loads((output_dir / "summary.json").read_text())
+            self.assertEqual(persisted, summary)
+            self.assertEqual(len(summary["runs"]), 2)
+            self.assertEqual(json.loads((output_dir / "runs" / "run_01.json").read_text()), summary["runs"][0])
+            self.assertEqual(json.loads((output_dir / "runs" / "run_02.json").read_text()), summary["runs"][1])
+            return summary
+
+    def test_summary_producer_refuses_pass_from_only_successful_requested_repeat(self):
+        summary = self._produce_complete_task_summary(task_oracle=True, second_error=True)
+        self.assertIs(summary["runs"][0]["task_eval"]["passed"], True)
+        self.assertEqual(summary["runs"][1]["status"], "error")
+        self.assertIn("synthetic requested repeat failed", summary["runs"][1]["error"])
+        self.assertIs(summary["task_passed"], False)
+        self.assertIs(summary["deterministic"], False)
+
+    def test_summary_producer_accepts_complete_two_repeat_task_success(self):
+        summary = self._produce_complete_task_summary(task_oracle=True, second_error=False)
+        self.assertTrue(all(record["task_eval"]["passed"] is True for record in summary["runs"]))
+        self.assertIs(summary["task_passed"], True)
+        self.assertIs(summary["deterministic"], True)
+
+    def test_summary_producer_preserves_absent_task_oracle_as_unknown(self):
+        summary = self._produce_complete_task_summary(task_oracle=False, second_error=False)
+        self.assertTrue(all(record["task_eval"] is None for record in summary["runs"]))
+        self.assertIs(summary["task_passed"], None)
+        self.assertIs(summary["deterministic"], True)
+
     def test_terminate_server_stops_process_group(self) -> None:
         proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
         try:
@@ -559,6 +609,29 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
                 "GGML_CUDA_DISABLE_GRAPHS=1",
                 (output_dir / "commands.sh").read_text(),
             )
+
+
+
+
+class TestCompleteTaskDenominator(unittest.TestCase):
+    def test_empty_or_negative_repeat_count_is_refused_before_server_launch(self):
+        for count in ("0", "-1"):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
+                runner.parse_args(["--runs", count])
+            self.assertEqual(refused.exception.code, 2)
+        self.assertIs(runner.summarize_task_pass([], 0, True), False)
+
+    def test_failed_or_missing_repeat_cannot_inherit_successful_task_verdict(self):
+        passed = {"status": "ok", "task_eval": {"passed": True}}
+        self.assertIs(runner.summarize_task_pass([passed, {"status": "error"}], 2, True), False)
+        self.assertIs(runner.summarize_task_pass([passed], 2, True), False)
+        self.assertIs(runner.summarize_task_pass([passed, {"status": "ok"}], 2, True), False)
+        self.assertIs(runner.summarize_task_pass([passed, {"status": "ok", "task_eval": {"passed": False}}], 2, True), False)
+
+    def test_complete_success_and_absent_task_oracle_remain_distinct(self):
+        passed = {"status": "ok", "task_eval": {"passed": True}}
+        self.assertIs(runner.summarize_task_pass([passed, passed], 2, True), True)
+        self.assertIs(runner.summarize_task_pass([{"status": "ok"}], 1, False), None)
 
 
 if __name__ == "__main__":
