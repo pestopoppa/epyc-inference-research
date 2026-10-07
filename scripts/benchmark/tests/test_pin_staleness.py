@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -189,10 +190,12 @@ def test_inspect_tree_and_cli_exit_contract_on_tracked_synthetic_checkout(
         tmp_path, b"original",
         _pin_source('Path("scripts/benchmark/asset.bin")', f'"{expected}"'),
     )
+    checker_copy = root / "scripts/benchmark/check_pin_staleness.py"
+    checker_copy.write_bytes(Path(scanner.__file__).read_bytes())
     _git_track(root)
 
     report = scanner.inspect_tree(root)
-    assert report["tracked_python_files"] == 1
+    assert report["tracked_python_files"] == 2
     assert report["counts"] == {"current": 1, "stale": 0, "missing": 0, "unresolved": 0}
     assert scanner.main(["--root", str(root), "--require-resolved"]) == 0
     capsys.readouterr()
@@ -229,10 +232,16 @@ def test_json_binds_checker_and_scanned_source_to_git_snapshot(tmp_path: Path, m
     checker_copy = root / "scripts/benchmark/check_pin_staleness.py"
     checker_copy.write_bytes(Path(scanner.__file__).read_bytes())
     _git_track(root)
+    # Run the actual copied checker so its executing source identity is this
+    # disposable tracked file; later mutation never touches the real checkout.
+    spec = importlib.util.spec_from_file_location("ni08_synthetic_checker", checker_copy)
+    assert spec is not None and spec.loader is not None
+    synthetic_scanner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(synthetic_scanner)
 
-    first = scanner.inspect_tree(root)
+    first = synthetic_scanner.inspect_tree(root)
     encoded_first = json.dumps(first, sort_keys=True)
-    repeated = scanner.inspect_tree(root)
+    repeated = synthetic_scanner.inspect_tree(root)
     assert json.dumps(repeated, sort_keys=True) == encoded_first
     assert first["root_git"]["stable"] is True
     assert first["root_git"]["before"]["available"] is True
@@ -250,14 +259,14 @@ def test_json_binds_checker_and_scanned_source_to_git_snapshot(tmp_path: Path, m
     assert source_identity["sha256"] == hashlib.sha256(
         (root / relative).read_bytes()).hexdigest()
 
-    original_list = scanner.tracked_python_files
+    original_list = synthetic_scanner.tracked_python_files
 
     def mutate_checker_during_scan(scan_root: Path) -> list[str]:
         checker_copy.write_bytes(checker_copy.read_bytes() + b"\n# synthetic source change\n")
         return original_list(scan_root)
 
-    monkeypatch.setattr(scanner, "tracked_python_files", mutate_checker_during_scan)
-    changed = scanner.inspect_tree(root)
+    monkeypatch.setattr(synthetic_scanner, "tracked_python_files", mutate_checker_during_scan)
+    changed = synthetic_scanner.inspect_tree(root)
     changed_checker = next(item for item in changed["source_file_identities"]
                            if item["path"] == "scripts/benchmark/check_pin_staleness.py")
     assert changed["root_git"]["stable"] is False
@@ -277,9 +286,9 @@ def test_json_binds_checker_and_scanned_source_to_git_snapshot(tmp_path: Path, m
         {"available": True, "head": "a" * 40, "tracked_dirty": True,
          "tracked_change_count": 1, "tracked_status_sha256": "2" * 64},
     ])
-    monkeypatch.setattr(scanner, "tracked_python_files", original_list)
-    monkeypatch.setattr(scanner, "_git_snapshot", lambda _root: next(snapshots))
-    status_changed = scanner.inspect_tree(root)
+    monkeypatch.setattr(synthetic_scanner, "tracked_python_files", original_list)
+    monkeypatch.setattr(synthetic_scanner, "_git_snapshot", lambda _root: next(snapshots))
+    status_changed = synthetic_scanner.inspect_tree(root)
     assert status_changed["root_git"]["stable"] is False
     assert status_changed["root_git"]["before"]["tracked_change_count"] == 1
     assert status_changed["root_git"]["after"]["tracked_change_count"] == 1

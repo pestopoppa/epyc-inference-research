@@ -502,9 +502,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Coverage complete: {str(report['complete']).lower()}")
     if report["counts"]["stale"] or report["counts"]["missing"]:
         return 1
-    if args.require_resolved and (
-            report["counts"]["unresolved"] or not report["root_git"]["stable"]
-            or report["checker_source"].get("status") != "read"):
+    if args.require_resolved and not report["complete"]:
         return 2
     return 0
 
