@@ -115,7 +115,7 @@ def _redact(text: str) -> str:
 #: Recognises this module's own truncation marker, so a second pass over an
 #: already-bounded string can tell "I did this" from "this needs doing".
 _TRUNCATION_MARKER_RE = re.compile(
-    r"\n\n\[\.\.\. truncated at (\d+) chars, total was (\d+)\]\Z"
+    r"\n\n\[\.\.\. truncated at ([0-9]{1,20}) chars, total was ([0-9]{1,20})\]\Z"
 )
 
 
@@ -135,8 +135,11 @@ def sanitize_work_text(text: Any, max_chars: int = WORK_TEXT_MAX_CHARS) -> str |
     the marker long, so the second pass re-truncated it and appended a SECOND
     marker reporting `total was <max_chars + len(marker)>`: the row's own
     provenance actively lied about how much was elided (measured: 32,500 real
-    chars reported as 32,049). An already-marked value at this same cap is now
-    returned unchanged.
+    chars reported as 32,049). An already-marked value at this same cap is
+    returned unchanged only when the marker starts within the cap. A marker
+    appended to an oversized untrusted value is not provenance: accepting it
+    would bypass both the storage bound and (for inputs above 1 MB) the second
+    redaction pass.
     """
     if text is None:
         return None
@@ -144,9 +147,11 @@ def sanitize_work_text(text: Any, max_chars: int = WORK_TEXT_MAX_CHARS) -> str |
     value = _redact(value)
     if len(value) > max_chars:
         marker = _TRUNCATION_MARKER_RE.search(value)
-        if marker and int(marker.group(1)) == max_chars:
-            # Already bounded by THIS policy at THIS cap. Re-truncating would
-            # overwrite a truthful original-length report with a smaller lie.
+        if (marker and int(marker.group(1)) == max_chars
+                and marker.start() <= max_chars):
+            # Only trust our marker when its prefix is itself within the cap.
+            # Otherwise arbitrary input could forge a suffix marker to bypass
+            # both the size bound and the post-truncation redaction pass.
             return value
         original_len = len(value)
         value = _redact(value[:max_chars])
