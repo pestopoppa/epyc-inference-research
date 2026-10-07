@@ -34,7 +34,8 @@ def keep_claims(*, status: str, mechanism_id: str, statement: str,
     paired_ab = (isinstance(comparison, Mapping)
                  and isinstance(comparison.get("pairs"), int)
                  and comparison["pairs"] > 0)
-    effect_verified = paired_ab and _oracle_passed(gates)
+    effect_verified = (paired_ab and _oracle_passed(gates)
+                       and comparison.get("decisive") is True)
     ablation_verified = (
         isinstance(ablation, Mapping)
         and ablation.get("status") == VERIFIED
