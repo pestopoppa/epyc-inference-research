@@ -378,6 +378,19 @@ class TestModelGatedProducerGuards(unittest.TestCase):
         self.assertIn(str(binary), argv)
         self.assertNotIn("build-v9-hip", argv[1])
 
+    def test_paddle_selected_binary_symlink_uses_target_build_library_directory(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            target = root / "llama.cpp-experimental" / "fresh-build" / "bin" / "llama-server"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"synthetic non-executable argv fixture; no kernel")
+            selected = root / "selected-server"
+            selected.symlink_to(target)
+            argv = build_server_argv(PaddleOcrVlConfig(binary=selected))
+            self.assertEqual(argv[1], f"LD_LIBRARY_PATH={target.parent}")
+            self.assertIn(str(selected), argv)
+            self.assertNotEqual(argv[1], f"LD_LIBRARY_PATH={selected.parent}")
+
     def test_paddle_prompt_profiles_include_html_table_lane(self):
         self.assertIn("default", PROMPT_PROFILES)
         self.assertIn("html_tables", PROMPT_PROFILES)
