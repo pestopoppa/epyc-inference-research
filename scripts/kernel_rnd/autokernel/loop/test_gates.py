@@ -122,17 +122,59 @@ class HardenedCandidateGates(unittest.TestCase):
 
     def test_the_runner_passes_callables_not_evaluated_verdicts(self):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        # Select every source-build chain, not the runtime-only oracles. Whole-source
-        # target validation intentionally adds a second compile/correctness chain.
-        chains = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
-                  and ast.unparse(node.func) == "gates.run_all"
-                  and any(isinstance(arg, ast.Lambda) and isinstance(arg.body, ast.Call)
-                          and ast.unparse(arg.body.func) == "gates.compiles" for arg in node.args)]
-        self.assertTrue(chains)
-        for chain in chains:
-            self.assertTrue(all(isinstance(arg, ast.Lambda) for arg in chain.args))
-            self.assertEqual([ast.unparse(arg.body.func) for arg in chain.args],
-                             ["gates.compiles", "gates.op_correctness"])
+        # Phase wrappers now own build/compute admission. The checks retain lazy
+        # callables so no oracle can observe an unbuilt candidate.
+        gate = _function_node(source, "gate")
+        builds = [node for node in gate.body if isinstance(node, ast.Assign)
+                  and any(isinstance(target, ast.Name) and target.id == "checks" for target in node.targets)
+                  and isinstance(node.value, ast.List) and node.value.elts
+                  and isinstance(node.value.elts[0], ast.Lambda)
+                  and ast.unparse(node.value.elts[0].body.func) == "local_compiles"]
+        build, = builds
+        self.assertEqual(len(build.value.elts), 1)
+        oracle_branch = gate.body[gate.body.index(build) + 1]
+        self.assertEqual(ast.unparse(oracle_branch.test), "cpu_launch")
+        for branch in (oracle_branch.body, oracle_branch.orelse):
+            extension = next(node.value for node in branch if isinstance(node, ast.Expr))
+            self.assertEqual(ast.unparse(extension.func), "checks.extend")
+            self.assertIsInstance(extension.args[0], ast.GeneratorExp)
+            callback = extension.args[0].elt
+            self.assertIsInstance(callback, ast.Lambda)
+            self.assertTrue(_calls(callback, "local_op_correctness"))
+        parents = {child: node for node in ast.walk(gate) for child in ast.iter_child_nodes(node)}
+        for call in _calls(gate, "local_op_correctness"):
+            ancestors, cursor = [], call
+            while cursor in parents:
+                cursor = parents[cursor]
+                ancestors.append(cursor)
+            self.assertTrue(any(isinstance(node, ast.Lambda) for node in ancestors),
+                            "correctness executed eagerly instead of through a callback")
+            self.assertTrue(any(
+                isinstance(node, ast.Call) and ast.unparse(node.func) in {"checks.extend", "gates.run_all"}
+                or isinstance(node, ast.Assign) and any(
+                    isinstance(target, ast.Name) and target.id == "checks" for target in node.targets)
+                for node in ancestors), "correctness callback is outside the gate chain")
+        # CPU run_all consumes compile first, then the callbacks appended above.
+        self.assertEqual(ast.unparse(gate.body[-1]), "return gates.run_all(*checks)")
+        # GPU must finish its build and return on refusal BEFORE entering the
+        # measurement phase that consumes those same correctness callbacks.
+        gpu = gate.body[-2]
+        self.assertEqual(ast.unparse(gpu.test), "not cpu_launch")
+        self.assertEqual(ast.unparse(gpu.body[0]), "compiled = checks.pop(0)()")
+        self.assertEqual(ast.unparse(gpu.body[1].test), "not compiled.passed")
+        self.assertEqual(ast.unparse(gpu.body[1].body[0]), "return (False, [compiled])")
+        measurement = gpu.body[2]
+        self.assertIsInstance(measurement, ast.With)
+        self.assertEqual(ast.unparse(measurement.items[0].context_expr), "cpu_measurement_window()")
+        self.assertEqual(ast.unparse(measurement.body[0]), "passed, verdicts = gates.run_all(*checks)")
+        compile_wrapper = _function_node(source, "local_compiles")
+        build_phase = next(node for node in compile_wrapper.body if isinstance(node, ast.With))
+        self.assertTrue(_calls(build_phase.items[0].context_expr, "build"))
+        self.assertTrue(_calls(build_phase, "compiles"))
+        correctness_wrapper = _function_node(source, "local_op_correctness")
+        self.assertIsInstance(correctness_wrapper.body[0], ast.With)
+        self.assertTrue(_calls(correctness_wrapper.body[0].items[0].context_expr, "cpu_measurement_window"))
+        self.assertTrue(_calls(correctness_wrapper.body[0], "op_correctness"))
 
 
 class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
@@ -158,7 +200,7 @@ class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
         # its argument list.
         calls = {ast.unparse(node.func): node.lineno for node in ast.walk(gate_node)
                  if isinstance(node, ast.Call)}
-        self.assertLess(calls["keep_the_diff"], calls["gates.compiles"])
+        self.assertLess(calls["keep_the_diff"], calls["local_compiles"])
 
     def test_an_empty_diff_writes_nothing(self):
         """An actor that changed nothing must not leave an empty patch file that
@@ -254,10 +296,13 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
                 verdict, anchor(gates.Verdict("op", True))), verdict)
         self.assertEqual(calls, [])
         body = (Path(gates.__file__).parent / "run.py").read_text(encoding="utf-8")
-        self.assertIn("gates.anchor_relative_correctness(\n"
-                      "                    gates.op_correctness(worker.build_dir, op=op, "
-                      "require_reference=True),\n"
-                      "                    lambda: _anchor_gate(op)) for op in scope)", body)
+        call, = _calls(_function_node(body, "gate"), "anchor_relative_correctness")
+        self.assertEqual(ast.unparse(call.args[0].func), "local_op_correctness")
+        self.assertEqual(ast.unparse(call.args[0].args[0]), "worker.build_dir")
+        self.assertTrue(next(keyword.value.value for keyword in call.args[0].keywords
+                             if keyword.arg == "require_reference"))
+        self.assertIsInstance(call.args[1], ast.Lambda)
+        self.assertEqual(ast.unparse(call.args[1].body), "_anchor_gate(op)")
 
     def test_a_pass_requires_proof_the_suite_executed(self):
         ran = ("Backend 1/2: ROCm0\n  1139/1139 tests passed\n"

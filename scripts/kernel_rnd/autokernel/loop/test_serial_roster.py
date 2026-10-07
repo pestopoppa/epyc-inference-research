@@ -53,10 +53,10 @@ def _inputs(tmp_path, *, backends=("cpu", "gpu"), unowned=False, missing=False,
         build = root / "original-build"
         template = _recipe()
         if backend == "gpu":
-            owned_cpus = sorted(os.sched_getaffinity(0))
-            template = replace(template, device="ROCm0", ngl=99,
-                               cpu_list=",".join(str(cpu) for cpu in owned_cpus),
-                               threads=len(owned_cpus))
+            # Keep the declared virtual footprint stable across narrow test
+            # owners. The taskset shim confines actual children to the owner's
+            # affinity; claim width must not change the scheduler fixture.
+            template = replace(template, device="ROCm0", ngl=99)
         command = template.server_argv(build, 18311)[3:]
         template = rr.canonical_recipe_projection(name=template.name, command_argv=command,
             topology_prefix=["taskset", "-c", template.cpu_list], n_predict=512,

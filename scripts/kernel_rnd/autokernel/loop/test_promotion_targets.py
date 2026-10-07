@@ -401,8 +401,14 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
     def test_synthetic_candidate_symbol_loss_still_vetoes_the_keep(self):
         rc, calls, _planners, _scratch, log = self._run_one_keep(candidate_symbols=[])
         self.assertEqual(rc, 0, log)
-        self.assertIn("KEEP_CANDIDATE-kernel-coverage", log)
-        self.assertIn("forward:ggml_compute_forward_mul_mat", log)
+        # The terminal log summarizes status; inspect the durable original veto
+        # rather than requiring its detail to be printed again.
+        records = list((self.store / run_mod.kernel_coverage.VERDICT_DIR).glob("*.json"))
+        self.assertEqual(len(records), 1)
+        veto = json.loads(records[0].read_text())
+        self.assertFalse(veto["passed"])
+        self.assertIn("forward:ggml_compute_forward_mul_mat", veto["reason"])
+        self.assertIn("keep_candidate", log)
         self.assertFalse((self.store / "anchor-gen-002").exists())
         self.assertEqual([call["dest"] for call in calls], [self.root / "lane0-build"])
         self.assertEqual(_sh(self.repo, "rev-parse", CANONICAL), self.tip)

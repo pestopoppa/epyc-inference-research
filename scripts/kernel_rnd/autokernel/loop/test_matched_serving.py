@@ -318,7 +318,7 @@ def test_post_keep_refresh_failure_preserves_keep_and_starts_no_candidate_compar
 
     def matched(argv):
         return real_main([*argv, "--serving-instrument", serving.MATCHED_INSTRUMENT,
-                          "--cpu-calibrate-serving", "24"])
+                          "--cpu-calibrate-serving", "24", "--no-floor-carry-forward"])
 
     def expect(result, _measured, _builds, fixture, selected):
         assert [row["status"] for row in result["iterations"]] == [
