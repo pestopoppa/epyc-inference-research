@@ -223,7 +223,10 @@ def validate_real_mask_corpus(capture_dir: "Path | str", cases: Sequence[FaCase]
             raise ValueError(f"{case.name}: native mask metadata does not match its case/run")
         if datetime.strptime(metadata["captured_at"], "%Y-%m-%dT%H:%M:%SZ") < started_at:
             raise ValueError(f"{case.name}: capture predates its native run manifest")
-        data = real_mask_path(root, case).read_bytes()
+        path = real_mask_path(root, case)
+        if path.stat().st_size != expected["mask_bytes"]:
+            raise ValueError(f"{case.name}: captured byte count does not match the case")
+        data = path.read_bytes()
         if len(data) != expected["mask_bytes"]:
             raise ValueError(f"{case.name}: captured byte count does not match the case")
         digest = 0xcbf29ce484222325
