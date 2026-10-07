@@ -189,6 +189,35 @@ def _divergence(row_a: tuple, row_b: tuple) -> dict:
     return {"level": level, "index": index}
 
 
+def _locate_divergence(rows_a: list, rows_b: list) -> dict | None:
+    """The first REQUEST at which two equal-length row sequences disagree (by digest),
+    named by its position and `prompt_id`, plus the content/token divergence within that
+    one pair (`_divergence`). None when every row agrees (never called in that case, but
+    defensive). This is "which pair, and where in it" for a receipt."""
+    for i, (ra, rb) in enumerate(zip(rows_a, rows_b)):
+        if ra[1] != rb[1]:
+            within = _divergence(ra, rb)
+            return {"request_index": i, "prompt_id": ra[0],
+                    "level": within["level"], "divergence_index": within["index"]}
+    return None
+
+
+def _locate_repeat_divergence(rows: list, n: int, request_index: int) -> dict | None:
+    """Among `n`-strided REPEATS of one request (`rows` is `repeats * n` rows long), the
+    first repeat whose completion disagrees with repeat 0 -- named by which two repeats,
+    plus the content/token divergence within that pair. None when every repeat agrees."""
+    repeats = len(rows) // n
+    base = rows[request_index]
+    for r in range(1, repeats):
+        other = rows[r * n + request_index]
+        if other[1] != base[1]:
+            within = _divergence(base, other)
+            return {"request_index": request_index, "prompt_id": base[0],
+                    "repeat_a": 0, "repeat_b": r,
+                    "level": within["level"], "divergence_index": within["index"]}
+    return None
+
+
 def _persist_divergence(record_dir, *, kind: str, **rows) -> str:
     """Persist the full per-repeat records behind an inconsistent identity verdict so a
     future refusal can be localized instead of re-run blind (no divergence position was
@@ -218,10 +247,19 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
     before every request on both arms; it resets the server state itself (a slot
     restore), so repetitions keep the prompt cache instead of `_uncached`.
 
-    `record_dir`, when given, persists the full per-repeat token ids and content behind
-    any non-`pass` verdict (`_persist_divergence`) and puts the written file's path first
-    in `detail`, so a future refusal can be localized instead of re-run blind. Absent
-    (the default) nothing is written and every verdict is exactly as before."""
+    `record_dir`, when given, persists EVERY observation made before a non-`pass` verdict
+    (every candidate repeat, every anchor repeat, the confirming anchor re-serve -- not
+    just the differing pair) under a consistent key naming (`anchor_first`, the single
+    initial anchor serve; `anchor_repeats`/`candidate_repeats`, the repeats re-serves,
+    when made; `anchor_reserve`, the confirming re-serve, when made; `candidate`, the
+    first-`n` candidate rows outside the repeats branch), plus `first_divergent` naming
+    WHICH comparison (request index/prompt_id, or which two repeats) first disagreed and
+    its content/token divergence index (`_locate_divergence`/`_locate_repeat_divergence`).
+    The written file's path is put first in `detail`, so a future refusal can be
+    localized instead of re-run blind. Absent (the default) nothing is written and every
+    verdict is exactly as before. A harness fault (a `serve_fn` exception) persists
+    whatever observations were already made before it fired -- there is no divergence to
+    locate there, only partial evidence."""
     if not requests:
         return IdentityResult("unavailable", "no frozen requests to serve")
     if anchor_recipe.backend != "cpu" or candidate_recipe.backend != "cpu":
@@ -248,13 +286,28 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
 
         def serve_fn(recipe, requests):  # noqa: E306
             return base_serve(recipe, requests, prepare=prepare)
+
+    def persist(kind: str, detail: dict) -> dict:
+        if record_dir is None:
+            return detail
+        return {"record": _persist_divergence(record_dir, kind=kind, **detail), **detail}
+
+    anchor: list | None = None
+    candidate_all: list | None = None
     try:
         with guard():
             anchor = serve_fn(anchor_recipe, selected)
             candidate_all = serve_fn(candidate_recipe, selected * repeats)
     except Exception as exc:  # a launch/request failure is never a correctness verdict
+        detail: dict = {}
+        if anchor is not None:
+            detail["anchor_first"] = [_row_record(r) for r in anchor]
+        if candidate_all is not None:
+            key = "candidate_repeats" if repeats > 1 else "candidate"
+            detail[key] = [_row_record(r) for r in candidate_all]
         return IdentityResult("unavailable", f"model identity serving failed: "
-                              f"{type(exc).__name__}: {exc}")
+                              f"{type(exc).__name__}: {exc}",
+                              json.dumps(persist("serving_failed", detail)) if detail else "")
     candidate = candidate_all[:n]
     racy = _inconsistent(candidate_all, n) if repeats > 1 else []
     if racy:
@@ -262,29 +315,40 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
             with guard():
                 anchor_all = serve_fn(anchor_recipe, selected * repeats)
         except Exception as exc:
+            detail = {"anchor_first": [_row_record(r) for r in anchor],
+                      "candidate_repeats": [_row_record(r) for r in candidate_all]}
             return IdentityResult("unavailable", f"anchor repetition serve failed: "
-                                  f"{type(exc).__name__}: {exc}")
+                                  f"{type(exc).__name__}: {exc}",
+                                  json.dumps(persist("anchor_repeat_serve_failed", detail)))
         if _inconsistent(anchor_all, n) or [row[1] for row in anchor_all[:n]] != \
                 [row[1] for row in anchor]:
-            detail: dict = {"anchor_first": [_row_record(r) for r in anchor],
-                            "anchor_repeats": [_row_record(r) for r in anchor_all],
-                            "candidate_repeats": [_row_record(r) for r in candidate_all]}
-            if record_dir is not None:
-                detail = {"record": _persist_divergence(
-                    record_dir, kind="anchor_self_inconsistent", **detail), **detail}
+            inconsistent_idx = _inconsistent(anchor_all, n)
+            if inconsistent_idx:
+                located = _locate_repeat_divergence(anchor_all, n, inconsistent_idx[0])
+                first_divergent = {"kind": "anchor_repeats_disagree_with_each_other",
+                                   **(located or {})}
+            else:
+                located = _locate_divergence(anchor, anchor_all[:n])
+                first_divergent = {"kind": "anchor_first_serve_disagrees_with_its_repeats",
+                                   **(located or {})}
+            detail = {"first_divergent": first_divergent,
+                      "anchor_first": [_row_record(r) for r in anchor],
+                      "anchor_repeats": [_row_record(r) for r in anchor_all],
+                      "candidate_repeats": [_row_record(r) for r in candidate_all]}
             return IdentityResult("unavailable", "the anchor's own repeated greedy "
                                   "completions differ; this instrument cannot judge a race",
-                                  json.dumps(detail))
-        detail = {"candidate_repeats": [_row_record(r) for r in candidate_all],
-                  "anchor": [_row_record(r) for r in anchor]}
-        if record_dir is not None:
-            detail = {"record": _persist_divergence(record_dir, kind="race", **detail),
-                      **detail}
+                                  json.dumps(persist("anchor_self_inconsistent", detail)))
+        first_divergent = {"kind": "candidate_repeats_disagree_with_each_other",
+                           **(_locate_repeat_divergence(candidate_all, n, racy[0]) or {})}
+        detail = {"first_divergent": first_divergent,
+                  "candidate_repeats": [_row_record(r) for r in candidate_all],
+                  "anchor_repeats": [_row_record(r) for r in anchor_all],
+                  "anchor_first": [_row_record(r) for r in anchor]}
         return IdentityResult("wrong", f"{len(racy)} of {n} request(s) gave different greedy "
                               f"completions across {repeats} candidate repetitions while the "
                               "anchor reproduces itself (a scheduling race)",
-                              json.dumps(detail))
-    differing = [(a, c) for a, c in zip(anchor, candidate) if a[1] != c[1]]
+                              json.dumps(persist("race", detail)))
+    differing = [(i, a, c) for i, (a, c) in enumerate(zip(anchor, candidate)) if a[1] != c[1]]
     if not differing:
         return IdentityResult("pass", f"{len(selected)} greedy completion(s) byte-identical "
                               "to the anchor under the campaign launch"
@@ -295,27 +359,33 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
         with guard():
             again = serve_fn(anchor_recipe, selected)
     except Exception as exc:
-        return IdentityResult("unavailable", f"anchor re-serve failed: {type(exc).__name__}: {exc}")
+        detail = {"anchor_first": [_row_record(r) for r in anchor],
+                  "candidate": [_row_record(r) for r in candidate]}
+        return IdentityResult("unavailable", f"anchor re-serve failed: {type(exc).__name__}: {exc}",
+                              json.dumps(persist("anchor_reserve_failed", detail)))
     if [row[1] for row in again] != [row[1] for row in anchor]:
-        detail = {"first": [_row_record(r) for r in anchor], "second": [_row_record(r) for r in again]}
-        if record_dir is not None:
-            detail = {"record": _persist_divergence(record_dir, kind="anchor_unstable",
-                                                     **detail), **detail}
+        located = _locate_divergence(anchor, again)
+        first_divergent = {"kind": "anchor_disagrees_between_two_launches", **(located or {})}
+        detail = {"first_divergent": first_divergent,
+                  "anchor_first": [_row_record(r) for r in anchor],
+                  "anchor_reserve": [_row_record(r) for r in again],
+                  "candidate": [_row_record(r) for r in candidate]}
         return IdentityResult("unavailable", "the anchor's own greedy completions differ "
                               "between two launches; this instrument cannot judge identity",
-                              json.dumps(detail))
-    (a, c), = differing[:1]
+                              json.dumps(persist("anchor_unstable", detail)))
+    i, a, c = differing[0]
     divergence = _divergence(a, c)
-    detail = {"divergence": divergence, "anchor": _row_record(a), "candidate": _row_record(c)}
-    if record_dir is not None:
-        detail = {"record": _persist_divergence(
-            record_dir, kind="wrong", divergence=divergence,
-            anchor=[_row_record(r) for r in anchor],
-            candidate=[_row_record(r) for r in candidate]), **detail}
+    first_divergent = {"kind": "candidate_disagrees_with_the_reproducible_anchor",
+                       "request_index": i, "prompt_id": a[0],
+                       "level": divergence["level"], "divergence_index": divergence["index"]}
+    detail = {"first_divergent": first_divergent,
+              "anchor_first": [_row_record(r) for r in anchor],
+              "anchor_reserve": [_row_record(r) for r in again],
+              "candidate": [_row_record(r) for r in candidate]}
     return IdentityResult("wrong", f"{len(differing)} of {len(selected)} greedy completion(s) "
                           f"differ from the reproducible anchor (first: {a[0]}, "
                           f"{divergence['level']} divergence at index {divergence['index']})",
-                          json.dumps(detail))
+                          json.dumps(persist("wrong", detail)))
 
 
 __all__ = ["IdentityResult", "check", "serve", "model_architecture", "DEFAULT_REQUESTS"]

@@ -231,6 +231,95 @@ def test_split_kv_semantics_and_configs():
     assert [(v, t) for _l, v, t in configs] == [("0", 7), ("0", 48), ("1", 48)]
 
 
+# -------------------------------------------- real-mask coverage (N>1, review item 1)
+
+def test_ds41_real_mask_cases_cover_nb_2_through_5_at_every_served_kv_depth():
+    cases = fa.ds41_real_mask_cases()
+    assert len(cases) == 4 * len(fa.DS41_REAL_MASK_QUERY_ROWS)
+    assert all(c.name.startswith("ds41_realmask_") for c in cases)
+    assert {c.nb for c in cases} == set(fa.DS41_REAL_MASK_QUERY_ROWS) == {2, 3, 4, 5}
+    assert {c.kv for c in cases} == {4096, 8192, 32768, 65536}
+    assert all((c.hsk, c.n_kv_heads, c.n_q_heads, c.sinks, c.mask) ==
+              (512, 1, 64, True, "captured") for c in cases)
+    # Never registered in test-backend-ops (which has no concept of an external mask),
+    # and never swept into the approximate-mask corpora.
+    assert not any(c.backend_ops for c in cases)
+    assert not (set(c.name for c in cases) & set(c.name for c in fa.CASE_SET))
+    assert not (set(c.name for c in cases) & set(c.name for c in fa.GUARD_CASES))
+    # 1 is deliberately excluded: live serving already covers N=1 under the REAL mask
+    # (model_identity.check, after longctx._oracle_arm strips speculative decoding).
+    assert 1 not in {c.nb for c in cases}
+
+
+def test_probe_supports_mask_file_is_false_for_the_probe_as_shipped():
+    """The probe source genuinely has no `--mask-file`/`mask="captured"` support yet --
+    this is a real capability check, not a hardcoded stub, so it will flip to True the
+    moment the described C++ change lands with no Python change needed here."""
+    assert fa.PROBE_MASK_FILE_FLAG not in fa.PROBE.read_text(encoding="utf-8")
+    assert fa.probe_supports_mask_file() is False
+
+
+def test_real_mask_identity_fails_closed_without_probe_support(tmp_path):
+    result = fa.check_real_mask_identity(tmp_path / "a", tmp_path / "c", tmp_path / "src",
+                                         capture_dir=tmp_path / "masks")
+    assert result.status == "unavailable"
+    assert fa.PROBE_MASK_FILE_FLAG in result.reason
+    assert "cannot be judged yet" in result.reason
+
+
+def test_real_mask_identity_fails_closed_without_a_capture_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    result = fa.check_real_mask_identity(tmp_path / "a", tmp_path / "c", tmp_path / "src")
+    assert result.status == "unavailable" and "no capture_dir was given" in result.reason
+
+
+def test_real_mask_identity_fails_closed_on_a_partial_capture(monkeypatch, tmp_path):
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    capture_dir = tmp_path / "masks"
+    capture_dir.mkdir()
+    cases = fa.ds41_real_mask_cases()
+    # Only the first case's mask file exists -- never a silent partial corpus.
+    fa.real_mask_path(capture_dir, cases[0]).write_bytes(b"\x00" * (cases[0].kv * cases[0].nb * 2))
+    result = fa.check_real_mask_identity(tmp_path / "a", tmp_path / "c", tmp_path / "src",
+                                         capture_dir=capture_dir,
+                                         check_anchor_identity_fn=lambda *a, **k: pytest.fail("ran"))
+    assert result.status == "unavailable"
+    assert f"{len(cases) - 1}/{len(cases)}" in result.reason
+
+
+def test_real_mask_identity_defers_to_anchor_identity_once_everything_is_ready(monkeypatch, tmp_path):
+    """Once the probe supports it and every case's mask is captured, this is exactly
+    `check_anchor_identity` run on the real-mask case set -- zero further Python needed."""
+    monkeypatch.setattr(fa, "probe_supports_mask_file", lambda: True)
+    capture_dir = tmp_path / "masks"
+    capture_dir.mkdir()
+    cases = fa.ds41_real_mask_cases()
+    for case in cases:
+        fa.real_mask_path(capture_dir, case).write_bytes(b"\x00" * (case.kv * case.nb * 2))
+    seen = {}
+
+    def fake_check_anchor_identity(anchor_build, candidate_build, source_root, *, cases,
+                                   anchor_recipe=None, candidate_recipe=None, window=None):
+        seen.update(cases=cases, anchor_build=anchor_build, candidate_build=candidate_build,
+                   source_root=source_root)
+        return fa.FaResult("pass", "ok")
+
+    result = fa.check_real_mask_identity(
+        tmp_path / "a", tmp_path / "c", tmp_path / "src", capture_dir=capture_dir,
+        anchor_recipe=_recipe(), candidate_recipe=_recipe(),
+        check_anchor_identity_fn=fake_check_anchor_identity)
+    assert result.status == "pass"
+    assert seen["cases"] == fa.ds41_real_mask_cases()
+    assert seen["source_root"] == tmp_path / "src"
+
+
+def test_gates_wraps_real_mask_identity_as_oracle_unavailable_by_default(tmp_path):
+    verdict = gates.check_cpu_fa_real_mask_identity(tmp_path / "a", tmp_path / "c",
+                                                    tmp_path / "src")
+    assert verdict.gate == "oracle_unavailable" and not verdict.passed
+    assert fa.PROBE_MASK_FILE_FLAG in verdict.reason
+
+
 # ------------------------------------------------------------------ anchor identity
 
 def _probe_text(case, threads, *, lib, digests=None, rows=None, input_hash="0" * 16,

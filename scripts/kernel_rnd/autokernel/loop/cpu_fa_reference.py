@@ -137,6 +137,120 @@ PROBE_CASES = (*CASE_SET, *GUARD_CASES)
 #: alternation, so no other FLASH_ATTN_EXT case can ride along.
 CASE_SET_REGEX = "^(" + "|".join(re.escape(case.vars()) for case in CASE_SET) + ")$"
 
+# --------------------------------------------------------------- real-mask coverage (N>1)
+
+#: DS41's CASE_SET/GUARD_CASES entries run the probe's FIXED pseudo-random sparse mask
+#: (module docstring: "a DS41 top-k stand-in"), never DS41's actual learned top-k
+#: selection. At N=1, the real mask IS already exercised -- by LIVE greedy decode inside
+#: `model_identity.check`, which since 2026-10-07 (`longctx._oracle_arm`) serves the
+#: identity oracle with speculative decoding stripped, i.e. genuine one-row-at-a-time
+#: decode under the model's own real mask. The surviving gap is N=2..5 (an MTP/dflash
+#: verify step's query-row counts) UNDER THE REAL mask -- not covered by the approximate
+#: probe (N=2..5, fake mask) nor by live serving (real mask, but only N=1). This is
+#: exactly where an error that needs BOTH could hide.
+#:
+#: Q38FN needs none of this: its probe mask (`mask="causal"`, a stock lower-triangular
+#: window) already IS its real mask -- Q38FN has no learned/dynamic selection, so
+#: CASE_SET's N=1..5 coverage of it is already bit-exact under the real pattern.
+DS41_REAL_MASK_QUERY_ROWS = (2, 3, 4, 5)
+#: A literal `cpu_fa_reference_probe.cpp` would carry once it accepts an externally
+#: captured mask file (see `check_real_mask_identity`'s docstring for the exact change);
+#: absent from the probe's actual source today, so `probe_supports_mask_file` is False.
+PROBE_MASK_FILE_FLAG = "--mask-file"
+
+
+def ds41_real_mask_cases() -> tuple[FaCase, ...]:
+    """DS41 shapes at `DS41_REAL_MASK_QUERY_ROWS`, the same served long-KV depths as
+    CASE_SET. `mask="captured"`: the probe does not synthesize these -- it has no
+    `"captured"` mode yet (`probe_supports_mask_file`) -- and `backend_ops=False`: these
+    never run through test-backend-ops (which has no concept of an externally supplied
+    mask either); they exist only for `check_real_mask_identity`'s standalone probe."""
+    return tuple(
+        FaCase(f"ds41_realmask_kv{kv // 1024}k_nb{nb}", 512, 512, 1, 64, kv, nb,
+              sinks=True, mask="captured", backend_ops=False)
+        for kv in (4096, 8192, 32768, 65536) for nb in DS41_REAL_MASK_QUERY_ROWS)
+
+
+def probe_supports_mask_file() -> bool:
+    """True once `cpu_fa_reference_probe.cpp` accepts `--mask-file <path>` and a
+    `mask="captured"` mode. Checked against the probe's SOURCE text, not a compiled
+    binary: `check_anchor_identity` compiles it fresh per call (module docstring) from
+    the one `.cpp` file at `PROBE`, so there is no persistent build to inspect the way
+    `binary_has_case_set` inspects test-backend-ops."""
+    try:
+        return PROBE_MASK_FILE_FLAG in PROBE.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+def real_mask_path(capture_dir: "Path | str", case: FaCase) -> Path:
+    """Where a captured real attention-mask file for `case` would live: `kv * nb`
+    little-endian `ggml_fp16_t` values in `[token][kv-cell]` row-major order, matching
+    the probe's own `m` tensor layout exactly -- see `check_real_mask_identity`'s
+    docstring for how such a file would be produced (not written here)."""
+    return Path(capture_dir) / f"{case.name}.mask.f16"
+
+
+def check_real_mask_identity(anchor_build: Path, candidate_build: Path, source_root: Path, *,
+                             capture_dir: "Path | str | None" = None,
+                             anchor_recipe=None, candidate_recipe=None,
+                             window: Callable[[], object] | None = None,
+                             check_anchor_identity_fn: "Callable | None" = None) -> FaResult:
+    """Bit identity between the ANCHOR and CANDIDATE probe on DS41's N=2..5 cases under
+    the REAL top-k attention mask (not the probe's fixed sparse approximation) -- the
+    coverage gap `DS41_REAL_MASK_QUERY_ROWS`'s module comment names.
+
+    FAILS CLOSED, unconditionally today, because of two C++ changes neither written
+    here (per the ak-longctx-identity-oracle-20261007 review, item 1):
+
+    1. `cpu_fa_reference_probe.cpp` needs a NEW `mask="captured"` mode (alongside the
+       existing `causal`/`sparse`) selected by a `--mask-file <path>` flag: instead of
+       synthesizing `f[t * kv + c]` (the causal/sparse branch around the mask-build
+       loop), read exactly `kv * nb` little-endian `ggml_fp16_t` values from that file
+       into the same buffer, and refuse (a distinct non-zero return code, never a
+       fabricated digest) if the file size does not match `kv * nb *
+       sizeof(ggml_fp16_t)` bytes exactly. `probe_supports_mask_file` detects this the
+       moment it lands (a literal-string check against the probe source, same idiom as
+       `cpu_fa_reference.binary_has_case_set`'s literal check against a compiled
+       binary).
+    2. Something upstream needs to CAPTURE that file from an actual DS41 server: a debug
+       hook in llama.cpp's DS41 attention-graph build, at the point the top-k sparse
+       mask tensor is populated just before `ggml_flash_attn_ext` consumes it, guarded
+       by an env var (e.g. `AUTOKERNEL_DUMP_FA_MASK=<dir>`) that dumps that tensor's
+       buffer via `ggml_backend_tensor_get` to `real_mask_path(dir, case)` the first
+       time a decode or MTP-verify step presents that exact (kv, nb) shape. One capture
+       per served shape from one live run is enough; `capture_dir` here then points at
+       that directory.
+
+    Once both land, this function's own logic already does the right thing without
+    further Python changes: it checks `probe_supports_mask_file()`, then that
+    `capture_dir` is given, then that EVERY case's file exists (never a silent partial
+    corpus), and only then defers to `check_anchor_identity` (compile once per arm, run
+    the probe, require bit identity) exactly as the approximate-mask cases already do."""
+    cases = ds41_real_mask_cases()
+    if not probe_supports_mask_file():
+        return FaResult("unavailable",
+            f"cpu_fa_reference_probe.cpp has no {PROBE_MASK_FILE_FLAG} support yet (a "
+            "new mask=\"captured\" mode that reads an externally captured real DS41 "
+            f"attention mask instead of synthesizing mask=sparse); {len(cases)} "
+            f"real-mask case(s) at nb={sorted(DS41_REAL_MASK_QUERY_ROWS)} cannot be "
+            "judged yet. See check_real_mask_identity's docstring for the exact C++ "
+            "change (the probe's --mask-file flag, and llama.cpp's capture hook that "
+            "would produce the file) -- not written here by design")
+    if capture_dir is None:
+        return FaResult("unavailable",
+            f"the probe supports {PROBE_MASK_FILE_FLAG} but no capture_dir was given; a "
+            "captured real DS41 attention-mask file is required per (kv, nb) case and "
+            "none has been supplied")
+    missing = [case.name for case in cases if not real_mask_path(capture_dir, case).is_file()]
+    if missing:
+        return FaResult("unavailable",
+            f"{len(missing)}/{len(cases)} real-mask case(s) have no captured mask file "
+            f"under {capture_dir} yet: {missing[:3]}")
+    run = check_anchor_identity_fn or check_anchor_identity
+    return run(anchor_build, candidate_build, source_root, cases=cases,
+              anchor_recipe=anchor_recipe, candidate_recipe=candidate_recipe, window=window)
+
 
 def backend_ops_patch_block() -> str:
     """The C++ the llama-tree patch adds (static helper; called from eval and perf)."""
@@ -463,4 +577,7 @@ def perf_screen(anchor_build: Path, candidate_build: Path, *, anchor_recipe,
 __all__ = ["CASE_SET", "CASE_SET_ENV", "CASE_SET_ID", "CASE_SET_REGEX", "FaCase", "FaResult",
            "GUARD_CASES", "PROBE_CASES", "THREADS_ENV", "backend_ops_patch_block",
            "binary_has_case_set", "check_anchor_identity", "compare_runs", "parse_perf",
-           "parse_probe", "perf_screen", "probe_configs", "split_kv_enabled"]
+           "parse_probe", "perf_screen", "probe_configs", "split_kv_enabled",
+           "DS41_REAL_MASK_QUERY_ROWS", "PROBE_MASK_FILE_FLAG", "SERVED_QUERY_ROWS",
+           "check_real_mask_identity", "ds41_real_mask_cases", "probe_supports_mask_file",
+           "real_mask_path"]

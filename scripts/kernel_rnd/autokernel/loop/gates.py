@@ -2350,6 +2350,26 @@ def check_cpu_fa_reference(anchor_build: Path, candidate_build: Path, source_roo
                    "oracle_unavailable", result.status == "pass", result.reason, result.detail)
 
 
+def check_cpu_fa_real_mask_identity(anchor_build: Path, candidate_build: Path,
+                                    source_root: Path, *, capture_dir=None,
+                                    anchor_recipe=None, candidate_recipe=None,
+                                    window=None) -> Verdict:
+    """`cpu_fa_schedule`: bit identity with the ANCHOR on DS41's N=2..5 cases under the
+    REAL top-k attention mask (review 2026-10-07, ak-longctx-identity-oracle item 1) --
+    `check_cpu_fa_reference` covers the same shapes only under the probe's fixed
+    approximate mask. FAILS CLOSED unconditionally today (`oracle_unavailable`, never a
+    silent pass): see `cpu_fa_reference.check_real_mask_identity`'s docstring for the two
+    C++ changes this needs (a probe `--mask-file` mode, and a capture hook in llama.cpp's
+    DS41 attention-graph build), neither written here by design."""
+    from . import cpu_fa_reference
+
+    result = cpu_fa_reference.check_real_mask_identity(
+        anchor_build, candidate_build, source_root, capture_dir=capture_dir,
+        anchor_recipe=anchor_recipe, candidate_recipe=candidate_recipe, window=window)
+    return Verdict("reference_comparison" if result.status != "unavailable" else
+                   "oracle_unavailable", result.status == "pass", result.reason, result.detail)
+
+
 def check_cpu_fa_perf_screen(anchor_build: Path, candidate_build: Path, *, anchor_recipe,
                              candidate_recipe, window=None) -> Verdict:
     """`cpu_fa_schedule`: paired anchor/candidate `test-backend-ops perf` screen on the
@@ -4039,7 +4059,8 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "affected_op_scope", "check_cpu_fa_case_set", "check_cpu_fa_perf_screen",
            "check_served_shape_case_set", "op_correctness_sharded",
            "SERVED_SHAPE_CASE_SET_DEFAULT_SHARDS",
-           "check_cpu_fa_reference", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
+           "check_cpu_fa_reference", "check_cpu_fa_real_mask_identity",
+           "check_cpu_gdn_reference", "check_cpu_iqk_reference",
            "check_cpu_route_reference", "gpu_graph_pool_hold_refusal",
            "no_fallback_dispatch", "op_correctness", "run_all",
            "PPL_CORPUS", "PPL_CORPUS_SHA256", "PPL_CHUNKS", "PPL_CTX", "PPL_BATCH",
