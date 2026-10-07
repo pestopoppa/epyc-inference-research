@@ -793,3 +793,70 @@ class TestHandleVisionRequest:
 
                 with pytest.raises(RuntimeError, match="All vision paths failed"):
                     await _handle_vision_request(request, primitives, state, "task123")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("backend", "expect_legacy"),
+        [("server", False), ("auto", True), ("cli", True), ("malformed", True), (None, True)],
+    )
+    async def test_server_only_refuses_without_legacy_vision_request(
+        self, monkeypatch, backend, expect_legacy
+    ):
+        """Only explicit server mode skips the redundant legacy endpoint."""
+        import asyncio
+        from types import SimpleNamespace
+        from src.api.models import ChatRequest
+
+        if backend is None:
+            monkeypatch.delenv("ORCHESTRATOR_VISION_VL_BACKEND", raising=False)
+        else:
+            monkeypatch.setenv("ORCHESTRATOR_VISION_VL_BACKEND", backend)
+
+        request = ChatRequest(
+            prompt="What is in this image?",
+            image_base64=base64.b64encode(b"synthetic image bytes").decode("ascii"),
+        )
+        posts = []
+        server_failure = MagicMock(status_code=503, text="unavailable")
+        legacy_success = MagicMock(status_code=200)
+        legacy_success.json.return_value = {"description": "legacy result"}
+
+        async def post(url, **kwargs):
+            posts.append(url)
+            if url.endswith("/vision/analyze") and backend == "server":
+                await asyncio.sleep(1)
+            return legacy_success if url.endswith("/vision/analyze") else server_failure
+
+        http_client = AsyncMock()
+        http_client.__aenter__.return_value = http_client
+        http_client.post.side_effect = post
+
+        with (
+            patch("src.services.document_client.get_document_client") as get_document_client,
+            patch("httpx.AsyncClient", return_value=http_client),
+            patch(
+                "src.api.routes.chat_vision._get_config",
+                return_value=SimpleNamespace(
+                    timeouts=SimpleNamespace(vision_inference=1),
+                    server_urls=SimpleNamespace(api_url="http://api"),
+                ),
+            ),
+            patch(
+                "src.api.routes.chat_vision._vl_url_for_role",
+                side_effect=lambda role: f"http://{role}",
+            ),
+        ):
+            get_document_client.return_value.ocr_image = AsyncMock(
+                return_value=SimpleNamespace(text="")
+            )
+            if expect_legacy:
+                assert await _handle_vision_request(request, Mock(), Mock(), "task") == "legacy result"
+            else:
+                with pytest.raises(RuntimeError, match="All vision paths failed"):
+                    await asyncio.wait_for(
+                        _handle_vision_request(request, Mock(), Mock(), "task"),
+                        timeout=0.25,
+                    )
+
+        assert sum(url.endswith("/vision/analyze") for url in posts) == int(expect_legacy)
+        assert len(posts) == 2 + int(expect_legacy)

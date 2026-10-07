@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast as _ast
 import logging
+import os
 import operator as _operator
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -330,6 +331,12 @@ async def _handle_vision_request(
         except Exception as e:
             last_error = f"{server_name}: {type(e).__name__}: {e}"
             logger.warning(f"VL {server_name} failed: {type(e).__name__}: {e}")
+
+    # A server-only deployment has no permitted CLI/legacy fallback. The
+    # legacy endpoint can otherwise spend another connect timeout probing the
+    # same unavailable server before refusing the request.
+    if os.environ.get("ORCHESTRATOR_VISION_VL_BACKEND", "auto").lower() == "server":
+        raise RuntimeError(f"All vision paths failed. Last error: {last_error}")
 
     # All VL servers failed — try legacy vision pipeline as last resort
     logger.warning(f"All VL servers failed ({last_error}), trying vision pipeline")
