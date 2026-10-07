@@ -1,0 +1,31 @@
+{
+  "primary_pin": "3af99f493e14fba162625d5dd687abea551a299e",
+  "scope": "Standalone actor, actual two-file primary patch, full provenance; private preparation only",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1536,
+      "sha256": "6d9b911bc14cdeb5f32a526f96c4da71e0367d17018cf99aafd0769b2a00ff2c"
+    },
+    {
+      "path": "finite-runner-v2-final-source-review.json",
+      "bytes": 2062,
+      "sha256": "baa1f6200cb2cc03f42e53a4108323d79f91eef69be53c9faa1d50097ba020c2"
+    },
+    {
+      "path": "finite-runner-v2-full-source-map.json",
+      "bytes": 19516,
+      "sha256": "6d8dc4b8784b44bcd7491b31239e4b114332d0d9f6caf27bd50e9f0ee2e8d61f"
+    },
+    {
+      "path": "primary-3af-device-seams.patch",
+      "bytes": 2941,
+      "sha256": "b550c51ef972636df132c7875df6f80e45f2c8ddd3b5eb192a5e25401040467e"
+    },
+    {
+      "path": "xllm_native_prefill_smoke.py",
+      "bytes": 34114,
+      "sha256": "f65d32a9f36342d4d5a20f804cd8a69cd1bd437e468c1ee591bc2504e31d4f6d"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "schema": "ni08.ufh05.finite-source-review.v2",
+  "reviewed_prior_draft_immutable": "/mnt/raid0/llm/tmp/ni08_remaining_backlog_screen-20261007/xllm-prefill-source-audit/device-seam-proposal",
+  "files": {
+    "xllm/paper_part2/artifacts.py": {
+      "sha256": "a90fb0942ccfc7dac23e6580eef576be07f3c73f1f9b360814763158d27bd8e7",
+      "bytes": 13050,
+      "module_ast_sha256": "1acc07ed85919c28e558a72026525373cd6faa200c3f8af3f01b0c8af26e0c46"
+    },
+    "xllm/paper_part2/distill.py": {
+      "sha256": "04d12863a3dc61f607dfb2218548935f1272f59955a63bc8329d03f7594b0c43",
+      "bytes": 17377,
+      "module_ast_sha256": "b7062cd9a03d52db49d0e5e88a0da681fe46ab6fb1b702fd5ca0a5da53c6e467"
+    },
+    "xllm_native_prefill_smoke.py": {
+      "sha256": "f65d32a9f36342d4d5a20f804cd8a69cd1bd437e468c1ee591bc2504e31d4f6d",
+      "bytes": 34114,
+      "module_ast_sha256": "8f9a2eb41a5d680fe88fc4027f8483e23d8ba17904976f8e4676092bbdb3d907"
+    }
+  },
+  "delta": "/mnt/raid0/llm/tmp/ni08_remaining_backlog_screen-20261007/xllm-prefill-source-audit/device-seam-proposal-v2/reviewed-draft-to-v2.diff",
+  "delta_sha256": "27d4d7cc5d3c8ed65c501216ca427197579daced8212d149e1eefd68360837e5",
+  "fixes": [
+    "RC-XLLM-PREFILL-1 recipe_id only; explicit ungraded operational record",
+    "actual loaded modules/executable/proc maps identity immediately after native imports before native/model operations; final snapshot retained",
+    "parent no-follow typed output inventory records directories and links and refuses specials",
+    "default student CPU construction then CUDA move retained; explicit device opt-in construction only"
+  ],
+  "execution_approved": false,
+  "host_project_execution": false,
+  "full_source_map": "/mnt/raid0/llm/tmp/ni08_remaining_backlog_screen-20261007/xllm-prefill-source-audit/device-seam-proposal-v2/finite-runner-v2-full-source-map.json",
+  "full_source_map_sha256": "6d8dc4b8784b44bcd7491b31239e4b114332d0d9f6caf27bd50e9f0ee2e8d61f",
+  "prior_review_packet_sha256": "f96f72574ec85f97e128e7d3e29af11a2a5da09d460fabdf324a785c13919bb3"
+}

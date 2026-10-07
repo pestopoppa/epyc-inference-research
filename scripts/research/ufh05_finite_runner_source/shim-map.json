@@ -1,0 +1,17 @@
+{
+  "schema": "epyc.xllm.device_source_seams.v1",
+  "source_pin": "3af99f493e14fba162625d5dd687abea551a299e",
+  "actual_source_patch": [
+    {
+      "path": "xllm/paper_part2/artifacts.py",
+      "original_sha256": "edf22e3751fe00b5021d363614daba100911228bf319d4baf107aa7abc6c786d",
+      "proposed_sha256": "a90fb0942ccfc7dac23e6580eef576be07f3c73f1f9b360814763158d27bd8e7"
+    },
+    {
+      "path": "xllm/paper_part2/distill.py",
+      "original_sha256": "49e3a5e7fddda4b13869df0b9db69903125be7878eab9acee168f59438aca3a0",
+      "proposed_sha256": "04d12863a3dc61f607dfb2218548935f1272f59955a63bc8329d03f7594b0c43"
+    }
+  ],
+  "execution_authorized": false
+}
