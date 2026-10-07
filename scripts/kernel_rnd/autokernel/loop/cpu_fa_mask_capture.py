@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 import subprocess
 
+from .cpu_fa_verifier_record import PROPOSITION, SCHEMA
+
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -51,16 +53,26 @@ def prepare(*, source_root: Path, build_dir: Path, model: Path, recipe_file: Pat
                 "model_sha256": sha256(model), "recipe_sha256": sha256(recipe_file),
                 "prompt_sha256": sha256(prompt_file), "run_id": run_id,
                 "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "binary_sha256": sha256(binary), "libllama_sha256": sha256(library)}
+                "binary_sha256": sha256(binary), "libllama_sha256": sha256(library),
+                "verifier_schema": SCHEMA, "decided_proposition": PROPOSITION,
+                "evidence_mode": "native_ds41_capture",
+                "capture_sources": {name: sha256(source_root / name) for name in
+                    ("src/models/deepseek41.cpp", "src/models/deepseek4-fa-mask-capture.h",
+                     "ggml/src/ggml-cpu/ops.cpp")},
+                "build_images": {str(path): sha256(path) for path in
+                    (binary, *sorted((build_dir / "bin").glob("*.so")))}}
     for name, original in (("recipe.json", recipe_file), ("prompt.txt", prompt_file)):
         with (capture_dir / name).open("xb") as target:
             target.write(original.read_bytes())
-    with (capture_dir / "capture-manifest.json").open("x", encoding="utf-8") as target:
-        json.dump(manifest, target, sort_keys=True, indent=2)
-        target.write("\n")
     env = {"LD_LIBRARY_PATH": str(build_dir / "bin"), "AUTOKERNEL_DUMP_FA_MASK": str(capture_dir)}
     env.update({f"AUTOKERNEL_FA_MASK_{key.upper()}": manifest[key] for key in
                 ("source_commit", "model", "model_sha256", "run_id", "recipe_sha256", "prompt_sha256")})
+    manifest["launch_env"] = env
+    manifest["launch_env_sha256"] = hashlib.sha256(json.dumps(env, sort_keys=True,
+        separators=(",", ":")).encode()).hexdigest()
+    with (capture_dir / "capture-manifest.json").open("x", encoding="utf-8") as target:
+        json.dump(manifest, target, sort_keys=True, indent=2)
+        target.write("\n")
     return {"manifest": str(capture_dir / "capture-manifest.json"), "launch_env": env}
 
 
