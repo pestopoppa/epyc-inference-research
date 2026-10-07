@@ -57,6 +57,7 @@ _INSTRUMENT_FRAME_PATHS = {
 _POINTER_MEMO = re.compile(
     r"(?:unordered_)?map\s*<\s*(?:const\s+)?void\s*\*"
     r"|reinterpret_cast\s*<\s*uintptr_t\s*>\s*\("
+    r"|\(\s*uintptr_t\s*\)\s*(?:src|input|data|ptr|tensor)\b"
     r"|(?:cache|memo)\s*\[\s*(?:src|input|data|ptr|tensor)\s*\]",
     re.IGNORECASE)
 _STRUCTURED_PREDICATE = re.compile(
