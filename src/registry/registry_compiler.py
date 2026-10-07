@@ -369,7 +369,7 @@ def _format_header_banner(
         "# Runtime stack truth lives in the MASTER registry. The next start detects master\n"
         "# changes by cache-key mismatch and regenerates this lean runtime view. To\n"
         "# edit registry data, change the master source; this generated view is disposable.\n"
-        "# temporarily skip the compile (e.g. during a master schema change), set\n"
+        "# To temporarily skip the compile (e.g. during a master schema change), set\n"
         "# ORCHESTRATOR_REGISTRY_NO_COMPILE=1.\n"
         "#\n"
         f"# Compiled at: {now}\n"
