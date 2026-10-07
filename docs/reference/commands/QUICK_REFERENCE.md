@@ -208,7 +208,8 @@ agent_task_end "Task description" "success"
 
 # 2. Check for quirks (interactive mode, output format)
 
-# 3. Add to model_registry.yaml with quirks documented
+# 3. Add to the canonical epyc-inference-research/orchestration/model_registry.yaml master
+#    with quirks documented; the orchestrator model_registry.yaml is generated lean output.
 ```
 
 ### Find Override Key

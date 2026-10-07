@@ -12,8 +12,11 @@ generator inheritance) are deleted — re-read that design before using this run
 - An **alias role** has NO process of its own — it rides its host's server(s). Same GGUF, one
   server (operator constitution: same-model roles share ONE server; roles are a remappable
   logical layer over servers).
-- **The single declarative truth**: the host's `shared_with` list in `server_mode` of
-  `orchestration/model_registry.yaml`. An alias must NEVER have its own `server_mode` row
+- **The single declarative truth**: the host's `shared_with` list in `server_mode` of the
+  canonical research master at `epyc-inference-research/orchestration/model_registry.yaml`.
+  The orchestrator's `orchestration/model_registry.yaml` is a generated lean runtime view,
+  rebuilt from that master at stack start; never edit the generated view.
+  An alias must NEVER have its own `server_mode` row
   (the dead-8070 coder_escalation row was exactly that defect).
 - Aliases keep their role-layer identity elsewhere: `roles:` section entry (model metadata),
   per-role timeouts (`TimeoutsConfig`), prompts/templates, sampling. Those stay per-role.
@@ -22,7 +25,7 @@ generator inheritance) are deleted — re-read that design before using this run
 
 | Layer | File | What to change |
 |---|---|---|
-| 1. Registry (SoT) | `orchestration/model_registry.yaml` | host row `server_mode.<host>.shared_with` list |
+| 1. Registry (SoT) | `epyc-inference-research/orchestration/model_registry.yaml` | host row `server_mode.<host>.shared_with` list; the orchestrator copy is generated lean output |
 | 2. Launch tagging | `scripts/server/stack_manifest.py` `ROLE_LAUNCH_META` | host's `shared_with_first_n` (+ `shared_with_first_n_count` if aliases should tag onto >1 instance) |
 | 3. Operative URL default | `src/config/models.py` `ServerURLsConfig` | alias field delegates: `_server_url_default("<host>")` |
 | 4. Generated priors | `orchestration/derived/stack_priors.yaml` | NEVER by hand — regenerate via the pipeline (WP-13 inheritance gives aliases the host's full port fleet) |

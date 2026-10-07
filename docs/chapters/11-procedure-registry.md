@@ -382,7 +382,7 @@ rollback:
       name: Restore Registry Backup
       action:
         type: shell
-        command: "cp model_registry.yaml.bak model_registry.yaml"
+        command: "cp application-config.yaml.bak application-config.yaml"
     - id: R2
       name: Delete Partial Results
       action:

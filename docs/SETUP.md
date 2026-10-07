@@ -89,7 +89,9 @@ The version example explicitly selects the experimental build's library director
 
 ## Downloading Models
 
-Models are defined in `orchestration/model_registry.yaml`. Download by tier:
+Models are authored in the canonical master at
+`epyc-inference-research/orchestration/model_registry.yaml`; the orchestrator's
+`orchestration/model_registry.yaml` is generated lean runtime output. Download by tier:
 
 ```bash
 # HOT tier (~40GB, always resident) — minimum for development
