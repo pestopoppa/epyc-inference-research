@@ -30,8 +30,9 @@ serving stays flat (dec-b4 +35% -> DFlash2 serving 0%). So a bundle CAN compound
 threshold on bench and still fail the serving gate. When it does, the champion of record
 does NOT move -- the operator's rule is that only a serving win advances it -- and the
 bundle is recorded as a measured divergence. What happens to the accumulated commits then
-is a policy choice the caller selects (`DivergenceAction`); this module computes the
-decision and leaves the git/build mechanics to the loop.
+follows the operator's implemented HOLD action (`DivergenceAction`); unsupported actions
+are refused at policy construction. This module computes the decision and leaves
+the git/build mechanics to the loop.
 
 R23-54 (operator 2026-09-08) ADDED A SECOND, MANDATORY TRIGGER. `fire_multiple` is a
 heuristic over the proxy, and the gate's first firing showed the proxy failing at that
@@ -155,8 +156,9 @@ class Outcome(enum.Enum):
 
 
 class DivergenceAction(enum.Enum):
-    """What the loop does with the accumulated commits when a bundle diverges. The caller
-    picks one; this module only NAMES the choice so the decision is explicit and logged.
+    """The implemented HOLD action for accumulated commits when a bundle diverges.
+    This module names the action so the operator contract is explicit and logged;
+    it does not advertise unimplemented rollback behavior.
 
     Operator decision 2026-09-04: HOLD, and write the divergence into the JOURNAL as
     evidence the planner reads -- "keep batching but update journal evidence so the planner
@@ -165,7 +167,6 @@ class DivergenceAction(enum.Enum):
     goes to the planner, and the planner may add keeps aimed at the serving gap OR revert /
     revise specific keeps already in the bundle (it authors in a worktree on the champion
     branch, so a revert is just another authored patch). `resolve` emits that evidence."""
-    ROLLBACK = "rollback"   #: reset the accumulator to the champion of record, discard the bundle
     HOLD = "hold"           #: keep the bundle; the planner gets the evidence and may revise it
     #: (a future BISECT action -- automatically find which keeps transferred -- is deliberately
     #: not built: the operator's HOLD+evidence hands that judgement to the PLANNER, which sees
@@ -175,7 +176,7 @@ class DivergenceAction(enum.Enum):
 @dataclass(frozen=True)
 class AccumulatorPolicy:
     """The thresholds. `fire_multiple` is the operator's 2-3x; `on_divergence` is the
-    caller's choice for the divergence case (default HOLD: the operator's 2026-09-04 ruling
+    implemented HOLD action for the divergence case (default HOLD: the operator's 2026-09-04 ruling
     -- keep the bundle and hand the divergence to the planner as journal evidence, so it can
     add keeps aimed at the serving gap or revise the keeps already bundled).
 
@@ -185,6 +186,10 @@ class AccumulatorPolicy:
     fire_multiple: float = 2.5
     on_divergence: DivergenceAction = DivergenceAction.HOLD  # operator 2026-09-04
     every_keeps: int = SERVING_GATE_EVERY_KEEPS              # R23-54; 4 -> 8 operator 2026-09-28
+
+    def __post_init__(self) -> None:
+        if self.on_divergence is not DivergenceAction.HOLD:
+            raise ValueError("only implemented divergence action HOLD is supported")
 
     def fire_threshold_pct(self, serving_floor_pct: float) -> float:
         return self.fire_multiple * serving_floor_pct
