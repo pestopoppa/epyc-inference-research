@@ -6,6 +6,7 @@ blocks, touch safety gates, or change baseline/archive authority.
 
 from __future__ import annotations
 
+import math
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, is_dataclass
@@ -396,7 +397,8 @@ def _question_provenance_note(row: Mapping[str, Any]) -> str:
     partitions = Counter(str(item.get("partition") or "core") for item in questions)
     flags: Counter[str] = Counter()
     for item in questions:
-        if _float(item.get("tools_used")) > 0:
+        tools_used = _optional_float(item.get("tools_used"))
+        if tools_used is not None and tools_used > 0:
             flags["tools"] += 1
         for key in (
             "error",
@@ -408,7 +410,8 @@ def _question_provenance_note(row: Mapping[str, Any]) -> str:
         ):
             if item.get(key):
                 flags[key] += 1
-        if _float(item.get("retry_count")) > 0:
+        retry_count = _optional_float(item.get("retry_count"))
+        if retry_count is not None and retry_count > 0:
             flags["retry"] += 1
         scoring = str(item.get("scoring_method") or "").strip()
         if scoring:
@@ -444,8 +447,12 @@ def _seq_note(
     )
     latest = max(seq_observations, key=_latest_trial_id)
     latest_seq = latest.get("seq") if isinstance(latest.get("seq"), Mapping) else {}
-    e_rate = _float(latest_seq.get("E_rate_noninf"))
-    combined = min(view.quality_state.wealth, e_rate) if e_rate > 0.0 else 0.0
+    e_rate = _optional_float(latest_seq.get("E_rate_noninf"))
+    combined = (
+        None
+        if e_rate is None
+        else min(view.quality_state.wealth, e_rate) if e_rate > 0.0 else 0.0
+    )
     ap24_blocker = _ap24_replay_blocker(latest, latest_seq)
     if ap24_blocker:
         replayable = f"no({ap24_blocker})"
@@ -455,7 +462,7 @@ def _seq_note(
     return (
         f"seq={latest_seq.get('state') or view.state} k={view.quality_state.k} "
         f"E_quality={view.quality_state.wealth:.3f} "
-        f"E_rate={e_rate:.3f} combined={combined:.3f} "
+        f"E_rate={_fmt_measured(e_rate, 3)} combined={_fmt_measured(combined, 3)} "
         f"replayable={replayable}"
     )
 
@@ -481,8 +488,14 @@ def _w8_replay_floor_blocker(row: Mapping[str, Any], seq: Mapping[str, Any]) -> 
         k = 0
     if k >= W8_REPLAY_MAX_K:
         return "attempt_cap_reached"
-    e_quality = _float(seq.get("E_quality"))
-    e_rate = _float(seq.get("E_rate_noninf"))
+    e_quality = _optional_float(seq.get("E_quality"))
+    e_rate = _optional_float(seq.get("E_rate_noninf"))
+    if e_quality is None and e_rate is None:
+        return "E_quality_and_E_rate_unavailable"
+    if e_quality is None:
+        return "E_quality_unavailable"
+    if e_rate is None:
+        return "E_rate_unavailable"
     combined = min(e_quality, e_rate) if e_quality > 0.0 and e_rate > 0.0 else 0.0
     if combined < W8_REPLAY_MIN_COMBINED_E:
         return "combined_E_below_replay_floor"
@@ -545,8 +558,14 @@ def _compact_trials(trial_ids: list[int]) -> str:
     return f"[{head},...,{tail}]"
 
 
-def _float(value: Any) -> float:
+def _optional_float(value: Any) -> float | None:
+    """Parse a finite, non-negative journal number; absence is not measured zero."""
+    if value is None or isinstance(value, bool):
+        return None
     try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
+        number = float(value)
+    except (OverflowError, TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or number < 0.0:
+        return None
+    return number
