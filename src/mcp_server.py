@@ -41,6 +41,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 mcp = FastMCP("orchestrator-info")
 
+# UTM-B1: expose only the existing read-only FTS lookup and exact event expand
+# functions. Navigation owns its fixed default store and allowlist; the tools
+# do not accept caller-selected databases, writes, or embedding/vector inputs.
+from src.trace.mcp_tools import register_trace_navigation_tools
+
+register_trace_navigation_tools(mcp)
+
 # HS-4 P0-MCP-b: every tool declares ``session_id``.
 # OpenCode names MCP tools "<server>_<tool>", and the epyc OpenCode plugin stamps
 # ``session_id`` onto every ``orchestrator_*`` call. fastmcp>=3 refuses undeclared
