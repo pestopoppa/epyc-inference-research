@@ -450,6 +450,7 @@ finally:
 held = {'schema': 'epyc.autokernel.direct_held_reference.v1', 'selection_digest': selected.digest,
         'evidence': artifact.to_dict()}
 status.write_json(batch, 'loop-held-claims.json', held)
+(root / 'store').mkdir()
 runtime = ArtifactStore(root / 'store' / 'runtime-preparation')
 try:
     interrupted = runtime.write('original-runtime-interruption', {

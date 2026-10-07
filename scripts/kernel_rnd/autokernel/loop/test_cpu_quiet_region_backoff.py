@@ -27,6 +27,12 @@ def native(tmp_path, monkeypatch):
     monkeypatch.setenv('EPYC_LOCK_FIFO', '0')
     monkeypatch.setattr(cli, '_preflight', lambda **kwargs: None)
     assert quiet.gpu_quiet_lock_path().parent == tmp_path / 'private-native-locks'
+    # A CPU-only claim or preflight refusal need not create the quiet file.
+    # Establish readable private custody through the ORIGINAL native provider;
+    # None stays an unknown observation, never an alias for no live owners.
+    with quiet.gpu_quiet_lock('exclusive', role='private-fixture-custody', timeout_s=1):
+        assert quiet.lock_owners() == {os.getpid(): 'exclusive'}
+    assert quiet.lock_owners() == {}
     return quiet, regions
 
 
