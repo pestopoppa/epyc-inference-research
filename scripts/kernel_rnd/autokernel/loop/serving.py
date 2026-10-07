@@ -47,6 +47,8 @@ import urllib.error
 from . import (headline_admissibility, hip_launch_proof, kernel_coverage,
                lifecycle_observation, procguard, residency, status)
 from . import native_server_response as server_response
+from .serving_server_owner import (ServerOwnershipRefused, ServerPortOwner,
+                                   require_free_port)
 from .loop import MeasurementFailed, MeasurementInvalid
 
 if TYPE_CHECKING:
@@ -1061,6 +1063,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         with sampler:
             observe("phase", "load")
             coverage_sink = kernel_coverage.open_launch_sink(recipe, build_dir)
+            require_free_port(port)
             srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                    stderr=(subprocess.DEVNULL if coverage_sink is None
                                            else coverage_sink.handle),
@@ -1075,11 +1078,15 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             # load itself remains open until the health marker below.
             observe("phase", "placement")
             try:
+                port_owner = ServerPortOwner(srv, port)
                 if cpu_profile_capture is not None:
                     cpu_profile_capture.attach_target(srv.pid)
                 for _ in range(boot_timeout_s // 2):
                     if srv.poll() is not None:
                         raise ServerDied(f"server exited {srv.returncode} during load ({recipe.describe()})")
+                    if not port_owner.listener_ready():
+                        time.sleep(2)
+                        continue
                     try:
                         health = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
                         if callable(getattr(health, "close", None)):
@@ -1092,6 +1099,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         time.sleep(2)
                 else:
                     raise ServerDied("server not healthy within boot timeout")
+                port_owner.require_listener()
                 observe("phase", "health")
                 # The env arm is verified on the LIVE process, before a single token is measured.
                 if resolved_recipe is None:
@@ -1104,9 +1112,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     hip_maps = hip_launch_proof.mapped_ggml(srv.pid, Path(build_dir) / "bin")
 
                 def one(i: int, phase: str) -> tuple:
+                    # Ownership checks bracket the original request timers.
+                    port_owner.require_listener()
                     if longctx is not None:
-                        return longctx.serve(port, i, phase, frozen_requests[i], capture=(
+                        result = longctx.serve(port, i, phase, frozen_requests[i], capture=(
                             response_capture is not None or cpu_profile_capture is not None))
+                        port_owner.require_listener()
+                        return result
                     if frozen_requests is None:
                         prompt_id = f"legacy-slot-{i}"
                         body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
@@ -1148,6 +1160,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                             if callable(getattr(opened, "close", None)):
                                 opened.close()
                         ended_monotonic = time.monotonic()
+                        port_owner.require_listener()
                         if http_error is not None:
                             raise http_error
                         response = json.loads(response_bytes)
@@ -1244,6 +1257,10 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     srv.kill()
                     srv.wait(10)
                     teardown = "killed"
+    except ServerOwnershipRefused as exc:
+        serving_exception = ServerDied(f"serving endpoint ownership refused: {exc}")
+        failure = f"ServerDied: {serving_exception}"
+        raise serving_exception from exc
     except Exception as exc:
         serving_exception = exc
         failure = f"{type(exc).__name__}: {exc}"

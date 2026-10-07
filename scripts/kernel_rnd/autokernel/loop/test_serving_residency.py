@@ -124,13 +124,15 @@ def _launch(proof: dict, *, recipe: serving.Recipe = RECIPE,
     stack = [mock.patch.object(serving.subprocess, "Popen", _popen),
              mock.patch.object(serving.urllib.request, "urlopen", _urlopen),
              mock.patch.object(serving.residency, "Sampler",
-                               _sampler_class(proof, made))]
+                               _sampler_class(proof, made)),
+             mock.patch.object(serving, "require_free_port"),
+             mock.patch.object(serving, "ServerPortOwner")]
     if verify_error is not None:
         stack.append(mock.patch.object(serving, "verify_env_readback",
                                        side_effect=verify_error))
-    with stack[0], stack[1], stack[2]:
+    with stack[0], stack[1], stack[2], stack[3], stack[4]:
         if verify_error is not None:
-            with stack[3]:
+            with stack[5]:
                 value = serving._measure_once(recipe, Path("/B"), 18311,
                                               evidence=evidence)
         else:

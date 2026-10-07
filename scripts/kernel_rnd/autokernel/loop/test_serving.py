@@ -129,7 +129,9 @@ class PlannedObservationSeam(unittest.TestCase):
                 "predicted_n": 4, "predicted_per_second": 10.0}}).encode())
 
         observations = []
-        with mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()), \
+        with mock.patch.object(serving, "require_free_port"), \
+                mock.patch.object(serving, "ServerPortOwner"), \
+                mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()), \
                 mock.patch.object(serving.residency, "Sampler", return_value=FakeSampler()), \
                 mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
                 mock.patch.object(serving, "verify_env_readback"):
@@ -196,7 +198,9 @@ class PlannedObservationSeam(unittest.TestCase):
                 "predicted_n": 4, "predicted_per_second": 10.0}}).encode())
 
         for observations in (None, []):
-            with mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()), \
+            with mock.patch.object(serving, "require_free_port"), \
+                mock.patch.object(serving, "ServerPortOwner"), \
+                mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()), \
                     mock.patch.object(serving.residency, "Sampler", return_value=FakeSampler()), \
                     mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
                     mock.patch.object(serving, "verify_env_readback"):
@@ -230,7 +234,9 @@ class PlannedObservationSeam(unittest.TestCase):
                     return Response(b"ok" if isinstance(request, str)
                                     else json.dumps(payload).encode())
 
-                with mock.patch.object(serving.subprocess, "Popen",
+                with mock.patch.object(serving, "require_free_port"), \
+                mock.patch.object(serving, "ServerPortOwner"), \
+                mock.patch.object(serving.subprocess, "Popen",
                                        return_value=FakeProcess()), \
                         mock.patch.object(serving.residency, "Sampler",
                                           return_value=FakeSampler()), \
@@ -356,7 +362,9 @@ class LifecycleObservationHook(unittest.TestCase):
             return original_residency_record(*args, **kwargs)
 
         sampler_effect = sampler_error if sampler_error else lambda: self.Sampler()
-        with mock.patch.object(serving.subprocess, "Popen", side_effect=popen), \
+        with mock.patch.object(serving, "require_free_port"), \
+                mock.patch.object(serving, "ServerPortOwner"), \
+                mock.patch.object(serving.subprocess, "Popen", side_effect=popen), \
                 mock.patch.object(serving.residency, "Sampler", side_effect=sampler_effect), \
                 mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
                 mock.patch.object(serving, "verify_env_readback", side_effect=readback), \
