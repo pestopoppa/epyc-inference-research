@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 
 from . import cpu_profile, pool, run, serving
+from .loop import ActorStopped
 from . import test_promotion_targets as fixtures
 from .test_cpu_screen import _inputs as cpu_inputs
 from .test_existing_gpu_serving_run import _inputs as gpu_inputs
@@ -14,7 +15,7 @@ from .test_existing_gpu_serving_run import _inputs as gpu_inputs
 
 @pytest.mark.parametrize("backend", ["cpu", "gpu"])
 @pytest.mark.parametrize("case", ["absent", "reuse", "new_request", "override",
-                                  "mismatch", "malformed", "dry_run", "failed"])
+                                  "mismatch", "malformed", "dry_run", "failed", "stop", "stop_matched"])
 def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
     fixture = fixtures.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
@@ -46,6 +47,16 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
 
         held, launches, pool_calls = [], [], []
         original_main = run.main
+        original_calibrate = serving.calibrate_floor
+        stop_requested = [False]
+
+        def calibrate(*args, **kwargs):
+            if case == "stop":
+                assert callable(kwargs.get("should_stop"))
+                stop_requested[0] = True
+                assert kwargs["should_stop"]()
+                raise ActorStopped("synthetic stop during startup floor calibration")
+            return original_calibrate(*args, **kwargs)
 
         @contextmanager
         def hold(*_args, **_quiet):
@@ -67,6 +78,10 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
             launches.append(resolved_recipe.execution_digest)
             if case == "failed":
                 raise serving.ServerDied("synthetic original launch failure")
+            if case == "stop_matched":
+                # Actual matched calibration observes the same stop before its
+                # second server launch; the original floor cannot be completed.
+                stop_requested[0] = True
             return 10.0
 
         def source_pool(**_kwargs):
@@ -85,6 +100,8 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                 argv += [f"--{backend}-calibrate-serving", "4"]
             if case == "dry_run":
                 argv += ["--dry-run"]
+            if case == "stop_matched":
+                argv += ["--serving-instrument", serving.MATCHED_INSTRUMENT]
             with mock.patch.object(run.claim, "hold_cpu", hold), \
                     mock.patch.object(run.claim, "hold", hold), \
                     mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
@@ -94,9 +111,34 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                     mock.patch.object(cpu_profile, "profile_loop", side_effect=cpu_profile.CpuProfileRefused(
                         "synthetic test; no hardware profiling")), \
                     mock.patch.object(serving, "_measure_once", observe), \
-                    mock.patch.object(pool, "provision", return_value=[]), \
+                    mock.patch.object(serving, "calibrate_floor", side_effect=calibrate), \
+                    mock.patch.object(serving, "_matched_frame", return_value={}), \
+                    mock.patch.object(serving, "_matched_plan", return_value={
+                        "orders": [["anchor", "candidate"]]}), \
+                    mock.patch.object(run, "_write_new_source_floor",
+                                      wraps=run._write_new_source_floor) as floor_write, \
+                    mock.patch.object(pool, "provision", return_value=[]) as provision, \
+                    mock.patch.object(pool, "stop_requested",
+                                      side_effect=lambda *_args: stop_requested[0]), \
                     mock.patch.object(pool, "drive", source_pool):
-                return original_main(argv)
+                result = original_main(argv)
+                if case in {"stop", "stop_matched"}:
+                    provision.assert_not_called()
+                    floor_write.assert_not_called()
+                    output = fixture.root / "result"
+                    original_run = json.loads((output / "loop-run.json").read_text())
+                    continuation = json.loads((output / "loop-continuation.json").read_text())
+                    terminal = json.loads((fixture.store / "loop-status.json").read_text())
+                    assert result == 0
+                    assert original_run["iterations"] == []
+                    assert original_run["continuation"]["terminal"] == "stopped"
+                    assert continuation == original_run["continuation"]
+                    reopened, _digest = run.serial_run.load_completed(
+                        output / "loop-continuation.json", expected_argv=argv)
+                    assert reopened == continuation
+                    assert terminal["state"] == "complete"
+                    assert stop_requested[0], "do not clear the owner's stop request"
+                return result
 
         with mock.patch.object(run, "main", invoke):
             if case in {"mismatch", "malformed", "failed"}:
@@ -110,7 +152,7 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                 assert rc == 0, log
                 assert not builds and not planners
         expected = 4 if case == "override" else 3 if case in {"absent", "new_request"} \
-            else 1 if case == "failed" else 0
+            else 1 if case in {"failed", "stop_matched"} else 0
         assert len(launches) == expected
         assert len(pool_calls) == int(case in {"absent", "reuse", "new_request", "override"})
         if case in {"mismatch", "malformed", "dry_run"}:
@@ -119,7 +161,7 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
             assert held.count("open") == held.count("close") == (1 if backend == "cpu" else 2)
         if retained_path is not None and case != "override":
             assert retained_path.read_bytes() == retained_bytes
-        if case in {"dry_run", "failed"}:
+        if case in {"dry_run", "failed", "stop", "stop_matched"}:
             assert not floor_path.exists()
         if case == "new_request":
             assert retained_path != floor_path and floor_path.exists()

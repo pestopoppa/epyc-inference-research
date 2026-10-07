@@ -4620,9 +4620,19 @@ def main(argv: list[str] | None = None) -> int:
         with cpu_measurement_window():
             return serving.compare(*args_, **kwargs_)
 
+    calibration_stopped = [False]
+
     def measured_serving_calibrate(*args_, **kwargs_):
-        with cpu_measurement_window():
-            return serving.calibrate_floor(*args_, **kwargs_)
+        kwargs_.setdefault("should_stop", should_stop)
+        try:
+            with cpu_measurement_window():
+                return serving.calibrate_floor(*args_, **kwargs_)
+        except loop.ActorStopped:
+            # Latch this owned calibration stop before its request-restoration
+            # handlers unwind. Only this stop enters normal run finalization.
+            calibration_stopped[0] = True
+            stopping["asked"] = True
+            raise
 
     def measured_bench_compare(*args_, **kwargs_):
         # Legacy GPU bench A/Bs are GPU measurements too: same q3 window.
@@ -6690,13 +6700,30 @@ def main(argv: list[str] | None = None) -> int:
                          "(--cpu-window-yield off): every call would wait on the loop's own "
                          "regions. Use --cpu-window-yield on or a GPU/hosted actor.")
 
+    @contextmanager
+    def graceful_calibration_stop():
+        nonlocal outcomes, pooled
+        try:
+            yield
+        except loop.ActorStopped:
+            if not calibration_stopped[0]:
+                raise
+            # ExitStack has released owned claims and reaped its children first.
+            # Reuse the ordinary artifact/heartbeat/continuation path below:
+            # a stopped batch is complete as a worker, never a failed retry.
+            outcomes = list(latest)
+            pooled = pool.PoolResult(outcomes=outcomes,
+                                     wall_seconds=time.time() - started)
+
     if direct_launch:
         report_runtime_progress()
     try:
         publish("starting")
         status_publisher.start()
         started = time.time()
-        with ExitStack() as ownership:
+        outcomes = []
+        pooled = pool.PoolResult(outcomes=outcomes)
+        with graceful_calibration_stop(), ExitStack() as ownership:
             # Every scratch path this run creates is allocated under this run scope and
             # released when the stack unwinds (normal end, exception, or the SIGTERM
             # stop path, which returns through here). The sweep first collects what a
