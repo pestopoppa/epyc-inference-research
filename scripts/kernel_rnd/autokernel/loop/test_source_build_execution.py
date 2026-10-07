@@ -360,7 +360,7 @@ def _selected_build(tmp_path: Path, revision: str):
     raw["source_snapshot"]["kernel"]["ref"] = ref
     enrolled = campaign.ResolvedCampaign.from_dict(raw)
     instance.runtime_anchors = prepared(enrolled, {target_digest: runtime_anchor(
-        target, instance.runtime_anchors.recipes[target_digest])})
+        target, instance.runtime_anchors.recipes[target_digest], tmp_path)})
     instance.resolved = enrolled
     base, _ = scheduler()
     config = scheduling.SchedulerConfig.from_dict(
