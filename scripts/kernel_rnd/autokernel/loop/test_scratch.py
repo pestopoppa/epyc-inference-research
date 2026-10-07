@@ -977,22 +977,35 @@ class NewWriterScratchBoundaries(Base):
         reg = self.reg()
         class Guard:
             @staticmethod
-            def call_scope(env):
+            def call_scope(env, *, checked=False):
                 from contextlib import contextmanager
                 @contextmanager
                 def scope():
                     yield {**env, procguard.ENV_SCOPE: "only-this-fixture"}
                 return scope()
-            @staticmethod
-            def sweep_scope(token):
+            sweeps = 0
+            proofs = 0
+            @classmethod
+            def sweep_scope_checked(cls, token):
                 assert token == "only-this-fixture"
-                return {"survivors": [{"pid": -1}]}  # no real signals in this control
+                cls.sweeps += 1
+                return {"survivors": [], "census_verified": cls.sweeps > 1,
+                        "census_errors": [] if cls.sweeps > 1 else ["temporary census refusal"]}
+            @classmethod
+            def scope_state(cls, token):
+                assert token == "only-this-fixture"
+                cls.proofs += 1
+                return {"survivors": [], "census_verified": cls.proofs > 1}
+            @staticmethod
+            def forget_checked_scope(token):
+                pass
         with mock.patch.object(procguard, "current", return_value=Guard()):
             with self.assertRaises(ScratchRefused):
                 with reg.scope("call", name="uncertain") as scope:
                     directory = scope.dir("owned-inputs", "uncertain")
                     with scratch.owned_child_env(scope):
                         pass
+        self.assertGreaterEqual(Guard.sweeps, 2)
         marker = scratch.read_marker("dir", directory)
         self.assertIn("release_blocked", marker)
         self.assertTrue(directory.exists())
@@ -1127,16 +1140,30 @@ class NewWriterScratchBoundaries(Base):
                 self.assertNotIn(str(timed_paths[0]), _worktrees(repo))
                 class UncertainGuard:
                     @staticmethod
-                    def call_scope(env):
+                    def call_scope(env, *, checked=False):
                         from contextlib import contextmanager
                         @contextmanager
                         def scope():
                             yield {**env, procguard.ENV_SCOPE: "synthetic-compile-cookie"}
                         return scope()
+                    sweeps = 0
+                    proofs = 0
                     @staticmethod
-                    def sweep_scope(token):
+                    def scope_is_open(token):
+                        return False
+                    @classmethod
+                    def sweep_scope_checked(cls, token):
                         assert token == "synthetic-compile-cookie"
-                        return {"survivors": [{"pid": -1}]}
+                        cls.sweeps += 1
+                        return {"survivors": [], "census_verified": cls.sweeps > 1}
+                    @classmethod
+                    def scope_state(cls, token):
+                        assert token == "synthetic-compile-cookie"
+                        cls.proofs += 1
+                        return {"survivors": [], "census_verified": cls.proofs > 1}
+                    @staticmethod
+                    def forget_checked_scope(token):
+                        pass
                 held_paths = []
                 def uncertain_compile(src, dest, **kwargs):
                     held_paths.extend([src, dest])
@@ -1241,7 +1268,7 @@ def test_original_cpu_owner_outlives_ppl_cookie_cleanup(native, tmp_path, monkey
         "current_anchor_commit": [head], "cor_build": [slot], "cor_commit": [head]}
     exec(compile(ast.Module(body=functions, type_ignores=[]), "original-ppl-owner-helper", "exec"), namespace)
     guard = procguard.Guard(store=store)
-    original_sweep = guard.sweep_scope
+    original_sweep = guard.sweep_scope_checked
     original_cpu_owner = native[1].cpu_region_lock
     original_close = claim.HeldCpuClaim._closing
     events, paths, tokens = [], [], []
@@ -1321,7 +1348,7 @@ def test_original_cpu_owner_outlives_ppl_cookie_cleanup(native, tmp_path, monkey
 
     monkeypatch.setattr(native[1], "cpu_region_lock", cpu_owner)
     monkeypatch.setattr(claim.HeldCpuClaim, "_closing", closing)
-    monkeypatch.setattr(guard, "sweep_scope", sweep)
+    monkeypatch.setattr(guard, "sweep_scope_checked", sweep)
     monkeypatch.setattr(procguard, "current", lambda: guard)
     monkeypatch.setattr(gates, "compiles", compile_timeout)
     monkeypatch.setattr(anchor_integrity, "object_digest", lambda _: "synthetic-slot-object-identity")

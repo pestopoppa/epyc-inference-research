@@ -268,6 +268,9 @@ class Guard:
         self.never_sweep = tuple(never_sweep)
         self._terminate = terminate or self._terminate_verified
         self._open: set[str] = set()
+        self._scope_captured: dict[str, dict[tuple[int, int], Proc]] = {}
+        self._scope_refusals: set[str] = set()
+        self._checked_open: set[str] = set()
         self._lock = threading.Lock()
         self.records: list[dict] = []
 
@@ -419,7 +422,7 @@ class Guard:
             return token is not None and token in self._open
 
     @contextmanager
-    def call_scope(self, env: Mapping[str, str] | None = None):
+    def call_scope(self, env: Mapping[str, str] | None = None, *, checked: bool = False):
         """`with guard.call_scope(env) as child_env: Popen(..., env=child_env)`.
 
         On exit (every path) every process still carrying this call's cookie is ended;
@@ -429,12 +432,18 @@ class Guard:
         child[ENV_SCOPE] = token
         with self._lock:
             self._open.add(token)
+            if checked:
+                self._checked_open.add(token)
         try:
             yield child
         finally:
             with self._lock:
                 self._open.discard(token)
-            self.sweep_scope(token)
+                self._checked_open.discard(token)
+            if checked:
+                self.sweep_scope_checked(token)
+            else:
+                self.sweep_scope(token)
 
     def sweep_scope(self, token: str) -> dict:
         table = snapshot(self.proc_root)
@@ -445,6 +454,121 @@ class Guard:
                    and not self._exempt(proc)]
         return self._end("call_scope_closed", targets,
                          lambda current: current.scope == token)
+
+    def scope_is_checked(self, token: str | None) -> bool:
+        with self._lock:
+            return token is not None and token in self._checked_open
+
+    def scope_refused(self, token: str) -> bool:
+        with self._lock:
+            return token in self._scope_refusals
+
+    def forget_checked_scope(self, token: str) -> None:
+        """Dispose only after the caller proved empty; an enclosing open scope owns it.
+
+        Captured Proc values own no persistent pidfds: each bounded termination closes
+        its pins in _terminate_verified's finally block. Repeated disposal is harmless.
+        """
+        with self._lock:
+            if token not in self._open:
+                self._scope_captured.pop(token, None)
+                self._scope_refusals.discard(token)
+
+    def scope_state(self, token: str) -> dict:
+        """Explicit census certainty for ONE original cookie and captured identities.
+
+        Generic snapshot() is best effort; an empty projection from it is never a
+        scope-death proof. Scope cleanup reads the census and provenance explicitly
+        and preserves original PID/start identities even if a captured child later
+        changes its environment. No name or path can establish ownership here.
+        """
+        errors: list[str] = []
+        table: dict[int, Proc] = {}
+        try:
+            names = os.listdir(self.proc_root)
+        except OSError as exc:
+            return {"survivors": [], "census_verified": False,
+                    "census_errors": [f"scope census: {type(exc).__name__}: {exc}"],
+                    "captured": []}
+        prefix = ENV_SCOPE.encode() + b"="
+        for name in names:
+            if not name.isdigit():
+                continue
+            pid = int(name)
+            proc = read_proc(self.proc_root, pid)
+            root = self.proc_root / name
+            if proc is None:
+                if root.exists():
+                    errors.append(f"unreadable scope process identity: {pid}")
+                continue
+            table[pid] = proc
+            if proc.state == "Z" or proc.pid == self.pid:
+                continue
+            if proc.uid is None:
+                errors.append(f"unknown scope process uid: {pid}")
+                continue
+            if proc.uid != self.uid:
+                continue
+            try:
+                with open(root / "environ", "rb") as stream:
+                    raw = stream.read(ENVIRON_READ_BYTES + 1)
+                if len(raw) > ENVIRON_READ_BYTES:
+                    errors.append(f"truncated scope provenance: {pid}")
+                    continue
+                scope = next((item[len(prefix):].decode("ascii", errors="replace")
+                              for item in raw.split(b"\0") if item.startswith(prefix)), None)
+            except OSError as exc:
+                # A disappearing process is dead, an unreadable live one is unknown.
+                current = read_stat(self.proc_root, pid)
+                if current is not None and current[1] == proc.start_ticks and current[2] != "Z":
+                    errors.append(f"unreadable scope provenance: {pid}: {type(exc).__name__}")
+                elif root.exists() and current is None:
+                    errors.append(f"unreadable scope identity after provenance failure: {pid}")
+                continue
+            if scope == token:
+                with self._lock:
+                    self._scope_captured.setdefault(token, {})[proc.identity] = proc
+        with self._lock:
+            captured = dict(self._scope_captured.get(token, {}))
+        survivors: list[Proc] = []
+        ancestors = _ancestors(table, self.pid)
+        for identity, original in captured.items():
+            current = read_proc(self.proc_root, original.pid)
+            if current is None:
+                if (self.proc_root / str(original.pid)).exists():
+                    errors.append(f"unreadable captured scope identity: {original.pid}")
+                continue
+            if current.identity != identity or current.state == "Z":
+                continue
+            if current.uid is None or current.uid != self.uid:
+                errors.append(f"unproved captured scope uid: {original.pid}")
+                continue
+            if current.pid != self.pid and current.pid not in ancestors and not self._exempt(current):
+                survivors.append(current)
+        return {"survivors": [proc.to_dict() for proc in survivors],
+                "census_verified": not errors, "census_errors": errors,
+                "captured": [proc.to_dict() for proc in captured.values()]}
+
+    def sweep_scope_checked(self, token: str) -> dict:
+        """Opt-in strict physical cleanup for scratch native-owner boundaries only."""
+        state = self.scope_state(token)
+        with self._lock:
+            captured = dict(self._scope_captured.get(token, {}))
+        keys = {(row["pid"], row["start_ticks"]) for row in state["survivors"]}
+        targets = [("leak", proc) for key, proc in captured.items() if key in keys]
+        record = self._end("call_scope_closed", targets,
+                           lambda current: current.identity in captured and current.uid == self.uid)
+        after = self.scope_state(token)
+        record["survivors"] = after["survivors"]
+        record["census_errors"] = state["census_errors"] + after["census_errors"]
+        record["census_verified"] = not record["census_errors"]
+        record["cleanup_verified"] = record["census_verified"] and not record["survivors"]
+        record["captured"] = after["captured"]
+        record["scope"] = token
+        if not record["cleanup_verified"]:
+            with self._lock:
+                self._scope_refusals.add(token)
+        return record
 
     def sweep_stale(self, reason: str = "stale") -> dict:
         table = snapshot(self.proc_root)

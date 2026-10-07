@@ -917,19 +917,71 @@ class adopt_tempfile:
 
 
 # -- CLI knobs --------------------------------------------------------------------------
+def _wait_child_cleanup(guard, token: str, on_hold) -> dict:
+    """Physical cleanup barrier inside the ORIGINAL enclosing native owner.
+
+    A bounded sweep may leave survivors or an unreadable census. Neither can unwind
+    this context: the same owner stays acquired through bounded retries. Diagnostic
+    failure cannot release it. An independently proved empty tree after a sweep/receipt
+    error may release resources, but the original call is permanently refused.
+    """
+    refused = bool(getattr(guard, "scope_refused", lambda _token: False)(token))
+    failures = []
+    attempt = 0
+    while True:
+        try:
+            record = guard.sweep_scope_checked(token)
+            if record.get("survivors") or record.get("census_verified") is not True:
+                refused = True
+        except BaseException as exc:
+            refused = True
+            failures.append(f"{type(exc).__name__}: {exc}")
+            record = {"survivors": [], "census_verified": False, "census_errors": failures[-1:]}
+        try:
+            state = guard.scope_state(token)
+            empty = state.get("census_verified") is True and not state.get("survivors")
+            if empty:
+                time.sleep(.1)
+                state = guard.scope_state(token)
+                empty = state.get("census_verified") is True and not state.get("survivors")
+        except BaseException as exc:
+            refused = True
+            failures.append(f"scope proof: {type(exc).__name__}: {exc}")
+            state = {"survivors": [], "census_verified": False, "census_errors": failures[-1:]}
+            empty = False
+        if empty:
+            guard.forget_checked_scope(token)
+            if refused:
+                raise ScratchRefused("child cleanup uncertain; original owner held until verified empty")
+            return record
+        refused = True
+        try:
+            on_hold({"event": "child_cleanup_safety_hold", "token": token,
+                     "attempt": attempt, "owner_pid": os.getpid(),
+                     "cleanup": record, "census": state, "failures": list(failures)})
+        except BaseException as exc:
+            failures.append(f"hold diagnostic: {type(exc).__name__}: {exc}")
+        attempt += 1
+        try:
+            time.sleep(1)
+        except BaseException as exc:
+            failures.append(f"hold wait: {type(exc).__name__}: {exc}")
+
+
 @contextmanager
 def captured_child_env(base: dict | None = None, *, paths: tuple[Path, ...] = ()):
     """Sweep the original compiler cookie before its resource owner can close.
 
-    Reuse a supplied environment only when its cookie is open in the actual guard.
+    Reuse a supplied environment only when its cookie is open in the actual checked guard.
     Its enclosing owned_child_env keeps its existing fences; every sweep here still
     runs inside the compiler's native owner. Fresh calls fence marked original paths
     before spawn, including an author scratch path owned by the parent process.
     """
     from . import procguard
     guard = procguard.current()
-    inherited = base is not None and guard.scope_is_open(base.get(procguard.ENV_SCOPE))
-    context = nullcontext(base) if inherited else guard.call_scope(base)
+    inherited = (base is not None and guard.scope_is_open(base.get(procguard.ENV_SCOPE))
+                 and guard.scope_is_checked(base.get(procguard.ENV_SCOPE)))
+    context = nullcontext(base) if inherited else guard.call_scope(base, checked=True)
     token = None
     fenced = []
     body_failure = None
@@ -966,8 +1018,16 @@ def captured_child_env(base: dict | None = None, *, paths: tuple[Path, ...] = ()
     finally:
         if token is not None:
             try:
-                record = guard.sweep_scope(token)
-                if record["survivors"] or scope_failure is not None:
+                def hold_original_paths(row):
+                    owner = current()
+                    while owner is not None:
+                        if any(Path(resource["path"]) == path for resource in owner.resources
+                               for _kind, path, _original in fenced):
+                            owner.retain("compiler descendant safety hold under original native owner")
+                            owner.registry._journal(row)
+                        owner = owner.parent
+                record = _wait_child_cleanup(guard, token, hold_original_paths)
+                if scope_failure is not None:
                     raise ScratchRefused("compiler cookie cleanup could not be verified")
                 # Validate ALL exact tokens before clearing ANY original path fence.
                 for kind, path, _original in fenced:
@@ -1013,7 +1073,7 @@ def owned_child_env(scope: Scope, base: dict | None = None, *,
     protected = [(scope, None), *[(item, None) if isinstance(item, Scope) else item for item in protect]]
     temporary = scope.tmp_env(base)
     try:
-        with guard.call_scope(temporary) as env:
+        with guard.call_scope(temporary, checked=True) as env:
             child = env
             for owner, paths in protected:
                 owner.block_release("owned child active or cleanup not yet verified",
@@ -1022,9 +1082,11 @@ def owned_child_env(scope: Scope, base: dict | None = None, *,
     finally:
         try:
             if child is not None:
-                record = guard.sweep_scope(child[procguard.ENV_SCOPE])
-                if record["survivors"]:
-                    raise ScratchRefused("owned child survived its cookie-bound cleanup")
+                def hold_original_paths(row):
+                    for owner, _paths in protected:
+                        owner.retain("child descendant safety hold under original native owner")
+                        owner.registry._journal(row)
+                _wait_child_cleanup(guard, child[procguard.ENV_SCOPE], hold_original_paths)
             if child is not None:
                 for owner, _paths in protected:
                     owner.clear_release_block(child[procguard.ENV_SCOPE])
