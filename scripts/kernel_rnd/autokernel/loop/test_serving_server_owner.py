@@ -188,10 +188,13 @@ def test_measure_once_child_exit_during_response_refuses_result_and_reaps_origin
     port = free_port()
     observations = []
     with listener(port) as child:
+        responses = []
         class Response:
             def read(self):
-                child.terminate()
-                child.wait(timeout=5)  # Actual original exit during this response control.
+                responses.append(True)
+                if len(responses) == 2:  # Keep warmup alive; die in the measured response.
+                    child.terminate()
+                    child.wait(timeout=5)  # Actual original exit during this response control.
                 return json.dumps({"stop": True, "timings": {
                     "predicted_n": 4, "predicted_per_second": 10.0}}).encode()
         class Health:
