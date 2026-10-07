@@ -27,6 +27,7 @@ multiplier (no aggressive override).
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import subprocess
 import time
@@ -190,14 +191,15 @@ def build_server_argv(config: UnlimitedOcrConfig) -> list[str]:
     return argv
 
 
-def query_page(config: UnlimitedOcrConfig, image_path: Path) -> dict[str, Any]:
+def query_page(config: UnlimitedOcrConfig, image_path: Path,
+               image_bytes: bytes | None = None) -> dict[str, Any]:
     body = {
         "messages": [
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": config.prompt},
-                    {"type": "image_url", "image_url": {"url": image_data_url(image_path)}},
+                    {"type": "image_url", "image_url": {"url": image_data_url(image_path, image_bytes)}},
                 ],
             }
         ],
@@ -246,6 +248,9 @@ class UnlimitedOcrProducer:
         response_dir: str | Path,
     ) -> EngineRunManifest:
         self.validate_inputs()
+        started_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        gt_bytes = Path(gt_json).read_bytes()
+        gt_sha256 = hashlib.sha256(gt_bytes).hexdigest()
         prediction_dir = Path(prediction_dir)
         response_dir = Path(response_dir)
         prediction_dir.mkdir(parents=True, exist_ok=True)
@@ -272,6 +277,7 @@ class UnlimitedOcrProducer:
         artifacts: list[PredictionArtifact] = []
         skipped = 0
         errors = 0
+        input_images: list[dict[str, Any]] = []
         cleanup: dict[str, Any] = {}
         window_receipt: dict[str, Any] = {}
         _lease = None
@@ -313,17 +319,27 @@ class UnlimitedOcrProducer:
                         "released": False,
                     }
 
-                image_paths = run_configs.gt_image_paths(gt_json, image_root=image_root)
-                for gt_image in run_configs.gt_image_basenames(gt_json):
+                image_paths = run_configs.gt_image_paths(
+                    gt_json, image_root=image_root, raw_bytes=gt_bytes)
+                for gt_image in run_configs.gt_image_basenames(gt_json, raw_bytes=gt_bytes):
                     image_path = image_paths.get(gt_image)
                     pred_name = run_configs.prediction_filename_for(gt_image)
                     if image_path is None or not image_path.exists():
                         skipped += 1
+                        input_images.append({"gt_image": gt_image,
+                                             "path": str(image_path) if image_path else None,
+                                             "status": "missing"})
                         continue
+
+                    image_bytes = image_path.read_bytes()
+                    input_images.append({"gt_image": gt_image, "path": str(image_path),
+                                         "status": "read",
+                                         "bytes": len(image_bytes),
+                                         "sha256": hashlib.sha256(image_bytes).hexdigest()})
 
                     started = time.perf_counter()
                     try:
-                        response = query_page(self.config, image_path)
+                        response = query_page(self.config, image_path, image_bytes)
                         latency_ms = (time.perf_counter() - started) * 1000.0
                         content = normalize_pipe_table_blocks(content_from_response(response))
                         timings = response.get("timings") or {}
@@ -373,6 +389,15 @@ class UnlimitedOcrProducer:
                         0.0, time.monotonic() - _lease.acquired_monotonic_s)
                 window_receipt["released"] = True
             write_json(response_dir / "inference_window.json", window_receipt)
+
+        write_json(response_dir / "producer_input_manifest.json", {
+            "schema": "epyc.odl_bench.model_gated_inputs/v1",
+            "ground_truth": {"path": str(Path(gt_json)), "bytes": len(gt_bytes),
+                             "sha256": gt_sha256, "parsed_from_hashed_bytes": True},
+            "images": input_images,
+            "image_bytes_sent_to_query": True,
+            "started_utc": started_utc,
+        })
 
         detail_bits = [
             f"server_log={server_stderr}",

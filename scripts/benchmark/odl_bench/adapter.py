@@ -591,6 +591,11 @@ def _main(argv=None):
             prompt_profile=str(args.prompt_file) if args.prompt_file else args.prompt_profile,
             allow_dirty_host=args.allow_dirty_host,
         )
+        source_before = None
+        if args.engine == UNLIMITED_OCR_ENGINE:
+            from .vidya_provenance import capture_source_identity
+
+            source_before = capture_source_identity(Path(__file__).resolve().parents[3])
         row_set = adapter.build_model_gated_row_set(
             args.gt,
             args.run_dir,
@@ -604,6 +609,19 @@ def _main(argv=None):
         )
         out = Path(args.run_dir) / "model_gated_row_set.json"
         out.write_text(json.dumps(row_set.to_dict(), indent=2), encoding="utf-8")
+        if args.engine == UNLIMITED_OCR_ENGINE:
+            from .vidya_provenance import write_unlimited_ocr_record
+
+            record_path = write_unlimited_ocr_record(
+                run_dir=args.run_dir,
+                response_dir=Path(args.run_dir) / "responses" / args.engine,
+                prediction_dir=Path(args.run_dir) / "predictions" / args.engine,
+                gt_json=args.gt,
+                row_set=row_set.to_dict(),
+                config=cfg,
+                source_before=source_before,
+            )
+            print(f"[odl_bench] wrote prospective Vidya source record {record_path}")
         print(f"[odl_bench] wrote {out}")
         print(json.dumps([r.to_dict() for r in row_set.metric_rows], indent=2))
         return 0

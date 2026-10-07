@@ -17,8 +17,10 @@ and is exercised against an in-test-generated born-digital PDF.
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -30,6 +32,7 @@ if str(_PKG_PARENT) not in sys.path:
     sys.path.insert(0, str(_PKG_PARENT))
 
 from odl_bench import backends, paddleocr_vl, run_configs, unlimited_ocr  # noqa: E402
+from odl_bench import vidya_provenance  # noqa: E402
 from odl_bench.adapter import OdlBenchAdapter  # noqa: E402
 from odl_bench.backends import (  # noqa: E402
     DETERMINISTIC_ENGINES,
@@ -108,6 +111,17 @@ def _make_min_pdf(lines) -> bytes:
     buf.write(("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n"
                % (n, xref_pos)).encode())
     return buf.getvalue()
+
+
+class TestVidyaProvenanceWriter(unittest.TestCase):
+    def test_output_tree_rejects_special_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "responses"
+            output.mkdir()
+            fifo = output / "unexpected.fifo"
+            os.mkfifo(fifo)
+            with self.assertRaisesRegex(ValueError, "non-regular entry"):
+                vidya_provenance._tree_files(output)
 
 
 @unittest.skipIf(BENCH_ROOT is None, "omnidocbench checkout not found")
@@ -531,6 +545,7 @@ class TestModelGatedProducerGuards(unittest.TestCase):
                 encoding="utf-8",
             )
             canned = "Unlimited OCR extracted markdown for page one"
+            sent_image_bytes = []
 
             class FakeProc:
                 pid = 123457
@@ -551,13 +566,16 @@ class TestModelGatedProducerGuards(unittest.TestCase):
                 UnlimitedOcrProducer.validate_inputs = lambda self: None  # type: ignore[assignment]
                 unlimited_ocr.subprocess.Popen = lambda *a, **k: FakeProc()  # type: ignore[assignment]
                 unlimited_ocr.wait_for_health = lambda port, timeout_s: None  # type: ignore[assignment]
-                unlimited_ocr.query_page = lambda config, image_path: {  # type: ignore[assignment]
-                    "choices": [
-                        {"message": {"content": canned}, "finish_reason": "stop"}
-                    ],
-                    "usage": {"prompt_tokens": 12, "completion_tokens": 5},
-                    "timings": {"prompt_per_second": 200.0, "predicted_per_second": 80.0},
-                }
+                def fake_query(config, image_path, image_bytes=None):
+                    sent_image_bytes.append(image_bytes)
+                    return {
+                        "choices": [
+                            {"message": {"content": canned}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 12, "completion_tokens": 5},
+                        "timings": {"prompt_per_second": 200.0, "predicted_per_second": 80.0},
+                    }
+                unlimited_ocr.query_page = fake_query  # type: ignore[assignment]
                 unlimited_ocr.terminate = lambda proc: {"dead": True}  # type: ignore[assignment]
 
                 adapter = OdlBenchAdapter(bench_root=BENCH_ROOT)
@@ -585,6 +603,15 @@ class TestModelGatedProducerGuards(unittest.TestCase):
             self.assertEqual(len(manifest.artifacts), 1)
             self.assertEqual((root / "pred" / "page1.md").read_text(), canned)
             self.assertTrue((root / "resp" / "page1.response.json").exists())
+            input_record = json.loads(
+                (root / "resp" / "producer_input_manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(sent_image_bytes, [(image_dir / "page1.png").read_bytes()])
+            self.assertEqual(input_record["ground_truth"]["sha256"],
+                             hashlib.sha256(gt.read_bytes()).hexdigest())
+            self.assertEqual(input_record["images"][0]["sha256"],
+                             hashlib.sha256(sent_image_bytes[0]).hexdigest())
+            self.assertTrue(input_record["image_bytes_sent_to_query"])
 
     def test_unlimited_ocr_holds_and_releases_the_inference_call_window(self):
         """R11 (2026-08-13): the model-resident interval must hold the shared
@@ -627,7 +654,7 @@ class TestModelGatedProducerGuards(unittest.TestCase):
                 UnlimitedOcrProducer.validate_inputs = lambda self: None  # type: ignore[assignment]
                 unlimited_ocr.subprocess.Popen = lambda *a, **k: FakeProc()  # type: ignore[assignment]
                 unlimited_ocr.wait_for_health = lambda port, timeout_s: None  # type: ignore[assignment]
-                unlimited_ocr.query_page = lambda config, image_path: {  # type: ignore[assignment]
+                unlimited_ocr.query_page = lambda config, image_path, image_bytes=None: {  # type: ignore[assignment]
                     "choices": [{"message": {"content": canned}, "finish_reason": "stop"}],
                     "usage": {"prompt_tokens": 12, "completion_tokens": 5},
                     "timings": {"prompt_per_second": 200.0, "predicted_per_second": 80.0},
