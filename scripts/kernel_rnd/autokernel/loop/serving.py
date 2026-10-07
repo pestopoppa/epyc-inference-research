@@ -619,6 +619,21 @@ class FloorUnitMismatch(ServingFloorMismatch):
     """
 
 
+class HostDegradedDuringCalibration(RecipeError):
+    """A matched floor calibration carries too many robust per-pair outliers, even after
+    bounded re-measurement, to file as this host's ordinary noise.
+
+    Origin: one 5.5-minute degraded block during a 24-pair A/A inflated Q38FN's matched
+    floor from ~0.65% to 6.528% -- `calibrate_floor` had no trimming and no degraded-host
+    guard, and the contaminated number then carried forward epoch to epoch via
+    `_carry_forward_floor` (DS41-C69) because zero contradicting anchor-guard A/A rows
+    reads as "no contradiction" (DS41-C87). Threat model is honest-but-fallible, not
+    adversarial, so the remedy is RE-MEASURE, never silently dropping data to shrink the
+    floor: a flagged pair gets one bounded re-measurement, and only a host that is STILL
+    degraded after that refuses outright.
+    """
+
+
 def unit_refusal(floor_unit: str | None, effect_unit: str | None, *,
                  path: object = None, what: str = "floor") -> str:
     """The refusal text, in one place so every gate says the same thing.
@@ -1684,6 +1699,137 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     return complete()
 
 
+# ---------------------------------------------------------------------------
+# OUTLIER GUARD for the matched A/A floor (AKX-FLOOR-REMEASURE-1). `calibrate_floor`'s
+# matched branch had no trimming and no degraded-host guard: one 5.5-minute degraded
+# block during a 24-pair A/A inflated Q38FN's floor from ~0.65% to 6.528%, and residency
+# records explicitly say ordinary load/PSI are "diagnostic, not blockers" -- so nothing
+# in the per-launch serving path itself would ever refuse a degraded launch. Honest-but-
+# fallible threat model: the response to a flagged pair is RE-MEASURE, bounded, never a
+# silent drop -- a floor must never get SMALLER by quietly discarding inconvenient data.
+# ---------------------------------------------------------------------------
+
+#: Modified z-score threshold (Iglewicz & Hoaglin 1993) a pair's |effect| must exceed,
+#: against the OTHER pairs' own median-absolute-deviation, to be flagged. k=5 is
+#: deliberately generous -- this guards against a genuinely degraded launch, not against
+#: ordinary between-process spread (R23-55's own ~13x unit story already lives here).
+OUTLIER_MAD_K = 5.0
+#: At most this many pairs may be re-measured in one calibration. More than this many
+#: flagged pairs is not "a few noisy launches"; it is refused outright, unmeasured.
+MAX_OUTLIER_REPLACEMENT_PAIRS = 6
+#: After the bounded re-measurement pass, more than this many pairs still flagged means
+#: the host did not recover DURING this calibration -- refuse rather than file a floor
+#: built on it (persistence, not a point-in-time glitch, the same two-sample discipline
+#: `_carry_forward_floor`'s DS41-C79 excursion check already applies elsewhere).
+OUTLIER_PERSISTENT_REFUSAL_LIMIT = 2
+
+
+def _pair_effects_pct(anchor: Sequence[float], candidate: Sequence[float]) -> list[float]:
+    """|effect| per pair, percent -- the per-PAIR analogue of the floor's own statistic
+    (`_matched_summary`'s resampled median effect), so the outlier test is in the exact
+    unit it protects."""
+    return [abs(c / a - 1.0) * 100.0 for a, c in zip(anchor, candidate)]
+
+
+def _mad_outlier_pairs(effects: Sequence[float], *, k: float = OUTLIER_MAD_K) -> list[int]:
+    """Indices of `effects` that are robust outliers against the OTHER pairs' own
+    median, via the median-absolute-deviation modified z-score: 0.6745*(x-median)/MAD,
+    flagged past `k`. A degenerate MAD (every pair identical) flags nothing -- there is
+    no scale to divide by, and that is a suspiciously clean host, not an outlier."""
+    if len(effects) < 2:
+        return []
+    med = statistics.median(effects)
+    mad = statistics.median([abs(e - med) for e in effects])
+    if mad <= 0:
+        return []
+    return [i for i, e in enumerate(effects) if abs(0.6745 * (e - med) / mad) > k]
+
+
+def _degraded_window_pairs(anchor_windows: Sequence[Mapping],
+                           candidate_windows: Sequence[Mapping]) -> list[int]:
+    """Pair indices whose anchor OR candidate launch carries a RECORDED degraded-host
+    verdict: `measurement_validity.status == "invalid"`, the same CPU-lifecycle
+    invalidity a per-launch keep already raises on (`residency.cpu_lifecycle_invalidity`
+    via `_measure_once`). Never inferred from the throughput numbers themselves -- this
+    reads evidence the launch already recorded about its OWN window. A backend/harness
+    that records no such field (GPU, or no CPU observer) contributes nothing here; that
+    is a limitation of what evidence exists, not a false "clean" verdict."""
+    flagged: set[int] = set()
+    for windows in (anchor_windows, candidate_windows):
+        for i, record in enumerate(windows):
+            if not isinstance(record, Mapping):
+                continue
+            validity = record.get("measurement_validity")
+            if isinstance(validity, Mapping) and validity.get("status") == "invalid":
+                flagged.add(i)
+    return sorted(flagged)
+
+
+def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: dict,
+                         plan: dict, values: dict, windows: dict) -> dict:
+    """Flag, bounded-remeasure, and (if still contaminated) REFUSE a matched A/A
+    calibration. Mutates `values`/`windows` IN PLACE for every successfully replaced
+    pair, so the summary computed after this call sees only the surviving/replaced
+    pairs -- never a trimmed-down count, so `calibration_pairs`/`process_launches`
+    keep their existing meaning untouched.
+
+    Returns the `outlier_guard` record the floor row carries (a new, optional field: a
+    reader or `_validate_matched_floor` that does not know it is unaffected, and an
+    older floor on disk that lacks it is simply a floor written before this guard
+    existed, not a malformed one).
+    """
+    anchor, candidate = values["anchor"], values["candidate"]
+    n = len(anchor)
+
+    def flagged_now():
+        effects = _pair_effects_pct(anchor, candidate)
+        mad = set(_mad_outlier_pairs(effects))
+        degraded = set(_degraded_window_pairs(windows["anchor"], windows["candidate"]))
+        return effects, mad, degraded
+
+    effects, mad_flagged, degraded_flagged = flagged_now()
+    initial_flagged = sorted(mad_flagged | degraded_flagged)
+    excluded = [{"pair_index": i,
+                "reason": "degraded_residency_window" if i in degraded_flagged else "mad_outlier",
+                "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i],
+                "effect_pct": round(effects[i], 3)} for i in initial_flagged]
+    if len(initial_flagged) > MAX_OUTLIER_REPLACEMENT_PAIRS:
+        raise HostDegradedDuringCalibration(
+            f"host degraded during floor calibration: {len(initial_flagged)} of {n} A/A "
+            f"pairs are robust |effect| outliers (MAD k={OUTLIER_MAD_K}) or overlap a "
+            f"recorded degraded window, exceeding the {MAX_OUTLIER_REPLACEMENT_PAIRS}-pair "
+            f"bounded replacement budget. Re-measure once the host is quiet; refusing "
+            f"rather than filing a floor built on a degraded host.")
+    replaced = []
+    for i in initial_flagged:
+        order = plan["orders"][i]
+        fresh_values: dict[str, float] = {}
+        fresh_windows: dict[str, list] = {"anchor": [], "candidate": []}
+        for arm in order:
+            fresh_values[arm] = _measure_once(recipe, build_dir, port,
+                                              evidence=fresh_windows[arm], **options)
+        anchor[i], candidate[i] = fresh_values["anchor"], fresh_values["candidate"]
+        windows["anchor"][i] = fresh_windows["anchor"][0] if fresh_windows["anchor"] else {}
+        windows["candidate"][i] = fresh_windows["candidate"][0] if fresh_windows["candidate"] else {}
+        replaced.append(i)
+    final_effects, final_mad, final_degraded = flagged_now()
+    still_flagged = sorted(final_mad | final_degraded)
+    if replaced and len(still_flagged) > OUTLIER_PERSISTENT_REFUSAL_LIMIT:
+        raise HostDegradedDuringCalibration(
+            f"host degraded during floor calibration: {len(still_flagged)} of {n} A/A "
+            f"pairs remain robust outliers after re-measuring {len(replaced)} flagged "
+            f"pair(s), exceeding the {OUTLIER_PERSISTENT_REFUSAL_LIMIT}-pair persistence "
+            f"bound. The host did not recover during this calibration; re-measure once "
+            f"it is quiet.")
+    return {"schema": "epyc.autokernel.serving_floor_outlier_guard.v1", "applied": True,
+            "mad_k": OUTLIER_MAD_K, "max_replacement_pairs": MAX_OUTLIER_REPLACEMENT_PAIRS,
+            "persistent_refusal_limit": OUTLIER_PERSISTENT_REFUSAL_LIMIT,
+            "initial_outlier_pair_indices": initial_flagged,
+            "replaced_pair_indices": replaced,
+            "final_outlier_pair_indices": still_flagged,
+            "excluded": excluded}
+
+
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
                     resolved_recipe=None, frozen_requests=None,
                     instrument=LEGACY_INSTRUMENT, pairs=None, longctx=None) -> dict:
@@ -1707,6 +1853,8 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             for arm in order:
                 values[arm].append(_measure_once(recipe, build_dir, port,
                                    evidence=windows[arm], **options))
+        outlier_guard = _apply_outlier_guard(recipe, build_dir, port, options,
+                                             plan, values, windows)
         row = {"schema": "epyc.autokernel.serving_floor.v2", "instrument": instrument,
                "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
                "recipe_env": dict(recipe.env or {}), "recipe_describe": recipe.describe(),
@@ -1727,6 +1875,7 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                "anchor_samples": values["anchor"], "candidate_samples": values["candidate"],
                "anchor_residency": windows["anchor"], "candidate_residency": windows["candidate"],
                "residency": _residency_fold(windows["anchor"] + windows["candidate"]),
+               "outlier_guard": outlier_guard,
                **_matched_summary(values["anchor"], values["candidate"], pairs)}
         row["content_sha256"] = _digest(row)
         return row
@@ -2080,11 +2229,13 @@ def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
 
 
 __all__ = ["CALIBRATION_UNIT", "COMPARE_EFFECT_UNIT", "FLOOR_KEY_MAX", "FLOOR_UNITS",
-           "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
+           "LOADER_OWNED_ENV", "MAX_OUTLIER_REPLACEMENT_PAIRS", "OUTLIER_MAD_K",
+           "OUTLIER_PERSISTENT_REFUSAL_LIMIT", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
            "SPEC_EXACT_ENV", "SPEC_EXACT_MODES", "verify_process_environ",
            "RESIDENCY_NOT_APPLICABLE", "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN",
            "UNIT_ARM", "UNIT_PROCESS", "UNIT_SESSION", "UNSET",
-           "EnvReadbackFailed", "FloorReading", "FloorUnitMismatch", "Recipe",
+           "EnvReadbackFailed", "FloorReading", "FloorUnitMismatch",
+           "HostDegradedDuringCalibration", "Recipe",
            "RecipeError", "ServerDied",
            "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "check_unit",
            "compare", "covers_request_phase", "floor_key", "floor_path", "load_floor",

@@ -1243,6 +1243,29 @@ def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instru
     if not candidates:
         return None, "no sealed lineage floor validates on the current complete frame"
     calibrated_at, path, raw, row, reading = max(candidates, key=lambda item: item[0])
+    # AKX-FLOOR-REMEASURE-1 (B): a floor sealed WITHOUT the outlier guard
+    # (`serving._apply_outlier_guard`, added after the Q38FN degraded-host inflation)
+    # carries no proof its A/A pairs were ever screened for a degraded host. Carrying it
+    # forward unconditionally is exactly how that contamination would propagate epoch to
+    # epoch (DS41-C69/C87 already read zero contradicting A/A as "no contradiction").
+    # Refuse the carry -- not the whole lineage -- when it is BOTH unguarded AND >3x the
+    # lineage's own previous sealed matched floor for this recipe_hash: a guarded floor,
+    # or one in line with its own history, still carries as before.
+    guard = row.get("outlier_guard")
+    guard_applied = isinstance(guard, dict) and guard.get("applied") is True
+    if not guard_applied:
+        previous = max((item for item in candidates if item[1] != path),
+                       key=lambda item: item[0], default=None)
+        if previous is not None:
+            previous_floor_pct = previous[3].get("floor_pct")
+            if (isinstance(previous_floor_pct, (int, float)) and previous_floor_pct > 0
+                    and row["floor_pct"] > 3.0 * previous_floor_pct):
+                return None, (
+                    f"carried floor {path} ({row['floor_pct']}%) was sealed without the "
+                    f"outlier guard and is >3x the lineage's previous sealed matched floor "
+                    f"({previous_floor_pct}% at {previous[1]}) for recipe_hash "
+                    f"{recipe.recipe_hash[:12]} -- refusing to carry a possibly "
+                    f"host-degraded floor [AKX-FLOOR-REMEASURE-1]; remeasuring instead")
     if not (Path(store) / "experiments.db").is_file():
         return None, "no campaign experiment store: no A/A evidence on the current anchor"
     commits = {str(commit) for commit in anchor_commits if commit}
@@ -1317,22 +1340,94 @@ def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instru
     return reading, carry
 
 
+#: AKX-FLOOR-REMEASURE-1 (C): the one-shot trigger an operator or coordinator drops to
+#: force a fresh matched floor calibration for a recipe's lineage, without restarting
+#: the lane. Filename only; `_remeasure_request_path` states the full location.
+REMEASURE_REQUEST_FILENAME = "REMEASURE_REQUEST.json"
+
+
+def _remeasure_request_path(store: Path, recipe) -> Path:
+    """Where the one-shot re-measure trigger for THIS recipe's matched floor lineage
+    lives.
+
+    Chosen location: `<store>/runtime-source-floors/<recipe.recipe_hash>/REMEASURE_REQUEST.json`
+    -- beside the per-identity floor directories `_source_floor_store` already keys by
+    `recipe.recipe_hash` under the matched instrument, not a new top-level store area.
+    The request is scoped to exactly the lineage whose exact/COR/carried floor it is
+    about to force absent, so two different recipes (or two runtime-recipe hashes of
+    the same model) never share or race on one trigger file.
+    """
+    return Path(store) / "runtime-source-floors" / recipe.recipe_hash / REMEASURE_REQUEST_FILENAME
+
+
+def _pending_remeasure_request(store: Path, recipe) -> dict | None:
+    """The pending request's own JSON body, or `{}` for an empty/malformed one, or
+    `None` when no request is pending. Malformed content never blocks the trigger --
+    an operator dropping `touch REMEASURE_REQUEST.json` must work."""
+    path = _remeasure_request_path(store, recipe)
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def consume_remeasure_request(store: Path, recipe, *, new_floor_path: Path) -> Path | None:
+    """Consume a pending re-measure request EXACTLY ONCE: rename it to
+    `...done-<utc>.json`, recording the floor it forced. A no-op (returns `None`) when
+    no request is pending -- every caller after a fresh calibration may call this
+    unconditionally.
+
+    Renaming rather than deleting keeps every forced re-measure in the audit trail, and
+    the rename IS the one-shot guarantee: there is no separate "mark consumed" flag to
+    race or skip, because a second reader's `_pending_remeasure_request` simply finds
+    nothing under the original name any more.
+    """
+    path = _remeasure_request_path(store, recipe)
+    if not path.is_file():
+        return None
+    from datetime import datetime, timezone
+    payload = _pending_remeasure_request(store, recipe) or {}
+    payload["consumed_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    payload["new_floor_path"] = str(new_floor_path)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    done_path = path.with_name(f"{path.stem}.done-{stamp}.json")
+    status.write_json(done_path.parent, done_path.name, payload, prefix=".remeasure-done-")
+    path.unlink()
+    return done_path
+
+
 def _select_source_floor(store: Path, recipe, launch, *, frozen_requests, instrument: str,
                          pairs: int, cor_build: Path | None = None, anchor_commits=(),
                          carry_forward: bool = True, dynamic: bool = False):
     """The source floor a launch gates against: `(floor_store, reading, carry)`.
 
-    Order, each step only when the one before found nothing: (1) the exact floor of
-    this anchor execution identity; (2) for the matched instrument, the protected
+    Order, each step only when the one before found nothing: (0) AKX-FLOOR-REMEASURE-1,
+    a pending `REMEASURE_REQUEST.json` for this recipe's matched lineage forces the
+    floor absent outright, so every caller's existing "absent -> calibrate and write"
+    fallback runs a fresh 24-pair calibration; (1) the exact floor of this anchor
+    execution identity; (2) for the matched instrument, the protected
     champion-of-record's exact floor (`cor_build`); (3) DS41-C69, the carried-forward
     lineage floor (`_carry_forward_floor`), unless `carry_forward` is False
     (`--no-floor-carry-forward`). `carry` is the carry record for (3), else None.
     Steps (1) and (2) are exactly the pre-C69 behaviour.
     """
+    matched = instrument == serving.MATCHED_INSTRUMENT
+    if matched and _pending_remeasure_request(store, recipe) is not None:
+        floor_store = _source_floor_store(store, recipe, launch, instrument=instrument,
+                                          dynamic=dynamic)
+        placeholder = serving.floor_path(floor_store, recipe, frozen_requests=frozen_requests,
+                                         instrument=instrument, pairs=pairs)
+        print(f"serving   REMEASURE_REQUEST pending at "
+              f"{_remeasure_request_path(store, recipe)}: forcing the matched floor "
+              f"absent for recipe_hash {recipe.recipe_hash[:12]} "
+              "[AKX-FLOOR-REMEASURE-1]")
+        return floor_store, serving.FloorReading(None, "absent", placeholder, {}), None
     floor_store, reading = _load_source_floor(
         store, recipe, launch, frozen_requests=frozen_requests, instrument=instrument,
         pairs=pairs, dynamic=dynamic)
-    matched = instrument == serving.MATCHED_INSTRUMENT
     # A source treatment changes executable/DSO identity, not the matched process
     # noise frame.  Once an accumulator has advanced, its protected champion-of-record
     # remains the calibrated reference for the same workload, request bytes,
@@ -3890,10 +3985,16 @@ def main(argv: list[str] | None = None) -> int:
                 samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
                 port=direct_launch.port, resolved_recipe=anchor_recipe, frozen_requests=frozen_requests,
                 **source_instrument)
-            _write_new_source_floor(
+            written_path = _write_new_source_floor(
                 floor_store, serving_recipe, anchor_recipe, value,
                 frozen_requests=frozen_requests, instrument=args.serving_instrument,
                 pairs=args.serving_pairs)
+            if args.serving_instrument == serving.MATCHED_INSTRUMENT:
+                # AKX-FLOOR-REMEASURE-1 (C): a no-op when no request was pending, so
+                # this is safe unconditionally -- consume it here, at keep time, the
+                # moment the forced calibration it requested lands on disk.
+                consume_remeasure_request(args.store, serving_recipe,
+                                          new_floor_path=written_path)
             _floor_store, reading = _load_source_floor(
                 args.store, serving_recipe, anchor_recipe,
                 frozen_requests=frozen_requests, instrument=args.serving_instrument,
@@ -6819,10 +6920,15 @@ def main(argv: list[str] | None = None) -> int:
                 floor_store = _source_floor_store(
                     args.store, serving_recipe, calibration_recipe,
                     instrument=args.serving_instrument)
-                _write_new_source_floor(
+                written_path = _write_new_source_floor(
                     floor_store, serving_recipe, calibration_recipe, calibration,
                     frozen_requests=frozen_requests, instrument=args.serving_instrument,
                     pairs=args.serving_pairs)
+                if args.serving_instrument == serving.MATCHED_INSTRUMENT:
+                    # AKX-FLOOR-REMEASURE-1 (C): the startup-flow twin of the keep-time
+                    # consumption above; a no-op when no request was pending.
+                    consume_remeasure_request(args.store, serving_recipe,
+                                              new_floor_path=written_path)
                 _floor_store, floor_reading = _load_source_floor(
                     args.store, serving_recipe, calibration_recipe,
                     frozen_requests=frozen_requests, instrument=args.serving_instrument,

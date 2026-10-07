@@ -33,7 +33,7 @@ def _isolated(tmp_path, monkeypatch):
         evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
                          "status": "not_applicable", "window_start": now,
                          "window_end": now, "samples": 0})
-        return 10 + (len(calls) % 7) / 100
+        return 10 + len(calls) / 1000  # monotone: no modulo discontinuity for the AKX-FLOOR-REMEASURE-1 outlier guard
     monkeypatch.setattr(serving, "_measure_once", measure)
     return calls
 
@@ -321,3 +321,211 @@ def test_cli_exposes_the_escape_hatch(capsys):
     with pytest.raises(SystemExit):
         run.main(["--help"])
     assert "--no-floor-carry-forward" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------------
+# AKX-FLOOR-REMEASURE-1 (B): a floor SEALED WITHOUT the outlier guard and >3x the
+# lineage's own previous sealed matched floor must not carry -- remeasure instead.
+# ---------------------------------------------------------------------------------
+
+def _sealed_without_guard(row):
+    """Simulate a floor sealed BEFORE `serving._apply_outlier_guard` existed: no
+    evidence it ever screened its A/A pairs, resealed so it still validates."""
+    row = dict(row)
+    row["outlier_guard"] = {
+        "schema": "epyc.autokernel.serving_floor_outlier_guard.v1", "applied": False,
+        "note": "fixture: floor sealed before the outlier guard existed"}
+    row["content_sha256"] = serving._digest(
+        {k: v for k, v in row.items() if k not in {"content_sha256", "conditions"}})
+    return row
+
+
+def _contaminated_calibration(tmp_path, recipe, build):
+    """A REAL matched calibration with a uniform ~10% anchor/candidate gap on every
+    pair -- a genuinely higher floor, not a MAD outlier (every pair sees the same gap,
+    so the guard itself finds nothing to flag). Standing in for a host that was
+    degraded for the WHOLE calibration, which `_apply_outlier_guard`'s persistence
+    bound already refuses outright -- this fixture isolates the >3x carry check from
+    that other refusal path."""
+    from unittest import mock
+
+    # `calibrate_floor`'s matched branch launches the SAME recipe/build_dir for both
+    # labels (it is an A/A on ONE build) -- nothing in the call signature says which
+    # label is running. Counting calls and alternating low/high reproduces the same
+    # ~10% gap on every pair regardless of which label lands on which side.
+    calls = []
+
+    def big_gap_measure(recipe, build_dir, port, *, evidence, **kwargs):
+        now = time.time()
+        evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
+                         "status": "not_applicable", "window_start": now,
+                         "window_end": now, "samples": 0})
+        calls.append(1)
+        return 10.0 if len(calls) % 2 else 11.0
+
+    launch = _launch(recipe, build)
+    with mock.patch.object(serving, "_measure_once", big_gap_measure):
+        row = serving.calibrate_floor(recipe, Path(build), samples=24,
+                                      resolved_recipe=launch, frozen_requests=REQUESTS,
+                                      **MODE)
+    assert row["outlier_guard"]["applied"] is True
+    assert not row["outlier_guard"]["initial_outlier_pair_indices"]
+    floor_store = run._source_floor_store(tmp_path, recipe, launch,
+                                          instrument=serving.MATCHED_INSTRUMENT)
+    return launch, row, floor_store
+
+
+def test_unguarded_floor_more_than_3x_previous_sealed_floor_refuses_the_carry(tmp_path):
+    recipe = _recipe()
+    _parent, prev_row, _prev_path = _calibrated(tmp_path, recipe, "/parent")
+    assert prev_row["outlier_guard"]["applied"] is True
+
+    contaminated_launch, contaminated_row, floor_store = _contaminated_calibration(
+        tmp_path, recipe, "/contaminated")
+    assert contaminated_row["floor_pct"] > 3 * prev_row["floor_pct"]
+    unguarded_row = _sealed_without_guard(contaminated_row)
+    run._write_new_source_floor(floor_store, recipe, contaminated_launch, unguarded_row,
+                               frozen_requests=REQUESTS,
+                               instrument=serving.MATCHED_INSTRUMENT, pairs=5)
+
+    tip = _launch(recipe, BUILD)
+    carried, reason = run._carry_forward_floor(
+        tmp_path, recipe, tip, frozen_requests=REQUESTS,
+        instrument=serving.MATCHED_INSTRUMENT, pairs=5, anchor_commits=(TIP,))
+    assert carried is None
+    assert "outlier guard" in reason and ">3x" in reason
+
+    _store, reading, carry = _select(tmp_path, recipe, tip)
+    assert reading.floor_pct is None and reading.provenance == "absent" and carry is None
+
+
+def test_guarded_floor_more_than_3x_previous_still_carries_on_fresh_aa(tmp_path):
+    """The >3x rule gates on the ABSENCE of the guard, not on the ratio alone: a floor
+    that genuinely ran the guard (`applied: True`) carries as before, on the strength
+    of its own fresh anchor-guard A/A -- exactly the pre-existing DS41-C69/C79/C87
+    semantics this change must not disturb."""
+    recipe = _recipe()
+    _parent, prev_row, _prev_path = _calibrated(tmp_path, recipe, "/parent")
+    contaminated_launch, contaminated_row, floor_store = _contaminated_calibration(
+        tmp_path, recipe, "/contaminated")
+    assert contaminated_row["floor_pct"] > 3 * prev_row["floor_pct"]
+    guarded_path = run._write_new_source_floor(
+        floor_store, recipe, contaminated_launch, contaminated_row,
+        frozen_requests=REQUESTS, instrument=serving.MATCHED_INSTRUMENT, pairs=5)
+    _aa(tmp_path, recipe, effect_pct=-contaminated_row["floor_pct"] / 2,
+        recorded_at=_later(contaminated_row))
+
+    tip = _launch(recipe, BUILD)
+    carried, carry = run._carry_forward_floor(
+        tmp_path, recipe, tip, frozen_requests=REQUESTS,
+        instrument=serving.MATCHED_INSTRUMENT, pairs=5, anchor_commits=(TIP,))
+    assert carried is not None and carried.path == guarded_path
+    assert carry["floor_pct"] == contaminated_row["floor_pct"]
+
+
+# ---------------------------------------------------------------------------------
+# AKX-FLOOR-REMEASURE-1 (C): a one-shot REMEASURE_REQUEST.json forces the matched
+# floor absent -- bypassing even an admissible carry -- for exactly one calibration.
+# ---------------------------------------------------------------------------------
+
+def _drop_remeasure_request(tmp_path, recipe, **extra):
+    path = run._remeasure_request_path(tmp_path, recipe)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"requested_by": "operator", **extra}), encoding="utf-8")
+    return path
+
+
+def _force_fresh_floor(tmp_path, recipe, launch, build):
+    """What `ensure_source_floor` does once `_select_source_floor` reports the floor
+    absent: calibrate, write, and (for the matched instrument) consume any pending
+    request -- the exact sequence AKX-FLOOR-REMEASURE-1 (C) hooks into."""
+    row = serving.calibrate_floor(recipe, Path(build), samples=24, resolved_recipe=launch,
+                                  frozen_requests=REQUESTS, **MODE)
+    floor_store = run._source_floor_store(tmp_path, recipe, launch,
+                                          instrument=serving.MATCHED_INSTRUMENT)
+    written = run._write_new_source_floor(floor_store, recipe, launch, row,
+                                          frozen_requests=REQUESTS,
+                                          instrument=serving.MATCHED_INSTRUMENT, pairs=5)
+    done = run.consume_remeasure_request(tmp_path, recipe, new_floor_path=written)
+    return row, written, done
+
+
+def test_remeasure_request_location_matches_the_documented_store_path(tmp_path):
+    recipe = _recipe()
+    expected = (tmp_path / "runtime-source-floors" / recipe.recipe_hash
+               / "REMEASURE_REQUEST.json")
+    assert run._remeasure_request_path(tmp_path, recipe) == expected
+
+
+def test_remeasure_request_forces_absent_bypassing_an_admissible_carry(tmp_path):
+    recipe = _recipe()
+    _parent, row, parent_path = _calibrated(tmp_path, recipe, "/parent")
+    _aa(tmp_path, recipe, effect_pct=-row["floor_pct"] / 2, recorded_at=_later(row))
+    tip = _launch(recipe, BUILD)
+
+    # Without a pending request the carry is admitted (same as every other test above).
+    _store, reading, carry = _select(tmp_path, recipe, tip)
+    assert reading.provenance == run.FLOOR_CARRY_PROVENANCE and reading.path == parent_path
+
+    request_path = _drop_remeasure_request(tmp_path, recipe)
+    floor_store, reading, carry = _select(tmp_path, recipe, tip)
+    assert reading.floor_pct is None and reading.provenance == "absent" and carry is None
+    assert request_path.is_file()  # not yet consumed -- only a successful write does that
+
+    row, written, done = _force_fresh_floor(tmp_path, recipe, tip, BUILD)
+    assert not request_path.exists()
+    assert done is not None and done.name.startswith("REMEASURE_REQUEST.done-")
+    assert done.parent == request_path.parent
+    recorded = json.loads(done.read_text())
+    assert recorded["requested_by"] == "operator"
+    assert recorded["new_floor_path"] == str(written)
+    assert "consumed_at" in recorded
+
+    # The lane now reads the freshly forced, verified exact floor -- not the carry.
+    _store, reading, carry = _select(tmp_path, recipe, tip)
+    assert reading.provenance == "verified" and reading.path == written and carry is None
+
+
+def test_remeasure_request_consumed_exactly_once(tmp_path):
+    recipe = _recipe()
+    tip = _launch(recipe, BUILD)
+    _drop_remeasure_request(tmp_path, recipe)
+    _store, reading, _carry = _select(tmp_path, recipe, tip)
+    assert reading.floor_pct is None
+
+    _row, written, done = _force_fresh_floor(tmp_path, recipe, tip, BUILD)
+    assert done is not None
+
+    # A second attempt to consume (e.g. a racing second caller in the same keep) is a
+    # clean no-op: nothing is pending any more, so nothing is renamed or overwritten.
+    again = run.consume_remeasure_request(tmp_path, recipe, new_floor_path=written)
+    assert again is None
+    assert len(list(done.parent.glob("REMEASURE_REQUEST.done-*.json"))) == 1
+
+    # And a later keep with no new request pending reads the already-forced floor
+    # without touching the done-file or re-forcing anything.
+    _store, reading, carry = _select(tmp_path, recipe, tip)
+    assert reading.provenance == "verified" and carry is None
+
+
+def test_malformed_remeasure_request_still_forces_absent_and_is_consumed(tmp_path):
+    """An operator dropping `touch REMEASURE_REQUEST.json` (empty file) must still
+    work -- the trigger is PRESENCE, not well-formed content."""
+    recipe = _recipe()
+    tip = _launch(recipe, BUILD)
+    request_path = run._remeasure_request_path(tmp_path, recipe)
+    request_path.parent.mkdir(parents=True, exist_ok=True)
+    request_path.write_text("", encoding="utf-8")
+    _store, reading, _carry = _select(tmp_path, recipe, tip)
+    assert reading.floor_pct is None
+    _row, _written, done = _force_fresh_floor(tmp_path, recipe, tip, BUILD)
+    assert done is not None and not request_path.exists()
+
+
+def test_remeasure_request_is_scoped_to_its_own_recipe_hash(tmp_path):
+    recipe_a = _recipe(name="matched-a")
+    recipe_b = _recipe(name="matched-b")
+    assert recipe_a.recipe_hash != recipe_b.recipe_hash
+    _drop_remeasure_request(tmp_path, recipe_a)
+    assert run._pending_remeasure_request(tmp_path, recipe_a) is not None
+    assert run._pending_remeasure_request(tmp_path, recipe_b) is None

@@ -36,7 +36,7 @@ def _measure(calls):
         evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
                          "status": "not_applicable", "window_start": started,
                          "window_end": time.time(), "samples": 0})
-        return 10 + (len(calls) % 7) / 100
+        return 10 + len(calls) / 1000  # monotone: no modulo discontinuity for the AKX-FLOOR-REMEASURE-1 outlier guard
     return measure
 
 

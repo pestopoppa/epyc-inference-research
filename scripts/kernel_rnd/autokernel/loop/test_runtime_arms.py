@@ -525,7 +525,7 @@ def _fake_measure(calls, *, candidate_bonus=0.0):
         evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
                          "status": "not_applicable", "window_start": started,
                          "window_end": time.time(), "samples": 0})
-        base = 10 + (len(calls) % 7) / 100
+        base = 10 + len(calls) / 1000  # monotone: no modulo discontinuity for the AKX-FLOOR-REMEASURE-1 outlier guard
         return base * (1 + candidate_bonus) if recipe.threads == 49 else base
     return measure
 
@@ -700,7 +700,7 @@ def test_main_keep_grade_arm_is_adopted_then_restored_into_a_new_epoch(monkeypat
             evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
                              "status": "not_applicable", "window_start": time.time(),
                              "window_end": time.time(), "samples": 0})
-            base = 10 + (len(calls) % 7) / 100
+            base = 10 + len(calls) / 1000  # monotone: no modulo discontinuity for the AKX-FLOOR-REMEASURE-1 outlier guard
             return base * 1.2 if recipe.threads == launch.template.threads + 1 else base
 
         @contextmanager
