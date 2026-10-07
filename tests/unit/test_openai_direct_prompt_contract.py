@@ -85,6 +85,26 @@ def test_split_leading_reasoning(text, reasoning, answer):
     assert openai_compat._split_leading_reasoning(text) == (reasoning, answer)
 
 
+def test_streaming_reasoning_filter_recognizes_tags_split_across_chunks():
+    filter_chunks = openai_compat._LeadingReasoningChunkFilter()
+    emitted = [filter_chunks.feed(chunk) for chunk in (
+        "  <thi", "nk>private reasoning", "</thi", "nk>  public", " answer"
+    )]
+    assert "".join(emitted) == "public answer"
+
+
+def test_streaming_reasoning_filter_preserves_nonleading_tag_text():
+    filter_chunks = openai_compat._LeadingReasoningChunkFilter()
+    emitted = [filter_chunks.feed(chunk) for chunk in ("Explain ", "<think", "> as a tag")]
+    assert "".join(emitted) == "Explain <think> as a tag"
+
+
+def test_streaming_reasoning_filter_refuses_unbounded_leading_whitespace():
+    filter_chunks = openai_compat._LeadingReasoningChunkFilter()
+    with pytest.raises(ValueError, match="prefix exceeds buffer limit"):
+        filter_chunks.feed(" " * (filter_chunks.MAX_PREFIX_WHITESPACE + 1))
+
+
 def test_message_omits_absent_reasoning_content():
     assert "reasoning_content" not in OpenAIMessage(role="assistant", content="x").model_dump()
     dumped = OpenAIMessage(role="assistant", content="x", reasoning_content="r").model_dump()

@@ -420,10 +420,8 @@ class TestLlamaServerBackend:
 
         with (
             patch.object(backend.client, "post", return_value=mock_response),
-            patch(
-                "src.backends.llama_server.time.time",
-                side_effect=[100.0, 140.0, 140.0, 140.0, 140.0, 140.0],
-            ),
+            patch("src.backends.serving_calls.log_path", return_value=None),
+            patch("src.backends.llama_server.time.time", side_effect=[100.0, 140.0]),
             patch("src.backends.llama_server.time.perf_counter", side_effect=[0.0, 40.0]),
         ):
             result = backend.infer(role_config, request)
@@ -584,7 +582,8 @@ class TestLlamaServerBackend:
 
         with (
             patch.object(backend.client, "stream", return_value=_StreamResponse()),
-            patch("src.backends.llama_server.time.time", side_effect=[100.0, 140.0, 140.0]),
+            patch("src.backends.serving_calls.log_path", return_value=None),
+            patch("src.backends.llama_server.time.time", side_effect=[100.0, 140.0]),
             patch("src.backends.llama_server.time.perf_counter", side_effect=[0.0, 40.0]),
         ):
             result = backend.infer_stream_text(role_config, request)
@@ -662,6 +661,7 @@ class TestLlamaServerBackend:
 
         with (
             patch.object(backend.client, "stream", return_value=_StreamResponse()),
+            patch("src.backends.serving_calls.log_path", return_value=None),
             patch("src.backends.llama_server.time.time", side_effect=[100.0, 101.0]),
         ):
             result = backend.infer_stream_text(role_config, request)
@@ -1011,6 +1011,56 @@ class TestChatCompletionsSchemaForwarding:
             "json_schema": {"name": "response", "schema": schema},
         }
         assert "json_schema" not in captured
+
+    def test_streaming_chat_payload_emits_text_and_assembles_whole_tool_calls(self, role_config):
+        backend = self._backend(use_chat_completions=False)
+        request = InferenceRequest(
+            role="frontdoor", prompt="ignored", n_tokens=64,
+            chat_payload={
+                "messages": [{"role": "user", "content": "read it"}],
+                "tools": [{"type": "function", "function": {"name": "read"}}],
+                "tool_choice": "auto",
+            },
+        )
+        captured = {}
+        chunks = []
+
+        class _StreamResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def raise_for_status(self):
+                return None
+
+            def iter_lines(self):
+                yield 'data: {"choices":[{"delta":{"content":"Checking. ","tool_calls":[{"index":0,"id":"call_abc","type":"function","function":{"name":"read","arguments":"{\\\"path\\\":"}}]}}]}'
+                yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\\"README.md\\\"}"}}]}}]}'
+                yield 'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}'
+                yield "data: [DONE]"
+
+        def _stream(method, path, json, timeout):
+            captured.update(json)
+            captured["path"] = path
+            return _StreamResponse()
+
+        with patch.object(backend.client, "stream", side_effect=_stream):
+            result = backend.infer_stream_text(role_config, request, on_chunk=chunks.append)
+
+        assert captured["path"] == "/v1/chat/completions"
+        assert captured["stream"] is True
+        assert captured["messages"] == request.chat_payload["messages"]
+        assert captured["tools"] == request.chat_payload["tools"]
+        assert chunks == ["Checking. "]
+        assert result.success is True
+        assert result.output == "Checking. "
+        assert result.completion_reason == "tool_calls"
+        assert result.tool_calls == [{
+            "id": "call_abc", "type": "function",
+            "function": {"name": "read", "arguments": '{"path":"README.md"}'},
+        }]
 
     def test_grammar_forwarded_non_streaming(self, role_config):
         backend = self._backend()

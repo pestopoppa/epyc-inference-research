@@ -18,6 +18,7 @@ from src.api.routes.config import router as config_router
 from src.api.routes.delegate import router as delegate_router
 from src.api.routes.dashboard import router as dashboard_router
 from src.api.routes.typed_judge import router as typed_judge_router
+from src.api.routes.voice import router as voice_router
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ def create_api_router() -> APIRouter:
     router.include_router(gates_router, tags=["gates"])
     router.include_router(stats_router, tags=["stats"])
     router.include_router(openai_router, prefix="/v1", tags=["openai"])
+    router.include_router(voice_router, prefix="/v1", tags=["voice"])
     # UFH14-B6: raw OpenAI passthrough for one role, behind the admission gate.
     router.include_router(passthrough_router, prefix="/v1", tags=["passthrough"])
     # Tier-2 coherence judge (typed decision; localhost only).
@@ -72,4 +74,5 @@ __all__ = [
     "config_router",
     "delegate_router",
     "typed_judge_router",
+    "voice_router",
 ]
