@@ -1,0 +1,59 @@
+--- a/xllm/paper_part2/artifacts.py
++++ b/xllm/paper_part2/artifacts.py
+@@ -252,12 +252,13 @@
+     return config["model"], state_dict
+ 
+ 
+-def build_model(model_fields: Mapping[str, Any], state_dict: Mapping[str, torch.Tensor], tokenizer):
+-    """The model of an artifact's fields and weights on the GPU in BF16, in eval mode and without gradients."""
++def build_model(model_fields: Mapping[str, Any], state_dict: Mapping[str, torch.Tensor], tokenizer,
++                *, device="cuda", dtype=torch.bfloat16):
++    """Build exact artifact weights on an explicit device/dtype, in eval mode without gradients."""
+     config = ModelConf.from_dict(dict(model_fields))
+-    with torch.device("cuda"):
++    with torch.device(device):
+         model = get_model_cls(config.arch, config)(config, tokenizer)
+     model.load_state_dict(state_dict, strict=True)
+     for parameter in model.parameters():
+-        parameter.data = parameter.data.to(torch.bfloat16)
++        parameter.data = parameter.data.to(device=device, dtype=dtype)
+     return model.eval().requires_grad_(False)
+--- a/xllm/paper_part2/distill.py
++++ b/xllm/paper_part2/distill.py
+@@ -308,7 +308,9 @@
+ 
+     for layer_id in range(teacher.loop_start_layer):
+         hidden = run(layer_id, hidden)
+-    with torch.autocast("cuda", dtype=torch.bfloat16):
++    # CPU feasibility uses explicit eager FP32; CUDA/ROCm retains released autocast.
++    with (contextlib.nullcontext() if hidden.device.type == "cpu"
++          else torch.autocast("cuda", dtype=torch.bfloat16)):
+         state = student(hidden, freqs_cis)
+     norm = teacher.huginn_prelude_norm_module
+     state = teacher.input_injection(state, hidden if norm is None else norm(hidden))
+@@ -322,7 +324,8 @@
+ 
+ 
+ def load_student(path: str | Path, teacher_manifest: Mapping[str, object],
+-                 teacher_fields: Mapping[str, object]) -> Student:
++                 teacher_fields: Mapping[str, object], *,
++                 device=None, dtype=torch.bfloat16) -> Student:
+     """A trained student in BF16 for evaluation with the teacher artifact of the given manifest and model fields.
+ 
+     `path` is a student artifact, which must pin that teacher's manifest SHA-256, or the `student_final.pt`
+@@ -336,6 +339,13 @@
+     else:
+         cfg = student_config(ModelConf.from_dict(dict(teacher_fields)))
+         state = torch.load(path, map_location="cpu", weights_only=True)
+-    student = Student(cfg)
++    if device is None:
++        # Preserve released default CPU construction followed by the CUDA move.
++        student = Student(cfg)
++        target_device = "cuda"
++    else:
++        with torch.device(device):
++            student = Student(cfg)
++        target_device = device
+     student.load_state_dict(state, strict=True)
+-    return student.to(device="cuda", dtype=torch.bfloat16).eval().requires_grad_(False)
++    return student.to(device=target_device, dtype=dtype).eval().requires_grad_(False)
