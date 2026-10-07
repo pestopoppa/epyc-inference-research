@@ -18,6 +18,7 @@ compare_orchestrator_direct.py and the seeding harness.
 from __future__ import annotations
 
 import ast
+from collections import Counter
 import hashlib
 import json
 import os
@@ -664,6 +665,7 @@ class BEAMAdapter(BaseAdapter):
         self._split = split
         self._transcripts: dict[str, str] = {}
         self._chunks: dict[str, list[str]] = {}
+        self._ingest_manifest: dict[str, dict] = {}
         self.source_kind: str | None = None
         mode = context_mode or os.environ.get(BEAM_CONTEXT_MODE_ENV) or BEAM_CONTEXT_FULL
         if mode not in BEAM_CONTEXT_MODES:
@@ -759,7 +761,17 @@ class BEAMAdapter(BaseAdapter):
             if not messages:
                 raise BEAMLoadError(f"conversation {conversation_id}: empty chat")
             self._transcripts[conversation_id] = self._render_transcript(messages)
-            self._chunks[conversation_id] = pair_chunks(messages)
+            chunks = pair_chunks(messages)
+            self._chunks[conversation_id] = chunks
+            role_counts = Counter(
+                str(message.get("role", "")).strip().lower() or "(empty)"
+                for message in messages
+            )
+            self._ingest_manifest[conversation_id] = {
+                "message_count": len(messages),
+                "role_counts": dict(sorted(role_counts.items())),
+                "chunk_count": len(chunks),
+            }
             probing = _beam_parse_probing_questions(conv.get("probing_questions"),
                                                     conversation_id)
             for ability in BEAM_ABILITIES:
@@ -788,16 +800,32 @@ class BEAMAdapter(BaseAdapter):
             return None
         return getattr(self._retriever, "name", None) or "injected"
 
-    def provenance(self) -> dict:
+    def provenance(self, conversation_id: str | None = None) -> dict:
         record = {
             "suite": self.suite_name,
             "split": self._split,
             "beam_source": self.source_kind,
             "context_mode": self.context_mode,
         }
-        if self.context_mode != BEAM_CONTEXT_FULL:
+        if self.context_mode == BEAM_CONTEXT_FULL:
+            record["ingest_filter"] = "full_history_prompt_no_retriever_lookup"
+        else:
             record.update({"chunking": CHUNKING, "retrieval_top_k": self._retrieval_top_k,
-                           "retriever": self.retriever_name()})
+                           "retriever": self.retriever_name(),
+                           "ingest_filter": "all_flattened_role_content_messages_in_source_order",
+                           "turn_granularity": (
+                               "pair_chunk: leading pre-user messages form one chunk; each user "
+                               "message starts a chunk containing following messages until next user"
+                           )})
+            if conversation_id is not None:
+                manifest = self._ingest_manifest.get(str(conversation_id))
+                if manifest is not None:
+                    record.update({
+                        "indexed_message_range_0based_halfopen": [0, manifest["message_count"]],
+                        "indexed_message_count": manifest["message_count"],
+                        "indexed_role_counts": manifest["role_counts"],
+                        "indexed_chunk_count": manifest["chunk_count"],
+                    })
         return record
 
     # ── prompts ──────────────────────────────────────────────────────────
@@ -884,5 +912,5 @@ class BEAMAdapter(BaseAdapter):
                 "retrieved_chunks": retrieved_chunks,
                 "prompt_chars": len(prompt),
             },
-            "provenance": self.provenance(),
+            "provenance": self.provenance(conversation_id),
         }

@@ -92,7 +92,8 @@ def test_full_arm_prompt_is_unchanged(tmp_path):
     assert item["prompt"].startswith(
         "The following is the complete history of your conversation with the user.\n\n")
     assert item["provenance"] == {"suite": "beam", "split": "100K",
-                                  "beam_source": "hf_parquet", "context_mode": "full"}
+                                  "beam_source": "hf_parquet", "context_mode": "full",
+                                  "ingest_filter": "full_history_prompt_no_retriever_lookup"}
     assert beam_context_kind_of_prompt(item["prompt"]) == "full"
 
 
@@ -114,6 +115,12 @@ def test_memory_arms_are_prompt_matched_and_differ_only_in_the_excerpts(tmp_path
     assert b[0]["provenance"]["context_mode"] == "trace"
     assert a[0]["provenance"]["retrieval_top_k"] == 10
     assert a[0]["provenance"]["chunking"] == "pair_chunk"
+    assert a[0]["provenance"]["ingest_filter"] == "all_flattened_role_content_messages_in_source_order"
+    assert a[0]["provenance"]["turn_granularity"].startswith("pair_chunk:")
+    assert a[0]["provenance"]["indexed_message_range_0based_halfopen"] == [0, 4]
+    assert a[0]["provenance"]["indexed_message_count"] == 4
+    assert a[0]["provenance"]["indexed_role_counts"] == {"assistant": 2, "user": 2}
+    assert a[0]["provenance"]["indexed_chunk_count"] == 2
 
 
 def test_injected_retriever_gets_conversation_and_budget(tmp_path):
