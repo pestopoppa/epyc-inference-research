@@ -203,19 +203,22 @@ def test_timeout_kills_term_ignoring_child_and_leaves_no_process(tmp_path):
             f"timeout left captured TERM-ignoring child alive: {child_identity}"
         )
     finally:
-        # Cleanup is limited to the exact captured process instance, never a reused PID.
-        if child_identity is not None and identity(child_identity[0]) == child_identity:
-            os.kill(child_identity[0], signal.SIGKILL)
-            assert wait_gone(child_identity), (
-                f"captured child survived SIGKILL or was not reaped: {child_identity}"
-            )
-        if not future.done():
+        try:
+            # Cleanup is limited to the exact captured process instance, never a reused PID.
+            if child_identity is not None and identity(child_identity[0]) == child_identity:
+                os.kill(child_identity[0], signal.SIGKILL)
+                assert wait_gone(child_identity), (
+                    f"captured child survived SIGKILL or was not reaped: {child_identity}"
+                )
+        finally:
             try:
-                future.result(timeout=30)
-            except FutureTimeoutError as exc:
-                executor.shutdown(wait=False, cancel_futures=True)
-                raise AssertionError("bounded MTMD probe future did not finish") from exc
-        executor.shutdown(wait=True)
+                if not future.done():
+                    try:
+                        future.result(timeout=30)
+                    except FutureTimeoutError as exc:
+                        raise AssertionError("bounded MTMD probe future did not finish") from exc
+            finally:
+                executor.shutdown(wait=future.done(), cancel_futures=not future.done())
 
 
 def _copy_env_library(tmp_path: Path) -> Path:
