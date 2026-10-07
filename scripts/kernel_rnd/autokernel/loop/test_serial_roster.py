@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
+import textwrap
 from types import SimpleNamespace
 
 import pytest
@@ -16,7 +18,33 @@ from .test_resolved_recipe import _artifacts, _policy
 from .test_serial_run import CHILD
 
 
-def _inputs(tmp_path, *, backends=("cpu", "gpu"), unowned=False, missing=False, experimental_gpu=False):
+def _confine_fixture_child(tmp_path, monkeypatch):
+    """Keep simulated owner children inside the test runner's actual CPU claim."""
+    wrapper = tmp_path / "taskset-within-test-affinity"
+    wrapper.write_text(textwrap.dedent(f"""\
+        #!{os.sys.executable}
+        import os, sys
+        args = sys.argv[1:]
+        if len(args) < 3 or args[0] != "-c":
+            raise SystemExit(64)
+        requested = set()
+        for part in args[1].split(","):
+            bounds = part.split("-", 1)
+            requested.update(range(int(bounds[0]), int(bounds[-1]) + 1))
+        effective = sorted(os.sched_getaffinity(0) & requested)
+        if not effective:
+            raise SystemExit(70)
+        os.sched_setaffinity(0, effective)
+        os.execv(args[2], args[2:])
+    """))
+    wrapper.chmod(0o755)
+    real_which = shutil.which
+    monkeypatch.setattr(sr.shutil, "which",
+                        lambda name: str(wrapper) if name == "taskset" else real_which(name))
+
+
+def _inputs(tmp_path, *, backends=("cpu", "gpu"), unowned=False, missing=False,
+            experimental_gpu=False, cpu_logical=None):
     registry, production, seeds, owners = _registry(), [], [], {}
     for index, backend in enumerate(backends):
         name = f"{backend}-{index}"
@@ -56,7 +84,8 @@ def _inputs(tmp_path, *, backends=("cpu", "gpu"), unowned=False, missing=False, 
     if missing:
         seeds.append(_target("offdisk", model="missing-model"))
     declaration = _manifest(production=production, seeds=seeds)
-    declaration["resources"].update(cpu_logical=list(range(192)), gpu_ids=[claim.DEVICE_ID])
+    declared_cpus = list(range(192)) if cpu_logical is None else list(cpu_logical)
+    declaration["resources"].update(cpu_logical=declared_cpus, gpu_ids=[claim.DEVICE_ID])
     resolved = campaign.resolve_manifest(
         campaign.CampaignManifest.from_dict(declaration),
         registry_snapshot=registry)
@@ -184,6 +213,7 @@ def test_single_target_batched_schedule_drives_children_and_accounts_each_stage(
     child = tmp_path / "tiny.py"
     child.write_text(CHILD)
     monkeypatch.setattr(sr, "_child_command", lambda args: [sr.sys.executable, str(child), *args])
+    _confine_fixture_child(tmp_path, monkeypatch)
     here = Path(sr.__file__).resolve()
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
     assert sr.main(argv) == 0
@@ -207,7 +237,8 @@ def test_single_target_batched_schedule_drives_children_and_accounts_each_stage(
 
 @pytest.mark.parametrize("experimental_gpu", [False, True])
 def test_generated_roster_drives_actual_children_and_completed_restart(tmp_path, monkeypatch, experimental_gpu):
-    _, _, argv = _inputs(tmp_path, experimental_gpu=experimental_gpu)
+    owned_cpus = sorted(os.sched_getaffinity(0))
+    _, _, argv = _inputs(tmp_path, experimental_gpu=experimental_gpu, cpu_logical=owned_cpus)
     child = tmp_path / "tiny.py"
     child.write_text(CHILD.replace('"pid": __import__(\'os\').getpid()',
         '"pid": __import__(\'os\').getpid(), "affinity": sorted(__import__(\'os\').sched_getaffinity(0))')
@@ -221,13 +252,15 @@ def test_generated_roster_drives_actual_children_and_completed_restart(tmp_path,
         .replace('None if cpu else anchor', 'None if experimental else anchor')
         .replace('None if cpu else "a" * 40', 'None if experimental else "a" * 40'))
     monkeypatch.setattr(sr, "_child_command", lambda args: [sr.sys.executable, str(child), *args])
-    monkeypatch.setenv("PYTHONPATH", str(Path(sr.__file__).resolve().parents[4]))
+    _confine_fixture_child(tmp_path, monkeypatch)
+    here = Path(sr.__file__).resolve()
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
     assert sr.main(argv) == 0
     state = tmp_path / "router"
     seen = [json.loads(line) for line in (state / "seen.jsonl").read_text().splitlines()]
     # Distinct recipe artifacts keep these as two distinct enrolled targets.
     assert len(seen) == 4
-    assert all(set(row["affinity"]) == set(os.sched_getaffinity(0)) & set(range(192)) for row in seen)
+    assert all(set(row["affinity"]) == set(owned_cpus) for row in seen)
     assert {sr.option(row["argv"], "--target-id") for row in seen} == {"cpu-0", "gpu-1"}
     resumed = [row for row in seen if sr.option(row["argv"], "--resume-run")]
     assert resumed
@@ -247,7 +280,9 @@ def test_multiple_cpu_targets_serialize_one_owned_source_without_fabricating_sha
     child = tmp_path / "tiny.py"
     child.write_text(CHILD)
     monkeypatch.setattr(sr, "_child_command", lambda args: [sr.sys.executable, str(child), *args])
-    monkeypatch.setenv("PYTHONPATH", str(Path(sr.__file__).resolve().parents[4]))
+    _confine_fixture_child(tmp_path, monkeypatch)
+    here = Path(sr.__file__).resolve()
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
     assert sr.main(argv) == 0
     seen = [json.loads(line)["argv"] for line in (
         tmp_path / "router" / "seen.jsonl").read_text().splitlines()]

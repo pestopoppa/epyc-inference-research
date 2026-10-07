@@ -1,13 +1,14 @@
 """Original serial selection/accounting; child hardware observations are fixtures."""
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from . import cpu_screen, scheduling, serial_roster, serial_run as sr, serial_scheduling as ss
 from .test_serial_scheduling import manifest
-from .test_serial_roster import _inputs, _build
+from .test_serial_roster import _inputs, _build, _confine_fixture_child
 from .test_serial_run import CHILD
 from .test_shared_history import _record
 
@@ -108,11 +109,21 @@ if scope:
     measured = cpu_screen.prepare_launch(full, scope, resolved.resources.cpu_logical)["launch"]
     screen = {"scope": scope, "candidate": None, "full_execution_digest": full.execution_digest,
               "measured_execution_digest": measured.execution_digest}
-row = sr.continuation(cpu_screen=screen,''')
+row = sr.continuation(''')
+    original_screen = '''    **({"cpu_screen": {"scope": sr.option(argv, "--cpu-screen-scope"),
+       "full_execution_digest": "c" * 64,
+       "measured_execution_digest": "d" * 64, "candidate": None}}
+       if cpu and sr.option(argv, "--cpu-screen-scope") else {}),'''
+    if original_screen not in child_source:
+        raise AssertionError("shared tiny child no longer has the expected CPU-screen fixture slot")
+    child_source = child_source.replace(original_screen,
+        '    **({"cpu_screen": screen} if screen is not None else {}),', 1)
     child = tmp_path / "scope_child.py"
     child.write_text(child_source)
     monkeypatch.setattr(sr, "_child_command", lambda args: [sr.sys.executable, str(child), *args])
-    monkeypatch.setenv("PYTHONPATH", str(Path(sr.__file__).resolve().parents[4]))
+    _confine_fixture_child(tmp_path, monkeypatch)
+    here = Path(sr.__file__).resolve()
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
     assert sr.main(argv) == 0
     router = tmp_path / "router"
     state = json.loads((router / "serial-state.json").read_text())
