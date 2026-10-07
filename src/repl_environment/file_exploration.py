@@ -6,9 +6,45 @@ Read-only file system inspection: peek, grep, list_dir, file_info.
 from __future__ import annotations
 
 import logging
+import os
 import re
 
 logger = logging.getLogger(__name__)
+
+
+def _explicit_exploration_root(env, file_path: str) -> tuple[str, str]:
+    """Return a validated resolved path and its caller-authorized explicit root.
+
+    Callers must run ``_validate_file_path`` first; that remains the authority for
+    task scope, legacy prefixes, and the knowledge-fence recording order.
+    """
+    from src.repl_environment.task_root import (
+        get_task_root, request_scope, resolve_task_path, task_root_active,
+    )
+
+    resolved = os.path.realpath(resolve_task_path(file_path))
+    scope = request_scope()
+    if scope is not None:
+        roots = (scope.root, *scope.read_roots)
+    elif task_root_active():
+        roots = (str(get_task_root()),)
+    else:
+        # Legacy admission has already checked the configured lexical prefix and
+        # knowledge fence. For this single-file read, the resolved file's parent
+        # is the narrow explicit root; no second prefix policy is introduced.
+        return os.path.dirname(resolved), resolved
+
+    candidates = []
+    for value in roots:
+        root = os.path.realpath(os.fspath(value)).rstrip(os.sep) or os.sep
+        try:
+            if os.path.commonpath((root, resolved)) == root:
+                candidates.append(root)
+        except ValueError:
+            continue
+    if not candidates:
+        raise PermissionError(f"validated path has no matching explicit exploration root: {resolved}")
+    return max(candidates, key=len), resolved
 
 
 class _FileExplorationMixin:
@@ -117,9 +153,11 @@ class _FileExplorationMixin:
                 return f"[ERROR: {error}]"
             # Resolve to the task-root (mirror file_write_safe) so reads find files where
             # writes + task setup put them. No-op in prod (task-root inactive → realpath).
-            from src.repl_environment.task_root import resolve_task_path
             try:
-                result = self._read_file_page(resolve_task_path(file_path), n, offset)
+                from src.repl_environment.exploration_core import read_file_page
+
+                root, resolved = _explicit_exploration_root(self, file_path)
+                result = read_file_page(root, resolved, n, offset, max_bytes=None)
                 event = {"n": n, "file_path": file_path}
                 if offset:
                     event["offset"] = offset
@@ -191,10 +229,16 @@ class _FileExplorationMixin:
             if not is_valid:
                 return [f"[ERROR: {error}]"]
             # Resolve to task-root (mirror file_write_safe); no-op in prod.
-            from src.repl_environment.task_root import resolve_task_path
             try:
-                with open(resolve_task_path(file_path), "r", encoding="utf-8", errors="replace") as f:
-                    source_text = f.read()
+                from src.repl_environment.exploration_core import grep_file
+
+                root, resolved = _explicit_exploration_root(self, file_path)
+                result = grep_file(
+                    root, resolved, pattern, context_lines=context_lines,
+                    max_hits=self.config.max_grep_results, max_line_chars=None,
+                    max_context_chars=None, max_bytes=None, allow_empty_pattern=True,
+                )
+                source_text = None
                 source_name = file_path
             except FileNotFoundError:
                 return [f"[ERROR: File not found: {file_path}]"]
@@ -203,6 +247,27 @@ class _FileExplorationMixin:
                 return [f"[ERROR: {type(e).__name__}: {e}]"]
         else:
             source_text = self.context
+
+        if file_path is not None:
+            matches = [item.line for item in result.matches]
+            match_details = [
+                {"line_num": item.line_num, "match": item.line[:500], "context": item.context[:1000]}
+                for item in result.matches
+            ]
+            if match_details and len(matches) >= self.config.max_grep_results:
+                matches.append(f"[... truncated at {self.config.max_grep_results} results]")
+            if match_details:
+                self._grep_hits_buffer.append({
+                    "pattern": pattern, "source": source_name,
+                    "match_count": len(match_details), "hits": match_details[:20],
+                })
+            self._exploration_log.add_event(
+                "grep", {"pattern": pattern, "file_path": file_path}, matches
+            )
+            self._track_research(
+                "grep", f"pattern={pattern!r}, file={file_path}", "\n".join(matches[:10])
+            )
+            return matches
 
         lines = source_text.split("\n")
         matches = []
@@ -249,6 +314,32 @@ class _FileExplorationMixin:
             "\n".join(matches[:10]),
         )
         return matches
+
+    def _outline_file(self, file_path: str) -> str:
+        """Return a bounded heuristic source outline for an admitted file path.
+
+        This adapter is intentionally not registered as a REPL/MCP tool yet; tool
+        exposure remains behind the separate catalog and rerun gate.
+        """
+        self._increment_exploration()
+        is_valid, error = self._validate_file_path(file_path)
+        if not is_valid:
+            return f"[ERROR: {error}]"
+        try:
+            from src.repl_environment.exploration_core import outline_file
+
+            root, resolved = _explicit_exploration_root(self, file_path)
+            result = outline_file(root, resolved)
+            self._exploration_log.add_event("outline_file", {"file_path": file_path}, result)
+            self._track_research("outline_file", f"file={file_path}", result)
+            return result
+        except FileNotFoundError:
+            return f"[ERROR: File not found: {file_path}]"
+        except IsADirectoryError:
+            return f"[ERROR: Path is a directory: {file_path}]"
+        except Exception as e:
+            logger.debug("outline_file failed", exc_info=True)
+            return f"[ERROR: {type(e).__name__}: {e}]"
 
     def _list_dir(self, path: str) -> str:
         """List contents of a directory.

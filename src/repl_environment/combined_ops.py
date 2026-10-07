@@ -301,36 +301,35 @@ class _CombinedOpsMixin:
         if not is_valid:
             return f"[ERROR: {error}]"
 
-        # Read file (resolve to task-root, mirror file_write_safe; no-op in prod)
-        from src.repl_environment.task_root import resolve_task_path
         try:
-            with open(resolve_task_path(path), "r", encoding="utf-8", errors="replace") as f:
-                content = f.read()
+            from src.repl_environment.exploration_core import grep_file
+            from src.repl_environment.file_exploration import _explicit_exploration_root
+
+            root, resolved = _explicit_exploration_root(self, path)
+            result = grep_file(
+                root, resolved, pattern, context_lines=max(0, context_lines),
+                max_hits=None, max_line_chars=None, max_context_chars=None,
+                max_bytes=None, ignore_case=False, splitlines=True,
+                allow_empty_pattern=True, compile_after_read=True,
+            )
         except FileNotFoundError:
             return f"[ERROR: File not found: {path}]"
         except IsADirectoryError:
             return f"[ERROR: Path is a directory: {path}]"
         except Exception as e:
+            message = str(e)
+            if message.startswith("invalid regex pattern: "):
+                return f"[ERROR: Invalid regex pattern: {message[len('invalid regex pattern: '):]}]"
             return f"[ERROR: {type(e).__name__}: {e}]"
 
-        # Apply regex
-        try:
-            compiled = re.compile(pattern)
-        except re.error as e:
-            return f"[ERROR: Invalid regex pattern: {e}]"
-
-        lines = content.splitlines()
         matches = []
-
-        for i, line in enumerate(lines):
-            if compiled.search(line):
-                start = max(0, i - context_lines)
-                end = min(len(lines), i + context_lines + 1)
-                context_block = []
-                for j in range(start, end):
-                    marker = ">>>" if j == i else "   "
-                    context_block.append(f"{marker} {j + 1:4d} | {lines[j]}")
-                matches.append("\n".join(context_block))
+        for item in result.matches:
+            start = max(0, item.line_num - 1 - max(0, context_lines))
+            context_block = []
+            for j, line in enumerate(item.context_lines, start=start):
+                marker = ">>>" if j + 1 == item.line_num else "   "
+                context_block.append(f"{marker} {j + 1:4d} | {line}")
+            matches.append("\n".join(context_block))
 
         self._exploration_log.add_event(
             "peek_grep",
