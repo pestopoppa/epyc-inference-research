@@ -88,6 +88,26 @@ def residency_sample(pid: int) -> dict:
     return {'time':datetime.now(timezone.utc).isoformat(),'pid':pid,
             'pid_alive':Path(f'/proc/{pid}').exists(),'kfd_pids':pids,'vram_used_bytes':vram}
 
+def poll_kfd_pid_exit(pid: int, *, timeout_s: float = 1.0,
+                      poll_interval_s: float = 0.02) -> tuple[list[dict], bool]:
+    """Wait for KFD bookkeeping to drop a reaped child, bounded by monotonic time.
+
+    `/proc/<pid>` can already be absent while KFD still reports the PID briefly.
+    Preserve every teardown sample; unknown KFD census is not treated as empty.
+    """
+    deadline=time.monotonic()+timeout_s
+    samples=[]
+    while True:
+        sample=residency_sample(pid)
+        samples.append(sample)
+        pids=sample.get('kfd_pids')
+        if pids is not None and str(pid) not in pids:
+            return samples,True
+        remaining=deadline-time.monotonic()
+        if remaining<=0:
+            return samples,False
+        time.sleep(min(poll_interval_s,remaining))
+
 def seal_verifier(e,out,binary,build,receipt,rows,returncode,reads,fixture):
     def identity(name,content):return {'id':name,'sha256':hashlib.sha256(content).hexdigest()}
     proposition='The claimed standalone gfx90a harness passed its declared operator assertions'
@@ -176,11 +196,10 @@ def main():
             code=proc.wait()
             ended=datetime.now(timezone.utc).isoformat()
         if claim.revocation():claim.acknowledge_revocation()
-    teardown=[]
-    for _ in range(2):
-        teardown.append(residency_sample(proc.pid));time.sleep(0.02)
-    if any(str(proc.pid) in (sample['kfd_pids'] or []) for sample in teardown):code=code or 2
-    residency={'started':started,'ended':ended,'samples':samples,'teardown_samples':teardown,'physical_claim':receipt}
+    teardown,teardown_pid_absent=poll_kfd_pid_exit(proc.pid)
+    if not teardown_pid_absent:code=code or 2
+    residency={'started':started,'ended':ended,'samples':samples,'teardown_samples':teardown,
+               'teardown_pid_absent':teardown_pid_absent,'physical_claim':receipt}
     (out/'residency.json').write_text(json.dumps(residency,sort_keys=True))
     rows=[json.loads(line) for line in (out/'stdout.jsonl').read_text().splitlines() if line.strip().startswith('{')]
     in_window=any(str(proc.pid) in (s['kfd_pids'] or []) and any(v>0 for v in s['vram_used_bytes'].values()) for s in samples)
