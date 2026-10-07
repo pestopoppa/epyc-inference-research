@@ -366,6 +366,94 @@ def test_the_test_expert_count_is_eight_with_real_per_expert_dims():
                                              (640, 2560)}
 
 
+def test_cpu_list_count_parses_ranges_and_singles():
+    assert cal.cpu_list_count("0-95") == 96
+    assert cal.cpu_list_count("0,2-4,7") == 5
+    assert cal.cpu_list_count("3") == 1
+
+
+def test_rewrite_prefix_for_lock_handles_every_known_shape():
+    """2026-10-06 live-defect follow-up: the AFFINITY element (taskset -c, or numactl
+    --physcpubind=) is rewritten to the lock cpu list; the memory POLICY
+    (--interleave=/--membind=) is left untouched."""
+    assert cal.rewrite_prefix_for_lock(["taskset", "-c", "0-95"], "0-47") == \
+        ["taskset", "-c", "0-47"]
+    assert cal.rewrite_prefix_for_lock(
+        ["taskset", "-c", "0-95", "numactl", "--interleave=all"], "0-47") == \
+        ["taskset", "-c", "0-47", "numactl", "--interleave=all"]
+    assert cal.rewrite_prefix_for_lock(
+        ["numactl", "--interleave=all", "--", "taskset", "-c", "0-95"], "0-47") == \
+        ["numactl", "--interleave=all", "--", "taskset", "-c", "0-47"]
+    # The precedent shape with no taskset at all: numactl --physcpubind=<list> carries
+    # BOTH the affinity and a policy token.
+    assert cal.rewrite_prefix_for_lock(
+        ["numactl", "--physcpubind=0-47", "--membind=0"], "8-15") == \
+        ["numactl", "--physcpubind=8-15", "--membind=0"]
+    # Idempotent when the lock list equals the served one (the common, non-narrowed
+    # case): rewriting to the SAME list is a no-op.
+    assert cal.rewrite_prefix_for_lock(["taskset", "-c", "0-95"], "0-95") == \
+        ["taskset", "-c", "0-95"]
+
+
+def test_rewrite_prefix_for_lock_fails_closed_on_an_unrecognized_shape():
+    """A prefix with no taskset -c or numactl --physcpubind= token cannot be confined
+    to the lock's cpu list -- refuse rather than run unconfined."""
+    with pytest.raises(cal.Refused, match="cannot confine"):
+        cal.rewrite_prefix_for_lock(["numactl", "--interleave=all"], "0-47")
+    with pytest.raises(cal.Refused, match="cannot confine"):
+        cal.rewrite_prefix_for_lock([], "0-47")
+
+
+def test_resolve_shard_count_caps_at_roughly_four_cores_per_shard_by_default():
+    """2026-10-06 live-defect follow-up: the single-process run used only ~400% CPU, so
+    ~4 cores/shard is enough -- the default must not oversubscribe far past that."""
+    # 96 served cores -> cap 24, but DEFAULT_SHARDS (16) is tighter here.
+    assert cal.resolve_shard_count(None, 1000, "0-95") == cal.DEFAULT_SHARDS
+    # A narrowed 8-core lock -> cap 2, tighter than DEFAULT_SHARDS.
+    assert cal.resolve_shard_count(None, 1000, "0-7") == 2
+    # A single-core lock still gets at least 1 shard (max(1, ...)).
+    assert cal.resolve_shard_count(None, 1000, "0") == 1
+    # Fewer cases than the cpu-based cap: clamped to cases.
+    assert cal.resolve_shard_count(None, 1, "0-95") == 1
+    # --shards always overrides the cpu-based cap (still clamped to cases and >= 1).
+    assert cal.resolve_shard_count(64, 1000, "0-7") == 64
+    assert cal.resolve_shard_count(64, 10, "0-7") == 10
+    with pytest.raises(cal.Refused):
+        cal.resolve_shard_count(0, 10, "0-95")
+    # No lock_cpu_list given: falls back to the plain cases-based default.
+    assert cal.resolve_shard_count(None, 1000) == cal.DEFAULT_SHARDS
+
+
+def test_served_recipe_confines_the_prefix_to_the_lock_cpu_list(tmp_path):
+    """2026-10-06 live-defect follow-up: `recipe["prefix"]` (what shards actually run
+    under) is affinity-confined to the LOCK's cpu list, never the full served
+    topology; `recipe["served_prefix"]` keeps the untouched original."""
+    build = _fake_build(tmp_path)
+    launch = _launch(tmp_path)   # served prefix is ["taskset", "-c", "0-95"]
+    narrowed = cal.served_recipe(launch, build, cpu_list="0-47", threads=None)
+    assert narrowed["prefix"] == ["taskset", "-c", "0-47"]
+    assert narrowed["served_prefix"] == ["taskset", "-c", "0-95"]
+    unnarrowed = cal.served_recipe(launch, build, cpu_list=None, threads=None)
+    assert unnarrowed["prefix"] == ["taskset", "-c", "0-95"]
+    assert unnarrowed["served_prefix"] == ["taskset", "-c", "0-95"]
+
+
+def test_execute_runs_shards_confined_to_the_narrowed_lock_cpu_list_not_served(tmp_path):
+    """End-to-end: with --cpu-list narrower than the served topology, every shard's
+    OWN taskset -c binding uses the narrowed lock list, not the full served one --
+    the live defect this follow-up fixes (16 shards x ~100 threads on all 96 cores)."""
+    build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
+    rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
+                   "--cpu-list", "0-7", "--region-lock", lock, "--execute",
+                   "--lane", "q38fn", "--shards", "1")
+    assert rc == 0, out
+    record = json.loads(next((store / "served_shape").glob("calibration-*.json")).read_text())
+    prov = record["provenance"]
+    assert prov["lock_cpu_list"] == "0-7"
+    assert prov["effective_prefix"] == ["taskset", "-c", "0-7"]
+    assert prov["cpu_list"] == "0-95"   # served topology, recorded but not run on
+
+
 def test_lock_claim_argv_uses_role_build_with_the_lock_cpu_list(tmp_path):
     """Requirement 2: the ONE correctness-mode lock claim is `--role build` with
     WHATEVER cpu list the recipe's lock_cpu_list carries (narrowed or not); it carries
@@ -577,6 +665,28 @@ def test_a_record_measured_under_a_narrowed_lock_cpu_list_imports_cleanly(tmp_pa
                    "--apply", "--lane", "q38fn", "--region-lock", lock)
     assert rc == 0, out
     assert (store / "served_shape" / "manifest.json").exists()
+
+
+def test_a_pre_affinity_fix_record_with_no_effective_prefix_still_imports(tmp_path):
+    """Coordinator follow-up constraint (2026-10-06): records produced by 1bace97d --
+    before this affinity fix -- carry NO "effective_prefix" field at all (that field
+    did not exist yet) and ran UNCONFINED, on the served prefix. They are being
+    measured live right now and must stay importable: affinity never affects
+    numerics, so replay must accept either the served prefix or the lock-rewritten
+    one, defaulting an absent field to the served prefix."""
+    from unittest import mock
+    build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
+    launch = _launch(tmp_path)
+    assert _run("--store", store, "--anchor-build", build, "--launch", launch,
+                "--region-lock", lock, "--execute", "--lane", "q38fn")[0] == 0
+    record = next((store / "served_shape").glob("calibration-*.json"))
+    body = json.loads(record.read_text())
+    assert "effective_prefix" in body["provenance"]   # the current code DOES record it
+    del body["provenance"]["effective_prefix"]         # simulate a pre-fix 1bace97d record
+    record.write_text(json.dumps(body))
+    with mock.patch.object(cal, "lane_profile_refusal", return_value=None):
+        why = cal.measurement_record_refusal(record, launch, "q38fn", str(lock))
+    assert why is None, why
 
 
 def test_timeout_s_reaches_subprocess_call(tmp_path):

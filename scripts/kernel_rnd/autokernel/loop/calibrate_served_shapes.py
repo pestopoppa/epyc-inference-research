@@ -21,11 +21,14 @@ touching iqk/repack) refused. This tool closes that gap in three steps:
    always takes an exclusive flock regardless of `--role`, so N per-shard claims would
    SERIALIZE; `-L` defaults to the served list but may be narrowed, since correctness
    work needs no exclusivity, only the served thread count). Inside that ONE claim,
-   `--shards N` (default `min(16, cases)`) runs N disjoint `test-backend-ops`
-   invocations CONCURRENTLY as background jobs and merges them, parses every case's
-   NMSE, and writes `<store>/served_shape/calibration-<utc>.json` with provenance
-   (anchor commit, every bin/ file's sha256, cpu list, threads, the one lock argv, the
-   per-shard filters and case assignment).
+   `--shards N` (default `min(16, cases, max(1, lock cpus // 4))` -- ~4 cores/shard,
+   since the single-process run used only ~400% CPU) runs N disjoint
+   `test-backend-ops` invocations CONCURRENTLY as background jobs, each confined by
+   affinity to the lock's own cpu list (never the full served topology), and merges
+   them, parses every case's NMSE, and writes
+   `<store>/served_shape/calibration-<utc>.json` with provenance (anchor commit, every
+   bin/ file's sha256, cpu list, threads, the one lock argv, the effective
+   (affinity-confined) prefix, the per-shard filters and case assignment).
 3. `--apply` turns the measurements into `case_set(anchor_nmse)`, writes
    `<store>/served_shape/patch.cpp` and `<store>/served_shape/manifest.json`, stages
    the final block into `--tree` (replacing the calibration block), and prints the
@@ -194,6 +197,48 @@ def build_calibration(tree: Path, cpu_list: str, region_lock: str, jobs: int,
     return build
 
 
+def cpu_list_count(cpu_list: str) -> int:
+    """Number of distinct CPUs a taskset/region-lock cpu-list string names (e.g. "0-95"
+    -> 96, "0,2-4,7" -> 5). Caller must have already validated the syntax
+    (`CPU_LIST_RE`)."""
+    total = 0
+    for part in cpu_list.split(","):
+        if "-" in part:
+            lo, hi = part.split("-")
+            total += int(hi) - int(lo) + 1
+        else:
+            total += 1
+    return total
+
+
+def rewrite_prefix_for_lock(prefix: list, lock_cpu_list: str) -> list:
+    """Correctness-mode CPU affinity fix (2026-10-06, live-defect follow-up): replace
+    the topology prefix's AFFINITY element -- `taskset -c <list>` and/or any
+    `numactl --physcpubind=<list>` token -- with `lock_cpu_list`, so shards actually
+    run on the cpus the region-lock claims, not the full served topology. Narrowing
+    only the lock's claim while leaving the served `taskset -c 0-95` untouched let
+    every shard run on all 96 served cores regardless of the lock, trampling quarters
+    other sessions hold (the live Q38FN defect: 16 shards x ~100 threads, load avg
+    ~1135). The memory POLICY (`--interleave=...`, `--membind=...`) is kept as-is --
+    numerics do not depend on NUMA placement, only on the served thread count. Fails
+    closed (refuses) when no affinity token is found: a prefix this tool cannot
+    confine is not safe to shard."""
+    out = list(prefix)
+    rewrote = False
+    for i, tok in enumerate(out):
+        if tok == "taskset" and i + 2 < len(out) and out[i + 1] == "-c":
+            out[i + 2] = lock_cpu_list
+            rewrote = True
+        elif isinstance(tok, str) and tok.startswith("--physcpubind="):
+            out[i] = f"--physcpubind={lock_cpu_list}"
+            rewrote = True
+    if not rewrote:
+        raise Refused(f"cannot confine topology prefix {prefix} to the correctness-mode "
+                      "lock: no taskset -c <list> or numactl --physcpubind=<list> token "
+                      "found (refusing rather than running unconfined)")
+    return out
+
+
 def served_recipe(launch_path: Path, build: Path, *, cpu_list: "str | None",
                   threads: "int | None") -> dict:
     """Round-12: the SERVED launch the calibration must reproduce, from the lane's
@@ -242,17 +287,37 @@ def served_recipe(launch_path: Path, build: Path, *, cpu_list: "str | None",
     env["PATH"] = os.environ.get("PATH", "/usr/bin:/bin")
     env[ssc.CASE_SET_ENV] = ssc.CALIBRATION_CASE_SET_ID
     env[ssc.BACKEND_THREADS_ENV] = str(served_threads)
-    return {"env": env, "prefix": prefix, "served_cpu_list": served_cpus,
-            "lock_cpu_list": lock_cpu_list, "cpu_list": served_cpus,
-            "threads": served_threads, "launch": str(Path(launch_path).resolve()),
+    # 2026-10-06 live-defect follow-up: `prefix` (what shard_inner_argv actually runs
+    # under) is the AFFINITY-CONFINED prefix -- rewritten to the lock's own cpu list,
+    # never the full served topology -- while `served_prefix` keeps the untouched
+    # original for provenance/replay. Idempotent when the lock list equals the served
+    # one (the common, non-narrowed case): the rewrite is then a no-op.
+    confined_prefix = rewrite_prefix_for_lock(prefix, lock_cpu_list)
+    return {"env": env, "prefix": confined_prefix, "served_prefix": prefix,
+            "served_cpu_list": served_cpus, "lock_cpu_list": lock_cpu_list,
+            "cpu_list": served_cpus, "threads": served_threads,
+            "launch": str(Path(launch_path).resolve()),
             "launch_sha256": _sha256(Path(launch_path))}
 
 
-def resolve_shard_count(requested: "int | None", n_cases: int) -> int:
-    """`--shards N` (default `min(DEFAULT_SHARDS, cases)`), clamped to `[1, n_cases]`."""
+def resolve_shard_count(requested: "int | None", n_cases: int,
+                        lock_cpu_list: "str | None" = None) -> int:
+    """`--shards N` always overrides (clamped to `[1, n_cases]`). The DEFAULT (no
+    --shards) is `min(DEFAULT_SHARDS, cases, max(1, lock_cpu_count // 4))`: the
+    single-process run used only ~400% CPU, so ~4 cores per shard is enough --
+    defaulting to one shard per core (or even DEFAULT_SHARDS regardless of the lock's
+    size) would oversubscribe far past where more shards buys any wall-clock win and
+    just adds scheduling noise. `lock_cpu_list` is validated by the caller
+    (`CPU_LIST_RE`); omitted (e.g. a caller with no lock cpu list in hand yet) skips
+    the cpu-based cap and falls back to the plain cases-based default."""
     if requested is not None and requested < 1:
         raise Refused(f"--shards must be >= 1, got {requested}")
-    n = requested if requested is not None else min(DEFAULT_SHARDS, n_cases)
+    if requested is not None:
+        n = requested
+    else:
+        n = DEFAULT_SHARDS
+        if lock_cpu_list:
+            n = min(n, max(1, cpu_list_count(lock_cpu_list) // 4))
     return max(1, min(n, n_cases))
 
 
@@ -339,15 +404,18 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
             shards: "int | None" = None) -> Path:
     """Sharded, correctness-mode --execute (2026-10-06, revised after coordinator
     review): split `lane`'s calibration corpus into `shards` (default
-    `min(DEFAULT_SHARDS, cases)`) disjoint case sets and run them CONCURRENTLY as
-    background jobs of ONE `bash -c` script, executed under exactly ONE region-lock
-    claim (`lock_claim_argv`, `--role build`) -- region-lock always takes an exclusive
-    flock per CPU region regardless of `--role`, so N per-shard claims on the same
-    region would SERIALIZE and erase the sharding speedup entirely. Every case must
-    appear exactly once in the merge and every shard must announce the seed-scheme
-    marker; ANY shard failing (non-zero exit, the claim itself failing/timing out, no
-    seed marker, unparseable or out-of-assignment output) fails the WHOLE execute and
-    writes nothing -- a partial merge would silently understate the corpus a later
+    `resolve_shard_count`'s `min(DEFAULT_SHARDS, cases, max(1, lock cpus // 4))`)
+    disjoint case sets and run them CONCURRENTLY, each confined by AFFINITY to the
+    lock's own cpu list (`recipe["prefix"]`, already rewritten by `served_recipe` --
+    never the full served topology), as background jobs of ONE `bash -c` script,
+    executed under exactly ONE region-lock claim (`lock_claim_argv`, `--role build`)
+    -- region-lock always takes an exclusive flock per CPU region regardless of
+    `--role`, so N per-shard claims on the same region would SERIALIZE and erase the
+    sharding speedup entirely. Every case must appear exactly once in the merge and
+    every shard must announce the seed-scheme marker; ANY shard failing (non-zero
+    exit, the claim itself failing/timing out, no seed marker, unparseable or
+    out-of-assignment output) fails the WHOLE execute and writes nothing -- a partial
+    merge would silently understate the corpus a later
     --apply bakes bounds from."""
     if not ssc.binary_has_seed_scheme(build):
         raise Refused(f"{build}/bin/test-backend-ops {ssc.SEED_REBUILD_HINT}; re-stage with "
@@ -360,14 +428,14 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
     binary = Path(build) / "bin" / "test-backend-ops"
     digest_before = _sha256(binary)
     triples = ssc.calibration_triples(lane)
-    n_shards = resolve_shard_count(shards, len(triples))
+    n_shards = resolve_shard_count(shards, len(triples), lock_cpu_list)
     groups = ssc.shard_sequence(triples, n_shards)
     inner_argvs = [shard_inner_argv(build, recipe, ssc.calibration_regex_for(group))
                   for group in groups]
     lock_argv = lock_claim_argv(recipe, region_lock, timeout_s=timeout_s)
     print(f"execute   ONE region-lock claim ({' '.join(lock_argv)}) wraps {n_shards} "
-          f"concurrent shard(s) over {len(triples)} case(s), "
-          f"{ssc.BACKEND_THREADS_ENV}={threads}", file=out)
+          f"concurrent shard(s) over {len(triples)} case(s), affinity confined to "
+          f"{recipe['prefix']}, {ssc.BACKEND_THREADS_ENV}={threads}", file=out)
     with tempfile.TemporaryDirectory(prefix="ak-calib-shard-") as raw_tmp:
         tmp = Path(raw_tmp)
         out_paths = [tmp / f"shard{i}.out" for i in range(n_shards)]
@@ -456,6 +524,7 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
                            "served_env": {k: v for k, v in sorted(recipe["env"].items())
                                           if k != "PATH"},
                            "lock_cpu_list": lock_cpu_list, "lock_role": "build",
+                           "effective_prefix": recipe["prefix"],
                            "shards": n_shards,
                            "shard_params_filters": [a[-1] for a in inner_argvs],
                            "shard_assignment": {str(i): [ssc.case_key(*t) for t in group]
@@ -534,6 +603,15 @@ def measurement_record_refusal(path: Path, launch: Path, lane: str,
         "shard_params_filters": (prov.get("shard_params_filters"), expected_filters),
     }
     bad = [name for name, (got, want) in checks.items() if got != want]
+    # Live-defect follow-up (2026-10-06): records from BEFORE the affinity fix carry no
+    # "effective_prefix" at all (they ran unconfined, on the served prefix) and must
+    # stay importable -- affinity never affects numerics. Accept either the served
+    # prefix or the lock-confined one; default an absent field to the served prefix.
+    effective_prefix = prov.get("effective_prefix")
+    if effective_prefix is None:
+        effective_prefix = recipe["served_prefix"]
+    if list(effective_prefix) not in (list(recipe["served_prefix"]), list(recipe["prefix"])):
+        bad.append("effective_prefix")
     if bad:
         return f"{path} does not match the intended served recipe: {', '.join(bad)}"
     binary = build / "bin" / "test-backend-ops"
@@ -619,10 +697,12 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
     parser.add_argument("--jobs", type=int, default=24)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--shards", type=int,
-                        help=f"--execute: disjoint test-backend-ops processes run "
-                        f"concurrently under correctness mode (default "
-                        f"min({DEFAULT_SHARDS}, cases)); correctness measures NMSE, not "
-                        "speed, so a quiet/exclusive host is not required")
+                        help=f"--execute: disjoint test-backend-ops processes, each "
+                        f"affinity-confined to the lock's own cpu list, run concurrently "
+                        f"under correctness mode (default min({DEFAULT_SHARDS}, cases, "
+                        "max(1, lock cpus // 4)) -- ~4 cores/shard); correctness "
+                        "measures NMSE, not speed, so a quiet/exclusive host is not "
+                        "required")
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
     try:
@@ -690,12 +770,15 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
         if not mutating:
             ready = (args.anchor_build is not None
                      and ssc.binary_has_calibration(args.anchor_build))
+            shard_note = (str(args.shards) if args.shards
+                         else f"min({DEFAULT_SHARDS}, cases, lock cpus // 4), each "
+                         "affinity-confined to the lock cpu list")
             print(f"DRY RUN   store {args.store}; anchor build {args.anchor_build} "
                   f"{'carries' if ready else 'does NOT carry'} the calibration block; "
                   f"{len(ssc.canonical_triples())} candidate cases; correctness-mode "
                   f"region-lock {args.region_lock} --cpu-list "
                   f"{args.cpu_list or '<served list>'} --role build, "
-                  f"{args.shards or DEFAULT_SHARDS} shard(s) (speed is NOT measured here). "
+                  f"{shard_note} shard(s) (speed is NOT measured here). "
                   "Pass --stage-calibration-patch / --execute / --apply.", file=out)
         return 0
     except Refused as exc:
