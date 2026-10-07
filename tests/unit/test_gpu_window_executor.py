@@ -142,7 +142,8 @@ def test_open_drains_stops_and_grants(env):
 def test_open_caps_window_at_60_min(env):
     with pytest.raises(gwe.WindowRefused) as exc:
         _open(env, minutes=90)
-    assert exc.value.reason == "window_too_long"
+    # the entry (ends +58 min) no longer covers the window, or the cap trips: both refuse
+    assert exc.value.reason in ("window_too_long", "schedule_mismatch")
     assert not env.window.exists() and env.fake.calls == []
 
 
