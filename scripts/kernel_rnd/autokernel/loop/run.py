@@ -3776,12 +3776,17 @@ def main(argv: list[str] | None = None) -> int:
                     route_references.append(_ppl_gate)
                 if witness is not None and witness.reference == "fa_anchor_bits":
                     # cpu_fa_schedule (audit 2026-10-04 C2/C3): the case-set corpus, bit
-                    # identity with the ANCHOR build, then the paired FA perf screen
+                    # identity with the ANCHOR build (including DS41 real masks), then
+                    # the paired FA perf screen
                     # before the serving A/B; model identity follows below.
                     route_references.extend((
                         lambda arm: gates.check_cpu_fa_case_set(worker.build_dir,
                                                                 resolved_recipe=arm),
                         lambda arm: gates.check_cpu_fa_reference(
+                            anchor_build[0], worker.build_dir, worker.worktree,
+                            anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
+                            candidate_recipe=arm, window=cpu_measurement_window),
+                        lambda arm: gates.check_cpu_fa_real_mask_identity(
                             anchor_build[0], worker.build_dir, worker.worktree,
                             anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
                             candidate_recipe=arm, window=cpu_measurement_window),
