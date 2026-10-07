@@ -93,7 +93,7 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   # seat's context cap, planner reasoning history, context bundle mode
                   # and author count -- actor provenance, never an identity.
                   "--actor-context-limit", "--actor-planner-reasoning-history",
-                  "--actor-context-mode", "--actor-authors",
+                  "--actor-context-mode", "--actor-authors", "--actor-author-sandbox",
                   # Declared runtime arms and their evidence protocol (runtime_arms.py,
                   # P-AK-SEARCH-1-A4): a search policy over the SAME launch. Each arm is a
                   # single-field delta the child builds from the target's own launch; the

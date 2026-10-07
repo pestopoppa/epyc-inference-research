@@ -304,7 +304,7 @@ RUNTIME_PROTOCOL_SWITCHES = frozenset({"--calibrate-runtime"})
 #: stayed bound, and a lineup change refused resume with "different stable resume inputs".
 POOL_ACTOR_FLAGS = frozenset({"--workers", "--lane-actor-models",
                               "--actor-context-limit", "--actor-planner-reasoning-history",
-                              "--actor-context-mode", "--actor-authors",
+                              "--actor-context-mode", "--actor-authors", "--actor-author-sandbox",
                               "--planner-model", "--planner-effort",
                               "--critic-model", "--critic-effort"})
 

@@ -463,3 +463,97 @@ def test_keep_policy_flags_are_shared_policy_not_resume_identity():
     extra = ["--keep-dimensions", "short_decode,capacity", "--keep-capacity-limit-gib", "62",
              "--gpu-cpu-region-claim", "off", "--longctx-surface", "/s.json"]
     assert sr.resume_binding(base + extra) == sr.resume_binding(base)
+
+
+@pytest.mark.parametrize("sandbox,equals", [(None, False), ("off", False),
+                                           ("on", False), ("off", True), ("on", True)])
+def test_shared_author_sandbox_reaches_owner_parser_with_default_unchanged(
+        tmp_path, monkeypatch, sandbox, equals):
+    """Admission must preserve the owner's explicit value and historical default."""
+    import argparse
+
+    _, _, argv = _inputs(tmp_path, backends=("cpu",))
+    common = tmp_path / "common.json"
+    option = ([] if sandbox is None else
+              [f"--actor-author-sandbox={sandbox}"] if equals else
+              ["--actor-author-sandbox", sandbox])
+    common.write_text(json.dumps(option))
+    _forbid_execution(monkeypatch)
+    monkeypatch.setattr(run.champion, "verify_startup", lambda **_kw: "a" * 40)
+    monkeypatch.setattr(run, "_git", lambda *_a: "a" * 40)
+    monkeypatch.setattr(run.workload_contract, "read_census",
+                        lambda *_a: SimpleNamespace(n_embd=4096, dominant_quant="Q4_K"))
+    monkeypatch.setattr(run.actors, "backend_for",
+                        lambda *_a: SimpleNamespace(describe=lambda: "fixture"))
+    parsed = []
+    original_parse = argparse.ArgumentParser.parse_args
+
+    def capture_owner_parse(parser, *args, **kwargs):
+        result = original_parse(parser, *args, **kwargs)
+        if hasattr(result, "actor_author_sandbox"):
+            parsed.append(result)
+        return result
+
+    monkeypatch.setattr(argparse.ArgumentParser, "parse_args", capture_owner_parse)
+    assert sr.main([*argv, "--common-args", str(common), "--dry-run"]) == 0
+    assert len(parsed) == 1
+    assert parsed[0].actor_author_sandbox == (sandbox or "on")
+    assert run._actor_sandbox(parsed[0]) == {"author_sandbox": sandbox != "off"}
+    assert not (tmp_path / "router").exists()
+
+
+def test_author_sandbox_is_actor_provenance_not_target_or_resume_identity(tmp_path):
+    _, _, argv = _inputs(tmp_path, backends=("cpu",))
+    targets, _, _ = _build(argv)
+    base = targets[0]
+    off = [*base, "--actor-author-sandbox", "off"]
+    on = [*base, "--actor-author-sandbox", "on"]
+    assert sr.input_binding(off) != sr.input_binding(on)
+    assert sr.resume_binding(off) == sr.resume_binding(on) == sr.resume_binding(base)
+    assert sr._selected_identity(off) == sr._selected_identity(on)
+    assert sr._scheduler_bindings([off]) == sr._scheduler_bindings([on])
+
+
+@pytest.mark.parametrize("extra", [["--actor-author-sandbox-unknown", "off"],
+                                   ["--actor-author-sandbox"]])
+def test_shared_author_sandbox_does_not_admit_unknown_or_missing_option(
+        tmp_path, monkeypatch, extra):
+    _, _, argv = _inputs(tmp_path, backends=("cpu",))
+    common = tmp_path / "common.json"
+    common.write_text(json.dumps(extra))
+    _forbid_execution(monkeypatch)
+    with pytest.raises(SystemExit) as refused:
+        sr.main([*argv, "--common-args", str(common), "--dry-run"])
+    assert refused.value.code == 2
+    assert not (tmp_path / "router").exists()
+
+
+@pytest.mark.parametrize("sandbox", ["off", "on"])
+def test_shared_author_sandbox_reaches_real_authenticated_control_startup(
+        tmp_path, monkeypatch, sandbox):
+    from . import serial_control
+    from .test_serial_control import _http
+
+    _, _, argv = _inputs(tmp_path, backends=("cpu",))
+    argv[argv.index("--rounds") + 1] = "1"
+    common = tmp_path / "common.json"
+    common.write_text(json.dumps(["--actor-author-sandbox", sandbox]))
+    child = tmp_path / "tiny.py"
+    child.write_text(CHILD)
+    monkeypatch.setattr(sr, "_child_command", lambda args: [sr.sys.executable, str(child), *args])
+    _confine_fixture_child(tmp_path, monkeypatch)
+    monkeypatch.setenv("AUTOKERNEL_CONTROL_TOKEN", "fixture-token")
+    original_start = serial_control.SerialHTTPService.start
+    snapshots = []
+
+    def start_and_read(service):
+        original_start(service)
+        snapshots.append(_http(f"http://127.0.0.1:{service.server.server_address[1]}"))
+
+    monkeypatch.setattr(serial_control.SerialHTTPService, "start", start_and_read)
+    assert sr.main([*argv, "--common-args", str(common),
+                    "--control-listen", "127.0.0.1:0",
+                    "--control-origin", "http://localhost:8100"]) == 0
+    assert len(snapshots) == 1 and snapshots[0]["owner_id"]
+    seen = json.loads((tmp_path / "router" / "seen.jsonl").read_text())
+    assert sr.option(seen["argv"], "--actor-author-sandbox") == sandbox
