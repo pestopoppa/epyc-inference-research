@@ -1,88 +1,108 @@
-"""Synthetic registration controls for the read-only UTM-B1 MCP wrappers."""
+"""Off-host FastMCP controls over a temporary synthetic trace database."""
 
-import inspect
-import json
+import asyncio
 import ast
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
+from fastmcp import Client, FastMCP
+
+from src.trace import navigation
+from src.trace.store import Event, ensure_schema, upsert_events
 from src.trace.mcp_tools import register_trace_navigation_tools
 
 
-class _FakeMCP:
-    def __init__(self):
-        self.tools = {}
-
-    def tool(self, *, name):
-        def register(function):
-            self.tools[name] = function
-            return function
-
-        return register
+def _run(coro):
+    return asyncio.run(coro)
 
 
-class _FakeNavigation:
-    def __init__(self):
-        self.calls = []
+def _synthetic_navigation(tmp_path):
+    db_path = tmp_path / "synthetic-trace.sqlite"
+    conn = ensure_schema(db_path)
+    try:
+        upsert_events(conn, [
+            Event(
+                ts_utc="2026-10-07T00:00:00+00:00",
+                source="synthetic",
+                source_path="synthetic-source.jsonl",
+                source_line=1,
+                session_id="synthetic-session",
+                category="observe",
+                summary="needle first synthetic event",
+                detail_json=json.dumps({"private": "synthetic payload"}),
+            ),
+            Event(
+                ts_utc="2026-10-07T00:00:01+00:00",
+                source="synthetic",
+                source_path="synthetic-source.jsonl",
+                source_line=2,
+                session_id="synthetic-session",
+                category="observe",
+                summary="needle second synthetic event",
+                detail_json=json.dumps({"private": "another payload"}),
+            ),
+        ])
+    finally:
+        conn.close()
+    return SimpleNamespace(
+        search_records=lambda text: navigation.search_records(text, db_path=db_path),
+        get_records=lambda ids: navigation.get_records(ids, db_path=db_path),
+    )
 
-    def search_records(self, text):
-        self.calls.append(("search_records", text))
-        return [{"id": 4, "summary": "synthetic match"}]
 
-    def get_records(self, event_ids):
-        self.calls.append(("get_records", list(event_ids)))
-        return [{"id": event_id, "summary": "synthetic exact record"} for event_id in event_ids]
-
-
-def test_orchestrator_mcp_server_registers_the_trace_navigation_surface():
+def test_default_orchestrator_catalog_does_not_activate_candidate_tools():
     repository = Path(__file__).resolve().parents[2]
     source = ast.parse((repository / "src/mcp_server.py").read_text(encoding="utf-8"))
-    registrations = [
-        node.value
-        for node in source.body
-        if isinstance(node, ast.Expr)
-        and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Name)
-        and node.value.func.id == "register_trace_navigation_tools"
-    ]
-
-    assert len(registrations) == 1
-    assert len(registrations[0].args) == 1
-    assert isinstance(registrations[0].args[0], ast.Name)
-    assert registrations[0].args[0].id == "mcp"
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "register_trace_navigation_tools"
+        for node in ast.walk(source)
+    )
 
 
-def test_registration_exposes_only_existing_search_and_expand_functions():
-    server = _FakeMCP()
-    navigation = _FakeNavigation()
+def test_opt_in_registration_exposes_dotted_names_and_exact_optional_schemas(tmp_path):
+    server = FastMCP("synthetic-trace-navigation")
+    register_trace_navigation_tools(server, navigation=_synthetic_navigation(tmp_path))
 
-    register_trace_navigation_tools(server, navigation=navigation)
+    async def _schemas():
+        async with Client(server) as client:
+            return {tool.name: tool.inputSchema for tool in await client.list_tools()}
 
-    assert set(server.tools) == {"ms.search", "ms.expand"}
-    assert list(inspect.signature(server.tools["ms.search"]).parameters) == [
-        "text", "session_id"
-    ]
-    assert list(inspect.signature(server.tools["ms.expand"]).parameters) == [
-        "event_ids", "session_id"
-    ]
+    schemas = _run(_schemas())
 
-
-def test_search_delegates_without_exposing_store_path_or_vector_inputs():
-    server = _FakeMCP()
-    navigation = _FakeNavigation()
-    register_trace_navigation_tools(server, navigation=navigation)
-
-    response = json.loads(server.tools["ms.search"]("synthetic query", session_id="client"))
-
-    assert response == {"records": [{"id": 4, "summary": "synthetic match"}]}
-    assert navigation.calls == [("search_records", "synthetic query")]
+    assert set(schemas) == {"ms.search", "ms.expand"}
+    search = schemas["ms.search"]
+    assert search["required"] == ["text"]
+    assert search["properties"]["text"]["type"] == "string"
+    assert search["properties"]["session_id"]["type"] == "string"
+    assert search["properties"]["session_id"]["default"] == ""
+    assert search["additionalProperties"] is False
+    expand = schemas["ms.expand"]
+    assert expand["required"] == ["event_ids"]
+    assert expand["properties"]["event_ids"] == {"items": {"type": "integer"}, "type": "array"}
+    assert expand["properties"]["session_id"]["default"] == ""
+    assert expand["additionalProperties"] is False
 
 
-def test_expand_preserves_requested_event_order_and_is_read_only():
-    server = _FakeMCP()
-    navigation = _FakeNavigation()
-    register_trace_navigation_tools(server, navigation=navigation)
+def test_fastmcp_calls_reach_existing_navigation_against_synthetic_sqlite(tmp_path):
+    navigation_api = _synthetic_navigation(tmp_path)
+    server = FastMCP("synthetic-trace-navigation")
+    register_trace_navigation_tools(server, navigation=navigation_api)
 
-    response = json.loads(server.tools["ms.expand"]([9, 4], session_id="client"))
+    async def _calls():
+        async with Client(server) as client:
+            search = await client.call_tool("ms.search", {"text": "needle"})
+            # Deliberately omit session_id to verify its default remains callable.
+            search_rows = json.loads(search.content[0].text)["records"]
+            ids = [row["id"] for row in search_rows]
+            expand = await client.call_tool("ms.expand", {"event_ids": ids[::-1]})
+            expanded_rows = json.loads(expand.content[0].text)["records"]
+            return search_rows, expanded_rows
 
-    assert [row["id"] for row in response["records"]] == [9, 4]
-    assert navigation.calls == [("get_records", [9, 4])]
+    search_rows, expanded_rows = _run(_calls())
+
+    assert len(search_rows) == 2
+    assert [row["id"] for row in expanded_rows] == [row["id"] for row in search_rows][::-1]
+    assert all("synthetic" in row["source_path"] for row in expanded_rows)
