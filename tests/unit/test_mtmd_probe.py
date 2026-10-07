@@ -1,6 +1,7 @@
 """Contract tests for the shared bounded llama-mtmd CLI probe."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import os
 from pathlib import Path
 import signal
@@ -153,20 +154,20 @@ def test_timeout_kills_term_ignoring_child_and_leaves_no_process(tmp_path):
     )
     cli.chmod(0o755)
 
-    child_pid = int(pid_file.read_text(encoding="utf-8").strip())
-
-    def identity(pid):
-        """Return Linux PID plus start-time identity; zombies count as present."""
+    def snapshot(pid):
+        """Return PID/start-time identity and state; zombies remain observable."""
         try:
             stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
         except FileNotFoundError:
             return None
         # comm is parenthesized and may itself contain spaces or ')'.
-        fields_after_comm = stat_text[stat_text.rfind(")") + 2:].split()
-        return (pid, fields_after_comm[19])  # field 22: starttime
+        fields_after_comm = stat_text[stat_text.rfind(")") + 2 :].split()
+        identity = (pid, fields_after_comm[19])  # field 22: starttime
+        return identity, fields_after_comm[0]  # field 3: process state
 
-    child_identity = identity(child_pid)
-    assert child_identity is not None
+    def identity(pid):
+        current = snapshot(pid)
+        return current[0] if current is not None else None
 
     def wait_gone(expected, seconds=5):
         deadline = time.monotonic() + seconds
@@ -176,19 +177,45 @@ def test_timeout_kills_term_ignoring_child_and_leaves_no_process(tmp_path):
             time.sleep(0.05)
         return identity(expected[0]) != expected
 
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mtmd-timeout-control")
+    future = executor.submit(run_mtmd_probe, cli)
+    child_identity = None
     try:
-        proc = run_mtmd_probe(cli)
+        # The probe must be live before we take the PID/start-time snapshot.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            try:
+                child_pid = int(pid_file.read_text(encoding="ascii").strip())
+            except (FileNotFoundError, ValueError):
+                time.sleep(0.05)
+                continue
+            current = snapshot(child_pid)
+            if current is not None and current[1] not in {"Z", "X"}:
+                child_identity = current[0]
+                break
+            child_identity = None
+            time.sleep(0.05)
+        assert child_identity is not None, "probe did not start a live captured child"
+
+        proc = future.result(timeout=30)
         assert proc is not None and proc.returncode in (124, 137)
         assert wait_gone(child_identity), (
             f"timeout left captured TERM-ignoring child alive: {child_identity}"
         )
     finally:
         # Cleanup is limited to the exact captured process instance, never a reused PID.
-        if identity(child_pid) == child_identity:
-            os.kill(child_pid, signal.SIGKILL)
+        if child_identity is not None and identity(child_identity[0]) == child_identity:
+            os.kill(child_identity[0], signal.SIGKILL)
             assert wait_gone(child_identity), (
                 f"captured child survived SIGKILL or was not reaped: {child_identity}"
             )
+        if not future.done():
+            try:
+                future.result(timeout=30)
+            except FutureTimeoutError as exc:
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise AssertionError("bounded MTMD probe future did not finish") from exc
+        executor.shutdown(wait=True)
 
 
 def _copy_env_library(tmp_path: Path) -> Path:
