@@ -176,11 +176,14 @@ int main(int argc, char ** argv) {
     Dl_info info;
     void * entry = dlsym(RTLD_DEFAULT, "ggml_backend_cpu_init");
     if (!entry || !dladdr(entry, &info) || !info.dli_fname) return 9;
+    char * library_path = realpath(info.dli_fname, nullptr);
+    if (!library_path) return 9;
 
     std::printf("AK_CPU_FA_REFERENCE_V1 %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64
                 " %" PRId64 " %" PRId64 " %s %s %" PRId64 " %" PRId64 " %" PRId64 "\n",
                 hsk, hsv, nkvh, gqa, kv, nb, sinks, mask_mode, layout, threads, reps, seed);
-    std::printf("L %s\n", info.dli_fname);
+    std::printf("L %s\n", library_path);
+    std::free(library_path);
     std::printf("I %016" PRIx64 "\n", input_hash);
     std::vector<float> output(ggml_nelements(out));
     std::vector<float> first;
