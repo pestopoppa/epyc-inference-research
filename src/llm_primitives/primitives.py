@@ -10,7 +10,7 @@ import os
 import threading
 import time
 from dataclasses import replace
-from typing import Any
+from typing import Any, Callable
 
 from .backend import BackendMixin
 from .config import LLMPrimitivesConfig
@@ -680,6 +680,7 @@ class LLMPrimitives(
         top_k: int | None = None,
         n_probs: int | None = None,
         post_sampling_probs: bool = False,
+        on_chunk: Callable[[str], None] | None = None,
     ) -> str:
         """Call a sub-LM with optional context slice.
 
@@ -743,6 +744,7 @@ class LLMPrimitives(
             return self._llm_call_impl(
                 prompt, context_slice, role, n_tokens, skip_suffix, stop_sequences,
                 persona, json_schema, grammar, **sampling_kwargs,
+                on_chunk=on_chunk,
             )
         finally:
             self._recursion_depth -= 1
@@ -770,6 +772,7 @@ class LLMPrimitives(
         seed: int | None = None,
         top_p: float | None = None,
         top_k: int | None = None,
+        on_chunk: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         """HS-4 P0.1: one structured chat-completions call (client tool mode).
 
@@ -830,7 +833,10 @@ class LLMPrimitives(
         token = self._chat_payload_ctx.set(payload)
         try:
             role_for_call = self._resolve_depth_override_role(role)
-            content = self._real_call(trace_prompt, role_for_call, n_tokens, None, **sampling_kwargs)
+            content = self._real_call(
+                trace_prompt, role_for_call, n_tokens, None,
+                on_chunk=on_chunk, **sampling_kwargs,
+            )
         except Exception as exc:
             log_entry.error = str(exc)
             raise
@@ -877,6 +883,7 @@ class LLMPrimitives(
         top_k: int | None = None,
         n_probs: int | None = None,
         post_sampling_probs: bool = False,
+        on_chunk: Callable[[str], None] | None = None,
     ) -> str:
         """Internal implementation of llm_call (after recursion check)."""
         start_time = time.perf_counter()
@@ -926,6 +933,18 @@ class LLMPrimitives(
         # backend path (_real_call -> inference.py) already adds its EXACT completion
         # token count to total_tokens_generated.
         _tokens_before = self.total_tokens_generated
+        streamed_characters = 0
+
+        def _capped_chunk(content: str) -> None:
+            nonlocal streamed_characters
+            if on_chunk is None or not isinstance(content, str):
+                return
+            remaining = max(0, self.config.output_cap - streamed_characters)
+            if remaining:
+                clipped = content[:remaining]
+                streamed_characters += len(clipped)
+                on_chunk(clipped)
+
         try:
             if self.mock_mode:
                 result = self._mock_call(full_prompt, role)
@@ -947,6 +966,7 @@ class LLMPrimitives(
                 result = self._real_call(
                     full_prompt, role_for_call, n_tokens, stop_sequences,
                     json_schema=json_schema, grammar=grammar,
+                    on_chunk=_capped_chunk if on_chunk is not None else None,
                     **sampling_kwargs,
                 )
 

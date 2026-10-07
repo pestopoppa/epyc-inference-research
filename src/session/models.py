@@ -48,6 +48,36 @@ class FindingSource(str, Enum):
 
 
 @dataclass
+class SessionMessage:
+    """One durable message within a session turn.
+
+    Message history is retained with its session: archiving keeps it, while
+    explicit session deletion removes it. ``display`` is structured JSON and
+    remains separate from text that may be spoken.
+    """
+
+    id: int
+    session_id: str
+    turn_id: str
+    role: str
+    text: str
+    spoken_text: str | None
+    display: dict[str, Any] | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass
+class SessionConversationSummary:
+    """Latest caller-produced compact state and the message frontier it covers."""
+
+    session_id: str
+    through_message_id: int
+    summary: str
+    updated_at: datetime
+
+
+@dataclass
 class SessionDocument:
     """A document processed within a session.
 

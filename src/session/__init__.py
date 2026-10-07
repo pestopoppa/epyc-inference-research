@@ -23,6 +23,8 @@ from src.session.models import (
     FindingSource,
     ResumeContext,
     Session,
+    SessionConversationSummary,
+    SessionMessage,
     SessionDocument,
     SessionStatus,
 )
@@ -45,6 +47,8 @@ __all__ = [
     "IdleMonitor",
     # Models
     "Session",
+    "SessionConversationSummary",
+    "SessionMessage",
     "SessionDocument",
     "SessionStatus",
     "Finding",

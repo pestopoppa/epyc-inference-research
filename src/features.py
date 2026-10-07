@@ -100,6 +100,7 @@ _FEATURE_REGISTRY: tuple[FeatureSpec, ...] = (
     # API Features
     FeatureSpec("streaming", False, True, "STREAMING", "SSE streaming endpoints"),
     FeatureSpec("openai_compat", False, True, "OPENAI_COMPAT", "OpenAI-compatible API"),
+    FeatureSpec("voice_turn", False, False, "VOICE_TURN", "First-party session-backed voice-turn SSE route; opt-in until integrated acceptance"),
     # Core Features
     FeatureSpec("repl", True, True, "REPL", "REPL execution environment"),
     FeatureSpec("caching", False, True, "CACHING", "Response caching with prefix routing"),
@@ -531,6 +532,7 @@ class Features:
     # API Features
     streaming: bool = False
     openai_compat: bool = False
+    voice_turn: bool = False  # First-party voice-turn route; opt-in pending integrated acceptance.
 
     # Core Features (usually enabled)
     repl: bool = True

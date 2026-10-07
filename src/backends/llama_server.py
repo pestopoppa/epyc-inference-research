@@ -1085,10 +1085,10 @@ class LlamaServerBackend(ModelBackend):
 
         self._refuse_if_parked(role_config)
 
-        # HS-4 P0.1: tool calls only arrive whole on the batch response, so a
-        # structured chat payload is never streamed (the primitives layer
-        # already forces batch; this is the backstop).
-        if _chat_payload(request) is not None:
+        # Preserve the established whole-response tool path unless a caller
+        # explicitly observes real content chunks. In that case structured
+        # tool-call deltas are assembled and returned as whole calls below.
+        if _chat_payload(request) is not None and on_chunk is None:
             return self.infer(role_config, request)
 
         start_time = time.time()
@@ -1099,7 +1099,8 @@ class LlamaServerBackend(ModelBackend):
         # OpenAI streaming format emits the same kind of incremental
         # content deltas, so we can route through /v1/chat/completions
         # without changing the on_chunk contract.
-        if self.config.use_chat_completions or _thinking_chat_lane(role_config, request):
+        if (_chat_payload(request) is not None or self.config.use_chat_completions
+                or _thinking_chat_lane(role_config, request)):
             return self._infer_stream_text_chat_completions(
                 role_config, request, on_chunk, start_time,
             )
@@ -1714,12 +1715,22 @@ class LlamaServerBackend(ModelBackend):
                     user_content = user_content[:idx]
         user_content = user_content.strip()
 
+        chat_payload = _chat_payload(request)
+        if chat_payload is not None:
+            messages = [dict(message) for message in chat_payload.get("messages") or []]
+        else:
+            messages = [{"role": "user", "content": user_content}]
         payload: dict[str, Any] = {
-            "messages": [{"role": "user", "content": user_content}],
+            "messages": messages,
             "max_tokens": request.n_tokens if request.n_tokens > 0 else 4096,
             "stream": True,
             "cache_prompt": _cache_prompt(request),
         }
+        if chat_payload is not None:
+            if chat_payload.get("tools") is not None:
+                payload["tools"] = chat_payload["tools"]
+            if chat_payload.get("tool_choice") is not None:
+                payload["tool_choice"] = chat_payload["tool_choice"]
         self._apply_deterministic_sampling(payload, role_config, request)
         if request.stop_sequences:
             payload["stop"] = request.stop_sequences
@@ -1731,6 +1742,7 @@ class LlamaServerBackend(ModelBackend):
 
         chunks: list[str] = []
         reasoning_chunks: list[str] = []
+        tool_call_parts: dict[int, dict[str, Any]] = {}
         completion_reason = "stop"
         # llama-server attaches its `timings` object to the LAST chunk of a chat
         # stream (server-task.cpp to_json_oaicompat_chat_stream: `if (timings.prompt_n
@@ -1810,6 +1822,30 @@ class LlamaServerBackend(ModelBackend):
                                                     "chat_completions stream aborted by on_chunk"
                                                 )
                                                 break
+                                    raw_tool_deltas = delta.get("tool_calls")
+                                    if isinstance(raw_tool_deltas, list):
+                                        for raw_delta in raw_tool_deltas:
+                                            if not isinstance(raw_delta, dict):
+                                                continue
+                                            raw_index = raw_delta.get("index")
+                                            if (not isinstance(raw_index, int)
+                                                    or isinstance(raw_index, bool) or raw_index < 0):
+                                                continue
+                                            partial = tool_call_parts.setdefault(raw_index, {
+                                                "id": "", "type": "function",
+                                                "function": {"name": "", "arguments": ""},
+                                            })
+                                            call_id = raw_delta.get("id")
+                                            if isinstance(call_id, str) and call_id:
+                                                partial["id"] = call_id
+                                            function_delta = raw_delta.get("function")
+                                            if isinstance(function_delta, dict):
+                                                name_delta = function_delta.get("name")
+                                                args_delta = function_delta.get("arguments")
+                                                if isinstance(name_delta, str):
+                                                    partial["function"]["name"] += name_delta
+                                                if isinstance(args_delta, str):
+                                                    partial["function"]["arguments"] += args_delta
                                     fr = choices[0].get("finish_reason")
                                     if fr:
                                         completion_reason = str(fr)
@@ -1866,7 +1902,7 @@ class LlamaServerBackend(ModelBackend):
                 else (tokens_generated / elapsed if elapsed > 0 else 0.0)
             )
             empty_generation = (
-                completion_reason != "read_timeout"
+                not tool_call_parts and completion_reason != "read_timeout"
                 and _is_empty_long_generation(output, elapsed)
             )
             if empty_generation:
@@ -1908,6 +1944,7 @@ class LlamaServerBackend(ModelBackend):
                 prompt_tokens=prompt_tokens,
                 cached_prompt_tokens=cached_prompt_tokens,
                 reasoning_content="".join(reasoning_chunks) or None,
+                tool_calls=[tool_call_parts[index] for index in sorted(tool_call_parts)],
             )
         except Exception as e:
             elapsed = time.time() - start_time
