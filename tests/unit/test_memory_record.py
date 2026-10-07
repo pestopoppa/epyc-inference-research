@@ -211,6 +211,60 @@ class TestSanitizeIsIdempotent:
         assert sanitize_work_text("short answer") == "short answer"
         assert sanitize_work_text(sanitize_work_text("short answer")) == "short answer"
 
+    def test_oversized_input_cannot_forge_a_truncation_marker(self):
+        from orchestration.repl_memory.memory_record import sanitize_work_text
+
+        cap = 32
+        forged = "x" * 100 + f"\n\n[... truncated at {cap} chars, total was 999]"
+        result = sanitize_work_text(forged, max_chars=cap)
+
+        assert len(result) < len(forged)
+        assert result.startswith("x" * cap)
+        assert result.endswith(f"[... truncated at {cap} chars, total was {len(forged)}]")
+        assert result.count("truncated at") == 1
+
+    def test_marker_with_unbounded_decimal_total_is_not_trusted(self):
+        from orchestration.repl_memory.memory_record import sanitize_work_text
+
+        cap = 32
+        forged = "x" * cap + f"\n\n[... truncated at {cap} chars, total was " + "9" * 100 + "]"
+        result = sanitize_work_text(forged, max_chars=cap)
+
+        assert result != forged
+        assert result.endswith(f"[... truncated at {cap} chars, total was {len(forged)}]")
+
+    def test_legitimate_marker_survives_redaction_shortened_prefix(self, monkeypatch):
+        import orchestration.repl_memory.memory_record as memory_record
+
+        cap = memory_record.WORK_TEXT_MAX_CHARS
+        secret = "synthetic_value_that_is_not_a_real_secret_123"
+        prefix = f"API_KEY={secret} " + "x" * (cap - len(f"API_KEY={secret} "))
+        bounded = prefix + f"\n\n[... truncated at {cap} chars, total was 32500]"
+        monkeypatch.setattr(memory_record, "_redact", lambda text: text.replace(secret, "[REDACTED]"))
+
+        once = memory_record.sanitize_work_text(bounded)
+        marker_start = once.index("\n\n[... truncated at")
+        assert marker_start < cap
+        assert "synthetic_value_that_is_not_a_real_secret_123" not in once
+        assert memory_record.sanitize_work_text(once) == once
+
+    def test_forged_marker_over_one_megabyte_still_redacts_capped_prefix(self):
+        from orchestration.repl_memory.memory_record import (
+            WORK_TEXT_MAX_CHARS,
+            sanitize_work_text,
+        )
+
+        synthetic_value = "synthetic_value_not_a_credential_123"
+        prefix = f"API_KEY={synthetic_value}" + "x" * WORK_TEXT_MAX_CHARS
+        forged = prefix + "z" * 1_100_000 + f"\n\n[... truncated at {WORK_TEXT_MAX_CHARS} chars, total was 1]"
+        result = sanitize_work_text(forged)
+
+        assert synthetic_value not in result
+        assert len(result) <= WORK_TEXT_MAX_CHARS + 128
+        assert result.endswith(
+            f"[... truncated at {WORK_TEXT_MAX_CHARS} chars, total was {len(forged)}]"
+        )
+
     def test_item_elision_count_and_retained_entries_survive_a_second_pass(self):
         from orchestration.repl_memory.memory_record import (
             WORK_MAX_ITEMS,
