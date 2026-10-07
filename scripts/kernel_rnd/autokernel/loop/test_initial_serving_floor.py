@@ -1,5 +1,5 @@
 """Actual startup/calibration/file owners; synthetic launches, never hardware."""
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import json
 from types import SimpleNamespace
 from unittest import mock
@@ -104,6 +104,8 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                 argv += ["--serving-instrument", serving.MATCHED_INSTRUMENT]
             with mock.patch.object(run.claim, "hold_cpu", hold), \
                     mock.patch.object(run.claim, "hold", hold), \
+                    mock.patch.object(run.claim, "hold_gpu_quiet_measurement",
+                                      side_effect=lambda *_args, **_kwargs: nullcontext()) as quiet_hold, \
                     mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
                     mock.patch.object(run.os, "sched_setaffinity"), \
                     mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
@@ -123,6 +125,8 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                     mock.patch.object(pool, "drive", source_pool):
                 result = original_main(argv)
                 if case in {"stop", "stop_matched"}:
+                    if backend == "gpu" and case == "stop_matched":
+                        quiet_hold.assert_called_once_with()
                     provision.assert_not_called()
                     floor_write.assert_not_called()
                     output = fixture.root / "result"
