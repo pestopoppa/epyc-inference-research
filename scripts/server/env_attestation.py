@@ -220,11 +220,8 @@ def attest(state: dict, *, aux_services: dict | None = None, pids_on_port=None,
             out.errors.append(failure)
         if is_llama:
             # Diagnostic keys are never declared: any one live on a llama-server must be explained
-            # by an unexpired per-component record naming this pid and value, or it is drift.
-            # Keys in the embedder override record were already adjudicated above under its
-            # separate process-scoped contract.
-            embedder_override_keys = set((override_record or {}).get("env") or {})
-            for key in sorted(diagnostic_keys() - set(declared) - embedder_override_keys):
+            # by an unexpired record naming this pid and value, or it is drift.
+            for key in sorted(diagnostic_keys() - set(declared)):
                 got = live.get(key)
                 if got is None:
                     continue
