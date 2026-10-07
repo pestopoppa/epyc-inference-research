@@ -9,7 +9,9 @@ mode is byte-identical to the pre-P0.1 route.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -21,6 +23,32 @@ from src.api.routes import openai_compat
 from src.api.state import get_state, reset_state
 from src.features import reset_features
 from src.scheduling.contention_gate import ContentionDenied
+
+
+def test_openai_thread_stream_close_waits_for_worker_quiescence():
+    async def scenario():
+        release_worker = threading.Event()
+        worker_finished = threading.Event()
+        cancelled = threading.Event()
+
+        def call(on_chunk):
+            on_chunk("first")
+            release_worker.wait(timeout=2)
+            worker_finished.set()
+            return "first"
+
+        stream = openai_compat._iter_thread_call_chunks(call, cancel_event=cancelled)
+        assert await anext(stream) == ("chunk", "first")
+        closing = asyncio.create_task(stream.aclose())
+        await asyncio.sleep(0.02)
+        assert not closing.done()
+        assert not worker_finished.is_set()
+        assert cancelled.is_set()
+        release_worker.set()
+        await closing
+        assert worker_finished.is_set()
+
+    asyncio.run(scenario())
 
 READ_TOOL = {
     "type": "function",
@@ -821,7 +849,18 @@ class _FakeBackend:
 
     def infer_stream_text(self, role_config, request, on_chunk=None):
         self.stream_calls += 1
-        raise AssertionError("client tool mode must not stream from the backend")
+        if on_chunk is None:
+            raise AssertionError("structured tool path streamed without a chunk observer")
+        from src.model_server import InferenceResult
+
+        on_chunk("visible ")
+        on_chunk("content")
+        self.requests.append(request)
+        return InferenceResult(
+            role="frontdoor", output="visible content", tokens_generated=5,
+            generation_speed=10.0, elapsed_time=0.1, success=True,
+            completion_reason="tool_calls", tool_calls=list(self.tool_calls),
+        )
 
 
 def _real_primitives(backend):
@@ -856,6 +895,26 @@ def test_primitives_chat_completion_call_binds_payload_and_returns_tool_calls():
     assert primitives.get_request_chat_payload() is None
     assert primitives.total_tokens_generated == 5
     assert primitives.call_log[-1].call_type == "chat_completion"
+
+
+def test_primitives_streams_content_chunks_and_returns_whole_tool_calls():
+    backend = _FakeBackend([MODEL_TOOL_CALL])
+    primitives = _real_primitives(backend)
+    chunks = []
+
+    out = primitives.chat_completion_call(
+        [{"role": "user", "content": "read it"}],
+        role="frontdoor", tools=[READ_TOOL], tool_choice="auto", on_chunk=chunks.append,
+    )
+
+    assert chunks == ["visible ", "content"]
+    assert out["content"] == "visible content"
+    assert out["tool_calls"] == [MODEL_TOOL_CALL]
+    assert backend.stream_calls == 1
+    assert backend.requests[0].chat_payload == {
+        "messages": [{"role": "user", "content": "read it"}],
+        "tools": [READ_TOOL], "tool_choice": "auto",
+    }
 
 
 def test_primitives_chat_completion_call_raises_instead_of_inband_error():

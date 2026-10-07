@@ -9,7 +9,7 @@ import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any
+from typing import Any, Callable
 
 from src.backends import serving_calls
 from src.exceptions import AdmissionDenied, ContextOverflowError
@@ -588,6 +588,7 @@ class InferenceMixin:
         top_k: int | None = None,
         n_probs: int | None = None,
         post_sampling_probs: bool = False,
+        on_chunk: Callable[[str], None] | None = None,
     ) -> str:
         """Make a real inference call via CachingBackend or legacy ModelServer.
 
@@ -706,6 +707,7 @@ class InferenceMixin:
                     top_k=top_k,
                     n_probs=n_probs,
                     post_sampling_probs=post_sampling_probs,
+                    on_chunk=on_chunk,
                 )
         return self._real_call_impl(
             prompt,
@@ -720,6 +722,7 @@ class InferenceMixin:
             top_k=top_k,
             n_probs=n_probs,
             post_sampling_probs=post_sampling_probs,
+            on_chunk=on_chunk,
         )
 
     def _real_call_impl(
@@ -736,6 +739,7 @@ class InferenceMixin:
         top_k: int | None = None,
         n_probs: int | None = None,
         post_sampling_probs: bool = False,
+        on_chunk: Callable[[str], None] | None = None,
     ) -> str:
         """Internal real call implementation (no concurrency gating)."""
         # Content-addressable cache check
@@ -749,6 +753,7 @@ class InferenceMixin:
             and stop_sequences is None
             and n_probs is None
             and _request_chat_payload(self) is None
+            and on_chunk is None
         ):
             from src.llm_cache import ContentAddressableCache
 
@@ -767,6 +772,13 @@ class InferenceMixin:
                 return cached
 
         result = None
+        streamed_chunks = 0
+
+        def _forward_chunk(content: str) -> None:
+            nonlocal streamed_chunks
+            if on_chunk is not None:
+                streamed_chunks += 1
+                on_chunk(content)
 
         def _call_on(target_role: str) -> str:
             return self._real_call_single(
@@ -782,11 +794,16 @@ class InferenceMixin:
                 top_k=top_k,
                 n_probs=n_probs,
                 post_sampling_probs=post_sampling_probs,
+                on_chunk=_forward_chunk if on_chunk is not None else None,
             )
 
         try:
             result = _call_on(role)
         except ContextOverflowError as overflow:
+            if streamed_chunks:
+                # A second generation after visible partial output would splice
+                # two answers into one client stream. Preserve the typed failure.
+                raise
             # MUST precede `except RuntimeError` (ContextOverflowError is one):
             # same-tier model fallback is the wrong remedy for a request that
             # does not fit, and it would mask the typed error.
@@ -814,6 +831,8 @@ class InferenceMixin:
                 if hasattr(self, "get_request_cancel_check") else None,
             )
         except RuntimeError as primary_error:
+            if streamed_chunks:
+                raise
             # Model fallback: try same-tier alternatives on infrastructure failure
             if not _get_features().model_fallback:
                 raise
@@ -839,22 +858,13 @@ class InferenceMixin:
                     reason,
                 )
                 try:
-                    result = self._real_call_single(
-                        prompt,
-                        fb_role_str,
-                        n_tokens,
-                        stop_sequences,
-                        json_schema=json_schema,
-                        grammar=grammar,
-                        temperature=temperature,
-                        seed=seed,
-                        top_p=top_p,
-                        top_k=top_k,
-                        n_probs=n_probs,
-                        post_sampling_probs=post_sampling_probs,
-                    )
+                    result = _call_on(fb_role_str)
                     break
                 except RuntimeError:
+                    if streamed_chunks:
+                        # Never splice a later fallback answer after this
+                        # fallback has exposed any part of its own response.
+                        raise
                     continue
             else:
                 # All fallbacks failed
@@ -880,6 +890,7 @@ class InferenceMixin:
         top_k: int | None = None,
         n_probs: int | None = None,
         post_sampling_probs: bool = False,
+        on_chunk: Callable[[str], None] | None = None,
     ) -> str:
         """Execute a single inference call against one role's backend."""
         # Try CachingBackend first (RadixAttention)
@@ -899,6 +910,7 @@ class InferenceMixin:
                 top_k=top_k,
                 n_probs=n_probs,
                 post_sampling_probs=post_sampling_probs,
+                on_chunk=on_chunk,
             )
 
         # Fall back to legacy ModelServer
@@ -1030,6 +1042,7 @@ class InferenceMixin:
         top_k: int | None = None,
         n_probs: int | None = None,
         post_sampling_probs: bool = False,
+        on_chunk: Callable[[str], None] | None = None,
     ) -> str:
         """Call a CachingBackend with RadixAttention prefix caching.
 
@@ -1144,7 +1157,9 @@ class InferenceMixin:
         wants_probabilities = n_probs is not None and int(n_probs) > 0
         # Probability capture and structured chat payloads (tool calls arrive
         # whole) both need the batch response, never the text stream.
-        batch_only = wants_probabilities or getattr(request, "chat_payload", None) is not None
+        batch_only = wants_probabilities or (
+            getattr(request, "chat_payload", None) is not None and on_chunk is None
+        )
         req_started = time.perf_counter()
 
         # Admission control: reject early if backend queue is full
@@ -1496,6 +1511,8 @@ class InferenceMixin:
                                     tap.write_chunk(content)
                                     _acc.append(content)
                                     _chunk_count += 1
+                                    if on_chunk is not None:
+                                        on_chunk(content)
                                     # Client disconnect → abort streaming to release lock sooner.
                                     if _cancel is not None and _cancel():
                                         raise StopIteration
@@ -1524,6 +1541,8 @@ class InferenceMixin:
 
                                     def _on_chunk_tap(content: str) -> None:
                                         _emit_first_output(content)
+                                        if on_chunk is not None:
+                                            on_chunk(content)
                                         if _cancel_tap is not None and _cancel_tap():
                                             raise StopIteration
 
@@ -1563,6 +1582,8 @@ class InferenceMixin:
 
                             def _cancel_only(content: str) -> None:
                                 _emit_first_output(content)
+                                if on_chunk is not None:
+                                    on_chunk(content)
                                 if _cancel_nt is not None and _cancel_nt():
                                     raise StopIteration
 

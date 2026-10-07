@@ -7,6 +7,8 @@ clients to use our orchestrator backend for inference.
 from __future__ import annotations
 
 import asyncio
+from contextlib import aclosing
+from concurrent.futures import TimeoutError as FutureTimeoutError
 import json
 import logging
 import re
@@ -78,6 +80,116 @@ router = APIRouter()
 # fail-open itself is a policy decision nobody has taken; this only makes it seen.
 _compression_fallback_lock = threading.Lock()
 CONTEXT_COMPRESSION_FALLBACK_COUNTS: dict[str, int] = {"total": 0}
+
+
+async def _iter_thread_call_chunks(call, *, cancel_event: threading.Event):
+    """Bridge a sync inference callback to an async consumer with backpressure."""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue(maxsize=16)
+    stopped = threading.Event()
+
+    def enqueue(item: tuple[str, Any]) -> bool:
+        if stopped.is_set():
+            return False
+        pending = asyncio.run_coroutine_threadsafe(queue.put(item), loop)
+        while not stopped.is_set():
+            try:
+                pending.result(timeout=0.1)
+                return True
+            except FutureTimeoutError:
+                continue
+        pending.cancel()
+        return False
+
+    def on_chunk(content: str) -> None:
+        if not isinstance(content, str):
+            raise TypeError("inference emitted a non-text chunk")
+        if content:
+            if not enqueue(("chunk", content)):
+                cancel_event.set()
+
+    def worker() -> None:
+        try:
+            value = call(on_chunk)
+        except Exception as exc:
+            enqueue(("error", exc))
+        else:
+            enqueue(("result", value))
+
+    task = asyncio.create_task(asyncio.to_thread(worker))
+    try:
+        while True:
+            kind, value = await queue.get()
+            yield kind, value
+            if kind != "chunk":
+                return
+    finally:
+        stopped.set()
+        cancel_event.set()
+        await _drain_thread_task(task, cancel_event)
+
+
+async def _drain_thread_task(task: asyncio.Task, cancel_event: threading.Event) -> None:
+    """Keep caller-owned state until the synchronous worker truly exits."""
+    drain = asyncio.ensure_future(asyncio.gather(task, return_exceptions=True))
+    interrupted = False
+    while not drain.done():
+        try:
+            await asyncio.shield(drain)
+        except asyncio.CancelledError:
+            interrupted = True
+            cancel_event.set()
+    if interrupted:
+        raise asyncio.CancelledError
+
+
+class _LeadingReasoningChunkFilter:
+    """Avoid exposing a leading inline <think> block while forwarding content."""
+
+    OPEN = "<think>"
+    CLOSE = "</think>"
+    MAX_PREFIX_WHITESPACE = 4096
+
+    def __init__(self) -> None:
+        self._phase = "prefix"
+        self._buffer = ""
+
+    def feed(self, chunk: str) -> str:
+        if self._phase == "content":
+            return chunk
+        self._buffer += chunk
+        if self._phase == "prefix":
+            candidate = self._buffer.lstrip()
+            if len(self._buffer) - len(candidate) > self.MAX_PREFIX_WHITESPACE:
+                raise ValueError("leading reasoning prefix exceeds buffer limit")
+            if self.OPEN.startswith(candidate):
+                if candidate == self.OPEN:
+                    self._buffer = self._buffer[self._buffer.find(self.OPEN) + len(self.OPEN):]
+                    self._phase = "reasoning"
+                return ""
+            if candidate.startswith(self.OPEN):
+                self._buffer = candidate[len(self.OPEN):]
+                self._phase = "reasoning"
+            else:
+                self._phase = "content"
+                output, self._buffer = self._buffer, ""
+                return output
+        if self._phase == "reasoning":
+            end = self._buffer.find(self.CLOSE)
+            if end < 0:
+                # Keep only a possible split closing-tag suffix; reasoning text
+                # itself can be discarded without retaining an unbounded trace.
+                keep = 0
+                for size in range(1, min(len(self.CLOSE), len(self._buffer) + 1)):
+                    if self._buffer.endswith(self.CLOSE[:size]):
+                        keep = size
+                self._buffer = self._buffer[-keep:] if keep else ""
+                return ""
+            output = self._buffer[end + len(self.CLOSE):].lstrip()
+            self._buffer = ""
+            self._phase = "content"
+            return output
+        return ""
 
 
 def _record_compression_fallback(exc: BaseException, message_count: int) -> None:
@@ -607,6 +719,7 @@ def _run_client_tool_completion(
     *,
     role: str | Role,
     sampling_kwargs: dict[str, Any],
+    on_chunk=None,
 ) -> tuple[str, list[dict[str, Any]], str, OpenAIUsage]:
     """One backend chat-completions call.
 
@@ -627,6 +740,7 @@ def _run_client_tool_completion(
         tools=request.tools,
         tool_choice=request.tool_choice,
         n_tokens=request.max_tokens,
+        on_chunk=on_chunk,
         **sampling_kwargs,
     )
     tool_calls = _normalise_client_tool_calls(list(result.get("tool_calls") or []))
@@ -1316,6 +1430,55 @@ async def openai_chat_completions(
             finish_reason = "stop"
             client_tool_calls: list[dict[str, Any]] = []
             client_usage: OpenAIUsage | None = None
+            first_chunk = True
+            streamed_content: list[str] = []
+            reasoning_filter = _LeadingReasoningChunkFilter()
+            can_stream_model_text = (
+                use_real_mode and not prompt_parts.image_base64
+                and (client_mode or disable_repl)
+                and not (escalation_plan is not None and escalation_plan.enabled)
+            )
+
+            def content_delta(content: str) -> str:
+                nonlocal first_chunk
+                chunk = {
+                    "id": chat_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": request.model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": ({"role": "assistant", "content": content}
+                                  if first_chunk else {"content": content}),
+                        "finish_reason": None,
+                    }],
+                }
+                first_chunk = False
+                if request.x_show_routing:
+                    chunk["x_role"] = role
+                return f"data: {json.dumps(chunk)}\n\n"
+
+            async def stream_call(call):
+                cancel_event = threading.Event()
+
+                def invoke(sink):
+                    with primitives.request_context(
+                        cancel_check=cancel_event.is_set,
+                        session_id=request.x_session_id,
+                    ):
+                        return call(sink)
+
+                async with aclosing(_iter_thread_call_chunks(
+                    invoke, cancel_event=cancel_event
+                )) as chunks:
+                    async for kind, value in chunks:
+                        if kind == "chunk":
+                            safe_content = reasoning_filter.feed(value)
+                            if safe_content:
+                                streamed_content.append(safe_content)
+                                yield "event", content_delta(safe_content)
+                        else:
+                            yield kind, value
 
             if not use_real_mode:
                 # Mock mode fallback
@@ -1364,16 +1527,33 @@ async def openai_chat_completions(
                     repl_final_answered = False
 
                     if client_mode:
-                        # HS-4 P0.1: the backend call is buffered (tool calls
-                        # arrive whole); content and tool-call deltas are then
-                        # replayed in OpenAI chunk format below.
+                        # Structured tool-call fields are assembled as whole
+                        # calls; text content uses real backend chunks when the
+                        # selected backend supports the streaming lane.
                         try:
-                            response_text, client_tool_calls, finish_reason, client_usage = (
-                                _run_client_tool_completion(
-                                    primitives, request, client_messages,
-                                    role=role, sampling_kwargs=sampling_kwargs,
+                            if can_stream_model_text:
+                                async with aclosing(stream_call(
+                                    lambda sink: _run_client_tool_completion(
+                                        primitives, request, client_messages,
+                                        role=role, sampling_kwargs=sampling_kwargs,
+                                        on_chunk=sink,
+                                    )
+                                )) as chunks:
+                                    async for kind, value in chunks:
+                                        if kind == "event":
+                                            yield value
+                                        elif kind == "result":
+                                            (response_text, client_tool_calls, finish_reason,
+                                             client_usage) = value
+                                        else:
+                                            raise value
+                            else:
+                                response_text, client_tool_calls, finish_reason, client_usage = (
+                                    _run_client_tool_completion(
+                                        primitives, request, client_messages,
+                                        role=role, sampling_kwargs=sampling_kwargs,
+                                    )
                                 )
-                            )
                             _raise_admission_denied_text(response_text)
                         except (AdmissionDenied, ContentionDenied) as e:
                             yield _sse_error_event(
@@ -1451,16 +1631,33 @@ async def openai_chat_completions(
                         # Direct LLM call — no REPL, no code execution.
                         # /chat's direct-stage prompt contract (_direct_call_prompt).
                         try:
-                            response_text = primitives.llm_call(
-                                _direct_call_prompt(
-                                    combined_context, role,
-                                    getattr(state, "registry", None),
-                                ),
-                                role=role,
-                                n_tokens=request.max_tokens,
-                                skip_suffix=True,
-                                **sampling_kwargs,
+                            direct_prompt = _direct_call_prompt(
+                                combined_context, role, getattr(state, "registry", None),
                             )
+                            if can_stream_model_text:
+                                async with aclosing(stream_call(
+                                    lambda sink: primitives.llm_call(
+                                        direct_prompt, role=role,
+                                        n_tokens=request.max_tokens,
+                                        skip_suffix=True, on_chunk=sink,
+                                        **sampling_kwargs,
+                                    )
+                                )) as chunks:
+                                    async for kind, value in chunks:
+                                        if kind == "event":
+                                            yield value
+                                        elif kind == "result":
+                                            response_text = value
+                                        else:
+                                            raise value
+                            else:
+                                response_text = primitives.llm_call(
+                                    direct_prompt,
+                                    role=role,
+                                    n_tokens=request.max_tokens,
+                                    skip_suffix=True,
+                                    **sampling_kwargs,
+                                )
                             _raise_admission_denied_text(response_text)
                         except (AdmissionDenied, ContentionDenied) as e:
                             yield _sse_error_event(
@@ -1643,7 +1840,7 @@ async def openai_chat_completions(
                         total_tokens = primitives.total_tokens_generated
                         client_usage = _escalated_client_usage(client_usage, escalation_plan)
 
-                    first_chunk = True
+                    first_chunk = not streamed_content
                     if response_reasoning:
                         # The direct call's split-off <think> block, as one
                         # reasoning_content delta ahead of the content deltas.
@@ -1655,10 +1852,10 @@ async def openai_chat_completions(
                             "choices": [
                                 {
                                     "index": 0,
-                                    "delta": {
-                                        "role": "assistant",
-                                        "reasoning_content": response_reasoning,
-                                    },
+                                    "delta": ({"role": "assistant",
+                                               "reasoning_content": response_reasoning}
+                                              if first_chunk
+                                              else {"reasoning_content": response_reasoning}),
                                     "finish_reason": None,
                                 }
                             ],
@@ -1668,27 +1865,24 @@ async def openai_chat_completions(
                             chunk["x_role"] = role
                         yield f"data: {json.dumps(chunk)}\n\n"
 
-                    # Stream the response character by character (OpenAI format)
-                    for char in response_text:
-                        chunk = {
-                            "id": chat_id,
-                            "object": "chat.completion.chunk",
-                            "created": created,
-                            "model": request.model,
-                            "choices": [
-                                {
-                                    "index": 0,
-                                    "delta": {"role": "assistant", "content": char}
-                                    if first_chunk
-                                    else {"content": char},
-                                    "finish_reason": None,
-                                }
-                            ],
-                        }
-                        first_chunk = False
-                        if request.x_show_routing:
-                            chunk["x_role"] = role
-                        yield f"data: {json.dumps(chunk)}\n\n"
+                    if streamed_content:
+                        observed = "".join(streamed_content)
+                        if not response_text.startswith(observed):
+                            yield _sse_error_event(
+                                chat_id=chat_id, created=created, model=request.model,
+                                message="streamed text differs from the completed response",
+                                error_type="stream_integrity_error", status_code=502,
+                            )
+                            yield "data: [DONE]\n\n"
+                            return
+                        remainder = response_text[len(observed):]
+                        if remainder:
+                            yield content_delta(remainder)
+                    elif response_text:
+                        # A route, cache hit, or legacy backend without a chunk
+                        # source emits one completed delta; never simulate tokens
+                        # by replaying characters.
+                        yield content_delta(response_text)
 
                     # HS-4 P0.1: one delta per tool call, complete arguments.
                     for tc_index, tool_call in enumerate(client_tool_calls):

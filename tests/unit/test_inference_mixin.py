@@ -92,6 +92,37 @@ def writable_tmp_dir(monkeypatch, tmp_path):
 class TestInferenceMixinRealCall:
     """Tests for _real_call() method."""
 
+    def test_fallback_runtime_error_after_streamed_chunk_does_not_try_next_role(
+        self, monkeypatch
+    ):
+        from types import SimpleNamespace
+
+        prims = LLMPrimitives(mock_mode=False)
+        monkeypatch.setattr(
+            "src.features.features",
+            lambda: SimpleNamespace(model_fallback=True, content_cache=False),
+        )
+        monkeypatch.setattr("src.roles.get_fallback_roles", lambda _role: ["fallback_a", "fallback_b"])
+        calls = []
+
+        def call_single(_prompt, role, **kwargs):
+            calls.append(role)
+            if role == "primary":
+                raise RuntimeError("primary unavailable")
+            if role == "fallback_a":
+                kwargs["on_chunk"]("partial fallback")
+                raise RuntimeError("fallback failed after visible output")
+            return "must not be called"
+
+        monkeypatch.setattr(prims, "_real_call_single", call_single)
+        streamed = []
+
+        with pytest.raises(RuntimeError, match="fallback failed after visible output"):
+            prims._real_call("prompt", "primary", on_chunk=streamed.append)
+
+        assert calls == ["primary", "fallback_a"]
+        assert streamed == ["partial fallback"]
+
     def test_real_call_with_caching_backend(self, mock_backend, mock_health_tracker):
         """Test _real_call uses CachingBackend when available."""
         # Create LLMPrimitives with backend
