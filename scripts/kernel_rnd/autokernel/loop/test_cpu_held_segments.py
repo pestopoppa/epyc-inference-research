@@ -341,13 +341,19 @@ def test_before_native_preflight_failure_remains_genuine_preclaim(native, tmp_pa
             pytest.fail('preflight refusal yielded a CPU context')
     run._publish_preclaim_failure(tmp_path, selected, target, failed.value)
     assert not (tmp_path / 'loop-claim-acquired.json').exists()
+    assert not (tmp_path / 'loop-held-claims.json').exists()
     assert native[0].lock_owners() == {}
     manifest = ss.SerialSchedulerManifest('cpu-generations', cfg, {'cpu': selected.proposal})
     active = {'scheduler_selection': selected.to_dict(), 'scheduler_selection_sha256': selected.digest}
     settled = sr._scheduled_failure_account({'scheduler_state': state.to_dict()}, manifest, active,
                                             tmp_path, [])
-    assert settled.campaign_attempts == 1 and settled.receipts == ()
-    assert settled.campaign_charged_seconds == 0
+    # A native preflight refusal retires only the issued selection. Actual held
+    # receipts are required to charge attempts, time, seed budgets or debt.
+    assert state.issued_selection_digests == (selected.digest,)
+    assert settled == replace(state, issued_selection_digests=())
+    with pytest.raises(s.SchedulingRefused, match='not an issued selection'):
+        sr._scheduled_failure_account({'scheduler_state': settled.to_dict()}, manifest, active,
+                                      tmp_path, [])
 
 
 @pytest.mark.parametrize('seed', [None, 'native-seed'])

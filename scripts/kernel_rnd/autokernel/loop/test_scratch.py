@@ -770,8 +770,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     # -- prospective original FA capture inputs (OP80 source integration only) -----------
     'cpu_fa_mask_capture.py:prepare:mkdir': (1, 'evidence: explicit capture-dir for prospective original FA masks; refuses nonempty prior captures and retains inputs/manifests'),
     'cpu_fa_mask_capture.py:prepare:open-write': (2, 'evidence: exclusive recipe/prompt snapshots and capture manifest bind run/source/model/tool/input hashes before governed FA capture'),
-    'cpu_fa_verifier_record.py:NativeVerifierRecord.__init__:mkdir': (1, 'evidence: exclusive per-verifier original custody directory beneath the explicit private capture root; retained for strict prospective reopening'),
-    'cpu_fa_verifier_record.py:exclusive:os-open-create': (1, 'evidence: owned private O_EXCL original request/observation/source pins; fsynced before the verifier verdict and consumed without reconstruction'),
+    'cpu_fa_verifier_record.py:NativeVerifierRecord.__init__:mkdir': (1, 'evidence: exclusive per-verifier custody beneath the private capture root; retained for strict original reopening'),
+    'cpu_fa_verifier_record.py:exclusive:os-open-create': (1, 'evidence: private O_EXCL request/observation/source pins; fsynced before verdict and reopened without reconstruction'),
     # -- reviewed quality/calibration writers: scratch owners remain native -------------
     'calibrate_served_shapes.py:build_calibration:write_text': (1, 'writes inside registered staged calibration scratch (provenance for the separate CLI execute phase)'),
     'calibrate_served_shapes.py:execute:mkdir': (1, 'evidence: served_shape calibration record directory, read back and recipe/binary/seed validated before apply'),
