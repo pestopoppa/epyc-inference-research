@@ -15,6 +15,7 @@ memory that outlives this process.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, replace
 import hashlib
