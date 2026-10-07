@@ -186,4 +186,37 @@ class AuthorityTests(unittest.TestCase):
                     self.assertEqual(acquire.call_args.kwargs['timeout_s'],0)
                     self.assertEqual(acquire.call_args.kwargs['campaign_id'],'owner:inference:EXL3-3' if owner else 'lease-1')
 
+class KfdTeardownPollingTests(unittest.TestCase):
+    class FakeClock:
+        def __init__(self):self.now=0.0;self.sleeps=[]
+        def monotonic(self):return self.now
+        def sleep(self,seconds):self.sleeps.append(seconds);self.now+=seconds
+
+    def test_reaped_pid_waits_for_kfd_bookkeeping_and_retains_samples(self):
+        clock=self.FakeClock()
+        samples=[{'pid':1234,'pid_alive':False,'kfd_pids':['1234'],'vram_used_bytes':{}},
+                 {'pid':1234,'pid_alive':False,'kfd_pids':['1234'],'vram_used_bytes':{}},
+                 {'pid':1234,'pid_alive':False,'kfd_pids':[],'vram_used_bytes':{}}]
+        with mock.patch.object(launcher.time,'monotonic',side_effect=clock.monotonic), \
+             mock.patch.object(launcher.time,'sleep',side_effect=clock.sleep), \
+             mock.patch.object(launcher,'residency_sample',side_effect=samples) as sample:
+            teardown,cleared=launcher.poll_kfd_pid_exit(1234,timeout_s=0.1,poll_interval_s=0.02)
+        self.assertTrue(cleared)
+        self.assertEqual(teardown,samples)
+        self.assertEqual(sample.call_count,3)
+        self.assertEqual(clock.sleeps,[0.02,0.02])
+
+    def test_unknown_or_persistent_kfd_census_fails_only_at_deadline(self):
+        clock=self.FakeClock()
+        lingering={'pid':5678,'pid_alive':False,'kfd_pids':['5678'],'vram_used_bytes':{}}
+        unknown={'pid':5678,'pid_alive':False,'kfd_pids':None,'vram_used_bytes':{}}
+        with mock.patch.object(launcher.time,'monotonic',side_effect=clock.monotonic), \
+             mock.patch.object(launcher.time,'sleep',side_effect=clock.sleep), \
+             mock.patch.object(launcher,'residency_sample',side_effect=[unknown,lingering,lingering,lingering]):
+            teardown,cleared=launcher.poll_kfd_pid_exit(5678,timeout_s=0.05,poll_interval_s=0.02)
+        self.assertFalse(cleared)
+        self.assertEqual(teardown,[unknown,lingering,lingering,lingering])
+        self.assertEqual(len(clock.sleeps),3)
+        self.assertAlmostEqual(sum(clock.sleeps),0.05)
+
 if __name__=='__main__':unittest.main(verbosity=2)
