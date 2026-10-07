@@ -102,6 +102,8 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                 argv += ["--serving-instrument", serving.MATCHED_INSTRUMENT]
             with mock.patch.object(run.claim, "hold_cpu", hold), \
                     mock.patch.object(run.claim, "hold", hold), \
+                    mock.patch.object(run.claim, "gpu_quiet_preflight",
+                                      return_value=fixture.root / "synthetic-gpu-quiet.lock") as quiet_preflight, \
                     mock.patch.object(run.claim, "hold_gpu_quiet_measurement",
                                       side_effect=lambda *_args, **_kwargs: nullcontext()) as quiet_hold, \
                     mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
@@ -124,6 +126,10 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                     mock.patch.object(run.build_recipe, "check_rocm_version",
                                       return_value=(True, "6.2.0")):
                 result = original_main(argv)
+                if backend == "gpu":
+                    quiet_preflight.assert_called_once_with()
+                else:
+                    quiet_preflight.assert_not_called()
                 if case in {"stop", "stop_matched"}:
                     if backend == "gpu" and case == "stop_matched":
                         quiet_hold.assert_called_once_with()
