@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any
 
 import belief_capture
+from tulving_srs_comparison import require_comparable_srs
 from tulving_episodic_adapter import (
     _DEFAULT_VARIANT,
     CHRONOLOGICAL_GET_STYLE,
@@ -529,6 +530,11 @@ def render_markdown(scored: dict[str, Any], result_path: Path) -> str:
         f"{summary.get('chronological_partial_coverage', 0)}"
         f" / {summary.get('chronological_questions', 0)}",
     ]
+    bins = summary.get("simple_recall_bins", {})
+    populated = [label for label, bucket in bins.items() if bucket.get("count", 0)]
+    lines.append(f"- Populated SRS bins: {', '.join(populated) or 'none'}")
+    lines.append("- Cross-book SRS comparison requires matching scorer version, gold-binding "
+                 "rule, bin basis and populated bin labels; consult the native count table.")
     if summary.get("unknown_get_style"):
         lines.append(
             f"- **Unknown get styles (excluded from every subset): "
@@ -592,6 +598,9 @@ def main() -> int:
     parser.add_argument("--variant", default=None,
                         help="Dataset variant (default: the rows' recorded variant, else "
                              f"{_DEFAULT_VARIANT})")
+    parser.add_argument("--compare-srs-to", type=Path, default=None,
+                        help="Refuse SRS comparison unless an existing scored JSON has the same "
+                             "scorer, gold binding, bin basis and populated bins")
     belief = parser.add_argument_group(
         "belief kernel (SC67)",
         "Emit the producer-authored claim-tuple sidecar beside --out-json. Requires the arm "
@@ -617,6 +626,9 @@ def main() -> int:
                 f"--variant {args.variant} disagrees with the rows' {recorded_variant}")
         variant = args.variant or recorded_variant or _DEFAULT_VARIANT
         scored = score_result_payload(payload, build_prompt_index(chapters, variant))
+        if args.compare_srs_to:
+            reference = _load_json(args.compare_srs_to)
+            require_comparable_srs(scored["summary"], reference.get("summary", {}))
     except (GoldBindingError, ValueError) as exc:
         raise SystemExit(f"score_tulving_run: {exc}") from exc
 

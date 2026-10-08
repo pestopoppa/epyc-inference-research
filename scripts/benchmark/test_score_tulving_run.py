@@ -515,3 +515,39 @@ def test_matching_arm_emits_through_main(tmp_path, monkeypatch):
     assert score_tulving_run.main() == 0
     rows = [json.loads(x) for x in (tmp_path / "belief_measurements.jsonl").read_text().splitlines()]
     assert {r["extra"]["arm"] for r in rows} == {"none"} and len(rows) == 2
+
+
+@pytest.mark.parametrize("mismatch", [False, True])
+def test_cli_comparison_gate_precedes_outputs_and_capture(tmp_path, monkeypatch, mismatch):
+    import copy
+    payload, prompts = _m12e_fixture()
+    scored = _score(payload, prompts)
+    reference = copy.deepcopy(scored)
+    if mismatch:
+        reference["summary"]["simple_recall_bins"]["6+"]["count"] += 1
+        reference["summary"]["simple_recall_questions"] += 1
+    source = tmp_path / "raw.json"
+    source.write_text(json.dumps(payload))
+    other = tmp_path / "other.json"
+    other.write_text(json.dumps(reference))
+    out, md = tmp_path / "score.json", tmp_path / "score.md"
+    monkeypatch.setattr(score_tulving_run, "build_prompt_index", lambda *a: _gold(prompts, 20))
+    def capture_forbidden():
+        pytest.fail("comparison refusal must precede capture")
+    if mismatch:
+        monkeypatch.setattr(score_tulving_run, "_load_belief_capture", capture_forbidden)
+    argv = ["score_tulving_run.py", str(source), "--chapters", "20", "--compare-srs-to",
+            str(other), "--out-json", str(out), "--out-md", str(md)]
+    if mismatch:
+        argv += ["--belief-measurements", "--arm", "none"]
+    monkeypatch.setattr("sys.argv", argv)
+    if mismatch:
+        with pytest.raises(SystemExit, match="SRS quantities differ"):
+            score_tulving_run.main()
+        assert not out.exists() and not md.exists()
+        assert not (tmp_path / "belief_measurements.jsonl").exists()
+    else:
+        assert score_tulving_run.main() == 0
+        assert json.loads(out.read_text()) == scored
+        assert "Populated SRS bins:" in md.read_text()
+        assert "Cross-book SRS comparison requires" in md.read_text()
