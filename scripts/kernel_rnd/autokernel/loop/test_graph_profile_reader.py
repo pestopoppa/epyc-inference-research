@@ -44,8 +44,7 @@ class ReaderTests(unittest.TestCase):
         for index,value in ((0,'-1'),(12,'0'),(12,'1.5'),(10,'nan'),(11,'-1'),(16,'1')):
             cells=list(self.node_cells);cells[index]=value
             raw=('\t'.join(r.NODE_COLUMNS)+'\n'+'\t'.join(cells)+'\n').encode()
-            with self.subTest(index=index,value=value):
-                with self.assertRaises(c.Refusal):r.parse_nodes(raw,'unavailable')
+            with self.assertRaises(c.Refusal):r.parse_nodes(raw,'unavailable')
         raw=('\t'.join(r.NODE_COLUMNS)+'\n'+('\t'.join(self.node_cells)+'\n')*2).encode()
         with self.assertRaises(c.Refusal):r.parse_nodes(raw,'unavailable')
     def test_path_exact_header_duplicate_and_nonfinite_refusals(self):
@@ -65,8 +64,7 @@ class ReaderTests(unittest.TestCase):
         rows=r.parse_nodes(Path(self.raw['pernode']).read_bytes(),'unavailable')
         for key,value in (('phase','unknown'),('phase','prefill'),('structural_sha256','a'*64),('n_nodes',2),('accumulated',False),('global_idx',1)):
             bad=copy.deepcopy(self.run);bad['eval_events'][0][key]=value
-            with self.subTest(key=key):
-                with self.assertRaises(c.Refusal):r.interpret(self.graph,bad,self.p,rows)
+            with self.assertRaises(c.Refusal):r.interpret(self.graph,bad,self.p,rows)
     def test_node_cardinality_and_native_metadata_refusals(self):
         rows=r.parse_nodes(Path(self.raw['pernode']).read_bytes(),'unavailable')
         for field,value in (('op','ADD'),('wall_max_ev',2),('evals',2)):

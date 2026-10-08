@@ -62,26 +62,23 @@ class CaptureTests(unittest.TestCase):
 
     def test_required_provenance_refusals(self):
         for key in self.p:
-            with self.subTest(key=key):
-                bad = copy.deepcopy(self.p); del bad[key]
-                with self.assertRaises(c.Refusal): c.begin(self.pre, bad)
+            bad = copy.deepcopy(self.p); del bad[key]
+            with self.assertRaises(c.Refusal): c.begin(self.pre, bad)
         self.assertFalse(self.pre.exists())
 
     def test_unknown_and_inconsistent_pre(self):
         cases = [("iqk", "unknown"), ("threads", True), ("owner", ""), ("recorded_at", "unknown")]
         for key, value in cases:
-            with self.subTest(key=key):
-                bad = copy.deepcopy(self.p); bad[key] = value
-                with self.assertRaises(c.Refusal): c.begin(self.pre, bad)
+            bad = copy.deepcopy(self.p); bad[key] = value
+            with self.assertRaises(c.Refusal): c.begin(self.pre, bad)
         bad = copy.deepcopy(self.p); bad["graph"]["identity_method"] = "node_count"
         with self.assertRaises(c.Refusal): c.begin(self.pre, bad)
 
     def test_during_drift_thread_unavailable_and_window(self):
         c.begin(self.pre, self.p)
         for key, value in (("effective_threads", 3), ("thread_availability", "aggregate_max_mean_min"), ("started_at", "2025-01-01T00:00:00Z"), ("owner", "other")):
-            with self.subTest(key=key):
-                bad = copy.deepcopy(self.o); bad[key] = value
-                with self.assertRaises(c.Refusal): c.during(self.during, self.pre, bad)
+            bad = copy.deepcopy(self.o); bad[key] = value
+            with self.assertRaises(c.Refusal): c.during(self.during, self.pre, bad)
         self.assertFalse(self.during.exists())
 
     def test_closure_and_mutation_refusals(self):
@@ -111,19 +108,17 @@ class CaptureTests(unittest.TestCase):
         for section, fields in (("graph", ("filter_semantics",)), ("eval", ("warmup_semantics", "accumulation_semantics", "dispersion_semantics"))):
             for field in fields:
                 for value in ("unknown", "plausible but unspecified", ""):
-                    with self.subTest(section=section, field=field, value=value):
-                        bad = copy.deepcopy(self.p); bad[section][field] = value
-                        with self.assertRaises(c.Refusal): c.begin(self.pre, bad)
+                    bad = copy.deepcopy(self.p); bad[section][field] = value
+                    with self.assertRaises(c.Refusal): c.begin(self.pre, bad)
         self.assertFalse(self.pre.exists())
 
     def test_pre_byte_identity_refusals(self):
         for role in ("binary", "graph_identity", "compiled_strings"):
-            with self.subTest(role=role):
-                path = self.binary if role == "binary" else Path(self.raw[role])
-                original = path.read_bytes(); path.write_bytes(original + b"changed")
-                with self.assertRaises(c.Refusal): c.begin(self.pre, self.p)
-                path.write_bytes(original)
-                if role == "binary": self.p["binary"]["mtime_ns"] = path.stat().st_mtime_ns
+            path = self.binary if role == "binary" else Path(self.raw[role])
+            original = path.read_bytes(); path.write_bytes(original + b"changed")
+            with self.assertRaises(c.Refusal): c.begin(self.pre, self.p)
+            path.write_bytes(original)
+            if role == "binary": self.p["binary"]["mtime_ns"] = path.stat().st_mtime_ns
         self.assertFalse(self.pre.exists())
 
     def test_pre_missing_compiled_string_even_matching_digest(self):
