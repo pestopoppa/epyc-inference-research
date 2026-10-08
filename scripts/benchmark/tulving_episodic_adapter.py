@@ -1015,6 +1015,7 @@ class TulvingEpisodicAdapter(BaseAdapter):
             prompt_dict: The prompt dict returned by _row_to_prompt.
             llm_judge: Optional callable(pred_items, gt_items, retrieval_type)
                        → Optional[float].  If non-None return, overrides F1.
+                       Item matches remain deterministic; a scalar is not alignment.
 
         Returns:
             dict with keys: precision, recall, f1, nb_pred, nb_gt,
@@ -1031,18 +1032,20 @@ class TulvingEpisodicAdapter(BaseAdapter):
         if llm_judge is not None:
             judge_score = llm_judge(predicted, ground_truth, retrieval_type)
             if judge_score is not None:
-                nb_gt = len(ground_truth)
-                return {
+                # A scalar judge score supplies no item alignment. Preserve the
+                # deterministic matches for coverage; do not infer semantic matches
+                # or chronological order from the judge's aggregate score.
+                result = score_f1_list(predicted, ground_truth)
+                result.update({
                     "precision": judge_score,
                     "recall": judge_score,
                     "f1": judge_score,
-                    "nb_pred": len(predicted),
-                    "nb_gt": nb_gt,
-                    "matched_gt_items": [],
                     "get_style": get_style,
                     "retrieval_type": retrieval_type,
                     "source": "llm_judge",
-                }
+                    "match_source": "deterministic",
+                })
+                return result
 
         result = score_f1_list(predicted, ground_truth)
         result["get_style"] = get_style
