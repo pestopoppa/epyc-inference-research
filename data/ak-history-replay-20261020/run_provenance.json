@@ -1,0 +1,73 @@
+{
+ "config_echo": {
+  "argv": [
+   "scripts/kernel_rnd/autokernel/history_replay/export.py",
+   "--out-dir",
+   "data/ak-history-replay-20261020"
+  ],
+  "live_window_s": 1800,
+  "python": "3.13.7",
+  "sqlite_uri": "file:<db>?mode=ro&immutable=1"
+ },
+ "elapsed_s": 38.95,
+ "liveness": [
+  {
+   "live": false,
+   "reasons": [],
+   "store": "/mnt/raid0/llm/autokernel/loop-memory/experiments.db"
+  },
+  {
+   "live": false,
+   "reasons": [],
+   "store": "/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/store/experiments.db"
+  },
+  {
+   "live": false,
+   "reasons": [],
+   "stale_window_ignored": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/cpu-window.json says phase=build_and_measure holds=True but expires_at 2026-10-04T06:04:41.291242Z has passed (loop dead per the window contract)",
+   "store": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/experiments.db"
+  },
+  {
+   "live": false,
+   "reasons": [],
+   "store": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-b0ba1d427/experiments.db"
+  },
+  {
+   "live": false,
+   "reasons": [],
+   "store": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55/experiments.db"
+  },
+  {
+   "live": false,
+   "reasons": [],
+   "store": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae/experiments.db"
+  },
+  {
+   "live": false,
+   "reasons": [],
+   "store": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store/experiments.db"
+  },
+  {
+   "live": false,
+   "reasons": [],
+   "store": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store-b0ba1d427/experiments.db"
+  }
+ ],
+ "mtime_check": {
+  "before_after_equal": true,
+  "changed": [],
+  "files_checked": 114,
+  "stores_mtime_ns": {
+   "/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/store/experiments.db": 1791137452727771109,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-b0ba1d427/experiments.db": 1791700109546401986,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55/experiments.db": 1790256759473621719,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae/experiments.db": 1790333970754728037,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/experiments.db": 1791170377537397535,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store-b0ba1d427/experiments.db": 1791700105198533990,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store/experiments.db": 1791088881092720846,
+   "/mnt/raid0/llm/autokernel/loop-memory/experiments.db": 1788957468651657658
+  }
+ },
+ "root": "/mnt/raid0/llm/autokernel",
+ "schema": "epyc.autokernel.history_replay.v1.run_provenance"
+}

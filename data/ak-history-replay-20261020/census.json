@@ -1,0 +1,1282 @@
+{
+ "a_rows_by_status_and_campaign": {
+  "all_stores_reconcile": true,
+  "by_campaign": {
+   "ak-27b-gpu-verify-20261004": {
+    "authoring_failed": 4,
+    "gate_refused": 5,
+    "hypothesis_rejected": 1,
+    "hypothesis_retired": 2,
+    "patch_rejected": 1
+   },
+   "ak-ds41-cpu-decode-20260923": {
+    "abstained": 326,
+    "anchor_guard_excursion": 3,
+    "anchor_verified": 22,
+    "authoring_failed": 11,
+    "gate_refused": 26,
+    "hypothesis_rejected": 50,
+    "hypothesis_retired": 7,
+    "integrity_refused": 3,
+    "keep_candidate": 9,
+    "kept": 28,
+    "lane_error": 8,
+    "measured_divergence": 1,
+    "measured_null": 28,
+    "measured_serving_gate": 2,
+    "measurement_invalid": 2,
+    "patch_rejected": 32,
+    "patch_rounds_exhausted": 13,
+    "planner_transient": 192,
+    "refused_at_formation": 6,
+    "refused_duplicate": 1,
+    "regression": 9,
+    "resume_rejected": 16,
+    "runtime_observed": 5,
+    "scope_blocked": 9,
+    "stopped_mid_formation": 16,
+    "superseded": 10
+   },
+   "ak-q38fn-cpu-decode-20261003": {
+    "abstained": 30,
+    "anchor_guard_excursion": 1,
+    "anchor_verified": 8,
+    "authoring_failed": 3,
+    "gate_refused": 16,
+    "hypothesis_rejected": 13,
+    "hypothesis_retired": 4,
+    "integrity_refused": 2,
+    "keep_candidate": 8,
+    "kept": 10,
+    "lane_error": 2,
+    "measured_divergence": 1,
+    "measured_null": 17,
+    "patch_rejected": 12,
+    "patch_rounds_exhausted": 7,
+    "planner_transient": 171,
+    "refused_duplicate": 2,
+    "regression": 1,
+    "resume_rejected": 13,
+    "runtime_observed": 6,
+    "scope_blocked": 3,
+    "stopped_mid_formation": 1
+   },
+   "loop-memory": {
+    "anchor_mismatch": 4,
+    "anchor_verified": 17,
+    "bench_failed": 4,
+    "champion_vs_production": 12,
+    "kept": 32,
+    "lane_error": 24,
+    "measured_null": 831,
+    "planner_transient": 837,
+    "refused_at_formation": 370,
+    "run_aborted": 4,
+    "stopped_mid_formation": 19,
+    "superseded": 243
+   }
+  },
+  "by_store": {
+   "ak-27b-gpu-verify-20261004/store": {
+    "by_status": {
+     "authoring_failed": 4,
+     "gate_refused": 5,
+     "hypothesis_rejected": 1,
+     "hypothesis_retired": 2,
+     "patch_rejected": 1
+    },
+    "reconciles": true,
+    "row_count_select_count": 13,
+    "sum_by_status": 13
+   },
+   "ak-ds41-cpu-decode-20260923/store": {
+    "by_status": {
+     "abstained": 102,
+     "anchor_guard_excursion": 3,
+     "anchor_verified": 18,
+     "authoring_failed": 10,
+     "gate_refused": 21,
+     "hypothesis_rejected": 38,
+     "hypothesis_retired": 7,
+     "integrity_refused": 1,
+     "keep_candidate": 5,
+     "kept": 22,
+     "lane_error": 7,
+     "measured_divergence": 1,
+     "measured_null": 21,
+     "measured_serving_gate": 2,
+     "measurement_invalid": 2,
+     "patch_rejected": 30,
+     "patch_rounds_exhausted": 13,
+     "planner_transient": 20,
+     "refused_at_formation": 5,
+     "refused_duplicate": 1,
+     "regression": 8,
+     "resume_rejected": 16,
+     "runtime_observed": 3,
+     "scope_blocked": 7,
+     "stopped_mid_formation": 12,
+     "superseded": 10
+    },
+    "reconciles": true,
+    "row_count_select_count": 385,
+    "sum_by_status": 385
+   },
+   "ak-ds41-cpu-decode-20260923/store-b0ba1d427": {
+    "by_status": {
+     "abstained": 224,
+     "anchor_verified": 4,
+     "authoring_failed": 1,
+     "gate_refused": 4,
+     "hypothesis_rejected": 12,
+     "integrity_refused": 2,
+     "keep_candidate": 4,
+     "kept": 6,
+     "measured_null": 7,
+     "patch_rejected": 2,
+     "planner_transient": 171,
+     "refused_at_formation": 1,
+     "regression": 1,
+     "runtime_observed": 2,
+     "scope_blocked": 2,
+     "stopped_mid_formation": 1
+    },
+    "reconciles": true,
+    "row_count_select_count": 444,
+    "sum_by_status": 444
+   },
+   "ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55": {
+    "by_status": {
+     "planner_transient": 1
+    },
+    "reconciles": true,
+    "row_count_select_count": 1,
+    "sum_by_status": 1
+   },
+   "ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae": {
+    "by_status": {
+     "gate_refused": 1,
+     "lane_error": 1,
+     "stopped_mid_formation": 3
+    },
+    "reconciles": true,
+    "row_count_select_count": 5,
+    "sum_by_status": 5
+   },
+   "ak-q38fn-cpu-decode-20261003/store": {
+    "by_status": {},
+    "reconciles": true,
+    "row_count_select_count": 0,
+    "sum_by_status": 0
+   },
+   "ak-q38fn-cpu-decode-20261003/store-b0ba1d427": {
+    "by_status": {
+     "abstained": 30,
+     "anchor_guard_excursion": 1,
+     "anchor_verified": 8,
+     "authoring_failed": 3,
+     "gate_refused": 16,
+     "hypothesis_rejected": 13,
+     "hypothesis_retired": 4,
+     "integrity_refused": 2,
+     "keep_candidate": 8,
+     "kept": 10,
+     "lane_error": 2,
+     "measured_divergence": 1,
+     "measured_null": 17,
+     "patch_rejected": 12,
+     "patch_rounds_exhausted": 7,
+     "planner_transient": 171,
+     "refused_duplicate": 2,
+     "regression": 1,
+     "resume_rejected": 13,
+     "runtime_observed": 6,
+     "scope_blocked": 3,
+     "stopped_mid_formation": 1
+    },
+    "reconciles": true,
+    "row_count_select_count": 331,
+    "sum_by_status": 331
+   },
+   "loop-memory": {
+    "by_status": {
+     "anchor_mismatch": 4,
+     "anchor_verified": 17,
+     "bench_failed": 4,
+     "champion_vs_production": 12,
+     "kept": 32,
+     "lane_error": 24,
+     "measured_null": 831,
+     "planner_transient": 837,
+     "refused_at_formation": 370,
+     "run_aborted": 4,
+     "stopped_mid_formation": 19,
+     "superseded": 243
+    },
+    "reconciles": true,
+    "row_count_select_count": 2397,
+    "sum_by_status": 2397
+   }
+  },
+  "label": "answerable_now",
+  "rows_total": 3576
+ },
+ "b_independent_campaigns": {
+  "between_run_sd_cv": "not answerable: no target has two independent campaigns that each hold a kept best score (count of targets with >=2 scored = 0)",
+  "by_target": {
+   "27b-gpu-verify": {
+    "between_run_best_score": null,
+    "independent_store_clusters": 1,
+    "with_a_kept_best_score": 0
+   },
+   "ds41-cpu-decode": {
+    "between_run_best_score": null,
+    "independent_store_clusters": 3,
+    "with_a_kept_best_score": 1
+   },
+   "legacy-loop-memory": {
+    "between_run_best_score": null,
+    "independent_store_clusters": 1,
+    "with_a_kept_best_score": 1
+   },
+   "q38fn-cpu-decode": {
+    "between_run_best_score": null,
+    "independent_store_clusters": 1,
+    "with_a_kept_best_score": 1
+   }
+  },
+  "clusters": [
+   {
+    "best_kept_effect_fraction": null,
+    "best_measured_effect_fraction": null,
+    "campaign_dirs": [
+     "ak-27b-gpu-verify-20261004"
+    ],
+    "continuation_evidence": "single store",
+    "n_kept": 0,
+    "rows": 13,
+    "stores": [
+     "ak-27b-gpu-verify-20261004/store"
+    ],
+    "target_group": "27b-gpu-verify"
+   },
+   {
+    "best_kept_effect_fraction": 0.16157236054232582,
+    "best_measured_effect_fraction": 0.16157236054232582,
+    "campaign_dirs": [
+     "ak-ds41-cpu-decode-20260923"
+    ],
+    "continuation_evidence": "stores share an epoch id (experiments or epoch_aliases)",
+    "n_kept": 28,
+    "rows": 829,
+    "stores": [
+     "ak-ds41-cpu-decode-20260923/store",
+     "ak-ds41-cpu-decode-20260923/store-b0ba1d427"
+    ],
+    "target_group": "ds41-cpu-decode"
+   },
+   {
+    "best_kept_effect_fraction": null,
+    "best_measured_effect_fraction": null,
+    "campaign_dirs": [
+     "ak-ds41-cpu-decode-20260923"
+    ],
+    "continuation_evidence": "single store",
+    "n_kept": 0,
+    "rows": 1,
+    "stores": [
+     "ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55"
+    ],
+    "target_group": "ds41-cpu-decode"
+   },
+   {
+    "best_kept_effect_fraction": null,
+    "best_measured_effect_fraction": null,
+    "campaign_dirs": [
+     "ak-ds41-cpu-decode-20260923"
+    ],
+    "continuation_evidence": "single store",
+    "n_kept": 0,
+    "rows": 5,
+    "stores": [
+     "ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae"
+    ],
+    "target_group": "ds41-cpu-decode"
+   },
+   {
+    "best_kept_effect_fraction": 0.04755028820257845,
+    "best_measured_effect_fraction": 0.0581833265703271,
+    "campaign_dirs": [
+     "ak-q38fn-cpu-decode-20261003"
+    ],
+    "continuation_evidence": "single store",
+    "n_kept": 10,
+    "rows": 331,
+    "stores": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427"
+    ],
+    "target_group": "q38fn-cpu-decode"
+   },
+   {
+    "best_kept_effect_fraction": 0.23339188950431944,
+    "best_measured_effect_fraction": 0.23339188950431944,
+    "campaign_dirs": [
+     "loop-memory"
+    ],
+    "continuation_evidence": "single store",
+    "n_kept": 32,
+    "rows": 2397,
+    "stores": [
+     "loop-memory"
+    ],
+    "target_group": "legacy-loop-memory"
+   }
+  ],
+  "empty_stores_not_counted": [
+   "ak-q38fn-cpu-decode-20261003/store"
+  ],
+  "label": "answerable_now (count: 1 independent campaign per target)",
+  "max_independent_scored_campaigns_for_any_target": 1,
+  "rule": "a store that shares any epoch id with another store is the same campaign (union-find); campaign = connected store cluster; best score = max effect_fraction over status=kept rows",
+  "targets_with_ge2_scored_independent_campaigns": 0
+ },
+ "c_budget_axis_and_keys": {
+  "call_to_attempt_key": {
+   "calls_with_no_following_attempt": 0,
+   "lines": 2700,
+   "lines_carrying_an_attempt_or_trial_key": 0,
+   "time_window_next_attempt_delta_buckets": {
+    "<=3600s": 1345,
+    "<=600s": 251,
+    "<=60s": 952,
+    ">3600s": 152
+   },
+   "verdict": "not answerable by key (count with key = 0 of 2700); only the time-window heuristic exists"
+  },
+  "cumulative_token_axis": "not answerable for the full call stream: 2413 of 2700 metrics lines carry no token field (hosted codex/claude seats); answerable only over the 287 opencode lines",
+  "cumulative_wall_s_axis": "answerable: wall_s on 2700 of 2700 lines; ts goes backwards 1 times across 19 files (concurrent lanes), so order by started_at/finished_at, not file position",
+  "duplicate_call_ids_across_files": 0,
+  "label": "partially_answerable",
+  "lines_without_tokens_by_backend_kind": {
+   "claude": 254,
+   "codex": 2159,
+   "opencode": 0
+  },
+  "metrics_lines_total": 2700,
+  "metrics_lines_with_decoded_plus_prompt_tokens": 287,
+  "metrics_lines_without_tokens": 2413,
+  "per_campaign_monotone_trial_counter": {
+   "recorded_at_inversions_vs_rowid_by_store": {
+    "ak-27b-gpu-verify-20261004/store": 0,
+    "ak-ds41-cpu-decode-20260923/store": 0,
+    "ak-ds41-cpu-decode-20260923/store-b0ba1d427": 0,
+    "ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55": 0,
+    "ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae": 0,
+    "ak-q38fn-cpu-decode-20261003/store": 0,
+    "ak-q38fn-cpu-decode-20261003/store-b0ba1d427": 0,
+    "loop-memory": 0
+   },
+   "rowid_is_per_store_and_restarts_at_1_in_each_store": true,
+   "verdict": "not answerable: no campaign-wide ordinal; rowid restarts per store and the DS41 campaign spans two stores"
+  },
+  "stable_trial_id": {
+   "attempt_id_present_rows": 3576,
+   "duplicate_attempt_ids_across_stores": 0,
+   "rows": 3576,
+   "verdict": "answerable: attempt_id is a unique per-attempt hash on every experiments row"
+  },
+  "token_lines_by_backend_kind": {
+   "opencode": 287
+  },
+  "ts_inversions_by_file": {
+   "/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/targets/b7b7868ffd944285c8d3dfa0b984cc20960184a1c0c35a10c52d68d4e7700e2a/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10b/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10c/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10d/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10e/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10f/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10g/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10h/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10i/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl": 1,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run8/targets/71f54ec472e002dfdf65f9d57481afc674084ac8168addfd5197c63dafd11ce0/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run9/targets/674cc00c0a4ae9f9a241195fda2adb00c208ef3a9fff980c0b2740162ccfe13d/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run9b/targets/674cc00c0a4ae9f9a241195fda2adb00c208ef3a9fff980c0b2740162ccfe13d/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run9c/targets/674cc00c0a4ae9f9a241195fda2adb00c208ef3a9fff980c0b2740162ccfe13d/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/targets-b0ba1d427/2fdf639c6c6293672a2ba56171fae5f95f7348e0a9be802108117dc20a85ede4/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/targets-b0ba1d427/b876f301021d646a90d64dd7c14a079b03ffad7eb62b54f374cf2b4afd132e69/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/targets-802bf9ac6/2a732697e5195010469da91ceb423b9376671f18ee808a985e7a6fac851ee419/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/targets-802bf9ac6/8dce0fa4e7f678651650aab4cec058cf76f83dc0a3aa5db9db08692ee48eb50b/workers/actor-replies/actor-calls.jsonl": 0,
+   "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/targets-b0ba1d427/47780f85117868a53da3e8591e48b0c11c78ba13468d4cfe3e0906113895e48a/workers/actor-replies/actor-calls.jsonl": 0
+  },
+  "ts_inversions_total": 1
+ },
+ "d_wall_split": {
+  "build": "needs fields: no build seconds on any experiments payload or call line (ak_check compile seconds cover only the author-side check). Needed: build_s, correctness_s, planner_s, critic_s, measure_s per attempt on the candidate record.",
+  "by_campaign": {
+   "ak-27b-gpu-verify-20261004": {
+    "author_side_ak_check_seconds_sum": 0.0,
+    "build_seconds": null,
+    "call_wall_s_by_role": {
+     "author": 495.429,
+     "critic": 1444.482,
+     "planner": 88.325
+    },
+    "calls_by_role": {
+     "author": 12,
+     "critic": 9,
+     "planner": 3
+    },
+    "identified_seconds_planner_critic_author_measure": 2028.236,
+    "legacy_comparison_device_seconds_rows": 0,
+    "legacy_comparison_device_seconds_sum": 0.0,
+    "measure_window_s_sum": 0.0,
+    "measure_window_s_sum_rows": 0,
+    "share_of_identified": {
+     "author": 0.2443,
+     "critic": 0.7122,
+     "measure_windows": 0.0,
+     "planner": 0.0435
+    }
+   },
+   "ak-ds41-cpu-decode-20260923": {
+    "author_side_ak_check_seconds_sum": 1638.0,
+    "build_seconds": null,
+    "call_wall_s_by_role": {
+     "author": 166264.487,
+     "critic": 39568.106,
+     "planner": 240923.626
+    },
+    "calls_by_role": {
+     "author": 202,
+     "critic": 306,
+     "planner": 1178
+    },
+    "identified_seconds_planner_critic_author_measure": 617489.348,
+    "legacy_comparison_device_seconds_rows": 0,
+    "legacy_comparison_device_seconds_sum": 0.0,
+    "measure_window_s_sum": 170733.129,
+    "measure_window_s_sum_rows": 82,
+    "share_of_identified": {
+     "author": 0.2693,
+     "critic": 0.0641,
+     "measure_windows": 0.2765,
+     "planner": 0.3902
+    }
+   },
+   "ak-q38fn-cpu-decode-20261003": {
+    "author_side_ak_check_seconds_sum": 0.0,
+    "build_seconds": null,
+    "call_wall_s_by_role": {
+     "author": 3139.806,
+     "critic": 7816.563,
+     "planner": 121487.376
+    },
+    "calls_by_role": {
+     "author": 76,
+     "critic": 132,
+     "planner": 782
+    },
+    "identified_seconds_planner_critic_author_measure": 142838.899,
+    "legacy_comparison_device_seconds_rows": 0,
+    "legacy_comparison_device_seconds_sum": 0.0,
+    "measure_window_s_sum": 10395.154,
+    "measure_window_s_sum_rows": 43,
+    "share_of_identified": {
+     "author": 0.022,
+     "critic": 0.0547,
+     "measure_windows": 0.0728,
+     "planner": 0.8505
+    }
+   },
+   "loop-memory": {
+    "author_side_ak_check_seconds_sum": 0.0,
+    "build_seconds": null,
+    "call_wall_s_by_role": {},
+    "calls_by_role": {},
+    "identified_seconds_planner_critic_author_measure": 0.0,
+    "legacy_comparison_device_seconds_rows": 854,
+    "legacy_comparison_device_seconds_sum": 321233.284,
+    "measure_window_s_sum": 0.0,
+    "measure_window_s_sum_rows": 0,
+    "share_of_identified": null
+   }
+  },
+  "caveat": "shares are over IDENTIFIED seconds only; they are not shares of loop wall and do not replace the 75.7%/3.9% figures until build seconds are recorded",
+  "cpu_window_events": "phase transitions exist in cpu-window*.events.jsonl but carry no event timestamp (only ttl-derived expires_at), so phase durations cannot be derived",
+  "label": "partially_answerable",
+  "measure": "answerable now as instrument window seconds (sum of comparison anchor/candidate residency window_s) on rows that carry a comparison; the measure PHASE wall is not recorded",
+  "planner_critic_author": "answerable now per call (wall_s on actor_call_metrics.v1); per ATTEMPT only via the time-window heuristic (see (c)), carried as heuristic_call_seconds_by_role"
+ },
+ "e_surrogate_readiness": {
+  "AK_RI_SURROGATE_1_trigger_by_target": {
+   "27b-gpu-verify": {
+    "count_threshold_met": false,
+    "trigger_met": false,
+    "typed_knob_trials": 0
+   },
+   "ds41-cpu-decode": {
+    "count_threshold_met": false,
+    "trigger_met": false,
+    "typed_knob_trials": 8
+   },
+   "legacy-loop-memory": {
+    "count_threshold_met": true,
+    "trigger_met": false,
+    "typed_knob_trials": 0
+   },
+   "q38fn-cpu-decode": {
+    "count_threshold_met": false,
+    "trigger_met": false,
+    "typed_knob_trials": 7
+   }
+  },
+  "by_target_store": [
+   {
+    "anchor_verified_rows": 0,
+    "anchored_trials_paired_anchor_and_numeric_effect": 0,
+    "comparable_same_epoch_groups": 0,
+    "comparable_trials_same_epoch": 0,
+    "distinct_measurement_epochs_in_comparable": 0,
+    "keeps_all": 0,
+    "keeps_among_comparable": 0,
+    "largest_comparable_group": 0,
+    "measured_trials_with_comparison": 0,
+    "meets_count_threshold_200_trials_and_20_keeps": false,
+    "rows": 13,
+    "rows_with_numeric_effect": 0,
+    "store": "ak-27b-gpu-verify-20261004/store",
+    "target_group": "27b-gpu-verify",
+    "typed_knob_coverage_of_comparable": null,
+    "typed_knob_trials_among_comparable": 0
+   },
+   {
+    "anchor_verified_rows": 18,
+    "anchored_trials_paired_anchor_and_numeric_effect": 59,
+    "comparable_same_epoch_groups": 17,
+    "comparable_trials_same_epoch": 59,
+    "distinct_measurement_epochs_in_comparable": 17,
+    "keeps_all": 22,
+    "keeps_among_comparable": 22,
+    "largest_comparable_group": 9,
+    "measured_trials_with_comparison": 59,
+    "meets_count_threshold_200_trials_and_20_keeps": false,
+    "rows": 385,
+    "rows_with_numeric_effect": 79,
+    "store": "ak-ds41-cpu-decode-20260923/store",
+    "target_group": "ds41-cpu-decode",
+    "typed_knob_coverage_of_comparable": 0.0678,
+    "typed_knob_trials_among_comparable": 4
+   },
+   {
+    "anchor_verified_rows": 4,
+    "anchored_trials_paired_anchor_and_numeric_effect": 20,
+    "comparable_same_epoch_groups": 5,
+    "comparable_trials_same_epoch": 20,
+    "distinct_measurement_epochs_in_comparable": 5,
+    "keeps_all": 6,
+    "keeps_among_comparable": 6,
+    "largest_comparable_group": 6,
+    "measured_trials_with_comparison": 20,
+    "meets_count_threshold_200_trials_and_20_keeps": false,
+    "rows": 444,
+    "rows_with_numeric_effect": 23,
+    "store": "ak-ds41-cpu-decode-20260923/store-b0ba1d427",
+    "target_group": "ds41-cpu-decode",
+    "typed_knob_coverage_of_comparable": 0.2,
+    "typed_knob_trials_among_comparable": 4
+   },
+   {
+    "anchor_verified_rows": 0,
+    "anchored_trials_paired_anchor_and_numeric_effect": 0,
+    "comparable_same_epoch_groups": 0,
+    "comparable_trials_same_epoch": 0,
+    "distinct_measurement_epochs_in_comparable": 0,
+    "keeps_all": 0,
+    "keeps_among_comparable": 0,
+    "largest_comparable_group": 0,
+    "measured_trials_with_comparison": 0,
+    "meets_count_threshold_200_trials_and_20_keeps": false,
+    "rows": 1,
+    "rows_with_numeric_effect": 0,
+    "store": "ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55",
+    "target_group": "ds41-cpu-decode",
+    "typed_knob_coverage_of_comparable": null,
+    "typed_knob_trials_among_comparable": 0
+   },
+   {
+    "anchor_verified_rows": 0,
+    "anchored_trials_paired_anchor_and_numeric_effect": 0,
+    "comparable_same_epoch_groups": 0,
+    "comparable_trials_same_epoch": 0,
+    "distinct_measurement_epochs_in_comparable": 0,
+    "keeps_all": 0,
+    "keeps_among_comparable": 0,
+    "largest_comparable_group": 0,
+    "measured_trials_with_comparison": 0,
+    "meets_count_threshold_200_trials_and_20_keeps": false,
+    "rows": 5,
+    "rows_with_numeric_effect": 0,
+    "store": "ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae",
+    "target_group": "ds41-cpu-decode",
+    "typed_knob_coverage_of_comparable": null,
+    "typed_knob_trials_among_comparable": 0
+   },
+   {
+    "anchor_verified_rows": 17,
+    "anchored_trials_paired_anchor_and_numeric_effect": 854,
+    "comparable_same_epoch_groups": 17,
+    "comparable_trials_same_epoch": 854,
+    "distinct_measurement_epochs_in_comparable": 17,
+    "keeps_all": 32,
+    "keeps_among_comparable": 32,
+    "largest_comparable_group": 161,
+    "measured_trials_with_comparison": 854,
+    "meets_count_threshold_200_trials_and_20_keeps": true,
+    "rows": 2397,
+    "rows_with_numeric_effect": 880,
+    "store": "loop-memory",
+    "target_group": "legacy-loop-memory",
+    "typed_knob_coverage_of_comparable": 0.0,
+    "typed_knob_trials_among_comparable": 0
+   },
+   {
+    "anchor_verified_rows": 8,
+    "anchored_trials_paired_anchor_and_numeric_effect": 42,
+    "comparable_same_epoch_groups": 7,
+    "comparable_trials_same_epoch": 42,
+    "distinct_measurement_epochs_in_comparable": 7,
+    "keeps_all": 10,
+    "keeps_among_comparable": 10,
+    "largest_comparable_group": 16,
+    "measured_trials_with_comparison": 42,
+    "meets_count_threshold_200_trials_and_20_keeps": false,
+    "rows": 331,
+    "rows_with_numeric_effect": 50,
+    "store": "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+    "target_group": "q38fn-cpu-decode",
+    "typed_knob_coverage_of_comparable": 0.1667,
+    "typed_knob_trials_among_comparable": 7
+   }
+  ],
+  "by_target_total": {
+   "27b-gpu-verify": {
+    "comparable_trials_same_epoch": 0,
+    "keeps_among_comparable": 0,
+    "rows_with_numeric_effect": 0,
+    "typed_knob_trials_among_comparable": 0
+   },
+   "ds41-cpu-decode": {
+    "comparable_trials_same_epoch": 79,
+    "keeps_among_comparable": 28,
+    "rows_with_numeric_effect": 102,
+    "typed_knob_trials_among_comparable": 8
+   },
+   "legacy-loop-memory": {
+    "comparable_trials_same_epoch": 854,
+    "keeps_among_comparable": 32,
+    "rows_with_numeric_effect": 880,
+    "typed_knob_trials_among_comparable": 0
+   },
+   "q38fn-cpu-decode": {
+    "comparable_trials_same_epoch": 42,
+    "keeps_among_comparable": 10,
+    "rows_with_numeric_effect": 50,
+    "typed_knob_trials_among_comparable": 7
+   }
+  },
+  "definition": "numeric effect = effect_fraction not null; measured trial = numeric effect, status != anchor_verified, comparison object present; anchored = comparison carries both anchor_tok_s and candidate_tok_s (paired matched anchor); comparable = same comparison (surface, metric, np) and same measurement epoch; typed knob = payload.runtime_pair.dimension",
+  "label": "answerable_now",
+  "note_legacy": "legacy-loop-memory passes the raw count threshold but spans many surfaces and epochs (see distinct_measurement_epochs_in_comparable and largest_comparable_group) and carries no typed knob descriptor, so the typed-descriptor clause fails",
+  "source_candidates_typed_descriptor": "needs fields: no typed knob/edit descriptor on source-patch candidates (only candidate_diff_sha256 where present)",
+  "trigger_AK_RI_SURROGATE_1_met_for_any_target": false
+ },
+ "excluded": [
+  {
+   "path": "/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/store-b0ba1d427-np1-r12-20261007",
+   "reason": "store directory without experiments.db"
+  },
+  {
+   "path": "/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/store-b0ba1d427-np1-r8-20261007",
+   "reason": "store directory without experiments.db"
+  },
+  {
+   "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run1-ad932bbd9",
+   "reason": "store directory without experiments.db"
+  },
+  {
+   "path": "/mnt/raid0/llm/autokernel/loop-memory/experiments.db.pre-retraction",
+   "reason": "pre-retraction backup snapshot of loop-memory/experiments.db (size 106496)"
+  },
+  {
+   "path": "/mnt/raid0/llm/autokernel/loop-memory/experiments.sqlite",
+   "reason": "empty or non-experiments file (size 0)"
+  }
+ ],
+ "f_runtime_arm_knob_space": {
+  "arm_attempt_files": [
+   {
+    "attempts": 2,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/runtime-preparation/runtime-arms-attempts.json",
+    "sha256": "a163aa9424d94ce3d6e1f8ba712bcd9f382a0a1185a3df3dfd31b62970ef4fb7"
+   },
+   {
+    "attempts": 4,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-b0ba1d427/runtime-preparation/runtime-arms-attempts.json",
+    "sha256": "7182ba136f414d092ffcab6e3c2d1c462ed1408e442b0a40a8db487636f73e39"
+   },
+   {
+    "attempts": 4,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store-b0ba1d427/runtime-preparation/runtime-arms-attempts.json",
+    "sha256": "59c95aaf0d5d2e6b6a2059da4c611ec57172b71c7a9ea74a47ebd60337325fb6"
+   }
+  ],
+  "arm_attempts_joined_to_an_experiments_row": 10,
+  "bounded_decision_token_space": "no at value level (integers and free strings are unbounded); yes at kind level (7 kinds). A bounded space exists only if values are discretised to a pre-declared grid per kind, which the schema does not hold",
+  "kind_vocabulary": [
+   "threads",
+   "cpu_list",
+   "numa_policy",
+   "env",
+   "batch",
+   "ubatch",
+   "load_threads"
+  ],
+  "kind_vocabulary_size": 7,
+  "label": "answerable_now",
+  "observed_distinct_anchor_candidate_pairs_by_kind": {
+   "env": 1,
+   "load_threads": 1
+  },
+  "observed_distinct_dimension_ids_in_experiments": {
+   "env:akm-cpu-omp-close-placement-diagnostic": 1,
+   "env:akm-cpu-runtime-close-thread-binding": 1,
+   "env:akm-ds41-omp-passive-wait-diagnostic": 1,
+   "env:akm-ds41-passive-omp-wait-diagnostic": 1,
+   "env:runtime-arm-omp-places-48-sib": 5,
+   "load_threads:runtime-arm-load-threads-48": 5,
+   "threads:akm-cpu-runtime-32-thread-team": 1
+  },
+  "observed_kinds": {
+   "env": 5,
+   "load_threads": 5
+  },
+  "observed_runtime_arm_attempts": 10,
+  "source": "scripts/kernel_rnd/autokernel/loop/unified_planner.py DIMENSIONS and RuntimeDimension.__post_init__",
+  "value_domains": {
+   "cpu_list": "free text",
+   "env": "free text key plus free text string-or-null value (key fixed within a dimension)",
+   "numa_policy": "free text constrained to a --interleave=/--membind= prefix",
+   "threads/batch/ubatch/load_threads": "positive integers (load_threads may be null); unbounded above"
+  }
+ },
+ "g_gap_table": {
+  "label": "answerable_now",
+  "rows": [
+   {
+    "evidence": "0/2700 lines",
+    "field": "attempt_id (or trial key) on actor_call.v1 / actor_call_metrics.v1 lines",
+    "status": "absent"
+   },
+   {
+    "evidence": "0/3576 payloads contain a call_id key",
+    "field": "experiments-row key back to its planner/critic/author calls",
+    "status": "absent"
+   },
+   {
+    "evidence": "rowid restarts per store",
+    "field": "campaign-wide monotone trial ordinal / evaluation counter",
+    "status": "absent"
+   },
+   {
+    "evidence": "3576 rows",
+    "field": "cumulative decoded+prompt token counter on experiments rows",
+    "status": "absent"
+   },
+   {
+    "evidence": "2413/2700 lines carry none",
+    "field": "token counts on hosted (codex/claude) call lines",
+    "status": "absent"
+   },
+   {
+    "evidence": "derivable from payload on 256/3576 rows; 3320 rows have only status/refusal_reason",
+    "field": "failure_class column/field on experiments rows",
+    "status": "partial"
+   },
+   {
+    "evidence": "0 rows; planner/critic/author only on call lines, measure only as instrument windows",
+    "field": "per-stage seconds planner/critic/build/correctness/measure on the candidate record",
+    "status": "absent"
+   },
+   {
+    "evidence": "3561/3576 rows null; typed only for runtime arms",
+    "field": "typed knob/edit descriptor on source-patch candidates",
+    "status": "absent"
+   },
+   {
+    "evidence": "10 attempts; joined by (dimension_id, effect) heuristic to 10",
+    "field": "runtime-arms-attempts.json entry -> experiments attempt_id",
+    "status": "absent"
+   },
+   {
+    "evidence": "phase durations underivable",
+    "field": "event timestamps on cpu-window phase events",
+    "status": "absent"
+   },
+   {
+    "evidence": "prompt {bytes,chars,sha256} only",
+    "field": "planner prompt text (only digest/bytes stored)",
+    "status": "absent"
+   },
+   {
+    "evidence": "retained_patch on 97/3576 rows; candidate_diff_sha256 on 162 rows",
+    "field": "patch bytes retained per candidate",
+    "status": "partial"
+   },
+   {
+    "evidence": "1594 harness-event rows (planner_transient, lane_error, bench_failed, abstained) mostly carry no statement",
+    "field": "hypothesis text on harness-event rows",
+    "status": "absent"
+   }
+  ]
+ },
+ "inputs": {
+  "actor_call_files": [
+   {
+    "campaign_dir": "ak-27b-gpu-verify-20261004",
+    "lines": 48,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/targets/b7b7868ffd944285c8d3dfa0b984cc20960184a1c0c35a10c52d68d4e7700e2a/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 24,
+     "epyc.autokernel.actor_call_metrics.v1": 24
+    },
+    "sha256": "252779ed44854fc2d6c104e551464d0aabf4dc9531039cff43baeb9c9dc6b203",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 2,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 1,
+     "epyc.autokernel.actor_call_metrics.v1": 1
+    },
+    "sha256": "9be9fce7f53bf2273df85c096b03548f4c1f6aef2fffed72230e8db7d44ce8b4",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 6,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10b/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 3,
+     "epyc.autokernel.actor_call_metrics.v1": 3
+    },
+    "sha256": "ccb6bd79be4cc8a6e2bf9115e581a96ef8577009ee9c3075579e9be0969beae9",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 2,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10c/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 1,
+     "epyc.autokernel.actor_call_metrics.v1": 1
+    },
+    "sha256": "861bf2c686d413b83c33f26aa5f9daa1de515b82aeb3d354c8e9dd6cda3f297e",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 2,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10d/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 1,
+     "epyc.autokernel.actor_call_metrics.v1": 1
+    },
+    "sha256": "25d1c2b222b45f298d0c813ff72fdee942b877707808026c7a47ff5c41cfa862",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 40,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10e/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 20,
+     "epyc.autokernel.actor_call_metrics.v1": 20
+    },
+    "sha256": "a7f95985880ba7ca3af2a34105a4d77d9ffed266e8d628cf28203af7785d5661",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 4,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10f/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 2,
+     "epyc.autokernel.actor_call_metrics.v1": 2
+    },
+    "sha256": "d1d98c8f9205091e246c927a92a67cebba48490edb21119d513bb935c85a6db2",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 36,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10g/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 18,
+     "epyc.autokernel.actor_call_metrics.v1": 18
+    },
+    "sha256": "1f501c93bde40450e104cbf08089a1dbca9685744bb4e3a3030025a753859e77",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 24,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10h/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 12,
+     "epyc.autokernel.actor_call_metrics.v1": 12
+    },
+    "sha256": "82f805b25df11f3f18bffe1b17f65ab6102e4ca69efcc7a7a18bc35f6a500aa8",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 1199,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run10i/targets/9816ea2726c4219abe1e6d2079365768818e1ae2fc3f4c7121a0ae5c82ce8868/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 599,
+     "epyc.autokernel.actor_call_metrics.v1": 599,
+     "epyc.autokernel.actor_salvage_turn.v1": 1
+    },
+    "sha256": "ce5ae68ac8cb5b99f72eac04d96daf206c0d3da4bf18902c0a2783ee757228da",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 1,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run8/targets/71f54ec472e002dfdf65f9d57481afc674084ac8168addfd5197c63dafd11ce0/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 1
+    },
+    "sha256": "37441073b489fc7630330fdb810153aa51e3bc3461b7f7c22619b998db3442e4",
+    "unpaired_calls": 1,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 1,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run9/targets/674cc00c0a4ae9f9a241195fda2adb00c208ef3a9fff980c0b2740162ccfe13d/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 1
+    },
+    "sha256": "7c4612d71150aa66ada940dbc5726dea03001cabfb88626731588506373d5891",
+    "unpaired_calls": 1,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 2,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run9b/targets/674cc00c0a4ae9f9a241195fda2adb00c208ef3a9fff980c0b2740162ccfe13d/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 1,
+     "epyc.autokernel.actor_call_metrics.v1": 1
+    },
+    "sha256": "3d328c1f70e3b0333ca83d0716be3974a96f606515ebb36f113d375e5c4dd13d",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 16,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run9c/targets/674cc00c0a4ae9f9a241195fda2adb00c208ef3a9fff980c0b2740162ccfe13d/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 8,
+     "epyc.autokernel.actor_call_metrics.v1": 8
+    },
+    "sha256": "19684ca0cbff8113c18d0c719c1dafe40d90086869790d32129cd6f37ae5f08b",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 280,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/targets-b0ba1d427/2fdf639c6c6293672a2ba56171fae5f95f7348e0a9be802108117dc20a85ede4/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 140,
+     "epyc.autokernel.actor_call_metrics.v1": 140
+    },
+    "sha256": "94c115b801b249008bb5493fc00fcf7c261f0bea10e67e1c4402d956fef21f7d",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "lines": 1760,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/targets-b0ba1d427/b876f301021d646a90d64dd7c14a079b03ffad7eb62b54f374cf2b4afd132e69/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 880,
+     "epyc.autokernel.actor_call_metrics.v1": 880
+    },
+    "sha256": "2474954f7c2d6daf4773eeac0b1b3896c57684cced0532249647289467bf76e6",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "lines": 1780,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/targets-802bf9ac6/2a732697e5195010469da91ceb423b9376671f18ee808a985e7a6fac851ee419/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 890,
+     "epyc.autokernel.actor_call_metrics.v1": 890
+    },
+    "sha256": "a112d618e121559d12cd03979eed81bc1e498d80cf580ffe547c201b1a0614b0",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "lines": 180,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/targets-802bf9ac6/8dce0fa4e7f678651650aab4cec058cf76f83dc0a3aa5db9db08692ee48eb50b/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 90,
+     "epyc.autokernel.actor_call_metrics.v1": 90
+    },
+    "sha256": "954fb616ca8df75b9be6a6fa006a0ec7b9789f1cbca3aac85724be7bea63efb1",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "lines": 20,
+    "path": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/targets-b0ba1d427/47780f85117868a53da3e8591e48b0c11c78ba13468d4cfe3e0906113895e48a/workers/actor-replies/actor-calls.jsonl",
+    "schemas": {
+     "epyc.autokernel.actor_call.v1": 10,
+     "epyc.autokernel.actor_call_metrics.v1": 10
+    },
+    "sha256": "9b97fc194c84efbb9c5d1e6815f31d959e17bde736658409dc27128bc6c5548d",
+    "unpaired_calls": 0,
+    "unpaired_metrics": 0
+   }
+  ]
+ },
+ "questions": {
+  "a": "answerable now",
+  "b": "not answerable: 0 targets with >=2 scored independent campaigns (see b)",
+  "c": "partially answerable: stable trial id yes; token budget axis only on 287 opencode lines; call->attempt key no (needs attempt_id on the sibling metrics line)",
+  "d": "partially answerable: planner/critic/author per call and measure windows yes; build seconds needs fields",
+  "e": "answerable now (counts in e.by_target_total)",
+  "f": "answerable now (kind-level bounded, value-level not)",
+  "g": "answerable now"
+ },
+ "root": "/mnt/raid0/llm/autokernel",
+ "schema": "epyc.autokernel.history_replay.v1",
+ "stores": [
+  {
+   "by_status": {
+    "anchor_mismatch": 4,
+    "anchor_verified": 17,
+    "bench_failed": 4,
+    "champion_vs_production": 12,
+    "kept": 32,
+    "lane_error": 24,
+    "measured_null": 831,
+    "planner_transient": 837,
+    "refused_at_formation": 370,
+    "run_aborted": 4,
+    "stopped_mid_formation": 19,
+    "superseded": 243
+   },
+   "campaign_dir": "loop-memory",
+   "label": "loop-memory",
+   "mtime_ns": 1788957468651657658,
+   "row_count": 2397,
+   "size_bytes": 9011200,
+   "store_path": "/mnt/raid0/llm/autokernel/loop-memory/experiments.db",
+   "target_group": "legacy-loop-memory",
+   "wal_bytes": null
+  },
+  {
+   "by_status": {
+    "authoring_failed": 4,
+    "gate_refused": 5,
+    "hypothesis_rejected": 1,
+    "hypothesis_retired": 2,
+    "patch_rejected": 1
+   },
+   "campaign_dir": "ak-27b-gpu-verify-20261004",
+   "label": "ak-27b-gpu-verify-20261004/store",
+   "mtime_ns": 1791137452727771109,
+   "row_count": 13,
+   "size_bytes": 274432,
+   "store_path": "/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/store/experiments.db",
+   "target_group": "27b-gpu-verify",
+   "wal_bytes": 0
+  },
+  {
+   "by_status": {
+    "abstained": 102,
+    "anchor_guard_excursion": 3,
+    "anchor_verified": 18,
+    "authoring_failed": 10,
+    "gate_refused": 21,
+    "hypothesis_rejected": 38,
+    "hypothesis_retired": 7,
+    "integrity_refused": 1,
+    "keep_candidate": 5,
+    "kept": 22,
+    "lane_error": 7,
+    "measured_divergence": 1,
+    "measured_null": 21,
+    "measured_serving_gate": 2,
+    "measurement_invalid": 2,
+    "patch_rejected": 30,
+    "patch_rounds_exhausted": 13,
+    "planner_transient": 20,
+    "refused_at_formation": 5,
+    "refused_duplicate": 1,
+    "regression": 8,
+    "resume_rejected": 16,
+    "runtime_observed": 3,
+    "scope_blocked": 7,
+    "stopped_mid_formation": 12,
+    "superseded": 10
+   },
+   "campaign_dir": "ak-ds41-cpu-decode-20260923",
+   "label": "ak-ds41-cpu-decode-20260923/store",
+   "mtime_ns": 1791170377537397535,
+   "row_count": 385,
+   "size_bytes": 4290445312,
+   "store_path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/experiments.db",
+   "target_group": "ds41-cpu-decode",
+   "wal_bytes": 0
+  },
+  {
+   "by_status": {
+    "abstained": 224,
+    "anchor_verified": 4,
+    "authoring_failed": 1,
+    "gate_refused": 4,
+    "hypothesis_rejected": 12,
+    "integrity_refused": 2,
+    "keep_candidate": 4,
+    "kept": 6,
+    "measured_null": 7,
+    "patch_rejected": 2,
+    "planner_transient": 171,
+    "refused_at_formation": 1,
+    "regression": 1,
+    "runtime_observed": 2,
+    "scope_blocked": 2,
+    "stopped_mid_formation": 1
+   },
+   "campaign_dir": "ak-ds41-cpu-decode-20260923",
+   "label": "ak-ds41-cpu-decode-20260923/store-b0ba1d427",
+   "mtime_ns": 1791700109546401986,
+   "row_count": 444,
+   "size_bytes": 1139998720,
+   "store_path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-b0ba1d427/experiments.db",
+   "target_group": "ds41-cpu-decode",
+   "wal_bytes": 0
+  },
+  {
+   "by_status": {
+    "planner_transient": 1
+   },
+   "campaign_dir": "ak-ds41-cpu-decode-20260923",
+   "label": "ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55",
+   "mtime_ns": 1790256759473621719,
+   "row_count": 1,
+   "size_bytes": 20480,
+   "store_path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55/experiments.db",
+   "target_group": "ds41-cpu-decode",
+   "wal_bytes": 0
+  },
+  {
+   "by_status": {
+    "gate_refused": 1,
+    "lane_error": 1,
+    "stopped_mid_formation": 3
+   },
+   "campaign_dir": "ak-ds41-cpu-decode-20260923",
+   "label": "ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae",
+   "mtime_ns": 1790333970754728037,
+   "row_count": 5,
+   "size_bytes": 69632,
+   "store_path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae/experiments.db",
+   "target_group": "ds41-cpu-decode",
+   "wal_bytes": 0
+  },
+  {
+   "by_status": {},
+   "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+   "label": "ak-q38fn-cpu-decode-20261003/store",
+   "mtime_ns": 1791088881092720846,
+   "row_count": 0,
+   "size_bytes": 28672,
+   "store_path": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store/experiments.db",
+   "target_group": "q38fn-cpu-decode",
+   "wal_bytes": 0
+  },
+  {
+   "by_status": {
+    "abstained": 30,
+    "anchor_guard_excursion": 1,
+    "anchor_verified": 8,
+    "authoring_failed": 3,
+    "gate_refused": 16,
+    "hypothesis_rejected": 13,
+    "hypothesis_retired": 4,
+    "integrity_refused": 2,
+    "keep_candidate": 8,
+    "kept": 10,
+    "lane_error": 2,
+    "measured_divergence": 1,
+    "measured_null": 17,
+    "patch_rejected": 12,
+    "patch_rounds_exhausted": 7,
+    "planner_transient": 171,
+    "refused_duplicate": 2,
+    "regression": 1,
+    "resume_rejected": 13,
+    "runtime_observed": 6,
+    "scope_blocked": 3,
+    "stopped_mid_formation": 1
+   },
+   "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+   "label": "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+   "mtime_ns": 1791700105198533990,
+   "row_count": 331,
+   "size_bytes": 278581248,
+   "store_path": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store-b0ba1d427/experiments.db",
+   "target_group": "q38fn-cpu-decode",
+   "wal_bytes": 0
+  }
+ ],
+ "stores_included": [
+  "loop-memory",
+  "ak-27b-gpu-verify-20261004/store",
+  "ak-ds41-cpu-decode-20260923/store",
+  "ak-ds41-cpu-decode-20260923/store-b0ba1d427",
+  "ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55",
+  "ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae",
+  "ak-q38fn-cpu-decode-20261003/store",
+  "ak-q38fn-cpu-decode-20261003/store-b0ba1d427"
+ ],
+ "totals": {
+  "actor_call_rows": 2700,
+  "experiment_rows": 3576,
+  "runtime_arm_attempt_rows": 10
+ }
+}
