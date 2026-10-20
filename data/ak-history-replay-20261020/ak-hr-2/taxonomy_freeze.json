@@ -1,0 +1,30 @@
+{
+ "disclosures": [
+  "Before freezing, the main thread had printed a few unlabelled rows from DS41/Q38FN while exploring the export (e.g. statements about solo-barrier collapse and RMS_NORM+MUL_MAT fusion, plus the 15 most common mechanism_ids across all stores). None of those rows were used to choose classes; classes were chosen from the 60 loop-memory pilot hypotheses and the checkbox example list.",
+  "Pilot hand labels are by an LLM agent (the main thread), not a human.",
+  "Rule parser pilot agreement was calibrated on the pilot only."
+ ],
+ "files": {
+  "pilot_hypotheses": "data/ak-history-replay-20261020/ak-hr-2/pilot60.jsonl",
+  "pilot_labels": "data/ak-history-replay-20261020/ak-hr-2/pilot_labels.json",
+  "rule_parser_py": "scripts/kernel_rnd/autokernel/history_replay/ak_hr2_taxonomy.py",
+  "taxonomy_md": "data/ak-history-replay-20261020/ak-hr-2/taxonomy_v1.md"
+ },
+ "frozen_at_utc": "2026-10-20T17:21:07Z",
+ "input_census_sha256": "644049cd5f413cb4cb3404a7fdc576741acf079ecfe1e9f833ce39dadc40b2bd",
+ "pilot": {
+  "dedupe": "unique statements; mechanism_id non-sentinel",
+  "draw": "random.sample over rows sorted by (store_label,rowid)",
+  "n": 60,
+  "seed": 20261020,
+  "source_store": "loop-memory only"
+ },
+ "schema": "ak-hr-2.taxonomy_freeze.v1",
+ "sha256": {
+  "pilot_hypotheses": "649b9cb0981ef10a7b8bb9f7459b50b0376d89e0223f774448f5a64ff2f5ff72",
+  "pilot_labels": "9a1f3ccaf6ceca9fe1cdc5d3cf5b6a5bbc1c26c45e7baf48b2c2ba90547adab0",
+  "rule_parser_py": "09b5c39b918359b15a1be4ab280aa50c0238cf55c6e3abb9741884dd09a63149",
+  "taxonomy_md": "d66cb3dcc0b316d4e8b89285f89e45848c19dd9dd54f4b7052f89733b1cc8375"
+ },
+ "statement": "Frozen before any window, entropy, repeat-null, faithfulness or held-out analysis was run. The 40 held-out hypotheses had not been drawn at freeze time."
+}
