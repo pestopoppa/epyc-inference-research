@@ -1,0 +1,25 @@
+corpus sha256=72d96dd93d9aa3bf54bb711d5c523c761c0626f784684aebed3f9f11dfd91d95 files=674 chars=20881145
+verify_ggml_linkage rc=0
+llm/kernels/builds/cpu-20260921-ffc1bac82/bin/libggml-cpu.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/opt/AMD/aocc-compiler-5.0.0/lib
+         2	/opt/rocm/lib
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/kernels/production/cpu
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.
+
+[2026-10-20T17:22:04Z] LAUNCH bank_build_unified_np2_pool148480 argv=["numactl", "--interleave=all", "--", "taskset", "-c", "0-23", "/mnt/raid0/llm/kernels/production/cpu/llama-server", "-m", "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf", "--host", "127.0.0.1", "--port", "18970", "-np", "2", "-c", "148480", "-t", "24", "-ub", "2048", "--flash-attn", "on", "--jinja", "-ctk", "q8_0", "-ctv", "q8_0", "--mlock", "--no-mmap", "--cache-ram", "32768", "--chat-template-file", "/mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja", "--spec-type", "draft-mtp", "--spec-draft-n-max", "4", "--reasoning", "off", "--device", "none", "--device-draft", "none", "--kv-unified", "--no-cache-idle-slots", "--no-cache-idle-slots", "--slot-save-path", "/mnt/raid0/llm/tmp/bank_e2e/unified"]
+[2026-10-20T17:22:16Z] health=HEALTHY
+[2026-10-20T17:22:16Z] LINKAGE {"lib_dirs": ["/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin"], "all_in_kernel_store": true}
+[2026-10-20T17:22:16Z] LOADFACTS {"kv_unified": "true", "n_ctx_slot": "148480", "n_slots": "2", "kv_buffer_mib": null, "rs_buffer_mib": null, "n_ctx_train_warn": null, "rss_after_load_gib": 37.88}
+[2026-10-20T17:23:10Z] BANKSTEP {"doc": 0, "name": "8k", "depth_from": 0, "depth_to": 7680, "chunk": 7680, "prompt_n": 7680, "cache_n": 0, "prefill_ms": 53994.863, "prefill_tps": 142.2357530567306, "wall_s": 54.0, "saved_tokens": 7680, "save_bytes": 149638128, "save_ms": 57.835, "error": null, "file": "doc0_L8k.bin"}
+[2026-10-20T17:24:04Z] BANKSTEP {"doc": 1, "name": "8k", "depth_from": 0, "depth_to": 7680, "chunk": 7680, "prompt_n": 7680, "cache_n": 0, "prefill_ms": 53022.97, "prefill_tps": 144.8428860171356, "wall_s": 53.0, "saved_tokens": 7680, "save_bytes": 149638128, "save_ms": 55.717, "error": null, "file": "doc1_L8k.bin"}
+[2026-10-20T17:24:56Z] CONTROL {"name": "8k", "D": 7680, "oneshot_ms": 52247.338, "oneshot_prompt_n": 7680, "chunk_sum_ms": 53994.863, "ratio_chunksum_over_oneshot": 1.033}
+[2026-10-20T17:24:59Z] STOP dead=True pid=603273
+BANK DONE manifest=/mnt/raid0/llm/tmp/bank_e2e/m_unified.json total_prefill_s=107.0
+DONE
