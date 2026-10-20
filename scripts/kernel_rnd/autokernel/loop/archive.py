@@ -505,7 +505,7 @@ def recall(store_root: Path, *, epoch: str, limit: int = 40,
     """What has been tried, cross-epoch records marked stale.
 
     Recency order by default. `ranking_authorized` is `P-AK-SEARCH-1-A3`'s epoch-scoped
-    ranking, off unless the caller asks (`run.py --rank-prior-experiments`): it returns
+    ranking, off unless the caller asks (`run.py` passes it by default since 2026-10-20; `--no-rank-prior-experiments` opts out): it returns
     an order of merit instead, with cross-epoch magnitudes redacted. The default is
     unchanged, and passing the flag is a decision with a name on it.
     """

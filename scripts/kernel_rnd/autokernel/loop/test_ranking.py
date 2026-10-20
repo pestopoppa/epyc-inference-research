@@ -69,8 +69,13 @@ def _referenced(code) -> set:
 
 class TheOptIn(unittest.TestCase):
 
-    def test_the_cli_defaults_to_denial_four(self):
-        self.assertFalse(_parse(_REQUIRED).rank_prior_experiments)
+    def test_the_cli_defaults_to_ranked_recall(self):
+        # Operator decision 2026-10-20: ranked recall is the default.
+        self.assertTrue(_parse(_REQUIRED).rank_prior_experiments)
+
+    def test_the_cli_can_opt_out_to_recency(self):
+        self.assertFalse(
+            _parse([*_REQUIRED, "--no-rank-prior-experiments"]).rank_prior_experiments)
 
     def test_the_cli_can_turn_it_on(self):
         self.assertTrue(

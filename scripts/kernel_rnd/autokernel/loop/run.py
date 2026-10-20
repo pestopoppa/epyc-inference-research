@@ -2080,13 +2080,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true",
                         help="prove the wiring without a provider call or a build")
     # `P-AK-SEARCH-1-A3` (RATIFIED 2026-08-31) narrows denial 4 to permit epoch-scoped
-    # ranking. Off by default and named on the command line, so an ordering that
-    # influenced a run is attributable to a flag someone typed. It grants ranking and
-    # nothing else -- banking, composition, readiness contribution and promotion are
-    # untouched, and the campaign still derives its own thresholds.
-    parser.add_argument("--rank-prior-experiments", action="store_true",
+    # ranking. DEFAULT ON since the operator decision of 2026-10-20 ("Flip the default
+    # now"; evidence AK-HR-2 render audit: recency recall shows no measured answer in
+    # 81.2% of planner calls, ranked 1.6%). `--no-rank-prior-experiments` restores
+    # recency recall. It grants ranking and nothing else -- banking, composition,
+    # readiness contribution and promotion are untouched, and the campaign still
+    # derives its own thresholds. The store/archive `recall()` API default is unchanged.
+    parser.add_argument("--rank-prior-experiments", action=argparse.BooleanOptionalAction,
+                        default=True,
                         help="P-AK-SEARCH-1-A3: order recalled records by merit "
-                             "instead of recency, cross-epoch magnitudes redacted")
+                             "instead of recency, cross-epoch magnitudes redacted "
+                             "(default: on; --no-rank-prior-experiments = recency)")
     parser.add_argument("--shared-history-root", type=Path, action="append", default=[],
                         help="read-only prior mechanism store; historical outcomes do not transfer")
     parser.add_argument("--operator-unblock-artifact", type=Path, action="append", default=[],

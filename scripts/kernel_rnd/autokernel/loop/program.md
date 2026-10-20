@@ -821,7 +821,7 @@ the operator amends it (decision D1,
 `handoffs/active/autokernel-rebuild-program.md`). Cross-epoch records are returned but
 marked `stale_epoch` — the fact that a mechanism was tried is formation; its *number*
 is not comparable. `P-AK-SEARCH-1-A3` permits epoch-scoped ranking
-(`--rank-prior-experiments`), and its do-not-repeat gate refuses re-proposing a
+(`--rank-prior-experiments`, the run.py default since the 2026-10-20 operator decision; `--no-rank-prior-experiments` = recency), and its do-not-repeat gate refuses re-proposing a
 mechanism already answered three times in the same epoch.
 
 **The epoch is the MEASUREMENT epoch** (OP-60, 2026-09-26): the anchor commit, the
