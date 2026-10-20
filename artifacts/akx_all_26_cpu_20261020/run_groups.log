@@ -1,0 +1,74 @@
+{"group": "cpu__nth24__ctl__-", "rc": 0, "seconds": 0.6, "stderr_tail": ""}
+{"group": "cpu__nth24__gdn__F32", "rc": 0, "seconds": 2.9, "stderr_tail": ""}
+{"group": "cpu__nth24__fa__F16", "rc": 0, "seconds": 3.1, "stderr_tail": ""}
+{"group": "cpu__nth24__fa__Q8_0", "rc": 0, "seconds": 4.5, "stderr_tail": ""}
+{"group": "cpu__nth24__fa__Q4_0", "rc": 0, "seconds": 5.6, "stderr_tail": ""}
+{"group": "cpu__nth24__mm__Q8_0", "rc": 0, "seconds": 2.2, "stderr_tail": ""}
+{"group": "cpu__nth24__mm__Q4_K", "rc": 0, "seconds": 1.1, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=5120)\n"}
+{"group": "cpu__nth24__mm__Q3_K", "rc": 0, "seconds": 1.0, "stderr_tail": ""}
+{"group": "cpu__nth24__mm__Q6_K", "rc": 0, "seconds": 1.3, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=5120)\n"}
+{"group": "cpu__nth24__mm__IQ2_XXS", "rc": 0, "seconds": 1.7, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=16 activation=15 ne00=5120)\n"}
+{"group": "cpu__nth24__mm__IQ2_XS", "rc": 0, "seconds": 1.7, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=17 activation=15 ne00=5120)\n"}
+{"group": "cpu__nth24__mm__IQ3_XXS", "rc": 0, "seconds": 3.0, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=18 activation=15 ne00=5120)\n"}
+{"group": "cpu__nth24__mm__IQ3_S", "rc": 0, "seconds": 2.0, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=21 activation=15 ne00=5120)\n"}
+{"group": "cpu__nth24__mm__IQ4_XS", "rc": 0, "seconds": 1.1, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=23 activation=15 ne00=5120)\n"}
+{"group": "cpu__nth24__mmid__Q8_0", "rc": 0, "seconds": 1.1, "stderr_tail": ""}
+{"group": "cpu__nth24__mmid__Q4_K", "rc": 0, "seconds": 0.9, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=256)\n"}
+{"group": "cpu__nth24__mmid__Q3_K", "rc": 0, "seconds": 2.4, "stderr_tail": ""}
+{"group": "cpu__nth24__mmid__Q6_K", "rc": 0, "seconds": 0.9, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=14 activation=99 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=14 activation=99 n_as=256)\n"}
+{"group": "cpu__nth24__mmid__IQ2_XXS", "rc": 0, "seconds": 1.0, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=16 activation=15 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=16 activation=15 n_as=256)\n"}
+{"group": "cpu__nth24__mmid__IQ2_XS", "rc": 0, "seconds": 1.0, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=17 activation=15 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=17 activation=15 n_as=256)\n"}
+{"group": "cpu__nth24__mmid__IQ3_XXS", "rc": 0, "seconds": 0.6, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=18 activation=15 n_as=256)\n"}
+{"group": "cpu__nth24__mmid__IQ3_S", "rc": 0, "seconds": 0.7, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=256)\n"}
+{"group": "cpu__nth24__mmid__IQ4_XS", "rc": 0, "seconds": 1.3, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=256)\n"}
+{"group": "cpu-native__nth24__mm__Q8_0", "rc": 0, "seconds": 1.4, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mm__Q4_K", "rc": 0, "seconds": 1.6, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mm__Q3_K", "rc": 0, "seconds": 2.9, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mm__Q6_K", "rc": 0, "seconds": 1.3, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mm__IQ2_XXS", "rc": 0, "seconds": 2.1, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mm__IQ2_XS", "rc": 0, "seconds": 2.7, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mm__IQ3_XXS", "rc": 0, "seconds": 3.9, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mm__IQ3_S", "rc": 0, "seconds": 2.2, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mm__IQ4_XS", "rc": 0, "seconds": 1.5, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mmid__Q8_0", "rc": 0, "seconds": 1.5, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mmid__Q4_K", "rc": 0, "seconds": 0.9, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mmid__Q3_K", "rc": 0, "seconds": 4.1, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mmid__Q6_K", "rc": 0, "seconds": 0.5, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mmid__IQ2_XXS", "rc": 0, "seconds": 2.3, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mmid__IQ2_XS", "rc": 0, "seconds": 1.5, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mmid__IQ3_XXS", "rc": 0, "seconds": 0.8, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mmid__IQ3_S", "rc": 0, "seconds": 2.1, "stderr_tail": ""}
+{"group": "cpu-native__nth24__mmid__IQ4_XS", "rc": 0, "seconds": 0.9, "stderr_tail": ""}
+{"group": "cpu_GGML_IQK-1_GGML_IQK_Q8_0-1___nth24__mm__Q8_0", "rc": 0, "seconds": 2.2, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=8 activation=99 ne00=5120)\n"}
+{"group": "cpu_GGML_IQK-1_GGML_IQK_Q8_0-1___nth24__mmid__Q8_0", "rc": 0, "seconds": 1.1, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=8 activation=99 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=8 activation=99 n_as=256)\n"}
+{"group": "cpu_GGML_IQK-1_GGML_ROWEXACT_N-9___nth24__mm__Q8_0", "rc": 0, "seconds": 1.2, "stderr_tail": ""}
+{"group": "cpu_GGML_IQK-1_GGML_ROWEXACT_N-9___nth24__mm__Q4_K", "rc": 0, "seconds": 0.9, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=5120)\n"}
+{"group": "cpu_GGML_IQK-1_GGML_ROWEXACT_N-9___nth24__mm__Q3_K", "rc": 0, "seconds": 1.7, "stderr_tail": ""}
+{"group": "cpu_GGML_IQK-1_GGML_ROWEXACT_N-9___nth24__mm__Q6_K", "rc": 0, "seconds": 1.4, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=5120)\n"}
+{"group": "cpu_GGML_IQK-1_GGML_ROWEXACT_N-9___nth24__mm__IQ2_XXS", "rc": 0, "seconds": 2.4, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=16 activation=15 ne00=5120)\n"}
+{"group": "cpu_GGML_IQK-1_GGML_ROWEXACT_N-9___nth24__mm__IQ2_XS", "rc": 0, "seconds": 2.9, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=17 activation=15 ne00=5120)\n"}
+{"group": "cpu_GGML_IQK-1_GGML_ROWEXACT_N-9___nth24__mm__IQ3_XXS", "rc": 0, "seconds": 2.4, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=18 activation=15 ne00=5120)\n"}
+{"group": "cpu_GGML_IQK-1_GGML_ROWEXACT_N-9___nth24__mm__IQ3_S", "rc": 0, "seconds": 4.2, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=21 activation=15 ne00=5120)\n"}
+{"group": "cpu_GGML_IQK-1_GGML_ROWEXACT_N-9___nth24__mm__IQ4_XS", "rc": 0, "seconds": 1.0, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=23 activation=15 ne00=5120)\n"}
+{"group": "cpu__nth1__gdn__F32", "rc": 0, "seconds": 0.9, "stderr_tail": ""}
+{"group": "cpu__nth1__fa__F16", "rc": 0, "seconds": 22.0, "stderr_tail": ""}
+{"group": "cpu__nth1__fa__Q8_0", "rc": 0, "seconds": 41.9, "stderr_tail": ""}
+{"group": "cpu__nth1__fa__Q4_0", "rc": 0, "seconds": 45.5, "stderr_tail": ""}
+{"group": "cpu__nth1__mm__Q8_0", "rc": 0, "seconds": 0.0, "stderr_tail": ""}
+{"group": "cpu__nth1__mm__Q4_K", "rc": 0, "seconds": 0.2, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=2048)\n"}
+{"group": "cpu__nth1__mm__Q3_K", "rc": 0, "seconds": 0.1, "stderr_tail": ""}
+{"group": "cpu__nth1__mm__Q6_K", "rc": 0, "seconds": 0.1, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2048)\n"}
+{"group": "cpu__nth1__mm__IQ2_XXS", "rc": 0, "seconds": 0.8, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=16 activation=15 ne00=2048)\n"}
+{"group": "cpu__nth1__mm__IQ2_XS", "rc": 0, "seconds": 1.6, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=17 activation=15 ne00=2048)\n"}
+{"group": "cpu__nth1__mm__IQ3_XXS", "rc": 0, "seconds": 1.0, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=18 activation=15 ne00=2048)\n"}
+{"group": "cpu__nth1__mm__IQ3_S", "rc": 0, "seconds": 0.7, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=21 activation=15 ne00=2048)\n"}
+{"group": "cpu__nth1__mm__IQ4_XS", "rc": 0, "seconds": 0.6, "stderr_tail": "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=23 activation=15 ne00=2048)\n"}
+{"group": "cpu__nth1__mmid__Q8_0", "rc": 0, "seconds": 0.8, "stderr_tail": ""}
+{"group": "cpu__nth1__mmid__Q4_K", "rc": 0, "seconds": 0.6, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=256)\n"}
+{"group": "cpu__nth1__mmid__Q3_K", "rc": 0, "seconds": 0.7, "stderr_tail": ""}
+{"group": "cpu__nth1__mmid__Q6_K", "rc": 0, "seconds": 0.8, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=14 activation=99 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=14 activation=99 n_as=256)\n"}
+{"group": "cpu__nth1__mmid__IQ2_XXS", "rc": 0, "seconds": 1.6, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=16 activation=15 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=16 activation=15 n_as=256)\n"}
+{"group": "cpu__nth1__mmid__IQ2_XS", "rc": 0, "seconds": 2.3, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=17 activation=15 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=17 activation=15 n_as=256)\n"}
+{"group": "cpu__nth1__mmid__IQ3_XXS", "rc": 0, "seconds": 2.2, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=18 activation=15 n_as=256)\n"}
+{"group": "cpu__nth1__mmid__IQ3_S", "rc": 0, "seconds": 2.0, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=256)\n"}
+{"group": "cpu__nth1__mmid__IQ4_XS", "rc": 0, "seconds": 1.1, "stderr_tail": "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=256)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=256)\n"}

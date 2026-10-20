@@ -1,0 +1,4400 @@
+{
+ "controls": {
+  "ctl-bitflip-injection": "FFFFFFFFF",
+  "ctl-negative-width-independent": "PPPPPPPPP",
+  "ctl-positive-width-dependent": "PFFFFFFFF"
+ },
+ "controls_ok": true,
+ "err_cells": [],
+ "missing_groups": [],
+ "n_aa_unclean": 0,
+ "n_cells": 4761,
+ "n_cells_with_reps": 4113,
+ "n_group_headers": 74,
+ "n_groups": 529,
+ "nondet_cells": [],
+ "schema": "akx-all-26.cpu-summary.v1",
+ "scoring": [
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-5120",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-17408",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-6144",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "F640",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-MM-Q8_0-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-MM-Q4_K-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q4_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-MM-Q3_K-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q3_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-MM-Q6_K-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q6_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-5120",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-17408",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-6144",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-MM-IQ2_XXS-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-5120",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-17408",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-6144",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-MM-IQ2_XS-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-5120",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-17408",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-6144",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-MM-IQ3_XXS-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-5120",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-17408",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-6144",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-MM-IQ3_S-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-MM-IQ4_XS-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ4_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-5120",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-17408",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "D27-6144",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "F640",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPUN-MM-Q8_0-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MM-Q4_K-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q4_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MM-Q3_K-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q3_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MM-Q6_K-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q6_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MM-IQ2_XXS-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MM-IQ2_XS-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MM-IQ3_XXS-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MM-IQ3_S-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MM-IQ4_XS-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ4_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F640",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUQ8-MM-Q8_0-ALL",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_IQK_Q8_0=1]",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F640",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-MMID-Q8_0-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-MMID-Q4_K-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q4_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-MMID-Q3_K-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q3_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-MMID-Q6_K-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q6_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 5,
+     "match": false,
+     "mode": "rand",
+     "pattern": "PPPPFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 5,
+     "match": false,
+     "mode": "rand",
+     "pattern": "PPPPFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 5,
+     "match": false,
+     "mode": "rand",
+     "pattern": "PPPPFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-MMID-IQ2_XXS-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": 3,
+   "result": "falsified",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 5,
+     "match": false,
+     "mode": "rand",
+     "pattern": "PPPPFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 5,
+     "match": false,
+     "mode": "rand",
+     "pattern": "PPPPFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 5,
+     "match": false,
+     "mode": "rand",
+     "pattern": "PPPPFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-MMID-IQ2_XS-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": 3,
+   "result": "falsified",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-MMID-IQ3_XXS-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 5,
+     "match": false,
+     "mode": "rand",
+     "pattern": "PPPPFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 5,
+     "match": false,
+     "mode": "rand",
+     "pattern": "PPPPFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 5,
+     "match": false,
+     "mode": "rand",
+     "pattern": "PPPPFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-MMID-IQ3_S-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": 3,
+   "result": "falsified",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-MMID-IQ4_XS-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ4_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F640",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MMID-Q8_0-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MMID-Q4_K-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q4_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MMID-Q3_K-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q3_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MMID-Q6_K-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "Q6_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MMID-IQ2_XXS-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MMID-IQ2_XS-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MMID-IQ3_XXS-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MMID-IQ3_S-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPUN-MMID-IQ4_XS-ALL",
+   "mode": "rand",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu-native",
+   "shape": null,
+   "src": "frozen",
+   "type": "IQ4_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MM-Q4_K-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "Q4_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MMID-Q4_K-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "Q4_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MM-Q3_K-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "Q3_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MMID-Q3_K-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "Q3_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MM-Q6_K-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "Q6_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MMID-Q6_K-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "Q6_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MM-IQ2_XXS-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MMID-IQ2_XXS-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MM-IQ2_XS-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MMID-IQ2_XS-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MM-IQ3_XXS-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MMID-IQ3_XXS-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MM-IQ3_S-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MMID-IQ3_S-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MM-IQ4_XS-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ4_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "rand",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "UUUUUUUUU",
+     "shape": "F640",
+     "status": "UNSUPPORTED"
+    }
+   ],
+   "id": "CPU-MMID-IQ4_XS-F640",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "UNSUPPORTED",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "F640",
+   "src": "frozen",
+   "type": "IQ4_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "2048",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-FA-F16-2048",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "2048",
+   "src": "frozen",
+   "type": "F16"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "7168",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-FA-F16-7168",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "7168",
+   "src": "frozen",
+   "type": "F16"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "16384",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-FA-F16-16384",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "16384",
+   "src": "frozen",
+   "type": "F16"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "65536",
+     "status": "FAIL"
+    }
+   ],
+   "id": "CPU-FA-F16-65536",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "65536",
+   "src": "frozen",
+   "type": "F16"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "2048",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-FA-Q8_0-2048",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "2048",
+   "src": "frozen",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "7168",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-FA-Q8_0-7168",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "7168",
+   "src": "frozen",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "16384",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-FA-Q8_0-16384",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "16384",
+   "src": "frozen",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "65536",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-FA-Q8_0-65536",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "65536",
+   "src": "frozen",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "2048",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-FA-Q4_0-2048",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "2048",
+   "src": "frozen",
+   "type": "Q4_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "7168",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-FA-Q4_0-7168",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "7168",
+   "src": "frozen",
+   "type": "Q4_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "16384",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-FA-Q4_0-16384",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "16384",
+   "src": "frozen",
+   "type": "Q4_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "65536",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-FA-Q4_0-65536",
+   "mode": null,
+   "nth": 24,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "65536",
+   "src": "frozen",
+   "type": "Q4_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "Q38-27B-Hv48-scalar",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "A3B-Hv32-scalar",
+     "status": "PASS"
+    }
+   ],
+   "id": "CPU-GDN-F32",
+   "mode": null,
+   "nth": 24,
+   "op": "GATED_DELTA_NET",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "shapes": [
+    "Q38-27B-Hv48-scalar",
+    "A3B-Hv32-scalar"
+   ],
+   "src": "frozen",
+   "type": "F32"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ2_XXS-shared",
+   "mode": "shared",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ2_XXS-disjoint",
+   "mode": "disjoint",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ2_XS-shared",
+   "mode": "shared",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ2_XS-disjoint",
+   "mode": "disjoint",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ3_S-shared",
+   "mode": "shared",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ3_S-disjoint",
+   "mode": "disjoint",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ3_XXS-shared",
+   "mode": "shared",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PFFFFFFFF",
+     "shape": "F2560",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ3_XXS-disjoint",
+   "mode": "disjoint",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "F640",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-Q8_0-shared",
+   "mode": "shared",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "F640",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-Q8_0-disjoint",
+   "mode": "disjoint",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-Q4_K-shared",
+   "mode": "shared",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q4_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-Q4_K-disjoint",
+   "mode": "disjoint",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q4_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-Q3_K-shared",
+   "mode": "shared",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q3_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-Q3_K-disjoint",
+   "mode": "disjoint",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q3_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-Q6_K-shared",
+   "mode": "shared",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q6_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-Q6_K-disjoint",
+   "mode": "disjoint",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q6_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "shared",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ4_XS-shared",
+   "mode": "shared",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ4_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "disjoint",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MMID-IQ4_XS-disjoint",
+   "mode": "disjoint",
+   "nth": 24,
+   "op": "MUL_MAT_ID",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ4_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "7168",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "16384",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "65536",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-FA-F16-nth1",
+   "mode": null,
+   "nth": 1,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "F16"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "7168",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "16384",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "65536",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-FA-Q8_0-nth1",
+   "mode": null,
+   "nth": 1,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "7168",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "16384",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "65536",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-FA-Q4_0-nth1",
+   "mode": null,
+   "nth": 1,
+   "op": "FLASH_ATTN_EXT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q4_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "Q38-27B-Hv48-scalar",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "A3B-Hv32-scalar",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "Q38-27B-Hv48-kda",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-GDN-all-shapes-nth24",
+   "mode": null,
+   "nth": 24,
+   "op": "GATED_DELTA_NET",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "F32"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "Q38-27B-Hv48-scalar",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "A3B-Hv32-scalar",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "Q38-27B-Hv48-kda",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-GDN-all-shapes-nth1",
+   "mode": null,
+   "nth": 1,
+   "op": "GATED_DELTA_NET",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "F32"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MM-Q8_0-nth1",
+   "mode": null,
+   "nth": 1,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MM-IQ2_XXS-nth1",
+   "mode": null,
+   "nth": 1,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MM-IQ2_XS-nth1",
+   "mode": null,
+   "nth": 1,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MM-IQ3_XXS-nth1",
+   "mode": null,
+   "nth": 1,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M2048",
+     "status": "FAIL"
+    },
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "M512",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CPU-MM-IQ3_S-nth1",
+   "mode": null,
+   "nth": 1,
+   "op": "MUL_MAT",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F640",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MM-Q8_0-rowexact9",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q8_0"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MM-Q4_K-rowexact9",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q4_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MM-Q3_K-rowexact9",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q3_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MM-Q6_K-rowexact9",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]",
+   "shape": null,
+   "src": "addendum",
+   "type": "Q6_K"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MM-IQ2_XXS-rowexact9",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ2_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MM-IQ2_XS-rowexact9",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ2_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MM-IQ3_XXS-rowexact9",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ3_XXS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MM-IQ3_S-rowexact9",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ3_S"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-5120",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-17408",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "D27-6144",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M2048",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "M512",
+     "status": "PASS"
+    },
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "F2560",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CPU-MM-IQ4_XS-rowexact9",
+   "mode": null,
+   "nth": 24,
+   "op": "MUL_MAT",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]",
+   "shape": null,
+   "src": "addendum",
+   "type": "IQ4_XS"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 2,
+     "match": true,
+     "mode": "-",
+     "pattern": "PFFFFFFFF",
+     "shape": "ctl-positive-width-dependent",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CTL-positive",
+   "mode": null,
+   "nth": 24,
+   "op": "CONTROL",
+   "pred": 2,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "ctl-positive-width-dependent",
+   "src": "addendum",
+   "type": "F32"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": null,
+     "match": true,
+     "mode": "-",
+     "pattern": "PPPPPPPPP",
+     "shape": "ctl-negative-width-independent",
+     "status": "PASS"
+    }
+   ],
+   "id": "ADD-CTL-negative",
+   "mode": null,
+   "nth": 24,
+   "op": "CONTROL",
+   "pred": "PASS",
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "ctl-negative-width-independent",
+   "src": "addendum",
+   "type": "F32"
+  },
+  {
+   "detail": [
+    {
+     "first_fail_k": 1,
+     "match": true,
+     "mode": "-",
+     "pattern": "FFFFFFFFF",
+     "shape": "ctl-bitflip-injection",
+     "status": "FAIL"
+    }
+   ],
+   "id": "ADD-CTL-bitflip",
+   "mode": null,
+   "nth": 24,
+   "op": "CONTROL",
+   "pred": 1,
+   "result": "confirmed",
+   "route": "cpu",
+   "shape": "ctl-bitflip-injection",
+   "src": "addendum",
+   "type": "F32"
+  }
+ ],
+ "scoring_counts": {
+  "addendum/confirmed": 40,
+  "frozen/confirmed": 63,
+  "frozen/falsified": 3
+ }
+}
