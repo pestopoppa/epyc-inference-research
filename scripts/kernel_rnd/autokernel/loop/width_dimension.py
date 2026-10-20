@@ -213,17 +213,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--footprint", nargs="*", default=[], help="paths the keep touches")
     ap.add_argument("--anchor-label")
     ap.add_argument("--keep-label")
-    ap.add_argument("--out")
     args = ap.parse_args(argv)
     record = width_dimension(
         footprint=args.footprint, anchor_table=load_table(args.anchor_table),
         keep_table=load_table(args.keep_table) if args.keep_table else None,
         anchor=args.anchor_label, keep=args.keep_label)
-    text = json.dumps(record, indent=1, sort_keys=True) + "\n"
-    if args.out:
-        Path(args.out).write_text(text, encoding="utf-8")
-    else:
-        print(text, end="")
+    print(json.dumps(record, indent=1, sort_keys=True))   # redirect to a file; no scratch of its own
     return 0
 
 

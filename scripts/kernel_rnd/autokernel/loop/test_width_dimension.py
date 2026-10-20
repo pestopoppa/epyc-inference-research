@@ -79,7 +79,7 @@ def test_model_level_dispositions():
     full = {w: _wr() for w in wd.MODEL_WIDTHS}
     assert wd.model_level_record(None, corpus=CORPUS)["disposition"] == "not_measured"
     assert wd.model_level_record(full, corpus=CORPUS)["disposition"] == "zero_flips_informative"
-    flips = dict(full, **{5: _wr(flips=2)})
+    flips = {**full, 5: _wr(flips=2)}
     assert wd.model_level_record(flips, corpus=CORPUS)["disposition"] == "flips_observed"
     confident = {w: _wr(nt1=0, nt2=0) for w in wd.MODEL_WIDTHS}
     assert wd.model_level_record(confident, corpus=CORPUS)["disposition"] == "uninformative"
