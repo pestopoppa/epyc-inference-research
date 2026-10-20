@@ -424,9 +424,12 @@ def _capacity_row(capacity: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 def keep_dimensions(*, declared: Sequence[str], primary: str,
-                    comparisons: Mapping[str, Any], capacity: Mapping[str, Any] | None
-                    ) -> dict[str, Any]:
-    """Per-dimension dispositions for one keep (pure). `passed` iff none failed/pending."""
+                    comparisons: Mapping[str, Any], capacity: Mapping[str, Any] | None,
+                    width_invariance: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Per-dimension dispositions for one keep (pure). `passed` iff none failed/pending.
+
+    `width_invariance` (AKX-ALL-27, `width_dimension.width_dimension`) is OBSERVE-ONLY: carried verbatim
+    under its own key, outside `dimensions`, and it never enters `passed` or `reason`."""
     declared = tuple(declared)
     rows: dict[str, dict[str, Any]] = {}
     for name in KEEP_DIMENSIONS:
@@ -457,11 +460,14 @@ def keep_dimensions(*, declared: Sequence[str], primary: str,
                           "noise_floor_pct": comparison.get("noise_floor_pct"),
                           "reason": "cross-workload interim non-inferiority rule"}
     blocking = {n: r for n, r in rows.items() if r["disposition"] in ("failed", "pending")}
-    return {"schema": DIMENSIONS_SCHEMA, "declared": list(declared), "primary": primary,
-            "dimensions": rows, "passed": not blocking,
-            "reason": ("; ".join(f"{n}: {r['disposition']} ({r['reason']})"
-                                 for n, r in blocking.items())
-                       or "no declared dimension regressed")}
+    record = {"schema": DIMENSIONS_SCHEMA, "declared": list(declared), "primary": primary,
+              "dimensions": rows, "passed": not blocking,
+              "reason": ("; ".join(f"{n}: {r['disposition']} ({r['reason']})"
+                                   for n, r in blocking.items())
+                         or "no declared dimension regressed")}
+    if width_invariance is not None:
+        record["width_invariance"] = dict(width_invariance)
+    return record
 
 
 def retain_dimensions(store: Path, mechanism_id: str, record: Mapping[str, Any], *,
