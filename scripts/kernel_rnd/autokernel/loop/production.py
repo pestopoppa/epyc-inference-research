@@ -583,12 +583,20 @@ def _read_text(path: Path) -> str | None:
 def read_host_facts(*, dmi_root: Path | str = "/sys/class/dmi/id",
                     proc_root: Path | str = "/proc",
                     node_root: Path | str = "/sys/devices/system/node",
-                    drm_root: Path | str = "/sys/class/drm") -> dict:
+                    drm_root: Path | str = "/sys/class/drm",
+                    module_root: Path | str = "/sys/module",
+                    rocm_root: Path | str = "/opt/rocm") -> dict:
     """Identity facts about this host that a BIOS, firmware or kernel change moves.
 
     Readable without root. An unreadable fact is None, and None is never compared:
     "could not read" is not "changed". Settings-only BIOS changes (memory interleave,
     memory speed) do NOT move any of these -- `HOST_CHANGES` is their record.
+
+    AKX-ALL-29.1 adds four additive GPU-stack facts, each None when unreadable:
+    `amdgpu_module_version` (/sys/module/amdgpu/version; absent for the in-tree
+    module, where `kernel_release` is the version), `amdgpu_srcversion` (the module
+    build hash), `rocm_version` (<rocm>/.info/version) and `hip_runtime_version`
+    (the libamdhip64.so.X.Y.Z the unversioned symlink resolves to).
     """
     dmi = Path(dmi_root)
     facts: dict[str, Any] = {key: _read_text(dmi / key) for key in (
@@ -615,7 +623,26 @@ def read_host_facts(*, dmi_root: Path | str = "/sys/class/dmi/id",
     except OSError:
         vbios = []
     facts["gpu_vbios"] = vbios or None
+    amdgpu = Path(module_root) / "amdgpu"
+    facts["amdgpu_module_version"] = _read_text(amdgpu / "version")
+    facts["amdgpu_srcversion"] = _read_text(amdgpu / "srcversion")
+    rocm = Path(rocm_root)
+    facts["rocm_version"] = _read_text(rocm / ".info" / "version")
+    facts["hip_runtime_version"] = _hip_runtime_version(rocm / "lib")
     return facts
+
+
+def _hip_runtime_version(lib_dir: Path) -> str | None:
+    """`6.2.60200` from `libamdhip64.so` -> `libamdhip64.so.6.2.60200`; None if absent."""
+    try:
+        target = os.path.realpath(lib_dir / "libamdhip64.so")
+    except OSError:
+        return None
+    name = os.path.basename(target)
+    prefix = "libamdhip64.so."
+    if not name.startswith(prefix) or not os.path.exists(target):
+        return None
+    return name[len(prefix):] or None
 
 
 def host_fact_changes(recorded: Mapping[str, Any] | None,

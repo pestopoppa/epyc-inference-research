@@ -94,6 +94,7 @@ from . import epoch_aliases
 from . import scratch
 from . import procguard
 from . import ak_check
+from . import noop_build
 from . import cpu_window
 from . import resume as resume_mod
 from . import bestof
@@ -4092,6 +4093,15 @@ def main(argv: list[str] | None = None) -> int:
                 return longctx_compare(worker.build_dir)
             if direct_launch:
                 return cpu_compare(anchor_build[0], worker.build_dir)
+            # AKX-ALL-29.3: a HIP candidate whose gfx90a kernel bodies equal the
+            # anchor's is not timed. None (hash unavailable, bodies differ, CPU
+            # recipe) falls through to the normal measurement unchanged.
+            if str(dict(recipe.cmake_defines()).get("GGML_HIP", "ON")).upper() != "OFF":
+                same = noop_build.identical_bodies(
+                    noop_build.find_hip_library(anchor_build[0]),
+                    noop_build.find_hip_library(worker.build_dir))
+                if same is not None:
+                    raise loop.NoOpBuild(same)
             # The anchor build is SHARED across lanes and only ever read, so it needs
             # no per-lane copy; the candidate binary is per lane because each lane
             # built it from its own patch.

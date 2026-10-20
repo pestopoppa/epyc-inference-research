@@ -23,6 +23,8 @@ INVALID_OUTCOMES = frozenset({
     # A refusal before measurement: the exact-attempt identity, and (DS41-C97) a runtime
     # treatment already measured in the same frame under another mechanism id.
     "refused_duplicate",
+    # AKX-ALL-29.3: gfx90a kernel bodies byte-identical to the incumbent's; not timed.
+    "no_op_build",
 })
 FAILED_OUTCOMES = frozenset({"bench_failed", "lane_error", "planner_transient",
                              "authoring_harness_failure"})

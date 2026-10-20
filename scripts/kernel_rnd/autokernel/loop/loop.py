@@ -203,6 +203,20 @@ class TailRefused(RuntimeError):
     """
 
 
+class NoOpBuild(RuntimeError):
+    """AKX-ALL-29.3: the candidate's gfx90a kernel bodies equal the incumbent's.
+
+    Raised by a measure callback BEFORE any timing. `iterate` records it as a
+    "no_op_build" outcome with both hashes; it is never a keep and never measured.
+    """
+
+    def __init__(self, record: dict):
+        super().__init__(
+            "no-op build: candidate gfx90a kernel bodies are byte-identical to the "
+            f"incumbent's ({record.get('candidate_body_sha256')}); timing skipped")
+        self.record = record
+
+
 class ConfirmVetoed(RuntimeError):
     """The confirm rung refused to promote a screen keep (§5.3, D1-D6).
 
@@ -514,6 +528,8 @@ class Outcome:
     invalid_measurement: dict | None = None
     instrument_failure: dict | None = None
     integrity_screen: dict | None = None
+    # AKX-ALL-29.3: both body hashes when the build was a no-op (status "no_op_build").
+    no_op_build: dict | None = None
     attempt_identity: str | None = None
     exact_repeat_dispatch_count: int | None = None
     duplicate_of: str | None = None
@@ -592,6 +608,8 @@ class Outcome:
             row["instrument_failure"] = self.instrument_failure
         if self.integrity_screen is not None:
             row["integrity_screen"] = self.integrity_screen
+        if self.no_op_build is not None:
+            row["no_op_build"] = self.no_op_build
         for key in ("attempt_identity", "exact_repeat_dispatch_count", "duplicate_of",
                     "prior_effect", "prior_epoch", "refusal_gate", "candidate_diff_sha256"):
             if getattr(self, key) is not None:
@@ -1968,6 +1986,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         except MeasurementFailed as exc:
                             return Outcome("bench_failed", hypothesis, [str(exc)],
                                 gate_verdicts=verdicts, instrument_failure=exc.record)
+                        except NoOpBuild as exc:
+                            return Outcome("no_op_build", hypothesis, [str(exc)],
+                                gate_verdicts=verdicts, no_op_build=exc.record)
                     # R23-44 compound-then-gate: an experimental serving source
                     # candidate may be smaller than the process-unit floor and still
                     # belong in the working accumulator.  It must still be a valid,
@@ -2062,7 +2083,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["AUTHORING_FAILED", "AUTHORING_HARNESS_FAILURE", "AUTHOR_HARNESS_FAILURE_CAP",
+__all__ = ["NoOpBuild", "AUTHORING_FAILED", "AUTHORING_HARNESS_FAILURE", "AUTHOR_HARNESS_FAILURE_CAP",
            "CRITIC1_RETRIES",
            "AuthoringFailure", "HARNESS_FAILURE_CLASSES", "HARNESS_OUTCOMES",
            "author_failure_feedback", "author_failure_record", "classify_author_failure",

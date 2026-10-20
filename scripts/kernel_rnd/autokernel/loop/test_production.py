@@ -1387,6 +1387,41 @@ class HostFactsAreReadWithoutRoot(unittest.TestCase):
         self.assertEqual(facts["numa_nodes"], 4)
         self.assertEqual(facts["gpu_vbios"], ["113-X"])
 
+    def test_gpu_stack_versions_are_read_and_nullable(self):
+        # AKX-ALL-29.1: amdgpu module + HIP runtime versions, None when unreadable.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "mod" / "amdgpu").mkdir(parents=True)
+            (root / "mod" / "amdgpu" / "version").write_text("6.8.5\n")
+            (root / "mod" / "amdgpu" / "srcversion").write_text("ABC123\n")
+            (root / "rocm" / ".info").mkdir(parents=True)
+            (root / "rocm" / ".info" / "version").write_text("6.2.0-66\n")
+            lib = root / "rocm" / "lib"
+            lib.mkdir()
+            (lib / "libamdhip64.so.6.2.60200").write_bytes(b"x")
+            (lib / "libamdhip64.so.6").symlink_to("libamdhip64.so.6.2.60200")
+            (lib / "libamdhip64.so").symlink_to("libamdhip64.so.6")
+            kw = dict(dmi_root=root / "nodmi", proc_root=root / "noproc",
+                      node_root=root / "nonode", drm_root=root / "nodrm")
+            full = production.read_host_facts(
+                module_root=root / "mod", rocm_root=root / "rocm", **kw)
+            empty = production.read_host_facts(
+                module_root=root / "nomod", rocm_root=root / "norocm", **kw)
+        self.assertEqual(full["amdgpu_module_version"], "6.8.5")
+        self.assertEqual(full["amdgpu_srcversion"], "ABC123")
+        self.assertEqual(full["rocm_version"], "6.2.0-66")
+        self.assertEqual(full["hip_runtime_version"], "6.2.60200")
+        for key in ("amdgpu_module_version", "amdgpu_srcversion",
+                    "rocm_version", "hip_runtime_version"):
+            self.assertIsNone(empty[key])
+        # additive: a record that predates the keys never reads as changed
+        self.assertEqual(production.host_fact_changes(
+            {"kernel_release": "6.14"}, {**full, "kernel_release": "6.14"}), [])
+        # ...and a driver/runtime move after capture does
+        self.assertEqual(len(production.host_fact_changes(
+            {"hip_runtime_version": "6.2.60200"},
+            {"hip_runtime_version": "7.0.0"})), 1)
+
 
 # ------------------------------------------- the serving-probe protocol kind
 

@@ -576,6 +576,24 @@ class AnInstrumentFailureEndsTheIterationNotTheRun(unittest.TestCase):
         self.assertEqual(outcome.status, "bench_failed")
         self.assertIn("rc=-9", " ".join(outcome.reasons))
 
+    def test_a_no_op_build_is_recorded_with_both_hashes_and_is_never_a_keep(self):
+        # AKX-ALL-29.3
+        record = {"incumbent_body_sha256": "a" * 64, "candidate_body_sha256": "a" * 64}
+        committed = []
+
+        def measure(hypothesis, paths):
+            raise loop.NoOpBuild(record)
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic([], []), context={},
+            measure=measure,
+            gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+            commit=lambda *a: committed.append(a) or "abc1234")
+        self.assertEqual(outcome.status, "no_op_build")
+        self.assertEqual(outcome.no_op_build, record)
+        self.assertEqual(outcome.to_attempt()["no_op_build"], record)
+        self.assertIsNone(outcome.comparison)
+        self.assertEqual(committed, [])
+
     def test_serving_failure_retains_structured_facts_and_is_not_a_null(self):
         retained = {"schema": "epyc.autokernel.serving_failed_comparison.v2",
                     "failed_arm": "candidate", "failed_ordinal": 1}
