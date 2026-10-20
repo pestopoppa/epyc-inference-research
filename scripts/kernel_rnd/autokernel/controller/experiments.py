@@ -488,6 +488,28 @@ class ExperimentStore:
             })
         return cursor.rowcount == 1
 
+    def trial_counters(self, *, epoch: str) -> dict[str, int | None]:
+        """AK-HR-3: the next campaign-wide trial ordinal and cumulative token count for
+        `epoch` in this store (a continued run shares its epoch, so it shares the counter).
+
+        `trial_ordinal` is the number of rows already recorded under `epoch` plus one.
+        `prior_cumulative_tokens` is the newest row's own `cumulative_tokens` (0 if none); the
+        caller adds its trial's tokens. Only ONE payload is parsed (the newest row's);
+        a row written before AK-HR-3 has none, so the sum restarts from zero there and the
+        gap is visible as a null on those rows. Concurrent lanes can read the same count;
+        readers dedupe on `attempt_id` and order by `recorded_at` then ordinal.
+        Read-only; never raises into the caller."""
+        try:
+            count = self._connection.execute(
+                "SELECT count(*) FROM experiments WHERE epoch_sha256=?", (epoch,)).fetchone()[0]
+            newest = self._connection.execute(
+                "SELECT json_extract(payload,'$.cumulative_tokens') FROM experiments "
+                "WHERE epoch_sha256=? ORDER BY rowid DESC LIMIT 1", (epoch,)).fetchone()
+            prior = newest[0] if newest and isinstance(newest[0], int) else 0
+            return {"trial_ordinal": int(count) + 1, "prior_cumulative_tokens": prior}
+        except Exception:       # noqa: BLE001 -- observe-only
+            return {"trial_ordinal": None, "prior_cumulative_tokens": None}
+
     def record_all(self, attempts: Iterable[Mapping[str, Any]], **kwargs: Any) -> int:
         return sum(1 for attempt in attempts if self.record(attempt, **kwargs))
 

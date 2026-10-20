@@ -49,7 +49,7 @@ import time
 from typing import Any, Callable, Mapping, Sequence
 import uuid
 
-from . import actor_metrics, belief_context, integrity, procguard, scratch
+from . import actor_metrics, belief_context, history_fields, integrity, procguard, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
                    Review)
 
@@ -1268,6 +1268,8 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             "opencode": opencode_stats,
             "metrics_error": (opencode_stats or {}).get("metrics_error") if collect_metrics else None,
             **_seat_provenance(env),
+            # AK-HR-3: nullable attempt-to-call key and family bucket (observe-only).
+            **history_fields.metrics_fields(),
         }
         if continued_session:
             record["salvage_turn"] = True
@@ -1288,6 +1290,10 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
                   "failure_class": failure_class,
                   "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                   "metrics_error": f"{type(exc).__name__}: {exc}"[:500]}
+    try:
+        history_fields.note_call(role, wall_s, failure_class, record.get("opencode"))
+    except Exception:   # noqa: BLE001 -- observe-only, never a reason to fail the call
+        pass
     try:
         target = Path(workspace).parent / ACTOR_REPLY_DIR
         target.mkdir(parents=True, exist_ok=True)

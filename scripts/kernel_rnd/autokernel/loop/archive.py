@@ -458,6 +458,21 @@ def keep(repo: Path, *, branch: str, message: str, paths: tuple[str, ...]) -> st
         return new_head
 
 
+def _with_trial_counters(store, attempt: Mapping[str, Any], epoch: str) -> Mapping[str, Any]:
+    """AK-HR-3: add the campaign-wide `trial_ordinal` and `cumulative_tokens` to a row the
+    loop produced inside `iterate` (it carries `trial_id`). Any other row, and any failure
+    to read the counters, is stored exactly as before. The ORIGINAL `attempt` still goes to
+    the auxiliary exports below; only the stored payload gains the two keys."""
+    if "trial_id" not in attempt:
+        return attempt
+    counters = store.trial_counters(epoch=epoch)
+    ordinal, prior = counters.get("trial_ordinal"), counters.get("prior_cumulative_tokens")
+    tokens = attempt.get("trial_tokens")
+    cumulative = (prior + tokens if isinstance(prior, int) and isinstance(tokens, int)
+                  else (prior if isinstance(prior, int) and prior else None))
+    return {**attempt, "trial_ordinal": ordinal, "cumulative_tokens": cumulative}
+
+
 def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
            recorded_at: str, campaign_id: str, on_serving_export=None,
            journal_receipt_out: list[dict[str, Any]] | None = None) -> bool:
@@ -469,7 +484,8 @@ def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
     receipts = journal_receipt_out if journal_receipt_out is not None else []
     first_receipt = len(receipts)
     with experiments.ExperimentStore(store_root) as store:
-        added = store.record(attempt, epoch=epoch, recorded_at=recorded_at,
+        added = store.record(_with_trial_counters(store, attempt, epoch),
+                             epoch=epoch, recorded_at=recorded_at,
                              campaign_id=campaign_id,
                              receipt_out=receipts)
         store.write_markdown(epoch=epoch)

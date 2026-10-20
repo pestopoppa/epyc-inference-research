@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from . import bench, gates, integrity, runtime_identity
+from . import bench, gates, history_fields, integrity, runtime_identity
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
@@ -566,6 +566,10 @@ class Outcome:
     # (`Abstain.mechanism_id` etc). Populated only from an Abstain's own optional
     # fields; never invented, never present for a reasonless/unnamed abstention.
     abstained_identity: dict | None = None
+    # AK-HR-3 (observe-only, nullable): `history_fields.Trial.snapshot()` of the
+    # `iterate` turn that produced this outcome. None for an outcome built outside
+    # `iterate` (its row then carries none of the AK-HR-3 keys, i.e. historical shape).
+    history_fields: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -618,6 +622,12 @@ class Outcome:
         for key in ("spawn_parent", "branch_id", "width", "depth"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
+        if self.history_fields is not None:
+            # Additive and nullable: a value that is unknown is null, never invented.
+            row.update(self.history_fields)
+            if row.get("mechanism_family_bucket") is None:
+                row["mechanism_family_bucket"] = history_fields.family_bucket(row)
+            row["knob_descriptor"] = history_fields.knob_descriptor(self.hypothesis)
         if self.hypothesis is not None:
             from . import claims
             split = claims.keep_claims(
@@ -1076,6 +1086,11 @@ def iterate(*, planner: Planner, critic: Critic,
     if iteration_scope is None:
         from . import scratch
         iteration_scope = scratch.current("iteration") or scratch.active_scope()
+    # AK-HR-3: observe-only trial context (attempt-to-call key, stage seconds). The two
+    # wrappers re-raise and return exactly what the callables do.
+    trial_token = history_fields.begin()
+    measure = history_fields.timed("measure", measure)
+    gate = history_fields.timed("gate", gate)
     working = dict(context)
     abandoned: list[dict] = []
     progress: dict[str, Any] = {"inflight": None, "critic2": None, "build": None,
@@ -1111,6 +1126,9 @@ def iterate(*, planner: Planner, critic: Critic,
             outcome.reasons = [STOPPED_AFTER_DISPOSALS, *outcome.reasons[1:],
                                _disposal_summary(abandoned)]
         outcome.abandoned_candidates = list(abandoned)
+        trial = history_fields.current()
+        if trial is not None and outcome.history_fields is None:
+            outcome.history_fields = trial.snapshot()
         if progress["author_panels"] and not outcome.author_panels:
             outcome.author_panels = [dict(panel) for panel in progress["author_panels"]]
         resumed = progress.get("resume")
@@ -1189,6 +1207,8 @@ def iterate(*, planner: Planner, critic: Critic,
             except Exception:      # noqa: BLE001 -- an exception type without __dict__
                 pass
         raise
+    finally:
+        history_fields.end(trial_token)
 
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
@@ -1564,6 +1584,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 return Outcome("abstained", None, [hypothesis.reason],
                                abstained_identity=identity)
             last_proposed = hypothesis
+            history_fields.note_hypothesis(hypothesis)
             repeat_reason = formation_guard(hypothesis, working)
             if repeat_reason:
                 return Outcome("refused_at_formation", hypothesis, [repeat_reason],
