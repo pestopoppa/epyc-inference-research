@@ -1,0 +1,33 @@
+[region-lock] acquiring regions ['q0'] as role='build' (timeout_s=0.0) …
+[region-lock] held ['q0'] after 0.0s wait; running: python3 -I /mnt/raid0/llm/epyc-inference-research/artifacts/np_context_kvu_cpu_study_20261020/driver/kvu_cpu_matrix.py --out /mnt/raid0/llm/epyc-inference-research/artifacts/np_context_kvu_cpu_study_20261020/loadonly --loadonly --nps 1,8 --lens 8k --pmodes independent --kv-modes unified --pools 1048576 --cpu-list 0-23 --threads 24 --port 18970
+corpus sha256=72d96dd93d9aa3bf54bb711d5c523c761c0626f784684aebed3f9f11dfd91d95 files=674 chars=20881145
+verify_ggml_linkage rc=0
+llm/kernels/builds/cpu-20260921-ffc1bac82/bin/libggml-cpu.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/opt/AMD/aocc-compiler-5.0.0/lib
+         2	/opt/rocm/lib
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/kernels/production/cpu
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.
+
+[2026-10-20T16:19:12Z] LAUNCH unified_np1_pool1048576 argv=["numactl", "--interleave=all", "--", "taskset", "-c", "0-23", "/mnt/raid0/llm/kernels/production/cpu/llama-server", "-m", "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf", "--host", "127.0.0.1", "--port", "18970", "-np", "1", "-c", "1048576", "-t", "24", "-ub", "2048", "--flash-attn", "on", "--jinja", "-ctk", "q8_0", "-ctv", "q8_0", "--mlock", "--no-mmap", "--cache-ram", "32768", "--chat-template-file", "/mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja", "--spec-type", "draft-mtp", "--spec-draft-n-max", "4", "--reasoning", "off", "--device", "none", "--device-draft", "none", "--kv-unified"]
+[2026-10-20T16:19:12Z] ENV {"OMP_PROC_BIND": "spread", "OMP_PLACES": "cores", "OMP_WAIT_POLICY": "active", "OMP_DYNAMIC": "false", "KMP_BLOCKTIME": "10", "GGML_IQK": "1", "LD_LIBRARY_PATH": "/usr/lib/llvm-20/lib"} binary=/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server
+[2026-10-20T16:19:26Z] health=HEALTHY
+[2026-10-20T16:19:26Z] LINKAGE {"lib_dirs": ["/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin"], "all_in_kernel_store": true}
+[2026-10-20T16:19:26Z] LOADFACTS {"kv_unified": "true", "n_ctx_slot": "262144", "n_slots": "1", "kv_buffer_mib": null, "rs_buffer_mib": null, "n_ctx_train_warn": "n_ctx_seq (1048576) > n_ctx_train (262144) -- possible training context overflow", "rss_after_load_gib": 48.5}
+SUMMARY {"launch": "unified_np1_pool1048576", "cell": "loadonly", "result": "OK", "prefill_tps_med": null, "ttft_s_med": null, "decode_tps_sum_med": null, "agg_e2e_med": null}
+[2026-10-20T16:19:30Z] STOP dead=True pid=868325
+[2026-10-20T16:19:30Z] LAUNCH unified_np8_pool1048576 argv=["numactl", "--interleave=all", "--", "taskset", "-c", "0-23", "/mnt/raid0/llm/kernels/production/cpu/llama-server", "-m", "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf", "--host", "127.0.0.1", "--port", "18970", "-np", "8", "-c", "1048576", "-t", "24", "-ub", "2048", "--flash-attn", "on", "--jinja", "-ctk", "q8_0", "-ctv", "q8_0", "--mlock", "--no-mmap", "--cache-ram", "32768", "--chat-template-file", "/mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja", "--spec-type", "draft-mtp", "--spec-draft-n-max", "4", "--reasoning", "off", "--device", "none", "--device-draft", "none", "--kv-unified"]
+[2026-10-20T16:19:30Z] ENV {"OMP_PROC_BIND": "spread", "OMP_PLACES": "cores", "OMP_WAIT_POLICY": "active", "OMP_DYNAMIC": "false", "KMP_BLOCKTIME": "10", "GGML_IQK": "1", "LD_LIBRARY_PATH": "/usr/lib/llvm-20/lib"} binary=/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server
+[2026-10-20T16:19:45Z] health=HEALTHY
+[2026-10-20T16:19:45Z] LINKAGE {"lib_dirs": ["/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin"], "all_in_kernel_store": true}
+[2026-10-20T16:19:45Z] LOADFACTS {"kv_unified": "true", "n_ctx_slot": "262144", "n_slots": "8", "kv_buffer_mib": null, "rs_buffer_mib": null, "n_ctx_train_warn": "n_ctx_seq (1048576) > n_ctx_train (262144) -- possible training context overflow", "rss_after_load_gib": 50.68}
+SUMMARY {"launch": "unified_np8_pool1048576", "cell": "loadonly", "result": "OK", "prefill_tps_med": null, "ttft_s_med": null, "decode_tps_sum_med": null, "agg_e2e_med": null}
+[2026-10-20T16:19:48Z] STOP dead=True pid=868981
+DONE
+ALLDONE

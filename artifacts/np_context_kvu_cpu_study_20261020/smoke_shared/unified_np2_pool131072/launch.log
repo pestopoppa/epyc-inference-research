@@ -1,0 +1,8 @@
+[2026-10-20T16:22:52Z] LAUNCH unified_np2_pool131072 argv=["numactl", "--interleave=all", "--", "taskset", "-c", "0-23", "/mnt/raid0/llm/kernels/production/cpu/llama-server", "-m", "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf", "--host", "127.0.0.1", "--port", "18970", "-np", "2", "-c", "131072", "-t", "24", "-ub", "2048", "--flash-attn", "on", "--jinja", "-ctk", "q8_0", "-ctv", "q8_0", "--mlock", "--no-mmap", "--cache-ram", "32768", "--chat-template-file", "/mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja", "--spec-type", "draft-mtp", "--spec-draft-n-max", "4", "--reasoning", "off", "--device", "none", "--device-draft", "none", "--kv-unified"]
+[2026-10-20T16:22:52Z] ENV {"OMP_PROC_BIND": "spread", "OMP_PLACES": "cores", "OMP_WAIT_POLICY": "active", "OMP_DYNAMIC": "false", "KMP_BLOCKTIME": "10", "GGML_IQK": "1", "LD_LIBRARY_PATH": "/usr/lib/llvm-20/lib"} binary=/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server
+[2026-10-20T16:23:03Z] health=HEALTHY
+[2026-10-20T16:23:03Z] LINKAGE {"lib_dirs": ["/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin"], "all_in_kernel_store": true}
+[2026-10-20T16:23:03Z] LOADFACTS {"kv_unified": "true", "n_ctx_slot": "131072", "n_slots": "2", "kv_buffer_mib": null, "rs_buffer_mib": null, "n_ctx_train_warn": null, "rss_after_load_gib": 37.67}
+[2026-10-20T16:25:11Z] unified_np2_pool131072 8k shared wave0: wall=73.7s ttft=[54.46, 23.46] dec_sum=18.5 cache=[0, 7844] err=0
+[2026-10-20T16:25:50Z] unified_np2_pool131072 8k shared wave1: wall=38.5s ttft=[18.23, 17.96] dec_sum=25.34 cache=[5824, 7844] err=0
+[2026-10-20T16:25:53Z] STOP dead=True pid=878201
