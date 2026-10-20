@@ -25,9 +25,15 @@ recordings are stored; a clip is a deterministic function of (recording, recipe)
 - CUT_IC / CUT_WAIT: member b is the same recording cut at a word boundary (cut snapped to a quiet valley near the ASR word boundary), member a runs to its natural end. 10 ms raised-cosine fade at the end of both. Both get exactly 2.0 s of digital silence. The assistant context is identical.
 - CTX_BC: the same acknowledgement waveform in both members; a is placed after the assistant finished a question, b over an assistant monologue that keeps going.
 
+## Current build (v2, 2026-10-20)
+
+112 main pairs (CUT_IC 69, CUT_WAIT 13, CTX_BC 30) and 27 reserve pairs, every clip gated by the independent gates (qa/qa_gates_report.json). 37 planned pairs
+(of 176 candidates incl. 36 alternate sentences) had no variant that passed and are absent (qa/selection_report.json); nothing was waived.
+v1 (fe730c481) is superseded: see qa_evidence_pre_fix/root_causes.json.
+
 ## Reserve stratum (backfill only)
 
-`manifest/reserve/` and `audio/reserve/user.tar` hold 25 further synthesized pairs (stratum `reserve`) with the same
+`manifest/reserve/` and `audio/reserve/user.tar` hold further synthesized pairs (stratum `reserve`) with the same
 selection rules and voice partition as the main set, built so that the human review of the main set cannot push the corpus
 below the 100-pair floor. Policy (enforced by `tt_verify.py`, recorded in `corpus.json`): a reserve pair counts ONLY
 through `manifest/backfill.json` (a recorded review rejection of a main pair plus a backfill of the same family and split),
@@ -55,4 +61,12 @@ PinMismatch), tampered scorer patch, wrong scorer base hash or commit, external 
 
 ## Rebuild from renders
 
-tt_plan.py (deterministic job list) -> tt_render_pipeline.py (under a region-lock build claim) -> tt_build.py -> `tt_verify.py seal`.
+tt_plan.py (deterministic job list) -> tt_render_pipeline.py (render variant k under a region-lock build claim; ASR-A cut search) -> `tt_build2.py candidates`
+-> tt_qa_gates.py (ASR-B, a different model) -> `tt_build2.py final` (first variant whose clips all pass; nothing waived) -> `tt_verify.py seal`.
+
+## Independent QA gates (v2)
+
+The v1 corpus passed its own QA yet 12 of 20 sampled pairs were defective by ear (root causes: `qa_evidence_pre_fix/root_causes.json`). In v2 admission
+rests on `tt_qa_gates.py` (U1 exact word sequence, U2 suffix and cut-point energy, U3 non-empty speech, A1 assistant continues to its natural end),
+run with ASR-B = faster-whisper large-v3, which neither places the cuts (ASR-A = faster-whisper large-v3-turbo) nor scores (whisper.cpp large-v3-turbo).
+`tt_verify.py` check 13 refuses a corpus whose `qa/qa_gates_report.json` is missing, covers different audio, or contains a failing clip.

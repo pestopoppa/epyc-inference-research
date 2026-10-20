@@ -1,0 +1,67 @@
+{
+ "subject": "CS-45 v1 corpus (epyc-inference-research fe730c481): operator review 2026-10-20, 12 of 20 sampled pairs defective (5/10 CUT_IC, 1/4 CUT_WAIT, 6/6 CTX_BC); 'clean cut' was marked Y everywhere",
+ "files": {
+  "operator_review_20261020.csv": "the operator's review form, notes verbatim",
+  "gates_on_v1_corpus_fe730c481.json": "independent gates (tt-qa-gates-1, ASR-B faster-whisper large-v3) run on every v1 main and reserve clip"
+ },
+ "root_causes": [
+  {
+   "class": "CUT_IC member b cut about one word off",
+   "pairs": [
+    "p0021",
+    "p0027",
+    "p0044",
+    "p0047",
+    "p0048"
+   ],
+   "causes": [
+    "v1 aligner was whisper.cpp; its JSON carries no t_dtw: all 1737 word records in recordings.jsonl have dtw_ms=null although pins.json recorded dtw=large.v3.turbo, so cut placement used heuristic token times only (about +-0.1 s)",
+    "tt_build.py:61-91 choose_cut took the DEEPEST energy minimum within +-160 ms (CUT_WINDOW_MS, line 35) of that estimate; a stop closure inside a word is deeper than the real word gap",
+    "evidence: p0021 cut 'to' at 1.465 s (ASR-B boundary 1.52 s); p0044 cut 'about' mid-word; p0047 cut 'need'; across 96 cuts with an ASR-B boundary the cut was >100 ms from it in 64 (median +110 ms, p10 -180 ms, p90 +325 ms)"
+   ],
+   "not_the_cause": "re-rendering: these pairs have a single TTS attempt each (provenance.tts.attempts)"
+  },
+  {
+   "class": "CUT_WAIT member b silent",
+   "pairs": [
+    "p0069"
+   ],
+   "causes": [
+    "the render opens with 0.4 s of faint noise (-42 dBFS) before the speech (-20 dBFS); the v1 trim (tt_audio.py:98 absolute -50 dB floor, called at tt_build.py:130) counted it as speech and whisper.cpp timed 'Hang on,' at 0-0.56 s, so the cut at 0.415 s fell before any real speech; ASR-B transcribes the noise as 'Thank you' (p=0.15)"
+   ]
+  },
+  {
+   "class": "CTX_BC member b: assistant stops mid-utterance",
+   "pairs": [
+    "p0085",
+    "p0088",
+    "p0091",
+    "p0100",
+    "p0103",
+    "p0110"
+   ],
+   "extent": "34 of 34 CTX_BC pairs in v1 (30 main + 4 reserve)",
+   "causes": [
+    "by design but wrong: tt_corpus.py:92 truncated the continuing assistant at total - a_start with total = onset + len(seg) + TRAIL, about 5.8 s into a 9-15 s monologue; the gate measures the assistant continuing only 2.26 s past the backchannel onset"
+   ]
+  }
+ ],
+ "why_v1_qa_passed": "the v1 pre-filter scored the FULL render's WER with the same whisper.cpp that placed the cut and checked valley depth with the same energy rule that picked it: it never examined the cut audio, and the ASR that decided where to cut also decided whether the cut was right",
+ "gate_results_on_v1": {
+  "main": {
+   "pairs": 105,
+   "defective": 82,
+   "CUT_IC": "50/62",
+   "CUT_WAIT": "2/13",
+   "CTX_BC": "30/30"
+  },
+  "reserve": {
+   "pairs": 25,
+   "defective": 14,
+   "CUT_IC": "9/17",
+   "CUT_WAIT": "1/4",
+   "CTX_BC": "4/4"
+  },
+  "vs_operator_sample": "flags 12 of 12 operator-defective pairs and also p0012, p0013, p0028 (marked good by ear: a repeated word fragment or the onset of the next word); gates are stricter than the ear, the intended direction"
+ }
+}

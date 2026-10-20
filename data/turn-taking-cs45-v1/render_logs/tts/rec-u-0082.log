@@ -27,21 +27,21 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Audio-Resample] Done: 137680 -> 206520 samples
 [WeightCtx] Loaded 76 tensors, 22.9 MB into backend
 [SpeakerEncoder] Loaded: enc_dim=1024 sr=24000 mel_dim=128 hidden=512 mfa=1536 asp_attn=128 se=128 scale=8
-[Pipeline] Speaker encoder lazy loaded in 7 ms
+[Pipeline] Speaker encoder lazy loaded in 6 ms
 [SpkExtract] Extracted 1024-dim embedding (206520 samples, padded 207288)
 [Prompt] Built: 10 ids, N_text=2, N_instruct=0, T_ctx=13, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=13 prefill=320.0 ms build=1.9 ms (stall for 0 active slots)
+[Batch] Admit slot=0 T_ctx=13 prefill=304.6 ms build=2.0 ms (stall for 0 active slots)
 [Sample] step=0 c0=1995 u=0.9843118191 subseq=0
 [Sample] step=1 c0=765 u=0.8125463724 subseq=16
 [Pipeline] EOS at step 7, stopping (slot 0)
 [Pipeline] Generation done : 7 frames
-[Perf] PromptBuild 1.9 ms
-[Perf] Prefill 320.0 ms (T_ctx prefill)
-[Perf] TTFA 509.7 ms (first frame codes)
-[Perf] TalkerDecode 549.1 ms (7 frames, 78.45 ms/frame)
-[Perf] CodePredictor 1063.2 ms (151.88 ms/frame)
+[Perf] PromptBuild 2.0 ms
+[Perf] Prefill 304.6 ms (T_ctx prefill)
+[Perf] TTFA 442.8 ms (first frame codes)
+[Perf] TalkerDecode 530.3 ms (7 frames, 75.76 ms/frame)
+[Perf] CodePredictor 952.8 ms (136.11 ms/frame)
 [Perf] HostCompose 0.3 ms (c0 sample + next emb)
-[Perf] CodecDecode 1248.4 ms
-[Perf] Total 3183.1 ms (7 frames, 230.37 ms/frame AR, audio 0.56 s, RTF 5.684)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0082.wav: 13440 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 13440 samples (0.56 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0082.wav
+[Perf] CodecDecode 1096.3 ms
+[Perf] Total 2886.6 ms (7 frames, 211.91 ms/frame AR, audio 0.56 s, RTF 5.155)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0082.wav: 13440 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 13440 samples (0.56 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0082.wav

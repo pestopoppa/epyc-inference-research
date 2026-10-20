@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CS-45 authored text inventory. The '|' marks the cut point (it is stripped before synthesis).
 
-Pair families (all pairs splice ONE rendered user recording; see tt_build.py):
+Pair families (all pairs splice ONE rendered user recording; see tt_build2.py):
   CUT_IC    : same recording, cut mid-clause (label incomplete) vs run to its end (label complete)
   CUT_WAIT  : same recording, cut after a self-contained hold request (label wait) vs the full
               utterance whose continuation changes the intent (label complete)
@@ -183,3 +183,47 @@ RESERVE_CUT_WAIT = [
     "Give me one moment, | the second item on that list is actually mistaken.",
 ]
 RESERVE_CTX_ACKS = ["Yeah.", "Okay.", "I see.", "Right."]
+
+
+# ---------------------------------------------------------------------------------------------
+# ALTERNATE inventory (added 2026-10-20 during the rebuild): extra MAIN-set cut pairs so the corpus clears the 100-pair floor
+# after the independent gates drop texts whose cut cannot be made clean (a sentence that fails every render variant is
+# dropped, not waived). The prefix ends on a function word whose continuation is NOT strongly predictable.
+ALT_CUT_IC = [
+    "We could meet at the cafe near the | station before the movie starts.",
+    "I'll send the invoice to your | office as soon as I finish.",
+    "Please check whether the museum is open on | the first Monday of the month.",
+    "She wanted to know how much the tickets would | cost for the whole family.",
+    "Can you put the groceries in the | fridge when you get home?",
+    "I think we should ask the neighbors if they | have seen the missing cat.",
+    "He forgot to bring the charger for his | laptop so he borrowed mine.",
+    "Let's plan the trip so that we arrive before | the evening rush begins.",
+    "The teacher asked everyone to open their books to | the chapter about volcanoes.",
+    "I would like to change my reservation from Friday to | the following Sunday evening.",
+    "Do you have any idea where the | extra chairs are stored?",
+    "We need to pick up a gift for | my cousin before the party.",
+    "My sister is planning to move into a | smaller apartment closer to work.",
+    "Please remind me to water the plants and also to | take out the recycling tonight.",
+    "It might be better if we waited until | after the holidays to decide.",
+    "The company is looking for someone who can | speak both French and German.",
+    "I saw a documentary about how bees | communicate with each other.",
+    "Would you rather go hiking or stay | at the hotel and relax?",
+    "There is a small bakery on my street that sells | fresh rolls every morning.",
+    "He explained that the printer stops working whenever the | paper tray is almost empty.",
+    "Tomorrow I have to drive my parents to | the airport before sunrise.",
+    "We were surprised by how quickly the | weather changed during the hike.",
+    "Could you help me carry these boxes up to the | second floor of the building?",
+    "They said the repair would take about a week unless the | parts arrive late.",
+    "I always keep a spare key under the | flowerpot by the back door.",
+    "My favorite part of the trip was the boat ride across the | lake at sunset.",
+    "Can you recommend a good place to buy a | winter coat that isn't too expensive?",
+    "She decided to take a different route because the | main road was closed.",
+    "The kids are hoping that we can go to the | beach on Saturday afternoon.",
+    "Please let the doctor know that I am allergic to | penicillin and several other medicines.",
+    "I borrowed a book from the library that explains how to | grow vegetables on a balcony.",
+    "Our team won the game even though we were behind at the | end of the first half.",
+    "He asked the waiter whether the soup of the day contained | any nuts or dairy.",
+    "I'm thinking about taking a class on how to | repair old furniture at the community center.",
+    "We'll have to leave early tomorrow if we want to catch the | first ferry to the island.",
+    "The shop closes at six, so we should hurry if we want to | buy fresh bread today.",
+]

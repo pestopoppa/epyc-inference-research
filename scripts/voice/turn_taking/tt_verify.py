@@ -65,7 +65,7 @@ def seal(D: Path) -> dict:
         "format": "tt-corpus-1",
         "instrument_version": C.INSTRUMENT_VERSION,
         "constants": {"sample_rate": A.SR, "lead_in": C.LEAD_IN, "gap_after_assist": C.GAP_AFTER_ASSIST, "bc_onset_in_assist": C.BC_ONSET_IN_ASSIST,
-                      "trail": C.TRAIL, "fade": C.FADE, "assist_fade": C.ASSIST_FADE},
+                      "trail": C.TRAIL, "fade": C.FADE, "assist_fade": C.ASSIST_FADE, "end_pad": C.END_PAD, "n_cont_min": C.N_CONT_MIN},
         "min_pairs_required": MIN_PAIRS,
         "strata": list(STRATA),
         "advance_eligible_strata": ADVANCE_ELIGIBLE,
@@ -159,7 +159,7 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
     for c in clips + rclips:
         try:
             u, a_ = pcm[c["user"]["recording_id"]], pcm[c["assistant"]["recording_id"]]
-            arr, lay = C.assemble_clip(u, tuple(c["user"]["trim"]), c["user"]["cut"], a_, c["assistant"]["mode"])
+            arr, lay = C.assemble_clip(u, tuple(c["user"]["trim"]), c["user"]["cut"], a_, c["assistant"]["mode"], c["layout"].get("tail"))
         except Exception as e:  # noqa: BLE001
             bad.append(f"{c['clip_id']}:assemble:{e}")
             continue
@@ -169,7 +169,7 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
         if pc.pcm_sha256() != want["pcm_sha256"] or [pc.channel_sha256(0), pc.channel_sha256(1)] != want["ch_sha256"] or pc.n_samples != want["n_samples"]:
             bad.append(f"{c['clip_id']}:pcm")
         lw = c["layout"]
-        if (lay.user_onset, lay.user_len, lay.user_end, lay.total) != (lw["user_onset"], lw["user_len"], lw["user_end"], lw["total"]):
+        if (lay.user_onset, lay.user_len, lay.user_end, lay.total, lay.tail) != (lw["user_onset"], lw["user_len"], lw["user_end"], lw["total"], lw.get("tail", C.TRAIL)):
             bad.append(f"{c['clip_id']}:layout")
         if lw["trail"] != C.TRAIL or lw["lead_in"] != C.LEAD_IN:
             bad.append(f"{c['clip_id']}:constants")
@@ -417,6 +417,34 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
     if meta.get("reserve", {}).get("pairs") != len(rpairs):
         bad.append("corpus.json reserve pair count differs")
     R.add("reserve_stratum_policy", not bad, bad[:20])
+
+    # V13 independent QA gates (ASR-B + energy) passed on EVERY clip, bound to the clip's PCM-SHA-256 -------------------
+    bad = []
+    qp = D / "qa" / "qa_gates_report.json"
+    if not qp.exists():
+        bad.append("qa/qa_gates_report.json missing")
+    else:
+        qa = json.loads(qp.read_text())
+        if qa.get("gates_version") != "tt-qa-gates-2":
+            bad.append(f"gates_version={qa.get('gates_version')}")
+        asr_b, asr_a, scored = str(qa.get("asr_b", "")), str(qa.get("built_with_asr_a", "")), str(qa.get("scored_with", ""))
+        if not asr_b or asr_b in (asr_a, scored) or "turbo" in asr_b:
+            bad.append("ASR-B is not independent of the build ASR and the scoring ASR")
+        if qa.get("all_pass") is not True:
+            bad.append("report all_pass is not true")
+        entries = qa.get("clips", {})
+        allc = clips + rclips
+        if len(entries) != len(allc):
+            bad.append(f"report covers {len(entries)} clips, corpus has {len(allc)}")
+        for c in allc:
+            e = entries.get(c["clip_id"])
+            if e is None:
+                bad.append(f"{c['clip_id']}:not in qa report")
+            elif e.get("pcm_sha256") != c["pcm"]["pcm_sha256"]:
+                bad.append(f"{c['clip_id']}:qa report is for different audio")
+            elif not e.get("pass") or not all(e.get("gates", {}).values()):
+                bad.append(f"{c['clip_id']}:gate failed {[g for g, ok in e.get('gates', {}).items() if not ok]}")
+    R.add("independent_qa_gates_passed", not bad, bad[:20])
 
     # V11 human slot exists and is honest -----------------------------------------------------------------------
     bad = []

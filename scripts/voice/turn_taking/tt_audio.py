@@ -156,15 +156,39 @@ def write_tar(path: str | Path, members: dict[str, bytes]) -> str:
     return file_sha256(path)
 
 
-def load_audio(root: str | Path, ref: str) -> tuple[Pcm, str]:
-    """ref is 'relative/path.wav' or 'relative/archive.tar#member.wav'. Returns (Pcm, sha256 of the WAV bytes)."""
+def load_audio_bytes(root: str | Path, ref: str) -> bytes:
+    """ref is 'relative/path.wav' or 'relative/archive.tar#member.wav'. Returns the WAV bytes."""
     if "#" in ref:
         arc, member = ref.split("#", 1)
         with tarfile.open(Path(root) / arc) as t:
             f = t.extractfile(member)
             if f is None:
                 raise FileNotFoundError(ref)
-            data = f.read()
-    else:
-        data = (Path(root) / ref).read_bytes()
+            return f.read()
+    return (Path(root) / ref).read_bytes()
+
+
+def load_audio(root: str | Path, ref: str) -> tuple[Pcm, str]:
+    """Returns (Pcm, sha256 of the WAV bytes)."""
+    data = load_audio_bytes(root, ref)
     return read_wav_bytes(data), hashlib.sha256(data).hexdigest()
+
+
+def speech_bounds(x: np.ndarray, sr: int = SR, rel_db: float = 20.0, pre_ms: int = 60, post_ms: int = 150):
+    """Speech-RELATIVE trim (v2). A TTS render can start with a faint noise floor (about -42 dBFS for 0.4 s in
+    rec-u-0069) that an absolute -50 dB rule counts as speech, so the 'speech' started 0.4 s early and a cut computed on
+    it contained no speech at all. Here a frame is speech when it is within rel_db of the recording's own p95 10-ms level.
+    Returns (trim_start, trim_end, voiced_start_in_trim, voiced_end_in_trim) in samples."""
+    f = int(sr * 0.010)
+    n = len(x) // f
+    fr = x[: n * f].astype(np.float64).reshape(n, f) / 32768.0
+    db = 20 * np.log10(np.sqrt((fr ** 2).mean(axis=1) + 1e-20) + 1e-12)
+    live = db[db > -70]
+    p95 = float(np.percentile(live, 95)) if len(live) else -20.0
+    idx = np.where(db >= p95 - rel_db)[0]
+    if len(idx) == 0:
+        return 0, len(x), 0, len(x)
+    vs, ve = int(idx[0] * f), int((idx[-1] + 1) * f)
+    t0 = max(0, vs - pre_ms * sr // 1000)
+    t1 = min(len(x), ve + post_ms * sr // 1000)
+    return t0, t1, vs - t0, ve - t0

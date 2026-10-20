@@ -1,0 +1,6 @@
+attempt 0: TTS for 140 renders on 46 single-thread workers
+attempt 0: aligning 139 recordings with ASR-A (faster-whisper large-v3-turbo)
+attempt 1: TTS for 3 renders on 46 single-thread workers
+attempt 1: aligning 3 recordings with ASR-A (faster-whisper large-v3-turbo)
+done: 140/140 renders passed the ASR-A text pre-filter
+render rc=0 2026-10-20T21:23:46Z

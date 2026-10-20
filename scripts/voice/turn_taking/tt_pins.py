@@ -41,6 +41,8 @@ def check_static() -> list[str]:
     bad = []
     e = era()
     for ch in e["changes"]:
+        if "patch_file" not in ch:  # instrument-level era entries (no scorer patch)
+            continue
         pf = D / ch["patch_file"]
         if not pf.exists() or sha(pf) != ch["patch_sha256"]:
             bad.append(f"{ch['id']}: patch digest")
@@ -68,7 +70,7 @@ def apply(kind: str, checkout: Path, dest: Path) -> list[str]:
     # group by file: several era entries can share one file/patch
     seen = set()
     for ch in era()["changes"]:
-        if not ch["patch_file"].startswith(f"scorer_patches/{KIND[kind]}/") or ch["patch_file"] in seen:
+        if "patch_file" not in ch or not ch["patch_file"].startswith(f"scorer_patches/{KIND[kind]}/") or ch["patch_file"] in seen:
             continue
         seen.add(ch["patch_file"])
         f = dest / ch["file"]

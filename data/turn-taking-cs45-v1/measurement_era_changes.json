@@ -67,6 +67,15 @@
    "after": "pinned Silero via tt_smartturn_vad_adapter (no download, sha256-checked) behind the same .prob(chunk512) interface",
    "comparability": "the Smart Turn gate decisions can differ slightly from the published TurnBench SmartTurn v3 row; that row stays a tagged reference, never mixed with ours",
    "era_boundary": true
+  },
+  {
+   "id": "ME-CS45-V2",
+   "scorer": "CS-45 corpus instrument tt-corpus-1 -> tt-corpus-2 (2026-10-20, after the operator review)",
+   "file": "scripts/voice/turn_taking/*",
+   "before": "cut placement from whisper.cpp heuristic token times + deepest energy valley within +-160 ms; absolute -50 dB trim; continuing assistant context truncated at user_end+TRAIL; QA by full-render WER with the same ASR",
+   "after": "cut placement by ASR-A (faster-whisper large-v3-turbo) generate-and-test (prefix and suffix must transcribe exactly) + energy valley; speech-relative trim (p95-20 dB); continuing assistant context runs to its natural end with a per-pair tail; admission by independent gates (ASR-B faster-whisper large-v3) bound to each clip's PCM-SHA-256",
+   "comparability": "v1 clips (epyc-inference-research fe730c481) and v2 clips are different instruments; no result on v1 clips may be pooled with v2",
+   "era_boundary": true
   }
  ],
  "not_patched_not_used": {

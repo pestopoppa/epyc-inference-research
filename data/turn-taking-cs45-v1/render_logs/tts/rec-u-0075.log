@@ -30,7 +30,7 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Pipeline] Speaker encoder lazy loaded in 5 ms
 [SpkExtract] Extracted 1024-dim embedding (199560 samples, padded 200328)
 [Prompt] Built: 23 ids, N_text=15, N_instruct=0, T_ctx=26, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=26 prefill=727.4 ms build=5.5 ms (stall for 0 active slots)
+[Batch] Admit slot=0 T_ctx=26 prefill=506.9 ms build=5.0 ms (stall for 0 active slots)
 [Sample] step=0 c0=1995 u=0.4854271412 subseq=0
 [Sample] step=1 c0=215 u=0.4683360755 subseq=16
 [Pipeline] Generated 8 frames (slot 0)
@@ -43,13 +43,13 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Pipeline] Generated 64 frames (slot 0)
 [Pipeline] EOS at step 65, stopping (slot 0)
 [Pipeline] Generation done : 65 frames
-[Perf] PromptBuild 5.5 ms
-[Perf] Prefill 727.4 ms (T_ctx prefill)
-[Perf] TTFA 840.2 ms (first frame codes)
-[Perf] TalkerDecode 5296.6 ms (65 frames, 81.49 ms/frame)
-[Perf] CodePredictor 8807.6 ms (135.50 ms/frame)
-[Perf] HostCompose 2.9 ms (c0 sample + next emb)
-[Perf] CodecDecode 14485.4 ms
-[Perf] Total 29326.2 ms (65 frames, 217.03 ms/frame AR, audio 5.20 s, RTF 5.640)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0075.wav: 124800 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 124800 samples (5.20 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0075.wav
+[Perf] PromptBuild 5.0 ms
+[Perf] Prefill 506.9 ms (T_ctx prefill)
+[Perf] TTFA 612.5 ms (first frame codes)
+[Perf] TalkerDecode 5326.7 ms (65 frames, 81.95 ms/frame)
+[Perf] CodePredictor 10397.6 ms (159.96 ms/frame)
+[Perf] HostCompose 2.5 ms (c0 sample + next emb)
+[Perf] CodecDecode 11923.9 ms
+[Perf] Total 28163.4 ms (65 frames, 241.95 ms/frame AR, audio 5.20 s, RTF 5.416)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0075.wav: 124800 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 124800 samples (5.20 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0075.wav

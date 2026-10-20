@@ -30,19 +30,19 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Pipeline] Speaker encoder lazy loaded in 5 ms
 [SpkExtract] Extracted 1024-dim embedding (221160 samples, padded 221928)
 [Prompt] Built: 11 ids, N_text=3, N_instruct=0, T_ctx=14, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=14 prefill=407.1 ms build=2.5 ms (stall for 0 active slots)
+[Batch] Admit slot=0 T_ctx=14 prefill=289.1 ms build=2.2 ms (stall for 0 active slots)
 [Sample] step=0 c0=1995 u=0.9545272589 subseq=0
 [Sample] step=1 c0=215 u=0.4808653891 subseq=16
 [Pipeline] Generated 8 frames (slot 0)
 [Pipeline] EOS at step 12, stopping (slot 0)
 [Pipeline] Generation done : 12 frames
-[Perf] PromptBuild 2.5 ms
-[Perf] Prefill 407.1 ms (T_ctx prefill)
-[Perf] TTFA 515.5 ms (first frame codes)
-[Perf] TalkerDecode 755.5 ms (12 frames, 62.96 ms/frame)
-[Perf] CodePredictor 1158.7 ms (96.56 ms/frame)
-[Perf] HostCompose 0.6 ms (c0 sample + next emb)
-[Perf] CodecDecode 2544.8 ms
-[Perf] Total 4869.4 ms (12 frames, 159.57 ms/frame AR, audio 0.96 s, RTF 5.072)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0096.wav: 23040 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 23040 samples (0.96 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0096.wav
+[Perf] PromptBuild 2.2 ms
+[Perf] Prefill 289.1 ms (T_ctx prefill)
+[Perf] TTFA 400.0 ms (first frame codes)
+[Perf] TalkerDecode 785.4 ms (12 frames, 65.45 ms/frame)
+[Perf] CodePredictor 1357.6 ms (113.13 ms/frame)
+[Perf] HostCompose 0.5 ms (c0 sample + next emb)
+[Perf] CodecDecode 2017.1 ms
+[Perf] Total 4452.0 ms (12 frames, 178.62 ms/frame AR, audio 0.96 s, RTF 4.638)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0096.wav: 23040 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 23040 samples (0.96 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0096.wav

@@ -1,0 +1,13 @@
+slice 2 start 2026-10-20T22:42:14Z cpus 65-71,161-167
+== main
+  reusing 10 clip results (identical PCM-SHA-256), gating 142 new clips
+  user ASR 20/142 (1s)
+  user ASR 40/142 (1s)
+  user ASR 60/142 (1s)
+  user ASR 80/142 (1s)
+  user ASR 100/142 (57s)
+  user ASR 120/142 (163s)
+  user ASR 140/142 (273s)
+{"gates_version": "tt-qa-gates-2", "which": "main", "asr_b": "faster-whisper large-v3 int8 CPU", "n_clips": 152, "n_pairs": 76, "defect_counts_by_gate": {"U1_words": 26, "U2_boundary": 25, "U3_nonempty": 0, "A1_assistant_continues": 0, "A2_assistant_text": 0}, "defective_clips": 46, "defective_pairs": 45, "by_family": {"CUT_IC": {"pairs": 76, "defective_pairs": 45}}}
+VERDICT DEFECTS
+slice rc=1 2026-10-20T22:52:02Z

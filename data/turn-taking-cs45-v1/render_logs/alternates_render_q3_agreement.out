@@ -1,0 +1,20 @@
+alt render (workspace-f8 kpf18-w1b q3 agreement, cpus 72-79,168-175) start 2026-10-20T21:15:26Z
+attempt 0: TTS for 36 renders on 16 single-thread workers
+attempt 0: aligning 36 recordings with ASR-A (faster-whisper large-v3-turbo)
+attempt 1: TTS for 1 renders on 16 single-thread workers
+attempt 1: aligning 1 recordings with ASR-A (faster-whisper large-v3-turbo)
+done: 35/36 renders passed the ASR-A text pre-filter
+alt v0 rc=5 2026-10-20T21:33:31Z
+attempt 0: TTS for 36 renders on 16 single-thread workers
+attempt 0: aligning 36 recordings with ASR-A (faster-whisper large-v3-turbo)
+attempt 1: TTS for 3 renders on 16 single-thread workers
+attempt 1: aligning 3 recordings with ASR-A (faster-whisper large-v3-turbo)
+done: 35/36 renders passed the ASR-A text pre-filter
+alt v1 rc=5 2026-10-20T22:00:07Z
+attempt 0: TTS for 36 renders on 16 single-thread workers
+attempt 0: aligning 36 recordings with ASR-A (faster-whisper large-v3-turbo)
+attempt 1: TTS for 2 renders on 16 single-thread workers
+attempt 1: aligning 2 recordings with ASR-A (faster-whisper large-v3-turbo)
+done: 34/36 renders passed the ASR-A text pre-filter
+alt v2 rc=5 2026-10-20T22:19:19Z
+ALT_DONE

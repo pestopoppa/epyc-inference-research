@@ -1,0 +1,21 @@
+smoke claim: 2026-10-20T16:42:26Z
+run1 claim queued 2026-10-20T16:52:26Z
+run1 q0 claim queued 2026-10-20T17:14:17Z
+run2 q0 claim queued 2026-10-20T17:22:13Z
+run3 q0 claim queued 2026-10-20T18:01:52Z
+reserve q1 claim queued 2026-10-20T18:15:44Z
+qa-current q0 claim queued 2026-10-20T19:14:47Z
+qa-current2 q0 claim queued 2026-10-20T19:17:20Z
+round0 claims (q0,q2,q3) queued 2026-10-20T19:36:25Z
+render-only v1 on q1 queued 2026-10-20T20:00:50Z
+v2 pre-render on 72-79,168-175 under workspace-f8's kpf18-w1b q3 claim by agreement (no own claim) 2026-10-20T20:12:56Z
+gates v0 q0 queued 2026-10-20T20:31:53Z
+render-only v3 on q0 (+siblings) queued 2026-10-20T20:42:44Z
+cand+gates g1 on q1 queued 2026-10-20T20:52:19Z
+cand+gates g2 on q1 queued 2026-10-20T21:02:53Z
+realign v0-2 on q1 (+siblings) queued 2026-10-20T21:15:26Z
+alt render on 72-79,168-175 under workspace-f8's kpf18-w1b q3 claim by agreement (no own claim) 2026-10-20T21:15:26Z
+cand+gates g3 on q1 queued 2026-10-20T21:56:49Z
+DEVIATION 2026-10-20T22:31:28Z: gates slices 0,1 co-run under nice -n 19 pinned to q2 CPUs (49-64 / 145-160) while q2 is held by a build-role job f8q-42-kpf18-item5, per coordinator permission to co-run with build holders; no claim of mine
+gates slice 2 on q1 queued 2026-10-20T22:31:28Z
+DEVIATION 2026-10-20T22:42:14Z: gates slice 2 co-run under nice -n 19 pinned to q2 CPUs 161-176? (see below) while q2 held by a build-role job; claim for q1 still queued

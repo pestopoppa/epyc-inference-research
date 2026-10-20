@@ -30,7 +30,7 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Pipeline] Speaker encoder lazy loaded in 6 ms
 [SpkExtract] Extracted 1024-dim embedding (263280 samples, padded 264048)
 [Prompt] Built: 28 ids, N_text=20, N_instruct=0, T_ctx=31, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=31 prefill=702.8 ms build=7.8 ms (stall for 0 active slots)
+[Batch] Admit slot=0 T_ctx=31 prefill=624.9 ms build=8.4 ms (stall for 0 active slots)
 [Sample] step=0 c0=1995 u=0.5545105934 subseq=0
 [Sample] step=1 c0=678 u=0.7024637461 subseq=16
 [Pipeline] Generated 8 frames (slot 0)
@@ -43,13 +43,13 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Pipeline] Generated 64 frames (slot 0)
 [Pipeline] EOS at step 66, stopping (slot 0)
 [Pipeline] Generation done : 66 frames
-[Perf] PromptBuild 7.8 ms
-[Perf] Prefill 702.8 ms (T_ctx prefill)
-[Perf] TTFA 866.1 ms (first frame codes)
-[Perf] TalkerDecode 4379.6 ms (66 frames, 66.36 ms/frame)
-[Perf] CodePredictor 7499.5 ms (113.63 ms/frame)
-[Perf] HostCompose 2.7 ms (c0 sample + next emb)
-[Perf] CodecDecode 13406.0 ms
-[Perf] Total 25999.4 ms (66 frames, 180.03 ms/frame AR, audio 5.28 s, RTF 4.924)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0046.wav: 126720 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 126720 samples (5.28 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0046.wav
+[Perf] PromptBuild 8.4 ms
+[Perf] Prefill 624.9 ms (T_ctx prefill)
+[Perf] TTFA 852.6 ms (first frame codes)
+[Perf] TalkerDecode 6894.8 ms (66 frames, 104.47 ms/frame)
+[Perf] CodePredictor 14533.9 ms (220.21 ms/frame)
+[Perf] HostCompose 2.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 11068.1 ms
+[Perf] Total 33133.8 ms (66 frames, 324.71 ms/frame AR, audio 5.28 s, RTF 6.275)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0046.wav: 126720 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 126720 samples (5.28 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0046.wav

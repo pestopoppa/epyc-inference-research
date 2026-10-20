@@ -1,0 +1,15 @@
+gates v0 start 2026-10-20T20:31:53Z cpus 1-16,97-112
+== main
+  user ASR 20/206 (44s)
+  user ASR 40/206 (88s)
+  user ASR 60/206 (134s)
+  user ASR 80/206 (177s)
+  user ASR 100/206 (216s)
+  user ASR 120/206 (235s)
+  user ASR 140/206 (253s)
+  user ASR 160/206 (271s)
+  user ASR 180/206 (312s)
+  user ASR 200/206 (352s)
+{"gates_version": "tt-qa-gates-1", "which": "main", "asr_b": "faster-whisper large-v3 int8 CPU", "n_clips": 206, "n_pairs": 103, "defect_counts_by_gate": {"U1_words": 12, "U2_boundary": 0, "U3_nonempty": 2, "A1_assistant_continues": 10, "A2_assistant_text": 0}, "defective_clips": 24, "defective_pairs": 23, "by_family": {"CUT_IC": {"pairs": 52, "defective_pairs": 0}, "CUT_WAIT": {"pairs": 17, "defective_pairs": 0}, "CTX_BC": {"pairs": 34, "defective_pairs": 0}}}
+VERDICT DEFECTS
+gates rc=1 2026-10-20T20:41:14Z

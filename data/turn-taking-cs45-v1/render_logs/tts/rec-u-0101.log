@@ -27,21 +27,21 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Audio-Resample] Done: 132560 -> 198840 samples
 [WeightCtx] Loaded 76 tensors, 22.9 MB into backend
 [SpeakerEncoder] Loaded: enc_dim=1024 sr=24000 mel_dim=128 hidden=512 mfa=1536 asp_attn=128 se=128 scale=8
-[Pipeline] Speaker encoder lazy loaded in 4 ms
+[Pipeline] Speaker encoder lazy loaded in 6 ms
 [SpkExtract] Extracted 1024-dim embedding (198840 samples, padded 199608)
 [Prompt] Built: 10 ids, N_text=2, N_instruct=0, T_ctx=13, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=13 prefill=281.3 ms build=1.5 ms (stall for 0 active slots)
+[Batch] Admit slot=0 T_ctx=13 prefill=284.3 ms build=2.6 ms (stall for 0 active slots)
 [Sample] step=0 c0=1221 u=0.2849038541 subseq=0
 [Sample] step=1 c0=1630 u=0.5359901190 subseq=16
 [Pipeline] EOS at step 6, stopping (slot 0)
 [Pipeline] Generation done : 6 frames
-[Perf] PromptBuild 1.5 ms
-[Perf] Prefill 281.3 ms (T_ctx prefill)
-[Perf] TTFA 353.9 ms (first frame codes)
-[Perf] TalkerDecode 255.4 ms (6 frames, 42.57 ms/frame)
-[Perf] CodePredictor 441.1 ms (73.51 ms/frame)
+[Perf] PromptBuild 2.6 ms
+[Perf] Prefill 284.3 ms (T_ctx prefill)
+[Perf] TTFA 529.6 ms (first frame codes)
+[Perf] TalkerDecode 443.4 ms (6 frames, 73.90 ms/frame)
+[Perf] CodePredictor 1014.8 ms (169.13 ms/frame)
 [Perf] HostCompose 0.3 ms (c0 sample + next emb)
-[Perf] CodecDecode 883.1 ms
-[Perf] Total 1862.8 ms (6 frames, 116.13 ms/frame AR, audio 0.48 s, RTF 3.881)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0101.wav: 11520 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 11520 samples (0.48 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0101.wav
+[Perf] CodecDecode 1054.0 ms
+[Perf] Total 2799.6 ms (6 frames, 243.08 ms/frame AR, audio 0.48 s, RTF 5.832)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0101.wav: 11520 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 11520 samples (0.48 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0101.wav

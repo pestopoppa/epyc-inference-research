@@ -27,10 +27,10 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Audio-Resample] Done: 105840 -> 158760 samples
 [WeightCtx] Loaded 76 tensors, 22.9 MB into backend
 [SpeakerEncoder] Loaded: enc_dim=1024 sr=24000 mel_dim=128 hidden=512 mfa=1536 asp_attn=128 se=128 scale=8
-[Pipeline] Speaker encoder lazy loaded in 5 ms
+[Pipeline] Speaker encoder lazy loaded in 33 ms
 [SpkExtract] Extracted 1024-dim embedding (158760 samples, padded 159528)
 [Prompt] Built: 22 ids, N_text=14, N_instruct=0, T_ctx=25, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=25 prefill=567.5 ms build=5.7 ms (stall for 0 active slots)
+[Batch] Admit slot=0 T_ctx=25 prefill=479.3 ms build=4.6 ms (stall for 0 active slots)
 [Sample] step=0 c0=1995 u=0.9470532537 subseq=0
 [Sample] step=1 c0=678 u=0.6561976075 subseq=16
 [Pipeline] Generated 8 frames (slot 0)
@@ -41,13 +41,13 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Pipeline] Generated 48 frames (slot 0)
 [Pipeline] EOS at step 55, stopping (slot 0)
 [Pipeline] Generation done : 55 frames
-[Perf] PromptBuild 5.7 ms
-[Perf] Prefill 567.5 ms (T_ctx prefill)
-[Perf] TTFA 705.1 ms (first frame codes)
-[Perf] TalkerDecode 4107.6 ms (55 frames, 74.68 ms/frame)
-[Perf] CodePredictor 7278.8 ms (132.34 ms/frame)
-[Perf] HostCompose 2.3 ms (c0 sample + next emb)
-[Perf] CodecDecode 10774.7 ms
-[Perf] Total 22737.5 ms (55 frames, 207.07 ms/frame AR, audio 4.40 s, RTF 5.168)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0009.wav: 105600 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 105600 samples (4.40 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0009.wav
+[Perf] PromptBuild 4.6 ms
+[Perf] Prefill 479.3 ms (T_ctx prefill)
+[Perf] TTFA 551.2 ms (first frame codes)
+[Perf] TalkerDecode 5372.9 ms (55 frames, 97.69 ms/frame)
+[Perf] CodePredictor 11321.6 ms (205.85 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 8738.2 ms
+[Perf] Total 25919.5 ms (55 frames, 303.57 ms/frame AR, audio 4.40 s, RTF 5.891)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0009.wav: 105600 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 105600 samples (4.40 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0009.wav

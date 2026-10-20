@@ -63,10 +63,11 @@
   "ggml": "0.18.0",
   "model_file": "/mnt/raid0/llm/models/whisper-ggml/ggml-large-v3-turbo.bin",
   "model_sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
-  "flags": "-ng -l en -ojf --dtw large.v3.turbo (token offsets grouped into words; DTW token times kept as an extra field); HIP_VISIBLE_DEVICES=-1; own LD_LIBRARY_PATH; threads 16 pinned to cores 0-15 (a measured-healthy layout, speech_cpu_realtime_20260924 hazard 1); linkage proved by scripts/utils/verify_ggml_linkage.sh (PASS, see manifest/build_report.json env)",
-  "dtw": "large.v3.turbo",
+  "flags": "-ng -l en -ojf (token offsets grouped into words). CORRECTION 2026-10-20: v1 recorded '--dtw large.v3.turbo', but whisper.cpp's JSON carried no t_dtw (all 1737 v1 word records have dtw_ms=null), so DTW was never in effect. whisper.cpp stays the pinned SCORING ASR; it no longer places cuts.",
+  "dtw": null,
   "wrapper": "scripts/voice/turn_taking/tt_asr_words.py (PinnedWhisperCpp refuses on binary/model hash mismatch)",
-  "replaces": "NeMo nvidia/parakeet-tdt-0.6b-v2 on CUDA (FDB get_transcript/asr.py) - ME-FDB-4"
+  "replaces": "NeMo nvidia/parakeet-tdt-0.6b-v2 on CUDA (FDB get_transcript/asr.py) - ME-FDB-4",
+  "role": "SCORING ASR (FDB v1 pause_handling / smooth_turn_taking adapters, HumDial cross-checks). NOT the cut-placement aligner and NOT the QA ASR."
  },
  "tts_kernel_for_synthesized_stratum": {
   "tree": "/mnt/raid0/llm/qwentts.cpp",
@@ -80,18 +81,34 @@
   "use": "READ-ONLY CLI on CPU (GGML_BACKEND=CPU, HIP_VISIBLE_DEVICES=-1, thread count via the nprocs_shim LD_PRELOAD from artifacts/speech_cpu_realtime_20260924); frozen tree never modified or rebuilt; no server started; CS-21 services :9000/:9002 untouched",
   "voice": "Base model speaker-embedding clone (--ref-wav, no ref text) of LibriSpeech test-clean reference clips; per-render seed recorded in recordings.jsonl",
   "render_run": {
-   "date_utc": "2026-10-20T17:15:27Z",
-   "mode": "qwen-tts CLI, one single-thread process per core (SHIM_NPROCS=2 via nprocs_shim, sha256 d3103d7ab45e0a5fe9473d7dd401e5462f39c06174b4a64109af6e387e3b3eb4), cores 1-23 of region q0 under a region-lock build claim; 8-thread runs were 472 ms/frame vs 36 ms/frame single-thread under host load, so the parallel single-thread design was used",
-   "linkage": "verify_ggml_linkage.sh PASS for qwen-tts and whisper-cli (logs: /mnt/raid0/llm/tmp/cs45/run1/linkage_*.txt, summarised in build_report.json)",
-   "nprocs_shim_sha256": "d3103d7ab45e0a5fe9473d7dd401e5462f39c06174b4a64109af6e387e3b3eb4",
+   "date_utc": "2026-10-20T19:39:59Z",
+   "mode": "v2 rebuild 2026-10-20: qwen-tts CLI, one single-thread process per core (SHIM_NPROCS=2 via nprocs_shim sha256 d3103d7ab45e0a5fe9473d7dd401e5462f39c06174b4a64109af6e387e3b3eb4), under region-lock build claims on q0 and q1 (+ SMT siblings), and on 72-79,168-175 under workspace-f8's kpf18-w1b q3 claim by agreement; some gates/alignment co-ran under nice -n 19 on q2 CPUs (49-71,145-167) next to a build-role holder (recorded deviations in render_logs/claims_deviations_and_queue.txt)",
+   "linkage": "verify_ggml_linkage.sh PASS (render_logs/linkage_qwen-tts.txt); all 139 render logs show the CPU backend and no ROCm device",
    "talker_sha256": "d54dbaf10591421fa764ed630d764efa717ae40cd959bd48c66d4eb1af226426",
    "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
-   "asr_model_sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
+   "nprocs_shim_sha256": "d3103d7ab45e0a5fe9473d7dd401e5462f39c06174b4a64109af6e387e3b3eb4"
   }
  },
  "python_runtime": {
   "interpreter": "/mnt/raid0/llm/epyc-orchestrator/.venv/bin/python -I",
   "note": "numpy/scipy/onnxruntime; versions recorded in build_report.json env"
  },
- "not_pinned_here": "Smart Turn v3.x weights, VAP checkpoints and Parakeet graphs are CS-46/CS-47 arm pins (their own sha256 are recorded in the CS-47 run-plan commit)."
+ "not_pinned_here": "Smart Turn v3.x weights, VAP checkpoints and Parakeet graphs are CS-46/CS-47 arm pins (their own sha256 are recorded in the CS-47 run-plan commit).",
+ "cut_placement_asr_A": {
+  "role": "BUILD aligner + cut generate-and-test (tt_align_fw.py)",
+  "engine": "faster-whisper 1.2.1 / ctranslate2 4.7.2, CPU int8",
+  "model": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+  "model_bin": "/mnt/raid0/llm/cache/huggingface/hub/models--mobiuslabsgmbh--faster-whisper-large-v3-turbo/snapshots/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf/model.bin",
+  "model_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+  "interpreter": "/mnt/raid0/llm/pace-env/bin/python -I"
+ },
+ "qa_asr_B": {
+  "role": "INDEPENDENT QA gates (tt_qa_gates.py): not used to build the corpus and not the scoring ASR",
+  "engine": "faster-whisper 1.2.1 / ctranslate2 4.7.2, CPU int8",
+  "model": "Systran/faster-whisper-large-v3",
+  "model_bin": "/mnt/raid0/llm/cache/huggingface/hub/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478/model.bin",
+  "model_sha256": "69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1",
+  "interpreter": "/mnt/raid0/llm/pace-env/bin/python -I",
+  "independence": "different weights and decoder depth from both the build aligner (large-v3-turbo CT2) and the scoring ASR (whisper.cpp large-v3-turbo ggml)"
+ }
 }

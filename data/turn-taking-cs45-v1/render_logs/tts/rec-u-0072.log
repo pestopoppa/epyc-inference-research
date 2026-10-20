@@ -27,27 +27,28 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Audio-Resample] Done: 145440 -> 218160 samples
 [WeightCtx] Loaded 76 tensors, 22.9 MB into backend
 [SpeakerEncoder] Loaded: enc_dim=1024 sr=24000 mel_dim=128 hidden=512 mfa=1536 asp_attn=128 se=128 scale=8
-[Pipeline] Speaker encoder lazy loaded in 4 ms
+[Pipeline] Speaker encoder lazy loaded in 6 ms
 [SpkExtract] Extracted 1024-dim embedding (218160 samples, padded 218928)
 [Prompt] Built: 25 ids, N_text=17, N_instruct=0, T_ctx=28, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=28 prefill=539.3 ms build=5.9 ms (stall for 0 active slots)
-[Sample] step=0 c0=1995 u=0.9906837940 subseq=0
-[Sample] step=1 c0=215 u=0.7827309370 subseq=16
+[Batch] Admit slot=0 T_ctx=28 prefill=615.5 ms build=7.2 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.5540546775 subseq=0
+[Sample] step=1 c0=215 u=0.3501717448 subseq=16
 [Pipeline] Generated 8 frames (slot 0)
 [Pipeline] Generated 16 frames (slot 0)
 [Pipeline] Generated 24 frames (slot 0)
 [Pipeline] Generated 32 frames (slot 0)
 [Pipeline] Generated 40 frames (slot 0)
 [Pipeline] Generated 48 frames (slot 0)
-[Pipeline] EOS at step 54, stopping (slot 0)
-[Pipeline] Generation done : 54 frames
-[Perf] PromptBuild 5.9 ms
-[Perf] Prefill 539.3 ms (T_ctx prefill)
-[Perf] TTFA 746.6 ms (first frame codes)
-[Perf] TalkerDecode 4862.2 ms (54 frames, 90.04 ms/frame)
-[Perf] CodePredictor 10588.4 ms (196.08 ms/frame)
-[Perf] HostCompose 2.0 ms (c0 sample + next emb)
-[Perf] CodecDecode 8111.4 ms
-[Perf] Total 24109.9 ms (54 frames, 286.16 ms/frame AR, audio 4.32 s, RTF 5.581)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0072.wav: 103680 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 103680 samples (4.32 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0072.wav
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 63, stopping (slot 0)
+[Pipeline] Generation done : 63 frames
+[Perf] PromptBuild 7.2 ms
+[Perf] Prefill 615.5 ms (T_ctx prefill)
+[Perf] TTFA 779.0 ms (first frame codes)
+[Perf] TalkerDecode 5576.5 ms (63 frames, 88.52 ms/frame)
+[Perf] CodePredictor 11297.0 ms (179.32 ms/frame)
+[Perf] HostCompose 2.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 10705.9 ms
+[Perf] Total 28205.5 ms (63 frames, 267.87 ms/frame AR, audio 5.04 s, RTF 5.596)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0072.wav: 120960 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 120960 samples (5.04 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0072.wav

@@ -1,0 +1,14 @@
+realign start 2026-10-20T21:15:26Z base 24 only=41 ids
+attempt 0: TTS for 41 renders on 23 single-thread workers
+attempt 0: aligning 41 recordings with ASR-A (faster-whisper large-v3-turbo)
+done: 41/41 renders passed the ASR-A text pre-filter
+realign v0 rc=0 2026-10-20T21:31:12Z
+attempt 0: TTS for 41 renders on 23 single-thread workers
+attempt 0: aligning 41 recordings with ASR-A (faster-whisper large-v3-turbo)
+done: 41/41 renders passed the ASR-A text pre-filter
+realign v1 rc=0 2026-10-20T21:48:42Z
+attempt 0: TTS for 41 renders on 23 single-thread workers
+attempt 0: aligning 41 recordings with ASR-A (faster-whisper large-v3-turbo)
+done: 41/41 renders passed the ASR-A text pre-filter
+realign v2 rc=0 2026-10-20T22:02:19Z
+REALIGN_DONE

@@ -10,9 +10,14 @@ Channel layout (16 kHz, int16, 2 channels): ch0 = USER, ch1 = ASSISTANT (our TTS
 Timeline (all sample counts at 16 kHz, constants below are part of the instrument version):
 
   ended context  : [LEAD_IN zeros][assistant utterance][GAP_AFTER_ASSIST zeros][user segment][TRAIL zeros]
-  continuing ctx : [LEAD_IN zeros][assistant monologue ..........................................]
+  continuing ctx : [LEAD_IN zeros][assistant monologue, COMPLETE, to its natural end][END_PAD zeros]
                                    user segment starts BC_ONSET_IN_ASSIST after the assistant starts;
-                                   the assistant keeps speaking through the user segment and TRAIL.
+                                   the assistant keeps speaking through the user segment and finishes on its own
+                                   (v1 truncated it at user_end + TRAIL, which the operator heard as the assistant
+                                   stopping mid-utterance during a backchannel: the defect this version fixes).
+
+`tail` = digital silence on the user channel after the user segment. CUT pairs: tail = TRAIL for both members.
+CTX pairs: one tail shared by both members, long enough that the continuing context finishes (ctx_tail()).
 """
 from __future__ import annotations
 
@@ -26,9 +31,11 @@ GAP_AFTER_ASSIST = 6400  # 0.40 s between the assistant ending and the user star
 BC_ONSET_IN_ASSIST = 52800  # 3.30 s into a continuing assistant monologue
 TRAIL = 32000  # 2.0 s of digital silence after the user's last sample (matched across a pair)
 FADE = 160  # 10 ms raised-cosine fade-out at the end of every user segment (cut or natural)
-ASSIST_FADE = 480  # 30 ms fade where an assistant monologue is truncated by the clip end
+ASSIST_FADE = 160  # 10 ms fade-out on the final samples of a continuing assistant context (it ends on its own)
+N_CONT_MIN = 48000  # a continuing assistant must still be speaking >= 3.0 s after the user segment ENDS
 
-INSTRUMENT_VERSION = "tt-corpus-1"
+END_PAD = 8000  # 0.5 s of silence after a continuing assistant context ends naturally
+INSTRUMENT_VERSION = "tt-corpus-2"  # v2 (2026-10-20): continuing assistant contexts run to their natural end; per-pair tail; speech-relative trim
 
 
 @dataclass(frozen=True)
@@ -39,6 +46,7 @@ class Layout:
     total: int
     assistant_start: int | None
     assistant_end: int | None  # last+1 sample of assistant speech actually present in the clip
+    tail: int = TRAIL  # silence on the user channel after the user segment (total == user_end + tail)
 
 
 def _fade_out(x: np.ndarray, n: int) -> np.ndarray:
@@ -60,14 +68,23 @@ def user_segment(rec: np.ndarray, trim_start: int, trim_end: int, cut: int | Non
     return _fade_out(seg, FADE)
 
 
+def ctx_tail(assistant_len: int, seg_len: int) -> int:
+    """Tail shared by both members of a context pair: long enough for the continuing assistant to finish + END_PAD."""
+    return max(TRAIL, assistant_len + END_PAD - BC_ONSET_IN_ASSIST - seg_len)
+
+
 def assemble_clip(
     user_rec: np.ndarray,
     trim: tuple[int, int],
     cut: int | None,
     assistant_rec: np.ndarray | None,
     assistant_mode: str,
+    tail: int | None = None,
 ) -> tuple[np.ndarray, Layout]:
     """Return (int16 array [n,2], Layout). assistant_mode in {'ended','continuing'}."""
+    tail = TRAIL if tail is None else int(tail)
+    if tail < TRAIL:
+        raise ValueError("tail shorter than TRAIL")
     seg = user_segment(user_rec, trim[0], trim[1], cut)
     if assistant_rec is None:
         raise ValueError("every CS-45 clip carries an assistant context channel")
@@ -75,24 +92,24 @@ def assemble_clip(
         a_start = LEAD_IN
         a_end = a_start + len(assistant_rec)
         onset = a_end + GAP_AFTER_ASSIST
-        total = onset + len(seg) + TRAIL
+        total = onset + len(seg) + tail
         out = np.zeros((total, 2), dtype=np.int16)
         out[a_start:a_end, 1] = assistant_rec
         out[onset : onset + len(seg), 0] = seg
-        lay = Layout(onset, len(seg), onset + len(seg), total, a_start, a_end)
+        lay = Layout(onset, len(seg), onset + len(seg), total, a_start, a_end, tail)
     elif assistant_mode == "continuing":
         a_start = LEAD_IN
         onset = a_start + BC_ONSET_IN_ASSIST
-        total = onset + len(seg) + TRAIL
-        if len(assistant_rec) < total - a_start:
-            raise ValueError(
-                f"continuing assistant context too short: {len(assistant_rec)} < {total - a_start} samples"
-            )
+        total = onset + len(seg) + tail
+        a_end = a_start + len(assistant_rec)
+        if a_end + END_PAD > total:
+            raise ValueError(f"tail {tail} too short: the continuing assistant context would be truncated ({a_end + END_PAD} > {total})")
+        if onset + len(seg) + N_CONT_MIN > a_end:
+            raise ValueError("continuing assistant context ends less than N_CONT_MIN after the user segment")
         out = np.zeros((total, 2), dtype=np.int16)
-        a = _fade_out(assistant_rec[: total - a_start], ASSIST_FADE)
-        out[a_start:total, 1] = a
+        out[a_start:a_end, 1] = _fade_out(assistant_rec, ASSIST_FADE)
         out[onset : onset + len(seg), 0] = seg
-        lay = Layout(onset, len(seg), onset + len(seg), total, a_start, total)
+        lay = Layout(onset, len(seg), onset + len(seg), total, a_start, a_end, tail)
     else:
         raise ValueError(f"unknown assistant_mode {assistant_mode!r}")
     return out, lay
@@ -119,12 +136,16 @@ def check_pair_invariants(
     """
     v: list[str] = []
     ua, ub = a_pcm[:, 0], b_pcm[:, 0]
+    if a_lay.tail != b_lay.tail:
+        v.append("members do not share the same tail")
+    if family in ("CUT_IC", "CUT_WAIT") and a_lay.tail != TRAIL:
+        v.append("cut pairs must use tail == TRAIL")
     for tag, u, lay in (("a", ua, a_lay), ("b", ub, b_lay)):
-        tail = u[lay.user_end : lay.user_end + TRAIL]
-        if len(tail) != TRAIL or np.any(tail != 0):
-            v.append(f"member {tag}: user channel is not exactly {TRAIL} samples of digital silence after the user segment")
-        if lay.total != lay.user_end + TRAIL:
-            v.append(f"member {tag}: clip does not end exactly TRAIL after the user segment")
+        tail = u[lay.user_end : lay.user_end + lay.tail]
+        if lay.tail < TRAIL or len(tail) != lay.tail or np.any(tail != 0):
+            v.append(f"member {tag}: user channel is not exactly {lay.tail} samples of digital silence after the user segment")
+        if lay.total != lay.user_end + lay.tail:
+            v.append(f"member {tag}: clip does not end exactly tail after the user segment")
         if np.any(u[: lay.user_onset] != 0):
             v.append(f"member {tag}: user channel is non-zero before the user onset")
     if family in ("CUT_IC", "CUT_WAIT"):
@@ -152,6 +173,11 @@ def check_pair_invariants(
             v.append("context pairs are never cut")
         if np.array_equal(a_pcm[:, 1][: min(len(a_pcm), len(b_pcm))], b_pcm[:, 1][: min(len(a_pcm), len(b_pcm))]):
             v.append("assistant channel is identical between members of a context pair")
+        # the continuing member's assistant must finish on its own AFTER the user segment, and stay silent-padded to the end
+        if b_lay.assistant_end is None or b_lay.assistant_end - b_lay.user_end < N_CONT_MIN:
+            v.append("continuing assistant does not run at least N_CONT_MIN past the user segment")
+        if b_lay.assistant_end is not None and b_lay.total - b_lay.assistant_end < END_PAD:
+            v.append("continuing assistant context is truncated by the clip end")
     else:
         v.append(f"unknown family {family!r}")
     return v

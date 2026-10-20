@@ -1,0 +1,37 @@
+cand+gates g2 start 2026-10-20T21:03:24Z cpus 25-40,121-136 scratch /mnt/raid0/llm/tmp/cs45/run_v0,/mnt/raid0/llm/tmp/cs45/run_v1,/mnt/raid0/llm/tmp/cs45/run_v2
+candidates: 296 pair-variants, 592 clips; build-stage rejects: 123 -> /mnt/raid0/llm/tmp/cs45/cand
+== main
+  user ASR 20/592 (15s)
+  user ASR 40/592 (27s)
+  user ASR 60/592 (39s)
+  user ASR 80/592 (52s)
+  user ASR 100/592 (69s)
+  user ASR 120/592 (82s)
+  user ASR 140/592 (94s)
+  user ASR 160/592 (111s)
+  user ASR 180/592 (123s)
+  user ASR 200/592 (147s)
+  user ASR 220/592 (159s)
+  user ASR 240/592 (175s)
+  user ASR 260/592 (189s)
+  user ASR 280/592 (201s)
+  user ASR 300/592 (209s)
+  user ASR 320/592 (215s)
+  user ASR 340/592 (221s)
+  user ASR 360/592 (228s)
+  user ASR 380/592 (233s)
+  user ASR 400/592 (239s)
+  user ASR 420/592 (247s)
+  user ASR 440/592 (252s)
+  user ASR 460/592 (257s)
+  user ASR 480/592 (272s)
+  user ASR 500/592 (292s)
+  user ASR 520/592 (306s)
+  user ASR 540/592 (321s)
+  user ASR 560/592 (335s)
+  user ASR 580/592 (346s)
+{"gates_version": "tt-qa-gates-2", "which": "main", "asr_b": "faster-whisper large-v3 int8 CPU", "n_clips": 592, "n_pairs": 296, "defect_counts_by_gate": {"U1_words": 31, "U2_boundary": 4, "U3_nonempty": 4, "A1_assistant_continues": 0, "A2_assistant_text": 0}, "defective_clips": 39, "defective_pairs": 37, "by_family": {"CUT_IC": {"pairs": 143, "defective_pairs": 34}, "CUT_WAIT": {"pairs": 51, "defective_pairs": 1}, "CTX_BC": {"pairs": 102, "defective_pairs": 2}}}
+VERDICT DEFECTS
+gates rc=1 2026-10-20T21:11:26Z
+unfilled 41 of 140; chosen 99
+done 2026-10-20T21:11:26Z

@@ -30,7 +30,7 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Pipeline] Speaker encoder lazy loaded in 6 ms
 [SpkExtract] Extracted 1024-dim embedding (221160 samples, padded 221928)
 [Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=24, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=24 prefill=686.4 ms build=6.2 ms (stall for 0 active slots)
+[Batch] Admit slot=0 T_ctx=24 prefill=624.0 ms build=5.3 ms (stall for 0 active slots)
 [Sample] step=0 c0=1995 u=0.7285512090 subseq=0
 [Sample] step=1 c0=215 u=0.2981492579 subseq=16
 [Pipeline] Generated 8 frames (slot 0)
@@ -41,13 +41,13 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Pipeline] Generated 48 frames (slot 0)
 [Pipeline] EOS at step 52, stopping (slot 0)
 [Pipeline] Generation done : 52 frames
-[Perf] PromptBuild 6.2 ms
-[Perf] Prefill 686.4 ms (T_ctx prefill)
-[Perf] TTFA 804.5 ms (first frame codes)
-[Perf] TalkerDecode 3688.0 ms (52 frames, 70.92 ms/frame)
-[Perf] CodePredictor 5999.8 ms (115.38 ms/frame)
-[Perf] HostCompose 2.3 ms (c0 sample + next emb)
-[Perf] CodecDecode 11957.8 ms
-[Perf] Total 22341.3 ms (52 frames, 186.35 ms/frame AR, audio 4.16 s, RTF 5.371)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0079.wav: 99840 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 99840 samples (4.16 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0079.wav
+[Perf] PromptBuild 5.3 ms
+[Perf] Prefill 624.0 ms (T_ctx prefill)
+[Perf] TTFA 814.1 ms (first frame codes)
+[Perf] TalkerDecode 5934.6 ms (52 frames, 114.13 ms/frame)
+[Perf] CodePredictor 12657.4 ms (243.41 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 10077.7 ms
+[Perf] Total 29302.0 ms (52 frames, 357.58 ms/frame AR, audio 4.16 s, RTF 7.044)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0079.wav: 99840 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 99840 samples (4.16 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0079.wav

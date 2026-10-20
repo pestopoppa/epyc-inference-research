@@ -27,22 +27,22 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Audio-Resample] Done: 145440 -> 218160 samples
 [WeightCtx] Loaded 76 tensors, 22.9 MB into backend
 [SpeakerEncoder] Loaded: enc_dim=1024 sr=24000 mel_dim=128 hidden=512 mfa=1536 asp_attn=128 se=128 scale=8
-[Pipeline] Speaker encoder lazy loaded in 6 ms
+[Pipeline] Speaker encoder lazy loaded in 5 ms
 [SpkExtract] Extracted 1024-dim embedding (218160 samples, padded 218928)
 [Prompt] Built: 10 ids, N_text=2, N_instruct=0, T_ctx=13, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=13 prefill=292.2 ms build=2.2 ms (stall for 0 active slots)
+[Batch] Admit slot=0 T_ctx=13 prefill=294.1 ms build=2.2 ms (stall for 0 active slots)
 [Sample] step=0 c0=1995 u=0.7664471269 subseq=0
 [Sample] step=1 c0=215 u=0.1780635417 subseq=16
 [Pipeline] Generated 8 frames (slot 0)
 [Pipeline] EOS at step 13, stopping (slot 0)
 [Pipeline] Generation done : 13 frames
 [Perf] PromptBuild 2.2 ms
-[Perf] Prefill 292.2 ms (T_ctx prefill)
-[Perf] TTFA 426.3 ms (first frame codes)
-[Perf] TalkerDecode 892.6 ms (13 frames, 68.66 ms/frame)
-[Perf] CodePredictor 1768.1 ms (136.01 ms/frame)
+[Perf] Prefill 294.1 ms (T_ctx prefill)
+[Perf] TTFA 444.0 ms (first frame codes)
+[Perf] TalkerDecode 934.9 ms (13 frames, 71.92 ms/frame)
+[Perf] CodePredictor 1704.8 ms (131.14 ms/frame)
 [Perf] HostCompose 0.5 ms (c0 sample + next emb)
-[Perf] CodecDecode 2325.4 ms
-[Perf] Total 5281.3 ms (13 frames, 204.71 ms/frame AR, audio 1.04 s, RTF 5.078)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0095.wav: 24960 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 24960 samples (1.04 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0095.wav
+[Perf] CodecDecode 2296.2 ms
+[Perf] Total 5232.9 ms (13 frames, 203.09 ms/frame AR, audio 1.04 s, RTF 5.032)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0095.wav: 24960 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 24960 samples (1.04 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0095.wav

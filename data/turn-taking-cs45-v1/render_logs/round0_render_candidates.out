@@ -1,0 +1,42 @@
+round 0 start 2026-10-20T19:39:59Z base core 0 left 17281s only=all
+attempt 0: TTS for 140 renders on 23 single-thread workers
+attempt 0: aligning 137 recordings with ASR-A (faster-whisper large-v3-turbo)
+attempt 1: TTS for 5 renders on 23 single-thread workers
+attempt 1: aligning 5 recordings with ASR-A (faster-whisper large-v3-turbo)
+done: 140/140 renders passed the ASR-A text pre-filter
+render rc=0 2026-10-20T20:16:13Z
+candidates: 103 pair-variants, 206 clips; build-stage rejects: 37 -> /mnt/raid0/llm/tmp/cs45/cand
+candidates rc=0 2026-10-20T20:16:14Z
+== main
+  user ASR 20/206 (52s)
+  user ASR 40/206 (104s)
+  user ASR 60/206 (157s)
+  user ASR 80/206 (211s)
+  user ASR 100/206 (258s)
+  user ASR 120/206 (301s)
+  user ASR 140/206 (342s)
+  user ASR 160/206 (385s)
+  user ASR 180/206 (439s)
+  user ASR 200/206 (490s)
+{"gates_version": "tt-qa-gates-1", "which": "main", "asr_b": "faster-whisper large-v3 int8 CPU", "n_clips": 206, "n_pairs": 103, "defect_counts_by_gate": {"U1_words": 12, "U2_boundary": 0, "U3_nonempty": 2, "A1_assistant_continues": 10, "A2_assistant_text": 0}, "defective_clips": 24, "defective_pairs": 23, "by_family": {"CUT_IC": {"pairs": 52, "defective_pairs": 0}, "CUT_WAIT": {"pairs": 17, "defective_pairs": 0}, "CTX_BC": {"pairs": 34, "defective_pairs": 0}}}
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/worktrees/cs45-research/scripts/voice/turn_taking/tt_qa_gates.py", line 311, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/mnt/raid0/llm/worktrees/cs45-research/scripts/voice/turn_taking/tt_qa_gates.py", line 304, in main
+    Path(a.out).write_text(json.dumps(rep, indent=1))
+                           ~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type bool is not JSON serializable
+gates rc=1 2026-10-20T20:30:44Z
+unfilled -> 0 2026-10-20T20:30:44Z
+ROUND_DONE

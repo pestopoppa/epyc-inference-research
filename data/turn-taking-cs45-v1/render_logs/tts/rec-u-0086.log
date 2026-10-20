@@ -27,22 +27,22 @@ ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
 [Audio-Resample] Done: 175520 -> 263280 samples
 [WeightCtx] Loaded 76 tensors, 22.9 MB into backend
 [SpeakerEncoder] Loaded: enc_dim=1024 sr=24000 mel_dim=128 hidden=512 mfa=1536 asp_attn=128 se=128 scale=8
-[Pipeline] Speaker encoder lazy loaded in 5 ms
+[Pipeline] Speaker encoder lazy loaded in 6 ms
 [SpkExtract] Extracted 1024-dim embedding (263280 samples, padded 264048)
 [Prompt] Built: 11 ids, N_text=3, N_instruct=0, T_ctx=14, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
-[Batch] Admit slot=0 T_ctx=14 prefill=305.1 ms build=2.2 ms (stall for 0 active slots)
+[Batch] Admit slot=0 T_ctx=14 prefill=311.4 ms build=2.8 ms (stall for 0 active slots)
 [Sample] step=0 c0=1221 u=0.1783029884 subseq=0
 [Sample] step=1 c0=1028 u=0.9424979091 subseq=16
 [Pipeline] Generated 8 frames (slot 0)
 [Pipeline] EOS at step 10, stopping (slot 0)
 [Pipeline] Generation done : 10 frames
-[Perf] PromptBuild 2.2 ms
-[Perf] Prefill 305.1 ms (T_ctx prefill)
-[Perf] TTFA 396.2 ms (first frame codes)
-[Perf] TalkerDecode 487.6 ms (10 frames, 48.76 ms/frame)
-[Perf] CodePredictor 932.8 ms (93.28 ms/frame)
+[Perf] PromptBuild 2.8 ms
+[Perf] Prefill 311.4 ms (T_ctx prefill)
+[Perf] TTFA 515.5 ms (first frame codes)
+[Perf] TalkerDecode 984.3 ms (10 frames, 98.43 ms/frame)
+[Perf] CodePredictor 1905.3 ms (190.53 ms/frame)
 [Perf] HostCompose 0.4 ms (c0 sample + next emb)
-[Perf] CodecDecode 1625.1 ms
-[Perf] Total 3353.5 ms (10 frames, 142.09 ms/frame AR, audio 0.80 s, RTF 4.192)
-[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0086.wav: 19200 samples, 24000 Hz, mono S16
-[Pipeline] Wrote 19200 samples (0.80 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0086.wav
+[Perf] CodecDecode 1737.1 ms
+[Perf] Total 4941.6 ms (10 frames, 289.00 ms/frame AR, audio 0.80 s, RTF 6.177)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0086.wav: 19200 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 19200 samples (0.80 s) -> /mnt/raid0/llm/tmp/cs45/run_v0/raw24/rec-u-0086.wav

@@ -2,7 +2,7 @@
 """CS-45 deterministic plan: render jobs and pair definitions from the authored text inventory.
 
 Pure data (no audio, no tools). The same plan feeds the renderer (tt_render_pipeline.py) and the
-corpus builder (tt_build.py), so a re-run reproduces the identical job list and pair assignment.
+corpus builder (tt_build2.py), so a re-run reproduces the identical job list and pair assignment.
 """
 from __future__ import annotations
 
@@ -136,6 +136,23 @@ def build_plan() -> dict:
                 "text_full": clean_text(ack), "text_prefix": None,
             })
             k += 1
+    # --- ALTERNATES: extra main-set cut pairs (see tt_spec.ALT_CUT_IC); ids continue the main numbering
+    for i, raw in enumerate(S.ALT_CUT_IC):
+        split = SPLITS[i % 2]
+        voice = next_voice(split)
+        pid = next_pair_id()
+        pre, post = raw.split("|")
+        n_prefix = len(norm_words(pre))
+        rid = f"rec-u-{pid[-4:]}"
+        add_user(rid, raw, voice, split, family="CUT_IC", pair_id=pid, prefix_words=n_prefix)
+        pool = pool_p[split]
+        asst = pool[(i // 2 + 2) % len(pool)]
+        pairs.append({
+            "pair_id": pid, "family": "CUT_IC", "split": split, "voice_id": voice["voice_id"], "user_recording": rid,
+            "assistant_a": asst, "assistant_b": asst, "assistant_mode_a": "ended", "assistant_mode_b": "ended",
+            "label_a": "complete", "label_b": "incomplete", "contrast": "cut_point", "prefix_words": n_prefix,
+            "text_full": clean_text(raw), "text_prefix": clean_text(pre),
+        })
     return {"plan_seed": PLAN_SEED, "voices": VOICES, "assistant_voice": ASSISTANT_VOICE, "jobs": jobs, "pairs": pairs}
 
 

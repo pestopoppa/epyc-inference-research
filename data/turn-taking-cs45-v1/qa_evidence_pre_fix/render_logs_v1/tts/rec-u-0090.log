@@ -1,0 +1,48 @@
+[Qwen] qwentts.cpp abab6b3 (2026-07-30)
+ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+[Load] Talker backend: CPU (CPU threads: 1)
+[GGUF] /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-talker-0.6b-base-Q8_0.gguf: 478 tensors, data at offset 5954368
+[WeightCtx] Loaded 316 tensors, 774.6 MB into backend
+[Talker] Loaded: 28 layers, hidden 1024, heads 16/8, head_dim 128, FFN 3072, RoPE theta 1000000, mrope sections [24,20,20] interleaved=0
+[WeightCtx] Loaded 86 tensors, 143.5 MB into backend
+[CodePredictor] Loaded: 5 layers, hidden 1024, heads 16/8, head_dim 128, FFN 3072, RoPE theta 1000000, 15 acoustic codebooks (vocab 2048 each), mtp_proj identity
+[GGUF] /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-tokenizer-12hz-Q8_0.gguf: 398 tensors, data at offset 29760
+[WeightCtx] Loaded 18 tensors, 33.0 MB into backend
+[Quantizer] Loaded: 16 codebooks (1 semantic + 15 acoustic), 2048 entries x 256 dim, hidden 512
+[WeightCtx] Loaded 93 tensors, 30.9 MB into backend
+[Transformer] Loaded: 8 layers, hidden 512, heads 16/16, head_dim 64, FFN 1024, RoPE theta 10000, sliding window 72
+[WeightCtx] Loaded 22 tensors, 33.1 MB into backend
+[Upsample] Loaded: 2 blocks (2x ratio per block), channels 1024, dwconv kernel 7
+[WeightCtx] Loaded 118 tensors, 142.9 MB into backend
+[DAC] Loaded: 4 blocks (strides 8/5/4/3), 24 kHz mono out, weights 142.9 MB
+[WeightCtx] Loaded 2 tensors, 3.0 MB into backend
+[Pipeline] Ready: hop 1920 samples @ 24000 Hz mono, 16 codebooks @ 12.5 Hz
+[KVCache] Allocated: 28 layers, 8 KV heads, head_dim 128, max_seq_len 4096, 1 sets -> 896 MB
+[KVCache] Allocated: 5 layers, 8 KV heads, head_dim 128, max_seq_len 16, 1 sets -> 0 MB
+[Pipeline] Loaded: arch=0b6 variant=base tokenizer=qwen3_tts_tokenizer_12hz codebooks=16 speaker_encoder=deferred speakers=0 fa=off clamp_fp16=off max_batch=1
+[BPE] Loaded from GGUF: 151676 vocab, 151291 merges, eos_id=151643
+[BPE] Registered 5 arch special tokens (total specials=6)
+[WAV] Read buffer: 137680 samples, 16000 Hz, 1 ch, 16 bit
+[Audio-Resample] 16000 Hz -> 24000 Hz, 137680 samples...
+[Audio-Resample] Done: 137680 -> 206520 samples
+[WeightCtx] Loaded 76 tensors, 22.9 MB into backend
+[SpeakerEncoder] Loaded: enc_dim=1024 sr=24000 mel_dim=128 hidden=512 mfa=1536 asp_attn=128 se=128 scale=8
+[Pipeline] Speaker encoder lazy loaded in 6 ms
+[SpkExtract] Extracted 1024-dim embedding (206520 samples, padded 207288)
+[Prompt] Built: 10 ids, N_text=2, N_instruct=0, T_ctx=13, hidden=1024, lang=English (id=2050), speaker=none (id=-1) ref_spk_emb=yes icl=no
+[Batch] Admit slot=0 T_ctx=13 prefill=334.6 ms build=2.6 ms (stall for 0 active slots)
+[Sample] step=0 c0=1221 u=0.1646019965 subseq=0
+[Sample] step=1 c0=765 u=0.3833746910 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] EOS at step 12, stopping (slot 0)
+[Pipeline] Generation done : 12 frames
+[Perf] PromptBuild 2.6 ms
+[Perf] Prefill 334.6 ms (T_ctx prefill)
+[Perf] TTFA 478.2 ms (first frame codes)
+[Perf] TalkerDecode 891.3 ms (12 frames, 74.28 ms/frame)
+[Perf] CodePredictor 1480.1 ms (123.34 ms/frame)
+[Perf] HostCompose 0.5 ms (c0 sample + next emb)
+[Perf] CodecDecode 2079.6 ms
+[Perf] Total 4789.0 ms (12 frames, 197.66 ms/frame AR, audio 0.96 s, RTF 4.989)
+[WAV] Wrote /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0090.wav: 23040 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 23040 samples (0.96 s) -> /mnt/raid0/llm/tmp/cs45/run1/raw24/rec-u-0090.wav

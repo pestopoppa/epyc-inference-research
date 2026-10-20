@@ -1,0 +1,7 @@
+variant 2 pre-render on 72-79,168-175 under workspace-f8's kpf18-w1b q3 claim by agreement; started 2026-10-20T20:12:56Z
+attempt 0: TTS for 140 renders on 16 single-thread workers
+attempt 0: aligning 138 recordings with ASR-A (faster-whisper large-v3-turbo)
+attempt 1: TTS for 4 renders on 16 single-thread workers
+attempt 1: aligning 4 recordings with ASR-A (faster-whisper large-v3-turbo)
+done: 140/140 renders passed the ASR-A text pre-filter
+render rc=0 2026-10-20T20:56:19Z

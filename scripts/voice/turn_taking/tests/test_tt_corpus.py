@@ -24,34 +24,12 @@ import tt_silero as TS  # noqa: E402
 import tt_verify as V  # noqa: E402
 
 REPO = TT.parents[2]
-STATIC = ["label_contract.json", "pins.json", "external_crosscheck.json", "measurement_era_changes.json"]
-
-
-def _copy_static(dst: Path):
-    src = REPO / "data" / "turn-taking-cs45-v1"
-    for f in STATIC:
-        shutil.copyfile(src / f, dst / f)
-    shutil.copytree(src / "pins", dst / "pins")
-    shutil.copytree(src / "scorer_patches", dst / "scorer_patches")
-    (dst / "manifest").mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src / "manifest" / "HUMAN_SLOT.md", dst / "manifest" / "HUMAN_SLOT.md")
-    (dst / "manifest" / "human_recorded.jsonl").write_text("")
 
 
 @pytest.fixture(scope="session")
 def fake_corpus(tmp_path_factory):
     root = tmp_path_factory.mktemp("fake")
-    S, D = root / "scratch", root / "corpus"
-    fake_renders.make_scratch(S)
-    D.mkdir()
-    _copy_static(D)
-    r = subprocess.run([sys.executable, "-I", str(TT / "tt_build.py"), "--scratch", str(S), "--out", str(D)], capture_output=True, text=True)
-    assert r.returncode == 0, r.stdout + r.stderr
-    S2 = root / "scratch_reserve"
-    fake_renders.make_scratch(S2, reserve=True)
-    r = subprocess.run([sys.executable, "-I", str(TT / "tt_build_reserve.py"), "--scratch", str(S2), "--corpus", str(D)], capture_output=True, text=True)
-    assert r.returncode == 0, r.stdout + r.stderr
-    V.seal(D)
+    D, _ = fake_renders.build_fake_corpus(root)
     return D
 
 
@@ -451,3 +429,197 @@ def test_reserve_audio_altered_refused(corpus):
     mutate_recording(corpus, rec, flip)
     reseal(corpus)
     assert "recordings_pcm_bound" in failing(corpus)
+
+
+# ------------------------------------------------------------------ independent QA gates (tt_qa_gates.py)
+def test_qa_report_missing_refused(corpus):
+    shutil.rmtree(corpus / "qa")
+    reseal(corpus)
+    assert "independent_qa_gates_passed" in failing(corpus)
+
+
+def test_qa_report_failed_clip_refused(corpus):
+    p = corpus / "qa" / "qa_gates_report.json"
+    q = json.loads(p.read_text())
+    cid = next(iter(q["clips"]))
+    q["clips"][cid]["gates"]["U1_words"] = False
+    q["clips"][cid]["pass"] = False
+    q["all_pass"] = False
+    wjson(p, q)
+    reseal(corpus)
+    assert "independent_qa_gates_passed" in failing(corpus)
+
+
+def test_qa_report_for_other_audio_refused(corpus):
+    p = corpus / "qa" / "qa_gates_report.json"
+    q = json.loads(p.read_text())
+    cid = next(iter(q["clips"]))
+    q["clips"][cid]["pcm_sha256"] = "0" * 64
+    wjson(p, q)
+    reseal(corpus)
+    assert "independent_qa_gates_passed" in failing(corpus)
+
+
+def test_qa_asr_must_differ_from_build_and_scoring_asr(corpus):
+    p = corpus / "qa" / "qa_gates_report.json"
+    q = json.loads(p.read_text())
+    q["asr_b"] = q["built_with_asr_a"]
+    wjson(p, q)
+    reseal(corpus)
+    assert "independent_qa_gates_passed" in failing(corpus)
+
+
+def _gate_on_tampered(tmp_path, tamper):
+    import stub_asr
+    import tt_qa_gates as Q
+
+    root = tmp_path / "t"
+    root.mkdir()
+    D, rep = fake_renders.build_fake_corpus(root, tamper=tamper)
+    return D, rep["main"]
+
+
+def _edit_clips(cand: Path, fn):
+    p = cand / "manifest" / "clips.jsonl"
+    rows = jl(p)
+    fn(rows)
+    wjl(p, rows)
+
+
+def _first_b(rows, fam, variant=".v0"):
+    return next(r for r in rows if r["pair_role"] == "b" and r["family"] == fam and r["clip_id"].endswith("-b") and r["stratum"] == "synthesized")
+
+
+def test_gate_catches_cut_one_word_early(tmp_path):
+    victim = {}
+
+    def tamper(cand):
+        def fn(rows):
+            r = _first_b(rows, "CUT_IC")
+            r["user"]["cut"] -= int(0.40 * 16000)  # one 0.28 s word + gap earlier
+            victim["pair"] = r["pair_id"]
+        _edit_clips(cand, fn)
+
+    D, rep = _gate_on_tampered(tmp_path, tamper)
+    sel = json.loads((D / "qa" / "selection_report.json").read_text())
+    assert victim["pair"].split(".v")[0] in sel["unfilled_pairs"]
+    assert rep["clips"][victim["pair"] + "-b"]["gates"]["U1_words"]["ok"] is False
+
+
+def test_gate_catches_cut_into_next_word(tmp_path):
+    victim = {}
+
+    def tamper(cand):
+        def fn(rows):
+            r = _first_b(rows, "CUT_IC")
+            r["user"]["cut"] += int(0.15 * 16000)  # 60 ms into the next word
+            victim["pair"] = r["pair_id"]
+        _edit_clips(cand, fn)
+
+    D, rep = _gate_on_tampered(tmp_path, tamper)
+    g = rep["clips"][victim["pair"] + "-b"]["gates"]
+    assert not (g["U1_words"]["ok"] and g["U2_boundary"]["ok"])
+
+
+def test_gate_catches_cut_inside_word(tmp_path):
+    victim = {}
+
+    def tamper(cand):
+        def fn(rows):
+            r = _first_b(rows, "CUT_IC")
+            r["user"]["cut"] -= int(0.14 * 16000)  # inside the last prefix word
+            victim["pair"] = r["pair_id"]
+        _edit_clips(cand, fn)
+
+    D, rep = _gate_on_tampered(tmp_path, tamper)
+    assert not rep["clips"][victim["pair"] + "-b"]["pass"]
+
+
+def test_gate_catches_silent_user_channel(tmp_path):
+    victim = {}
+
+    def tamper(cand):
+        def fn(rows):
+            r = _first_b(rows, "CUT_WAIT")
+            r["user"]["cut"] = int(0.03 * 16000)
+            victim["pair"] = r["pair_id"]
+        _edit_clips(cand, fn)
+
+    D, rep = _gate_on_tampered(tmp_path, tamper)
+    assert rep["clips"][victim["pair"] + "-b"]["gates"]["U3_nonempty"]["ok"] is False
+
+
+def test_gate_catches_assistant_truncated_at_clip_end(tmp_path, monkeypatch):
+    """Emulates the v1 layout: the continuing assistant is cut at user_end + TRAIL."""
+    import stub_asr
+    import tt_qa_gates as Q
+
+    orig = C.assemble_clip
+
+    def v1_like(user_rec, trim, cut, assistant_rec, mode, tail=None):
+        if mode == "continuing":
+            seg = C.user_segment(user_rec, trim[0], trim[1], cut)
+            keep = C.BC_ONSET_IN_ASSIST + len(seg) + C.TRAIL
+            arr, lay = orig(user_rec, trim, cut, assistant_rec, mode, tail)
+            arr = arr[: C.LEAD_IN + keep].copy()
+            return arr, C.Layout(lay.user_onset, lay.user_len, lay.user_end, len(arr), lay.assistant_start, len(arr), C.TRAIL)
+        return orig(user_rec, trim, cut, assistant_rec, mode, tail)
+
+    root = tmp_path / "t"
+    root.mkdir()
+    D, rep = fake_renders.build_fake_corpus(root)
+    monkeypatch.setattr(C, "assemble_clip", v1_like)
+    r = Q.run(D, "main", 1, None, asr=stub_asr.StubAsr(), progress=lambda *_: None)
+    assert r["defect_counts_by_gate"]["A1_assistant_continues"] >= 30
+
+
+def test_ctx_pair_assistant_continues_past_backchannel(fake_corpus):
+    clips = [json.loads(x) for x in open(fake_corpus / "manifest" / "clips.jsonl")]
+    bs = [c for c in clips if c["family"] == "CTX_BC" and c["pair_role"] == "b"]
+    assert bs
+    for c in bs:
+        lay = c["layout"]
+        assert lay["assistant_end"] - lay["user_end"] >= C.N_CONT_MIN
+        assert lay["total"] - lay["assistant_end"] >= C.END_PAD
+        assert lay["tail"] >= C.TRAIL
+
+
+def test_gates_reuse_skips_identical_audio(tmp_path):
+    import stub_asr
+    import tt_qa_gates as Q
+
+    root = tmp_path / "t"
+    root.mkdir()
+    D, rep = fake_renders.build_fake_corpus(root)
+    # the gates were run on the candidate set; re-run on the final corpus with the first report as reuse -> nothing to gate
+    reuse = {e["pcm_sha256"]: e for e in rep["main"]["clips"].values()}
+
+    class Count(stub_asr.StubAsr):
+        n = 0
+
+        def words(self, x, ctx=None):
+            Count.n += 1
+            return super().words(x, ctx)
+
+    r = Q.run(D, "main", 1, None, asr=Count(), progress=lambda *_: None, reuse=reuse)
+    assert Count.n == 0 and r["defective_pairs"] == 0 and r["n_clips"] == len([1 for _ in open(D / "manifest" / "clips.jsonl")])
+
+
+def test_variant_fallback_uses_next_passing_variant(tmp_path):
+    victim = {}
+
+    def tamper(cand):
+        def fn(rows):
+            r = next(x for x in rows if x["pair_role"] == "b" and x["family"] == "CUT_IC" and x["clip_id"].endswith(".v0-b") and x["stratum"] == "synthesized")
+            r["user"]["cut"] -= int(0.40 * 16000)
+            victim["pair"] = r["pair_id"].split(".v")[0]
+        _edit_clips(cand, fn)
+
+    root = tmp_path / "t"
+    root.mkdir()
+    D, rep = fake_renders.build_fake_corpus(root, tamper=tamper, variants=2)
+    pairs = {p["pair_id"]: p for p in jl(D / "manifest" / "pairs.jsonl")}
+    assert pairs[victim["pair"]]["chosen_variant"] == 1
+    others = [p for k, p in pairs.items() if k != victim["pair"]]
+    assert all(p["chosen_variant"] == 0 for p in others)
+    assert failing(D) == set()

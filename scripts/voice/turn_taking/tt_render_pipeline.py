@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
-"""CS-45 synthesized-stratum renderer: production qwentts.cpp (READ-ONLY) -> 24 kHz -> 16 kHz, plus
-whisper.cpp (production-speech-v1, CPU) word timing for the cut points. CLI processes only; no
-server is started and no GPU is touched. Run it under a region-lock BUILD claim on the cores it is
-given, e.g.
+"""CS-45 synthesized-stratum renderer, v2 (2026-10-20).
 
-  region-lock run --regions q3 --role build --tag cs45-render -- \
-      python3 tt_render_pipeline.py --scratch /mnt/raid0/llm/tmp/cs45/run1 --cores 72-95 \
-          --tts-cpus 73-77,79-81 --tts-threads 8 --asr-layouts '8:73-77,79-81|16:73-77,79-83,85-89,91'
+Phases (run it under a region-lock BUILD claim on the cores it is given):
+  A  TTS: the production qwentts.cpp CLI (READ-ONLY, CPU), ONE SINGLE-THREAD PROCESS PER CORE, in parallel.
+     (qwen-tts under host load: 8 threads = 472 ms/frame, 1 thread = 36 ms/frame; see render_logs.)
+  B  ALIGN: one faster-whisper large-v3-turbo process (tt_align_fw.py, ASR-A) produces word timestamps + a transcript for
+     every new recording. whisper.cpp's token timestamps are NOT used for cut placement any more (root cause of the
+     v1 misaligned cuts).
+  C  text QA: the ASR-A transcript must equal the intended text (numerals normalised) for cut-family recordings; a
+     failing render is re-rendered with the next seed (up to MAX_ATTEMPTS). This is only a pre-filter: the
+     independent gates (tt_qa_gates.py, ASR-B) decide admission.
 
-Every child PID is appended to <scratch>/pids_started.txt and every child is reaped (TERM, then KILL,
-then verified dead) on timeout or error. Nothing is left running.
+Jobs are the USER recordings of the main plan and of the reserve plan (assistant contexts already exist in the corpus).
+A variant k > 0 re-renders the same text with a different seed under id '<render_id>.v<k>' (the builder keeps the first
+variant that passes all gates). Every child PID is appended to <scratch>/pids_started.txt and reaped on timeout/error.
 
-Outputs under --scratch:
-  raw24/<id>.wav     qwen-tts native 24 kHz mono output
-  rec16/<id>.wav     pinned 3:2 polyphase resample (tt_audio.resample_24k_to_16k)
-  asr/<id>.json      raw whisper-cli -ojf output (token offsets and, if supported, DTW)
-  tts/<id>.log       qwen-tts stderr/stdout
-  renders.jsonl      one provenance row per render (final attempt) + attempt history
-  linkage_*.txt      verify_ggml_linkage.sh proofs
-  env.json           binary/model digests, versions, layout decisions
+  region-lock run --regions q0 --role build --tag cs45-render -- \
+     /mnt/raid0/llm/epyc-orchestrator/.venv/bin/python -I tt_render_pipeline.py --scratch DIR --variant 0 \
+        --tts-cpus 1-23 --align-cpus 0-15 [--only id,id,...]
 """
 from __future__ import annotations
 
@@ -30,22 +29,22 @@ import signal
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tt_audio as A  # noqa: E402
 import tt_plan as P  # noqa: E402
+import tt_qa_gates as Q  # noqa: E402  (norm_words only)
 
 QWEN = "/mnt/raid0/llm/qwentts.cpp/build"
-WHISPER = "/mnt/raid0/llm/whisper.cpp/build/bin"
 TTS_MODEL = "/mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-talker-0.6b-base-Q8_0.gguf"
 TTS_CODEC = "/mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-tokenizer-12hz-Q8_0.gguf"
-ASR_MODEL = "/mnt/raid0/llm/models/whisper-ggml/ggml-large-v3-turbo.bin"
 LINKAGE = "/workspace/repos/epyc-inference-research/scripts/utils/verify_ggml_linkage.sh"
 SHIM = "/mnt/raid0/llm/tmp/cs45/nprocs_shim.so"
-MAX_ATTEMPTS = 3
+PACE_PY = "/mnt/raid0/llm/pace-env/bin/python"
+MAX_ATTEMPTS = 2
+HERE = Path(__file__).resolve().parent
 
 
 def sha256_file(p: str) -> str:
@@ -61,15 +60,12 @@ class Runner:
         self.pidfile = pidfile
 
     def run(self, argv, env, stdin_text=None, out_path=None, timeout=180):
-        """Run one child; returns (rc, seconds). Always reaps; never leaves a process behind."""
         out_f = open(out_path, "wb") if out_path else subprocess.DEVNULL
         t0 = time.time()
-        p = subprocess.Popen(
-            argv, env=env, stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
-            stdout=out_f, stderr=subprocess.STDOUT, start_new_session=True,
-        )
+        p = subprocess.Popen(argv, env=env, stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL, stdout=out_f,
+                             stderr=subprocess.STDOUT, start_new_session=True)
         with open(self.pidfile, "a") as pf:
-            pf.write(f"{time.strftime('%FT%TZ', time.gmtime())} pid={p.pid} {' '.join(argv[:3])} ...\n")
+            pf.write(f"{time.strftime('%FT%TZ', time.gmtime())} pid={p.pid} {' '.join(argv[:4])} ...\n")
         try:
             if stdin_text is not None:
                 p.communicate(stdin_text.encode(), timeout=timeout)
@@ -106,42 +102,18 @@ class Runner:
             pass
 
 
-def tts_env(threads: int) -> dict:
+def tts_env() -> dict:
     e = {k: v for k, v in os.environ.items() if k not in ("LD_LIBRARY_PATH", "LD_PRELOAD")}
-    e.update({"HIP_VISIBLE_DEVICES": "-1", "GGML_BACKEND": "CPU", "LD_LIBRARY_PATH": f"{QWEN}:/opt/rocm/lib",
-              "SHIM_NPROCS": str(2 * threads), "LD_PRELOAD": SHIM})
+    e.update({"HIP_VISIBLE_DEVICES": "-1", "GGML_BACKEND": "CPU", "LD_LIBRARY_PATH": f"{QWEN}:/opt/rocm/lib", "SHIM_NPROCS": "2", "LD_PRELOAD": SHIM})
     return e
 
 
-def asr_env() -> dict:
-    e = {k: v for k, v in os.environ.items() if k not in ("LD_LIBRARY_PATH", "LD_PRELOAD")}
-    e.update({"HIP_VISIBLE_DEVICES": "-1", "LD_LIBRARY_PATH": f"{WHISPER}:/opt/rocm/lib"})
-    return e
-
-
-def parse_asr(path: Path) -> dict:
-    """whisper-cli -ojf -> {'text': str, 'words': [{w, t0_ms, t1_ms, dtw_ms|None, p}]}"""
-    d = json.loads(path.read_text(encoding="utf-8", errors="replace"))
-    words, cur = [], None
-    text = []
-    for seg in d.get("transcription", []):
-        text.append(seg.get("text", ""))
-        for tk in seg.get("tokens", []):
-            t = tk.get("text", "")
-            if t.startswith("[_") or t.startswith("<|") or not t.strip():
-                continue
-            off = tk.get("offsets", {})
-            dtw = tk.get("t_dtw", -1)
-            dtw_ms = int(dtw) * 10 if isinstance(dtw, (int, float)) and dtw >= 0 else None
-            if cur is None or t.startswith(" "):
-                cur = {"w": t.strip(), "t0_ms": off.get("from"), "t1_ms": off.get("to"), "dtw_ms": dtw_ms, "p": tk.get("p")}
-                words.append(cur)
-            else:
-                cur["w"] += t
-                cur["t1_ms"] = off.get("to")
-                if cur["dtw_ms"] is None:
-                    cur["dtw_ms"] = dtw_ms
-    return {"text": "".join(text).strip(), "words": words}
+def expand_cpus(spec: str) -> list[int]:
+    out = []
+    for part in spec.split(","):
+        lo, _, hi = part.partition("-")
+        out += list(range(int(lo), int(hi or lo) + 1))
+    return out
 
 
 def wer(ref: list[str], hyp: list[str]) -> float:
@@ -156,113 +128,72 @@ def wer(ref: list[str], hyp: list[str]) -> float:
     return d[m] / max(1, n)
 
 
+def user_jobs() -> list[dict]:
+    jobs = [j for j in P.build_plan()["jobs"] if j["role"] == "user"]
+    jobs += [j for j in P.build_reserve_plan()["jobs"] if j["role"] == "user"]
+    return jobs
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--scratch", required=True)
-    ap.add_argument("--cores", required=True, help="claimed region, for the record only, e.g. 72-95")
-    ap.add_argument("--tts-cpus", required=True, help="taskset cpu list for qwen-tts, chosen so no SMT sibling is busy")
-    ap.add_argument("--tts-threads", type=int, default=8)
-    ap.add_argument("--asr-layouts", required=True, help="'threads:cpulist|threads:cpulist' tried in order (probe must finish in 25 s)")
-    ap.add_argument("--only", default="", help="comma list of render_ids (re-render subset)")
-    ap.add_argument("--seed-bump", type=int, default=0, help="added to attempt index for the seeds of --only renders")
-    ap.add_argument("--no-asr", action="store_true")
-    ap.add_argument("--reserve", action="store_true", help="render the RESERVE plan (tt_plan.build_reserve_plan)")
-    args = ap.parse_args()
+    ap.add_argument("--variant", type=int, default=0)
+    ap.add_argument("--only", default="", help="comma list of base render ids (without .vK)")
+    ap.add_argument("--tts-cpus", required=True)
+    ap.add_argument("--align-cpus", required=True)
+    ap.add_argument("--align-procs", type=int, default=4)
+    ap.add_argument("--realign", action="store_true", help="skip TTS for ids whose recording exists and re-run ONLY the ASR-A alignment + cut search")
+    a = ap.parse_args()
 
-    S = Path(args.scratch)
-    for d in ("raw24", "rec16", "asr", "tts"):
+    S = Path(a.scratch)
+    for d in ("raw24", "rec16", "tts", "align"):
         (S / d).mkdir(parents=True, exist_ok=True)
     runner = Runner(S / "pids_started.txt")
-    plan = P.build_reserve_plan() if args.reserve else P.build_plan()
-    jobs = plan["jobs"]
-    if args.only:
-        want = set(args.only.split(","))
+    jobs = user_jobs()
+    if a.only:
+        want = set(a.only.split(","))
         jobs = [j for j in jobs if j["render_id"] in want]
+    suffix = f".v{a.variant}" if a.variant else ""
+    for j in jobs:
+        j["base_id"] = j["render_id"]
+        j["render_id"] = j["base_id"] + suffix
+        j["variant"] = a.variant
 
-    # ---- environment digests + linkage proof (read-only use of the frozen speech trees)
     env_json = S / "env.json"
     if not env_json.exists():
-        info = {"date_utc": time.strftime("%FT%TZ", time.gmtime()), "claimed_region_cores": args.cores, "tts_cpus": args.tts_cpus,
-                "tts_threads": args.tts_threads, "asr_layouts": args.asr_layouts}
-        for name, path in (("qwen-tts", f"{QWEN}/qwen-tts"), ("whisper-cli", f"{WHISPER}/whisper-cli")):
-            info[name] = {"path": path, "sha256": sha256_file(path), "mtime": time.strftime("%FT%TZ", time.gmtime(os.path.getmtime(path)))}
-        for name, path in (("tts_talker", TTS_MODEL), ("tts_codec", TTS_CODEC), ("asr_model", ASR_MODEL), ("nprocs_shim", SHIM)):
+        info = {"date_utc": time.strftime("%FT%TZ", time.gmtime()), "tts_cpus": a.tts_cpus, "align_cpus": a.align_cpus, "align_procs": a.align_procs,
+                "qwen-tts": {"path": f"{QWEN}/qwen-tts", "sha256": sha256_file(f"{QWEN}/qwen-tts")}}
+        for name, path in (("tts_talker", TTS_MODEL), ("tts_codec", TTS_CODEC), ("nprocs_shim", SHIM)):
             info[name] = {"path": path, "sha256": sha256_file(path), "bytes": os.path.getsize(path)}
         env_json.write_text(json.dumps(info, indent=1))
-        for name, binp, tree, e in (("qwen-tts", f"{QWEN}/qwen-tts", QWEN, tts_env(args.tts_threads)),
-                                    ("whisper-cli", f"{WHISPER}/whisper-cli", WHISPER, asr_env())):
-            e = dict(e)
-            e.pop("LD_PRELOAD", None)
-            rc, _ = runner.run([LINKAGE, binp, tree], e, out_path=str(S / f"linkage_{name}.txt"), timeout=120)
-            if rc != 0:
-                print(f"LINKAGE FAIL {name} rc={rc}; see linkage_{name}.txt", file=sys.stderr)
-                return 3
-        rc, _ = runner.run([f"{QWEN}/qwen-tts", "--help"], tts_env(args.tts_threads), out_path=str(S / "qwen-tts.help.txt"), timeout=30)
-        rc, _ = runner.run([f"{WHISPER}/whisper-cli", "--help"], asr_env(), out_path=str(S / "whisper-cli.help.txt"), timeout=30)
+        e = {k: v for k, v in tts_env().items() if k != "LD_PRELOAD"}
+        rc, _ = runner.run([LINKAGE, f"{QWEN}/qwen-tts", QWEN], e, out_path=str(S / "linkage_qwen-tts.txt"), timeout=120)
+        if rc != 0:
+            print("LINKAGE FAIL qwen-tts", file=sys.stderr)
+            return 3
 
-    tts_cores = args.tts_cpus
-    # whisper layout: a probe that does not finish in 25 s marks a layout as collapsed
-    # (speech_cpu_realtime_20260924 hazard 1) and the next one is tried.
-    layouts = [(int(x.split(":")[0]), x.split(":")[1]) for x in args.asr_layouts.split("|")]
-    asr_layout = None
-    dtw_ok = True
     rows_path = S / "renders.jsonl"
     done = {}
     if rows_path.exists():
         for line in rows_path.read_text().splitlines():
             r = json.loads(line)
             done[r["render_id"]] = r
-
-    def asr_cmd(wav: Path, base: Path, threads: int, cores: str, dtw: bool):
-        argv = ["taskset", "-c", cores, f"{WHISPER}/whisper-cli", "-m", ASR_MODEL, "-f", str(wav), "-t", str(threads),
-                "-ng", "-l", "en", "-ojf", "-of", str(base), "-np"]
-        if dtw:
-            argv += ["--dtw", "large.v3.turbo"]
-        return argv
-
-    def do_asr(wav: Path, rid: str):
-        nonlocal asr_layout, dtw_ok
-        base = S / "asr" / rid
-        if asr_layout is None:
-            for th, cs in layouts:
-                for dtw in (True, False):
-                    rc, dt = runner.run(asr_cmd(wav, base, th, cs, dtw), asr_env(), out_path=str(S / "asr" / f"{rid}.log"), timeout=25)
-                    if rc == 0 and (S / "asr" / f"{rid}.json").exists() and dt < 20:
-                        asr_layout = (th, cs)
-                        dtw_ok = dtw
-                        (S / "asr_layout.json").write_text(json.dumps({"threads": th, "cores": cs, "dtw": dtw, "probe_s": round(dt, 2)}))
-                        return parse_asr(S / "asr" / f"{rid}.json")
-                    (S / "asr" / f"{rid}.json").unlink(missing_ok=True)
-            raise RuntimeError("no healthy whisper layout found in the claimed cores")
-        th, cs = asr_layout
-        rc, dt = runner.run(asr_cmd(wav, base, th, cs, dtw_ok), asr_env(), out_path=str(S / "asr" / f"{rid}.log"), timeout=120)
-        if rc != 0 or not (S / "asr" / f"{rid}.json").exists():
-            raise RuntimeError(f"asr failed for {rid} rc={rc}")
-        return parse_asr(S / "asr" / f"{rid}.json")
-
-    # ---- phased execution: (A) parallel single-thread TTS, (B) sequential ASR, (C) QA and retry.
-    # qwen-tts is decode-latency-bound and its per-graph thread spawn collapses under host load (measured on
-    # this host 2026-10-20: 8 threads = 472 ms/frame, 1 thread = 36 ms/frame), so jobs run as independent
-    # single-thread processes, one per core.
-    from concurrent.futures import ThreadPoolExecutor
-
-    cpu_list = []
-    for part in args.tts_cpus.split(","):
-        lo_, _, hi_ = part.partition("-")
-        cpu_list += list(range(int(lo_), int(hi_ or lo_) + 1))
     state = {j["render_id"]: {"job": j, "history": [], "ok": False, "asr": None} for j in jobs}
-    for rid, r in done.items():
-        if rid in state and r.get("qa_ok") and not args.only:
-            state[rid].update(ok=True, history=r.get("history", []), asr=r.get("asr"), row=r)
+    for rid in list(state):
+        if rid in done and done[rid].get("qa_ok") and not a.realign:
+            state[rid].update(ok=True, history=done[rid]["history"], asr=done[rid].get("asr"), row=done[rid])
+    cpus = expand_cpus(a.tts_cpus)
 
     def tts_one(rid: str, cpu: int, attempt: int):
         j = state[rid]["job"]
-        seed = (j["seed"] + 7919 * (attempt + args.seed_bump)) % 2_000_000_000
+        if a.realign and (S / "rec16" / f"{rid}.wav").exists():
+            return {"attempt": attempt, "seed": None, "qa": "align-pending", "realign": True}
+        seed = (j["seed"] + 7919 * (attempt + 101 * a.variant)) % 2_000_000_000
         raw = S / "raw24" / f"{rid}.wav"
         raw.unlink(missing_ok=True)
-        argv = ["taskset", "-c", str(cpu), f"{QWEN}/qwen-tts", "--model", TTS_MODEL, "--codec", TTS_CODEC, "--lang", "English",
-                "--seed", str(seed), "--ref-wav", j["ref"], "-o", str(raw)]
-        rc, dt = runner.run(argv, tts_env(1), stdin_text=j["text"] + "\n", out_path=str(S / "tts" / f"{rid}.log"), timeout=600)
+        argv = ["taskset", "-c", str(cpu), f"{QWEN}/qwen-tts", "--model", TTS_MODEL, "--codec", TTS_CODEC, "--lang", "English", "--seed", str(seed),
+                "--ref-wav", j["ref"], "-o", str(raw)]
+        rc, dt = runner.run(argv, tts_env(), stdin_text=j["text"] + "\n", out_path=str(S / "tts" / f"{rid}.log"), timeout=600)
         if rc != 0 or not raw.exists():
             return {"attempt": attempt, "seed": seed, "tts_rc": rc, "qa": "tts-failed"}
         p24 = A.read_wav(raw)
@@ -270,57 +201,84 @@ def main() -> int:
             return {"attempt": attempt, "seed": seed, "qa": f"unexpected format {p24.sample_rate}/{p24.channels}"}
         x16 = A.resample_24k_to_16k(p24.samples[:, 0])
         A.write_wav(S / "rec16" / f"{rid}.wav", A.Pcm(x16[:, None], A.SR))
-        return {"attempt": attempt, "seed": seed, "tts_s": round(dt, 2), "qa": "asr-pending"}
+        return {"attempt": attempt, "seed": seed, "tts_s": round(dt, 2), "qa": "align-pending"}
 
-    def qa(rid: str, asr: dict, hist: dict):
-        j = state[rid]["job"]
-        ref = P.norm_words(j["text"])
-        hyp = P.norm_words(asr["text"])
-        w = wer(ref, hyp)
-        dur = A.read_wav(S / "rec16" / f"{rid}.wav").n_samples / A.SR
-        if j.get("family") == "CTX_BC":  # acknowledgement phrases: duration/non-empty only
-            good = 0.25 <= dur <= 2.0 and len(hyp) > 0
-        else:
-            good = w <= 0.15 and 0.2 <= dur / max(1, len(ref)) <= 0.9
-        hist["qa"] = f"{'ok' if good else 'FAIL'} wer={w:.3f} dur={dur:.2f}"
-        return good
+    def align(rids: list[str]) -> dict:
+        """ASR-A over all new recordings, sharded across --align-procs processes on disjoint cores."""
+        cl = expand_cpus(a.align_cpus)
+        nproc = max(1, min(a.align_procs, len(rids), len(cl)))
+        per = len(cl) // nproc
+        env = {k: v for k, v in os.environ.items() if k not in ("LD_LIBRARY_PATH", "LD_PRELOAD")}
+        env["HIP_VISIBLE_DEVICES"] = "-1"
+        jobs_by = {}
+        for r in rids:
+            j = state[r]["job"]
+            row = {"id": r, "wav": str(S / "rec16" / f"{r}.wav"), "text": j["text"]}
+            if j.get("family") in ("CUT_IC", "CUT_WAIT"):
+                row["n_prefix"] = j["prefix_words"]
+            jobs_by[r] = row
+        outs = []
+
+        def shard(i):
+            sub = rids[i::nproc]
+            lst, outp = S / "align" / f"jobs{i}.jsonl", S / "align" / f"out{i}.jsonl"
+            lst.write_text("\n".join(json.dumps(jobs_by[r]) for r in sub) + "\n")
+            cpuset = ",".join(str(c) for c in cl[i * per : (i + 1) * per])
+            rc, dt = runner.run(["taskset", "-c", cpuset, PACE_PY, "-I", str(HERE / "tt_align_fw.py"), "--list", str(lst), "--out", str(outp), "--threads", str(per)],
+                                env, out_path=str(S / "align" / f"run{i}.log"), timeout=7200)
+            if rc != 0:
+                raise RuntimeError(f"alignment shard {i} failed rc={rc}; see {S/'align'/f'run{i}.log'}")
+            return outp
+
+        with ThreadPoolExecutor(max_workers=nproc) as ex:
+            outs = list(ex.map(shard, range(nproc)))
+        res = {}
+        for outp in outs:
+            for l in outp.read_text().splitlines():
+                d = json.loads(l)
+                res[d["id"]] = d
+        return res
 
     pending = [rid for rid, st in state.items() if not st["ok"]]
     for attempt in range(MAX_ATTEMPTS):
         if not pending:
             break
-        print(f"attempt {attempt}: TTS for {len(pending)} renders on {len(cpu_list)} single-thread workers", flush=True)
-        # one worker per core: round-robin assignment, each worker runs its share sequentially
-        shares = {c: [] for c in cpu_list}
+        print(f"attempt {attempt}: TTS for {len(pending)} renders on {len(cpus)} single-thread workers", flush=True)
+        shares = {c: [] for c in cpus}
         for i, rid in enumerate(pending):
-            shares[cpu_list[i % len(cpu_list)]].append(rid)
+            shares[cpus[i % len(cpus)]].append(rid)
 
         def worker(cpu):
             return [(rid, tts_one(rid, cpu, attempt)) for rid in shares[cpu]]
 
-        with ThreadPoolExecutor(max_workers=len(cpu_list)) as ex:
-            for res in ex.map(worker, cpu_list):
+        with ThreadPoolExecutor(max_workers=len(cpus)) as ex:
+            for res in ex.map(worker, cpus):
                 for rid, h in res:
                     state[rid]["history"].append(h)
         if attempt == 0 and all(state[r]["history"][-1]["qa"] == "tts-failed" for r in pending):
             print("every first-attempt TTS job failed; aborting (see tts/*.log)", file=sys.stderr)
             return 4
-        nxt = []
-        for rid in pending:
-            h = state[rid]["history"][-1]
-            if h["qa"] == "tts-failed" or h["qa"].startswith("unexpected"):
-                nxt.append(rid)
-                continue
-            if args.no_asr:
-                state[rid]["ok"] = True
-                continue
-            asr = do_asr(S / "rec16" / f"{rid}.wav", rid)
-            state[rid]["asr"] = asr
-            if qa(rid, asr, h):
+        ok_tts = [r for r in pending if state[r]["history"][-1]["qa"] == "align-pending"]
+        print(f"attempt {attempt}: aligning {len(ok_tts)} recordings with ASR-A (faster-whisper large-v3-turbo)", flush=True)
+        res = align(ok_tts) if ok_tts else {}
+        nxt = [r for r in pending if r not in ok_tts]
+        for rid in ok_tts:
+            asr = res[rid]
+            j = state[rid]["job"]
+            ref = Q.norm_words(j["text"])
+            hyp = Q.norm_words(asr["text"])
+            w = wer(ref, hyp)
+            dur = A.read_wav(S / "rec16" / f"{rid}.wav").n_samples / A.SR
+            if j.get("family") == "CTX_BC":
+                good = 0.25 <= dur <= 2.0 and len(hyp) > 0
+            else:
+                good = hyp == ref
+            state[rid]["history"][-1]["qa"] = f"{'ok' if good else 'FAIL'} asrA_wer={w:.3f} dur={dur:.2f}"
+            state[rid]["asr"] = {"text": asr["text"], "words": asr["words"], "engine": "faster-whisper large-v3-turbo int8 CPU", "cut_candidates": asr.get("cut_candidates")}
+            if good:
                 state[rid]["ok"] = True
             else:
                 nxt.append(rid)
-            print(f"{rid} {h['qa']}", flush=True)
         pending = nxt
     out = []
     for rid, st in state.items():
@@ -328,10 +286,10 @@ def main() -> int:
             out.append(st["row"])
             continue
         j = st["job"]
-        row = {"render_id": rid, "role": j["role"], "text": j["text"], "voice_id": j["voice_id"], "ref_wav": j["ref"],
-               "ref_sha256": sha256_file(j["ref"]), "split": j["split"], "family": j.get("family"), "pair_id": j.get("pair_id"),
-               "prefix_words": j.get("prefix_words"), "seed_final": st["history"][-1].get("seed") if st["history"] else None,
-               "history": st["history"], "qa_ok": st["ok"]}
+        row = {"render_id": rid, "base_id": j["base_id"], "variant": j["variant"], "role": j["role"], "text": j["text"], "voice_id": j["voice_id"],
+               "ref_wav": j["ref"], "ref_sha256": sha256_file(j["ref"]), "split": j["split"], "family": j.get("family"), "pair_id": j.get("pair_id"),
+               "prefix_words": j.get("prefix_words"), "seed_final": st["history"][-1].get("seed") if st["history"] else None, "history": st["history"],
+               "qa_ok": st["ok"]}
         if (S / "raw24" / f"{rid}.wav").exists() and (S / "rec16" / f"{rid}.wav").exists():
             row["raw24_pcm_sha256"] = A.read_wav(S / "raw24" / f"{rid}.wav").pcm_sha256()
             r16 = A.read_wav(S / "rec16" / f"{rid}.wav")
@@ -344,7 +302,7 @@ def main() -> int:
     with open(rows_path, "w") as f:
         for r in done.values():
             f.write(json.dumps(r) + "\n")
-    print(f"done: {sum(1 for r in out if r['qa_ok'])}/{len(out)} renders passed QA", flush=True)
+    print(f"done: {sum(1 for r in out if r['qa_ok'])}/{len(out)} renders passed the ASR-A text pre-filter", flush=True)
     return 0 if all(r["qa_ok"] for r in out) else 5
 
 
