@@ -100,3 +100,29 @@ def test_sharded_merge_carries_records_and_same_verdict():
                                      resolved_recipe=None, case_shards=shards,
                                      _op_correctness=fake)
     assert v.passed and len(v.case_records) == 2 and sorted(seen) == ["a", "b"]
+
+
+def _guard(op, vars_, dtype, rms):
+    return ('AK_GUARD_BANDS_V1 ' + json.dumps({
+        "schema": "epyc.autokernel.guard_bands.v1", "op": op, "vars": vars_,
+        "output_dtype": dtype, "output_rms": rms, "views": [], "violations": []}))
+
+
+def test_guard_receipt_fills_output_dtype_and_rms_when_present():
+    # AKX-ALL-29.5 producer (AKX_GUARD_BANDS=1) prints one receipt per case on stderr
+    q4 = "type_a=q4_K,type_b=f32,m=16,n=1,k=256"
+    f16 = "type_a=f16,type_b=f32,m=16,n=1,k=256"
+    # stdout and stderr are concatenated by the gate: receipts trail the console text
+    suite = PASSING + _guard("MUL_MAT", q4, "f32", 1.25) + "\n"
+    # only the q4 case has a receipt; the f16 case must stay null, never inherit it
+    v = _gate(suite)
+    by = {r["params"]: r for r in v.case_records}
+    assert by[q4]["output_dtype"] == "f32" and by[q4]["output_rms"] == 1.25
+    assert by[f16]["output_dtype"] is None and by[f16]["output_rms"] is None
+
+
+def test_guard_receipt_garbage_or_absent_stays_null():
+    assert gates._guard_receipt_fields("nothing here") == {}
+    assert gates._guard_receipt_fields("AK_GUARD_BANDS_V1 {broken") == {}
+    got = gates._guard_receipt_fields(_guard("SCALE", "x", "f32", None))
+    assert got[("SCALE", "x")] == {"output_dtype": "f32", "output_rms": None}

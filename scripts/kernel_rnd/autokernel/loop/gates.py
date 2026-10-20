@@ -80,6 +80,31 @@ CASE_RECORD_LIMIT = 256
 _PARAM_TYPE_RE = re.compile(r"(?:^|,)(type(?:_[A-Za-z0-9]+)?)=([A-Za-z0-9_]+)")
 
 
+_GUARD_PREFIX = "AK_GUARD_BANDS_V1 "
+
+
+def _guard_receipt_fields(output: str) -> dict:
+    """(op, vars) -> {"output_dtype", "output_rms"} from the opt-in guard-band receipt
+    lines (AKX_GUARD_BANDS=1 producer). Empty when the build does not emit them."""
+    found = {}
+    for line in output.splitlines():
+        at = line.find(_GUARD_PREFIX)
+        if at < 0:
+            continue
+        try:
+            rec = json.loads(line[at + len(_GUARD_PREFIX):])
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and "op" in rec:
+            rms = rec.get("output_rms")
+            found[(rec["op"], rec.get("vars"))] = {
+                "output_dtype": rec.get("output_dtype") if isinstance(
+                    rec.get("output_dtype"), str) else None,
+                "output_rms": float(rms) if isinstance(rms, (int, float))
+                and not isinstance(rms, bool) else None}
+    return found
+
+
 def gate_case_records(output: str, backend: str, op: str,
                       *, limit: int = CASE_RECORD_LIMIT) -> "tuple | None":
     """AKX-ALL-29.4: a compact structured record per gated case, from console text the gate
@@ -87,15 +112,16 @@ def gate_case_records(output: str, backend: str, op: str,
     into the gate, and any parse trouble yields None (never raises, never changes a result).
 
     Fields (all but op/params/status/passed nullable): `types` (the `type*=` entries of
-    the case params, e.g. {"type_a": "q4_K"}), `output_dtype` (always null: the instrument
-    does not print it and this adds no computation), `metric_id`, `observed`, `tolerance`
+    the case params, e.g. {"type_a": "q4_K"}), `output_dtype` (null unless the build's opt-in
+    AKX_GUARD_BANDS receipt carries it), `metric_id`, `observed`, `tolerance`
     (the `AK_REF_V1` values, null when the case carried no receipt), `fraction_of_tolerance`,
-    `oracle_id`, `output_rms` (null: the harness does not compute it).
+    `oracle_id`, `output_rms` (same: null unless the receipt carries it).
     """
     try:
         from ..execution import t0_provider
         parsed = t0_provider.parse_backend_ops_console(output)
         wanted = backend_ops_selector(op).split(",")
+        extra = _guard_receipt_fields(output)
         rows = []
         for frame in parsed.backends:
             if frame.name != backend or frame.skipped:
@@ -104,10 +130,11 @@ def gate_case_records(output: str, backend: str, op: str,
                 if case.op not in wanted:
                     continue
                 ref = case.reference
+                got = extra.get((case.op, case.params)) or {}
                 rows.append({
                     "op": case.op, "params": case.params[:256],
                     "types": dict(_PARAM_TYPE_RE.findall(case.params)) or None,
-                    "output_dtype": None, "status": case.status,
+                    "output_dtype": got.get("output_dtype"), "status": case.status,
                     "passed": case.passed,
                     "metric_id": ref.metric_id if ref else None,
                     "observed": ref.observed if ref else None,
@@ -115,7 +142,7 @@ def gate_case_records(output: str, backend: str, op: str,
                     "fraction_of_tolerance": (ref.observed / ref.tolerance
                                               if ref and ref.tolerance else None),
                     "oracle_id": ref.oracle_id if ref else None,
-                    "output_rms": None})
+                    "output_rms": got.get("output_rms")})
         rows.sort(key=lambda r: (r["passed"], -(r["fraction_of_tolerance"] or 0.0)))
         return tuple(rows[:limit])
     except Exception:  # noqa: BLE001 - observation must never alter a gate outcome
