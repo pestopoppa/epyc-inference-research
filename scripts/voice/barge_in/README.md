@@ -35,4 +35,5 @@ t_stop within 0.15 s, t_resp within 0.30 s (32 ms window + 30 ms pad + onset lag
 
 ## Pending / external
 * FDB v1.5 stimuli: FETCHED 2026-10-20 (public Drive folder, gdown) to `/mnt/raid0/llm/data/fdb-v1.5-20261020`; zip sha256 in `artifacts/cs48_barge_in_conformance_20261020/fdb_v15_zip_sha256.txt`; `bi_manifest.scenarios_from_fdb15` loads all 498 samples.
-* CS-45 manifest rows: `scenarios_from_cs45` documents the keys it needs; wire the real schema when CS-45 is committed.
+* CS-45 manifest: bound (`bi_manifest.scenarios_from_cs45(clips_dir, out_dir)`; stereo clips from `tt_materialize.py`, PCM-SHA-256 re-checked with `tt_audio`, ch0 user only; label `backchannel` rows plus any row with an explicit `overlap_class`). The synthesized stratum has no talking_to_others / background_speech rows by CS-45 contract.
+* Pins resolve repo-relative (`scripts/voice/turn_taking`, `data/turn-taking-cs45-v1`); `TT_PINS_DIR` / `CS45_DATA` only override. Final suite: 30 passed with both unset and an audit hook proving zero opens under `worktrees/cs45*`.

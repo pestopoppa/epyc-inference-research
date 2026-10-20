@@ -1,5 +1,5 @@
 observed silero t_stop err 0.07599999999999996 t_resp err 0.11199999999999999 hd {'ok': True, 'silero_minus_eventlog_s': 0.088, 'tolerance_s': 0.2}
-............real-clock t_stop_ms 300.0 chain_ms 0.035
+............real-clock t_stop_ms 300.0 chain_ms 0.049
 ..............live asr words 55 {'tor': 1, 'latency_s': 0.0} {'pause_handling': {'average_take_turn': 1.0}, 'smooth_turn_taking': {'average_take_turn': 1.0, 'average_latency_s': 0.0}}
 PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_known_answer_interruption
 PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_stop_grid[0.1]
@@ -29,6 +29,8 @@ PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_orchestrator_so
 PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_fdb_v1_adapter_matches_unmodified_scripts
 PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_live_pinned_whisper_cpp_wiring
 PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_manifest_adapters
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_cs45_manifest_binding
 PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_no_cloud_judge_no_network_surface
-29 passed in 28.76s
+30 passed in 29.16s
+AUDIT cs45-worktree opens: 0 []
 rc=0

@@ -390,15 +390,34 @@ def test_manifest_adapters(tmp_path, scen):
     (sd / "metadata.json").write_text(json.dumps({"context_text": "x", "current_turn_text": "y", "timestamps": [0.1, 3.3]}))
     got = M.scenarios_from_fdb15(tmp_path / "fdb15")
     assert got[0]["overlap_class"] == "talking_to_others" and got[0]["user_speech_end_s"] == 3.3 and "clean_stimulus_wav" in got[0]
-    row = {"id": "c45-1", "overlap_class": "backchannel", "user_wav": scen["backchannel-01"]["stimulus_wav"],
-           "user_speech_start_s": 0.1, "user_speech_end_s": 0.9,
-           "pcm_sha256": scen["backchannel-01"]["stimulus_pcm_sha256"]}
-    mf = tmp_path / "m.jsonl"
-    mf.write_text(json.dumps(row) + "\n")
-    assert M.scenarios_from_cs45(mf)[0]["id"] == "c45-1"
-    mf.write_text(json.dumps(dict(row, pcm_sha256="0" * 64)) + "\n")
+
+
+def test_cs45_manifest_binding(tmp_path):
+    """Real CS-45 schema: materialise two backchannel pairs with CS-45's own tool, bind, run one through the harness."""
+    import subprocess, sys, bi_manifest as M, bi_vad
+    tt = bi_vad.pins_dir()
+    clips = tmp_path / "clips"
+    subprocess.run([sys.executable, "-I", str(tt / "tt_materialize.py"), "--corpus", str(M.corpus_dir()), "--out", str(clips),
+                    "--pairs", "tt1-p0081,tt1-p0082"], check=True, capture_output=True)
+    ids = {p.stem for p in clips.glob("*.wav")}
+    scs = M.scenarios_from_cs45(clips, tmp_path / "stim", clip_ids=ids)
+    assert scs and all(s["overlap_class"] == "backchannel" and s["source"]["stratum"] == "synthesized" for s in scs)
+    sc = scs[0]
+    assert sc["stimulus_offset_s"] == 0.0 and sc["user_speech_end_s"] > sc["user_speech_start_s"]
+    run, _ = record(tmp_path / "r", sc, [])
+    s = bi_score.score_run(tmp_path / "r", cache=tmp_path / "c")
+    assert s["eventlog"]["label"] == "continue" and s["scenario"]["id"] == sc["id"]
+    # altered materialised clip -> refused, not skipped
+    import numpy as np
+    ta = bi_vad.tt("tt_audio")
+    wav = clips / f"{sc['id']}.wav"
+    pcm = ta.read_wav(wav)
+    pcm.samples[100, 0] ^= 1
+    ta.write_wav(wav, pcm)
     with pytest.raises(M.ManifestRefused, match="PCM-SHA-256"):
-        M.scenarios_from_cs45(mf)
+        M.scenarios_from_cs45(clips, tmp_path / "stim2", clip_ids=ids)
+    with pytest.raises(M.ManifestRefused, match="missing"):
+        M.scenarios_from_cs45(tmp_path / "nowhere", tmp_path / "stim3", clip_ids=ids)
 
 
 def test_no_cloud_judge_no_network_surface(tmp_path, scen, cache, monkeypatch):

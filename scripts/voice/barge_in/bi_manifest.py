@@ -54,24 +54,57 @@ def scenarios_from_fdb15(root: str | Path, *, stimulus_offset_s: float = 3.0, li
     return out
 
 
-def scenarios_from_cs45(manifest_jsonl: str | Path, *, stimulus_offset_s: float = 3.0) -> list[dict]:
-    """Rows of the CS-45 manifest that carry an overlap class. Each row must provide: id, overlap_class, user_wav,
-    user_speech_start_s, user_speech_end_s, pcm_sha256 (of user_wav's int16 samples); optional clean_user_wav. The
-    PCM-SHA-256 binding is enforced here (corpus rule): a row whose audio hash differs is refused, never skipped."""
-    out = []
-    for line in Path(manifest_jsonl).read_text().splitlines():
-        if not line.strip():
+def corpus_dir() -> Path:
+    import bi_fdb
+    return bi_fdb.cs45_data()
+
+
+def scenarios_from_cs45(clips_dir: str | Path, out_dir: str | Path, *, corpus: str | Path | None = None,
+                        stimulus_offset_s: float = 0.0, strata: tuple[str, ...] | None = None, clip_ids: set[str] | None = None) -> list[dict]:
+    """Overlap scenarios from the real CS-45 manifest (``manifest/clips.jsonl`` + ``human_recorded.jsonl``).
+
+    Admitted rows: label == "backchannel" (the user speaks a short acknowledgement while the assistant holds the floor;
+    overlap class ``backchannel``) and any row carrying an explicit ``overlap_class`` in {user_interruption, backchannel,
+    talking_to_others, background_speech} (the human-recorded stratum / FDB-style material; the synthesized stratum has
+    no talking_to_others / background_speech rows by contract). Other labels (complete / incomplete / wait) are
+    turn-end clips for CS-47, not overlap scenarios, and are skipped.
+
+    Audio: the materialised stereo clip ``<clips_dir>/<clip_id>.wav`` (ch0 user, ch1 assistant; produce with
+    ``scripts/voice/turn_taking/tt_materialize.py``). Its decoded PCM-SHA-256 is re-checked against the manifest row with
+    CS-45's own ``tt_audio`` (mismatch -> ManifestRefused, never skipped). Only ch0 is the stimulus: the assistant channel
+    is the recorded context and is replaced by the cascade under test. Clip time is kept (offset 0.0), so the user
+    window is the row's ``gold.user_speech_start_s/end_s`` and the cascade has been speaking since t0 as in the clip.
+    The clean condition is digital silence of the same length (no user at all)."""
+    import bi_vad
+
+    ta = bi_vad.tt("tt_audio")
+    D = Path(corpus) if corpus else corpus_dir()
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for f in ("clips.jsonl", "human_recorded.jsonl"):
+        p = D / "manifest" / f
+        rows += [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+    res = []
+    for r in rows:
+        cls = r.get("overlap_class") or ("backchannel" if r["label"] == "backchannel" else None)
+        if cls not in CLASSES or (strata and r["stratum"] not in strata) or (clip_ids is not None and r["clip_id"] not in clip_ids):
             continue
-        r = json.loads(line)
-        if r.get("overlap_class") not in CLASSES:
-            continue
-        x, sr = A.read_wav(r["user_wav"])
-        if A.pcm_sha256(x) != r["pcm_sha256"]:
-            raise ManifestRefused(f"{r['id']}: PCM-SHA-256 {A.pcm_sha256(x)} != manifest {r['pcm_sha256']}")
-        sc = {"id": r["id"], "overlap_class": r["overlap_class"], "stimulus_wav": r["user_wav"], "stimulus_offset_s": stimulus_offset_s,
-              "user_speech_start_s": r["user_speech_start_s"], "user_speech_end_s": r["user_speech_end_s"],
-              "stimulus_pcm_sha256": r["pcm_sha256"], "source": {"set": "cs45-manifest"}}
-        if r.get("clean_user_wav"):
-            sc["clean_stimulus_wav"] = r["clean_user_wav"]
-        out.append(sc)
-    return out
+        wav = Path(clips_dir) / f"{r['clip_id']}.wav"
+        if not wav.exists():
+            raise ManifestRefused(f"{r['clip_id']}: materialised clip {wav} missing (run tt_materialize.py)")
+        pcm = ta.read_wav(wav)
+        if pcm.pcm_sha256() != r["pcm"]["pcm_sha256"]:
+            raise ManifestRefused(f"{r['clip_id']}: PCM-SHA-256 {pcm.pcm_sha256()} != manifest {r['pcm']['pcm_sha256']}")
+        user = pcm.samples[:, 0].astype("<i2")
+        if pcm.sample_rate != A.SR:
+            raise ManifestRefused(f"{r['clip_id']}: sample rate {pcm.sample_rate}")
+        sp = out / f"{r['clip_id']}.user.wav"
+        A.write_wav(sp, user)
+        g = r["gold"]
+        res.append({"id": r["clip_id"], "overlap_class": cls, "stimulus_wav": str(sp), "stimulus_offset_s": stimulus_offset_s,
+                    "user_speech_start_s": g["user_speech_start_s"], "user_speech_end_s": g["user_speech_end_s"],
+                    "stimulus_pcm_sha256": A.pcm_sha256(user),
+                    "source": {"set": "cs45-manifest", "stratum": r["stratum"], "split": r["split"], "label": r["label"],
+                               "pair_id": r.get("pair_id"), "manifest_pcm_sha256": r["pcm"]["pcm_sha256"]}})
+    return res
