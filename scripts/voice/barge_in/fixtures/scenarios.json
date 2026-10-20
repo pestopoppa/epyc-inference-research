@@ -1,0 +1,64 @@
+{
+ "agent_clip": [
+  "1188-133604-0008",
+  0.45,
+  18.0
+ ],
+ "annotations": {
+  "backchannel-01": {
+   "stimulus_pcm_sha256": "44c324eac29ee8c33273c9a9ad27bcdfb6aedc75cf2df4d22524a8c9ab516f67",
+   "user_speech_end_s": 0.894,
+   "user_speech_start_s": 0.098
+  },
+  "background-speech-01": {
+   "stimulus_pcm_sha256": "650fc0685be9a545dfa0c0a0ee4d5b222e9c1318a33040c5aade7b6e4ddc40a8",
+   "user_speech_end_s": 2.942,
+   "user_speech_start_s": 0.066
+  },
+  "interruption-01": {
+   "stimulus_pcm_sha256": "19814cdc96141de29f1eaf34475fd859c61bf2e821a27d7240f7b6be96da9df9",
+   "user_speech_end_s": 3.998,
+   "user_speech_start_s": 0.13
+  },
+  "talking-to-others-01": {
+   "stimulus_pcm_sha256": "3e8ba0c6a0308b5b96cc23548d3f8207e0ee2ac2cdd2b463d66143cc6c2e7339",
+   "user_speech_end_s": 3.358,
+   "user_speech_start_s": 0.098
+  }
+ },
+ "schema": "bi-fixtures-v1",
+ "specs": [
+  [
+   "interruption-01",
+   "user_interruption",
+   "1089-134686-0010",
+   0.4,
+   4.41,
+   1.0
+  ],
+  [
+   "backchannel-01",
+   "backchannel",
+   "121-121726-0006",
+   0.4,
+   1.4,
+   1.0
+  ],
+  [
+   "talking-to-others-01",
+   "talking_to_others",
+   "121-121726-0011",
+   0.5,
+   4.04,
+   0.7
+  ],
+  [
+   "background-speech-01",
+   "background_speech",
+   "1320-122612-0014",
+   0.3,
+   3.3,
+   0.25
+  ]
+ ]
+}

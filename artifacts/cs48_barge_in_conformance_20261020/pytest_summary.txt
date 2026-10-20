@@ -1,0 +1,34 @@
+observed silero t_stop err 0.07599999999999996 t_resp err 0.11199999999999999 hd {'ok': True, 'silero_minus_eventlog_s': 0.088, 'tolerance_s': 0.2}
+............real-clock t_stop_ms 300.0 chain_ms 0.035
+..............live asr words 55 {'tor': 1, 'latency_s': 0.0} {'pause_handling': {'average_take_turn': 1.0}, 'smooth_turn_taking': {'average_take_turn': 1.0, 'average_latency_s': 0.0}}
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_known_answer_interruption
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_stop_grid[0.1]
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_stop_grid[0.25]
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_stop_grid[0.7]
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_stop_grid[1.2]
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_resume_label_and_timing_rejection
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_no_stop_classes[backchannel-01]
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_no_stop_classes[talking-to-others-01]
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_no_stop_classes[background-speech-01]
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_late_cancel_is_queue_only
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_both_gap_readings_differ_where_they_should
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_24k_model_rate_and_clean_baseline
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_real_clock_realtime_player
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_baseline_good_is_accepted
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_mutation_altered_clip
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_mutation_shifted_output_audio
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_mutation_shifted_event_clock
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_mutation_missing_and_silent_output
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_mutation_clean_channel
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_mutation_duplicated_channel
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_mutation_event_log_defects
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_mutation_wrong_silero_hash_refused
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_mutation_wrong_fdb_base_refused
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_replay_bit_identical
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_orchestrator_source_unmodified_and_recorded
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_fdb_v1_adapter_matches_unmodified_scripts
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_live_pinned_whisper_cpp_wiring
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_manifest_adapters
+PASSED scripts/voice/barge_in/tests/test_bi_conformance.py::test_no_cloud_judge_no_network_surface
+29 passed in 28.76s
+rc=0

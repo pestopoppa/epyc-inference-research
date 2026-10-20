@@ -1,0 +1,192 @@
+{
+ "clean_eventlog": {
+  "chain_fired": false,
+  "label": "continue",
+  "model_stop_ns": null,
+  "t_stop_ms": null
+ },
+ "eventlog": {
+  "cancel_chain": {
+   "cancel_call_ns": 3530000000,
+   "chain_latency_ms": 0.0,
+   "hook_end_ns": {
+    "generation": 3530000000,
+    "orchestrator": 3530000000,
+    "queue": 3530000000,
+    "vocoder": 3530000000
+   },
+   "hook_ns": {
+    "generation": 3530000000,
+    "orchestrator": 3530000000,
+    "queue": 3530000000,
+    "vocoder": 3530000000
+   },
+   "late_cancel": false,
+   "order_ok": true,
+   "raised": null
+  },
+  "chain_fired": true,
+  "label": "silent",
+  "label_basis": "event-log deterministic (cancel chain fired / playback resumed / new response generated); NON-COMPARABLE to FDB GPT-4o Respond/Resume labels",
+  "model_restart_ns": null,
+  "model_stop_ns": 3530000000,
+  "new_response_generated": false,
+  "playback_resumed": false,
+  "t_resp_ms": null,
+  "t_stop_ms": 400.0,
+  "user_speech_end_ns": 6998000000,
+  "user_speech_start_ns": 3130000000
+ },
+ "fdb_timing": {
+  "clean_baseline_code_reading": {
+   "model_segments": [
+    [
+     0.098,
+     6.91
+    ],
+    [
+     7.81,
+     9.534
+    ],
+    [
+     10.434,
+     15.102
+    ],
+    [
+     15.778,
+     17.598
+    ]
+   ],
+   "t_resp_s": [],
+   "t_stop_s": [],
+   "user_segments": []
+  },
+  "note": "Silero VAD only; no GPT-4o behavior label, no gpt-4-turbo rating",
+  "readings": {
+   "code": {
+    "latency_resp_list": [],
+    "latency_stop_list": [
+     [
+      3.138,
+      3.614
+     ]
+    ],
+    "model_merge_gap_s": 0.5,
+    "model_segments": [
+     [
+      0.098,
+      3.614
+     ]
+    ],
+    "official_process_folder_matches": true,
+    "t_resp_s": [],
+    "t_stop_s": [
+     0.476
+    ],
+    "user_merge_gap_s": 0.6,
+    "user_segments": [
+     [
+      3.138,
+      6.974
+     ]
+    ]
+   },
+   "comment": {
+    "latency_resp_list": [],
+    "latency_stop_list": [
+     [
+      3.138,
+      3.614
+     ]
+    ],
+    "model_merge_gap_s": 0.05,
+    "model_segments": [
+     [
+      0.098,
+      1.118
+     ],
+     [
+      1.602,
+      3.614
+     ]
+    ],
+    "t_resp_s": [],
+    "t_stop_s": [
+     0.476
+    ],
+    "user_merge_gap_s": 0.3,
+    "user_segments": [
+     [
+      3.138,
+      6.974
+     ]
+    ]
+   }
+  }
+ },
+ "humdial": {
+  "crosscheck": {
+   "ok": true,
+   "reason": "no model audio after user end on both"
+  },
+  "definition": "first_response_delay = first model audio start at/after user segment end - user segment end; timing_rejection = a new response's audio started before the user segment end",
+  "first_model_audio_after_user_end_ns": null,
+  "first_response_delay_ms": null,
+  "silero_first_model_segment_start_after_user_end_s": null,
+  "timing_rejection": false,
+  "timing_rejection_audio_ns": null
+ },
+ "integrity": {
+  "clean": {
+   "cancel_chains": 0,
+   "events": 94,
+   "ok": true
+  },
+  "n_samples": 296800,
+  "ok": true,
+  "overlap": {
+   "cancel_chains": 1,
+   "events": 49,
+   "ok": true
+  },
+  "sr": 16000
+ },
+ "measurement_era": [
+  {
+   "change": "FDB get_timing.py runs on the CS-45 patched copy (ME-FDB-1/2: no torch/torchaudio/torch.hub; pinned ONNX Silero); merge gaps passed explicitly per reading instead of editing module constants",
+   "id": "ME-CS48-1"
+  },
+  {
+   "change": "FDB v1 word timestamps from pinned whisper.cpp (CS-45 ME-FDB-4) replace CrisperWhisper/NeMo; FDB eval_pause_handling.py / eval_smooth_turn_taking.py run UNMODIFIED",
+   "id": "ME-CS48-2"
+  },
+  {
+   "change": "t_stop/t_resp Respond/Resume labels are event-log deterministic, NOT GPT-4o labels; no gpt-4-turbo interruption rating; values are not comparable to published FDB numbers",
+   "id": "ME-CS48-3"
+  }
+ ],
+ "pins": {
+  "fdb_commit": "3e799c45a045256f47d5f1c9cda90157e2d2ec9e",
+  "orchestrator_voice_sha256": {
+   "__init__.py": "16c841aff5dfdf1a9b311e26bde859dae6effad6b7a4473e23a99a3ae55be6cb",
+   "cascade.py": "f65d05ae14187a00eb9cf39e98e40c3d312d902800b147c02deda3c528e66063",
+   "contracts.py": "52b90d6e6ffb1600da13522bcea352c6823005a947c230f5f2b426d4d7f53b1e",
+   "controller.py": "edf7853e5a75dfe0fbfaae24a8d50965aa01d723cd03f4f81b3c73450a034f68",
+   "http_clients.py": "fd2f4486b05917e867ac3610a94707664994c3b6b9c635b849241e0c35d8efb1"
+  },
+  "silero_sha256": "4cbf549b8326f60f80f2536d9eefeb450a9abe83365a098031c89719f1be17d2"
+ },
+ "run_sha256": {
+  "clean_events.jsonl": "6fcf71c796d74fa1dc3cbbe44fd375a50c7cc4bc45e2848419ef7f3669aff3df",
+  "clean_input.wav": "ec3965ce508ee501266bf5d18d077acfd36c10529ad5dc2466d4dd17a060a4bd",
+  "clean_output.wav": "b81f96d8abb70746bb7fd65f9773d7172b317a7baf21ae7153ad00c4fadab53a",
+  "events.jsonl": "466dff603c0e772a427c0261af67ce9493008e258d107e95b23e4dafafa1999c",
+  "input.wav": "4adbdce760f5dd967dd8f23f1d7ad0252b665f803b33b36228b44a7926af5452",
+  "output.wav": "b906c4471e2cbf07605f5921513915e878ddd406680d62172fc78595ac8ca5ca"
+ },
+ "scenario": {
+  "id": "interruption-01",
+  "overlap_class": "user_interruption"
+ },
+ "schema": "bi-score-v2"
+}
