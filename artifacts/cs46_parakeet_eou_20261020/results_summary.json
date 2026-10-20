@@ -1,0 +1,588 @@
+{
+ "task": "CS-46",
+ "date": "2026-10-20",
+ "provenance": {
+  "community_onnx": {
+   "repo": "ysdede/parakeet-realtime-eou-120m-v1-onnx",
+   "revision": "6d6be8e9113b4aa8ae7b4d5dfb655795c084d0c6",
+   "sha256": {
+    "decoder_joint-model.int8.onnx": "5464333fa933bf2c60952c08f01f5b5dd3fe3176e1c70d3eeddb48412514a0f9",
+    "decoder_joint-model.onnx": "50d355bc769420c506b2268ca3abe34f63dcaeb0ce0fdab80034248ea2a0ef88",
+    "encoder-model.onnx": "45c8e0b973fbd7e523308d058336bc1054ca05a66b215b5fa629ec17250bf7b8"
+   }
+  },
+  "nemo_checkpoint": {
+   "repo": "nvidia/parakeet_realtime_eou_120m-v1",
+   "hf_commit": "a7e2b4629593dce0ec19f600e00e9904353fda2d",
+   "file": "parakeet_realtime_eou_120m-v1.nemo",
+   "sha256": "6603a22a53b7c1a4bac4736cb24628fb568a7102ba931a28c799e2e72f109893"
+  },
+  "self_exported_graphs_not_in_git": {
+   "decoder_joint_self_fp32.onnx": "cc1482c8176baff67bd460e50e96ee604fd65ede4aee2a93040457a17b7f51ae",
+   "decoder_joint_self_int8.onnx": "f9f5bb7deccc00767a15bd22e2a6392f5b8f8f2f4d7009fb3cf4ba6009107e52",
+   "encoder_stream_160ms.onnx": "1cc0a129688e53440353013a19a57c2e49d78287a004d62d3726cf5b3e7b19c5",
+   "encoder_stream_80ms.onnx": "4e07e483857cc7bf4ae5f026b2cabf876dfd791ba43ac425de9e1137e68316b3"
+  },
+  "parakeet_rs": {
+   "clone": "/mnt/raid0/llm/tmp/dive-w4-parakeet-rs/repo",
+   "head": "6ad1501898842fda76f86f7bcad6b361daf5df9e",
+   "note": "the dispatch text named 2b08bdbee70052a5bf36f898e8bf510db35c3e8e, which does not exist in that clone; the CS-46 task text and the clone say 6ad1501"
+  },
+  "venvs": {
+   "arm": "onnxruntime 1.31.0, numpy 2.5.4, soundfile 0.14.0, scipy 1.18.1 (python 3.12.14)",
+   "nemo": "nemo_toolkit 3.0.0, torch 2.14.1+cpu (cuda unavailable), python 3.12.14"
+  },
+  "cs45_manifest": "data/turn-taking-cs45-v1 @ research de8763541 (clips materialised by tt_materialize.py, PCM-SHA-256 verified)"
+ },
+ "parity_summary": {
+  "vs_nemo_eval_frontend": {
+   "c160_full__exact__fp32_fp32": {
+    "n": 20,
+    "step_parity": 1,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c160_full__exact__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 0,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c160_full__exact__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 1,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c160_full__exact__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 0,
+    "token_parity": 19,
+    "eou_step_parity": 14,
+    "mean_edit_distance": 0.15
+   },
+   "c160_full__nemo_va__fp32_fp32": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c160_full__nemo_va__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 14,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c160_full__nemo_va__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c160_full__nemo_va__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 10,
+    "token_parity": 19,
+    "eou_step_parity": 15,
+    "mean_edit_distance": 0.15
+   },
+   "c160_none__exact__fp32_fp32": {
+    "n": 20,
+    "step_parity": 14,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c160_none__exact__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 11,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c160_none__exact__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 14,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c160_none__exact__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 10,
+    "token_parity": 19,
+    "eou_step_parity": 14,
+    "mean_edit_distance": 0.15
+   },
+   "c160_none__nemo_va__fp32_fp32": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c160_none__nemo_va__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 14,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c160_none__nemo_va__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c160_none__nemo_va__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 10,
+    "token_parity": 19,
+    "eou_step_parity": 15,
+    "mean_edit_distance": 0.15
+   },
+   "c80_full__exact__fp32_fp32": {
+    "n": 20,
+    "step_parity": 2,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c80_full__exact__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 1,
+    "token_parity": 18,
+    "eou_step_parity": 18,
+    "mean_edit_distance": 0.15
+   },
+   "c80_full__exact__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 2,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c80_full__exact__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 1,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.05
+   },
+   "c80_full__nemo_va__fp32_fp32": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c80_full__nemo_va__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 11,
+    "token_parity": 18,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c80_full__nemo_va__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c80_full__nemo_va__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 9,
+    "token_parity": 19,
+    "eou_step_parity": 16,
+    "mean_edit_distance": 0.05
+   },
+   "c80_none__exact__fp32_fp32": {
+    "n": 20,
+    "step_parity": 17,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c80_none__exact__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 10,
+    "token_parity": 18,
+    "eou_step_parity": 18,
+    "mean_edit_distance": 0.15
+   },
+   "c80_none__exact__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 17,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c80_none__exact__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 11,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.05
+   },
+   "c80_none__nemo_va__fp32_fp32": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c80_none__nemo_va__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 11,
+    "token_parity": 18,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c80_none__nemo_va__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c80_none__nemo_va__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 9,
+    "token_parity": 19,
+    "eou_step_parity": 16,
+    "mean_edit_distance": 0.05
+   }
+  },
+  "vs_nemo_shipped_frontend": {
+   "c160_full__exact__fp32_fp32": {
+    "n": 20,
+    "step_parity": 1,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c160_full__exact__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 0,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c160_full__exact__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 1,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c160_full__exact__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 0,
+    "token_parity": 19,
+    "eou_step_parity": 14,
+    "mean_edit_distance": 0.15
+   },
+   "c160_full__nemo_va__fp32_fp32": {
+    "n": 20,
+    "step_parity": 18,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c160_full__nemo_va__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 12,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c160_full__nemo_va__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 18,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c160_full__nemo_va__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 8,
+    "token_parity": 19,
+    "eou_step_parity": 15,
+    "mean_edit_distance": 0.15
+   },
+   "c160_none__exact__fp32_fp32": {
+    "n": 20,
+    "step_parity": 17,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c160_none__exact__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 14,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c160_none__exact__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 17,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c160_none__exact__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 9,
+    "token_parity": 19,
+    "eou_step_parity": 14,
+    "mean_edit_distance": 0.15
+   },
+   "c160_none__nemo_va__fp32_fp32": {
+    "n": 20,
+    "step_parity": 17,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c160_none__nemo_va__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 13,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c160_none__nemo_va__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 17,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c160_none__nemo_va__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 9,
+    "token_parity": 19,
+    "eou_step_parity": 15,
+    "mean_edit_distance": 0.15
+   },
+   "c80_full__exact__fp32_fp32": {
+    "n": 20,
+    "step_parity": 2,
+    "token_parity": 20,
+    "eou_step_parity": 18,
+    "mean_edit_distance": 0.0
+   },
+   "c80_full__exact__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 1,
+    "token_parity": 18,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c80_full__exact__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 2,
+    "token_parity": 20,
+    "eou_step_parity": 18,
+    "mean_edit_distance": 0.0
+   },
+   "c80_full__exact__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 1,
+    "token_parity": 19,
+    "eou_step_parity": 16,
+    "mean_edit_distance": 0.05
+   },
+   "c80_full__nemo_va__fp32_fp32": {
+    "n": 20,
+    "step_parity": 18,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c80_full__nemo_va__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 12,
+    "token_parity": 18,
+    "eou_step_parity": 18,
+    "mean_edit_distance": 0.15
+   },
+   "c80_full__nemo_va__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 18,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c80_full__nemo_va__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 11,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.05
+   },
+   "c80_none__exact__fp32_fp32": {
+    "n": 20,
+    "step_parity": 17,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c80_none__exact__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 10,
+    "token_parity": 18,
+    "eou_step_parity": 18,
+    "mean_edit_distance": 0.15
+   },
+   "c80_none__exact__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 17,
+    "token_parity": 20,
+    "eou_step_parity": 19,
+    "mean_edit_distance": 0.0
+   },
+   "c80_none__exact__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 11,
+    "token_parity": 19,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.05
+   },
+   "c80_none__nemo_va__fp32_fp32": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c80_none__nemo_va__fp32_int8dec": {
+    "n": 20,
+    "step_parity": 11,
+    "token_parity": 18,
+    "eou_step_parity": 17,
+    "mean_edit_distance": 0.15
+   },
+   "c80_none__nemo_va__fp32_selfdec": {
+    "n": 20,
+    "step_parity": 20,
+    "token_parity": 20,
+    "eou_step_parity": 20,
+    "mean_edit_distance": 0.0
+   },
+   "c80_none__nemo_va__fp32_selfdec_int8": {
+    "n": 20,
+    "step_parity": 9,
+    "token_parity": 19,
+    "eou_step_parity": 16,
+    "mean_edit_distance": 0.05
+   }
+  }
+ },
+ "feature_diffs": {
+  "c160_offline_slaney": {
+   "clips": 20,
+   "max_abs_over_clips": 0.0002346038818359375,
+   "mean_of_mean_abs": 2.821836503130726e-07,
+   "frames_equal_all": true
+  },
+  "c160_offline_htk": {
+   "clips": 20,
+   "max_abs_over_clips": 14.30555534362793,
+   "mean_of_mean_abs": 0.35748927742242814,
+   "frames_equal_all": true
+  },
+  "c160_rolling_buffer_nemo_va_vs_NeMo_eval_max_abs": 0.00022983551025390625,
+  "c160_rolling_buffer_nemo_va_vs_NeMo_shipped_dithered": {
+   "max_abs_over_clips": 0.2859983444213867,
+   "mean_of_mean_abs": 0.007572293770499528
+  },
+  "c80_offline_slaney": {
+   "clips": 20,
+   "max_abs_over_clips": 0.0002346038818359375,
+   "mean_of_mean_abs": 2.821836503130726e-07,
+   "frames_equal_all": true
+  },
+  "c80_offline_htk": {
+   "clips": 20,
+   "max_abs_over_clips": 14.30555534362793,
+   "mean_of_mean_abs": 0.35748927742242814,
+   "frames_equal_all": true
+  },
+  "c80_rolling_buffer_nemo_va_vs_NeMo_eval_max_abs": 0.00022983551025390625,
+  "c80_rolling_buffer_nemo_va_vs_NeMo_shipped_dithered": {
+   "max_abs_over_clips": 0.3878307342529297,
+   "mean_of_mean_abs": 0.007779233949258923
+  }
+ },
+ "nemo_reference_determinism": {
+  "c160_full_nemo_shipped_vs_nemo_eval_token_streams_differ": "0/20",
+  "c160_none_nemo_shipped_vs_nemo_eval_token_streams_differ": "0/20",
+  "c80_full_nemo_shipped_vs_nemo_eval_token_streams_differ": "0/20",
+  "c80_none_nemo_shipped_vs_nemo_eval_token_streams_differ": "0/20",
+  "c160_none_shipped_vs_seeded_rerun_token_streams_differ": "0/20",
+  "service_preprocessor_training_as_shipped": true,
+  "service_preprocessor_dither": 1e-05,
+  "asr_model_preprocessor_normalize": "NA",
+  "nemo_version": "3.0.0"
+ },
+ "parakeet_rs_vs_nemo": {
+  "eval_reference": {
+   "n": 20,
+   "eou_both": 15,
+   "eou_call_equal": 10,
+   "norm_text_equal": 14,
+   "r0_eou_marker_clips": 0,
+   "deltas": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "shipped_reference": {
+   "n": 20,
+   "eou_both": 15,
+   "eou_call_equal": 10,
+   "norm_text_equal": 14,
+   "r0_eou_marker_clips": 0,
+   "deltas": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1
+   ]
+  }
+ }
+}

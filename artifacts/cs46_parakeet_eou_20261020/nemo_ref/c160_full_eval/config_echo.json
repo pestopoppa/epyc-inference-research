@@ -1,0 +1,25 @@
+{
+ "nemo_version": "3.0.0",
+ "torch": "2.14.1+cpu",
+ "args": {
+  "nemo": "/mnt/raid0/llm/tmp/cs-46-20261020/nemo/parakeet_realtime_eou_120m-v1.nemo",
+  "clips": "/mnt/raid0/llm/tmp/cs-46-20261020/clips.jsonl",
+  "out": "/mnt/raid0/llm/tmp/cs-46-20261020/nemo_ref/c160_full_eval",
+  "chunk_ms": "160",
+  "reset": "full",
+  "threads": "8",
+  "frontend_mode": "eval"
+ },
+ "streaming_cfg": "CacheAwareStreamingConfig(chunk_size=[9, 16], shift_size=[9, 16], cache_drop_size=0, last_channel_cache_size=70, valid_out_len=2, pre_encode_cache_size=[0, 9], drop_extra_pre_encoded=2, last_channel_num=0, last_time_num=0)",
+ "att_context_size": [
+  70,
+  1
+ ],
+ "buffer_size_in_secs": 0.25,
+ "tokens_per_frame": 2,
+ "preprocessor_dither_training_only": 1e-05,
+ "preprocessor_normalize": "NA",
+ "service_preprocessor_training_as_shipped": true,
+ "service_preprocessor_dither": 1e-05,
+ "frontend_mode": "eval"
+}

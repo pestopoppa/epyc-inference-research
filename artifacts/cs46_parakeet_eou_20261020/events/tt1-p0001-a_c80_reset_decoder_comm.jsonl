@@ -1,0 +1,23 @@
+{"config": {"chunk_ms": 80, "reset": "decoder", "hold_s": 0.0, "max_symbols": 10, "frontend": "exact", "mel": "slaney", "encoder": "/mnt/raid0/llm/tmp/cs-46-20261020/export/encoder_stream_80ms.onnx", "decoder_joint": "/mnt/raid0/llm/tmp/cs-46-20261020/dl/decoder_joint-model.onnx"}, "pairing": "fp32_fp32", "wav": "/mnt/raid0/llm/tmp/cs-46-20261020/clips/tt1-p0001-a.wav"}
+{"t": 3.2, "step": 38, "enc_frame": 38, "frame_t": 3.04, "id": 4, "kind": "token", "piece": "\u2581i"}
+{"t": 3.36, "step": 40, "enc_frame": 40, "frame_t": 3.2, "id": 99, "kind": "token", "piece": "\u2581was"}
+{"t": 3.6, "step": 43, "enc_frame": 43, "frame_t": 3.44, "id": 2, "kind": "token", "piece": "\u2581th"}
+{"t": 3.6, "step": 43, "enc_frame": 43, "frame_t": 3.44, "id": 176, "kind": "token", "piece": "ink"}
+{"t": 3.68, "step": 44, "enc_frame": 44, "frame_t": 3.52, "id": 22, "kind": "token", "piece": "ing"}
+{"t": 4.32, "step": 52, "enc_frame": 52, "frame_t": 4.16, "id": 51, "kind": "token", "piece": "\u2581we"}
+{"t": 4.48, "step": 54, "enc_frame": 54, "frame_t": 4.32, "id": 15, "kind": "token", "piece": "\u2581c"}
+{"t": 4.48, "step": 54, "enc_frame": 54, "frame_t": 4.32, "id": 135, "kind": "token", "piece": "ould"}
+{"t": 4.64, "step": 56, "enc_frame": 56, "frame_t": 4.48, "id": 75, "kind": "token", "piece": "\u2581go"}
+{"t": 4.8, "step": 58, "enc_frame": 58, "frame_t": 4.64, "id": 24, "kind": "token", "piece": "\u2581to"}
+{"t": 4.88, "step": 59, "enc_frame": 59, "frame_t": 4.72, "id": 5, "kind": "token", "piece": "\u2581the"}
+{"t": 5.2, "step": 63, "enc_frame": 63, "frame_t": 5.04, "id": 570, "kind": "token", "piece": "\u2581par"}
+{"t": 5.28, "step": 64, "enc_frame": 64, "frame_t": 5.12, "id": 1018, "kind": "token", "piece": "k"}
+{"t": 5.44, "step": 66, "enc_frame": 66, "frame_t": 5.28, "id": 356, "kind": "token", "piece": "\u2581af"}
+{"t": 5.44, "step": 66, "enc_frame": 66, "frame_t": 5.28, "id": 125, "kind": "token", "piece": "ter"}
+{"t": 5.76, "step": 70, "enc_frame": 70, "frame_t": 5.6000000000000005, "id": 31, "kind": "token", "piece": "\u2581l"}
+{"t": 5.76, "step": 70, "enc_frame": 70, "frame_t": 5.6000000000000005, "id": 808, "kind": "token", "piece": "unch"}
+{"t": 6.0, "step": 73, "enc_frame": 73, "frame_t": 5.84, "id": 24, "kind": "token", "piece": "\u2581to"}
+{"t": 6.24, "step": 76, "enc_frame": 76, "frame_t": 6.08, "id": 754, "kind": "token", "piece": "\u2581mor"}
+{"t": 6.32, "step": 77, "enc_frame": 77, "frame_t": 6.16, "id": 782, "kind": "token", "piece": "row"}
+{"t": 6.64, "step": 81, "enc_frame": 81, "frame_t": 6.48, "id": 1024, "kind": "eou"}
+{"t": 6.64, "step": 81, "enc_frame": 81, "frame_t": 6.48, "kind": "reset", "policy": "decoder"}

@@ -1,0 +1,24 @@
+{
+ "nemo_file": "/mnt/raid0/llm/tmp/cs-46-20261020/nemo/parakeet_realtime_eou_120m-v1.nemo",
+ "torch": "2.14.1+cpu",
+ "exports": {
+  "160": {
+   "path": "/mnt/raid0/llm/tmp/cs-46-20261020/export/encoder_stream_160ms.onnx",
+   "how": "torchscript(dynamo=False)",
+   "streaming_cfg": "CacheAwareStreamingConfig(chunk_size=[9, 16], shift_size=[9, 16], cache_drop_size=0, last_channel_cache_size=70, valid_out_len=2, pre_encode_cache_size=[0, 9], drop_extra_pre_encoded=2, last_channel_num=0, last_time_num=0)",
+   "drop_extra": 2,
+   "torch_out_frames": 2
+  },
+  "80": {
+   "path": "/mnt/raid0/llm/tmp/cs-46-20261020/export/encoder_stream_80ms.onnx",
+   "how": "torchscript(dynamo=False)",
+   "streaming_cfg": "CacheAwareStreamingConfig(chunk_size=[9, 16], shift_size=[1, 8], cache_drop_size=1, last_channel_cache_size=70, valid_out_len=1, pre_encode_cache_size=[0, 9], drop_extra_pre_encoded=2, last_channel_num=0, last_time_num=0)",
+   "drop_extra": 2,
+   "torch_out_frames": 1
+  },
+  "decoder_joint_self_fp32": "/mnt/raid0/llm/tmp/cs-46-20261020/export/decoder_joint_self_fp32.onnx"
+ },
+ "tmp_files": [
+  "encoder-parakeet_eou.onnx"
+ ]
+}

@@ -1,0 +1,1705 @@
+{
+  "config_echo": {
+    "model_dir": "/mnt/raid0/llm/tmp/cs-46-20261020/dl",
+    "files": {
+      "encoder": "encoder-model.onnx",
+      "decoder_joint": "decoder_joint-model.onnx",
+      "decoder_joint_int8": "decoder_joint-model.int8.onnx"
+    },
+    "hf_repo": "ysdede/parakeet-realtime-eou-120m-v1-onnx",
+    "hf_revision": "6d6be8e9113b4aa8ae7b4d5dfb655795c084d0c6",
+    "contract": "parakeet-rs 6ad1501898842fda76f86f7bcad6b361daf5df9e src/model_eou.rs"
+  },
+  "graphs": {
+    "encoder": {
+      "file": "encoder-model.onnx",
+      "bytes": 459170470,
+      "sha256": "45c8e0b973fbd7e523308d058336bc1054ca05a66b215b5fa629ec17250bf7b8",
+      "inputs": {
+        "audio_signal": {
+          "dtype": "float",
+          "shape": [
+            null,
+            128,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            128,
+            "frames"
+          ]
+        },
+        "length": {
+          "dtype": "int64",
+          "shape": [
+            null
+          ],
+          "raw_shape": [
+            "batch"
+          ]
+        }
+      },
+      "outputs": {
+        "outputs": {
+          "dtype": "float",
+          "shape": [
+            null,
+            512,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            512,
+            "encoded_frames"
+          ]
+        }
+      },
+      "providers": [
+        "CPUExecutionProvider"
+      ]
+    },
+    "decoder_joint": {
+      "file": "decoder_joint-model.onnx",
+      "bytes": 21348923,
+      "sha256": "50d355bc769420c506b2268ca3abe34f63dcaeb0ce0fdab80034248ea2a0ef88",
+      "inputs": {
+        "encoder_outputs": {
+          "dtype": "float",
+          "shape": [
+            null,
+            512,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            512,
+            "encoded_frames"
+          ]
+        },
+        "targets": {
+          "dtype": "int32",
+          "shape": [
+            null,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            "target_frames"
+          ]
+        },
+        "input_states_1": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "batch",
+            640
+          ]
+        },
+        "input_states_2": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "batch",
+            640
+          ]
+        }
+      },
+      "outputs": {
+        "outputs": {
+          "dtype": "float",
+          "shape": [
+            null,
+            null,
+            null,
+            1027
+          ],
+          "raw_shape": [
+            "batch",
+            "LogSoftmaxoutputs_dim_1",
+            "target_plus_sos",
+            1027
+          ]
+        },
+        "output_states_1": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "batch",
+            640
+          ]
+        },
+        "output_states_2": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "batch",
+            640
+          ]
+        }
+      },
+      "providers": [
+        "CPUExecutionProvider"
+      ]
+    },
+    "decoder_joint_int8": {
+      "file": "decoder_joint-model.int8.onnx",
+      "bytes": 5368692,
+      "sha256": "5464333fa933bf2c60952c08f01f5b5dd3fe3176e1c70d3eeddb48412514a0f9",
+      "inputs": {
+        "encoder_outputs": {
+          "dtype": "float",
+          "shape": [
+            null,
+            512,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            512,
+            "encoded_frames"
+          ]
+        },
+        "targets": {
+          "dtype": "int32",
+          "shape": [
+            null,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            "target_frames"
+          ]
+        },
+        "input_states_1": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "batch",
+            640
+          ]
+        },
+        "input_states_2": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "batch",
+            640
+          ]
+        }
+      },
+      "outputs": {
+        "outputs": {
+          "dtype": "float",
+          "shape": [
+            null,
+            null,
+            null,
+            1027
+          ],
+          "raw_shape": [
+            "batch",
+            "LogSoftmaxoutputs_dim_1",
+            "target_plus_sos",
+            1027
+          ]
+        },
+        "output_states_1": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "batch",
+            640
+          ]
+        },
+        "output_states_2": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "batch",
+            640
+          ]
+        }
+      },
+      "providers": [
+        "CPUExecutionProvider"
+      ]
+    },
+    "selfexport_encoder_160ms": {
+      "file": "encoder_stream_160ms.onnx",
+      "bytes": 459285247,
+      "sha256": "1cc0a129688e53440353013a19a57c2e49d78287a004d62d3726cf5b3e7b19c5",
+      "inputs": {
+        "audio_signal": {
+          "dtype": "float",
+          "shape": [
+            null,
+            128,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            128,
+            "time"
+          ]
+        },
+        "length": {
+          "dtype": "int64",
+          "shape": [
+            null
+          ],
+          "raw_shape": [
+            "batch"
+          ]
+        },
+        "cache_last_channel": {
+          "dtype": "float",
+          "shape": [
+            17,
+            1,
+            70,
+            512
+          ],
+          "raw_shape": [
+            17,
+            1,
+            70,
+            512
+          ]
+        },
+        "cache_last_time": {
+          "dtype": "float",
+          "shape": [
+            17,
+            1,
+            512,
+            8
+          ],
+          "raw_shape": [
+            17,
+            1,
+            512,
+            8
+          ]
+        },
+        "cache_last_channel_len": {
+          "dtype": "int64",
+          "shape": [
+            1
+          ],
+          "raw_shape": [
+            1
+          ]
+        }
+      },
+      "outputs": {
+        "outputs": {
+          "dtype": "float",
+          "shape": [
+            null,
+            512,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            512,
+            "time"
+          ]
+        },
+        "encoded_lengths": {
+          "dtype": "int64",
+          "shape": [
+            null
+          ],
+          "raw_shape": [
+            "batch"
+          ]
+        },
+        "new_cache_last_channel": {
+          "dtype": "float",
+          "shape": [
+            17,
+            1,
+            null,
+            512
+          ],
+          "raw_shape": [
+            17,
+            1,
+            "Slicenew_cache_last_channel_dim_2",
+            512
+          ]
+        },
+        "new_cache_last_time": {
+          "dtype": "float",
+          "shape": [
+            17,
+            1,
+            512,
+            null
+          ],
+          "raw_shape": [
+            17,
+            1,
+            512,
+            "Concatnew_cache_last_time_dim_3"
+          ]
+        },
+        "new_cache_last_channel_len": {
+          "dtype": "int64",
+          "shape": [
+            1
+          ],
+          "raw_shape": [
+            1
+          ]
+        }
+      },
+      "providers": [
+        "CPUExecutionProvider"
+      ]
+    },
+    "selfexport_encoder_80ms": {
+      "file": "encoder_stream_80ms.onnx",
+      "bytes": 459306546,
+      "sha256": "4e07e483857cc7bf4ae5f026b2cabf876dfd791ba43ac425de9e1137e68316b3",
+      "inputs": {
+        "audio_signal": {
+          "dtype": "float",
+          "shape": [
+            null,
+            128,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            128,
+            "time"
+          ]
+        },
+        "length": {
+          "dtype": "int64",
+          "shape": [
+            null
+          ],
+          "raw_shape": [
+            "batch"
+          ]
+        },
+        "cache_last_channel": {
+          "dtype": "float",
+          "shape": [
+            17,
+            1,
+            70,
+            512
+          ],
+          "raw_shape": [
+            17,
+            1,
+            70,
+            512
+          ]
+        },
+        "cache_last_time": {
+          "dtype": "float",
+          "shape": [
+            17,
+            1,
+            512,
+            8
+          ],
+          "raw_shape": [
+            17,
+            1,
+            512,
+            8
+          ]
+        },
+        "cache_last_channel_len": {
+          "dtype": "int64",
+          "shape": [
+            1
+          ],
+          "raw_shape": [
+            1
+          ]
+        }
+      },
+      "outputs": {
+        "outputs": {
+          "dtype": "float",
+          "shape": [
+            null,
+            512,
+            null
+          ],
+          "raw_shape": [
+            "batch",
+            512,
+            "time"
+          ]
+        },
+        "encoded_lengths": {
+          "dtype": "int64",
+          "shape": [
+            null
+          ],
+          "raw_shape": [
+            "batch"
+          ]
+        },
+        "new_cache_last_channel": {
+          "dtype": "float",
+          "shape": [
+            17,
+            1,
+            null,
+            512
+          ],
+          "raw_shape": [
+            17,
+            1,
+            "Slicenew_cache_last_channel_dim_2",
+            512
+          ]
+        },
+        "new_cache_last_time": {
+          "dtype": "float",
+          "shape": [
+            17,
+            1,
+            512,
+            null
+          ],
+          "raw_shape": [
+            17,
+            1,
+            512,
+            "Concatnew_cache_last_time_dim_3"
+          ]
+        },
+        "new_cache_last_channel_len": {
+          "dtype": "int64",
+          "shape": [
+            1
+          ],
+          "raw_shape": [
+            1
+          ]
+        }
+      },
+      "providers": [
+        "CPUExecutionProvider"
+      ]
+    },
+    "selfexport_decoder_joint": {
+      "file": "decoder_joint_self_fp32.onnx",
+      "bytes": 21347640,
+      "sha256": "cc1482c8176baff67bd460e50e96ee604fd65ede4aee2a93040457a17b7f51ae",
+      "inputs": {
+        "encoder_outputs": {
+          "dtype": "float",
+          "shape": [
+            null,
+            512,
+            null
+          ],
+          "raw_shape": [
+            "encoder_outputs_dynamic_axes_1",
+            512,
+            "encoder_outputs_dynamic_axes_2"
+          ]
+        },
+        "targets": {
+          "dtype": "int32",
+          "shape": [
+            null,
+            null
+          ],
+          "raw_shape": [
+            "targets_dynamic_axes_1",
+            "targets_dynamic_axes_2"
+          ]
+        },
+        "target_length": {
+          "dtype": "int32",
+          "shape": [
+            null
+          ],
+          "raw_shape": [
+            "target_length_dynamic_axes_1"
+          ]
+        },
+        "input_states_1": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "input_states_1_dynamic_axes_1",
+            640
+          ]
+        },
+        "input_states_2": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "input_states_2_dynamic_axes_1",
+            640
+          ]
+        }
+      },
+      "outputs": {
+        "outputs": {
+          "dtype": "float",
+          "shape": [
+            null,
+            null,
+            null,
+            1027
+          ],
+          "raw_shape": [
+            "Addoutputs_dim_0",
+            "Addoutputs_dim_1",
+            "Addoutputs_dim_2",
+            1027
+          ]
+        },
+        "prednet_lengths": {
+          "dtype": "int32",
+          "shape": [
+            null
+          ],
+          "raw_shape": [
+            "target_length_dynamic_axes_1"
+          ]
+        },
+        "output_states_1": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "targets_dynamic_axes_1",
+            640
+          ]
+        },
+        "output_states_2": {
+          "dtype": "float",
+          "shape": [
+            1,
+            null,
+            640
+          ],
+          "raw_shape": [
+            1,
+            "targets_dynamic_axes_1",
+            640
+          ]
+        }
+      },
+      "providers": [
+        "CPUExecutionProvider"
+      ]
+    }
+  },
+  "diff": {
+    "encoder": [
+      {
+        "side": "inputs",
+        "name": "audio_signal",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            128,
+            null
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            128,
+            "frames"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "length",
+        "status": "MATCH",
+        "contract": [
+          "int64",
+          [
+            1
+          ]
+        ],
+        "graph": [
+          "int64",
+          [
+            "batch"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "cache_last_channel",
+        "status": "MISSING_IN_GRAPH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            70,
+            512
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "cache_last_time",
+        "status": "MISSING_IN_GRAPH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            8
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "cache_last_channel_len",
+        "status": "MISSING_IN_GRAPH",
+        "contract": [
+          "int64",
+          [
+            1
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "outputs",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            512,
+            null
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            512,
+            "encoded_frames"
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "new_cache_last_channel",
+        "status": "MISSING_IN_GRAPH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            70,
+            512
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "new_cache_last_time",
+        "status": "MISSING_IN_GRAPH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            8
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "new_cache_last_channel_len",
+        "status": "MISSING_IN_GRAPH",
+        "contract": [
+          "int64",
+          [
+            1
+          ]
+        ]
+      }
+    ],
+    "decoder_joint": [
+      {
+        "side": "inputs",
+        "name": "encoder_outputs",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            512,
+            1
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            512,
+            "encoded_frames"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "targets",
+        "status": "MATCH",
+        "contract": [
+          "int32",
+          [
+            1,
+            1
+          ]
+        ],
+        "graph": [
+          "int32",
+          [
+            "batch",
+            "target_frames"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "target_length",
+        "status": "MISSING_IN_GRAPH",
+        "contract": [
+          "int32",
+          [
+            1
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "input_states_1",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "batch",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "input_states_2",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "batch",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "outputs",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            1,
+            1027
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            "LogSoftmaxoutputs_dim_1",
+            "target_plus_sos",
+            1027
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "output_states_1",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "batch",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "output_states_2",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "batch",
+            640
+          ]
+        ]
+      }
+    ],
+    "decoder_joint_int8": [
+      {
+        "side": "inputs",
+        "name": "encoder_outputs",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            512,
+            1
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            512,
+            "encoded_frames"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "targets",
+        "status": "MATCH",
+        "contract": [
+          "int32",
+          [
+            1,
+            1
+          ]
+        ],
+        "graph": [
+          "int32",
+          [
+            "batch",
+            "target_frames"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "target_length",
+        "status": "MISSING_IN_GRAPH",
+        "contract": [
+          "int32",
+          [
+            1
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "input_states_1",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "batch",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "input_states_2",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "batch",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "outputs",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            1,
+            1027
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            "LogSoftmaxoutputs_dim_1",
+            "target_plus_sos",
+            1027
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "output_states_1",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "batch",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "output_states_2",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "batch",
+            640
+          ]
+        ]
+      }
+    ],
+    "selfexport_encoder_160ms": [
+      {
+        "side": "inputs",
+        "name": "audio_signal",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            128,
+            null
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            128,
+            "time"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "length",
+        "status": "MATCH",
+        "contract": [
+          "int64",
+          [
+            1
+          ]
+        ],
+        "graph": [
+          "int64",
+          [
+            "batch"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "cache_last_channel",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            70,
+            512
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            17,
+            1,
+            70,
+            512
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "cache_last_time",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            8
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            8
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "cache_last_channel_len",
+        "status": "MATCH",
+        "contract": [
+          "int64",
+          [
+            1
+          ]
+        ],
+        "graph": [
+          "int64",
+          [
+            1
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "outputs",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            512,
+            null
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            512,
+            "time"
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "new_cache_last_channel",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            70,
+            512
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            17,
+            1,
+            "Slicenew_cache_last_channel_dim_2",
+            512
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "new_cache_last_time",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            8
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            "Concatnew_cache_last_time_dim_3"
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "new_cache_last_channel_len",
+        "status": "MATCH",
+        "contract": [
+          "int64",
+          [
+            1
+          ]
+        ],
+        "graph": [
+          "int64",
+          [
+            1
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "encoded_lengths",
+        "status": "EXTRA_IN_GRAPH",
+        "graph": [
+          "int64",
+          [
+            "batch"
+          ]
+        ]
+      }
+    ],
+    "selfexport_encoder_80ms": [
+      {
+        "side": "inputs",
+        "name": "audio_signal",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            128,
+            null
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            128,
+            "time"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "length",
+        "status": "MATCH",
+        "contract": [
+          "int64",
+          [
+            1
+          ]
+        ],
+        "graph": [
+          "int64",
+          [
+            "batch"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "cache_last_channel",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            70,
+            512
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            17,
+            1,
+            70,
+            512
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "cache_last_time",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            8
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            8
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "cache_last_channel_len",
+        "status": "MATCH",
+        "contract": [
+          "int64",
+          [
+            1
+          ]
+        ],
+        "graph": [
+          "int64",
+          [
+            1
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "outputs",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            512,
+            null
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "batch",
+            512,
+            "time"
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "new_cache_last_channel",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            70,
+            512
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            17,
+            1,
+            "Slicenew_cache_last_channel_dim_2",
+            512
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "new_cache_last_time",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            8
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            17,
+            1,
+            512,
+            "Concatnew_cache_last_time_dim_3"
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "new_cache_last_channel_len",
+        "status": "MATCH",
+        "contract": [
+          "int64",
+          [
+            1
+          ]
+        ],
+        "graph": [
+          "int64",
+          [
+            1
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "encoded_lengths",
+        "status": "EXTRA_IN_GRAPH",
+        "graph": [
+          "int64",
+          [
+            "batch"
+          ]
+        ]
+      }
+    ],
+    "selfexport_decoder_joint": [
+      {
+        "side": "inputs",
+        "name": "encoder_outputs",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            512,
+            1
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "encoder_outputs_dynamic_axes_1",
+            512,
+            "encoder_outputs_dynamic_axes_2"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "targets",
+        "status": "MATCH",
+        "contract": [
+          "int32",
+          [
+            1,
+            1
+          ]
+        ],
+        "graph": [
+          "int32",
+          [
+            "targets_dynamic_axes_1",
+            "targets_dynamic_axes_2"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "target_length",
+        "status": "MATCH",
+        "contract": [
+          "int32",
+          [
+            1
+          ]
+        ],
+        "graph": [
+          "int32",
+          [
+            "target_length_dynamic_axes_1"
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "input_states_1",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "input_states_1_dynamic_axes_1",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "inputs",
+        "name": "input_states_2",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "input_states_2_dynamic_axes_1",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "outputs",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            1,
+            1027
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            "Addoutputs_dim_0",
+            "Addoutputs_dim_1",
+            "Addoutputs_dim_2",
+            1027
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "output_states_1",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "targets_dynamic_axes_1",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "output_states_2",
+        "status": "MATCH",
+        "contract": [
+          "float",
+          [
+            1,
+            1,
+            640
+          ]
+        ],
+        "graph": [
+          "float",
+          [
+            1,
+            "targets_dynamic_axes_1",
+            640
+          ]
+        ]
+      },
+      {
+        "side": "outputs",
+        "name": "prednet_lengths",
+        "status": "EXTRA_IN_GRAPH",
+        "graph": [
+          "int32",
+          [
+            "target_length_dynamic_axes_1"
+          ]
+        ]
+      }
+    ]
+  },
+  "card_config": {
+    "model_id": "nvidia/parakeet_realtime_eou_120m-v1",
+    "sample_rate": 16000,
+    "mel_bins": 128,
+    "frame_shift_seconds": 0.01,
+    "subsampling_factor": 8,
+    "vocab_size": 1026,
+    "blank_id": 1026,
+    "eou_id": 1024,
+    "eob_id": 1025,
+    "pred_hidden": 640,
+    "pred_layers": 1,
+    "max_symbols_per_step": 10
+  }
+}
