@@ -115,6 +115,13 @@ def assemble_clip(
     return out, lay
 
 
+def assemble_row(row: dict, user_rec: np.ndarray, assistant_rec: np.ndarray) -> tuple[np.ndarray, Layout]:
+    """THE single place a manifest clip row becomes audio. tt_verify, tt_materialize and every consumer must call this (or
+    reproduce it exactly): it includes the per-pair `layout.tail` that v2 added. v2's first push shipped a tt_materialize that
+    omitted the tail and failed on CTX_BC clips while tt_verify passed; the divergence test in tests/ now guards it."""
+    return assemble_clip(user_rec, tuple(row["user"]["trim"]), row["user"]["cut"], assistant_rec, row["assistant"]["mode"], row["layout"].get("tail"))
+
+
 def check_pair_invariants(
     family: str,
     a_pcm: np.ndarray,

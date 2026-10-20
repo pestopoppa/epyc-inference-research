@@ -159,7 +159,7 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
     for c in clips + rclips:
         try:
             u, a_ = pcm[c["user"]["recording_id"]], pcm[c["assistant"]["recording_id"]]
-            arr, lay = C.assemble_clip(u, tuple(c["user"]["trim"]), c["user"]["cut"], a_, c["assistant"]["mode"], c["layout"].get("tail"))
+            arr, lay = C.assemble_row(c, u, a_)
         except Exception as e:  # noqa: BLE001
             bad.append(f"{c['clip_id']}:assemble:{e}")
             continue

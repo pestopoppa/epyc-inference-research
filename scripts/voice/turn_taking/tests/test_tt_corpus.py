@@ -623,3 +623,47 @@ def test_variant_fallback_uses_next_passing_variant(tmp_path):
     others = [p for k, p in pairs.items() if k != victim["pair"]]
     assert all(p["chosen_variant"] == 0 for p in others)
     assert failing(D) == set()
+
+
+# ------------------------------------------------------------------ consumer path: tt_materialize must agree with tt_verify
+def _materialize_all(corpus: Path, out: Path):
+    return subprocess.run([sys.executable, "-I", str(TT / "tt_materialize.py"), "--corpus", str(corpus), "--out", str(out), "--include-reserve"],
+                          capture_output=True, text=True)
+
+
+def test_materialize_every_clip_like_a_consumer(corpus, tmp_path):
+    """The consumer path (tt_materialize, which CS-47/CS-48 call) must reproduce EVERY committed clip, main and reserve, and
+    agree with tt_verify. v2's first push shipped a tt_materialize that omitted layout.tail: tt_verify passed while CTX_BC
+    clips failed here."""
+    n = len(jl(corpus / "manifest" / "clips.jsonl")) + len(jl(corpus / "manifest" / "reserve" / "clips.jsonl"))
+    assert failing(corpus) == set()
+    r = _materialize_all(corpus, tmp_path / "m")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert len(list((tmp_path / "m").glob("*.wav"))) == n
+    assert any(c["layout"]["tail"] > C.TRAIL for c in jl(corpus / "manifest" / "clips.jsonl")), "no shared-tail (CTX_BC) clip to exercise"
+
+
+def test_materialize_and_verify_agree_when_the_tar_diverges(corpus, tmp_path):
+    rec = next(r for r in map(json.loads, open(corpus / "manifest" / "recordings.jsonl")) if r["role"] == "user")
+
+    def flip(pc):
+        s = pc.samples.copy()
+        s[(rec["trim"][0] + rec["trim"][1]) // 2 - 3, 0] += 1000
+        return A.Pcm(s, pc.sample_rate)
+
+    mutate_recording(corpus, rec, flip)
+    reseal(corpus)  # digests consistent, manifest PCM hashes now stale versus the tar
+    assert failing(corpus), "tt_verify accepted a tar that no longer matches the manifest"
+    assert _materialize_all(corpus, tmp_path / "m").returncode != 0, "tt_materialize accepted a tar that no longer matches the manifest"
+
+
+def test_materialize_and_verify_agree_when_a_layout_tail_diverges(corpus, tmp_path):
+    rows = jl(corpus / "manifest" / "clips.jsonl")
+    for r in rows:
+        if r["layout"]["tail"] > C.TRAIL:
+            r["layout"]["tail"] -= 800
+            break
+    wjl(corpus / "manifest" / "clips.jsonl", rows)
+    reseal(corpus)
+    assert failing(corpus)
+    assert _materialize_all(corpus, tmp_path / "m").returncode != 0

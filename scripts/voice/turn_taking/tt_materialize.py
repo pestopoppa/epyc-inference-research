@@ -15,9 +15,12 @@ import tt_audio as A  # noqa: E402
 import tt_corpus as C  # noqa: E402
 
 
-def materialize(D: Path, out: Path, pairs: set | None = None) -> list[dict]:
+def materialize(D: Path, out: Path, pairs: set | None = None, include_reserve: bool = False) -> list[dict]:
     recs = {r["recording_id"]: r for r in map(json.loads, (D / "manifest" / "recordings.jsonl").read_text().splitlines())}
     clips = [json.loads(x) for x in (D / "manifest" / "clips.jsonl").read_text().splitlines()]
+    if include_reserve and (D / "manifest" / "reserve" / "clips.jsonl").exists():
+        recs.update({r["recording_id"]: r for r in map(json.loads, (D / "manifest" / "reserve" / "recordings.jsonl").read_text().splitlines())})
+        clips += [json.loads(x) for x in (D / "manifest" / "reserve" / "clips.jsonl").read_text().splitlines()]
     res = []
     cache = {}
     def rec(rid):
@@ -28,7 +31,7 @@ def materialize(D: Path, out: Path, pairs: set | None = None) -> list[dict]:
     for c in clips:
         if pairs and c["pair_id"] not in pairs:
             continue
-        arr, lay = C.assemble_clip(rec(c["user"]["recording_id"]), tuple(c["user"]["trim"]), c["user"]["cut"], rec(c["assistant"]["recording_id"]), c["assistant"]["mode"])
+        arr, lay = C.assemble_row(c, rec(c["user"]["recording_id"]), rec(c["assistant"]["recording_id"]))
         pc = A.Pcm(arr, A.SR)
         if pc.pcm_sha256() != c["pcm"]["pcm_sha256"]:
             raise SystemExit(f"{c['clip_id']}: PCM-SHA-256 mismatch")
@@ -43,6 +46,7 @@ if __name__ == "__main__":
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--pairs", default="")
+    ap.add_argument("--include-reserve", action="store_true")
     a = ap.parse_args()
-    r = materialize(Path(a.corpus), Path(a.out), set(a.pairs.split(",")) if a.pairs else None)
+    r = materialize(Path(a.corpus), Path(a.out), set(a.pairs.split(",")) if a.pairs else None, a.include_reserve)
     print(f"materialised {len(r)} clips, all PCM-SHA-256 verified")
