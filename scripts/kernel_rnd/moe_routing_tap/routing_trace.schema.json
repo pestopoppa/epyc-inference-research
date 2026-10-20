@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "epyc.moe.routing_trace.v1",
+  "title": "MoE routing tap trace manifest (RT-2.1 trace-shape rider)",
+  "description": "Header of one routing-tap capture. The per-token rows (columns below) and the int16 id tensor [rows, n_layers, top_k] are bound by sha256. An aggregate-only dump is not a valid trace: token order, sample boundaries, the prefill/decode tag and the speculative block size are mandatory, so RT-6/RT-7 can derive [steps, layers, experts] counts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "model", "arch", "batch_size", "layers", "samples", "columns", "ids", "rows_sha256"],
+  "properties": {
+    "schema": {"const": "epyc.moe.routing_trace.v1"},
+    "model": {"type": "string", "minLength": 1},
+    "arch": {"type": "string", "minLength": 1, "description": "e.g. qwen35moe, deepseek41"},
+    "batch_size": {"type": "integer", "minimum": 1, "description": "-b used for the capture; prefill chunk length"},
+    "layers": {
+      "type": "array", "minItems": 1,
+      "description": "One entry per MoE layer, in layer order. n_experts may differ per layer (deepseek41 mixes 256-expert layers with 128-expert DSpark layers).",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["layer", "n_experts", "top_k", "id_dtype"],
+        "properties": {
+          "layer": {"type": "integer", "minimum": 0},
+          "n_experts": {"type": "integer", "minimum": 2},
+          "top_k": {"type": "integer", "minimum": 1},
+          "id_dtype": {"const": "int16", "description": "RT-1 adjustment 1: int8 overflows the 256/512-expert fleet"},
+          "group": {"enum": ["main", "dspark"], "description": "optional layer family tag"}
+        }
+      }
+    },
+    "samples": {
+      "type": "array", "minItems": 1,
+      "description": "Sample boundaries. Rows [start_row, start_row + n_rows) belong to sample_id, in token order.",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["sample_id", "domain", "start_row", "n_rows"],
+        "properties": {
+          "sample_id": {"type": "integer", "minimum": 0},
+          "domain": {"type": "string"},
+          "start_row": {"type": "integer", "minimum": 0},
+          "n_rows": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "columns": {
+      "const": ["sample_id", "pos", "phase", "step", "spec_block", "spec_accepted"],
+      "description": "Fixed per-token row columns, in this order."
+    },
+    "ids": {
+      "type": "object", "additionalProperties": false,
+      "required": ["dtype", "shape_note", "sha256"],
+      "properties": {
+        "dtype": {"const": "int16"},
+        "shape_note": {"const": "[rows, n_layers, top_k] row-major; layers with smaller top_k pad with -1"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "rows_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "row": {
+      "description": "Semantics of one token row (documentation of the columns; rows are stored columnar/binary, validated by trace_shape.py).",
+      "type": "object",
+      "properties": {
+        "sample_id": {"type": "integer"},
+        "pos": {"type": "integer", "minimum": 0, "description": "token index within its sample; strictly increasing within a sample (token order kept)"},
+        "phase": {"enum": ["prefill", "decode"]},
+        "step": {"type": "integer", "minimum": 0, "description": "forward-pass index within the sample; every row of one forward shares it (a prefill chunk, a decode step, a speculative verify block)"},
+        "spec_block": {"type": "integer", "minimum": 1, "description": "tokens in this row's forward: n_tokens of the chunk for prefill, 1 for plain decode, the verify block size for speculative decode"},
+        "spec_accepted": {"type": ["boolean", "null"], "description": "decode rows of a speculative block: whether the row's token was accepted; null for prefill and non-speculative decode"}
+      }
+    }
+  }
+}
