@@ -89,5 +89,33 @@ class GuardBandTests(unittest.TestCase):
             a.add_view("late", 8)
 
 
+class ProducerReceiptTests(unittest.TestCase):
+    """Receipts in the exact shape test-backend-ops (AKX_GUARD_BANDS=1) prints."""
+
+    def test_parse_and_judge_clean_and_violating_lines(self):
+        clean = ('AK_GUARD_BANDS_V1 {"schema":"epyc.autokernel.guard_bands.v1","band_bytes":4096,'
+                 '"views":[{"name":"dst","extent":256,"offset":4096}],"violations":[]}')
+        bad = clean.replace('"violations":[]', '"violations":[{"view":"dst","band":"tail",'
+                            '"first_offset":0,"n_bytes":1,"expected":91,"observed":0}]')
+        got = gb.parse_receipts("noise\n" + clean + "\n[x] ok\n" + bad + "\nAK_GUARD_BANDS_V1 {broken\n")
+        self.assertEqual(len(got), 2)
+        self.assertTrue(gb.verdict_from_receipt(got[0]).passed)
+        v = gb.verdict_from_receipt(got[1])
+        self.assertFalse(v.passed)
+        self.assertIn("after view 'dst'", v.reason)
+
+    def test_outside_view_band_has_its_own_reason(self):
+        r = {"schema": gb.SCHEMA, "views": [{"name": "dst"}, {"name": "kv"}],
+             "violations": [{"view": "dst", "band": "outside_view", "first_offset": 7,
+                             "n_bytes": 3, "expected": 1, "observed": 2}]}
+        v = gb.verdict_from_receipt(r, required_views=("dst", "kv"))
+        self.assertFalse(v.passed)
+        self.assertIn("outside view 'dst'", v.reason)
+
+    def test_poison_function_matches_the_c_producer(self):
+        # the C side uses (i * 167 + 91) & 0xFF; first bytes pinned here
+        self.assertEqual([gb.poison_byte(i) for i in range(4)], [91, 2, 169, 80])
+
+
 if __name__ == "__main__":
     unittest.main()

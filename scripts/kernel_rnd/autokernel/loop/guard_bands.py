@@ -44,6 +44,10 @@ class Violation:
     observed: int
 
     def reason(self) -> str:
+        if self.band == "outside_view":
+            return (f"guard_band_violation: {self.n_bytes} byte(s) of the parent outside "
+                    f"view '{self.view}' changed (first at parent +{self.first_offset}: "
+                    f"0x{self.observed:02x} != initial 0x{self.expected:02x})")
         where = ("before" if self.band == "head" else "after") + f" view '{self.view}'"
         return (f"guard_band_violation: {self.n_bytes} byte(s) written {where} "
                 f"({self.band} band, first at +{self.first_offset}: "
@@ -125,6 +129,23 @@ class GuardedArena:
         return {"schema": SCHEMA, "band_bytes": self.band_bytes,
                 "views": [{"name": n, "extent": e, "offset": o} for n, (o, e) in self._views.items()],
                 "violations": [vars(v).copy() for v in violations]}
+
+
+RECEIPT_PREFIX = "AK_GUARD_BANDS_V1 "
+
+
+def parse_receipts(text: str) -> list[dict[str, Any]]:
+    """The receipts a guard-banded `test-backend-ops` run (AKX_GUARD_BANDS=1) printed,
+    one per case, from its stderr/stdout. Lines that do not parse are skipped."""
+    import json
+    out = []
+    for line in text.splitlines():
+        if line.startswith(RECEIPT_PREFIX):
+            try:
+                out.append(json.loads(line[len(RECEIPT_PREFIX):]))
+            except ValueError:
+                continue
+    return out
 
 
 def verdict_from_receipt(receipt: Mapping[str, Any] | None, *,
