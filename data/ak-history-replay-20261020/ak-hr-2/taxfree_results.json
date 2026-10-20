@@ -1,0 +1,2019 @@
+{
+ "config_echo": {
+  "W": 20,
+  "answer_statuses": [
+   "confirm_vetoed",
+   "keep_candidate",
+   "kept",
+   "measured_null",
+   "regression"
+  ],
+  "argv": [
+   "--history",
+   "data/ak-history-replay-20261020/history_records.jsonl",
+   "--out-dir",
+   "data/ak-history-replay-20261020/ak-hr-2"
+  ],
+  "experiment_rows": 3576,
+  "history_sha256": "376c0eecb93c129a499360c48218a776eb1e1e0363502e51d8dfaef2eef2ef14",
+  "permutations": 1000,
+  "python": "3.13.7",
+  "rows": 3586,
+  "seed": 20261020
+ },
+ "descriptive_windows_not_predeclared": {
+  "note": "Entropy / distinct counts over mechanism_id and over target file, W=20 sliding, deduplicated statements, order = recorded_at; campaign statistic = window-weighted mean OLS slope of H_t; null = 1000 within-epoch order permutations; below_null_p5 is reported but is NOT the predeclared verdict (that needs the mechanism taxonomy, which failed its held-out gate).",
+  "per_campaign": {
+   "ak-27b-gpu-verify-20261004": {
+    "by_mechanism_id": {
+     "below_null_p5": null,
+     "epochs_eligible": [],
+     "null_p5_slope": null,
+     "observed_weighted_slope": null,
+     "permutation_p_lower": null,
+     "total_full_windows": 0,
+     "total_sliding_windows": 0
+    },
+    "by_target_file": {
+     "below_null_p5": null,
+     "epochs_eligible": [],
+     "null_p5_slope": null,
+     "observed_weighted_slope": null,
+     "permutation_p_lower": null,
+     "total_full_windows": 0,
+     "total_sliding_windows": 0
+    },
+    "epoch_sizes": [
+     3
+    ],
+    "epochs": 1,
+    "hypotheses_deduped": 3
+   },
+   "ak-ds41-cpu-decode-20260923": {
+    "by_mechanism_id": {
+     "below_null_p5": false,
+     "epochs_eligible": [
+      {
+       "H_slope_per_window": 0.0,
+       "epoch": "b74a6b9d",
+       "first_window_H": 2.995732273553991,
+       "full_windows": 1,
+       "last_window_H": 2.995732273553991,
+       "mean_H": 2.995732273553991,
+       "mean_distinct": 20.0,
+       "n": 24,
+       "sliding_windows": 5
+      },
+      {
+       "H_slope_per_window": 0.0,
+       "epoch": "f4b4fc9f",
+       "first_window_H": 2.7877881193860072,
+       "full_windows": 1,
+       "last_window_H": 2.7877881193860072,
+       "mean_H": 2.7877881193860072,
+       "mean_distinct": 17.0,
+       "n": 26,
+       "sliding_windows": 7
+      }
+     ],
+     "null_p5_slope": -0.015884622887832083,
+     "observed_weighted_slope": 0.0,
+     "permutation_p_lower": 0.552,
+     "total_full_windows": 2,
+     "total_sliding_windows": 12
+    },
+    "by_target_file": {
+     "below_null_p5": false,
+     "epochs_eligible": [
+      {
+       "H_slope_per_window": 0.006060206461848549,
+       "epoch": "b74a6b9d",
+       "first_window_H": 1.891053111376833,
+       "full_windows": 1,
+       "last_window_H": 1.8866967846580784,
+       "mean_H": 1.858927968660932,
+       "mean_distinct": 9.4,
+       "n": 24,
+       "sliding_windows": 5
+      },
+      {
+       "H_slope_per_window": -0.04497440389598216,
+       "epoch": "f4b4fc9f",
+       "first_window_H": 1.4001386549282813,
+       "full_windows": 1,
+       "last_window_H": 1.202262257535642,
+       "mean_H": 1.3088690159054317,
+       "mean_distinct": 4.571428571428571,
+       "n": 26,
+       "sliding_windows": 7
+      }
+     ],
+     "null_p5_slope": -0.037923333629994886,
+     "observed_weighted_slope": -0.023709982913552696,
+     "permutation_p_lower": 0.137,
+     "total_full_windows": 2,
+     "total_sliding_windows": 12
+    },
+    "epoch_sizes": [
+     26,
+     24,
+     15,
+     13,
+     12,
+     9,
+     8,
+     8,
+     7,
+     6,
+     6,
+     6,
+     6,
+     4,
+     2,
+     2,
+     2,
+     2,
+     2,
+     2,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "epochs": 28,
+    "hypotheses_deduped": 170
+   },
+   "ak-q38fn-cpu-decode-20261003": {
+    "by_mechanism_id": {
+     "below_null_p5": false,
+     "epochs_eligible": [
+      {
+       "H_slope_per_window": 0.004951051289713896,
+       "epoch": "1105f10f",
+       "first_window_H": 2.9264175554979963,
+       "full_windows": 1,
+       "last_window_H": 2.995732273553991,
+       "mean_H": 2.9165154529185684,
+       "mean_distinct": 18.857142857142858,
+       "n": 26,
+       "sliding_windows": 7
+      }
+     ],
+     "null_p5_slope": -0.02227973080371253,
+     "observed_weighted_slope": 0.004951051289713896,
+     "permutation_p_lower": 0.681,
+     "total_full_windows": 1,
+     "total_sliding_windows": 7
+    },
+    "by_target_file": {
+     "below_null_p5": false,
+     "epochs_eligible": [
+      {
+       "H_slope_per_window": -0.008328975288912641,
+       "epoch": "1105f10f",
+       "first_window_H": 1.8513618739611635,
+       "full_windows": 1,
+       "last_window_H": 1.8217383933208384,
+       "mean_H": 1.839115469382617,
+       "mean_distinct": 8.0,
+       "n": 26,
+       "sliding_windows": 7
+      }
+     ],
+     "null_p5_slope": -0.04449711361206859,
+     "observed_weighted_slope": -0.008328975288912641,
+     "permutation_p_lower": 0.37,
+     "total_full_windows": 1,
+     "total_sliding_windows": 7
+    },
+    "epoch_sizes": [
+     26,
+     11,
+     8,
+     8,
+     6,
+     6,
+     5,
+     2
+    ],
+    "epochs": 8,
+    "hypotheses_deduped": 72
+   },
+   "loop-memory": {
+    "by_mechanism_id": {
+     "below_null_p5": false,
+     "epochs_eligible": [
+      {
+       "H_slope_per_window": 0.0,
+       "epoch": "0322f601",
+       "first_window_H": 2.995732273553991,
+       "full_windows": 1,
+       "last_window_H": 2.995732273553991,
+       "mean_H": 2.995732273553991,
+       "mean_distinct": 20.0,
+       "n": 20,
+       "sliding_windows": 1
+      },
+      {
+       "H_slope_per_window": -0.006512395288066823,
+       "epoch": "03c16e54",
+       "first_window_H": 2.1809455605615966,
+       "full_windows": 2,
+       "last_window_H": 2.3457374038618126,
+       "mean_H": 2.2097358386553045,
+       "mean_distinct": 11.64516129032258,
+       "n": 50,
+       "sliding_windows": 31
+      },
+      {
+       "H_slope_per_window": 0.051608915764872074,
+       "epoch": "16bdb109",
+       "first_window_H": 2.5240580773894714,
+       "full_windows": 1,
+       "last_window_H": 2.8309404302537744,
+       "mean_H": 2.633744920855114,
+       "mean_distinct": 16.125,
+       "n": 27,
+       "sliding_windows": 8
+      },
+      {
+       "H_slope_per_window": 0.008086717106532696,
+       "epoch": "28fa1568",
+       "first_window_H": 2.7184734013300127,
+       "full_windows": 1,
+       "last_window_H": 2.7877881193860072,
+       "mean_H": 2.726175036669568,
+       "mean_distinct": 16.11111111111111,
+       "n": 28,
+       "sliding_windows": 9
+      },
+      {
+       "H_slope_per_window": 4.709434575638693e-06,
+       "epoch": "377047b0",
+       "first_window_H": 2.649158683274018,
+       "full_windows": 5,
+       "last_window_H": 2.7184734013300127,
+       "mean_H": 2.938470933884009,
+       "mean_distinct": 19.2680412371134,
+       "n": 116,
+       "sliding_windows": 97
+      },
+      {
+       "H_slope_per_window": 0.003059664355147293,
+       "epoch": "5d0ccce1",
+       "first_window_H": 2.8571028374420018,
+       "full_windows": 6,
+       "last_window_H": 2.649158683274018,
+       "mean_H": 2.586067086883914,
+       "mean_distinct": 15.858490566037736,
+       "n": 125,
+       "sliding_windows": 106
+      },
+      {
+       "H_slope_per_window": 0.0013971191926478832,
+       "epoch": "61fe190c",
+       "first_window_H": 2.220636797977266,
+       "full_windows": 12,
+       "last_window_H": 1.4427833121586762,
+       "mean_H": 1.8446947308708672,
+       "mean_distinct": 8.6431718061674,
+       "n": 246,
+       "sliding_windows": 227
+      },
+      {
+       "H_slope_per_window": 0.0018310501832079972,
+       "epoch": "6a4dccec",
+       "first_window_H": 2.4843668399738017,
+       "full_windows": 9,
+       "last_window_H": 2.7184734013300127,
+       "mean_H": 2.4625884000215335,
+       "mean_distinct": 14.016666666666667,
+       "n": 199,
+       "sliding_windows": 180
+      },
+      {
+       "H_slope_per_window": -0.011552453009332423,
+       "epoch": "6fd67634",
+       "first_window_H": 2.995732273553991,
+       "full_windows": 1,
+       "last_window_H": 2.9264175554979963,
+       "mean_H": 2.964925732195771,
+       "mean_distinct": 19.555555555555557,
+       "n": 28,
+       "sliding_windows": 9
+      },
+      {
+       "H_slope_per_window": 0.0062454428223653186,
+       "epoch": "a6fdc513",
+       "first_window_H": 2.995732273553991,
+       "full_windows": 3,
+       "last_window_H": 2.995732273553991,
+       "mean_H": 2.784111303230869,
+       "mean_distinct": 17.784313725490197,
+       "n": 70,
+       "sliding_windows": 51
+      },
+      {
+       "H_slope_per_window": -0.00157512850262167,
+       "epoch": "d558328b",
+       "first_window_H": 2.76162571219778,
+       "full_windows": 5,
+       "last_window_H": 2.0558449546770494,
+       "mean_H": 2.74631217151698,
+       "mean_distinct": 17.265060240963855,
+       "n": 102,
+       "sliding_windows": 83
+      },
+      {
+       "H_slope_per_window": -0.009902102579427792,
+       "epoch": "e07165cd",
+       "first_window_H": 2.995732273553991,
+       "full_windows": 1,
+       "last_window_H": 2.9264175554979963,
+       "mean_H": 2.9784035940399924,
+       "mean_distinct": 19.75,
+       "n": 27,
+       "sliding_windows": 8
+      },
+      {
+       "H_slope_per_window": 0.0038090634553285653,
+       "epoch": "f6d6cca0",
+       "first_window_H": 2.3195749966735852,
+       "full_windows": 7,
+       "last_window_H": 2.8309404302537744,
+       "mean_H": 2.62258433968447,
+       "mean_distinct": 16.00735294117647,
+       "n": 155,
+       "sliding_windows": 136
+      },
+      {
+       "H_slope_per_window": 0.0005883085185909151,
+       "epoch": "f922856a",
+       "first_window_H": 2.6923109941417853,
+       "full_windows": 12,
+       "last_window_H": 2.995732273553991,
+       "mean_H": 2.832532147362369,
+       "mean_distinct": 18.017777777777777,
+       "n": 244,
+       "sliding_windows": 225
+      }
+     ],
+     "null_p5_slope": -0.0007327608201363658,
+     "observed_weighted_slope": 0.0016313227325080427,
+     "permutation_p_lower": 1.0,
+     "total_full_windows": 66,
+     "total_sliding_windows": 1171
+    },
+    "by_target_file": {
+     "below_null_p5": true,
+     "epochs_eligible": [
+      {
+       "H_slope_per_window": 0.0,
+       "epoch": "0322f601",
+       "first_window_H": 0.818808456222877,
+       "full_windows": 1,
+       "last_window_H": 0.818808456222877,
+       "mean_H": 0.818808456222877,
+       "mean_distinct": 3.0,
+       "n": 20,
+       "sliding_windows": 1
+      },
+      {
+       "H_slope_per_window": -0.013966457320024035,
+       "epoch": "03c16e54",
+       "first_window_H": 1.4427833121586762,
+       "full_windows": 2,
+       "last_window_H": 1.1024288055726656,
+       "mean_H": 1.2471456413826412,
+       "mean_distinct": 5.806451612903226,
+       "n": 50,
+       "sliding_windows": 31
+      },
+      {
+       "H_slope_per_window": 0.022601380365281358,
+       "epoch": "16bdb109",
+       "first_window_H": 0.1985152433458726,
+       "full_windows": 1,
+       "last_window_H": 0.3250829733914482,
+       "mean_H": 0.24597814211296345,
+       "mean_distinct": 2.0,
+       "n": 27,
+       "sliding_windows": 8
+      },
+      {
+       "H_slope_per_window": 0.000751255026953529,
+       "epoch": "28fa1568",
+       "first_window_H": 0.6881388137135884,
+       "full_windows": 1,
+       "last_window_H": 0.6931471805599453,
+       "mean_H": 0.6898082693290407,
+       "mean_distinct": 2.0,
+       "n": 28,
+       "sliding_windows": 9
+      },
+      {
+       "H_slope_per_window": 0.003648943248369612,
+       "epoch": "377047b0",
+       "first_window_H": 1.442080248948443,
+       "full_windows": 5,
+       "last_window_H": 1.7785860824530713,
+       "mean_H": 1.3059266871913888,
+       "mean_distinct": 5.288659793814433,
+       "n": 116,
+       "sliding_windows": 97
+      },
+      {
+       "H_slope_per_window": -0.006737965616770519,
+       "epoch": "5d0ccce1",
+       "first_window_H": 2.5536815580297962,
+       "full_windows": 6,
+       "last_window_H": 2.0253262207700677,
+       "mean_H": 2.3119437213144702,
+       "mean_distinct": 12.773584905660377,
+       "n": 125,
+       "sliding_windows": 106
+      },
+      {
+       "H_slope_per_window": 0.00025799258533153586,
+       "epoch": "61fe190c",
+       "first_window_H": 1.9468389992053854,
+       "full_windows": 12,
+       "last_window_H": 1.1097385521061456,
+       "mean_H": 1.4679498272922684,
+       "mean_distinct": 6.092511013215859,
+       "n": 246,
+       "sliding_windows": 227
+      },
+      {
+       "H_slope_per_window": -1.0880165856521497e-05,
+       "epoch": "6a4dccec",
+       "first_window_H": 1.6695801269814072,
+       "full_windows": 9,
+       "last_window_H": 1.773674807164117,
+       "mean_H": 1.6942346863054705,
+       "mean_distinct": 7.322222222222222,
+       "n": 199,
+       "sliding_windows": 180
+      },
+      {
+       "H_slope_per_window": -0.013096569325232768,
+       "epoch": "6fd67634",
+       "first_window_H": 2.2240978714293633,
+       "full_windows": 1,
+       "last_window_H": 2.082007361865277,
+       "mean_H": 2.21408885378841,
+       "mean_distinct": 11.555555555555555,
+       "n": 28,
+       "sliding_windows": 9
+      },
+      {
+       "H_slope_per_window": 0.0010607760979292828,
+       "epoch": "a6fdc513",
+       "first_window_H": 0.5875009311062074,
+       "full_windows": 3,
+       "last_window_H": 0.6874357505033553,
+       "mean_H": 0.4690900354235309,
+       "mean_distinct": 2.8627450980392157,
+       "n": 70,
+       "sliding_windows": 51
+      },
+      {
+       "H_slope_per_window": -0.007992669539325623,
+       "epoch": "d558328b",
+       "first_window_H": 1.8343719702816237,
+       "full_windows": 5,
+       "last_window_H": 1.1582146934012183,
+       "mean_H": 1.3732265451241654,
+       "mean_distinct": 5.301204819277109,
+       "n": 102,
+       "sliding_windows": 83
+      },
+      {
+       "H_slope_per_window": 0.014534526151175025,
+       "epoch": "e07165cd",
+       "first_window_H": 1.3491689438896621,
+       "full_windows": 1,
+       "last_window_H": 1.4305622903362423,
+       "mean_H": 1.3796914488071297,
+       "mean_distinct": 5.0,
+       "n": 27,
+       "sliding_windows": 8
+      },
+      {
+       "H_slope_per_window": -0.0046122679705318135,
+       "epoch": "f6d6cca0",
+       "first_window_H": 1.8479008005090658,
+       "full_windows": 7,
+       "last_window_H": 1.5353070175881727,
+       "mean_H": 1.8066772408531566,
+       "mean_distinct": 8.272058823529411,
+       "n": 155,
+       "sliding_windows": 136
+      },
+      {
+       "H_slope_per_window": 0.0002206844152216582,
+       "epoch": "f922856a",
+       "first_window_H": 2.042316124449607,
+       "full_windows": 12,
+       "last_window_H": 0.9489154358953991,
+       "mean_H": 2.1160931701823893,
+       "mean_distinct": 10.591111111111111,
+       "n": 244,
+       "sliding_windows": 225
+      }
+     ],
+     "null_p5_slope": -0.0013335717085897812,
+     "observed_weighted_slope": -0.0014838242255170212,
+     "permutation_p_lower": 0.028,
+     "total_full_windows": 66,
+     "total_sliding_windows": 1171
+    },
+    "epoch_sizes": [
+     246,
+     244,
+     199,
+     155,
+     125,
+     116,
+     102,
+     70,
+     50,
+     28,
+     28,
+     27,
+     27,
+     20,
+     15,
+     13,
+     5,
+     4,
+     4
+    ],
+    "epochs": 19,
+    "hypotheses_deduped": 1478
+   }
+  }
+ },
+ "faithfulness_i": {
+  "definition": "rho = confirm-tier effect / screen-tier effect. Confirm tier = status kept or measured_serving_gate; screen tier = the latest EARLIER row of the same campaign and mechanism_id with status keep_candidate, measured_null or regression and a numeric effect; strict pairing when candidate_diff_sha256 matches. The export holds one effect per row, not both tiers per attempt, so this is a cross-row join. Mechanism class breakdown: not available (taxonomy gate failed).",
+  "pairs": [
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "77080c3dcec29f73ac805ff75ca2bbe302af576c5dd3790b774e60cc3f7f36a5",
+    "confirm_effect": 0.04534927864089644,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     47
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-gemm4xn-2x-unroll",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "104104b799a21546433ede3de4d91ad332c45d8704ae33fc2a67cbce51d714e7",
+    "confirm_effect": 0.03440292909674736,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     58
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-dense-q8-tb-prefetch",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "c7e478ee3285a67f99209b109097ccfad1fd31883834237ed445556f66c7c4f5",
+    "confirm_effect": 0.05683411790206061,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     66
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-q4k-x4t-weight-prefetch",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.07113400412845383,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     68
+    ],
+    "confirm_status": "measured_serving_gate",
+    "judgeable": false,
+    "mechanism_id": "serving-gate-a1faab471e83",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "41b70abb23687efb130dac57ec6ffeb4f128fb381c4befbe176572220ad8628c",
+    "confirm_effect": 0.01073787008157523,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     69
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-q4k-x4t-weight-prefetch",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.08606071251261338,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     70
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "runtime-arm-load-threads-48",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "deb87a63b00cd75006b38d671ddc050adb0a50da446dda27cc1a01fec7fce333",
+    "confirm_effect": 0.008008555865508082,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     83
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-dense-q8-offset-vnni",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "ef2a796c32d57a43889a8502df5ce8612c68cbe5f30ae1895f51e2b609d197f9",
+    "confirm_effect": 0.003948393632757563,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     96
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-gemm4xn-4x-unroll",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.11181175988284875,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     159
+    ],
+    "confirm_status": "measured_serving_gate",
+    "judgeable": false,
+    "mechanism_id": "serving-gate-053c3bd82d00",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "8dbb07477f2ccfa46dfcb5dd65e22550379bba772ffde2234853fea44b20bd26",
+    "confirm_effect": 0.12174819861668684,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     160
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-dense-q8-tinyblas-zmm-widen",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "869acf51cf1c59bcca86ddc5a66ba77a106f6bfb59cecf7face88eb669322bd1",
+    "confirm_effect": 0.0037284043908167863,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     166
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-dense-q8-seed-accum",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "19952511d38e2c07533c92f4b64172d06a472acc06469f694f664bb16455d4fb",
+    "confirm_effect": 0.006007230450843393,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     170
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-q4k-x4t-zmm-widen",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "3837dcdf00eec117aa04366fdbcfdd6db40dc912ac39cadce79b3d37644fc0d9",
+    "confirm_effect": 0.022657715929629285,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     177
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-dense-q8-bscale-cvtph",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "d528e017f8256c0e8e9ecc433ba80583b60f55596d8449c7e1eab9b79c7b993a",
+    "confirm_effect": 0.006933591392311422,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     183
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-mmid-flat-qact-rows",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "80dbf0250d27f14621019c7a0d01ae6b514a55db9401df9bbb5e753ffc70ec45",
+    "confirm_effect": 0.013417710383234915,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     227
+    ],
+    "confirm_status": "kept",
+    "judgeable": true,
+    "mechanism_id": "akm-ds41-mmid-verify-flat-slabs",
+    "pairing": "mechanism_id_only_candidate_identity_not_established",
+    "rho": 0.587255551184222,
+    "same_epoch": false,
+    "screen_effect": 0.022848162705618735,
+    "screen_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     190
+    ],
+    "screen_status": "keep_candidate",
+    "unstable_small_screen": false
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "e0944445883a2eef386b977d5ad5bd62bf84016387a6c7405335c522af57b443",
+    "confirm_effect": 0.017160413177309763,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     239
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-dense-q8-two-row-tail-tiles",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "27632839c4ef525cf5868dbe948274faf6068662e04f30aa720f9618283356c2",
+    "confirm_effect": 0.007060091943321689,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     250
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-dense-q8-zmm-pair-unroll",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "4031611f5c753ddaa3a9f885621a899cae7d12311b33f83c59f1a4b20ec2b3f1",
+    "confirm_effect": 0.013731163543131197,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     254
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-mmid-deduplicate-empty-selection",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "90eb196874ccd6380d760b176dd4b6cca2cb9659df70ac6f4f4771cac2b38a6f",
+    "confirm_effect": 0.008168053122672658,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     285
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-q4k-activation-metadata-reuse",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "dab2aa852762d0834c863c95ca0ebcdd08a6bcf3069a08d4da8dbda52a1691ce",
+    "confirm_effect": 0.00568478071358558,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     302
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-q8-rn3-single-pair-loop",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "d95540b840d6f9eaa0d55d54f87f6bbc57a2403e95371e8d6834c704814dd4b2",
+    "confirm_effect": 0.012577360667086923,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     320
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-rmsnorm-eight-double-chains",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "5d9d6e5268d646db1de4fd7e5814be064a2adb6c7f5a0606597c5f577da7f1a6",
+    "confirm_effect": 0.0013235495210608406,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     331
+    ],
+    "confirm_status": "kept",
+    "judgeable": true,
+    "mechanism_id": "akm-ds41-rmsnorm-single-pass-output",
+    "pairing": "strict_same_candidate_diff_sha256",
+    "rho": -0.06008184951539791,
+    "same_epoch": true,
+    "screen_effect": -0.022029107488138133,
+    "screen_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     325
+    ],
+    "screen_status": "measured_null",
+    "unstable_small_screen": false
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "34cc7e171a5b9ee3cc3062769c2ce909fd2a530c5814bbdb91a53133fbee76d5",
+    "confirm_effect": 0.018209202867916385,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     344
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-dense-qact-flat-block-partition",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "2ad079d2a0381c148c95a0a0c2eeda62b14d6610c13a45a09e6f3ff14f209b2f",
+    "confirm_effect": 0.020499293591557333,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store",
+     382
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-mmid-qact-block-partition",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.05614610627072536,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store-b0ba1d427",
+     1
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "runtime-arm-load-threads-48",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "837f7911dfabceb27870b82990c65200a087097c2747089221c065ab5922b496",
+    "confirm_effect": 0.026731474282656098,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store-b0ba1d427",
+     4
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-solo-small-three-row-runs",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "35f93e8365058eabda75971b80444bfab3d7f035227e06133bd3438b327a689e",
+    "confirm_effect": 0.011118664559548908,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store-b0ba1d427",
+     16
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-small-concat-solo-runs",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "44dd17866d77514191a284dc1891918b22c2e8739a553be4e35daeed925c314e",
+    "confirm_effect": 0.0034962305988535114,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store-b0ba1d427",
+     18
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-small-sumrows-solo",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": "35382a4ff3d523354e4b217cf77e54e78174a5579f1f9a37e5a15340c6f9d2fb",
+    "confirm_effect": 0.0011997203113678356,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store-b0ba1d427",
+     25
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-ds41-verify-bounded-flat-expert-slabs",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-ds41-cpu-decode-20260923",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.16157236054232582,
+    "confirm_row": [
+     "ak-ds41-cpu-decode-20260923/store-b0ba1d427",
+     89
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "runtime-arm-omp-places-48-sib",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.04755028820257845,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     1
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "runtime-arm-load-threads-48",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": "254a67d2de4d6982701bb6a588a9c62a586140f415e605b320f4983195e99db5",
+    "confirm_effect": 0.021579666539523812,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     4
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cpu-solo-verify-five-rows",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": "fb591770490dd16bc9db824bf0fb55b6af127fbbbf93806b97624480aa858843",
+    "confirm_effect": 0.006271945173250026,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     7
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cpu-q8-proportional-stream-placement",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": "231b82271478a58467945ff09474f5fbeaa0c05f1d1f4389cf32109105823ece",
+    "confirm_effect": 0.039324196473554895,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     11
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cpu-q8-verify-five-single-pass",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": "7f62fb16161ff51fa752f73f57276bc50acbf5657a010b7ab1b6651cbaa79e47",
+    "confirm_effect": 0.033568294533127485,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     19
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cpu-float-narrow-m-column-jobs",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": "e1506bc7986f5148ce7162b46d33ea4e9fe63078923f3bc19997646f78bfcef7",
+    "confirm_effect": 0.02047731239781858,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     37
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cpu-mmid-flat-activation-blocks",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": "464ff3785ec008a240cbf7553b446319ffaaff1db26b010218ad1139b02cce68",
+    "confirm_effect": 0.0005393791039824958,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     116
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cpu-q8-next-tile-prefetch",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": "ec993400af6e3f67f7e34428b34f1958d5cf674d23d0fd7d01d092690709053b",
+    "confirm_effect": 0.016112405178828615,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     144
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cpu-solo-concat-verify-five",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": "87e7167b044a5f2c182dd1da8f1f779f9cd7dfd1179e92b07eb9881c8efa1552",
+    "confirm_effect": 0.005932164016749786,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     152
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cpu-iq3s-grid-gather",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "ak-q38fn-cpu-decode-20261003",
+    "candidate_diff_sha256": "983c1f80d89dda60cd7525f3ebc9e18d4000f04fa75cfb3294f5abf5ba695616",
+    "confirm_effect": 0.008483695274238201,
+    "confirm_row": [
+     "ak-q38fn-cpu-decode-20261003/store-b0ba1d427",
+     158
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cpu-dense-verify-flat-quant-blocks",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.03897501157258443,
+    "confirm_row": [
+     "loop-memory",
+     37
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q8-1-contiguous-1d-index",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.02017777887575778,
+    "confirm_row": [
+     "loop-memory",
+     45
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-fattn-two-partition-collapse-stabilized",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.055739718762249924,
+    "confirm_row": [
+     "loop-memory",
+     49
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q4k-branchless-scale-unpack",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.05353328252362344,
+    "confirm_row": [
+     "loop-memory",
+     51
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q8-1-float2-halfwave",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.04849349742278708,
+    "confirm_row": [
+     "loop-memory",
+     55
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q8-1-float4-eighthwave",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.018460526107562325,
+    "confirm_row": [
+     "loop-memory",
+     58
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q8-1-fourlane-dual-fragment",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.027421924127387642,
+    "confirm_row": [
+     "loop-memory",
+     92
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-mmvq-static-swiglu-gate",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.015713694695010272,
+    "confirm_row": [
+     "loop-memory",
+     98
+    ],
+    "confirm_status": "kept",
+    "judgeable": true,
+    "mechanism_id": "akm-q8-1-gfx90a-hybrid-reduce",
+    "pairing": "mechanism_id_only_candidate_identity_not_established",
+    "rho": 2.2545639191799984,
+    "same_epoch": true,
+    "screen_effect": 0.006969726855526659,
+    "screen_row": [
+     "loop-memory",
+     97
+    ],
+    "screen_status": "measured_null",
+    "unstable_small_screen": false
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.02978391574239536,
+    "confirm_row": [
+     "loop-memory",
+     126
+    ],
+    "confirm_status": "kept",
+    "judgeable": true,
+    "mechanism_id": "akm-q4k-q8-sum-sidecar",
+    "pairing": "mechanism_id_only_candidate_identity_not_established",
+    "rho": 26.48122144825019,
+    "same_epoch": false,
+    "screen_effect": 0.0011247183518554582,
+    "screen_row": [
+     "loop-memory",
+     86
+    ],
+    "screen_status": "measured_null",
+    "unstable_small_screen": false
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.02495458543837592,
+    "confirm_row": [
+     "loop-memory",
+     214
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q4k-smallk-wave-row",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.02093484437753723,
+    "confirm_row": [
+     "loop-memory",
+     219
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q4k-split-dot4-chains",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.01764973645123824,
+    "confirm_row": [
+     "loop-memory",
+     251
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q4k-split-dot4-chains",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.03451571710763446,
+    "confirm_row": [
+     "loop-memory",
+     273
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-mmvq-static-bias-only",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.041548196732636544,
+    "confirm_row": [
+     "loop-memory",
+     316
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q6k-chunked-packed-operands",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.012816140525305775,
+    "confirm_row": [
+     "loop-memory",
+     487
+    ],
+    "confirm_status": "kept",
+    "judgeable": true,
+    "mechanism_id": "akm-rope-neox-quad-angle-broadcast",
+    "pairing": "mechanism_id_only_candidate_identity_not_established",
+    "rho": 6.966149841653442,
+    "same_epoch": true,
+    "screen_effect": 0.0018397738803539454,
+    "screen_row": [
+     "loop-memory",
+     484
+    ],
+    "screen_status": "measured_null",
+    "unstable_small_screen": false
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.09320765901002503,
+    "confirm_row": [
+     "loop-memory",
+     619
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q4k-chained-dp4a",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.021347920148125477,
+    "confirm_row": [
+     "loop-memory",
+     790
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q8-1-graph-local-reuse",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.02146502027188424,
+    "confirm_row": [
+     "loop-memory",
+     810
+    ],
+    "confirm_status": "kept",
+    "judgeable": true,
+    "mechanism_id": "akm-mmvq-fixed-1536-unroll",
+    "pairing": "mechanism_id_only_candidate_identity_not_established",
+    "rho": 2.0472021714385473,
+    "same_epoch": true,
+    "screen_effect": 0.01048505153587298,
+    "screen_row": [
+     "loop-memory",
+     799
+    ],
+    "screen_status": "measured_null",
+    "unstable_small_screen": false
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.013585722894165375,
+    "confirm_row": [
+     "loop-memory",
+     1123
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-rmsnorm-1536-float4-384",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.01810814015914164,
+    "confirm_row": [
+     "loop-memory",
+     1151
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q6k-paired-scale-pk-fma",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.025296254913939054,
+    "confirm_row": [
+     "loop-memory",
+     1250
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-rmsnorm-1536-direct-mul-index",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.01364709079405757,
+    "confirm_row": [
+     "loop-memory",
+     1317
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-mmvq-gfx90a-dense-wide-launch",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.013145335062361152,
+    "confirm_row": [
+     "loop-memory",
+     1388
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q8-1-graph-tensor-cache-owned-pool",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.014505376836607686,
+    "confirm_row": [
+     "loop-memory",
+     1403
+    ],
+    "confirm_status": "kept",
+    "judgeable": true,
+    "mechanism_id": "akm-q4k-halfwave-dpp-final-reduce",
+    "pairing": "mechanism_id_only_candidate_identity_not_established",
+    "rho": 2.781745141126278,
+    "same_epoch": true,
+    "screen_effect": 0.005214488064400724,
+    "screen_row": [
+     "loop-memory",
+     1398
+    ],
+    "screen_status": "measured_null",
+    "unstable_small_screen": false
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.017831417520234316,
+    "confirm_row": [
+     "loop-memory",
+     1415
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q6k-single-row-dpp-final-reduce",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.050974201961565546,
+    "confirm_row": [
+     "loop-memory",
+     1445
+    ],
+    "confirm_status": "kept",
+    "judgeable": true,
+    "mechanism_id": "akm-cdna2-q4k-b8-mmvq-crossover",
+    "pairing": "mechanism_id_only_candidate_identity_not_established",
+    "rho": -26.94780947781505,
+    "same_epoch": true,
+    "screen_effect": -0.0018915898156223188,
+    "screen_row": [
+     "loop-memory",
+     1439
+    ],
+    "screen_status": "measured_null",
+    "unstable_small_screen": false
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.060746552233427176,
+    "confirm_row": [
+     "loop-memory",
+     1507
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-fattn-gfx90a-eight-wave-vkq",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.13929512112844833,
+    "confirm_row": [
+     "loop-memory",
+     1537
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-q4k-b4-weight-block-hoist",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.23339188950431944,
+    "confirm_row": [
+     "loop-memory",
+     1997
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cdna2-q8-b4-mmvq-route",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.02031072317836924,
+    "confirm_row": [
+     "loop-memory",
+     2154
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cdna2-q8-b1-eight-warp-four-row",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.008921918563818076,
+    "confirm_row": [
+     "loop-memory",
+     2170
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cdna2-q8-b1-singlepass-vdr4",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   },
+   {
+    "campaign_dir": "loop-memory",
+    "candidate_diff_sha256": null,
+    "confirm_effect": 0.02582985586620512,
+    "confirm_row": [
+     "loop-memory",
+     2306
+    ],
+    "confirm_status": "kept",
+    "judgeable": false,
+    "mechanism_id": "akm-cdna2-q8-single-x4-load",
+    "reason": "no earlier screen-tier row for this mechanism_id in the campaign"
+   }
+  ],
+  "per_campaign": {
+   "ak-27b-gpu-verify-20261004": {
+    "confirm_tier_rows": 0,
+    "judgeable": 0,
+    "judgeable_strict_same_candidate": 0,
+    "not_judgeable": 0,
+    "not_judgeable_reasons": {},
+    "rho_all_pairs": [],
+    "rho_sign_flips": 0,
+    "rho_sum_ratio": null
+   },
+   "ak-ds41-cpu-decode-20260923": {
+    "confirm_tier_rows": 30,
+    "judgeable": 2,
+    "judgeable_strict_same_candidate": 1,
+    "not_judgeable": 28,
+    "not_judgeable_reasons": {
+     "no earlier screen-tier row for this mechanism_id in the campaign": 28
+    },
+    "rho_all_pairs": [
+     0.5873,
+     -0.0601
+    ],
+    "rho_sign_flips": 1,
+    "rho_sum_ratio": 17.99788291397445
+   },
+   "ak-q38fn-cpu-decode-20261003": {
+    "confirm_tier_rows": 10,
+    "judgeable": 0,
+    "judgeable_strict_same_candidate": 0,
+    "not_judgeable": 10,
+    "not_judgeable_reasons": {
+     "no earlier screen-tier row for this mechanism_id in the campaign": 10
+    },
+    "rho_all_pairs": [],
+    "rho_sign_flips": 0,
+    "rho_sum_ratio": null
+   },
+   "loop-memory": {
+    "confirm_tier_rows": 32,
+    "judgeable": 6,
+    "judgeable_strict_same_candidate": 0,
+    "not_judgeable": 26,
+    "not_judgeable_reasons": {
+     "no earlier screen-tier row for this mechanism_id in the campaign": 26
+    },
+    "rho_all_pairs": [
+     2.2546,
+     26.4812,
+     6.9661,
+     2.0472,
+     2.7817,
+     -26.9478
+    ],
+    "rho_sign_flips": 1,
+    "rho_sum_ratio": 6.118158404715369
+   }
+  }
+ },
+ "no_intent_accounting": {
+  "ak-27b-gpu-verify-20261004": {
+   "no_intent": 0,
+   "no_intent_by_status": {},
+   "rows": 13,
+   "with_intent": 13,
+   "with_intent_by_status": {
+    "authoring_failed": 4,
+    "gate_refused": 5,
+    "hypothesis_rejected": 1,
+    "hypothesis_retired": 2,
+    "patch_rejected": 1
+   }
+  },
+  "ak-ds41-cpu-decode-20260923": {
+   "no_intent": 557,
+   "no_intent_by_status": {
+    "abstained": 323,
+    "anchor_guard_excursion": 3,
+    "anchor_verified": 22,
+    "lane_error": 8,
+    "planner_transient": 189,
+    "stopped_mid_formation": 12
+   },
+   "rows": 835,
+   "with_intent": 278,
+   "with_intent_by_status": {
+    "abstained": 3,
+    "authoring_failed": 11,
+    "gate_refused": 26,
+    "hypothesis_rejected": 50,
+    "hypothesis_retired": 7,
+    "integrity_refused": 3,
+    "keep_candidate": 9,
+    "kept": 28,
+    "measured_divergence": 1,
+    "measured_null": 28,
+    "measured_serving_gate": 2,
+    "measurement_invalid": 2,
+    "patch_rejected": 32,
+    "patch_rounds_exhausted": 13,
+    "planner_transient": 3,
+    "refused_at_formation": 6,
+    "refused_duplicate": 1,
+    "regression": 9,
+    "resume_rejected": 16,
+    "runtime_observed": 5,
+    "scope_blocked": 9,
+    "stopped_mid_formation": 4,
+    "superseded": 10
+   }
+  },
+  "ak-q38fn-cpu-decode-20261003": {
+   "no_intent": 198,
+   "no_intent_by_status": {
+    "abstained": 15,
+    "anchor_guard_excursion": 1,
+    "anchor_verified": 8,
+    "lane_error": 2,
+    "planner_transient": 171,
+    "stopped_mid_formation": 1
+   },
+   "rows": 331,
+   "with_intent": 133,
+   "with_intent_by_status": {
+    "abstained": 15,
+    "authoring_failed": 3,
+    "gate_refused": 16,
+    "hypothesis_rejected": 13,
+    "hypothesis_retired": 4,
+    "integrity_refused": 2,
+    "keep_candidate": 8,
+    "kept": 10,
+    "measured_divergence": 1,
+    "measured_null": 17,
+    "patch_rejected": 12,
+    "patch_rounds_exhausted": 7,
+    "refused_duplicate": 2,
+    "regression": 1,
+    "resume_rejected": 13,
+    "runtime_observed": 6,
+    "scope_blocked": 3
+   }
+  },
+  "loop-memory": {
+   "no_intent": 916,
+   "no_intent_by_status": {
+    "anchor_mismatch": 4,
+    "anchor_verified": 17,
+    "bench_failed": 4,
+    "champion_vs_production": 12,
+    "lane_error": 24,
+    "planner_transient": 837,
+    "refused_at_formation": 9,
+    "run_aborted": 4,
+    "superseded": 5
+   },
+   "rows": 2397,
+   "with_intent": 1481,
+   "with_intent_by_status": {
+    "kept": 32,
+    "measured_null": 831,
+    "refused_at_formation": 361,
+    "stopped_mid_formation": 19,
+    "superseded": 238
+   }
+  }
+ },
+ "repeat_null_ii": {
+  "definition": "formation = intent-bearing row with a non-sentinel mechanism_id (V1 every such row; V2 same but an earlier answer row with the identical statement text is not allowed to match, to remove a hypothesis agreeing with its own lifecycle rows; V3 first occurrence per statement); agreement = do_not_repeat.structural_target(mechanism, symbol, file).agreement against an EARLIER row of the same campaign with status in ANSWER_STATUSES; A restricts to same epoch (full epoch or equal measurement_epoch, the dispatch_guard rule), B is any epoch; guard_rule needs >= 3 such answers. Candidate-diff and research_scope escape clauses of dispatch_guard are not replayable from the export.",
+  "per_campaign": {
+   "ak-27b-gpu-verify-20261004": {
+    "V1_all_intent_rows_incl_same_statement_matches": {
+     "A_agree_same_epoch": 0,
+     "A_rate": 0.0,
+     "B_agree_any_epoch": 0,
+     "B_rate": 0.0,
+     "agreeing_formations_by_status_A": {},
+     "formations": 13,
+     "guard_rate": 0.0,
+     "guard_rule_three_same_epoch_answers": 0,
+     "refused_at_formation_formations": 0,
+     "refused_at_formation_rate": 0.0,
+     "refused_rate_le_A_rate": true,
+     "refused_rows_meeting_guard_rule": 0,
+     "refused_rows_structurally_agreeing_A": 0,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    },
+    "V2_all_intent_rows_excluding_same_statement_matches": {
+     "A_agree_same_epoch": 0,
+     "A_rate": 0.0,
+     "B_agree_any_epoch": 0,
+     "B_rate": 0.0,
+     "agreeing_formations_by_status_A": {},
+     "formations": 13,
+     "guard_rate": 0.0,
+     "guard_rule_three_same_epoch_answers": 0,
+     "refused_at_formation_formations": 0,
+     "refused_at_formation_rate": 0.0,
+     "refused_rate_le_A_rate": true,
+     "refused_rows_meeting_guard_rule": 0,
+     "refused_rows_structurally_agreeing_A": 0,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    },
+    "V3_first_occurrence_per_statement": {
+     "A_agree_same_epoch": 0,
+     "A_rate": 0.0,
+     "B_agree_any_epoch": 0,
+     "B_rate": 0.0,
+     "agreeing_formations_by_status_A": {},
+     "formations": 3,
+     "guard_rate": 0.0,
+     "guard_rule_three_same_epoch_answers": 0,
+     "refused_at_formation_formations": 0,
+     "refused_at_formation_rate": 0.0,
+     "refused_rate_le_A_rate": true,
+     "refused_rows_meeting_guard_rule": 0,
+     "refused_rows_structurally_agreeing_A": 0,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    }
+   },
+   "ak-ds41-cpu-decode-20260923": {
+    "V1_all_intent_rows_incl_same_statement_matches": {
+     "A_agree_same_epoch": 10,
+     "A_rate": 0.03597122302158273,
+     "B_agree_any_epoch": 23,
+     "B_rate": 0.08273381294964029,
+     "agreeing_formations_by_status_A": {
+      "kept": 1,
+      "measured_null": 2,
+      "measurement_invalid": 1,
+      "regression": 1,
+      "resume_rejected": 3,
+      "superseded": 2
+     },
+     "formations": 278,
+     "guard_rate": 0.0,
+     "guard_rule_three_same_epoch_answers": 0,
+     "refused_at_formation_formations": 6,
+     "refused_at_formation_rate": 0.02158273381294964,
+     "refused_rate_le_A_rate": true,
+     "refused_rows_meeting_guard_rule": 0,
+     "refused_rows_structurally_agreeing_A": 0,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    },
+    "V2_all_intent_rows_excluding_same_statement_matches": {
+     "A_agree_same_epoch": 7,
+     "A_rate": 0.025179856115107913,
+     "B_agree_any_epoch": 12,
+     "B_rate": 0.04316546762589928,
+     "agreeing_formations_by_status_A": {
+      "kept": 1,
+      "measured_null": 2,
+      "measurement_invalid": 1,
+      "regression": 1,
+      "superseded": 2
+     },
+     "formations": 278,
+     "guard_rate": 0.0,
+     "guard_rule_three_same_epoch_answers": 0,
+     "refused_at_formation_formations": 6,
+     "refused_at_formation_rate": 0.02158273381294964,
+     "refused_rate_le_A_rate": true,
+     "refused_rows_meeting_guard_rule": 0,
+     "refused_rows_structurally_agreeing_A": 0,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    },
+    "V3_first_occurrence_per_statement": {
+     "A_agree_same_epoch": 5,
+     "A_rate": 0.03289473684210526,
+     "B_agree_any_epoch": 10,
+     "B_rate": 0.06578947368421052,
+     "agreeing_formations_by_status_A": {
+      "kept": 1,
+      "measurement_invalid": 1,
+      "regression": 1,
+      "superseded": 2
+     },
+     "formations": 152,
+     "guard_rate": 0.0,
+     "guard_rule_three_same_epoch_answers": 0,
+     "refused_at_formation_formations": 0,
+     "refused_at_formation_rate": 0.0,
+     "refused_rate_le_A_rate": true,
+     "refused_rows_meeting_guard_rule": 0,
+     "refused_rows_structurally_agreeing_A": 0,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    }
+   },
+   "ak-q38fn-cpu-decode-20261003": {
+    "V1_all_intent_rows_incl_same_statement_matches": {
+     "A_agree_same_epoch": 4,
+     "A_rate": 0.03007518796992481,
+     "B_agree_any_epoch": 16,
+     "B_rate": 0.12030075187969924,
+     "agreeing_formations_by_status_A": {
+      "abstained": 1,
+      "keep_candidate": 1,
+      "resume_rejected": 2
+     },
+     "formations": 133,
+     "guard_rate": 0.0,
+     "guard_rule_three_same_epoch_answers": 0,
+     "refused_at_formation_formations": 0,
+     "refused_at_formation_rate": 0.0,
+     "refused_rate_le_A_rate": true,
+     "refused_rows_meeting_guard_rule": 0,
+     "refused_rows_structurally_agreeing_A": 0,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    },
+    "V2_all_intent_rows_excluding_same_statement_matches": {
+     "A_agree_same_epoch": 2,
+     "A_rate": 0.015037593984962405,
+     "B_agree_any_epoch": 13,
+     "B_rate": 0.09774436090225563,
+     "agreeing_formations_by_status_A": {
+      "abstained": 1,
+      "keep_candidate": 1
+     },
+     "formations": 133,
+     "guard_rate": 0.0,
+     "guard_rule_three_same_epoch_answers": 0,
+     "refused_at_formation_formations": 0,
+     "refused_at_formation_rate": 0.0,
+     "refused_rate_le_A_rate": true,
+     "refused_rows_meeting_guard_rule": 0,
+     "refused_rows_structurally_agreeing_A": 0,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    },
+    "V3_first_occurrence_per_statement": {
+     "A_agree_same_epoch": 2,
+     "A_rate": 0.029411764705882353,
+     "B_agree_any_epoch": 5,
+     "B_rate": 0.07352941176470588,
+     "agreeing_formations_by_status_A": {
+      "abstained": 1,
+      "keep_candidate": 1
+     },
+     "formations": 68,
+     "guard_rate": 0.0,
+     "guard_rule_three_same_epoch_answers": 0,
+     "refused_at_formation_formations": 0,
+     "refused_at_formation_rate": 0.0,
+     "refused_rate_le_A_rate": true,
+     "refused_rows_meeting_guard_rule": 0,
+     "refused_rows_structurally_agreeing_A": 0,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    }
+   },
+   "loop-memory": {
+    "V1_all_intent_rows_incl_same_statement_matches": {
+     "A_agree_same_epoch": 223,
+     "A_rate": 0.15057393652937204,
+     "B_agree_any_epoch": 281,
+     "B_rate": 0.18973666441593517,
+     "agreeing_formations_by_status_A": {
+      "kept": 4,
+      "measured_null": 157,
+      "refused_at_formation": 13,
+      "stopped_mid_formation": 1,
+      "superseded": 48
+     },
+     "formations": 1481,
+     "guard_rate": 0.031060094530722483,
+     "guard_rule_three_same_epoch_answers": 46,
+     "refused_at_formation_formations": 361,
+     "refused_at_formation_rate": 0.2437542201215395,
+     "refused_rate_le_A_rate": false,
+     "refused_rows_meeting_guard_rule": 2,
+     "refused_rows_structurally_agreeing_A": 13,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    },
+    "V2_all_intent_rows_excluding_same_statement_matches": {
+     "A_agree_same_epoch": 222,
+     "A_rate": 0.149898717083052,
+     "B_agree_any_epoch": 280,
+     "B_rate": 0.18906144496961513,
+     "agreeing_formations_by_status_A": {
+      "kept": 4,
+      "measured_null": 157,
+      "refused_at_formation": 13,
+      "stopped_mid_formation": 1,
+      "superseded": 47
+     },
+     "formations": 1481,
+     "guard_rate": 0.031060094530722483,
+     "guard_rule_three_same_epoch_answers": 46,
+     "refused_at_formation_formations": 361,
+     "refused_at_formation_rate": 0.2437542201215395,
+     "refused_rate_le_A_rate": false,
+     "refused_rows_meeting_guard_rule": 2,
+     "refused_rows_structurally_agreeing_A": 13,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    },
+    "V3_first_occurrence_per_statement": {
+     "A_agree_same_epoch": 222,
+     "A_rate": 0.15020297699594046,
+     "B_agree_any_epoch": 279,
+     "B_rate": 0.18876860622462788,
+     "agreeing_formations_by_status_A": {
+      "kept": 4,
+      "measured_null": 157,
+      "refused_at_formation": 13,
+      "stopped_mid_formation": 1,
+      "superseded": 47
+     },
+     "formations": 1478,
+     "guard_rate": 0.03112313937753721,
+     "guard_rule_three_same_epoch_answers": 46,
+     "refused_at_formation_formations": 360,
+     "refused_at_formation_rate": 0.2435723951285521,
+     "refused_rate_le_A_rate": false,
+     "refused_rows_meeting_guard_rule": 2,
+     "refused_rows_structurally_agreeing_A": 13,
+     "refused_rows_whose_text_cites_do_not_repeat": 0
+    }
+   }
+  }
+ },
+ "schema": "ak-hr-2.taxfree.v1",
+ "status": "TAXONOMY GATE FAILED (see heldout_agreement.json); this file carries no collapse verdict",
+ "surface_diff_distance": {
+  "ak-27b-gpu-verify-20261004": {
+   "judgeable": false,
+   "max_in_one_epoch": 6,
+   "note": "patch bytes are not in the export; judgeable would additionally need a store read",
+   "rows_with_retained_patch": 6
+  },
+  "ak-ds41-cpu-decode-20260923": {
+   "judgeable": false,
+   "max_in_one_epoch": 10,
+   "note": "patch bytes are not in the export; judgeable would additionally need a store read",
+   "rows_with_retained_patch": 59
+  },
+  "ak-q38fn-cpu-decode-20261003": {
+   "judgeable": true,
+   "max_in_one_epoch": 22,
+   "note": "patch bytes are not in the export; judgeable would additionally need a store read",
+   "rows_with_retained_patch": 32
+  },
+  "loop-memory": {
+   "judgeable": false,
+   "max_in_one_epoch": 0,
+   "note": "patch bytes are not in the export; judgeable would additionally need a store read",
+   "rows_with_retained_patch": 0
+  }
+ }
+}

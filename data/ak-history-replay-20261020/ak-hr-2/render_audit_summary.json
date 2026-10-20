@@ -1,0 +1,775 @@
+{
+  "config": {
+    "argv": [],
+    "git_head": "092a845391dc0255c835a175b5cc43098008f71f",
+    "input_sha256": {
+      "actor_call_records.jsonl": "2ce625ca04d809d0db89b035cc521415316744fdeca1646afe0921b51a9f2e2b",
+      "history_records.jsonl": "376c0eecb93c129a499360c48218a776eb1e1e0363502e51d8dfaef2eef2ef14"
+    },
+    "limit": 12,
+    "pinned_history_pool": 500,
+    "pinned_history_statuses": [
+      "kept",
+      "keep_candidate",
+      "abstained",
+      "measured_null"
+    ],
+    "proxies": {
+      "as_of_cut": "row.recorded_at < call.started_at on 27-char normalised YYYY-MM-DDTHH:MM:SS.ffffffZ (whole seconds padded .000000); row order = raw recorded_at DESC then rowid DESC (as the SQL)",
+      "call_epoch": "task_key.epoch_sha256 / measurement_epoch of the row named by call.join (store_label+rowid), i.e. the NEXT recorded attempt (time-window heuristic, no key join)",
+      "invisible_answers": "same-epoch ANSWER rows before the call that are in neither the verbose 12 nor the visible Always-shown block",
+      "render": "real actors.render_context({'prior_experiments': rows}, limit=12); Already-tried section = '## Already tried' to next '\\n## '",
+      "run_py": "imported; real run.prior_experiments / _with_pinned_history used with ExperimentStore swapped for AsOfStore",
+      "same_epoch": "row epoch == call epoch OR (row measurement_epoch not None and == call measurement_epoch); verified aliases not exported",
+      "shares": "mean/median over rendered calls of per-call (group rows / rows shown); always_shown shares only over calls whose block is non-empty",
+      "unexported_fields_none": [
+        "falsifier",
+        "result_sha256",
+        "claims",
+        "exact_attribution_effect_fraction",
+        "target_runtime_effect_fraction"
+      ]
+    },
+    "python": "3.13.7 (main, Mar  3 2026, 12:19:54) [GCC 15.2.0]",
+    "ranking_pool": 2000,
+    "recency_recall_limit": 40,
+    "status_groups": {
+      "ANSWER": [
+        "confirm_vetoed",
+        "keep_candidate",
+        "kept",
+        "measured_null",
+        "regression"
+      ],
+      "FORMATION_GATE": [
+        "authoring_failed",
+        "gate_refused",
+        "hypothesis_rejected",
+        "hypothesis_retired",
+        "integrity_refused",
+        "patch_rejected",
+        "patch_rounds_exhausted",
+        "refused_at_formation",
+        "refused_duplicate",
+        "resume_rejected",
+        "scope_blocked",
+        "stopped_mid_formation"
+      ],
+      "HARNESS": [
+        "abstained",
+        "bench_failed",
+        "lane_error",
+        "planner_transient"
+      ],
+      "OTHER": "every other status (named per scope in *_other_status_rows)"
+    }
+  },
+  "overall": {
+    "empty_window": 3,
+    "modes": {
+      "rank": {
+        "already_tried_chars": {
+          "mean": 6769.638265,
+          "median": 6395.0,
+          "n": 1960
+        },
+        "always_shown_calls_with_rows": 1032,
+        "always_shown_other_status_rows": {},
+        "always_shown_share": {
+          "ANSWER": {
+            "mean": 0.027019,
+            "median": 0.0,
+            "n": 1032
+          },
+          "FORMATION_GATE": {
+            "mean": 0.0,
+            "median": 0.0,
+            "n": 1032
+          },
+          "HARNESS": {
+            "mean": 0.972981,
+            "median": 1.0,
+            "n": 1032
+          },
+          "OTHER": {
+            "mean": 0.0,
+            "median": 0.0,
+            "n": 1032
+          }
+        },
+        "crosscheck_failures": 0,
+        "distinct_mechanisms_verbose12": {
+          "mean": 11.651531,
+          "median": 12.0,
+          "n": 1960
+        },
+        "distinct_mechanisms_visible": {
+          "mean": 11.683673,
+          "median": 12.0,
+          "n": 1960
+        },
+        "frac_zero_answer_in_verbose12": 0.016327,
+        "frac_zero_answer_in_verbose_plus_always": 0.016327,
+        "invisible_answers": {
+          "mean": 0.013776,
+          "median": 0.0,
+          "n": 1960
+        },
+        "same_epoch_answers_before": {
+          "mean": 1.630612,
+          "median": 2.0,
+          "n": 1960
+        },
+        "verbose12_calls_with_rows": 1960,
+        "verbose12_other_status_rows": {
+          "anchor_guard_excursion": 15,
+          "anchor_verified": 848,
+          "runtime_observed": 885,
+          "superseded": 37
+        },
+        "verbose12_share": {
+          "ANSWER": {
+            "mean": 0.565791,
+            "median": 0.738636,
+            "n": 1960
+          },
+          "FORMATION_GATE": {
+            "mean": 0.314511,
+            "median": 0.166667,
+            "n": 1960
+          },
+          "HARNESS": {
+            "mean": 0.042467,
+            "median": 0.0,
+            "n": 1960
+          },
+          "OTHER": {
+            "mean": 0.077232,
+            "median": 0.083333,
+            "n": 1960
+          }
+        }
+      },
+      "recency": {
+        "already_tried_chars": {
+          "mean": 8011.256122,
+          "median": 6810.0,
+          "n": 1960
+        },
+        "always_shown_calls_with_rows": 1027,
+        "always_shown_other_status_rows": {},
+        "always_shown_share": {
+          "ANSWER": {
+            "mean": 0.663463,
+            "median": 0.75,
+            "n": 1027
+          },
+          "FORMATION_GATE": {
+            "mean": 0.0,
+            "median": 0.0,
+            "n": 1027
+          },
+          "HARNESS": {
+            "mean": 0.336537,
+            "median": 0.25,
+            "n": 1027
+          },
+          "OTHER": {
+            "mean": 0.0,
+            "median": 0.0,
+            "n": 1027
+          }
+        },
+        "crosscheck_failures": 0,
+        "distinct_mechanisms_verbose12": {
+          "mean": 1.195918,
+          "median": 0.0,
+          "n": 1960
+        },
+        "distinct_mechanisms_visible": {
+          "mean": 2.520408,
+          "median": 3.0,
+          "n": 1960
+        },
+        "frac_zero_answer_in_verbose12": 0.812245,
+        "frac_zero_answer_in_verbose_plus_always": 0.386224,
+        "invisible_answers": {
+          "mean": 0.068367,
+          "median": 0.0,
+          "n": 1960
+        },
+        "same_epoch_answers_before": {
+          "mean": 1.630612,
+          "median": 2.0,
+          "n": 1960
+        },
+        "verbose12_calls_with_rows": 1960,
+        "verbose12_other_status_rows": {
+          "anchor_guard_excursion": 14,
+          "anchor_verified": 260,
+          "measured_divergence": 43,
+          "measured_serving_gate": 13,
+          "measurement_invalid": 18,
+          "runtime_observed": 97,
+          "superseded": 76
+        },
+        "verbose12_share": {
+          "ANSWER": {
+            "mean": 0.042746,
+            "median": 0.0,
+            "n": 1960
+          },
+          "FORMATION_GATE": {
+            "mean": 0.075651,
+            "median": 0.0,
+            "n": 1960
+          },
+          "HARNESS": {
+            "mean": 0.858113,
+            "median": 1.0,
+            "n": 1960
+          },
+          "OTHER": {
+            "mean": 0.02349,
+            "median": 0.0,
+            "n": 1960
+          }
+        }
+      }
+    },
+    "n_calls": 1963,
+    "reason_counts": {
+      "empty_window": 3,
+      "rendered": 1960
+    },
+    "rendered": 1960,
+    "unjoined": 0
+  },
+  "per_campaign_dir": {
+    "ak-27b-gpu-verify-20261004": {
+      "empty_window": 2,
+      "modes": {
+        "rank": {
+          "already_tried_chars": {
+            "mean": 2306.0,
+            "median": 2306,
+            "n": 1
+          },
+          "always_shown_calls_with_rows": 0,
+          "always_shown_other_status_rows": {},
+          "always_shown_share": {
+            "ANSWER": {
+              "mean": null,
+              "median": null,
+              "n": 0
+            },
+            "FORMATION_GATE": {
+              "mean": null,
+              "median": null,
+              "n": 0
+            },
+            "HARNESS": {
+              "mean": null,
+              "median": null,
+              "n": 0
+            },
+            "OTHER": {
+              "mean": null,
+              "median": null,
+              "n": 0
+            }
+          },
+          "crosscheck_failures": 0,
+          "distinct_mechanisms_verbose12": {
+            "mean": 1.0,
+            "median": 1,
+            "n": 1
+          },
+          "distinct_mechanisms_visible": {
+            "mean": 1.0,
+            "median": 1,
+            "n": 1
+          },
+          "frac_zero_answer_in_verbose12": 1.0,
+          "frac_zero_answer_in_verbose_plus_always": 1.0,
+          "invisible_answers": {
+            "mean": 0.0,
+            "median": 0,
+            "n": 1
+          },
+          "same_epoch_answers_before": {
+            "mean": 0.0,
+            "median": 0,
+            "n": 1
+          },
+          "verbose12_calls_with_rows": 1,
+          "verbose12_other_status_rows": {},
+          "verbose12_share": {
+            "ANSWER": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 1
+            },
+            "FORMATION_GATE": {
+              "mean": 1.0,
+              "median": 1.0,
+              "n": 1
+            },
+            "HARNESS": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 1
+            },
+            "OTHER": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 1
+            }
+          }
+        },
+        "recency": {
+          "already_tried_chars": {
+            "mean": 2306.0,
+            "median": 2306,
+            "n": 1
+          },
+          "always_shown_calls_with_rows": 0,
+          "always_shown_other_status_rows": {},
+          "always_shown_share": {
+            "ANSWER": {
+              "mean": null,
+              "median": null,
+              "n": 0
+            },
+            "FORMATION_GATE": {
+              "mean": null,
+              "median": null,
+              "n": 0
+            },
+            "HARNESS": {
+              "mean": null,
+              "median": null,
+              "n": 0
+            },
+            "OTHER": {
+              "mean": null,
+              "median": null,
+              "n": 0
+            }
+          },
+          "crosscheck_failures": 0,
+          "distinct_mechanisms_verbose12": {
+            "mean": 1.0,
+            "median": 1,
+            "n": 1
+          },
+          "distinct_mechanisms_visible": {
+            "mean": 1.0,
+            "median": 1,
+            "n": 1
+          },
+          "frac_zero_answer_in_verbose12": 1.0,
+          "frac_zero_answer_in_verbose_plus_always": 1.0,
+          "invisible_answers": {
+            "mean": 0.0,
+            "median": 0,
+            "n": 1
+          },
+          "same_epoch_answers_before": {
+            "mean": 0.0,
+            "median": 0,
+            "n": 1
+          },
+          "verbose12_calls_with_rows": 1,
+          "verbose12_other_status_rows": {},
+          "verbose12_share": {
+            "ANSWER": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 1
+            },
+            "FORMATION_GATE": {
+              "mean": 1.0,
+              "median": 1.0,
+              "n": 1
+            },
+            "HARNESS": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 1
+            },
+            "OTHER": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 1
+            }
+          }
+        }
+      },
+      "n_calls": 3,
+      "reason_counts": {
+        "empty_window": 2,
+        "rendered": 1
+      },
+      "rendered": 1,
+      "unjoined": 0
+    },
+    "ak-ds41-cpu-decode-20260923": {
+      "empty_window": 1,
+      "modes": {
+        "rank": {
+          "already_tried_chars": {
+            "mean": 8836.31011,
+            "median": 6395,
+            "n": 1177
+          },
+          "always_shown_calls_with_rows": 987,
+          "always_shown_other_status_rows": {},
+          "always_shown_share": {
+            "ANSWER": {
+              "mean": 0.011145,
+              "median": 0.0,
+              "n": 987
+            },
+            "FORMATION_GATE": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 987
+            },
+            "HARNESS": {
+              "mean": 0.988855,
+              "median": 1.0,
+              "n": 987
+            },
+            "OTHER": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 987
+            }
+          },
+          "crosscheck_failures": 0,
+          "distinct_mechanisms_verbose12": {
+            "mean": 11.507222,
+            "median": 12,
+            "n": 1177
+          },
+          "distinct_mechanisms_visible": {
+            "mean": 11.521665,
+            "median": 12,
+            "n": 1177
+          },
+          "frac_zero_answer_in_verbose12": 0.026338,
+          "frac_zero_answer_in_verbose_plus_always": 0.026338,
+          "invisible_answers": {
+            "mean": 0.012744,
+            "median": 0,
+            "n": 1177
+          },
+          "same_epoch_answers_before": {
+            "mean": 2.480034,
+            "median": 3,
+            "n": 1177
+          },
+          "verbose12_calls_with_rows": 1177,
+          "verbose12_other_status_rows": {
+            "anchor_guard_excursion": 8,
+            "anchor_verified": 101,
+            "runtime_observed": 852,
+            "superseded": 37
+          },
+          "verbose12_share": {
+            "ANSWER": {
+              "mean": 0.698544,
+              "median": 0.75,
+              "n": 1177
+            },
+            "FORMATION_GATE": {
+              "mean": 0.21258,
+              "median": 0.166667,
+              "n": 1177
+            },
+            "HARNESS": {
+              "mean": 0.016979,
+              "median": 0.0,
+              "n": 1177
+            },
+            "OTHER": {
+              "mean": 0.071897,
+              "median": 0.083333,
+              "n": 1177
+            }
+          }
+        },
+        "recency": {
+          "already_tried_chars": {
+            "mean": 9230.73407,
+            "median": 6810,
+            "n": 1177
+          },
+          "always_shown_calls_with_rows": 1000,
+          "always_shown_other_status_rows": {},
+          "always_shown_share": {
+            "ANSWER": {
+              "mean": 0.66025,
+              "median": 0.75,
+              "n": 1000
+            },
+            "FORMATION_GATE": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 1000
+            },
+            "HARNESS": {
+              "mean": 0.33975,
+              "median": 0.25,
+              "n": 1000
+            },
+            "OTHER": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 1000
+            }
+          },
+          "crosscheck_failures": 0,
+          "distinct_mechanisms_verbose12": {
+            "mean": 1.237043,
+            "median": 0,
+            "n": 1177
+          },
+          "distinct_mechanisms_visible": {
+            "mean": 3.37808,
+            "median": 3,
+            "n": 1177
+          },
+          "frac_zero_answer_in_verbose12": 0.796941,
+          "frac_zero_answer_in_verbose_plus_always": 0.090909,
+          "invisible_answers": {
+            "mean": 0.075616,
+            "median": 0,
+            "n": 1177
+          },
+          "same_epoch_answers_before": {
+            "mean": 2.480034,
+            "median": 3,
+            "n": 1177
+          },
+          "verbose12_calls_with_rows": 1177,
+          "verbose12_other_status_rows": {
+            "anchor_guard_excursion": 7,
+            "anchor_verified": 150,
+            "measured_divergence": 2,
+            "measured_serving_gate": 13,
+            "measurement_invalid": 18,
+            "runtime_observed": 46,
+            "superseded": 76
+          },
+          "verbose12_share": {
+            "ANSWER": {
+              "mean": 0.041364,
+              "median": 0.0,
+              "n": 1177
+            },
+            "FORMATION_GATE": {
+              "mean": 0.091722,
+              "median": 0.0,
+              "n": 1177
+            },
+            "HARNESS": {
+              "mean": 0.843586,
+              "median": 1.0,
+              "n": 1177
+            },
+            "OTHER": {
+              "mean": 0.023327,
+              "median": 0.0,
+              "n": 1177
+            }
+          }
+        }
+      },
+      "n_calls": 1178,
+      "reason_counts": {
+        "empty_window": 1,
+        "rendered": 1177
+      },
+      "rendered": 1177,
+      "unjoined": 0
+    },
+    "ak-q38fn-cpu-decode-20261003": {
+      "empty_window": 0,
+      "modes": {
+        "rank": {
+          "already_tried_chars": {
+            "mean": 3664.767263,
+            "median": 3438.0,
+            "n": 782
+          },
+          "always_shown_calls_with_rows": 45,
+          "always_shown_other_status_rows": {},
+          "always_shown_share": {
+            "ANSWER": {
+              "mean": 0.375185,
+              "median": 0.333333,
+              "n": 45
+            },
+            "FORMATION_GATE": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 45
+            },
+            "HARNESS": {
+              "mean": 0.624815,
+              "median": 0.666667,
+              "n": 45
+            },
+            "OTHER": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 45
+            }
+          },
+          "crosscheck_failures": 0,
+          "distinct_mechanisms_verbose12": {
+            "mean": 11.882353,
+            "median": 12.0,
+            "n": 782
+          },
+          "distinct_mechanisms_visible": {
+            "mean": 11.941176,
+            "median": 12.0,
+            "n": 782
+          },
+          "frac_zero_answer_in_verbose12": 0.0,
+          "frac_zero_answer_in_verbose_plus_always": 0.0,
+          "invisible_answers": {
+            "mean": 0.015345,
+            "median": 0.0,
+            "n": 782
+          },
+          "same_epoch_answers_before": {
+            "mean": 0.35422,
+            "median": 0.0,
+            "n": 782
+          },
+          "verbose12_calls_with_rows": 782,
+          "verbose12_other_status_rows": {
+            "anchor_guard_excursion": 7,
+            "anchor_verified": 747,
+            "runtime_observed": 33
+          },
+          "verbose12_share": {
+            "ANSWER": {
+              "mean": 0.366705,
+              "median": 0.333333,
+              "n": 782
+            },
+            "FORMATION_GATE": {
+              "mean": 0.467053,
+              "median": 0.5,
+              "n": 782
+            },
+            "HARNESS": {
+              "mean": 0.080882,
+              "median": 0.083333,
+              "n": 782
+            },
+            "OTHER": {
+              "mean": 0.085359,
+              "median": 0.083333,
+              "n": 782
+            }
+          }
+        },
+        "recency": {
+          "already_tried_chars": {
+            "mean": 6183.097187,
+            "median": 5800.0,
+            "n": 782
+          },
+          "always_shown_calls_with_rows": 27,
+          "always_shown_other_status_rows": {},
+          "always_shown_share": {
+            "ANSWER": {
+              "mean": 0.782481,
+              "median": 1.0,
+              "n": 27
+            },
+            "FORMATION_GATE": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 27
+            },
+            "HARNESS": {
+              "mean": 0.217519,
+              "median": 0.0,
+              "n": 27
+            },
+            "OTHER": {
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 27
+            }
+          },
+          "crosscheck_failures": 0,
+          "distinct_mechanisms_verbose12": {
+            "mean": 1.134271,
+            "median": 0.0,
+            "n": 782
+          },
+          "distinct_mechanisms_visible": {
+            "mean": 1.231458,
+            "median": 0.0,
+            "n": 782
+          },
+          "frac_zero_answer_in_verbose12": 0.835038,
+          "frac_zero_answer_in_verbose_plus_always": 0.829923,
+          "invisible_answers": {
+            "mean": 0.057545,
+            "median": 0.0,
+            "n": 782
+          },
+          "same_epoch_answers_before": {
+            "mean": 0.35422,
+            "median": 0.0,
+            "n": 782
+          },
+          "verbose12_calls_with_rows": 782,
+          "verbose12_other_status_rows": {
+            "anchor_guard_excursion": 7,
+            "anchor_verified": 110,
+            "measured_divergence": 41,
+            "runtime_observed": 51
+          },
+          "verbose12_share": {
+            "ANSWER": {
+              "mean": 0.044881,
+              "median": 0.0,
+              "n": 782
+            },
+            "FORMATION_GATE": {
+              "mean": 0.05028,
+              "median": 0.0,
+              "n": 782
+            },
+            "HARNESS": {
+              "mean": 0.881074,
+              "median": 1.0,
+              "n": 782
+            },
+            "OTHER": {
+              "mean": 0.023765,
+              "median": 0.0,
+              "n": 782
+            }
+          }
+        }
+      },
+      "n_calls": 782,
+      "reason_counts": {
+        "rendered": 782
+      },
+      "rendered": 782,
+      "unjoined": 0
+    }
+  }
+}
