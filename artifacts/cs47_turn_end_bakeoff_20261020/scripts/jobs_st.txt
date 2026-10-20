@@ -1,0 +1,12 @@
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_00 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_00.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_01 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_01.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_02 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_02.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_03 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_03.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_04 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_04.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_05 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_05.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_06 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_06.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_07 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_07.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_08 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_08.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_09 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_09.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_10 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_10.jsonl
+/mnt/raid0/llm/tmp/cs-47-20261020/shards/s12_11 /mnt/raid0/llm/tmp/cs-47-20261020/out/st_s12_11.jsonl

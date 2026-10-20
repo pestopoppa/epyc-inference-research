@@ -1,0 +1,13 @@
+# CS-47 accuracy-leg pins and config echo (2026-10-20)
+Tue Oct 20 23:19:21 UTC 2026
+silero pin: data/turn-taking-cs45-v1/pins.json silero_vad_v6.onnx 4cbf549b8326f60f80f2536d9eefeb450a9abe83365a098031c89719f1be17d2
+2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f  dl/smart-turn-v3.2-cpu.onnx
+smart-turn source: huggingface.co/pipecat-ai/smart-turn-v3 resolve/main/smart-turn-v3.2-cpu.onnx fetched 2026-10-20 ~23:01Z (repo sha at CS-47 dive: f766f81d3cfdf7737ac64aad813d91bbfd56bf93)
+1cc0a129688e53440353013a19a57c2e49d78287a004d62d3726cf5b3e7b19c5  /mnt/raid0/llm/tmp/cs-46-20261020/export/encoder_stream_160ms.onnx
+4e07e483857cc7bf4ae5f026b2cabf876dfd791ba43ac425de9e1137e68316b3  /mnt/raid0/llm/tmp/cs-46-20261020/export/encoder_stream_80ms.onnx
+cc1482c8176baff67bd460e50e96ee604fd65ede4aee2a93040457a17b7f51ae  /mnt/raid0/llm/tmp/cs-46-20261020/export/decoder_joint_self_fp32.onnx
+50d355bc769420c506b2268ca3abe34f63dcaeb0ce0fdab80034248ea2a0ef88  /mnt/raid0/llm/tmp/cs-46-20261020/dl/decoder_joint-model.onnx
+77c3f876cddac2d9ad82efceea38fd6acd16575e0ab54ab3396aa4621fa8ff02  /mnt/raid0/llm/tmp/cs-46-20261020/dl/vocab.txt
+corpus: research cb6b08fea data/turn-taking-cs45-v1 (v2); tt_verify.py VERDICT PASS before use; 224/224 main clips re-materialised hash-exact (tt_materialize.py omits layout.tail and mismatches on some clips; scripts/materialize.py passes it as tt_verify does)
+venv: transformers 4.57.1, onnxruntime 1.26.0 (Smart Turn); orchestrator venv onnxruntime 1.26.0 (Silero, Parakeet)
+claims: build-role q2/q3 (tags cs-47-accuracy-legs, cs-47-accuracy-legs-st), nice -n 10, 24 / 12 parallel single-thread procs, OMP_NUM_THREADS=1
