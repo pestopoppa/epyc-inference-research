@@ -74,6 +74,54 @@ def _correctness_detail(backend: str, counts, stdout: str, stderr: str,
     return (text + "\n" + "\n" + tail)[:limit]
 
 
+#: Cap on case records stored per verdict. Failing cases, then worst fraction-of-tolerance
+#: first, so the cap only ever drops the cases furthest from their tolerance.
+CASE_RECORD_LIMIT = 256
+_PARAM_TYPE_RE = re.compile(r"(?:^|,)(type(?:_[A-Za-z0-9]+)?)=([A-Za-z0-9_]+)")
+
+
+def gate_case_records(output: str, backend: str, op: str,
+                      *, limit: int = CASE_RECORD_LIMIT) -> "tuple | None":
+    """AKX-ALL-29.4: a compact structured record per gated case, from console text the gate
+    already captured. OBSERVES ONLY: no verdict, tolerance or mode is read from or fed back
+    into the gate, and any parse trouble yields None (never raises, never changes a result).
+
+    Fields (all but op/params/status/passed nullable): `types` (the `type*=` entries of
+    the case params, e.g. {"type_a": "q4_K"}), `output_dtype` (always null: the instrument
+    does not print it and this adds no computation), `metric_id`, `observed`, `tolerance`
+    (the `AK_REF_V1` values, null when the case carried no receipt), `fraction_of_tolerance`,
+    `oracle_id`, `output_rms` (null: the harness does not compute it).
+    """
+    try:
+        from ..execution import t0_provider
+        parsed = t0_provider.parse_backend_ops_console(output)
+        wanted = backend_ops_selector(op).split(",")
+        rows = []
+        for frame in parsed.backends:
+            if frame.name != backend or frame.skipped:
+                continue
+            for case in frame.cases:
+                if case.op not in wanted:
+                    continue
+                ref = case.reference
+                rows.append({
+                    "op": case.op, "params": case.params[:256],
+                    "types": dict(_PARAM_TYPE_RE.findall(case.params)) or None,
+                    "output_dtype": None, "status": case.status,
+                    "passed": case.passed,
+                    "metric_id": ref.metric_id if ref else None,
+                    "observed": ref.observed if ref else None,
+                    "tolerance": ref.tolerance if ref else None,
+                    "fraction_of_tolerance": (ref.observed / ref.tolerance
+                                              if ref and ref.tolerance else None),
+                    "oracle_id": ref.oracle_id if ref else None,
+                    "output_rms": None})
+        rows.sort(key=lambda r: (r["passed"], -(r["fraction_of_tolerance"] or 0.0)))
+        return tuple(rows[:limit])
+    except Exception:  # noqa: BLE001 - observation must never alter a gate outcome
+        return None
+
+
 def anchor_relative_correctness(candidate: "Verdict", anchor_check) -> "Verdict":
     """A seeded-reference `correctness` refusal counts against the patch only when the
     ANCHOR passes the same gate.
@@ -104,10 +152,18 @@ class Verdict:
     passed: bool
     reason: str = ""
     detail: str = ""
+    #: AKX-ALL-29.4 write side: one compact record per gated `test-backend-ops` case
+    #: (see `gate_case_records`). Nullable and ADDITIVE: it takes no part in equality, is
+    #: never read by any gate, and `to_dict` omits the key when it is None so rows
+    #: written before this field existed, and verdicts that carry none, keep their shape.
+    case_records: "tuple | None" = dataclasses.field(default=None, compare=False)
 
     def to_dict(self) -> dict:
-        return {"gate": self.gate, "passed": self.passed,
-                "reason": self.reason or None, "detail": self.detail[:2000] or None}
+        row = {"gate": self.gate, "passed": self.passed,
+               "reason": self.reason or None, "detail": self.detail[:2000] or None}
+        if self.case_records is not None:
+            row["case_records"] = list(self.case_records)
+        return row
 
 
 def compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
@@ -2422,14 +2478,20 @@ def op_correctness_sharded(build_dir: Path, *, op: str, backend: str, resolved_r
                        f"{len(unavailable)}/{len(verdicts)} shard(s) unavailable: "
                        + "; ".join(v.reason for v in unavailable[:3]))
     failed = [v for v in verdicts if not v.passed]
+    merged = tuple(row for v in verdicts for row in (v.case_records or ())) or None
+    if merged is not None:
+        merged = tuple(sorted(merged, key=lambda r: (r["passed"], -(r["fraction_of_tolerance"]
+                                                                    or 0.0)))[:CASE_RECORD_LIMIT])
     if failed:
         return Verdict(failed[0].gate, False,
                        f"{len(failed)}/{len(verdicts)} shard(s) failed: "
                        + "; ".join(v.reason for v in failed[:3]),
-                       "\n".join(v.detail for v in failed if v.detail)[:4000])
+                       "\n".join(v.detail for v in failed if v.detail)[:4000],
+                       case_records=merged)
     return Verdict(verdicts[0].gate, True,
                    f"{len(verdicts)} shard(s), "
-                   f"{sum(expected for _filter, expected in case_shards)} case(s) passed")
+                   f"{sum(expected for _filter, expected in case_shards)} case(s) passed",
+                   case_records=merged)
 
 
 def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
@@ -2665,7 +2727,8 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                        "harness fault, NOT evidence about the patch", output[-2000:])
     if block.group(2) == "FAIL":
         return Verdict("correctness", False, f"{op} failed on {backend}",
-                       _correctness_detail(backend, counts, done.stdout, done.stderr))
+                       _correctness_detail(backend, counts, done.stdout, done.stderr),
+                       case_records=gate_case_records(plain, backend, op))
     if done.returncode != 0 or any(int(passed) != int(total) for passed, total in counts):
         return Verdict("oracle_unavailable", False,
                        f"test-backend-ops gave contradictory {backend} status and exit/tally; "
@@ -2711,8 +2774,10 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
             "tolerance": ref.tolerance,
             "raw_output_sha256": hashlib.sha256(output.encode()).hexdigest(),
         }
-        return Verdict("correctness", True, detail=json.dumps(receipt, sort_keys=True))
-    return Verdict("correctness", True, detail=done.stdout[-500:])
+        return Verdict("correctness", True, detail=json.dumps(receipt, sort_keys=True),
+                       case_records=gate_case_records(plain, backend, op))
+    return Verdict("correctness", True, detail=done.stdout[-500:],
+                   case_records=gate_case_records(plain, backend, op))
 
 
 def deterministic(build_dir: Path, model: Path, *, runs: int = 3) -> Verdict:
