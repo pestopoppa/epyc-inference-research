@@ -1,0 +1,40 @@
+--- a/v1_v1.5/get_transcript/asr.py
++++ b/v1_v1.5/get_transcript/asr.py
+@@ -3,10 +3,15 @@
+ import argparse
+ from glob import glob
+ 
++import sys
+ import soundfile as sf
+-import nemo.collections.asr as nemo_asr
+ from tqdm import tqdm
+ 
++# CS-45 measurement-era change ME-FDB-4: word timestamps come from the pinned CPU whisper.cpp
++# (production-speech-v1) instead of NeMo parakeet-tdt-0.6b-v2 on CUDA. Interface unchanged.
++sys.path.insert(0, os.environ["TT_PINS_DIR"])  # required: directory holding the CS-45 pinned modules
++import tt_asr_words
++
+ MODEL_NAME = ""
+ 
+ 
+@@ -17,10 +22,7 @@
+     # JSON output filename mirrors the audio filename (e.g. clean_input.wav -> clean_input.json)
+     json_name = audio_name.rsplit(".", 1)[0] + ".json"
+ 
+-    # Load the pretrained NeMo ASR model and move to GPU
+-    asr_model = nemo_asr.models.ASRModel.from_pretrained(
+-        model_name="nvidia/parakeet-tdt-0.6b-v2"
+-    ).cuda()
++    asr_model = tt_asr_words.PinnedWhisperCpp()
+ 
+     for audio_path in tqdm(audio_paths):
+         print(audio_path)
+@@ -52,7 +54,7 @@
+         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+             sf.write(tmp.name, waveform, sr)
+             # original file‐based API (this accepts timestamps=True)
+-            asr_outputs = asr_model.transcribe([tmp.name], timestamps=True)
++            asr_outputs = asr_model.transcribe([tmp.name], timestamps=True)  # same shape as NeMo's: .timestamp["word"]
+         # remove the temp file so you don't leak disk
+         os.unlink(tmp.name)
+ 

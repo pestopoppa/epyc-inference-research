@@ -1,0 +1,90 @@
+{
+  "contract_id": "cs45-label-contract-v1",
+  "frozen_by": "CS-45 (handoffs/active/conversation-stack.md)",
+  "scope": "Labels attached to user-channel decision points in two-channel (user + assistant) clips. A label is a statement about what a correct system SHOULD do at the stated point; it is never a model output.",
+  "turn_states": {
+    "complete": {
+      "definition": "The user has finished a contribution and released the floor; a response is due.",
+      "system_should": "take the floor (respond) after the user's last speech frame; an end-of-turn decision is allowed from user_speech_end_s onwards and its delay is the signed latency.",
+      "gold": {"eot_gold_s": "time of the last user speech sample (end of the final word; fade excluded)", "hold_window_s": null},
+      "scoring_role": "positive for end-of-turn recall and signed latency; an end-of-turn decision BEFORE eot_gold_s is a cut-in, scored as an early (negative-latency) event, not as a hit."
+    },
+    "incomplete": {
+      "definition": "The user is mid-turn: the clause is syntactically or semantically unfinished at the pause (function-word cut, hesitation, restart in progress), so more speech is expected.",
+      "system_should": "hold; neither respond nor stop its own output because of this pause.",
+      "gold": {"eot_gold_s": null, "hold_window_s": "[user_speech_end_s, clip_end_s] - digital silence of exactly 2.0 s on both channels"},
+      "scoring_role": "negative for false cuts: any end-of-turn event inside hold_window_s counts once as a false cut (EOT FPR / mid-turn-pause FPR)."
+    },
+    "backchannel": {
+      "definition": "A short acknowledgement ('yeah', 'okay', 'mm hm', 'I see') produced while the OTHER party holds the floor; it is not a bid for the floor.",
+      "system_should": "keep the floor (keep speaking); do not stop output, do not treat the acknowledgement as an end of the user's turn.",
+      "gold": {"eot_gold_s": null, "hold_window_s": "[user_speech_start_s, clip_end_s]", "floor_holder_during_user": "assistant"},
+      "scoring_role": "negative for interruption false positives (INT FPR) and for policy yield/keep (a stop or an end-of-turn here is a false yield)."
+    },
+    "wait": {
+      "definition": "The user explicitly asks the system to hold ('hold on', 'give me a second', 'one moment') and has not yet given the content; the floor stays reserved for the user although the user is silent.",
+      "system_should": "not respond and not time out into a response during the hold window; a short non-committal acknowledgement is permitted only if the policy under test declares it.",
+      "gold": {"eot_gold_s": null, "hold_window_s": "[user_speech_end_s, clip_end_s]"},
+      "scoring_role": "negative for false cuts (same arithmetic as incomplete); reported as its own stratum because a silence-timer baseline and a semantic arm can differ here."
+    }
+  },
+  "turn_state_notes": [
+    "The four states are mutually exclusive per decision point. 'complete' is the only state with an end-of-turn positive.",
+    "A decision point is the user_speech_end_s of a clip (clips carry exactly one).",
+    "An utterance whose prefix could stand as a finished request is NOT admitted as an 'incomplete' cut; ambiguous cuts are rejected at review, never labelled by majority."
+  ],
+  "rejection_classes_humdial": {
+    "source": "HumDial Track-2 (ICASSP 2026 challenge) class names; the definitions below are OURS, one line each, and the mapping is nearest-equivalent, never identical to the organisers' annotation.",
+    "URB": {"name": "user real-time backchannel", "definition": "Acknowledgement speech while the assistant is talking that must not interrupt it.", "nearest_turn_state": "backchannel"},
+    "PH": {"name": "pause handling", "definition": "A mid-utterance pause after which the user continues, so the system must stay silent through it.", "nearest_turn_state": "incomplete"},
+    "TPS": {"name": "third-party speech", "definition": "Speech from someone other than the user (a bystander) that must not trigger a response or an interruption.", "nearest_turn_state": null, "overlap_class": "background_speech"},
+    "SDO": {"name": "speech directed at others", "definition": "The user talking to another person in the room, not to the assistant.", "nearest_turn_state": null, "overlap_class": "talking_to_others"}
+  },
+  "interruption_classes_humdial": {
+    "source": "HumDial Track-2 class names; definitions are ours.",
+    "FQ": {"name": "follow-up question", "definition": "The user cuts in with a question that builds on what the assistant was saying; the assistant should stop and answer."},
+    "ND": {"name": "negation / dissatisfaction", "definition": "The user cuts in to reject, correct or complain about what was said; the assistant should stop and repair."},
+    "RR": {"name": "repetition request", "definition": "The user cuts in asking the assistant to repeat or restate; the assistant should stop and repeat."},
+    "TS": {"name": "topic switch", "definition": "The user cuts in to change the subject; the assistant should stop and follow the new topic."},
+    "ST": {"name": "silence / termination", "definition": "The user cuts in to stop the assistant ('stop', 'be quiet'); the assistant should stop and not resume on its own."}
+  },
+  "badcat_style_interrupt_classes": {
+    "source": "Badcat full-duplex submission prompt (explicit rebuttal / negation, question, request to stop or correct => interrupt; agreement / response / encouragement => continue). Our own one-line definitions.",
+    "interrupt_explicit_rebuttal": "User contradicts or negates the assistant ('that's not right').",
+    "interrupt_question": "User asks a question mid-output.",
+    "interrupt_stop": "User tells the assistant to stop, wait or correct itself ('stop', 'hold on, that is wrong').",
+    "continue_acknowledgement": "User agrees, acknowledges or encourages ('yeah', 'got it', 'good point'); the assistant keeps talking. Equivalent to the turn state 'backchannel'."
+  },
+  "overlap_classes": {
+    "talking_to_others": "Speech by the enrolled user that is addressed to a third person; must not trigger a reply and must not cancel assistant output (HumDial SDO).",
+    "background_speech": "Speech by non-enrolled people, a TV or a radio at conversational level; must not trigger a reply and must not cancel assistant output (HumDial TPS).",
+    "annotation_status": "classes are defined here and consumed by CS-48 overlap stimuli; the synthesized CS-45 stratum contains no talking_to_others / background_speech clips (those need real room acoustics and a second voice mixed at level); FDB v1.5 data and the human-recorded stratum supply them when fetched or recorded."
+  },
+  "self_correction": {
+    "definition": "Mid-utterance change of intent by the same speaker ('set a timer for ten, no, fifteen minutes'); the later content supersedes the earlier.",
+    "turn_state": "incomplete until the corrected content is complete, then complete.",
+    "annotation": {"field": "self_correction", "values": ["none", "repair_in_progress", "repaired"], "reparandum_span_s": "[start,end] of the superseded words", "repair_span_s": "[start,end] of the replacement words"},
+    "scoring": "NOT scored by CS-45/CS-47. Tool-call correctness after a self-correction is left to CS-24 / CS-36; CS-45 only freezes the field so recordings made now carry it.",
+    "synthesized_coverage": "none (class annotated now for human recordings; no synthesized clips carry it)"
+  },
+  "pair_families": {
+    "CUT_IC": {"labels": ["complete", "incomplete"], "contrast": "cut_point", "definition": "One rendered recording; member a runs to its natural end, member b is cut at a word boundary inside a clause, then both get exactly 2.0 s of digital silence."},
+    "CUT_WAIT": {"labels": ["complete", "wait"], "contrast": "cut_point", "definition": "One rendered recording of a hold request plus a content-changing continuation; member b is cut after the hold request, member a runs on."},
+    "CTX_BC": {"labels": ["complete", "backchannel"], "contrast": "assistant_context", "definition": "One rendered acknowledgement waveform (sample-identical in both members); a = placed after the assistant finished a question, b = placed over an assistant monologue that keeps going."}
+  },
+  "pair_construction_invariants": [
+    "identical waveform: the user channel is sample-identical over the shared span (cut pairs: from the onset to the shorter segment minus the 10 ms fade; context pairs: the whole faded segment)",
+    "matched trailing silence: exactly 32000 samples (2.0 s) of digital zero on the user channel after the user segment, in both members; the clip ends there",
+    "cut pairs carry identical assistant context; context pairs differ ONLY in the assistant channel and in the clock position of the user segment",
+    "both members of a pair share speaker, dialogue, split and stratum"
+  ],
+  "strata": {
+    "synthesized": "qwentts.cpp production kernel, voices cloned from LibriSpeech speaker embeddings; may reject or rank an arm, never advance one",
+    "human_recorded": "real human speech (CS-4 sets 2 and 5, operator recordings, public sets where the licence allows); the ONLY stratum on which an arm can advance"
+  },
+  "mapping_to_turnbench": {
+    "complete": "an 'eot' prediction inside [eot_gold_s - 0.25, eot_gold_s + 3.0] s is a true positive with signed latency t_pred - eot_gold_s (TurnBench window)",
+    "incomplete_wait": "mid-turn-pause negative span; an 'eot' prediction inside it is a false positive (at most one per span)",
+    "backchannel": "backchannel negative; an 'interruption' prediction on the user channel inside the span is the INT false positive (at most one per span); an end-of-turn / yield decision there is additionally a false yield in the paired yield/keep PASR rows of CS-47"
+  }
+}

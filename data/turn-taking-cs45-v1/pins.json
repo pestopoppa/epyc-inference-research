@@ -1,0 +1,97 @@
+{
+ "pin_set_id": "cs45-pins-v1",
+ "recorded_utc": "2026-10-20T16:58:32Z",
+ "rule": "One instrument pin set for CS-22/CS-23 scoring (CS-45 e). A scorer run that cannot show these hashes is not admissible; a change to any pin is a measurement-era boundary recorded in measurement_era_changes.json.",
+ "silero_vad": {
+  "repo_path": "pins/silero_vad_v6.onnx",
+  "sha256": "4cbf549b8326f60f80f2536d9eefeb450a9abe83365a098031c89719f1be17d2",
+  "bytes": 1245151,
+  "origin": "faster-whisper 1.2.1 package asset faster_whisper/assets/silero_vad_v6.onnx (byte-identical in /mnt/raid0/llm/pace-env and /mnt/raid0/llm/hermes-agent site-packages; no fresh download was needed)",
+  "interface": "input [seq,576] f32 (64 context + 512 window @16 kHz), h/c [1,1,128]; outputs speech_probs, hn, cn. This export is NOT the PyPI silero_vad.onnx (input/state/sr).",
+  "loader": "scripts/voice/turn_taking/tt_silero.py (PinnedSilero: refuses on hash mismatch; get_speech_timestamps = port of faster_whisper.vad.get_speech_timestamps with silero defaults 0.5/250 ms/100 ms/30 ms)",
+  "runtime": "onnxruntime 1.26.0 CPUExecutionProvider, inter_op 1, intra_op 1 (orchestrator venv /mnt/raid0/llm/epyc-orchestrator/.venv, python -I)",
+  "parity_checks": {
+   "streaming_vs_offline_max_abs_prob_diff": 0.0,
+   "segments_vs_faster_whisper_get_speech_timestamps": "identical on LibriSpeech 6930-75918-0000: [{start 8736, end 56080}] samples"
+  }
+ },
+ "full_duplex_bench": {
+  "repo": "https://github.com/DanielLin94144/Full-Duplex-Bench",
+  "commit": "3e799c45a045256f47d5f1c9cda90157e2d2ec9e",
+  "checkout_used": "/mnt/raid0/llm/tmp/dive-w3-fdb-repo/repo (ephemeral scratch; re-clone and `git checkout` the commit)",
+  "patched_files": {
+   "v1_v1.5/evaluation/get_timing.py": {
+    "base_sha256": "4f551da4194ab4d9584db964f4b27223914eecf98cbc312388ecf45eaf6f8a17",
+    "patched_sha256": "ff6a86364c75212677cd7b0b3277dc79cc538b695a9e492e1924a421f93effdf",
+    "patch": "scorer_patches/fdb-3e799c4/v1_v1.5/evaluation/get_timing.py.patch"
+   },
+   "v1_v1.5/evaluation/eval_backchannel.py": {
+    "base_sha256": "36371e3efb4a25e6b5afe317d70c81ad8f8815b95ef025baa06b11c378ecd0d9",
+    "patched_sha256": "884b3d69fe9fddfdd3d88cb2129e815f3583c70a1038409d820529d723cd2470",
+    "patch": "scorer_patches/fdb-3e799c4/v1_v1.5/evaluation/eval_backchannel.py.patch"
+   },
+   "v1_v1.5/get_transcript/asr.py": {
+    "base_sha256": "aedaee0d50f2bc47947caf6f3899939461e290225a98c0ddc434c360189596cf",
+    "patched_sha256": "ef12a6613dbb8daa115680db11b2249aebea28b955699fad7eb04319f7b11712",
+    "patch": "scorer_patches/fdb-3e799c4/v1_v1.5/get_transcript/asr.py.patch"
+   }
+  },
+  "scope": "v1/v1.5 timing and word-timestamp scorers only; no GPT-4o behaviour classifier and no gpt-4-turbo rating is ever invoked"
+ },
+ "turnbench": {
+  "repo": "https://github.com/SesameAILabs/turnbench",
+  "commit": "38a6f874322430cb3ca71d8a52aa1e636e88bad8",
+  "checkout_used": "/mnt/raid0/llm/tmp/dive-w3-turnbench/repo (ephemeral scratch)",
+  "patched_files": {
+   "baselines/smart_turn_v3/predict.py": {
+    "base_sha256": "4980b178f9a3a1a20ff33475dad33af9fbdb48449af77cf394b39046a4b93d08",
+    "patched_sha256": "dc3e2bac99381ce89efc7af219aee9cd3295d7d48ad562d0d7370454424246b1",
+    "patch": "scorer_patches/turnbench-38a6f87/baselines/smart_turn_v3/predict.py.patch"
+   }
+  },
+  "scorer": "turnbench.score used unpatched (local CPU, no judge) with --dataset <local snapshot> and HF_HUB_OFFLINE=1",
+  "dev_snapshot": "see external_crosscheck.json (turnbench-dev, revision c29aa4e6...)"
+ },
+ "asr_word_timestamps": {
+  "purpose": "the ASR for ANY word-timestamp metric (FDB v1 pause_handling / smooth_turn_taking adapters, HumDial first-response cross-checks, cut-point estimation of this corpus)",
+  "tool": "whisper-cli",
+  "tool_tree": "/mnt/raid0/llm/whisper.cpp",
+  "tool_tree_commit": "b307379226d93d9c5ed790d7cea0626613c0ef4b",
+  "tool_tree_branch": "production-speech-v1",
+  "binary": "/mnt/raid0/llm/whisper.cpp/build/bin/whisper-cli",
+  "binary_sha256": "093cdb5736b50eb8567b0367f24bf0bcaf947f5ddca9f140f43e47531d31330c",
+  "ggml": "0.18.0",
+  "model_file": "/mnt/raid0/llm/models/whisper-ggml/ggml-large-v3-turbo.bin",
+  "model_sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+  "flags": "-ng -l en -ojf --dtw large.v3.turbo (token offsets grouped into words; DTW token times kept as an extra field); HIP_VISIBLE_DEVICES=-1; own LD_LIBRARY_PATH; threads 16 pinned to cores 0-15 (a measured-healthy layout, speech_cpu_realtime_20260924 hazard 1); linkage proved by scripts/utils/verify_ggml_linkage.sh (PASS, see manifest/build_report.json env)",
+  "dtw": "large.v3.turbo",
+  "wrapper": "scripts/voice/turn_taking/tt_asr_words.py (PinnedWhisperCpp refuses on binary/model hash mismatch)",
+  "replaces": "NeMo nvidia/parakeet-tdt-0.6b-v2 on CUDA (FDB get_transcript/asr.py) - ME-FDB-4"
+ },
+ "tts_kernel_for_synthesized_stratum": {
+  "tree": "/mnt/raid0/llm/qwentts.cpp",
+  "tree_commit": "2c1b5182e7e9f1acaa04405ff21747d8a7acf4d5",
+  "branch": "production-speech-v1",
+  "binary": "/mnt/raid0/llm/qwentts.cpp/build/qwen-tts",
+  "binary_sha256": "1781c49cef8d9c079ca7d50cb8c84704d698701f20cee9806fba3ecd3067c311",
+  "ggml": "0.17.0",
+  "talker": "/mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-talker-0.6b-base-Q8_0.gguf",
+  "codec": "/mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-tokenizer-12hz-Q8_0.gguf",
+  "use": "READ-ONLY CLI on CPU (GGML_BACKEND=CPU, HIP_VISIBLE_DEVICES=-1, thread count via the nprocs_shim LD_PRELOAD from artifacts/speech_cpu_realtime_20260924); frozen tree never modified or rebuilt; no server started; CS-21 services :9000/:9002 untouched",
+  "voice": "Base model speaker-embedding clone (--ref-wav, no ref text) of LibriSpeech test-clean reference clips; per-render seed recorded in recordings.jsonl",
+  "render_run": {
+   "date_utc": "2026-10-20T17:15:27Z",
+   "mode": "qwen-tts CLI, one single-thread process per core (SHIM_NPROCS=2 via nprocs_shim, sha256 d3103d7ab45e0a5fe9473d7dd401e5462f39c06174b4a64109af6e387e3b3eb4), cores 1-23 of region q0 under a region-lock build claim; 8-thread runs were 472 ms/frame vs 36 ms/frame single-thread under host load, so the parallel single-thread design was used",
+   "linkage": "verify_ggml_linkage.sh PASS for qwen-tts and whisper-cli (logs: /mnt/raid0/llm/tmp/cs45/run1/linkage_*.txt, summarised in build_report.json)",
+   "nprocs_shim_sha256": "d3103d7ab45e0a5fe9473d7dd401e5462f39c06174b4a64109af6e387e3b3eb4",
+   "talker_sha256": "d54dbaf10591421fa764ed630d764efa717ae40cd959bd48c66d4eb1af226426",
+   "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+   "asr_model_sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
+  }
+ },
+ "python_runtime": {
+  "interpreter": "/mnt/raid0/llm/epyc-orchestrator/.venv/bin/python -I",
+  "note": "numpy/scipy/onnxruntime; versions recorded in build_report.json env"
+ },
+ "not_pinned_here": "Smart Turn v3.x weights, VAP checkpoints and Parakeet graphs are CS-46/CS-47 arm pins (their own sha256 are recorded in the CS-47 run-plan commit)."
+}

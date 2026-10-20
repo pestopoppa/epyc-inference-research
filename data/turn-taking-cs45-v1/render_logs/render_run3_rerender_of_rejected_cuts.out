@@ -1,0 +1,21 @@
+attempt 0: TTS for 15 renders on 15 single-thread workers
+rec-u-0003 ok wer=0.000 dur=3.52
+rec-u-0005 ok wer=0.000 dur=3.04
+rec-u-0008 FAIL wer=0.182 dur=4.24
+rec-u-0016 ok wer=0.000 dur=4.96
+rec-u-0019 ok wer=0.000 dur=4.40
+rec-u-0023 ok wer=0.000 dur=4.72
+rec-u-0024 ok wer=0.000 dur=4.72
+rec-u-0029 ok wer=0.000 dur=3.52
+rec-u-0038 ok wer=0.000 dur=5.20
+rec-u-0040 ok wer=0.000 dur=5.60
+rec-u-0042 ok wer=0.000 dur=4.88
+rec-u-0064 ok wer=0.000 dur=4.72
+rec-u-0069 ok wer=0.000 dur=2.80
+rec-u-0072 ok wer=0.000 dur=4.32
+rec-u-0073 ok wer=0.000 dur=4.88
+attempt 1: TTS for 1 renders on 15 single-thread workers
+rec-u-0008 FAIL wer=0.182 dur=4.80
+attempt 2: TTS for 1 renders on 15 single-thread workers
+rec-u-0008 FAIL wer=0.182 dur=4.32
+done: 14/15 renders passed QA

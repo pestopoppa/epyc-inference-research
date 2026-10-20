@@ -1,0 +1,14 @@
+--- a/baselines/smart_turn_v3/predict.py
++++ b/baselines/smart_turn_v3/predict.py
+@@ -45,7 +45,10 @@
+ sys.modules.setdefault("pyaudio", _pyaudio_stub)
+ 
+ import inference as _inference_mod                                            # noqa: E402
+-from record_and_predict import SileroVAD, ensure_model                       # noqa: E402
++# CS-45 measurement-era change ME-TB-1: the Silero gate is the single pinned local ONNX (no download,
++# sha256-checked) behind the same .prob(chunk) interface; upstream SileroVAD/ensure_model are not used.
++sys.path.insert(0, os.environ["TT_PINS_DIR"])  # required: directory holding the CS-45 pinned modules
++from tt_smartturn_vad_adapter import SileroVAD, ensure_model                  # noqa: E402
+ 
+ import onnxruntime as _ort
+ _cuda      = "CUDAExecutionProvider" in _ort.get_available_providers()

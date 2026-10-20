@@ -1,0 +1,7 @@
+rec-a-question-00 qa_ok=True {'attempt': 0, 'seed': 622109640, 'tts_s': 33.75, 'qa': 'ok wer=0.000 dur=3.52'}
+rec-a-question-01 qa_ok=True {'attempt': 0, 'seed': 1365985599, 'tts_s': 27.23, 'qa': 'ok wer=0.000 dur=2.32'}
+rec-a-question-02 qa_ok=True {'attempt': 0, 'seed': 530874031, 'tts_s': 41.81, 'qa': 'ok wer=0.100 dur=3.68'}
+rec-a-question-03 qa_ok=True {'attempt': 0, 'seed': 415658210, 'tts_s': 37.92, 'qa': 'ok wer=0.000 dur=3.60'}
+rec-a-question-04 qa_ok=True {'attempt': 0, 'seed': 699450221, 'tts_s': 49.59, 'qa': 'ok wer=0.000 dur=3.36'}
+rec-a-question-05 qa_ok=True {'attempt': 0, 'seed': 1800543290, 'tts_s': 53.88, 'qa': 'ok wer=0.000 dur=3.76'}
+rec-a-question-06 qa_ok=True {'attempt': 0, 'seed': 1251548814, 'tts_s': 50.28, 'qa': 'ok wer=0.000 dur=3.60'}

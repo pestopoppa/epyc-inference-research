@@ -1,0 +1,55 @@
+--- a/v1_v1.5/evaluation/eval_backchannel.py
++++ b/v1_v1.5/evaluation/eval_backchannel.py
+@@ -4,9 +4,32 @@
+ from scipy.spatial.distance import jensenshannon
+ from scipy.interpolate import interp1d
+ 
+-from silero_vad import load_silero_vad, get_speech_timestamps
+-import torchaudio
+ import argparse
++import sys
++import wave
++from pathlib import Path
++
++# CS-45 measurement-era change ME-FDB-3: pinned local Silero, stdlib WAV I/O (no torch/torchaudio).
++sys.path.insert(0, os.environ["TT_PINS_DIR"])  # required: directory holding the CS-45 pinned modules
++import tt_silero as _tt_silero
++
++
++def get_speech_timestamps(wav, model, return_seconds=False):
++    return _tt_silero.get_speech_timestamps(wav, model, return_seconds=return_seconds)
++
++
++def load_silero_vad():
++    return _tt_silero.PinnedSilero()
++
++
++def _load(path):
++    with wave.open(path, "rb") as w:
++        if w.getnchannels() != 1 or w.getsampwidth() != 2:
++            raise ValueError(f"{path}: CS-45 patched loader admits mono 16-bit PCM only")
++        sr = w.getframerate()
++        x = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float32) / 32768.0
++    return x[None, :], sr
++
+ 
+ # Define the hyperparameters
+ window_size = 0.2
+@@ -32,14 +55,12 @@
+         if not os.path.exists(out_wav_path):
+             raise FileNotFoundError("Required file 'output.wav' not found.")
+ 
+-        wav, sr = torchaudio.load(out_wav_path)
++        wav, sr = _load(out_wav_path)
+         if sr != 16000:
+-            # silero assumes 16kHz input & we are not passing sr to it
+-            wav = torchaudio.functional.resample(wav, sr, 16000)
+-            sr = 16000
++            raise ValueError(f"{out_wav_path}: CS-45 patched scorer requires 16 kHz (got {sr}); resample upstream with the pinned recipe")
+ 
+         segments = get_speech_timestamps(
+-            wav,
++            wav[0],
+             vad_model,
+             return_seconds=True,  # Return speech timestamps in seconds (default is samples)
+         )

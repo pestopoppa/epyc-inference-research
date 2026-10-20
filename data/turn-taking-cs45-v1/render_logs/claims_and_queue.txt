@@ -1,0 +1,5 @@
+smoke claim: 2026-10-20T16:42:26Z
+run1 claim queued 2026-10-20T16:52:26Z
+run1 q0 claim queued 2026-10-20T17:14:17Z
+run2 q0 claim queued 2026-10-20T17:22:13Z
+run3 q0 claim queued 2026-10-20T18:01:52Z

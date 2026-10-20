@@ -1,0 +1,102 @@
+{
+ "audio_copied_into_corpus": false,
+ "policy": "CS-45(d): external cross-check material is recorded as hashes and ids only. No audio, no transcripts, no annotation is copied into this corpus; an absent set changes nothing else in the programme. Nothing here may be used as selection/confirmation material of the Annex S corpus.",
+ "sets": [
+  {
+   "set_id": "turnbench-dev",
+   "status": "present",
+   "stored_in_corpus": false,
+   "source": "mundo-ai/turn-benchmark-dev (gated HF dataset, operator-supplied token)",
+   "revision": "c29aa4e6422122a8dccbe23598016a089bea2121",
+   "scorer_repo": {
+    "repo": "https://github.com/SesameAILabs/turnbench",
+    "commit": "38a6f874322430cb3ca71d8a52aa1e636e88bad8"
+   },
+   "local_snapshot_manifest": {
+    "path": "/mnt/raid0/llm/datasets/turnbench-dev-c29aa4e6/MANIFEST.json",
+    "sha256": "68557be83f45a996684f3b823551dc7e8ed9a99639a140ab5dd9dab802a71189",
+    "fetched_utc": "2026-10-20T16:35:59.979917Z"
+   },
+   "file_sha256": {
+    "README.md": "9fa0b0925dea79fa25ec83f242fbe0788ff43ebf4a9382a7589bb7acd0cec6fe",
+    "LICENSE": "ffbf72a2c8257598dfc5ed031ce08730e2d8410392a5e18d1fd18130cd00a2b4",
+    "data/dev-00000-of-00003.parquet": "223c4235ba0a523169917bf352072ba39ca210ed6899a58db8fe1636d5914e6b",
+    "data/dev-00001-of-00003.parquet": "38e30e5d267944da565aa4d0fe993b4890736ecbe94a4f4c03a9e91ddc4014c5",
+    "data/dev-00002-of-00003.parquet": "527b9c9cc65a3bcc967dc96daf6ba97461bc420c2e36b8819927d39cf58c3a94"
+   },
+   "file_bytes": {
+    "README.md": 6489,
+    "LICENSE": 20070,
+    "data/dev-00000-of-00003.parquet": 1979344115,
+    "data/dev-00001-of-00003.parquet": 1608523180,
+    "data/dev-00002-of-00003.parquet": 628007701
+   },
+   "n_conversations": 38,
+   "conversation_ids": [
+    "20",
+    "21",
+    "22",
+    "38",
+    "40",
+    "41",
+    "42",
+    "43",
+    "44",
+    "68",
+    "71",
+    "94",
+    "95",
+    "105",
+    "106",
+    "107",
+    "112",
+    "113",
+    "114",
+    "122",
+    "124",
+    "125",
+    "126",
+    "127",
+    "128",
+    "129",
+    "138",
+    "139",
+    "140",
+    "141",
+    "157",
+    "158",
+    "159",
+    "160",
+    "169",
+    "170",
+    "171",
+    "172"
+   ],
+   "conversation_ids_sha256": "42ee0c285c015137df7e0e9ebc05cb308970ab2459d072950922636b3340de54",
+   "conversation_ids_note": "sha256 of the sorted ids joined with newlines; equals the set in turnbench/splits/dev.txt@38a6f87 (sha256 14925612f1ebbecf61d8c7ca635eadfcd1e8de6e1247b24b1d756d5862bf276a)",
+   "revision_note": "turnbench@38a6f87 hard-codes DEV_REVISION 8fa18a24be51528a45397b35cbcaecd84202062b in turnbench/data.py; the local snapshot is c29aa4e6422122a8dccbe23598016a089bea2121. Scoring must pass --dataset <local dir> with HF_HUB_OFFLINE=1 so the scorer never resolves the hard-coded revision from the hub; any score is tagged with BOTH revisions. durations-dev.json@38a6f87 sha256 7a3db7cd48bca35c95b461defec45bba0c59856f92c06ffb2428cc5769b62d8a is checked against the snapshot's audio durations by the CS-47 run-plan before the first scored run.",
+   "licence_note": "dataset licence (non-commercial, no voice cloning) lives in the snapshot's LICENSE; not reproduced here"
+  },
+  {
+   "set_id": "echo",
+   "status": "absent",
+   "stored_in_corpus": false,
+   "source": "ECHO (gated HF request)",
+   "note": "optional; operator has not requested access; absence changes nothing else"
+  },
+  {
+   "set_id": "humdial-track2-train-dev",
+   "status": "absent",
+   "stored_in_corpus": false,
+   "source": "HumDial Track-2 train/dev (registration email)",
+   "note": "optional; not registered; absence changes nothing else"
+  },
+  {
+   "set_id": "full-duplex-bench-v1.5-data",
+   "status": "absent",
+   "stored_in_corpus": false,
+   "source": "FDB v1.5 data (Google Drive, manual fetch; repo pinned @3e799c4)",
+   "note": "consumed by CS-48; hashes are added when fetched"
+  }
+ ]
+}

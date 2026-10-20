@@ -1,0 +1,74 @@
+--- a/v1_v1.5/evaluation/get_timing.py
++++ b/v1_v1.5/evaluation/get_timing.py
+@@ -13,10 +13,15 @@
+ """
+ 
+ from __future__ import annotations
+-import argparse, json, importlib
++import argparse, json, os, sys, wave
+ from pathlib import Path
+ from typing import List, Tuple
+-import torch, torchaudio
++import numpy as np
++
++# CS-45 measurement-era change ME-FDB-1/ME-FDB-2: no torch, no torchaudio, no hub fetch.
++# Silero comes from the single pinned ONNX (sha256-checked, refuses on mismatch); WAV I/O is stdlib.
++sys.path.insert(0, os.environ["TT_PINS_DIR"])  # required: directory holding the CS-45 pinned modules
++import tt_silero as _tt_silero
+ 
+ # ---------------- Parameters ----------------
+ SR = 16_000
+@@ -25,36 +30,28 @@
+ AUDIO_EXT = "wav"
+ OUT_FILENAME = "latency_intervals.json"
+ 
+-# ---------------- Silero‑VAD ---------------
+-vad_module = importlib.import_module("silero_vad")
+-if hasattr(vad_module, "VoiceActivityDetector"):
+-    from silero_vad import VoiceActivityDetector
+-
+-    _VAD = VoiceActivityDetector(sample_rate=SR)
+-
+-    def _vad_ts(wav):
+-        return [(t["start"], t["end"]) for t in _VAD.get_speech_ts(wav)]
+-
+-else:
+-    from silero_vad import get_speech_timestamps
+-
+-    _M, _ = torch.hub.load(
+-        "snakers4/silero-vad", model="silero_vad", trust_repo=True, onnx=False
+-    )
+-
+-    def _vad_ts(w):
+-        return [
+-            (t["start"], t["end"])
+-            for t in get_speech_timestamps(w, _M, sampling_rate=SR)
+-        ]
++# ---------------- Silero‑VAD (pinned, local) ---------------
++_VAD = _tt_silero.PinnedSilero()
++
++
++def _vad_ts(w):
++    return [(t["start"], t["end"]) for t in _tt_silero.get_speech_timestamps(w, _VAD)]
+ 
+ 
+ # -------------- Helpers --------------------
+ def load_wav(p: Path):
+-    wav, sr = torchaudio.load(p)
++    with wave.open(str(p), "rb") as w:
++        if w.getnchannels() != 1 or w.getsampwidth() != 2:
++            raise ValueError(f"{p}: CS-45 patched loader admits mono 16-bit PCM only")
++        sr, n = w.getframerate(), w.getnframes()
++        x = np.frombuffer(w.readframes(n), dtype="<i2").astype(np.float32) / 32768.0
+     if sr != SR:
+-        wav = torchaudio.functional.resample(wav, sr, SR)
+-    return wav.squeeze(0)
++        from math import gcd
++        from scipy.signal import resample_poly
++
++        g = gcd(sr, SR)
++        x = resample_poly(x, SR // g, sr // g).astype(np.float32)
++    return x
+ 
+ 
+ def _merge(seg: List[Tuple[float, float]], gap_thr: float):
