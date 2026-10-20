@@ -184,3 +184,67 @@ Tok/s below are informational (quarter, 24 threads, not the production shape). S
   recurrent state ~0.31 GiB per sequence (slope, 7 extra seqs). Memory is a non-issue on this host (449 GiB free); the
   production log does not print KV/RS buffer sizes, so RSS-after-load slope is the measure.
 - Driver fix found in smoke: the stderr scan matched benign `truncated = 0` lines; now matches `truncated = [1-9]` only.
+
+## 8. Tier 0 — decision core (added 2026-10-20 on coordinator request; all tiers above unchanged)
+
+`driver --tier0` (fixed cell order, `--dry-run` prints it; waves default 4). Fits one full-host window.
+
+**Prefill-once design for decode cells (`depth` prompt mode).** Wave 1: every stream gets its own distinct document of
+`L - 256 - 64 - 256(suffix)` tokens, pinned to its slot (`id_slot = stream index`), so this wave measures **concurrent
+prefill tok/s and TTFT** (n = np streams). Waves 2..4: each stream re-sends ITS OWN wave-1 document plus a fresh
+corpus suffix (<= 256 tokens, distinct per stream per wave), fixed 256-token greedy generation, same slot. Only the suffix plus the hybrid
+checkpoint-granularity re-process (~2k tokens, seen in smoke: `prompt_n` ~2,047) is prefilled; `prompt_n` and
+`cache_n` are recorded per request. Report **wave 1 (prefill/TTFT)** and **waves >= 2 (decode at depth)** separately
+(`summary.jsonl`: `prefill_tps_med`/`ttft_s_med` from wave 1; `decode_*_med` from waves >= 2). **Waves >= 2 are NOT
+independent prefills, and that is valid for decode-at-depth:** a decode step reads the same KV bytes (`np x depth x 10.9
+KB`) and the same recurrent state whether the prefix was just prefilled or reused from the slot; reuse changes only how
+the prefix got into the cache, not what a decode step touches. It must not be quoted as a prefill number, and it gives
+n = 3 decode waves per cell (not 3 independent documents).
+
+| # | Launch (geometry) | Cell | Notes |
+|---|---|---|---|
+| 1 | split np4 slot 65,536 (= production) | L64k depth; then anchor (8 clients, short) | **first cell = prefill calibration** |
+| 2 | unified np4 pool 524,288 | L64k depth | B of the pair |
+| 3 | split np4 slot 65,536 (again) | L64k depth | A again: ABA drift check |
+| 4 | unified np8 pool 524,288 | L32k depth, L64k depth, L64k shared-prefix (no fork) | |
+| 5 | unified np8 pool 524,288, MTP off | L64k depth | control |
+| 6 | unified np8 pool 1,048,576 | L128k depth (one cell) | what unified uniquely enables |
+| 7 | unified np8 pool 524,288 | pool-full stress (np8 x 128k) | |
+| 8 | fork build, unified np8 pool 524,288 | L64k shared_fork | placeholder: runs only with `--fork-binary` |
+
+Split/unified pairs exist only at np4 L64k (cells 1-3, ABA). np8 has no split partner in Tier 0 (split np8 is Tier A/B).
+
+**Estimate (estimator, `driver --dry-run --tier0`): 7.0 h total** (6.8 h without the fork cell): cell 1 20.5 min + anchor 1.6,
+cell 2 20.5, cell 3 20.5, np8 L32k 20.7, np8 L64k 40.4, shared 40.4, MTP-off 41.3, 128k 95.8, pool-full 89.6, fork 10.9 min,
+plus ~2 min load per launch. Inside the 6-10 h window; no cut needed. If calibration comes in slower, cut first the **pool-full stress
+(89.6 min)**: its behaviour class (error / queue / truncate) is reproducible at reduced scale on one quarter as correctness
+work, then the np8 L64k shared-prefix cell.
+
+**Prefill assumption, stated explicitly:** the estimator uses ~300 tok/s full-host prefill (live frontdoor log: 298
+tok/s at 2.7k tokens, plus a mild L-tax). The only measurement we hold at depth is the quarter smoke: 107 tok/s at 8k on 24 cores (~4.4 tok/s/core;
+x96 cores would give ~420 tok/s if prefill scaled linearly, so 300 is a conservative-to-plausible guess, but long-context
+attention and 96-way interleave are unmeasured). Cell 1 (split np4 L64k, 4 x ~65k-token prefill) is the calibration:
+**refresh `prefill_tps()` in the driver from its wave-1 `prefill_tps` and re-run `--dry-run --tier0` before cell 2**; if the
+re-run total exceeds 10 h, apply the cut above.
+
+**Capture rows (belief-kernel write side).** Every cell row (and every per-wave row in `<cell>/waves_capture.jsonl`) is
+schema `epyc.vidya.np_ctx_kvu_capture.v1` with `row_sha256` (sha256 of canonical JSON minus that field), binary sha256 +
+realpath + kernel-store path, `kv_unified_from_log` (read back from the server's `kv_unified =` launch-log line; the
+argv flag is kept only as `kv_unified_argv_flag` for contrast), `n_ctx_slot` from the log, `c`, `np`, `L`, `pool`,
+`prompt_mode`, `wave`, `mtp`, `draft_depth`, host context (timestamp, cpu-list, `loadavg_start`, host BW constant),
+and `prompt_n`/`cache_n`/`n_fork_tokens`. `validate_row()` in the driver is the shared validator the adapter should
+import. Projection only, no grading (`claim_tuple.grade()` decides). These rows are the **producer for VB-KVU-CPU**
+(`vidya-belief-substrate-program.md`; field intent: VB-KVU-1). The source row in `scripts/vidya/adapters/README.md` is the
+owning session's to apply.
+
+**Depth-mode reuse is not guaranteed — smoke finding (`smoke_depth/`, unified np2 pool 131,072, L 8k, id_slot honoured).**
+Wave 2: stream 0 reused 5,552 cached tokens (prompt_n 2,232) but stream 1 reused **0** (prompt_n 7,783 = full re-prefill).
+Likely causes (not yet isolated): hybrid models resume only at context checkpoints (`--checkpoint-min-step` default 8192,
+so an 8k document has almost none) and `--cache-idle-slots` (default on, production leaves it) saves idle slots to the RAM
+prompt cache and clears them from a unified pool. At L >= 32k there are checkpoints every 8,192 tokens, so reuse should be
+deeper, but that is unverified. The driver therefore records `n_reprefill` per wave (`prompt_n > 50%` of the document) in every depth
+cell, and the report must treat a wave with re-prefilled streams as a prefill sample, not decode-at-depth only. Decode-at-depth
+numbers stay valid either way (the KV is resident when decode starts); only wall time grows: worst case each decode wave costs a
+full wave-1 prefill, i.e. Tier 0 up to ~2.5x the 7.0 h estimate. Check cell 1's wave 2 `prompt_n` immediately; if re-prefill
+shows up, the contingency is a second arm of the same cell with `--no-cache-idle-slots` (`--extra-argv`, a stated deviation
+from production argv) and/or `--checkpoint-min-step 0`, chosen by the owning session.

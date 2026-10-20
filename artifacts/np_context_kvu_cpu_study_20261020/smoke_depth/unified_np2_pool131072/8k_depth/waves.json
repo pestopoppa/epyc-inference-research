@@ -1,0 +1,82 @@
+[
+ {
+  "wave": 0,
+  "wall_s": 120.5,
+  "n_ok": 2,
+  "n_err": 0,
+  "ttft_s": [
+   64.87,
+   102.66
+  ],
+  "prefill_tps": [
+   117.2,
+   95.4
+  ],
+  "prompt_n": [
+   7600,
+   7579
+  ],
+  "n_fork_tokens": [
+   null,
+   null
+  ],
+  "n_prompt_tokens_cache": [
+   0,
+   0
+  ],
+  "predicted_n": [
+   256,
+   256
+  ],
+  "decode_tps_per_stream": [
+   4.71,
+   14.38
+  ],
+  "decode_tps_sum": 19.1,
+  "decode_tps_overlap_window": 28.28,
+  "agg_e2e_tok_s": 4.25,
+  "rss_gib": 38.97,
+  "vmhwm_gib": 38.97,
+  "errors": []
+ },
+ {
+  "wave": 1,
+  "wall_s": 96.9,
+  "n_ok": 2,
+  "n_err": 0,
+  "ttft_s": [
+   40.69,
+   72.15
+  ],
+  "prefill_tps": [
+   54.9,
+   108.0
+  ],
+  "prompt_n": [
+   2232,
+   7783
+  ],
+  "n_fork_tokens": [
+   null,
+   null
+  ],
+  "n_prompt_tokens_cache": [
+   5552,
+   0
+  ],
+  "predicted_n": [
+   256,
+   256
+  ],
+  "decode_tps_per_stream": [
+   4.55,
+   12.34
+  ],
+  "decode_tps_sum": 16.89,
+  "decode_tps_overlap_window": 21.54,
+  "agg_e2e_tok_s": 5.28,
+  "rss_gib": 39.42,
+  "vmhwm_gib": 39.42,
+  "errors": []
+ }
+]
