@@ -248,3 +248,86 @@ numbers stay valid either way (the KV is resident when decode starts); only wall
 full wave-1 prefill, i.e. Tier 0 up to ~2.5x the 7.0 h estimate. Check cell 1's wave 2 `prompt_n` immediately; if re-prefill
 shows up, the contingency is a second arm of the same cell with `--no-cache-idle-slots` (`--extra-argv`, a stated deviation
 from production argv) and/or `--checkpoint-min-step 0`, chosen by the owning session.
+
+## 9. CONTEXT BANK redesign (operator 2026-10-20: "traverse the matrix additively, never reprocess large prompts from zero")
+
+This SUPERSEDES the live-prefill cell designs of §1/§8 for every cell whose subject is decode (the §8 `depth` mode stays
+in the driver as the MTP-faithful fallback, see the MTP limitation below). Driver: `--build-bank`, `--from-bank` (full
+matrix: INDEPENDENT cells become `bank` cells), `--gates`, `--tier0` (now bank-based), `--bank-dir`, `--manifest`.
+
+**Bank build (once; unified np8, pool 1,179,648, `--no-cache-idle-slots`, `--slot-save-path <bank dir>`).** 8 distinct corpus
+documents, each pinned to its own slot and grown 8k -> 32k -> 64k -> 128k. Document token arrays are stored
+(`doc{i}.tokens.json`) and every step sends the exact previous token sequence + next chunk as **token IDs** (no retokenisation
+drift; `n_predict 0`, prefill only), so `prompt_n` == chunk length. After each step: `POST /slots/{i}?action=save` ->
+`doc{i}_L{name}.bin`. Doc length per class = `L - 512` (leaves 256 suffix + 256 generated inside a split slot of exactly L).
+Per-step prefill tok/s and ms are recorded (prefill-at-depth; Sigma steps = fresh-prompt TTFT equivalent). Controls: one
+fresh one-shot prefill of doc 0 per L after `action=erase`; the manifest reports chunk-sum / one-shot ratio. Bank files live under
+`_bank_scratch/` (self-ignoring `.gitignore`, not in git); `bank_manifest.json` (committed) holds per-file sha256, byte size, token
+count, per-step timings, controls and the binary sha256. Total prefill = 8 x 128k once. **Estimate 1.9 h** (assumption model).
+
+**Every bank cell** = launch with that cell's argv (+ `--slot-save-path`), restore `doc{i}_L{L}.bin` into slot i
+**before every wave** (untimed, so all waves are identical), append a fresh 200-token suffix (distinct per stream and wave), generate 256
+fixed tokens, pinned `id_slot`. `prompt_n` ~ suffix; `n_restored` per slot is recorded. **Restore works across launches but NOT across KV layouts (measured, e2e below):** the state file embeds `n_stream`, and
+`llama_state_seq_load_file` fails with `n_stream mismatch` (HTTP 400 "Unable to restore slot") when it differs. Unified has
+`n_stream = 1` for every np and pool size, so ONE unified bank serves all unified cells; split has `n_stream = np`, so each split np needs its OWN bank
+(`--build-bank --bank-kv split --bank-np N`; files in `_bank_scratch/split_np{N}/`, manifest `bank_manifest_split_np{N}.json`). The coordinator's assumption of
+cross-KV-mode restore is therefore false; split arms either carry a per-np bank or run live (`depth` mode).
+
+**Pool occupancy is a recorded variable** (the :8083 "~40k own vs ~275k occupied" finding, `kvu16b-rootcause-REPORT.md`): each wave records
+`resident_tokens_at_start` (sum of `n_restored`), `used_cells_est`, `active_streams`, `restored_slots`. Cells: `bank` (restore only active
+slots = idle slots empty), `bank4` (np8 launch, restore 4, decode 4), `bank_resident4` (np8 launch, restore all 8, decode 4 =
+the production reality under `--no-cache-idle-slots`; Tier 0 at 64k only).
+
+**Pool-full stress on the bank:** restore `pool // L` docs at 128k (fills the 524,288 pool), then send np8 requests; resident ones decode, the
+extra four bring fresh 128k token prompts that cannot fit; classification ERROR / TRUNCATE / QUEUE_OR_FIT, `/slots` polled; hard timeout 1800 s.
+
+**Unified arms' argv = production frontdoor argv + `--kv-unified` + `--no-cache-idle-slots`** (coordinator decision; same pairing :8083 runs). Split arms keep today's argv.
+Recorded in every row (`cache_idle_slots_argv`, `extra_argv`). Smoke `smoke_depth_nocis/` (unified np2, 8k, id_slot, 3 waves, flag on): no stream
+re-prefilled (waves 2/3 `prompt_n` ~2.0-2.3k = checkpoint-granularity tail, `cache_n` 5.5-5.7k both streams); the `--checkpoint-min-step 0`
+diagnostic was therefore not needed.
+
+### Correctness gates (small L = 7,680 tokens, np2, production argv, quarter q0) — `gates/gates.json`
+| gate | split | unified (`--no-cache-idle-slots`) |
+|---|---|---|
+| (a) restore+suffix output byte-identical to cold live prefill+suffix (2 suffixes x 256 tokens, greedy) | **PASS** (A, B) | **PASS** (A, B) |
+| (c) restored 7,680-token slot + 1,024-token chunk -> `prompt_n` == 1,024 | **PASS** (cache_n 7,680) | **PASS** |
+| save size / tokens | 149.6 MB, 7,680 (= 19.5 KB/token incl. recurrent state) | same |
+| (b) MTP draft acceptance live vs restored | live 166/355 = 0.47, 163/361 = 0.45 -> restored 135/473 = 0.29, 143/445 = 0.32 | live 174/320 = 0.54, 176/315 = 0.56 -> restored 138/464 = 0.30, 140/456 = 0.31 |
+
+**(b) is a bank LIMITATION.** `server-context.cpp` slot save/restore (~L2607/L2640) handles `ctx_tgt` only; the MTP head runs in a separate `ctx_dft`
+(`LLAMA_CONTEXT_TYPE_MTP`), whose per-sequence state is not saved, so after a restore the draft has no history for the restored prefix and acceptance falls
+by about 40% relative (draft_n per token also rises) for the whole generation; a warm-up decode cannot rebuild the missing prefix history. Therefore:
+- **MTP-off bank cells are clean** (output identical, only target state matters); geometry/occupancy/np/pool/KV-mode effects on the *target* are measured faithfully.
+- **MTP-on bank cells carry an acceptance penalty**: report them as "restored-draft" and do not quote MTP-on decode tok/s as production-representative. Faithful MTP-on numbers need either the §8 live `depth`
+  cells (prefill once per launch, draft state intact) for a handful of key cells, or an experimental-kernel change (v11 candidate, `llama.cpp-experimental` only,
+  production kernel untouched): save/restore `ctx_dft` next to `ctx_tgt` in `SLOT_SAVE/RESTORE` (the RAM prompt-cache path `prompt_save/prompt_load` already does both). That change belongs with the
+  fork-build branch; with it the bank is valid for MTP-on and no live prefill remains.
+
+### Re-estimates (driver `--dry-run`, assumption model)
+| scope | before (live) | with bank |
+|---|---|---|
+| Tier 0 cells | 7.0 h (§8 depth design) | **2.0 h cells + 1.9 h unified bank + 0.6 h split-np4 bank (8k-64k) = 4.5 h** (MTP-on rows flagged "restored-draft") |
+| Tier 0 MTP-faithful hybrid (bank for MTP-off + occupancy cells; live `depth` for np4 split/unified L64k + np8 L64k) | - | ~6 h |
+| Full matrix, all cells | 57.3 h (estimator revised: shared cells now modelled as warm + np-1 cold) | **16.8 h cells + 1.9 h bank**; 61 INDEPENDENT-class cells cost only 2.7 h; the remaining time is the 60 live SHARED cells |
+Prefill assumption (300 tok/s full host) still unmeasured; the bank build itself is the calibration (per-step `prefill_tps` at depth), after which re-run `--dry-run`.
+
+### MTP decision rule (coordinator 2026-10-20; gate 4(b) result in `gates/gates.json`)
+Compared at the SAME depth (7,680 tokens), 256 generated tokens, greedy, per suffix (A, B), both layouts: acceptance restored vs live (table above)
+and decode tok/s (NOT yet captured: the first gate run predates the `decode_tps` field; the driver now records it; a re-run queued for q0 timed out after 25 min because other sessions held every quarter -- re-run `--gates` when a quarter is free, ~10 min). Rule:
+1. If restored acceptance < 0.9 x live acceptance **or** restored decode tok/s < 0.95 x live (any suffix/layout) -> the bank is valid ONLY for MTP-off cells and for
+   prefill-at-depth (bank build steps, controls). Observed: acceptance ratio ~0.55-0.65 -> **rule triggers**.
+2. MTP-on decode cells then run LIVE (§8 `depth` mode: prefill once per launch, wave 1 prefill/TTFT, waves >= 2 decode at depth). In Tier 0 these are only
+   the MTP-on cells that carry a decode claim: split np4 L64k (x2, ABA), unified np4 L64k, unified np8 L32k/L64k, unified np8 P=1M L128k (the 128k cell is
+   ~96 min live; it may instead be reported MTP-off from the bank plus a restored-draft MTP-on row labelled as such).
+3. The MTP-off control column and all occupancy / pool / KV-mode geometry cells can come from the bank (target-state effects), which is where the large
+   savings are; the full matrix keeps MTP-on live only for np {1,4,8} x L {8k,64k} corner cells.
+4. **Option for main (not implemented; the frozen production kernel is untouched and no patch was written):** extend `SLOT_SAVE` / `SLOT_RESTORE` in
+   `tools/server/server-context.cpp` (~L2607 / ~L2640) to also `llama_state_seq_save_file/load_file` `ctx_dft` into a sibling `.dft` file (the RAM
+   prompt-cache path `prompt_save`/`prompt_load` already carries `main` + `drft` buffers), and clear `ctx_dft` on restore. Must live on a `llama.cpp-experimental` branch
+   (natural home: the fork build) and be validated by re-running gate (b); if acceptance and decode tok/s then match live, the bank is valid for MTP-on and the live cells disappear.
+
+### E2E evidence for the new code paths (`bank_e2e/`, np2, 8k, quarter q0)
+`--build-bank` (unified: 2 docs, 107 s total prefill at ~142 tok/s on 24 cores; split np2: 106 s), chunk-sum / one-shot controls 1.03 (unified) and 1.07 (split)
+(single step here, so this only checks timing noise; the real additive-vs-one-shot ratio comes from the full bank build), `n_saved` 7,680 per file; `--from-bank` cells for split np2
+and unified np2 restored 2 docs (15,360 resident tokens recorded per wave), `prompt_n` = 200 (the suffix) for every stream and wave, TTFT ~4-5 s, 0 errors.
+The first attempt (unified bank restored into a split launch) failed with `n_stream mismatch`, which is how the layout rule above was found.
