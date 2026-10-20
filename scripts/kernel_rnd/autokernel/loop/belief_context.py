@@ -208,7 +208,20 @@ def load_root(root: str | Path | None = None) -> dict[str, Any]:
             raise FileNotFoundError(f"ROOT reader module missing: {vidya / name}.py")
     sys.path.insert(0, str(vidya))
     try:
-        modules = {name: importlib.import_module(name) for name in _VIDYA_MODULES}
+        # LITERAL names, not a loop over `_VIDYA_MODULES`: the campaign-boundary walk
+        # (test_campaign_footprint) follows literal `import_module("x")` and fails
+        # closed on a computed name. These are ROOT's modules, outside this package,
+        # so the literal form is both walkable and exactly what the loop did.
+        modules = {
+            "canonical": importlib.import_module("canonical"),
+            "lattice": importlib.import_module("lattice"),
+            "frames": importlib.import_module("frames"),
+            "ledger": importlib.import_module("ledger"),
+            "fold": importlib.import_module("fold"),
+            "gate": importlib.import_module("gate"),
+        }
+        if tuple(modules) != _VIDYA_MODULES:
+            raise ImportError("ROOT reader module list drifted from _VIDYA_MODULES")
     finally:
         try:
             sys.path.remove(str(vidya))

@@ -195,6 +195,17 @@ CAMPAIGN_ROOTS = {
         "earlyoom, whose argv names what it guards",
     f"{ROOT_PKG}.resource.claim_witness":
         "a claim that is observed but never held is not a claim (invariant 9)",
+    f"{ROOT_PKG}.codegen_summary":
+        "a bounded backend-native diagnostic accompanies every executed KEEP; missing "
+        "compiler evidence stays unavailable and never changes ranking (campaign.py "
+        "imports it directly and lists it in MODULES_THE_DRIVER_USES)",
+    f"{ROOT_PKG}.execution.inference_window":
+        "CPU and GPU candidate preparation may overlap, but every actual model-load/"
+        "inference call is serialized by one recoverable host-wide flock: GPU loading "
+        "perturbs the memory system the CPU benchmark measures",
+    f"{ROOT_PKG}.execution.screening_baseline":
+        "amortized exact-frame anchor banks support noisy candidate-only discovery "
+        "screens but are never accepted by strict T1 and cannot grant rank authority",
     f"{ROOT_PKG}.controller.hypotheses":
         "`claim_for_hypothesis` calls itself the ONLY route from a hypothesis to a "
         "resource claim and had ZERO non-test callers until 2026-08-04 — a guard "
@@ -325,6 +336,26 @@ CONTROLLER_ALLOWED = {
         "verdict, so no SPENDABLE token exists without a real ledger. "
         "`compile_for_tracker` builds it from the tracker's own record and lives here. "
         "It is also reached unconditionally via `controller/__init__.py`",
+    f"{ROOT_PKG}.controller.authoring_contract":
+        "admitted 2026-10-20 (test debt: reached but never declared). "
+        "`c5_seed_corpus` (a C3 suite input, via evaluator.c3_epyc_suite) calls "
+        "`assert_prompt_hygiene` at load time, so a seed corpus that leaks a forbidden "
+        "marker is refused before it can reach a prompt. Imports only stdlib and "
+        "`schemas`; it owns no model client and reaches nothing else under controller/",
+    f"{ROOT_PKG}.controller.discovery_supervisor_secure":
+        "admitted 2026-10-20 (test debt). fd-relative filesystem/process containment "
+        "primitives (`RuntimeRoot`, `SecureRuntimeError`) used by loop.worker_lifecycle, "
+        "loop.campaign_control and loop.measurement_capture, which `journal` (a declared "
+        "root) imports to validate worker-lifecycle events. Stdlib only; it is a "
+        "containment layer for the campaign path, not strategy",
+    f"{ROOT_PKG}.controller.experiments":
+        "admitted 2026-10-20 (test debt). The durable experiment-memory store "
+        "(sqlite, outlives a deployment) read by loop.archive; it exists because one "
+        "rewrite was re-proposed 38 times. Stdlib only, no planner or actor logic",
+    f"{ROOT_PKG}.controller.workload_contract":
+        "admitted 2026-10-20 (test debt). `read_census` reads the GGUF header so the "
+        "screening workload provably dispatches the kernels production dispatches; "
+        "loop.census and loop.model_identity bind it. Stdlib only",
     f"{ROOT_PKG}.controller.shared":
         "`ControllerError`, `selection_block()` and `LEDGER_DIMENSIONS` — the six lines "
         "the two modules above were pinned to the removed AK4 plane by. Reached only "
@@ -410,6 +441,29 @@ FIXED_N_EVENT_REDUCTION = {
     f"{ROOT_PKG}.execution.control_runner": frozenset({
         "run_e_process", "select_construction",
     }),
+    # Added 2026-10-20 (test debt, bound by loop.serving_preparation since its 2026-09-09 commit). The serving-preparation
+    # declaration VALIDATES its stated construction id and hypothesis/margin
+    # (`select_construction`, `null_boundary_for` are pure lookups/arithmetic), and the
+    # calibration solve feeds a fixed, fully collected A/A + neutral block vector to
+    # `controls.run_calibration_block` once. It binds neither `run_e_process` nor any
+    # SequentialEvaluation/BlockRequest/StopDecision, requests no block, and cannot stop
+    # early. Exact by module and symbol, like the entry above.
+    f"{ROOT_PKG}.loop.serving_preparation": frozenset({
+        "select_construction", "null_boundary_for",
+    }),
+}
+
+#: Computed-name dynamic imports the walk cannot follow, admitted by EXACT MODULE with
+#: the reason the target cannot be a fenced module. Everything else stays a finding.
+#: `test_every_allowed_unresolved_import_is_still_unresolved` fails on a stale entry.
+UNRESOLVED_DYNAMIC_IMPORT_ALLOWED = {
+    f"{ROOT_PKG}.loop.feed_runtime":
+        "pinned_import() is the __import__ hook installed into the builtins of ROOT "
+        "(epyc-root vidya) sources exec'd from a captured closure. It serves pinned "
+        "names itself, refuses relative imports outside the closure, and — since "
+        "2026-10-20 — refuses any name rooted at this package before delegating the "
+        "remaining stdlib/ROOT names to builtins.__import__, so the computed name can "
+        "never resolve to a module this boundary fences",
 }
 
 STATISTICS_MODULE = f"{ROOT_PKG}.evaluator.statistics"
@@ -875,7 +929,8 @@ def unresolved_import_findings(graph: "ImportGraph", _edges: dict) -> list:
     that silently skips `import_module(f"{__package__}.controller.guards")`
     reports a clean boundary over a module it never looked at.
     """
-    return list(graph.unresolved)
+    allowed = {name.replace(ROOT_PKG, graph.root, 1) for name in UNRESOLVED_DYNAMIC_IMPORT_ALLOWED}
+    return [f for f in graph.unresolved if f.split(":", 1)[0] not in allowed]
 
 
 def _write(root: Path, rel: str, source: str) -> None:
@@ -1290,8 +1345,17 @@ class TestCampaignFootprint(unittest.TestCase):
         skipping it silently would let all three checks report clean over a
         module nobody looked at.
         """
+        edges = campaign_edges()
+        found = unresolved_import_findings(self.graph, edges)
+        self.assertEqual(found, [], "\n".join(found))
+
+    def test_every_allowed_unresolved_import_is_still_unresolved(self):
+        """The allow-list must not outlive the call it admits."""
         campaign_edges()
-        self.assertEqual(self.graph.unresolved, [], "\n".join(self.graph.unresolved))
+        live = {f.split(":", 1)[0] for f in self.graph.unresolved}
+        stale = sorted(m for m in UNRESOLVED_DYNAMIC_IMPORT_ALLOWED
+                       if m.replace(ROOT_PKG, self.graph.root, 1) not in live)
+        self.assertEqual(stale, [], f"allow-listed modules with no unresolved import: {stale}")
 
     def test_the_entrypoint_stays_inside_the_declared_closure(self):
         """campaign.py may only reach what the declared roots already reach."""

@@ -48,47 +48,21 @@ from autokernel import schemas as S  # noqa: E402
 from autokernel.evaluator import api  # noqa: E402
 from autokernel.execution import physical_bounds  # noqa: E402
 from autokernel.test_schemas import _proposal as _proposal_fixture  # noqa: E402
+from autokernel.test_campaign import write_calibration_bundle  # noqa: E402
 
 PROGRAM_MD = Path(__file__).resolve().parent / "program.md"
 
 
 def _write_current_calibration(root: Path) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    source = {
-        "schema": "epyc.autokernel.runtime_source_label.v1",
-        "production_source_commit": campaign.PRODUCTION_COMMIT,
-        "measurement_instrument_commit": campaign.MEASUREMENT_COMMIT,
-        "measurement_binary_sha256": "1" * 64,
-        "copied_binary_sha256": "1" * 64,
-        "measurement_linkage_sha256": "2" * 64,
-        "copied_linkage_sha256": "2" * 64,
-        "binary_copy_exact": True,
-    }
-    source_sha = S.content_hash(source)
-    (root / "runtime-source-label.json").write_text(
-        json.dumps({**source, "source_sha256": source_sha}), encoding="utf-8")
-    declaration = {
-        "schema": "epyc.autokernel.live_control_campaign_declaration.v1",
-        "campaign_id": "ak-controls-current-doc-test",
-        "recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
-        "contribution_floor": 0.03,
-        "max_blocks_per_candidate": 20,
-        "source_sha256": source_sha,
-    }
-    (root / "campaign_declaration.json").write_text(
-        json.dumps(declaration), encoding="utf-8")
-    (root / "summary.json").write_text(json.dumps({
-        "campaign_id": declaration["campaign_id"],
-        "state": "controls_complete", "may_rank": True,
-        "binary_copy_exact": True,
-        "production_source_commit": campaign.PRODUCTION_COMMIT,
-        "calibration": {
-            "outputs": {"accepted": True, "b_min_blocks": 12,
-                        "noise_floor_phi": 0.04},
-            "attempts": [{"accepted": True,
-                          "mde": {"found": True, "value": 0.025}}],
-        },
-    }), encoding="utf-8")
+    """The CURRENT live-control bundle, from the one fixture that tracks the contract.
+
+    This used to be a private copy that stopped at the 2026-08-12 shape. The
+    2026-08-13 bundle contract (86600a0f6) requires `calibration_frame`, the anchor
+    motion window and its settling receipt; the copy was never updated, so the
+    documented command failed on the fixture, not on program.md or the code.
+    """
+    write_calibration_bundle(root)
+
 
 #: Subpackages the operator has not adopted into campaign #1 and which are STILL
 #: ON DISK. `release/` and `adapters/` were restored narrowly for the AK9 speech

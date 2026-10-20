@@ -173,6 +173,12 @@ class LoadedFeedProjection:
                 if name not in modules:
                     raise FeedRuntimeRefused("pinned ROOT dependency imported before loading")
                 return modules[name]
+            if name.split(".")[0] == __name__.split(".")[0]:
+                # The delegate below is a computed-name import the campaign-boundary
+                # walk cannot follow (test_campaign_footprint declares it). Pinned ROOT
+                # sources need only stdlib/ROOT names, so refuse this package outright:
+                # the hook can then never reach a module the boundary fences.
+                raise FeedRuntimeRefused("ROOT source may not import the autokernel package")
             return builtins.__import__(name, globals, locals, fromlist, level)
 
         registered = []
