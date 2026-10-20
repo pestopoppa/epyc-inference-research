@@ -8,6 +8,7 @@ by that instrument.  Unsupported launch shapes remain per-target diagnostics.
 
 from __future__ import annotations
 
+from dataclasses import replace
 import hashlib
 import json
 import math
@@ -15,7 +16,7 @@ from pathlib import Path
 import stat
 from typing import Any, Mapping
 
-from . import campaign
+from . import campaign, serving
 from .resolved_recipe import ARTIFACT_SCHEMA as LAUNCH_ARTIFACT_SCHEMA
 from .resolved_recipe import (EnvironmentPolicy, ResolutionError,
                               canonical_recipe_projection, resolve_canonical_launch)
@@ -401,6 +402,41 @@ def manifest_from_export(value: Path | str | Mapping[str, Any], *,
     return campaign.CampaignManifest.from_dict(raw)
 
 
+def _with_declared_environment(recipe: serving.Recipe, target: Mapping[str, Any],
+                               environment_policy: EnvironmentPolicy | Mapping[str, Any]
+                               ) -> serving.Recipe:
+    """`recipe` (the env-less command projection) declaring the export's own environment
+    for the policy's measurement keys, so the recipe owns them.
+
+    `canonical_recipe_projection` is env-less by construction: the canonical grammar
+    carries environment in the launch environment, never in the command. Left like that,
+    every measurement key the policy witnesses at `/proc/<pid>/environ` reports `unknown`
+    and the resolved capability is unsupported (`process_environ_witness_missing`) for
+    EVERY exported target -- the same defect the long-context identity oracle had on
+    2026-10-08. The producer's declaration is the export itself: a measurement key it
+    sets (`environment`) is declared with that value, one it removes
+    (`environment_unsets`) is declared absent. A measurement key the export neither sets
+    nor unsets stays undeclared, so its witness stays `unknown` and the capability stays
+    fail-closed. Keys outside the policy's measurement keys are not the recipe's to own.
+    The export bytes are still the authority: the caller's launch is resolved from
+    `target["environment"]` and byte-compared against the export afterwards."""
+    policy = EnvironmentPolicy.from_dict(
+        environment_policy.to_dict() if isinstance(environment_policy, EnvironmentPolicy)
+        else environment_policy)
+    measured = set(policy.measurement_keys)
+    environment = target.get("environment")
+    unsets = target.get("environment_unsets", [])
+    if not isinstance(environment, Mapping) or not isinstance(unsets, list):
+        raise ResolutionError("export environment declaration is malformed")
+    declared = {key: value for key, value in environment.items() if key in measured}
+    removed = sorted({key for key in unsets if key in measured})
+    if set(declared) & set(removed):
+        raise ResolutionError("export both sets and unsets a measurement key")
+    if not declared and not removed:
+        return recipe  # Nothing to own: the template (and its hash) is unchanged.
+    return replace(recipe, env=declared, explicit_unsets=tuple(removed))
+
+
 def resolve_exported_recipes(value: Path | str | Mapping[str, Any], *,
                              environment_policy: EnvironmentPolicy | Mapping[str, Any]
                              ) -> dict[str, Any]:
@@ -424,9 +460,9 @@ def resolve_exported_recipes(value: Path | str | Mapping[str, Any], *,
             if not isinstance(command, list) or not isinstance(topology, Mapping):
                 raise ResolutionError("canonical command/topology declaration is absent")
             prefix = topology.get("argv_prefix")
-            recipe = canonical_recipe_projection(
+            recipe = _with_declared_environment(canonical_recipe_projection(
                 name=f"production:{target['target_id']}", command_argv=command,
-                topology_prefix=prefix)
+                topology_prefix=prefix), target, environment_policy)
             artifacts = {"model": None, "drafter": None, "executable": None, "dsos": []}
             for item in _entry_artifacts(target):
                 role = item["use"]

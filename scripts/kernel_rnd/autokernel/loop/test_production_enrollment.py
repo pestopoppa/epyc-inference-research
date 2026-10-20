@@ -96,6 +96,86 @@ def _policy() -> dict:
             "witnesses": {}}
 
 
+def _witnessed_policy(*keys: str) -> dict:
+    """Every measurement key witnessed at /proc/<pid>/environ (the Q38FN/DS41 contract
+    shape). `_policy()` has no measurement keys, which is why the env-less template never
+    showed up as unsupported in this file."""
+    return {"schema": ENVIRONMENT_POLICY_SCHEMA, "version": "witnessed-v1",
+            "measurement_keys": list(keys), "allowed_inherit_keys": [],
+            "witnesses": {key: "process_environ" for key in keys}}
+
+
+def _witnessed_export(tmp_path: Path, *, unsets=("GGML_IQK",)) -> dict:
+    export = _export(tmp_path)
+    export["targets"][0]["environment_unsets"] = list(unsets)
+    return _seal_recipe_artifacts(export, tmp_path)
+
+
+def test_exported_recipe_owns_its_process_environ_witnessed_environment(tmp_path: Path):
+    """Regression (same class as the 2026-10-08 long-context oracle refusal): the
+    exported template came from the env-less command projection, so every measurement key
+    witnessed at /proc/<pid>/environ was `unknown` and every production runtime anchor
+    (`unified_planner.prepare_runtime_anchors`) resolved capability-unsupported
+    (`process_environ_witness_missing`). The export's own declaration -- a value in
+    `environment`, a removal in `environment_unsets` -- is now the recipe's."""
+    export = _witnessed_export(tmp_path)
+    target = export["targets"][0]
+    row = resolve_exported_recipes(
+        export, environment_policy=_witnessed_policy("GGML_IQK", "OMP_PROC_BIND")
+    )["targets"][0]
+    assert row["status"] == "resolved", row["reason"]
+    resolved = CanonicalResolvedRecipe.from_dict(row["resolved_recipe"])
+    assert resolved.capability.supported, resolved.capability.reasons
+    assert resolved.template.env == {"OMP_PROC_BIND": "spread"}
+    assert resolved.template.explicit_unsets == ("GGML_IQK",)
+    witnesses = {w.key: (w.kind, w.status, w.field, w.expected)
+                 for w in resolved.capability.witnesses}
+    assert witnesses == {
+        "OMP_PROC_BIND": ("process_environ", "declared", "environ:OMP_PROC_BIND", "spread"),
+        "GGML_IQK": ("process_environ", "declared", "environ:GGML_IQK", serving.UNSET)}
+    # The export bytes stay the authority (resolver's own byte-equality check).
+    assert list(resolved.argv) == target["argv"]
+    assert dict(resolved.launch_env) == target["environment"]
+
+
+def test_exported_recipe_stays_fail_closed_on_an_undeclared_measurement_key(tmp_path: Path):
+    """A measurement key the export neither sets nor unsets is NOT invented: its witness
+    stays `unknown` and the capability stays unsupported."""
+    row = resolve_exported_recipes(
+        _witnessed_export(tmp_path),
+        environment_policy=_witnessed_policy("GGML_IQK", "OMP_PLACES", "OMP_PROC_BIND"),
+    )["targets"][0]
+    resolved = CanonicalResolvedRecipe.from_dict(row["resolved_recipe"])
+    assert not resolved.capability.supported
+    assert [reason.code for reason in resolved.capability.reasons] == [
+        "process_environ_witness_missing"]
+    assert {w.key: w.status for w in resolved.capability.witnesses} == {
+        "GGML_IQK": "declared", "OMP_PLACES": "unknown", "OMP_PROC_BIND": "declared"}
+
+
+def test_exported_recipe_refuses_a_key_both_set_and_unset(tmp_path: Path):
+    row = resolve_exported_recipes(
+        _witnessed_export(tmp_path, unsets=("OMP_PROC_BIND",)),
+        environment_policy=_witnessed_policy("OMP_PROC_BIND"))["targets"][0]
+    assert row["status"] == "unsupported"
+    assert row["reason"] == "not_exactly_resolvable:ResolutionError"
+
+
+def test_exported_recipe_without_measurement_keys_keeps_its_template_identity(tmp_path):
+    """No measurement key to own: the template, and so its recipe hash, is exactly the
+    command projection it always was."""
+    export = _witnessed_export(tmp_path)
+    target = export["targets"][0]
+    resolved = CanonicalResolvedRecipe.from_dict(resolve_exported_recipes(
+        export, environment_policy=_policy())["targets"][0]["resolved_recipe"])
+    projected = rr.canonical_recipe_projection(
+        name=f"production:{target['target_id']}", command_argv=target["command_argv"],
+        topology_prefix=target["topology"]["argv_prefix"])
+    # (Compared by serialized identity: the snapshot round trip turns env None into {}.)
+    assert resolved.template.to_dict() == projected.to_dict()
+    assert resolved.template_hash == projected.recipe_hash
+
+
 def _campaign_config(backend: str = "cpu") -> dict:
     return {"schema": CAMPAIGN_CONFIG_SCHEMA, "campaign_id": "production-test",
             "request_id": "request-1",
