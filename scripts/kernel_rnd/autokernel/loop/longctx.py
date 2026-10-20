@@ -354,18 +354,28 @@ def _oracle_arm(arm):
     anchor's 3 repeated greedy completions disagree with themselves, so every candidate
     saw `oracle_unavailable`). Stripping it makes the oracle judge the target model's own
     decode, never the drafter's agreement with it. A launch with no speculative decoding
-    to strip is returned unchanged (identity preserved, same object)."""
+    to strip is returned unchanged (identity preserved, same object).
+
+    The oracle's template keeps the ARM's environment declaration (`env`,
+    `explicit_unsets`, `env_readback`; `_oracle_template`). `canonical_recipe_projection`
+    is env-less by construction (the canonical grammar carries environment in
+    `launch_env`, never in the command), so a template rebuilt from the stripped command
+    alone owns none of the measurement keys the arm's recipe declares. Under a
+    `process_environ`-witnessed environment policy every such key then reports `unknown`,
+    the capability is unsupported (`process_environ_witness_missing`) and serving refuses
+    the oracle -- the 2026-10-08 Q38FN refusal (all 8 GGML_*/OMP_* keys of
+    q38fn-b0ba1d427-cpu-t48-mtp-d4) that left every long-context attention candidate
+    `oracle_unavailable`. The launch environment is the arm's, unchanged, so the carried
+    declaration is still exactly what the process receives. Should the oracle still lose
+    a capability the arm has, this refuses here with the reasons, rather than ship an
+    oracle that can only fail at serve time."""
     from . import resolved_recipe as rr
 
     stripped = _strip_speculative_decoding(arm.command_argv)
     if stripped == tuple(arm.command_argv):
         return arm
-    template = rr.canonical_recipe_projection(
-        name=f"{arm.template.name}-identity-oracle", command_argv=stripped,
-        topology_prefix=arm.topology_prefix, n_predict=arm.template.n_predict,
-        temperature=arm.template.temperature, top_p=arm.template.top_p,
-        top_k=arm.template.top_k, metric=arm.template.metric)
-    return rr.resolve_canonical_launch(
+    template = _oracle_template(arm, stripped)
+    oracle = rr.resolve_canonical_launch(
         template, build_dir=Path(arm.build_dir), command_argv=stripped,
         topology_prefix=arm.topology_prefix, launch_environment=dict(arm.launch_env),
         artifact_identities={"model": arm.model.to_dict(), "drafter": None,
@@ -376,6 +386,26 @@ def _oracle_arm(arm):
         runtime_ld_paths=arm.runtime_ld_paths,
         provenance={**dict(arm.provenance),
                    "identity_oracle": "speculative_decoding_stripped"})
+    if arm.capability.supported and not oracle.capability.supported:
+        raise LongCtxRefused(
+            "identity oracle lost the arm's launch capability when speculative decoding "
+            "was stripped: " + ", ".join(reason.code for reason in oracle.capability.reasons))
+    return oracle
+
+
+def _oracle_template(arm, stripped: Sequence[str]) -> serving.Recipe:
+    """The semantic template of the stripped command, carrying the arm's own environment
+    declaration -- the recipe stays the owner of every measurement key (`_oracle_arm`)."""
+    from . import resolved_recipe as rr
+
+    projected = rr.canonical_recipe_projection(
+        name=f"{arm.template.name}-identity-oracle", command_argv=stripped,
+        topology_prefix=arm.topology_prefix, n_predict=arm.template.n_predict,
+        temperature=arm.template.temperature, top_p=arm.template.top_p,
+        top_k=arm.template.top_k, metric=arm.template.metric)
+    return replace(projected, env=dict(arm.template.env or {}),
+                   explicit_unsets=tuple(arm.template.explicit_unsets),
+                   env_readback=tuple(arm.template.env_readback))
 
 
 def _http_post(port: int, path: str, body: bytes, timeout: float) -> bytes:

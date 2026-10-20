@@ -687,6 +687,87 @@ def test_oracle_arm_is_a_passthrough_when_there_is_nothing_to_strip(tmp_path):
     assert longctx._oracle_arm(launch) is launch
 
 
+#: The live q38fn-b0ba1d427-cpu-t48-mtp-d4 recipe environment, every key witnessed at
+#: /proc/<pid>/environ by its environment policy (provisional-q38fn/environment-policy.json).
+Q38FN_RECIPE_ENV = {"GGML_FA_SPLIT_KV": "0", "GGML_FUSED_DECODE_OFF": "1", "GGML_IQK": "1",
+                    "GGML_NOHUGEPAGE_PROCESS": "1", "OMP_DYNAMIC": "false",
+                    "OMP_PLACES": "cores", "OMP_PROC_BIND": "spread",
+                    "OMP_WAIT_POLICY": "active"}
+
+
+def _mtp_launch_with_witnessed_env(build: Path, *, unset=("GGML_SCHED_MAX_COPIES",)):
+    """`_mtp_launch` under the Q38FN shape of environment contract: the recipe declares
+    every measurement key (values, plus one explicit unset) and the policy witnesses each
+    one at /proc/<pid>/environ. The earlier fixtures used an EMPTY policy, which is why the
+    2026-10-08 refusal never reproduced in this file. Unlike `_mtp_launch` this is a
+    SUPPORTED CPU arm, like the live one: external drafter on CPU (`-ngld 0`,
+    `--device-draft none`) with `--draft-p-min 0.5`."""
+    port = 18657
+    base = replace(_template(), spec_decode={
+        "type": "draft-mtp", "drafter": "/models/drafter-mtp-shared-q8.gguf", "ngld": 0,
+        "draft_n_max": 4}, extra_flags=("--device-draft", "none", "--draft-p-min", "0.5"))
+    command = base.server_argv(build, port) + ["--no-mmap", "--no-webui"]
+    template = replace(
+        rr.canonical_recipe_projection(name=base.name, command_argv=command,
+                                       topology_prefix=(), n_predict=8, temperature=0.0,
+                                       top_k=1),
+        env=dict(Q38FN_RECIPE_ENV), explicit_unsets=tuple(sorted(unset)))
+    return rr.resolve_canonical_launch(
+        template, build_dir=build, command_argv=command, topology_prefix=(),
+        launch_environment={"LD_LIBRARY_PATH": str(build / "bin"), **Q38FN_RECIPE_ENV},
+        artifact_identities=_artifacts(template, build=build), backend="cpu",
+        environment_policy=_policy(*Q38FN_RECIPE_ENV, *unset, witness="process_environ"),
+        port=port, runtime_binary_dir=str(build / "bin"),
+        runtime_ld_paths=(str(build / "bin"),),
+        provenance={"export_sha256": "a" * 64, "instance_mode": "full",
+                    "source:fixture": "b" * 64})
+
+
+def test_oracle_arm_keeps_the_recipe_owned_process_environ_witnesses():
+    """Regression, 2026-10-08 (Q38FN AK campaign, r10): every long-context attention
+    candidate refused with `oracle_unavailable` / "canonical launch is unsupported:
+    process_environ_witness_missing". `_oracle_arm` rebuilt its template from the stripped
+    command alone (`canonical_recipe_projection`, env-less by construction), so all 8
+    witnessed GGML_*/OMP_* keys became `unknown` on the oracle although the launch still
+    carried them. The oracle must keep the arm's declaration and stay supported."""
+    arm = _mtp_launch_with_witnessed_env(Path("/build"))
+    assert arm.capability.supported
+    oracle = longctx._oracle_arm(arm)
+    assert oracle is not arm and oracle.drafter is None
+    assert oracle.template.spec_decode == {"type": "none"}
+    assert oracle.capability.supported, oracle.capability.reasons
+    assert dict(oracle.launch_env) == dict(arm.launch_env)
+    assert oracle.template.env == arm.template.env
+    assert oracle.template.explicit_unsets == arm.template.explicit_unsets
+    declared = {w.key: (w.kind, w.status, w.field, w.expected)
+                for w in oracle.capability.witnesses}
+    assert declared == {w.key: (w.kind, w.status, w.field, w.expected)
+                        for w in arm.capability.witnesses}
+    assert declared["GGML_SCHED_MAX_COPIES"] == (
+        "process_environ", "declared", "environ:GGML_SCHED_MAX_COPIES", serving.UNSET)
+    assert all(status == "declared" for _kind, status, _f, _e in declared.values())
+    # The oracle snapshot survives its own schema round trip.
+    assert rr.resolved_recipe_from_dict(oracle.to_dict()).execution_digest \
+        == oracle.execution_digest
+
+
+def test_oracle_arm_refuses_an_oracle_that_lost_the_arms_capability(monkeypatch):
+    """Fail closed at construction, naming the reason: re-introduce the 2026-10-08
+    env-less oracle template and the oracle must refuse here, not at serve time."""
+    arm = _mtp_launch_with_witnessed_env(Path("/build"))
+
+    def env_less(arm, stripped):
+        return rr.canonical_recipe_projection(
+            name=f"{arm.template.name}-identity-oracle", command_argv=stripped,
+            topology_prefix=arm.topology_prefix, n_predict=arm.template.n_predict,
+            temperature=arm.template.temperature, top_p=arm.template.top_p,
+            top_k=arm.template.top_k, metric=arm.template.metric)
+
+    monkeypatch.setattr(longctx, "_oracle_template", env_less)
+    with pytest.raises(longctx.LongCtxRefused, match="process_environ_witness_missing"):
+        longctx._oracle_arm(arm)
+
+
 def test_identity_targets_strips_speculative_decoding_from_both_oracle_arms(tmp_path):
     """The INC root cause this fixes: the live q38fn-...-mtp-d4 target's own drafter made
     the unmodified anchor's 3 repeated greedy completions disagree with themselves inside
