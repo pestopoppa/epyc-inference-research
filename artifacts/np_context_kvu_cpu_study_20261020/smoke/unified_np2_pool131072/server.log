@@ -1,0 +1,55 @@
+0.00.023.135 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.023.475 W srv  llama_server: -----------------
+0.00.023.477 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.023.477 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.023.477 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.023.477 W srv  llama_server: -----------------
+0.00.024.651 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf'
+0.05.831.153 W warning: failed to mlock 37790109696-byte buffer (after previously locking 0 bytes): Cannot allocate memory
+0.09.301.606 I srv    load_model: initializing, n_slots = 2, n_ctx_slot = 131072, kv_unified = 'true'
+0.09.369.413 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.09.369.492 I srv  llama_server: model loaded
+0.09.369.499 I srv  llama_server: listening on http://127.0.0.1:18970
+0.11.834.392 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1
+0.11.834.459 I slot launch_slot_: id  1 | task 0 | processing task, is_child = 0
+0.13.037.835 I slot print_timing: id  1 | task 0 | prompt eval time =     842.93 ms /   151 tokens (    5.58 ms per token,   179.14 tokens per second)
+0.13.037.843 I slot print_timing: id  1 | task 0 |        eval time =     359.90 ms /    16 tokens (   22.49 ms per token,    44.46 tokens per second)
+0.13.037.844 I slot print_timing: id  1 | task 0 |       total time =    1202.83 ms /   167 tokens
+0.13.037.851 I slot print_timing: id  1 | task 0 |    graphs reused =          3
+0.13.037.855 I slot print_timing: id  1 | task 0 | draft acceptance = 1.00000 (   12 accepted /    12 generated), mean len =  5.00
+0.13.038.211 I slot      release: id  1 | task 0 | stop processing: n_tokens = 166, truncated = 0
+0.13.105.857 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.13.105.900 I slot launch_slot_: id  0 | task 6 | processing task, is_child = 0
+0.13.139.920 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 635140363128
+0.13.139.957 I slot launch_slot_: id  1 | task 7 | processing task, is_child = 0
+0.23.547.846 I slot print_timing: id  0 | task 6 | prompt processing, n_tokens =   2048, progress = 0.26, t =  10.41 s / 196.77 tokens per second
+0.36.325.428 I slot print_timing: id  0 | task 6 | prompt processing, n_tokens =   4096, progress = 0.52, t =  23.19 s / 176.66 tokens per second
+0.50.789.189 I slot print_timing: id  0 | task 6 | prompt processing, n_tokens =   5788, progress = 0.74, t =  37.65 s / 153.73 tokens per second
+0.50.800.629 I slot print_timing: id  1 | task 7 | prompt processing, n_tokens =    356, progress = 0.05, t =  14.47 s / 24.59 tokens per second
+1.08.877.906 I slot print_timing: id  0 | task 6 | prompt processing, n_tokens =   7832, progress = 1.00, t =  55.74 s / 140.51 tokens per second
+1.08.888.832 I slot print_timing: id  1 | task 7 | prompt processing, n_tokens =    360, progress = 0.05, t =  32.56 s / 11.06 tokens per second
+1.19.577.738 I slot print_timing: id  1 | task 7 | prompt processing, n_tokens =   2404, progress = 0.31, t =  43.25 s / 55.58 tokens per second
+1.33.137.798 I slot print_timing: id  1 | task 7 | prompt processing, n_tokens =   4447, progress = 0.56, t =  56.81 s / 78.28 tokens per second
+1.43.674.624 I slot print_timing: id  1 | task 7 | prompt processing, n_tokens =   5825, progress = 0.74, t =  67.35 s / 86.49 tokens per second
+2.01.080.010 I slot print_timing: id  1 | task 7 | prompt processing, n_tokens =   7868, progress = 1.00, t =  84.75 s / 92.83 tokens per second
+2.01.287.040 I slot print_timing: id  1 | task 7 | prompt processing, n_tokens =   7869, progress = 1.00, t =  84.96 s / 92.62 tokens per second
+2.08.243.495 I slot print_timing: id  1 | task 7 | n_decoded =    101, tg =  15.02 t/s, tg_3s =  15.02 t/s
+2.10.934.989 I slot print_timing: id  0 | task 6 | n_decoded =    100, tg =   1.95 t/s, tg_3s =   1.95 t/s
+2.11.381.163 I slot print_timing: id  1 | task 7 | n_decoded =    137, tg =  13.89 t/s, tg_3s =  11.47 t/s
+2.14.020.313 I slot print_timing: id  0 | task 6 | n_decoded =    139, tg =   2.55 t/s, tg_3s =  12.64 t/s
+2.14.463.327 I slot print_timing: id  1 | task 7 | n_decoded =    199, tg =  15.38 t/s, tg_3s =  20.12 t/s
+2.17.174.682 I slot print_timing: id  0 | task 6 | n_decoded =    188, tg =   3.26 t/s, tg_3s =  15.53 t/s
+2.17.440.073 I slot print_timing: id  1 | task 7 | prompt eval time =   85195.37 ms /  7873 tokens (   10.82 ms per token,    92.41 tokens per second)
+2.17.440.128 I slot print_timing: id  1 | task 7 |        eval time =   15918.64 ms /   256 tokens (   62.18 ms per token,    16.08 tokens per second)
+2.17.440.138 I slot print_timing: id  1 | task 7 |       total time =  101114.01 ms /  8129 tokens
+2.17.440.147 I slot print_timing: id  1 | task 7 |    graphs reused =         70
+2.17.440.159 I slot print_timing: id  1 | task 7 | draft acceptance = 0.65018 (  184 accepted /   283 generated), mean len =  3.59
+2.17.440.966 I slot      release: id  1 | task 7 | stop processing: n_tokens = 8128, truncated = 0
+2.20.259.240 I slot print_timing: id  0 | task 6 | n_decoded =    241, tg =   3.97 t/s, tg_3s =  17.18 t/s
+2.21.001.011 I slot print_timing: id  0 | task 6 | prompt eval time =   66411.19 ms /  7836 tokens (    8.48 ms per token,   117.99 tokens per second)
+2.21.001.324 I slot print_timing: id  0 | task 6 |        eval time =   61449.64 ms /   256 tokens (  240.04 ms per token,     4.17 tokens per second)
+2.21.001.334 I slot print_timing: id  0 | task 6 |       total time =  127860.83 ms /  8092 tokens
+2.21.001.344 I slot print_timing: id  0 | task 6 |    graphs reused =         91
+2.21.001.358 I slot print_timing: id  0 | task 6 | draft acceptance = 0.39494 (  156 accepted /   395 generated), mean len =  2.58
+2.21.002.167 I slot      release: id  0 | task 6 | stop processing: n_tokens = 8091, truncated = 0
+2.21.003.870 I srv    operator(): operator(): cleaning up before exit...

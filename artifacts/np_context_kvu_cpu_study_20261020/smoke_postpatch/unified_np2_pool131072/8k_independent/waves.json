@@ -1,0 +1,42 @@
+[
+ {
+  "wave": 0,
+  "wall_s": 126.3,
+  "n_ok": 2,
+  "n_err": 0,
+  "ttft_s": [
+   106.71,
+   65.14
+  ],
+  "prefill_tps": [
+   94.1,
+   120.3
+  ],
+  "prompt_n": [
+   7873,
+   7836
+  ],
+  "n_fork_tokens": [
+   null,
+   null
+  ],
+  "n_prompt_tokens_cache": [
+   0,
+   0
+  ],
+  "predicted_n": [
+   256,
+   256
+  ],
+  "decode_tps_per_stream": [
+   15.98,
+   4.19
+  ],
+  "decode_tps_sum": 20.17,
+  "decode_tps_overlap_window": 27.34,
+  "agg_e2e_tok_s": 4.05,
+  "rss_gib": 38.98,
+  "vmhwm_gib": 38.98,
+  "errors": []
+ }
+]

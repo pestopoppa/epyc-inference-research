@@ -1,0 +1,34 @@
+[region-lock] acquiring regions ['q0'] as role='build' (timeout_s=0.0) …
+[region-lock] held ['q0'] after 0.0s wait; running: python3 -I /mnt/raid0/llm/epyc-inference-research/artifacts/np_context_kvu_cpu_study_20261020/driver/kvu_cpu_matrix.py --out /mnt/raid0/llm/epyc-inference-research/artifacts/np_context_kvu_cpu_study_20261020/smoke_postpatch --nps 2 --lens 8k --pmodes independent --waves 1 --pools 131072 --cpu-list 0-23 --threads 24 --port 18970
+corpus sha256=72d96dd93d9aa3bf54bb711d5c523c761c0626f784684aebed3f9f11dfd91d95 files=674 chars=20881145
+verify_ggml_linkage rc=0
+llm/kernels/builds/cpu-20260921-ffc1bac82/bin/libggml-cpu.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/opt/AMD/aocc-compiler-5.0.0/lib
+         2	/opt/rocm/lib
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/kernels/production/cpu
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.
+
+[2026-10-20T16:14:27Z] LAUNCH split_np2_slot65536 argv=["numactl", "--interleave=all", "--", "taskset", "-c", "0-23", "/mnt/raid0/llm/kernels/production/cpu/llama-server", "-m", "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf", "--host", "127.0.0.1", "--port", "18970", "-np", "2", "-c", "131072", "-t", "24", "-ub", "2048", "--flash-attn", "on", "--jinja", "-ctk", "q8_0", "-ctv", "q8_0", "--mlock", "--no-mmap", "--cache-ram", "32768", "--chat-template-file", "/mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja", "--spec-type", "draft-mtp", "--spec-draft-n-max", "4", "--reasoning", "off", "--device", "none", "--device-draft", "none", "--no-kv-unified"]
+[2026-10-20T16:14:27Z] ENV {"OMP_PROC_BIND": "spread", "OMP_PLACES": "cores", "OMP_WAIT_POLICY": "active", "OMP_DYNAMIC": "false", "KMP_BLOCKTIME": "10", "GGML_IQK": "1", "LD_LIBRARY_PATH": "/usr/lib/llvm-20/lib"} binary=/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server
+[2026-10-20T16:14:39Z] health=HEALTHY
+[2026-10-20T16:14:39Z] LINKAGE {"lib_dirs": ["/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin"], "all_in_kernel_store": true}
+[2026-10-20T16:14:39Z] LOADFACTS {"kv_unified": "false", "n_ctx_slot": "65536", "n_slots": "2", "kv_buffer_mib": null, "rs_buffer_mib": null, "n_ctx_train_warn": null, "rss_after_load_gib": 37.67}
+[2026-10-20T16:16:47Z] split_np2_slot65536 8k independent wave0: wall=126.5s ttft=[65.43, 106.87] dec_sum=17.32 cache=[0, 0] err=0
+SUMMARY {"launch": "split_np2_slot65536", "cell": "8k_independent", "result": "OK", "prefill_tps_med": 107.15, "ttft_s_med": 86.15, "decode_tps_sum_med": 17.32, "agg_e2e_med": 4.05}
+[2026-10-20T16:16:50Z] STOP dead=True pid=852513
+[2026-10-20T16:16:50Z] LAUNCH unified_np2_pool131072 argv=["numactl", "--interleave=all", "--", "taskset", "-c", "0-23", "/mnt/raid0/llm/kernels/production/cpu/llama-server", "-m", "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf", "--host", "127.0.0.1", "--port", "18970", "-np", "2", "-c", "131072", "-t", "24", "-ub", "2048", "--flash-attn", "on", "--jinja", "-ctk", "q8_0", "-ctv", "q8_0", "--mlock", "--no-mmap", "--cache-ram", "32768", "--chat-template-file", "/mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja", "--spec-type", "draft-mtp", "--spec-draft-n-max", "4", "--reasoning", "off", "--device", "none", "--device-draft", "none", "--kv-unified"]
+[2026-10-20T16:16:50Z] ENV {"OMP_PROC_BIND": "spread", "OMP_PLACES": "cores", "OMP_WAIT_POLICY": "active", "OMP_DYNAMIC": "false", "KMP_BLOCKTIME": "10", "GGML_IQK": "1", "LD_LIBRARY_PATH": "/usr/lib/llvm-20/lib"} binary=/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server
+[2026-10-20T16:17:01Z] health=HEALTHY
+[2026-10-20T16:17:01Z] LINKAGE {"lib_dirs": ["/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin"], "all_in_kernel_store": true}
+[2026-10-20T16:17:01Z] LOADFACTS {"kv_unified": "true", "n_ctx_slot": "131072", "n_slots": "2", "kv_buffer_mib": null, "rs_buffer_mib": null, "n_ctx_train_warn": null, "rss_after_load_gib": 37.67}
+[2026-10-20T16:19:09Z] unified_np2_pool131072 8k independent wave0: wall=126.3s ttft=[106.71, 65.14] dec_sum=20.17 cache=[0, 0] err=0
+SUMMARY {"launch": "unified_np2_pool131072", "cell": "8k_independent", "result": "OK", "prefill_tps_med": 107.2, "ttft_s_med": 85.92, "decode_tps_sum_med": 20.17, "agg_e2e_med": 4.05}
+[2026-10-20T16:19:12Z] STOP dead=True pid=861258
+DONE

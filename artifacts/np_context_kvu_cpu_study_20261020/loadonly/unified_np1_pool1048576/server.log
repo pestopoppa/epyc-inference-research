@@ -1,0 +1,16 @@
+0.00.030.628 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.030.928 W srv  llama_server: -----------------
+0.00.030.930 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.030.930 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.030.930 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.030.930 W srv  llama_server: -----------------
+0.00.032.102 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf'
+0.05.303.073 W warning: failed to mlock 37790109696-byte buffer (after previously locking 0 bytes): Cannot allocate memory
+0.07.891.369 W llama_context: n_ctx_seq (1048576) > n_ctx_train (262144) -- possible training context overflow
+0.10.242.802 W llama_context: n_ctx_seq (1048576) > n_ctx_train (262144) -- possible training context overflow
+0.10.713.898 W srv    load_model: the slot context (1048576) exceeds the training context of the model (262144) - capping
+0.11.509.518 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 262144, kv_unified = 'true'
+0.11.691.899 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.11.691.972 I srv  llama_server: model loaded
+0.11.691.979 I srv  llama_server: listening on http://127.0.0.1:18970
+0.14.307.564 I srv    operator(): operator(): cleaning up before exit...
