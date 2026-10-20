@@ -353,6 +353,30 @@ class ConcurrentRace(Fixture):
         self.assertEqual(tuple(paths), (TARGET,))
         self.assert_no_scratch_left()
 
+    def test_panel_members_see_the_lanes_trial_context(self):
+        # AK-HR-3: member threads run in a copy of the lane's context, so an actor call
+        # made inside a member carries the lane's trial_id (it used to be null there).
+        from autokernel.loop import history_fields
+        seen = []
+
+        class Seeing(Editor):
+            def author(self, hypothesis, context):
+                trial = history_fields.current()
+                seen.append(trial.trial_id if trial else None)
+                history_fields.note_call("author", 1.5, None, None)
+                return super().author(hypothesis, context)
+
+        panel = self.panel({
+            "off": lambda s, w, st: Seeing(s, w, st),
+            "medium": lambda s, w, st: Seeing(s, w, st, text="int f(void) { return 8; }\n")})
+        with history_fields.trial_scope("f" * 32) as trial:
+            paths, _records = self.call(panel)
+            seconds = trial.snapshot()["stage_seconds"]["author"]
+        self.assertEqual(tuple(paths), (TARGET,))
+        self.assertTrue(seen and all(x == "f" * 32 for x in seen), seen)
+        self.assertGreaterEqual(seconds, 1.5)
+        self.assert_no_scratch_left()
+
     def test_first_passing_wins_and_the_other_is_cancelled(self):
         barrier, log, blockers = threading.Barrier(2), [], []
 
