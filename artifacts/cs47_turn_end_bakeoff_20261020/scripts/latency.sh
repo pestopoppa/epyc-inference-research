@@ -22,7 +22,7 @@ if [ "${CS47_INNER:-0}" != 1 ]; then
 fi
 OUT=$T/latency_out; mkdir -p "$OUT"
 PYV=$T/venv/bin/python; PYO=/mnt/raid0/llm/epyc-orchestrator/.venv/bin/python
-export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 ORT_NUM_THREADS=1 HF_HUB_OFFLINE=1
+export HF_HUB_OFFLINE=1
 { echo "# config echo"; date -u; uname -a; echo "regions=$REGIONS pin4=$PIN4 pin1=$PIN1 repeats=$REPEATS deadline=$DEADLINE";
   "$RL" status; sha256sum $T/dl/smart-turn-v3.2-cpu.onnx; python3 - <<'P'
 import glob
@@ -30,10 +30,11 @@ for f in sorted(glob.glob("/sys/devices/system/cpu/cpu48/cpufreq/scaling_cur_fre
 P
 } > "$OUT/config_echo.txt" 2>&1
 run() { # pinlabel cpus arm variant aa
-  local plabel=$1 cpus=$2 arm=$3 var=$4 aa=$5 py=$PYO
+  local plabel=$1 cpus=$2 arm=$3 var=$4 aa=$5 py=$PYO nth=1
+  [ "$plabel" = pin4 ] && nth=4
   [ "$arm" = smartturn ] && py=$PYV
   [ "$(date -u +%s)" -lt "$DEADLINE_EPOCH" ] || { echo "deadline reached, stopping" >&2; return 0; }
-  taskset -c "$cpus" "$py" -I $T/lat_worker.py --arm "$arm" --variant "$var" --repeats "$REPEATS" --pin-label "$plabel" --aa-pass "$aa" \
+  taskset -c "$cpus" "$py" -I $T/lat_worker.py --arm "$arm" --variant "$var" --repeats "$REPEATS" --pin-label "$plabel" --aa-pass "$aa" --threads "$nth" \
      --deadline-epoch "$DEADLINE_EPOCH" --out "$OUT/lat_${arm}_${var//,/_}_${plabel}_${aa}.json" >> "$OUT/latency.log" 2>&1
 }
 for AA in A1 A2; do
