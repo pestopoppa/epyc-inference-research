@@ -1,0 +1,30 @@
+{
+ "arm": "smartturn",
+ "variant": null,
+ "pin": "pin4",
+ "aa_pass": "A1",
+ "n_decisions": 180,
+ "repeats": 10,
+ "ort_intra_threads": 4,
+ "clips": [
+  "tt1-p0001-a",
+  "tt1-p0022-b",
+  "tt1-p0051-a",
+  "tt1-p0077-b",
+  "tt1-p0096-a",
+  "tt1-p0115-b"
+ ],
+ "aborted_by_deadline": false,
+ "wall_ms": {
+  "p50": 57.15977353975177,
+  "p95": 79.14049223763868,
+  "p99": 99.71462408895631
+ },
+ "cpu_ms": {
+  "p50": 32.11577200000004,
+  "p95": 45.169887599999946
+ },
+ "taskset": 4,
+ "host": "Beelzebub",
+ "t_utc": "2026-10-20T23:27:16Z"
+}

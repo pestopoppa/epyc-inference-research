@@ -1,0 +1,408 @@
+[
+ {
+  "arm": "smartturn_silero_adaptive",
+  "theta": 0.99,
+  "gate_s": 0.4,
+  "T_short": 0.5,
+  "T_long": 2.5,
+  "sel": {
+   "recall": 0.27586206896551724,
+   "eot_fpr": 0.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 1.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.7241379310344828,
+   "complete_answered_within_Tshort": 0.0,
+   "lat_p10_p50_p90_ms": [
+    2431.0,
+    2548.0,
+    2636.0
+   ],
+   "n": 116,
+   "n_complete": 58,
+   "n_incomplete": 36,
+   "n_backchannel": 15
+  },
+  "conf": {
+   "recall": 0.2962962962962963,
+   "eot_fpr": 0.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 1.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.7037037037037037,
+   "complete_answered_within_Tshort": 0.0,
+   "lat_p10_p50_p90_ms": [
+    2438.0,
+    2561.0,
+    2628.0
+   ],
+   "n": 108,
+   "n_complete": 54,
+   "n_incomplete": 33,
+   "n_backchannel": 15
+  },
+  "tag": "feasible"
+ },
+ {
+  "arm": "parakeet_eou_adaptive",
+  "variant": "fp32_fp32,160,decoder",
+  "T_long": 2.5,
+  "T_short": null,
+  "sel": {
+   "recall": 0.9827586206896551,
+   "eot_fpr": 0.9722222222222222,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.027777777777777776,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.017241379310344827,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    326.00000000000017,
+    500.0,
+    924.0000000000001
+   ],
+   "n": 116,
+   "n_complete": 58,
+   "n_incomplete": 36,
+   "n_backchannel": 15
+  },
+  "conf": {
+   "recall": 0.9629629629629629,
+   "eot_fpr": 1.0,
+   "int_fpr": 0.9333333333333333,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.06666666666666667,
+   "complete_censored_or_missed": 0.037037037037037035,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    292.0,
+    509.9999999999998,
+    847.0000000000005
+   ],
+   "n": 108,
+   "n_complete": 54,
+   "n_incomplete": 33,
+   "n_backchannel": 15
+  },
+  "tag": "INFEASIBLE(min-FPR shown)"
+ },
+ {
+  "arm": "parakeet_eou_adaptive",
+  "variant": "fp32_fp32,160,full",
+  "T_long": 2.5,
+  "T_short": null,
+  "sel": {
+   "recall": 0.9827586206896551,
+   "eot_fpr": 0.9722222222222222,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.027777777777777776,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.017241379310344827,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    326.00000000000017,
+    500.0,
+    924.0000000000001
+   ],
+   "n": 116,
+   "n_complete": 58,
+   "n_incomplete": 36,
+   "n_backchannel": 15
+  },
+  "conf": {
+   "recall": 0.9629629629629629,
+   "eot_fpr": 1.0,
+   "int_fpr": 0.9333333333333333,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.06666666666666667,
+   "complete_censored_or_missed": 0.037037037037037035,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    292.0,
+    509.9999999999998,
+    847.0000000000005
+   ],
+   "n": 108,
+   "n_complete": 54,
+   "n_incomplete": 33,
+   "n_backchannel": 15
+  },
+  "tag": "INFEASIBLE(min-FPR shown)"
+ },
+ {
+  "arm": "parakeet_eou_adaptive",
+  "variant": "fp32_fp32,80,decoder",
+  "T_long": 2.5,
+  "T_short": null,
+  "sel": {
+   "recall": 0.9827586206896551,
+   "eot_fpr": 1.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.017241379310344827,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    270.000000000001,
+    390.00000000000057,
+    740.0
+   ],
+   "n": 116,
+   "n_complete": 58,
+   "n_incomplete": 36,
+   "n_backchannel": 15
+  },
+  "conf": {
+   "recall": 0.9814814814814815,
+   "eot_fpr": 1.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.018518518518518517,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    270.00000000000045,
+    419.99999999999994,
+    696.0000000000002
+   ],
+   "n": 108,
+   "n_complete": 54,
+   "n_incomplete": 33,
+   "n_backchannel": 15
+  },
+  "tag": "INFEASIBLE(min-FPR shown)"
+ },
+ {
+  "arm": "parakeet_eou_adaptive",
+  "variant": "fp32_fp32,80,full",
+  "T_long": 2.5,
+  "T_short": null,
+  "sel": {
+   "recall": 0.9827586206896551,
+   "eot_fpr": 1.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.017241379310344827,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    270.000000000001,
+    390.00000000000057,
+    740.0
+   ],
+   "n": 116,
+   "n_complete": 58,
+   "n_incomplete": 36,
+   "n_backchannel": 15
+  },
+  "conf": {
+   "recall": 0.9814814814814815,
+   "eot_fpr": 1.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.018518518518518517,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    270.00000000000045,
+    419.99999999999994,
+    696.0000000000002
+   ],
+   "n": 108,
+   "n_complete": 54,
+   "n_incomplete": 33,
+   "n_backchannel": 15
+  },
+  "tag": "INFEASIBLE(min-FPR shown)"
+ },
+ {
+  "arm": "parakeet_eou_adaptive",
+  "variant": "fp32_selfdec,160,decoder",
+  "T_long": 2.5,
+  "T_short": null,
+  "sel": {
+   "recall": 0.9827586206896551,
+   "eot_fpr": 0.9722222222222222,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.027777777777777776,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.017241379310344827,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    326.00000000000017,
+    500.0,
+    924.0000000000001
+   ],
+   "n": 116,
+   "n_complete": 58,
+   "n_incomplete": 36,
+   "n_backchannel": 15
+  },
+  "conf": {
+   "recall": 0.9629629629629629,
+   "eot_fpr": 1.0,
+   "int_fpr": 0.9333333333333333,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.06666666666666667,
+   "complete_censored_or_missed": 0.037037037037037035,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    292.0,
+    509.9999999999998,
+    847.0000000000005
+   ],
+   "n": 108,
+   "n_complete": 54,
+   "n_incomplete": 33,
+   "n_backchannel": 15
+  },
+  "tag": "INFEASIBLE(min-FPR shown)"
+ },
+ {
+  "arm": "parakeet_eou_adaptive",
+  "variant": "fp32_selfdec,160,full",
+  "T_long": 2.5,
+  "T_short": null,
+  "sel": {
+   "recall": 0.9827586206896551,
+   "eot_fpr": 0.9722222222222222,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.027777777777777776,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.017241379310344827,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    326.00000000000017,
+    500.0,
+    924.0000000000001
+   ],
+   "n": 116,
+   "n_complete": 58,
+   "n_incomplete": 36,
+   "n_backchannel": 15
+  },
+  "conf": {
+   "recall": 0.9629629629629629,
+   "eot_fpr": 1.0,
+   "int_fpr": 0.9333333333333333,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.06666666666666667,
+   "complete_censored_or_missed": 0.037037037037037035,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    292.0,
+    509.9999999999998,
+    847.0000000000005
+   ],
+   "n": 108,
+   "n_complete": 54,
+   "n_incomplete": 33,
+   "n_backchannel": 15
+  },
+  "tag": "INFEASIBLE(min-FPR shown)"
+ },
+ {
+  "arm": "parakeet_eou_adaptive",
+  "variant": "fp32_selfdec,80,decoder",
+  "T_long": 2.5,
+  "T_short": null,
+  "sel": {
+   "recall": 0.9827586206896551,
+   "eot_fpr": 1.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.017241379310344827,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    270.000000000001,
+    390.00000000000057,
+    740.0
+   ],
+   "n": 116,
+   "n_complete": 58,
+   "n_incomplete": 36,
+   "n_backchannel": 15
+  },
+  "conf": {
+   "recall": 0.9814814814814815,
+   "eot_fpr": 1.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.018518518518518517,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    270.00000000000045,
+    419.99999999999994,
+    696.0000000000002
+   ],
+   "n": 108,
+   "n_complete": 54,
+   "n_incomplete": 33,
+   "n_backchannel": 15
+  },
+  "tag": "INFEASIBLE(min-FPR shown)"
+ },
+ {
+  "arm": "parakeet_eou_adaptive",
+  "variant": "fp32_selfdec,80,full",
+  "T_long": 2.5,
+  "T_short": null,
+  "sel": {
+   "recall": 0.9827586206896551,
+   "eot_fpr": 1.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.017241379310344827,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    270.000000000001,
+    390.00000000000057,
+    740.0
+   ],
+   "n": 116,
+   "n_complete": 58,
+   "n_incomplete": 36,
+   "n_backchannel": 15
+  },
+  "conf": {
+   "recall": 0.9814814814814815,
+   "eot_fpr": 1.0,
+   "int_fpr": 1.0,
+   "incomplete_never_fired_censored": 0.0,
+   "incomplete_held_not_censored": 0.0,
+   "backchannel_never_fired_censored": 0.0,
+   "complete_censored_or_missed": 0.018518518518518517,
+   "complete_answered_within_Tshort": null,
+   "lat_p10_p50_p90_ms": [
+    270.00000000000045,
+    419.99999999999994,
+    696.0000000000002
+   ],
+   "n": 108,
+   "n_complete": 54,
+   "n_incomplete": 33,
+   "n_backchannel": 15
+  },
+  "tag": "INFEASIBLE(min-FPR shown)"
+ }
+]

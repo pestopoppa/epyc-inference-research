@@ -1,0 +1,30 @@
+{
+ "arm": "silero",
+ "variant": null,
+ "pin": "pin4",
+ "aa_pass": "A1",
+ "n_decisions": 16030,
+ "repeats": 10,
+ "ort_intra_threads": 4,
+ "clips": [
+  "tt1-p0001-a",
+  "tt1-p0022-b",
+  "tt1-p0051-a",
+  "tt1-p0077-b",
+  "tt1-p0096-a",
+  "tt1-p0115-b"
+ ],
+ "aborted_by_deadline": false,
+ "wall_ms": {
+  "p50": 0.0574400182813406,
+  "p95": 0.07131652673706411,
+  "p99": 0.079481047578156
+ },
+ "cpu_ms": {
+  "p50": 0.05754000000002257,
+  "p95": 0.07133750000000158
+ },
+ "taskset": 4,
+ "host": "Beelzebub",
+ "t_utc": "2026-10-20T23:27:04Z"
+}

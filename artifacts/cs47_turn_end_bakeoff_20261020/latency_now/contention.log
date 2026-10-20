@@ -1,0 +1,36 @@
+23:26:50
+201.51 244.29 262.93 252/4997 1047926
+  q0  HELD   bench-cpu[None] qwentts-threadpool-final2;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] kpf174-fix;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:27:50
+222.46 241.63 260.81 236/4877 2428249
+  q0  HELD   bench-cpu[None] qwentts-threadpool-final3;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:28:51
+165.27 222.83 253.22 312/4954 3806274
+  q0  HELD   bench-cpu[None] qwentts-threadpool-final3;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:29:51
+188.59 218.03 249.61 244/4851 1010859
+  q0  HELD   bench-cpu[None] qwentts-threadpool-final3;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:30:51
+185.74 212.55 245.79 328/4940 2430386
+  q0  HELD   bench-cpu[None] qwentts-threadpool-final3;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:31:51
+203.71 213.21 243.94 50/4648 3700778
+  q0  free   ;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:32:51
+180.07 204.01 238.83 237/4831 845832
+  q0  free   ;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:33:51
+192.86 203.54 236.51 423/5050 2198856
+  q0  free   ;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:34:51
+225.44 211.75 237.32 240/4913 3502502
+  q0  free   ;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:35:51
+166.20 200.58 232.07 39/4684 4183841
+  q0  free   ;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:36:51
+86.82 171.54 220.11 39/4693 7059
+  q0  free   ;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
+23:37:51
+55.17 147.07 208.66 34/4678 25496
+  q0  free   ;  q1  HELD   build[None] f8q-pair-takeover-q1;  q2  HELD   build[None] cs-47-latency-now;  q3  HELD   kpf18[None] kpf18:f8-w1c-20261020-hostthreads;gpu-quiet  free   ;
