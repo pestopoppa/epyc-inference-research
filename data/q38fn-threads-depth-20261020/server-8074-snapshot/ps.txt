@@ -1,0 +1,4 @@
+    PID                  STARTED     ELAPSED   RSS COMMAND
+  68102 Tue Oct 13 09:09:27 2026  7-04:00:57 109775984 /mnt/raid0/llm/kernels/builds/cpu-20261004-b0ba1d427/bin/llama-server --host 127.0.0.1 --port 8074 -m /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf -md /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.5 -np 1 -c 262144 -t 48 --no-mmap --cache-ram 32768 -fa on -ctk f16 -ctv f16 --jinja --no-webui
+VmRSS:	109775984 kB
+Threads:	242

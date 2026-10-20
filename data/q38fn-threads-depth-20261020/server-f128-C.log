@@ -1,0 +1,50 @@
+0.00.001.507 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.658 I srv          init: The UI is disabled
+0.00.001.665 I srv          init: Use --ui/--no-ui (or deprecated --webui/--no-webui) to enable/disable
+0.00.001.744 W srv  llama_server: -----------------
+0.00.001.748 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.752 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.756 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.760 W srv  llama_server: -----------------
+0.00.003.694 I srv    load_model: loading model '/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf'
+0.00.294.070 E llama_model_load: error loading model: borrow_shared_tensor: this model is a draft head without its own 'token_embd.weight'; load it as a draft of its target model, not on its own
+0.00.294.113 E llama_model_load_from_file_impl: failed to load model
+0.00.294.178 W srv    load_model: [spec] failed to measure draft model memory: failed to load model
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2560)
+0.09.354.705 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 136192, kv_unified = 'false'
+0.09.376.656 W srv          init: --cache-idle-slots requires --cache-ram, disabling
+0.09.389.480 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.09.389.549 I srv  llama_server: model loaded
+0.09.389.558 I srv  llama_server: listening on http://127.0.0.1:18074
+0.12.986.590 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 1.000
+0.12.986.694 I slot launch_slot_: id  0 | task 1 | processing task, is_child = 0
+0.13.300.823 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 15 (slots 1), budget = 0, t_iter = 289.0 ms, kv_pos = 131087, ms/tok = 0.000
+0.13.502.261 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 159.9 ms, kv_pos = 131091, ms/tok = 0.000
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)
+0.19.329.517 I slot print_timing: id  0 | task 1 | n_decoded =    101, tg =  17.33 t/s, tg_3s =  17.33 t/s
+0.22.490.532 I slot print_timing: id  0 | task 1 | n_decoded =    148, tg =  16.47 t/s, tg_3s =  14.87 t/s
+0.25.590.660 I slot print_timing: id  0 | task 1 | n_decoded =    204, tg =  16.88 t/s, tg_3s =  18.06 t/s
+0.28.415.729 I slot print_timing: id  0 | task 1 | prompt eval time =     515.52 ms /    19 tokens (   27.13 ms per token,    36.86 tokens per second)
+0.28.415.785 I slot print_timing: id  0 | task 1 |        eval time =   14913.47 ms /   256 tokens (   58.26 ms per token,    17.17 tokens per second)
+0.28.415.790 I slot print_timing: id  0 | task 1 |       total time =   15428.99 ms /   275 tokens
+0.28.415.800 I slot print_timing: id  0 | task 1 |    graphs reused =         49
+0.28.415.810 I slot print_timing: id  0 | task 1 | draft acceptance = 0.60563 (  172 accepted /   284 generated), mean len =  3.18
+0.28.422.014 I slot      release: id  0 | task 1 | stop processing: n_tokens = 131346, truncated = 0
+0.29.103.672 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 1.000
+0.29.103.802 I slot launch_slot_: id  0 | task 88 | processing task, is_child = 0
+0.29.391.855 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 15 (slots 1), budget = 0, t_iter = 263.3 ms, kv_pos = 131087, ms/tok = 0.000
+0.29.593.990 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 160.6 ms, kv_pos = 131091, ms/tok = 0.000
+0.35.428.209 I slot print_timing: id  0 | task 88 | n_decoded =    101, tg =  17.31 t/s, tg_3s =  17.31 t/s
+0.38.598.156 I slot print_timing: id  0 | task 88 | n_decoded =    148, tg =  16.44 t/s, tg_3s =  14.83 t/s
+0.41.668.885 I slot print_timing: id  0 | task 88 | n_decoded =    204, tg =  16.89 t/s, tg_3s =  18.24 t/s
+0.44.688.946 I slot print_timing: id  0 | task 88 | n_decoded =    255, tg =  16.89 t/s, tg_3s =  16.89 t/s
+0.44.814.776 I slot print_timing: id  0 | task 88 | prompt eval time =     490.15 ms /    19 tokens (   25.80 ms per token,    38.76 tokens per second)
+0.44.814.817 I slot print_timing: id  0 | task 88 |        eval time =   15220.79 ms /   256 tokens (   59.46 ms per token,    16.82 tokens per second)
+0.44.814.823 I slot print_timing: id  0 | task 88 |       total time =   15710.95 ms /   275 tokens
+0.44.814.829 I slot print_timing: id  0 | task 88 |    graphs reused =         96
+0.44.814.838 I slot print_timing: id  0 | task 88 | draft acceptance = 0.60284 (  170 accepted /   282 generated), mean len =  3.12
+0.44.822.013 I slot      release: id  0 | task 88 | stop processing: n_tokens = 131346, truncated = 0
+0.44.825.410 I srv    operator(): operator(): cleaning up before exit...
