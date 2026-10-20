@@ -39,6 +39,7 @@ KV_BYTES_PER_TOKEN = 10.9e3     # q8_0, 10 full-attention layers (registry kv_ki
 HOST_BW_GBS = 446.8             # measured read-sum at t96 (cpu-decode-roofline-program.md)
 W_TOTAL_GB, W_ACTIVE1_GB = 37.8, 3.3   # Q8_0 file; ~3B active params x 1.0625 B  (ASSUMPTION, see PLAN physics)
 N_PREDICT_DEFAULT = 256
+DEPTH_SUFFIX_TOK = 256          # tier-0 depth mode: fresh suffix per wave (<=256 tokens)
 TOK_MARGIN = 64                 # prompt = L - n_predict - TOK_MARGIN, so a split slot of exactly L tokens holds it
 LS = {"8k": 8192, "32k": 32768, "64k": 65536, "128k": 131072, "t8short": 1024}   # t8short: 8 clients vs np4, anchor for stack_topology.yaml:140-150 (T=8 full 124.56 tok/s)
 FORK_BIN_DEFAULT = "/mnt/raid0/llm/llama.cpp-experimental/build-cpu/bin/llama-server"   # placeholder; pass --fork-binary
@@ -115,6 +116,22 @@ def build_launches(a):
         add("unified_np8_pool524288_poolfull", 8, 524288, True, True, ["128k"], ["independent"], "poolfull")
     return out
 
+def build_tier0(a):
+    """Tier 0 decision core (ordered ABA where a split/unified pair exists). Cells: (L, pmode)."""
+    mk = lambda lid, np_, c, uni, mtp, cells, kind="matrix", **kw: dict(id=lid, np=np_, c=c, unified=uni, mtp=mtp, cells=cells, kind=kind, bin=kw.get("bin"), extra=tuple(a.extra_argv.split()) + tuple(kw.get("extra", ())))
+    A = lambda: mk("split_np4_slot65536", 4, 262144, False, True, [("64k", "depth"), ("t8short", "independent")])
+    out = [A(),                                                                              # A: first cell doubles as calibration
+           mk("unified_np4_pool524288", 4, 524288, True, True, [("64k", "depth")]),          # B
+           dict(A(), id="split_np4_slot65536_aba2", cells=[("64k", "depth")]),                # A again (drift)
+           mk("unified_np8_pool524288", 8, 524288, True, True, [("32k", "depth"), ("64k", "depth"), ("64k", "shared")]),
+           mk("unified_np8_pool524288_mtpoff", 8, 524288, True, False, [("64k", "depth")], "mtp_off"),
+           mk("unified_np8_pool1048576", 8, 1048576, True, True, [("128k", "depth")]),
+           mk("unified_np8_pool524288_poolfull", 8, 524288, True, True, [("128k", "independent")], "poolfull")]
+    if a.fork_binary or a.dry_run:
+        out.append(mk("unified_np8_pool524288_fork", 8, 524288, True, True, [("64k", "shared_fork")], bin=a.fork_binary or FORK_BIN_DEFAULT,
+                      extra=("--slot-fork-min-tokens", str(a.fork_min_tokens))))             # placeholder until the fork build exists
+    return out
+
 def order_launches(ls, a):
     """Alternating A/B order (host drifts ~3%/few h): pair split/unified per np and flip the pair order on every
     other np; the drift anchor (split np4 L32k independent) is re-run at start, middle and end."""
@@ -136,6 +153,14 @@ def prefill_tps(L):               # ASSUMPTION calibrated to frontdoor live log 
 AGG_DECODE = {1: 40.0, 2: 70.0, 4: 100.0, 8: 124.0}     # tok/s MTP aggregate, frontdoor full host (registry/comments)
 def est_cell_s(np_, Lname, pmode, waves, npred, mtp=True):
     L = LS[Lname]; P = L - npred - TOK_MARGIN
+    if pmode in ("depth", "shared", "shared_fork"):
+        agg = AGG_DECODE[np_] * (1.0 if mtp else 0.6)
+        t_dec = npred / (agg / np_) * (1 + 0.25 * L / 131072)
+        re_pre = np_ * (2048 + DEPTH_SUFFIX_TOK) / prefill_tps(L)      # checkpoint-granularity re-process + suffix
+        first = {"depth": np_ * P / prefill_tps(L),
+                 "shared": P / prefill_tps(L) + (np_ - 1) * P / prefill_tps(L),      # warm + np-1 cold streams
+                 "shared_fork": P / prefill_tps(L) + re_pre}[pmode]                  # warm + forked streams
+        return first + t_dec + (waves - 1) * (re_pre + t_dec) + 20
     agg = AGG_DECODE[np_] * (1.0 if mtp else 0.6)
     t_dec = npred / (agg / np_) * (1 + 0.25 * L / 131072)
     warm = P / prefill_tps(L) if pmode in ("shared", "shared_fork") else 0
@@ -204,9 +229,11 @@ def make_doc(corpus, port, ntok, ratio):
     return t, n, len(t) / max(n, 1)
 
 # ----------------------------------------------------------------------------------------------- one request
-def one_request(port, prompt, npred, tag, t_barrier=None):
+def one_request(port, prompt, npred, tag, t_barrier=None, id_slot=None):
     body = {"prompt": prompt, "n_predict": npred, "ignore_eos": True, "temperature": 0, "seed": 42, "stream": True,
             "return_tokens": True, "cache_prompt": True}
+    if id_slot is not None:
+        body["id_slot"] = id_slot          # pin stream -> slot so per-slot reuse is deterministic (depth mode)
     rec = {"tag": tag, "status": None, "error": None, "ttft": None, "t_start": None, "t_end": None, "chunks": []}
     req = urllib.request.Request(f"http://127.0.0.1:{port}/completion", data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
@@ -362,6 +389,58 @@ def scan_log(path, offset):
     data = open(path, "rb").read()[offset:].decode(errors="ignore")
     return {p: len(re.findall(p, data, re.I)) for p in ERR_PATS if re.search(p, data, re.I)}, len(data.encode()) + offset
 
+# ----------------------------------------------------------------------------------------------- capture rows
+# Belief-kernel WRITE side (CLAUDE.md "Belief Kernel"; VB-KVU-1 / producer for VB-KVU-CPU).  Projection only: no grading.
+CAPTURE_SCHEMA = "epyc.vidya.np_ctx_kvu_capture.v1"
+_BIN_SHA = {}
+def file_sha256(path):
+    if path not in _BIN_SHA:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for blk in iter(lambda: f.read(1 << 22), b""):
+                h.update(blk)
+        _BIN_SHA[path] = h.hexdigest()
+    return _BIN_SHA[path]
+
+def row_hash(row):
+    body = {k: v for k, v in row.items() if k != "row_sha256"}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+def validate_row(row):
+    """Shared validator (the adapter imports this).  Returns a list of problems; [] = valid."""
+    bad = []
+    if row.get("schema") != CAPTURE_SCHEMA: bad.append("schema")
+    if row.get("row_sha256") != row_hash(row): bad.append("row_sha256 mismatch")
+    if row.get("kv_unified_from_log") not in ("true", "false"): bad.append("kv_unified not read back from launch log")
+    for k in ("binary_sha256", "binary_realpath", "n_ctx_slot", "c", "np", "prompt_mode", "ts", "cpu_list", "loadavg_start"):
+        if row.get(k) in (None, ""): bad.append(f"missing {k}")
+    return bad
+
+def finalize_row(row, a, la, srv, facts, loadavg, wave=None, wave_rec=None):
+    """Stamp a cell (wave=None) or per-wave row with the capture schema + self-hash.  Fields come from the launch
+    log / filesystem / the request records, never from argv defaults."""
+    argv = srv.argv
+    binp = os.path.realpath(argv[0])
+    dd = argv[argv.index("--spec-draft-n-max") + 1] if "--spec-draft-n-max" in argv else None
+    row = dict(row)
+    row.update(schema=CAPTURE_SCHEMA, model=os.path.basename(MODEL), arm=la["id"], wave=wave,
+               prompt_mode=row.get("pmode") or row.get("prompt_mode") or "independent",
+               binary_realpath=binp, binary_sha256=file_sha256(binp), kernel_store_path=os.path.realpath(KSTORE),
+               kv_unified_from_log=facts.get("kv_unified"), kv_unified_argv_flag=("--kv-unified" if "--kv-unified" in argv else "--no-kv-unified" if "--no-kv-unified" in argv else None),
+               n_ctx_slot=int(facts["n_ctx_slot"]) if facts.get("n_ctx_slot") else None, n_slots_log=facts.get("n_slots"),
+               n_ctx_train_warn=facts.get("n_ctx_train_warn"),
+               pool=la["c"] if la["unified"] else None, c=la["c"], np=la["np"], L=row.get("L", LS.get(la["cells"][0][0]) if la.get("cells") else None),
+               mtp=la["mtp"], draft_depth=(int(dd) if dd and la["mtp"] else 0), draft_kv_type=None,
+               host_bw_gbs=HOST_BW_GBS, cpu_list=a.cpu_list, threads=a.threads, loadavg_start=loadavg,
+               ts=time.strftime("%FT%TZ", time.gmtime()))
+    if wave_rec is not None:
+        row.update(prompt_n=wave_rec["prompt_n"], cache_n=wave_rec["n_prompt_tokens_cache"], n_fork_tokens=wave_rec["n_fork_tokens"])
+    else:
+        row.update(prompt_n=row.get("prompt_n_by_wave"), cache_n=row.get("cache_n_by_wave"), n_fork_tokens=row.get("n_fork_tokens_by_wave"))
+    row["row_sha256"] = None
+    row["row_sha256"] = row_hash(row)
+    return row
+
 # ----------------------------------------------------------------------------------------------- cells
 def run_launch(a, la, outroot, corpus, summary):
     ldir = outroot / la["id"]; ldir.mkdir(parents=True, exist_ok=True)
@@ -416,6 +495,7 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
     ntok = L - a.npredict - TOK_MARGIN
     cdir = ldir / f"{Lname}_{pmode}"; cdir.mkdir(exist_ok=True)
     cl = open(cdir / "cell.log", "w"); cell_header(cl, a, la, Lname, pmode, srv, facts)
+    loadavg = [round(x, 2) for x in os.getloadavg()]
     waves = []
     t_cell = time.time()
     shared_doc = None
@@ -429,6 +509,19 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
             for s in range(nclients):
                 prompts.append(shared_doc + f"\n\n[stream {s} wave {w} nonce {hashlib.sha1(f'{la['id']}{Lname}{w}{s}'.encode()).hexdigest()[:8]}] "
                                "Summarize the document above in detail.\n")
+        elif pmode == "depth":
+            # prefill-once: wave 0 = distinct L-token doc per stream; waves >=1 = SAME doc + fresh short suffix (<=256 tok)
+            if w == 0:
+                depth_docs = []
+                for s in range(nclients):
+                    d, n, ratio = make_doc(corpus, a.port, ntok - DEPTH_SUFFIX_TOK - 40, ratio)
+                    depth_docs.append(d)
+            for s in range(nclients):
+                if w == 0:
+                    prompts.append(depth_docs[s] + f"\n\n[stream {s} wave 0] Summarize the document above in detail.\n")
+                else:
+                    sfx = corpus.take(int(DEPTH_SUFFIX_TOK * 0.8 * ratio))      # ~0.8*suffix tokens, fresh text per stream per wave
+                    prompts.append(depth_docs[s] + f"\n\n[stream {s} wave {w}] Continue with these notes:\n" + sfx)
         else:
             for s in range(nclients):
                 d, n, ratio = make_doc(corpus, a.port, ntok - 40, ratio)
@@ -437,7 +530,7 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
         bar = threading.Barrier(nclients)
         t0 = time.time()
         with ThreadPoolExecutor(nclients) as ex:
-            recs = list(ex.map(lambda sp: one_request(a.port, sp[1], a.npredict, f"w{w}s{sp[0]}", bar), enumerate(prompts)))
+            recs = list(ex.map(lambda sp: one_request(a.port, sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0] if pmode == "depth" else None), enumerate(prompts)))
         wall = time.time() - t0
         rss, hwm = srv.rss_gib()
         ok = [r for r in recs if r["error"] is None and r["status"] == 200]
@@ -449,21 +542,32 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                   predicted_n=[r["predicted_n"] for r in recs], decode_tps_per_stream=[round(x, 2) for x in dec],
                   decode_tps_sum=round(sum(dec), 2), decode_tps_overlap_window=(round(overlap_agg(recs), 2) if overlap_agg(recs) else None),
                   agg_e2e_tok_s=round(sum(r["predicted_n"] or 0 for r in ok) / wall, 2),
-                  rss_gib=rss, vmhwm_gib=hwm, errors=[r["error"] for r in recs if r["error"]][:4])
+                  rss_gib=rss, vmhwm_gib=hwm, errors=[r["error"] for r in recs if r["error"]][:4],
+                  n_reprefill=(sum(1 for r in recs if (r["prompt_n"] or 0) > 0.5 * ntok) if (pmode == "depth" and w > 0) else None))
         waves.append(wv)
         cl.write("WAVE " + json.dumps(wv) + "\n"); cl.flush()
         say(f"{la['id']} {Lname} {pmode} wave{w}: wall={wv['wall_s']}s ttft={wv['ttft_s']} dec_sum={wv['decode_tps_sum']} cache={wv['n_prompt_tokens_cache']} err={wv['n_err']}")
     errs, _ = scan_log(ldir / "server.log", off)
-    def med(key):
-        v = [x for w in waves for x in (w[key] if isinstance(w[key], list) else [w[key]]) if x is not None]
+    DW = waves[1:] if pmode == "depth" else None
+    def med(key, ws=None):
+        v = [x for w in (waves if ws is None else ws) for x in (w[key] if isinstance(w[key], list) else [w[key]]) if x is not None]
         return round(statistics.median(v), 2) if v else None
-    row = dict(launch=la["id"], cell=f"{Lname}_{pmode}", np=np_, clients=nclients, n_fork_tokens_by_wave=[w["n_fork_tokens"] for w in waves], prompt_n_by_wave=[w["prompt_n"] for w in waves], c=la["c"], unified=la["unified"], mtp=la["mtp"], L=L, pmode=pmode,
+    row = dict(launch=la["id"], cell=f"{Lname}_{pmode}", np=np_, clients=nclients, n_fork_tokens_by_wave=[w["n_fork_tokens"] for w in waves], n_reprefill_by_wave=[w["n_reprefill"] for w in waves], prompt_n_by_wave=[w["prompt_n"] for w in waves], c=la["c"], unified=la["unified"], mtp=la["mtp"], L=L, pmode=pmode,
                waves=a.waves, result="OK" if all(w["n_err"] == 0 for w in waves) else "ERRORS",
-               prefill_tps_med=med("prefill_tps"), ttft_s_med=med("ttft_s"), decode_tps_stream_med=med("decode_tps_per_stream"),
-               decode_tps_sum_med=med("decode_tps_sum"), decode_tps_overlap_med=med("decode_tps_overlap_window"),
-               agg_e2e_med=med("agg_e2e_tok_s"), cache_n_by_wave=[w["n_prompt_tokens_cache"] for w in waves],
+               prefill_tps_med=med("prefill_tps", waves[:1] if pmode == "depth" else None), ttft_s_med=med("ttft_s", waves[:1] if pmode == "depth" else None),
+               decode_tps_stream_med=med("decode_tps_per_stream", DW), decode_tps_sum_med=med("decode_tps_sum", DW),
+               decode_tps_overlap_med=med("decode_tps_overlap_window", DW), agg_e2e_med=med("agg_e2e_tok_s", DW),
+               depth_waves_note=("wave 0 = prefill/TTFT (n=np streams); waves>=1 = decode at depth, NOT independent prefills" if pmode == "depth" else None),
+               ttft_s_decode_waves_med=med("ttft_s", DW) if pmode == "depth" else None, prompt_n_decode_waves_med=med("prompt_n", DW) if pmode == "depth" else None, cache_n_by_wave=[w["n_prompt_tokens_cache"] for w in waves],
                rss_gib_max=max((w["rss_gib"] or 0) for w in waves), stderr_hits=errs, cell_wall_s=round(time.time() - t_cell, 1),
                physics=physics(np_, L, la["mtp"]), host_bw_gbs=HOST_BW_GBS, n_ctx_slot=facts.get("n_ctx_slot"), kv_unified=facts.get("kv_unified"))
+    with open(cdir / "waves_capture.jsonl", "w") as wf:
+        for w in waves:
+            wf.write(json.dumps(finalize_row(dict(row, pmode=pmode, L=L, cell=row["cell"], decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"],
+                                                  prefill_tps=w["prefill_tps"], decode_tps_per_stream=w["decode_tps_per_stream"],
+                                                  agg_e2e_tok_s=w["agg_e2e_tok_s"]), a, la, srv, facts, loadavg, wave=w["wave"], wave_rec=w)) + "\n")
+    row = finalize_row(row, a, la, srv, facts, loadavg)
+    row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close()
     (cdir / "waves.json").write_text(json.dumps(waves, indent=1))
     summary(row)
@@ -503,6 +607,8 @@ def run_poolfull(a, la, ldir, corpus, Lname, srv, summary, say, facts):
                "TRUNCATE" if any(r["truncated"] for r in recs) else "QUEUE_OR_FIT")
     row = dict(launch=la["id"], cell=f"{Lname}_poolfull", np=np_, c=la["c"], L=L, result="POOLFULL", outcome=outcome, per_request=per,
                stderr_hits=errs, slots_polls=polls[:200], rss_gib_max=srv.rss_gib()[1])
+    row = finalize_row(row, a, la, srv, facts, [round(x, 2) for x in os.getloadavg()])
+    row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close()
     summary(row)
 
@@ -517,7 +623,8 @@ def main():
     p.add_argument("--lens", default="8k,32k,64k,128k")
     p.add_argument("--pmodes", default="independent,shared", help="add shared_fork (needs --fork-binary at run time; dry-run prints a placeholder) for the prefix-fork arm")
     p.add_argument("--pools", default="262144,524288,1048576")
-    p.add_argument("--waves", type=int, default=3)
+    p.add_argument("--waves", type=int, default=None, help="default 3; 4 under --tier0 (1 prefill wave + 3 decode-at-depth waves)")
+    p.add_argument("--tier0", action="store_true", help="decision-core cell list (fixed order, ABA), prefill-once depth mode")
     p.add_argument("--npredict", type=int, default=N_PREDICT_DEFAULT)
     p.add_argument("--mtp-off", action="store_true")
     p.add_argument("--stress", action="store_true")
@@ -537,7 +644,9 @@ def main():
         sys.exit("refusing production port range 8000-8200")
     if a.verify_against_launcher:
         sys.exit(0 if verify_against_launcher() else 1)
-    ls = order_launches(build_launches(a), a)
+    if a.waves is None:
+        a.waves = 4 if a.tier0 else 3
+    ls = build_tier0(a) if a.tier0 else order_launches(build_launches(a), a)
     if a.only:
         keys = a.only.split(","); ls = [l for l in ls if any(k in l["id"] for k in keys)]
     if a.dry_run:
@@ -558,7 +667,7 @@ def main():
     corpus = Corpus(a.corpus_roots.split(","))
     sumf = out / "summary.jsonl"
     def summary(row):
-        row["ts"] = time.strftime("%FT%TZ", time.gmtime())
+        row.setdefault("ts", time.strftime("%FT%TZ", time.gmtime()))
         with open(sumf, "a") as f:
             f.write(json.dumps(row) + "\n")
         print("SUMMARY " + json.dumps({k: row.get(k) for k in ("launch", "cell", "result", "prefill_tps_med", "ttft_s_med", "decode_tps_sum_med", "agg_e2e_med")}), flush=True)
