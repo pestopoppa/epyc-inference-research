@@ -208,17 +208,55 @@ class TestThpKnobsAreNotConflated(unittest.TestCase):
 
 
 class TestArtifactIdentity(unittest.TestCase):
-    def test_uniform_is_not_uniform(self):
-        self.assertNotEqual(R.TRUNK_EFFECTIVE_BPW, 4.0)
-        self.assertAlmostEqual(R.TRUNK_EFFECTIVE_BPW, 4.995, places=3)
+    def test_trunk_is_the_served_ud_split_set(self):
+        # 2026-10-20: retargeted to the production-served UD-IQ4_XS set.
+        self.assertIn("/UD-IQ4_XS/", R.TRUNK_GGUF)
+        self.assertTrue(R.TRUNK_GGUF.endswith("-00001-of-00003.gguf"))
+        self.assertEqual(len(R.TRUNK_SHARDS), 3)
+        self.assertEqual(R.TRUNK_SHARDS[0][0], R.TRUNK_GGUF)
+        self.assertEqual(sum(b for _p, b, _s in R.TRUNK_SHARDS), R.TRUNK_BYTES)
+
+    def test_nothing_resolves_to_the_retired_trunk(self):
+        self.assertNotIn("uniform", R.TRUNK_GGUF.lower())
+        for path, _b, _s in R.TRUNK_SHARDS:
+            self.assertNotIn("uniform", path.lower())
+        self.assertNotIn("uniform", R.build_serve_command(bindir="/x").__str__().lower())
+        self.assertIn("RETIRED", R.MEASURED_TRUNK["status"])
+        with self.assertRaises(R.RecipeViolation):
+            R.assert_artifacts_exist(model=R.MEASURED_TRUNK["path"])
+
+    def test_a_non_trunk_model_is_refused_not_size_checked_as_one_file(self):
+        with self.assertRaises(R.RecipeViolation):
+            R.assert_artifacts_exist(model="/nonexistent/other.gguf")
+
+    def test_trunk_effective_width_is_not_its_name(self):
+        # UD-IQ4_XS's dense stack is Q8_0: the name says ~4.25 bpw, the stream is 7.0.
+        self.assertAlmostEqual(R.TRUNK_EFFECTIVE_BPW, 7.002, places=3)
         self.assertGreater(len(R.TRUNK_QUANT_CENSUS), 3)
+        self.assertAlmostEqual(
+            sum(v[2] for v in R.TRUNK_QUANT_COMPOSITION.values()),
+            R.TRUNK_BYTES_PER_TOKEN_GB, places=2)
+
+    def test_retired_uniform_was_not_uniform(self):
+        self.assertNotEqual(R.MEASURED_TRUNK["effective_bpw"], 4.0)
+        self.assertAlmostEqual(R.MEASURED_TRUNK["effective_bpw"], 4.995, places=3)
+        derived = R.MEASURED_TRUNK["active_params_b"] * R.MEASURED_TRUNK["effective_bpw"] / 8
+        self.assertAlmostEqual(derived, R.MEASURED_TRUNK["bytes_per_token_gb"], places=2)
 
     def test_bytes_per_token_matches_the_bpw_and_param_count(self):
         derived = R.TRUNK_ACTIVE_PARAMS_B * R.TRUNK_EFFECTIVE_BPW / 8
         self.assertAlmostEqual(derived, R.TRUNK_BYTES_PER_TOKEN_GB, places=2)
 
+    def test_every_headline_names_the_artifact_it_was_measured_on(self):
+        # The epoch reset must be visible: no headline may read as a TRUNK number.
+        for name, h in R.HEADLINES.items():
+            self.assertEqual(h.get("measured_on_artifact"), R.MEASURED_TRUNK_LABEL, name)
+        self.assertIn(R.MEASURED_TRUNK["sha256"][:8], R.MEASURED_TRUNK_LABEL)
+
     def test_digests_are_real_sha256(self):
-        for h in [R.TRUNK_SHA256, R.MTP_HEAD_SHA256, *R.CHAMPION_SHA256.values()]:
+        hashes = [s for _p, _b, s in R.TRUNK_SHARDS]
+        for h in [*hashes, R.MEASURED_TRUNK["sha256"], R.MTP_HEAD_SHA256,
+                  *R.CHAMPION_SHA256.values()]:
             self.assertEqual(len(h), 64)
             int(h, 16)
 

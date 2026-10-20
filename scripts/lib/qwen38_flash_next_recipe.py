@@ -65,7 +65,8 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 RECIPE_ID = "qwen38-flash-next-cpu-mtp"
-RECIPE_REVISION = "2026-09-14"   # WRAP-10: landed in git; champion branch reconciled
+RECIPE_REVISION = "2026-10-20"   # trunk retargeted to UD-IQ4_XS; IQ4_XS-uniform retired (MEASURED_TRUNK)
+# 2026-09-14: WRAP-10 landed in git; champion branch reconciled.
 # 2026-09-08: CHAMP-2 THP shim ADOPTED into the recipe (previous revision).
 
 # ★ THE SURFACE THIS RECIPE DESCRIBES. The champion's launch recipe is PER-SURFACE and
@@ -97,41 +98,100 @@ class RecipeViolation(AssertionError):
 # ---------------------------------------------------------------------------
 # 1. ARTIFACT IDENTITY
 # ---------------------------------------------------------------------------
-# The trunk. NOTE THE NAME LIES: "IQ4_XS-uniform" is NOT uniform. Its per-class
-# composition is mixed and its EFFECTIVE width is 4.995 bpw, not 4.0 — every
-# roofline/bytes-per-token calculation must use 4.995, and anyone budgeting from
-# the filename will be ~25% low.
-TRUNK_GGUF = (
-    "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/"
-    "IQ4_XS-uniform/Qwen3.8-Flash-Next-IQ4_XS-uniform.gguf"
+# ★★ THE TRUNK WAS RETARGETED 2026-10-20 (operator: "focus on UD-IQ4 XS instead";
+# keeper ruling 2026-09-15 RECLAIM-2). It is now the PRODUCTION-SERVED 3-shard
+# UD-IQ4_XS set -- the file the :8074 server loads, the INF-67 megakernel was benched
+# on, and the AutoKernel q38fn lane targets. The previous trunk, the locally-requantised
+# `IQ4_XS-uniform` single file, is RETIRED and recorded below as MEASURED_TRUNK: every
+# number in HEADLINES was measured on THAT file, not on this one.
+#
+# ⚠ THE MEASUREMENT EPOCH RESETS WITH THIS CHANGE. OP-32 (2026-09-01) chose the uniform
+# file as the campaign baseline because it decoded +15.2% faster than UD (tg128 t48,
+# 10.52 vs 9.13 t/s, llama-bench, observation grade). UD streams 5.839 GB/token against
+# the uniform file's 4.166 (+40%), so a CPU-decode number re-measured on this trunk is
+# EXPECTED to be lower and is NOT comparable to any HEADLINES entry. Re-baseline; never
+# splice the two epochs.
+#
+# llama.cpp loads a split set from its FIRST shard, so TRUNK_GGUF names shard 1. Shard 1
+# holds METADATA ONLY (0 tensors): any identity check must cover all three shards, which
+# is why TRUNK_SHARDS exists and the validators iterate it.
+TRUNK_DIR = "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS"
+TRUNK_GGUF = TRUNK_DIR + "/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
+# (path, bytes, sha256). Bytes: stat 2026-10-20. sha256: the per-shard `.sha256`
+# sidecars written 2026-09-02, which equal the HF LFS oids recorded in
+# .cache/huggingface/download/UD-IQ4_XS/*.metadata (revision c8b5954a).
+TRUNK_SHARDS = (
+    (TRUNK_GGUF, 10_946_624,
+     "5ce89370720f8bf90890f439361282104c1aa1482d4013bb9a50923e758e71a4"),
+    (TRUNK_DIR + "/Qwen3.8-Flash-Next-UD-IQ4_XS-00002-of-00003.gguf", 49_835_229_856,
+     "577a38a2392b40ca2193cea502e1d92f60b8cd370675d308e0ec21885d9daaa7"),
+    (TRUNK_DIR + "/Qwen3.8-Flash-Next-UD-IQ4_XS-00003-of-00003.gguf", 43_836_407_744,
+     "d4634e6d84f0ebb0940be15c90d3790bf6464e3dea3a1cddc567dc0e83ad8833"),
 )
-TRUNK_BYTES = 98_392_912_256
-TRUNK_SHA256 = "4bfb98496364f8721c1e3ea084a238d690c52b1042a317e05fb43b756c9f8957"
+TRUNK_BYTES = 93_682_584_224     # sum over TRUNK_SHARDS (registry artifact_status.file_bytes)
+TRUNK_PROVENANCE = "hf:unsloth/Qwen3.8-Flash-Next-GGUF UD-IQ4_XS/ @ revision c8b5954a"
 TRUNK_ARCH = "qwen4exp"          # general.architecture
-TRUNK_TENSORS = 1224
+TRUNK_TENSORS = 1224             # split.tensors.count (0 + 373 + 851 over the shards)
 
-TRUNK_EFFECTIVE_BPW = 4.995      # NOT 4.0 — see TRUNK_QUANT_COMPOSITION
-TRUNK_ACTIVE_PARAMS_B = 6.671    # resident tensors + 10/512 of each expert
-TRUNK_BYTES_PER_TOKEN_GB = 4.166 # 6.671e9 * 4.995 / 8 — the roofline denominator
+# Census computed 2026-10-20 with gguf-py over the shard headers, counting every
+# non-expert, non-gather tensor once and each *_exps tensor at 10/512. The SAME script
+# reproduces the retired file's 4.166 / 6.671 / 4.995 exactly, so the two are comparable.
+TRUNK_EFFECTIVE_BPW = 7.002      # dense Q8_0 dominates; NOT 4.25 "because the name says IQ4_XS"
+TRUNK_ACTIVE_PARAMS_B = 6.671    # a property of the architecture: identical for both files
+TRUNK_BYTES_PER_TOKEN_GB = 5.839 # 6.671e9 * 7.002 / 8 — the roofline denominator
 
-# The "uniform" in the directory name is FALSE and the error compounds: assuming
-# 4.0 bpw and 6.0 B active params under-predicts the streamed bytes by 38.9%
-# (1.112 x 1.249). Measured tensor census (b11/gguf_inv.py over the real GGUF):
 TRUNK_QUANT_CENSUS = {          # tensor count by dtype
-    "IQ4_XS": 586,
-    "IQ4_NL": 182,
-    "Q5_K": 54,
-    "Q5_1": 12,                  # blk.0-5 ffn_down_exps / ffn_down_shexp (use_more_bits)
+    "Q8_0": 502,                 # 496 dense (attention, GDN, hc_*, shexp, ple) + 5 ffn_down_exps + 1 gather
+    "IQ3_S": 94,                 # ffn_gate_exps / ffn_up_exps, 47 layers each
+    "IQ4_NL": 44,                # 43 ffn_down_exps + per_layer_token_embd (gather-only)
+    "BF16": 24,                  # indexer q_proj / k_proj
+    "IQ4_XS": 2,                 # ffn_gate_exps / ffn_up_exps, ONE layer
     "Q6_K": 1,                   # output.weight (lm_head)
-    # remainder: F32 norms, ssm_conv1d, and the ffn_gate_inp routers
+    # remainder: 557 F32 (norms, routers, ssm_*, conv1d)
 }
-TRUNK_QUANT_COMPOSITION = {      # tensor class -> stored dtype, with GB/token
-    "ffn_gate_inp (router), all norms, ssm_conv1d": ("F32",   32.00, 0.259),
-    "output.weight (lm_head)":                      ("Q6_K",   6.56, 0.522),
-    "attn_qkv (36 GDN layers), attn_v":             ("Q5_K",   5.50, 0.660),
-    "ffn_down_exps (42 layers), ffn_down_shexp, hc_*_up": ("IQ4_NL", 4.50, 0.510),
-    "ffn_down_exps (layers 0-5)":                   ("Q5_1",   5.50, None),
-    "everything else":                              ("IQ4_XS", 4.25, 2.215),
+TRUNK_QUANT_COMPOSITION = {      # tensor class -> (stored dtype, bpw, GB/token)
+    "dense: attn_*, ssm_out, hc_*, *_shexp, ple_*": ("Q8_0",   8.50, 3.802),
+    "output.weight (lm_head)":                      ("Q6_K",   6.56, 0.521),
+    "ffn_down_exps (43 layers)":                    ("IQ4_NL", 4.50, 0.396),
+    "ffn_gate_exps + ffn_up_exps (47 layers)":      ("IQ3_S",  3.44, 0.662),
+    "norms, ffn_gate_inp routers, ssm_*, conv1d":   ("F32",   32.00, 0.313),
+    "ffn_down_exps (5 layers)":                     ("Q8_0",   8.50, 0.087),
+    "indexer q_proj / k_proj":                      ("BF16",  16.00, 0.039),
+    "ffn_gate_exps + ffn_up_exps (1 layer)":        ("IQ4_XS", 4.25, 0.018),
+    # gather-only, NOT streamed per token: token_embd (Q8_0) + per_layer_token_embd
+    # (IQ4_NL), 29.48 GB on disk.
+}
+
+# ★ THE RETIRED TRUNK -- where every HEADLINES number was measured. KEEP THIS BLOCK.
+# File retired 2026-10-20 (operator); the weights may already be deleted, so nothing
+# may resolve a serve or a bench to MEASURED_TRUNK["path"]. It is the identity of a
+# past measurement, not an artifact you can load.
+# NOTE ITS NAME LIED: "IQ4_XS-uniform" was NOT uniform (mixed per-class dtypes,
+# 4.995 effective bpw, not 4.0; budgeting from the name was ~25% low). It was a
+# quant-from-quant of the UD file above (llama-quantize --allow-requantize ... IQ4_XS,
+# build 10151 7cdd7c97b; epyc-inference-research data/inf68-uniform-iq4xs-ab-20260831/
+# requant.log), NOT published on HF. Regenerable from UD with that command; bit-identity
+# of a regeneration is unproven.
+MEASURED_TRUNK = {
+    "path": ("/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/"
+             "IQ4_XS-uniform/Qwen3.8-Flash-Next-IQ4_XS-uniform.gguf"),
+    "status": "RETIRED 2026-10-20 (operator); keeper is UD-IQ4_XS (TRUNK_SHARDS)",
+    "bytes": 98_392_912_256,
+    "sha256": "4bfb98496364f8721c1e3ea084a238d690c52b1042a317e05fb43b756c9f8957",
+    "tensors": 1224,
+    "effective_bpw": 4.995,
+    "active_params_b": 6.671,
+    "bytes_per_token_gb": 4.166,
+    "chosen_by": "OP-32 (2026-09-01): +15.2% decode vs UD, observation grade",
+    "census": {"IQ4_XS": 586, "IQ4_NL": 182, "Q5_K": 54, "Q5_1": 12, "Q6_K": 1},
+    "composition": {             # tensor class -> (stored dtype, bpw, GB/token)
+        "ffn_gate_inp (router), all norms, ssm_conv1d": ("F32",   32.00, 0.259),
+        "output.weight (lm_head)":                      ("Q6_K",   6.56, 0.522),
+        "attn_qkv (36 GDN layers), attn_v":             ("Q5_K",   5.50, 0.660),
+        "ffn_down_exps (42 layers), ffn_down_shexp, hc_*_up": ("IQ4_NL", 4.50, 0.510),
+        "ffn_down_exps (layers 0-5)":                   ("Q5_1",   5.50, None),
+        "everything else":                              ("IQ4_XS", 4.25, 2.215),
+    },
 }
 
 # The MTP head. A SEPARATE GGUF loaded as the draft model (-md), not embedded.
@@ -170,16 +230,15 @@ MTP_HEAD_REJECTED = {
     "mtp-shared-Q8_0-headQ4_K.gguf": "B12 candidate, 1.077x wall vs borrowed q6_K — NO-GO",
 }
 
-# Artifact-axis note (do NOT silently substitute): `IQ4_XS-uniform-gateup-r16`
-# (98,267,079,776 B, sha256 6468558b42579664af5a4551292828264905109f9a8d3fea4d8e10e3c7ce47d7)
-# is measured better (+1.69% MTP, +0.63% plain, PPL null at MDE 1.041%) and is the
-# Axis B/D COMPARISON BASELINE. It is deliberately NOT the recipe's artifact: it is the
-# only non-bit-identical lever in the campaign, and adopting it would retire the
-# bit-identity property that makes the champion kernel promotable on a digest match.
-# `IQ4_XS-uniform` stays the era anchor and this recipe's artifact until PROD-3 decides.
-# The production-SERVED file today is a different object again: the 3-shard
-# `.../UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-0000{1,2,3}-of-00003.gguf`. This recipe
-# describes the CAMPAIGN artifact; reconciling served-vs-anchor is PROD-3's job.
+# Artifact-axis history (RESOLVED 2026-10-20). The router-F16 variants of the retired
+# trunk -- `IQ4_XS-uniform-r16` (98,267,083,136 B; B4's GO: +1.69% MTP, +0.63% plain,
+# PPL null at MDE 1.041%) and `IQ4_XS-uniform-gateup-r16` (98,267,079,776 B, sha256
+# 6468558b...c7ce47d7, the Axis B/D comparison baseline) -- were DELETED 2026-09-15
+# (RECLAIM-2). NOTE: an earlier revision of this comment attributed B4's numbers to
+# `-gateup-r16`; they were measured on `-uniform-r16`. Neither was ever the recipe's
+# artifact (the only non-bit-identical lever; adopting it would have retired the
+# digest-match promotability of the champion kernel). PROD-3's served-vs-anchor
+# reconciliation is answered by the operator: the served UD-IQ4_XS set IS the trunk.
 
 # ---------------------------------------------------------------------------
 # 2. KERNEL IDENTITY (the champion)
@@ -769,9 +828,16 @@ KNOWN_BAD_FLAG_FORMS = {
 # The host drifts ~3%/hours but repeats to 1.1% within a window, so absolutes are only
 # comparable inside the window that produced them. Both entries below are real; they are
 # different binaries in different windows and MUST NOT be mixed.
+# ★ EVERY ENTRY BELOW WAS MEASURED ON MEASURED_TRUNK (the retired IQ4_XS-uniform file),
+# verified 2026-10-20 from the arm scripts that produced them (speed-claim/arm.sh,
+# champion3/arm.sh, retest1/session*.sh all set TRUNK=...IQ4_XS-uniform.gguf). The recipe's
+# TRUNK is now UD-IQ4_XS, which streams +40% bytes/token: these numbers DO NOT TRANSFER
+# to it and must not be quoted as the current recipe's throughput. Re-measure on TRUNK.
+MEASURED_TRUNK_LABEL = "MEASURED_TRUNK: IQ4_XS-uniform single file, sha256 4bfb9849...c9f8957 (retired 2026-10-20)"
 HEADLINES = {
     "champion3": {
         "binary": "build 10241 (9c4f73e29)",
+        "measured_on_artifact": MEASURED_TRUNK_LABEL,   # ★ NOT the current TRUNK -- see section 1
         # ★ Provenance kept explicit. These numbers were measured at 9c4f73e29 and must
         # never be relabelled to the folded champion ef81196d5.
         "measured_at_commit": "9c4f73e29",
@@ -806,6 +872,7 @@ HEADLINES = {
     },
     "speed_claim_aba": {
         "binary": "build 10221 (c51e4dabf) — pristine + BE-1/BE-2, NOT the champion",
+        "measured_on_artifact": MEASURED_TRUNK_LABEL,   # ★ NOT the current TRUNK -- see section 1
         "window": "2026-09-04, single lock window, ABA x3",
         "mtp_served_tps": 23.16,           # sd 0.14, spread 1.1%, range 23.01-23.26
         "plain_served_tps": 12.35,         # sd 0.24
@@ -824,6 +891,7 @@ HEADLINES = {
 # 18 launches, none dropped, all 24/24 rows complete, shim ON verified per launch.
 HEADLINES["champion_final_20260908"] = {
     "binary": "ef81196d5 (folded champion) + GGML_NOHUGEPAGE_PROCESS=1 at launch",
+    "measured_on_artifact": MEASURED_TRUNK_LABEL,   # ★ NOT the current TRUNK -- see section 1
     # ⚠ THE BINARY THIS HEADLINE ACTUALLY CAME OFF IS NOT IDENTIFIED. Recorded
     # 2026-09-14; do not remove this field to make the entry look tidy.
     "binary_build_number": 10303,
@@ -1038,11 +1106,26 @@ def assert_canonical_env(env: dict) -> None:
             )
 
 
+def _trunk_parts(model: str) -> tuple:
+    """(path, bytes, sha256) for every file the trunk consists of. The trunk is a SPLIT
+    set named by its first shard, and that shard holds metadata only, so checking
+    ``model`` alone would certify 10.9 MB of a 93.7 GB artifact."""
+    if model == TRUNK_GGUF:
+        return TRUNK_SHARDS
+    if model == MEASURED_TRUNK["path"]:
+        raise RecipeViolation(
+            f"{model} is the RETIRED measurement trunk ({MEASURED_TRUNK['status']}); "
+            f"this recipe's trunk is {TRUNK_GGUF}"
+        )
+    raise RecipeViolation(f"{model} is not this recipe's trunk ({TRUNK_GGUF})")
+
+
 def assert_artifacts_exist(model: str = TRUNK_GGUF, head: str = MTP_HEAD_GGUF) -> None:
-    """Presence + SIZE. Size is a cheap identity check that catches a truncated or
-    swapped artifact without hashing 92 GB; use assert_artifact_digests() when the
-    stakes justify the read."""
-    for path, want_bytes in ((model, TRUNK_BYTES), (head, MTP_HEAD_BYTES)):
+    """Presence + SIZE of every trunk shard and the head. Size is a cheap identity check
+    that catches a truncated or swapped artifact without hashing 93 GB; use
+    assert_artifact_digests() when the stakes justify the read."""
+    parts = [(path, want) for path, want, _sha in _trunk_parts(model)]
+    for path, want_bytes in (*parts, (head, MTP_HEAD_BYTES)):
         f = Path(path)
         if not f.is_file():
             raise RecipeViolation(f"artifact missing: {path}")
@@ -1052,9 +1135,10 @@ def assert_artifacts_exist(model: str = TRUNK_GGUF, head: str = MTP_HEAD_GGUF) -
 
 
 def assert_artifact_digests(model: str = TRUNK_GGUF, head: str = MTP_HEAD_GGUF) -> None:
-    """Full sha256 of both artifacts. Reads ~95 GB; run it when promoting or when a
-    number disagrees with the recipe, not on every serve."""
-    for path, want in ((model, TRUNK_SHA256), (head, MTP_HEAD_SHA256)):
+    """Full sha256 of every trunk shard and the head. Reads ~96 GB; run it when
+    promoting or when a number disagrees with the recipe, not on every serve."""
+    parts = [(path, sha) for path, _bytes, sha in _trunk_parts(model)]
+    for path, want in (*parts, (head, MTP_HEAD_SHA256)):
         h = hashlib.sha256()
         with open(path, "rb") as fh:
             for chunk in iter(lambda: fh.read(1 << 24), b""):

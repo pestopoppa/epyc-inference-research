@@ -2056,8 +2056,9 @@ server_mode:
                                        # was never served. See .md C4.
       measured_on_kernel: "ef81196d5 / build 10241 (llama.cpp-experimental champion)"
       measured_artifact: IQ4_XS-uniform single-file (98,392,912,256 B)  # NOT the UD-IQ4_XS
-                                       # 3-shard set this row serves. Reconciling served-vs-anchor
-                                       # is PROD-3's open job; the recipe module says so itself.
+                                       # 3-shard set this row serves. File retired 2026-10-20
+                                       # (operator; keeper UD-IQ4_XS): the recipe TRUNK is now
+                                       # the UD set and this records where the numbers came from.
     numa_instances: 1
     numa_ports: [8074]
     # ── THROUGHPUT PRIOR ── category=OPTIMUM, 2026-07-31. Full instance, canonical placement,
@@ -2075,7 +2076,8 @@ server_mode:
                          #       v10 (ffc1bac82 / build 10303). qwen4exp IS present in v10's
                          #       libllama.so (verified), so the model LOADS — but the number
                          #       does not transfer across a kernel without a re-bench;
-                         #   (3) measured on the IQ4_XS-uniform single file, not UD-IQ4_XS.
+                         #   (3) measured on the IQ4_XS-uniform single file, not UD-IQ4_XS
+                         #       (file retired 2026-10-20; keeper UD-IQ4_XS).
                          # It is carried so the router has a non-null prior at cutover. It is
                          # NOT decision-grade and must not appear in a headline table.
     throughput_measured_at_context: 8192
@@ -3298,7 +3300,8 @@ roles:
                                 # ratio MTP/plain 1.5516.
       speedup: 1.55x
       # ⚠ SCOPE OF BOTH FIGURES, which the scalars cannot carry: measured at -c 8192, -np 1,
-      # on the IQ4_XS-uniform SINGLE-FILE artifact, on llama.cpp-experimental build 10241 —
+      # on the IQ4_XS-uniform SINGLE-FILE artifact (retired 2026-10-20; keeper UD-IQ4_XS),
+      # on llama.cpp-experimental build 10241 —
       # NOT at the 262144 this role serves, NOT on the UD-IQ4_XS shards it points at, and NOT
       # on production v10 (ffc1bac82 / build 10303). qwen4exp IS compiled into v10's
       # libllama.so (verified by symbol inspection), so the model loads; the NUMBERS still
@@ -8814,10 +8817,12 @@ roles:
       from research-campaign artifact to the PRODUCTION model backing architect_critic (:8074, CPU),
       single-role: ingest_long_context is NOT aliased here — operator ruling C2 sent it to
       architect_general's :8083 GPU Qwen3.8-27B (server_mode.ingest_long_context.alias_of,
-      server_mode.architect_critic.shared_with). ⚠ THIS IS NOT THE ARTIFACT THE CAMPAIGN MEASURED — the
-      codified recipe's TRUNK_GGUF is the IQ4_XS-uniform SINGLE FILE (98,392,912,256 B, sha256
-      4bfb9849...f8957). Reconciling served-vs-anchor is PROD-3's open job and the recipe module
-      says so itself. Every performance figure attached to this model was taken on the uniform file."
+      server_mode.architect_critic.shared_with). 2026-10-20 (operator): this 3-shard set is ALSO the
+      codified recipe's TRUNK (scripts/lib/qwen38_flash_next_recipe.py TRUNK_SHARDS); the former campaign
+      anchor, the IQ4_XS-uniform single file (98,392,912,256 B, sha256 4bfb9849...f8957), is RETIRED
+      (keeper UD-IQ4_XS). ⚠ Every performance figure attached to this model was still taken on that
+      retired uniform file (recipe MEASURED_TRUNK) and must be re-measured on this artifact before it
+      is quoted as this artifact's throughput."
     model:
       name: Qwen3.8-Flash-Next-UD-IQ4_XS
       path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
