@@ -90,6 +90,7 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import contextvars
 import threading
 import time
 from typing import Any, Callable, Iterator, Mapping, Sequence
@@ -988,8 +989,11 @@ class AuthorPanel:
                 for loser in losers:
                     self._retire(scope, loser, hypothesis)
 
-        threads = [threading.Thread(target=run, args=(member,), daemon=True,
-                                    name=f"{self.lane}-{member.spec.label}")
+        # AK-HR-3: each member thread runs in a COPY of this lane's context so its actor
+        # calls carry the lane's `trial_id` (one Context cannot be entered by two threads,
+        # hence one copy per thread). The Trial object itself is shared and lock-guarded.
+        threads = [threading.Thread(target=contextvars.copy_context().run, args=(run, member),
+                                    daemon=True, name=f"{self.lane}-{member.spec.label}")
                    for member in members]
         for thread in threads:
             thread.start()

@@ -207,6 +207,21 @@ def knob_descriptor(d: dict):
     return None
 
 
+#: AK-HR-3 write-side fields (`loop/history_fields.py`). Read only when present: a row
+#: written before AK-HR-3 gets NO `history_fields` key, so outputs over old stores stay
+#: byte-identical to the AK-HR-1 run.
+HR3_KEYS = ("trial_id", "trial_ordinal", "cumulative_tokens", "stage_seconds", "failure_class",
+            "mechanism_family_bucket", "knob_descriptor")
+
+
+def hr3_fields(d: dict):
+    """The AK-HR-3 fields of one payload or metrics line, each null when absent; None when
+    the line carries none of them (an old row)."""
+    if not isinstance(d, dict) or not any(k in d for k in HR3_KEYS):
+        return None
+    return {k: d.get(k) for k in HR3_KEYS}
+
+
 def comparison_scalars(cmp):
     if not isinstance(cmp, dict):
         return None
@@ -277,6 +292,7 @@ def read_store(db: Path):
                                           "measure": None}},
             "lineage": {"spawn_parent": sp, "branch_id": br, "width": w, "depth": dp,
                         "hypothesis_round": d.get("hypothesis_round"), "patch_round": d.get("patch_round")},
+            **({"history_fields": hr3} if (hr3 := hr3_fields(d)) else {}),
             "payload_bytes": len(payload),
             "payload_flags": {"has_call_id_key": '"call_id"' in payload,
                               "has_retained_patch": "retained_patch" in d,
@@ -331,6 +347,7 @@ def read_calls(path: Path, camp: str):
             "ak_check_seconds": num(ak.get("seconds")) if ak else None,
             "ak_check_compile_seconds": num(((ak.get("by_mode") or {}).get("compile") or {}).get("seconds")),
             "ak_check_op_test_seconds": num(((ak.get("by_mode") or {}).get("op-test") or {}).get("seconds")),
+            **({"history_fields": hr3} if (hr3 := hr3_fields(d)) else {}),
             "attempt_key_in_line": any(k in d for k in ("attempt_id", "trial_id")) or
                                    any(k in c for k in ("attempt_id", "trial_id")),
         })
@@ -671,6 +688,36 @@ def build_census(root, rows, arm_rows, store_meta, excluded, call_rows, call_fil
                                 "calls_with_no_following_attempt": len(call_rows) - len(deltas)},
         "duplicate_call_ids_across_files": dup_call_ids,
     }
+
+    hr3_calls = [c for c in call_rows if "history_fields" in c]
+    hr3_rows = [r for r in exp if "history_fields" in r]
+    if hr3_calls or hr3_rows:
+        # Present only over post-AK-HR-3 stores; absent (so census bytes unchanged) otherwise.
+        row_trials = {r["history_fields"]["trial_id"]: r for r in hr3_rows
+                      if r["history_fields"]["trial_id"]}
+        joined = [c for c in hr3_calls if c["history_fields"]["trial_id"] in row_trials]
+        ordinals = sorted(r["history_fields"]["trial_ordinal"] for r in hr3_rows
+                          if isinstance(r["history_fields"]["trial_ordinal"], int))
+        cumul = [r["history_fields"]["cumulative_tokens"] for r in sorted(
+            (r for r in hr3_rows if isinstance(r["history_fields"]["trial_ordinal"], int)),
+            key=lambda r: r["history_fields"]["trial_ordinal"])]
+        c_["post_change_fields"] = {
+            "rows_with_fields": len(hr3_rows), "metrics_lines_with_fields": len(hr3_calls),
+            "calls_joined_to_an_attempt_by_trial_id": len(joined),
+            "calls_with_trial_id_but_no_recorded_attempt": sum(
+                1 for c in hr3_calls if c["history_fields"]["trial_id"]
+                and c["history_fields"]["trial_id"] not in row_trials),
+            "calls_with_null_trial_id": sum(1 for c in hr3_calls if not c["history_fields"]["trial_id"]),
+            "trial_ordinals_strictly_increasing": all(x < y for x, y in zip(ordinals, ordinals[1:])),
+            "cumulative_tokens_monotone_non_decreasing": all(
+                y >= x for x, y in zip([v for v in cumul if v is not None],
+                                       [v for v in cumul if v is not None][1:])),
+            "rows_with_family_bucket": sum(1 for r in hr3_rows if r["history_fields"]["mechanism_family_bucket"]),
+            "rows_with_knob_descriptor": sum(1 for r in hr3_rows if r["history_fields"]["knob_descriptor"]),
+            "rows_with_stage_seconds": sum(1 for r in hr3_rows if r["history_fields"]["stage_seconds"]),
+            "verdict": "call->attempt join by trial_id and the budget axis are answerable over these rows only; "
+                       "older rows stay time-window-only",
+        }
 
     # ---- (d) wall split
     role_wall = defaultdict(lambda: defaultdict(float))

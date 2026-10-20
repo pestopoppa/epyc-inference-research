@@ -19,8 +19,8 @@ Contract (the RB-lineage telemetry pattern, `85c7b91e`):
     abstained row already carries the planner's free-text `mechanism_family` under that key
     (`loop.Outcome.abstained_identity`), and overwriting it would change an existing field.
   * The trial context is a `contextvars.ContextVar`: it follows the lane's thread through
-    `loop.iterate`. A best-of author panel runs members on worker threads that do not
-    inherit it, so a call made there carries `trial_id: null` (an honest null).
+    `loop.iterate`. A best-of author panel runs each member in a copy of that context
+    (`bestof.AuthorPanel._race`), so panel calls carry the lane's `trial_id` too.
 
 The attempt-to-call join key is `trial_id`: minted at the start of `loop.iterate`, written
 on every actor call's metrics line during that iteration and on the iteration's experiments
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import contextvars
 import secrets
+import threading
 import time
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator, Mapping
@@ -55,6 +56,7 @@ class Trial:
 
     def __init__(self, trial_id: str | None = None) -> None:
         self.trial_id = trial_id or secrets.token_hex(16)
+        self._lock = threading.Lock()   # best-of panel members share one Trial
         self.stage_seconds: dict[str, float | None] = {stage: None for stage in STAGES}
         self.call_failure_classes: list[str] = []
         self.decoded_tokens: int | None = None
@@ -63,13 +65,15 @@ class Trial:
 
     def add_seconds(self, stage: str, seconds: float) -> None:
         if stage in self.stage_seconds and isinstance(seconds, (int, float)):
-            self.stage_seconds[stage] = round((self.stage_seconds[stage] or 0.0)
-                                              + max(0.0, float(seconds)), 3)
+            with self._lock:
+                self.stage_seconds[stage] = round((self.stage_seconds[stage] or 0.0)
+                                                  + max(0.0, float(seconds)), 3)
 
     def add_tokens(self, decoded: Any, prompt: Any) -> None:
-        for name, value in (("decoded_tokens", decoded), ("prompt_tokens", prompt)):
-            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-                setattr(self, name, (getattr(self, name) or 0) + value)
+        with self._lock:
+            for name, value in (("decoded_tokens", decoded), ("prompt_tokens", prompt)):
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    setattr(self, name, (getattr(self, name) or 0) + value)
 
     def snapshot(self) -> dict[str, Any]:
         """The nullable payload fields. `trial_tokens` is decoded+prompt, null when no call
