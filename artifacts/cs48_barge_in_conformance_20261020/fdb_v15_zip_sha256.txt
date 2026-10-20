@@ -1,0 +1,7 @@
+4dd2c23b3e03fe01ae36e2572bff1bc2679469f419741fc259f99fbc32d0a1d1  background_speech.zip
+2029a0687190a3bc9a9ec65ec620f484d831cb9dcdacb025a46e16a39cf62bc1  talking_to_other.zip
+abe3f1765b542e1b3c47b90f2d18a24d5203e392a78f2b7c90474fac06a69bb9  user_backchannel.zip
+0560418f1d02e9d73a6136b24efac803daa63a2056d3f0d539a901fe9a70912e  user_interruption.zip
+# Fetched 2026-10-20 with gdown from the PUBLIC folder https://drive.google.com/drive/folders/1DtoxMVO9_Y_nDs2peZtx3pw-U2qYgpd3 (v1.5/*.zip; no login).
+# Raw zips: /mnt/raid0/llm/data/fdb-v1.5-raw-20261020/ ; extracted (path-checked, no code run): /mnt/raid0/llm/data/fdb-v1.5-20261020/
+# bi_manifest.scenarios_from_fdb15 loads 498 samples (user_interruption 200, talking_to_others 100, background_speech 100, backchannel 98), all 16 kHz mono with clean_input.wav.

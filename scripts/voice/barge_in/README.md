@@ -34,5 +34,5 @@ Event-log quantities: exact (0 ns) on the virtual clock; real clock: wake-up jit
 t_stop within 0.15 s, t_resp within 0.30 s (32 ms window + 30 ms pad + onset lag); HumDial cross-check 0.20 s. Observed errors are printed by the suite (`-s`).
 
 ## Pending / external
-* FDB v1.5 stimuli (Google Drive `1DtoxMVO9_Y_nDs2peZtx3pw-U2qYgpd3`, 499 samples): operator manual fetch; `bi_manifest.scenarios_from_fdb15(<root>)` reads a local copy and refuses with "manual fetch pending" when absent.
+* FDB v1.5 stimuli: FETCHED 2026-10-20 (public Drive folder, gdown) to `/mnt/raid0/llm/data/fdb-v1.5-20261020`; zip sha256 in `artifacts/cs48_barge_in_conformance_20261020/fdb_v15_zip_sha256.txt`; `bi_manifest.scenarios_from_fdb15` loads all 498 samples.
 * CS-45 manifest rows: `scenarios_from_cs45` documents the keys it needs; wire the real schema when CS-45 is committed.
