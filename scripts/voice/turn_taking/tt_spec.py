@@ -147,3 +147,39 @@ ASSIST_PROMPT = [
     "Go ahead, I'm ready.",
     "What can I do for you today?",
 ]
+
+
+# ---------------------------------------------------------------------------------------------
+# RESERVE inventory (separate stratum 'reserve'): same selection rules as the main set, used ONLY to
+# backfill pairs that the human review rejects; never counted otherwise (see corpus.json policy).
+RESERVE_CUT_IC = [
+    "Can you tell me whether the bakery on the corner is still open | at this time of night?",
+    "I was hoping we could move the dentist appointment to a | day when I don't have class.",
+    "She asked me to send her the photos from the trip and also the | video of the fireworks.",
+    "Please read me the headlines from yesterday and then | tell me what the weather is today.",
+    "It would be great if you could find a restaurant that has both | vegetarian options and outdoor seating.",
+    "I tried to call you three times but your phone kept | going straight to voicemail.",
+    "The last time we talked about this you said that the budget would | be approved before the end of the month.",
+    "Add a note to my calendar that says I need to bring the | signed forms to the school on Friday.",
+    "Do you remember the name of the actor who played the | detective in that old black and white film?",
+    "My brother is visiting next weekend and he would like to see the | science museum and the botanical garden.",
+    "We need to decide whether to repaint the kitchen before or | after the new floor goes in.",
+    "I read that the train line is closed between the airport and the | city center because of construction.",
+    "Could you set the thermostat so that it warms up the house an hour before I | get home from work?",
+    "He promised to return the ladder as soon as he finished | cleaning the gutters on his own roof.",
+    "What is the quickest way to get from the old town to the | harbor if I don't want to take the bus?",
+    "I'd like to order two large pizzas, one with mushrooms and one with | extra cheese and olives.",
+    "Remind me tomorrow morning to call the plumber and ask him whether | he can come on Thursday afternoon.",
+    "The instructions say that you should let the paint dry completely before you | put the second coat on the wall.",
+    "My neighbor mentioned that the city is planning to build a new library on the | empty lot behind the post office.",
+    "Tell me how long it takes to roast a chicken that weighs about | four pounds in a regular oven.",
+    "I just realized that I left my umbrella in the | taxi on the way to the meeting.",
+    "Our flight was delayed by two hours, so we missed the connection and had to | wait for the next one in the morning.",
+]
+RESERVE_CUT_WAIT = [
+    "Hold on a minute, | that is not the restaurant I was talking about.",
+    "Hang on a second, | I just remembered that my sister is allergic to nuts.",
+    "Wait a second, | you read me the wrong phone number.",
+    "Give me one moment, | the second item on that list is actually mistaken.",
+]
+RESERVE_CTX_ACKS = ["Yeah.", "Okay.", "I see.", "Right."]

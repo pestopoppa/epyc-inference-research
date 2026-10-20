@@ -47,6 +47,10 @@ def fake_corpus(tmp_path_factory):
     _copy_static(D)
     r = subprocess.run([sys.executable, "-I", str(TT / "tt_build.py"), "--scratch", str(S), "--out", str(D)], capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+    S2 = root / "scratch_reserve"
+    fake_renders.make_scratch(S2, reserve=True)
+    r = subprocess.run([sys.executable, "-I", str(TT / "tt_build_reserve.py"), "--scratch", str(S2), "--corpus", str(D)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
     V.seal(D)
     return D
 
@@ -300,3 +304,150 @@ def test_silero_streaming_equals_offline():
     xs = np.pad(x, (0, 512 - len(x) % 512))
     on = np.array([st.feed(xs[i : i + 512]) for i in range(0, len(xs), 512)])
     assert np.abs(off - on).max() < 1e-6
+
+
+# ------------------------------------------------------------------ reserve stratum
+def jl(p: Path):
+    return [json.loads(x) for x in open(p)]
+
+
+def wjl(p: Path, rows):
+    p.unlink()
+    p.write_text("\n".join(json.dumps(x, sort_keys=True) for x in rows) + "\n")
+
+
+def wjson(p: Path, obj):
+    p.unlink()
+    p.write_text(json.dumps(obj, indent=1))
+
+
+def test_reserve_present_and_sealed(corpus):
+    assert len(jl(corpus / "manifest" / "reserve" / "pairs.jsonl")) >= 20
+    assert json.loads((corpus / "corpus.json").read_text())["reserve"]["policy_id"] == "cs45-reserve-v1"
+
+
+def _reject(corpus, n):
+    pairs = jl(corpus / "manifest" / "pairs.jsonl")
+    return pairs[:n]
+
+
+def test_reserve_not_counted_without_backfill(corpus):
+    # six review rejections leave 99 effective pairs; 20+ reserve pairs exist but are not counted
+    rej = _reject(corpus, len(jl(corpus / "manifest" / "pairs.jsonl")) - 99)
+    bf = json.loads((corpus / "manifest" / "backfill.json").read_text())
+    bf["rejections"] = [{"pair_id": p["pair_id"], "reviewer": "test", "date": "2026-10-20", "reason": "t"} for p in rej]
+    wjson(corpus / "manifest" / "backfill.json", bf)
+    reseal(corpus)
+    assert "min_100_english_pairs" in failing(corpus)
+
+
+def test_recorded_backfill_restores_count(corpus):
+    pairs = jl(corpus / "manifest" / "pairs.jsonl")
+    res = jl(corpus / "manifest" / "reserve" / "pairs.jsonl")
+    n_rej = len(pairs) - 99
+    rej, bfs, used = [], [], set()
+    for p in pairs:
+        if len(rej) == n_rej:
+            break
+        cand = next((r for r in res if (r["family"], r["split"]) == (p["family"], p["split"]) and r["pair_id"] not in used), None)
+        if cand is None:
+            continue
+        used.add(cand["pair_id"])
+        rej.append({"pair_id": p["pair_id"], "reviewer": "test", "date": "2026-10-20", "reason": "t"})
+        if len(bfs) < 1:
+            bfs.append({"reserve_pair_id": cand["pair_id"], "replaces_pair_id": p["pair_id"]})
+    bf = json.loads((corpus / "manifest" / "backfill.json").read_text())
+    bf["rejections"], bf["backfills"] = rej, bfs
+    wjson(corpus / "manifest" / "backfill.json", bf)
+    reseal(corpus)
+    assert failing(corpus) == set()  # 99 + 1 backfill = 100 effective
+
+
+def _with_backfill(corpus, reserve_pick, main_pick):
+    bf = json.loads((corpus / "manifest" / "backfill.json").read_text())
+    bf["rejections"] = [{"pair_id": main_pick["pair_id"], "reviewer": "test", "date": "2026-10-20", "reason": "t"}]
+    bf["backfills"] = [{"reserve_pair_id": reserve_pick["pair_id"], "replaces_pair_id": main_pick["pair_id"]}]
+    wjson(corpus / "manifest" / "backfill.json", bf)
+    reseal(corpus)
+
+
+def test_backfill_without_rejection_refused(corpus):
+    pairs, res = jl(corpus / "manifest" / "pairs.jsonl"), jl(corpus / "manifest" / "reserve" / "pairs.jsonl")
+    m = next(p for p in pairs if p["family"] == res[0]["family"] and p["split"] == res[0]["split"])
+    bf = json.loads((corpus / "manifest" / "backfill.json").read_text())
+    bf["backfills"] = [{"reserve_pair_id": res[0]["pair_id"], "replaces_pair_id": m["pair_id"]}]
+    wjson(corpus / "manifest" / "backfill.json", bf)
+    reseal(corpus)
+    assert "reserve_stratum_policy" in failing(corpus)
+
+
+def test_backfill_family_or_split_mismatch_refused(corpus):
+    pairs, res = jl(corpus / "manifest" / "pairs.jsonl"), jl(corpus / "manifest" / "reserve" / "pairs.jsonl")
+    r = res[0]
+    m = next(p for p in pairs if (p["family"], p["split"]) != (r["family"], r["split"]))
+    _with_backfill(corpus, r, m)
+    assert "reserve_stratum_policy" in failing(corpus)
+
+
+def test_reserve_speaker_crossing_splits_refused(corpus):
+    rc = jl(corpus / "manifest" / "reserve" / "clips.jsonl")
+    rp = jl(corpus / "manifest" / "reserve" / "pairs.jsonl")
+    main = jl(corpus / "manifest" / "clips.jsonl")
+    pid = rc[0]["pair_id"]
+    other = next(c["speaker_id"] for c in main if c["split"] != rc[0]["split"])
+    for r in rc:
+        if r["pair_id"] == pid:
+            r["speaker_id"] = other
+    for p in rp:
+        if p["pair_id"] == pid:
+            p["speaker_id"] = other
+    wjl(corpus / "manifest" / "reserve" / "clips.jsonl", rc)
+    wjl(corpus / "manifest" / "reserve" / "pairs.jsonl", rp)
+    reseal(corpus)
+    f = failing(corpus)
+    assert "reserve_stratum_policy" in f and "selection_confirmation_disjoint" in f
+
+
+def test_reserve_assistant_context_from_other_split_refused(corpus):
+    rc = jl(corpus / "manifest" / "reserve" / "clips.jsonl")
+    main = jl(corpus / "manifest" / "clips.jsonl")
+    foreign = next(c["assistant"]["recording_id"] for c in main if c["split"] != rc[0]["split"] and c["assistant"]["mode"] == rc[0]["assistant"]["mode"])
+    rc[0]["assistant"]["recording_id"] = foreign
+    wjl(corpus / "manifest" / "reserve" / "clips.jsonl", rc)
+    reseal(corpus)
+    f = failing(corpus)
+    assert "reserve_stratum_policy" in f or "selection_confirmation_disjoint" in f
+
+
+def test_reserve_labelled_synthesized_refused(corpus):
+    rc = jl(corpus / "manifest" / "reserve" / "clips.jsonl")
+    rc[0]["stratum"] = "synthesized"
+    wjl(corpus / "manifest" / "reserve" / "clips.jsonl", rc)
+    reseal(corpus)
+    assert "strata_separate_and_advance_policy" in failing(corpus)
+
+
+def test_reserve_dialogue_colliding_with_main_refused(corpus):
+    rc = jl(corpus / "manifest" / "reserve" / "clips.jsonl")
+    rp = jl(corpus / "manifest" / "reserve" / "pairs.jsonl")
+    main = jl(corpus / "manifest" / "clips.jsonl")
+    pid = rc[0]["pair_id"]
+    for p in rp:
+        if p["pair_id"] == pid:
+            p["dialogue_id"] = main[0]["dialogue_id"]
+    wjl(corpus / "manifest" / "reserve" / "pairs.jsonl", rp)
+    reseal(corpus)
+    assert "reserve_stratum_policy" in failing(corpus)
+
+
+def test_reserve_audio_altered_refused(corpus):
+    rec = jl(corpus / "manifest" / "reserve" / "recordings.jsonl")[0]
+
+    def flip(pc):
+        s = pc.samples.copy()
+        s[(rec["trim"][0] + rec["trim"][1]) // 2 - 3, 0] += 1000
+        return A.Pcm(s, pc.sample_rate)
+
+    mutate_recording(corpus, rec, flip)
+    reseal(corpus)
+    assert "recordings_pcm_bound" in failing(corpus)

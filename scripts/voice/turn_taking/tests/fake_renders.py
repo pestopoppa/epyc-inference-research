@@ -13,9 +13,9 @@ import tt_plan as P  # noqa: E402
 SR = A.SR
 
 
-def make_scratch(S: Path) -> None:
+def make_scratch(S: Path, reserve: bool = False) -> None:
     (S / "rec16").mkdir(parents=True, exist_ok=True)
-    plan = P.build_plan()
+    plan = P.build_reserve_plan() if reserve else P.build_plan()
     rows = []
     rng = np.random.default_rng(7)
     for j in plan["jobs"]:

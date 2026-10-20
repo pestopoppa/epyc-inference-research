@@ -166,13 +166,14 @@ def main() -> int:
     ap.add_argument("--only", default="", help="comma list of render_ids (re-render subset)")
     ap.add_argument("--seed-bump", type=int, default=0, help="added to attempt index for the seeds of --only renders")
     ap.add_argument("--no-asr", action="store_true")
+    ap.add_argument("--reserve", action="store_true", help="render the RESERVE plan (tt_plan.build_reserve_plan)")
     args = ap.parse_args()
 
     S = Path(args.scratch)
     for d in ("raw24", "rec16", "asr", "tts"):
         (S / d).mkdir(parents=True, exist_ok=True)
     runner = Runner(S / "pids_started.txt")
-    plan = P.build_plan()
+    plan = P.build_reserve_plan() if args.reserve else P.build_plan()
     jobs = plan["jobs"]
     if args.only:
         want = set(args.only.split(","))

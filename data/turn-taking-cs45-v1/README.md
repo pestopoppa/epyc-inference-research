@@ -25,6 +25,15 @@ recordings are stored; a clip is a deterministic function of (recording, recipe)
 - CUT_IC / CUT_WAIT: member b is the same recording cut at a word boundary (cut snapped to a quiet valley near the ASR word boundary), member a runs to its natural end. 10 ms raised-cosine fade at the end of both. Both get exactly 2.0 s of digital silence. The assistant context is identical.
 - CTX_BC: the same acknowledgement waveform in both members; a is placed after the assistant finished a question, b over an assistant monologue that keeps going.
 
+## Reserve stratum (backfill only)
+
+`manifest/reserve/` and `audio/reserve/user.tar` hold 25 further synthesized pairs (stratum `reserve`) with the same
+selection rules and voice partition as the main set, built so that the human review of the main set cannot push the corpus
+below the 100-pair floor. Policy (enforced by `tt_verify.py`, recorded in `corpus.json`): a reserve pair counts ONLY
+through `manifest/backfill.json` (a recorded review rejection of a main pair plus a backfill of the same family and split),
+never otherwise, and never as evidence for advancing an arm. Reserve ids, dialogues and recordings are disjoint from the
+main set; reserve speakers keep their main split; reserve assistant contexts are main recordings reused inside the same split.
+
 ## Verify / refuse
 
 ```

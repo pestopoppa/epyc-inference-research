@@ -1,0 +1,5 @@
+{
+ "policy": "Reserve pairs count toward the 100-pair floor ONLY through a record here: a review rejection of a main pair, and a backfill naming the reserve pair that replaces it (same family and split). Nothing else counts them.",
+ "rejections": [],
+ "backfills": []
+}

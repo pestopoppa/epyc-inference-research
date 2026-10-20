@@ -139,6 +139,61 @@ def build_plan() -> dict:
     return {"plan_seed": PLAN_SEED, "voices": VOICES, "assistant_voice": ASSISTANT_VOICE, "jobs": jobs, "pairs": pairs}
 
 
+def build_reserve_plan() -> dict:
+    """Reserve stratum: same rules and voice partition as the main plan, NEW texts/recordings/dialogues, and the
+    assistant contexts of the main set reused WITHIN the same split only (so no context crosses the boundary)."""
+    main = build_plan()
+    pools: dict[tuple[str, str], list[str]] = {}
+    for j in main["jobs"]:
+        if j["role"] == "assistant":
+            pools.setdefault((j["kind"], j["split"]), []).append(j["render_id"])
+    jobs: list[dict] = []
+    pairs: list[dict] = []
+    counters = {"selection": 1, "confirmation": 1}  # offset so reserve voices/contexts rotate differently from main
+    no = 0
+
+    def voice_for(split: str) -> dict:
+        vs = [v for v in VOICES if v["split"] == split]
+        v = vs[counters[split] % len(vs)]
+        counters[split] += 1
+        return v
+
+    def add(fam, raw, a_label, b_label, contrast, ctxs, i):
+        nonlocal no
+        no += 1
+        pid = f"tt1-r{no:04d}"
+        split = SPLITS[i % 2]
+        voice = voice_for(split)
+        rid = f"rec-r-u-{no:04d}"
+        pre = raw.split("|")[0] if "|" in raw else None
+        n_prefix = len(norm_words(pre)) if pre else 0
+        jobs.append({"render_id": rid, "role": "user", "text": clean_text(raw), "voice_id": voice["voice_id"], "ref": voice_ref_path(voice),
+                     "seed": _seed(rid), "split": split, "family": fam, "pair_id": pid, "prefix_words": n_prefix})
+        a_ctx, b_ctx, a_mode, b_mode = ctxs(split, i)
+        pairs.append({"pair_id": pid, "family": fam, "split": split, "voice_id": voice["voice_id"], "user_recording": rid,
+                      "assistant_a": a_ctx, "assistant_b": b_ctx, "assistant_mode_a": a_mode, "assistant_mode_b": b_mode,
+                      "label_a": a_label, "label_b": b_label, "contrast": contrast, "prefix_words": n_prefix,
+                      "text_full": clean_text(raw), "text_prefix": clean_text(pre) if pre else None})
+
+    def prompt_ctx(split, i):
+        p = pools[("prompt", split)]
+        c = p[(i // 2 + 1) % len(p)]
+        return c, c, "ended", "ended"
+
+    for i, raw in enumerate(S.RESERVE_CUT_IC):
+        add("CUT_IC", raw, "complete", "incomplete", "cut_point", prompt_ctx, i)
+    for i, raw in enumerate(S.RESERVE_CUT_WAIT):
+        add("CUT_WAIT", raw, "complete", "wait", "cut_point", prompt_ctx, i)
+
+    def ctx_bc(split, i):
+        q, m = pools[("question", split)], pools[("monologue", split)]
+        return q[(i // 2 + 2) % len(q)], m[(i // 2 + 1) % len(m)], "ended", "continuing"
+
+    for i, ack in enumerate(S.RESERVE_CTX_ACKS):
+        add("CTX_BC", ack, "complete", "backchannel", "assistant_context", ctx_bc, i)
+    return {"plan_seed": PLAN_SEED + "/reserve", "voices": VOICES, "assistant_voice": ASSISTANT_VOICE, "jobs": jobs, "pairs": pairs}
+
+
 if __name__ == "__main__":
     p = build_plan()
     import collections

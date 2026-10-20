@@ -28,6 +28,7 @@ MIN_PAIRS = 100
 SEAL_EXCLUDE = {"corpus.json", "SHA256SUMS"}
 STRATA = ("synthesized", "human_recorded")
 ADVANCE_ELIGIBLE = ["human_recorded"]
+RESERVE_POLICY_ID = "cs45-reserve-v1"
 SYNTH_FAMILIES = {"CUT_IC": ("complete", "incomplete"), "CUT_WAIT": ("complete", "wait"), "CTX_BC": ("complete", "backchannel")}
 
 
@@ -71,6 +72,8 @@ def seal(D: Path) -> dict:
         "counts": {"synthesized_pairs": sum(1 for p in pairs if p["stratum"] == "synthesized"), "by_family": fam,
                    "human_recorded_clips": len(read_jsonl(D / "manifest" / "human_recorded.jsonl"))},
         "pcm_binding": "SHA-256 of decoded interleaved little-endian int16 samples; sample rate, channels and sample count recorded with it (Annex S P-STT-1 1.2)",
+        "reserve": {"policy_id": RESERVE_POLICY_ID, "pairs": len(read_jsonl(D / "manifest" / "reserve" / "pairs.jsonl")),
+                    "policy": "stratum 'reserve': synthesized backfill pairs, same rules and voice partition. Used ONLY to replace main pairs that the human review rejects, through manifest/backfill.json (a recorded rejection plus a backfill of the same family and split). Never counted toward the 100-pair floor otherwise; never evidence for advancing an arm."},
         "files": files,
     }
     (D / "corpus.json").write_text(json.dumps(meta, indent=1, sort_keys=True) + "\n")
@@ -123,11 +126,17 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
     clips = read_jsonl(D / "manifest" / "clips.jsonl")
     pairs = read_jsonl(D / "manifest" / "pairs.jsonl")
     human = read_jsonl(D / "manifest" / "human_recorded.jsonl")
+    rres = {r["recording_id"]: r for r in read_jsonl(D / "manifest" / "reserve" / "recordings.jsonl")}
+    rclips = read_jsonl(D / "manifest" / "reserve" / "clips.jsonl")
+    rpairs = read_jsonl(D / "manifest" / "reserve" / "pairs.jsonl")
+    bfp = D / "manifest" / "backfill.json"
+    backfill = json.loads(bfp.read_text()) if bfp.exists() else {"rejections": [], "backfills": []}
+    all_recs = {**recs, **rres}
 
     # V2 recordings: PCM recomputed from the WAV bytes ------------------------------------------
     pcm: dict[str, np.ndarray] = {}
     bad = []
-    for rid, r in recs.items():
+    for rid, r in all_recs.items():
         try:
             w, fsha = A.load_audio(D, r["path"])
         except Exception as e:  # noqa: BLE001
@@ -140,12 +149,14 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
         if fsha != r["file_sha256"]:
             bad.append(f"{rid}:file_sha256")
         pcm[rid] = w.samples[:, 0]
+    if len(all_recs) != len(recs) + len(rres):
+        bad.append("recording id collision between main and reserve")
     R.add("recordings_pcm_bound", not bad and len(recs) > 0, bad[:20])
 
     # V3 every clip re-assembles to its recorded PCM-SHA-256 -------------------------------------
     bad = []
     asm: dict[str, tuple[np.ndarray, C.Layout]] = {}
-    for c in clips:
+    for c in clips + rclips:
         try:
             u, a_ = pcm[c["user"]["recording_id"]], pcm[c["assistant"]["recording_id"]]
             arr, lay = C.assemble_clip(u, tuple(c["user"]["trim"]), c["user"]["cut"], a_, c["assistant"]["mode"])
@@ -166,8 +177,8 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
 
     # V4 pairs are exact splices of ONE recording --------------------------------------------------
     bad = []
-    by_id = {c["clip_id"]: c for c in clips}
-    for p in pairs:
+    by_id = {c["clip_id"]: c for c in clips + rclips}
+    for p in pairs + rpairs:
         try:
             ca, cb = by_id[p["clips"][0]], by_id[p["clips"][1]]
         except (KeyError, IndexError):
@@ -188,20 +199,23 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
             viol = C.check_pair_invariants(p["family"], asm[ca["clip_id"]][0], asm[ca["clip_id"]][1], ca["user"]["cut"],
                                            asm[cb["clip_id"]][0], asm[cb["clip_id"]][1], cb["user"]["cut"])
             bad += [f"{p['pair_id']}:{v}" for v in viol]
-    ref_ids = {x for p in pairs for x in p["clips"]}
+    ref_ids = {x for p in pairs + rpairs for x in p["clips"]}
     if set(by_id) != ref_ids:
         bad.append("clips-vs-pairs:unreferenced-or-missing-clips")
     R.add("pairs_are_splices_of_one_recording", not bad and len(pairs) > 0, bad[:20])
 
     # V5 count ---------------------------------------------------------------------------------------
     synth_pairs = [p for p in pairs if p["stratum"] == "synthesized" and p.get("language") == "en"]
-    R.add("min_100_english_pairs", len(synth_pairs) >= MIN_PAIRS, {"have": len(synth_pairs), "need": MIN_PAIRS})
+    # reserve pairs are NEVER counted unless backfill.json records a review rejection AND the backfill replacing it
+    eff = len(synth_pairs) - len(backfill["rejections"]) + len(backfill["backfills"])
+    R.add("min_100_english_pairs", eff >= MIN_PAIRS, {"main_pairs": len(synth_pairs), "review_rejections": len(backfill["rejections"]),
+                                                        "backfills": len(backfill["backfills"]), "effective": eff, "need": MIN_PAIRS})
 
     # V6 split disjointness, DERIVED from rows ------------------------------------------------------
     sets = {"selection": {"speaker": set(), "dialogue": set(), "user_rec": set(), "asst_rec": set(), "pair": set()},
             "confirmation": {"speaker": set(), "dialogue": set(), "user_rec": set(), "asst_rec": set(), "pair": set()}}
     bad = []
-    for c in clips:
+    for c in clips + rclips:
         s = c["split"]
         if s not in sets:
             bad.append(f"{c['clip_id']}:split={s}")
@@ -227,9 +241,9 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
     if sj.exists():
         S = json.loads(sj.read_text())
         for sp in ("selection", "confirmation"):
-            if set(S[sp]["speakers"]) != sets[sp]["speaker"] - {h["speaker_id"] for h in human}:
+            if set(S[sp]["speakers"]) != {c["speaker_id"] for c in clips if c["split"] == sp}:
                 bad.append(f"splits.json:{sp}:speakers-differ")
-            if set(S[sp]["pairs"]) != sets[sp]["pair"]:
+            if set(S[sp]["pairs"]) != {c["pair_id"] for c in clips if c["split"] == sp}:
                 bad.append(f"splits.json:{sp}:pairs-differ")
     else:
         bad.append("splits.json missing")
@@ -237,6 +251,9 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
 
     # V7 strata kept separate --------------------------------------------------------------------------
     bad = []
+    for c in rclips:
+        if c["stratum"] != "reserve":
+            bad.append(f"{c['clip_id']}:stratum={c['stratum']} in reserve/clips.jsonl")
     for c in clips:
         if c["stratum"] != "synthesized":
             bad.append(f"{c['clip_id']}:stratum={c['stratum']} in clips.jsonl")
@@ -247,7 +264,7 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
             bad.append(f"human:{h.get('clip_id')}:stratum")
         if str(h.get("speaker_id", "")).startswith("synth-"):
             bad.append(f"human:{h.get('clip_id')}:synth speaker id")
-    if {c["speaker_id"] for c in clips} & {h.get("speaker_id") for h in human}:
+    if {c["speaker_id"] for c in clips + rclips} & {h.get("speaker_id") for h in human}:
         bad.append("speaker-in-both-strata")
     if meta.get("advance_eligible_strata") != ADVANCE_ELIGIBLE:
         bad.append(f"advance_eligible_strata={meta.get('advance_eligible_strata')}")
@@ -263,7 +280,7 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
         states = set(lc["turn_states"])
         if states != {"complete", "incomplete", "backchannel", "wait"}:
             bad.append(f"turn_states={sorted(states)}")
-        for c in clips:
+        for c in clips + rclips:
             if c["label"] not in states:
                 bad.append(f"{c['clip_id']}:label={c['label']}")
             g = c["gold"]
@@ -281,7 +298,7 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
     # V9 external material is hashes and ids only, outside the corpus --------------------------------------
     bad = []
     ext_p = D / "external_crosscheck.json"
-    corpus_hashes = {r["pcm_sha256"] for r in recs.values()} | {r["file_sha256"] for r in recs.values()} | {c["pcm"]["pcm_sha256"] for c in clips}
+    corpus_hashes = {r["pcm_sha256"] for r in all_recs.values()} | {r["file_sha256"] for r in recs.values()} | {c["pcm"]["pcm_sha256"] for c in clips + rclips}
     if not ext_p.exists():
         bad.append("external_crosscheck.json missing")
     else:
@@ -298,8 +315,8 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
             if s.get("stored_in_corpus") is not False:
                 bad.append(f"{s.get('set_id')}:stored_in_corpus")
     audio_dirs = {p.parts[0] + "/" + p.parts[1] for p in (Path(r) for r in tree_files(D)) if p.suffix in (".wav", ".flac", ".mp3", ".ogg", ".opus", ".parquet", ".tar") and len(p.parts) > 1}
-    if audio_dirs - {"audio/synth"}:
-        bad.append(f"audio outside audio/synth: {sorted(audio_dirs - {'audio/synth'})}")
+    if audio_dirs - {"audio/synth", "audio/reserve"}:
+        bad.append(f"audio outside audio/synth|reserve: {sorted(audio_dirs - {'audio/synth', 'audio/reserve'})}")
     R.add("external_material_hashes_and_ids_only", not bad, bad[:20])
 
     # V10 pins -----------------------------------------------------------------------------------------------
@@ -342,6 +359,64 @@ def verify(D: Path, label_contract_path: Path | None = None) -> Report:
                 if pf and (not (D / pf).exists() or sha256_file(D / pf) != ch.get("patch_sha256")):
                     bad.append(f"{ch.get('id')}:patch-digest")
     R.add("instrument_pins_recorded_and_hash_checked", not bad, bad[:20])
+
+    # V12 reserve stratum policy -------------------------------------------------------------------------------
+    bad = []
+    main_ids = {"pair": {p["pair_id"] for p in pairs}, "dialogue": {c["dialogue_id"] for c in clips}, "rec": set(recs)}
+    spk_main = {c["speaker_id"]: c["split"] for c in clips}
+    asst_main = {}
+    for c in clips:
+        asst_main.setdefault(c["assistant"]["recording_id"], c["split"])
+    for p in rpairs:
+        if p["stratum"] != "reserve":
+            bad.append(f"{p['pair_id']}:stratum")
+        if p["pair_id"] in main_ids["pair"] or p["dialogue_id"] in main_ids["dialogue"] or p["user_recording"] in main_ids["rec"]:
+            bad.append(f"{p['pair_id']}:id-collides-with-main")
+        if spk_main.get(p["speaker_id"]) != p["split"]:
+            bad.append(f"{p['pair_id']}:speaker-split-differs-from-main({spk_main.get(p['speaker_id'])} vs {p['split']})")
+    for c in rclips:
+        if asst_main.get(c["assistant"]["recording_id"]) != c["split"]:
+            bad.append(f"{c['clip_id']}:assistant-context-from-other-split")
+    rsj = D / "manifest" / "reserve" / "splits.json"
+    if rpairs:
+        if not rsj.exists():
+            bad.append("reserve/splits.json missing")
+        else:
+            rs = json.loads(rsj.read_text())
+            for sp in ("selection", "confirmation"):
+                if set(rs.get(sp, [])) != {p["pair_id"] for p in rpairs if p["split"] == sp}:
+                    bad.append(f"reserve/splits.json:{sp}:differs")
+    rej_ids = [x["pair_id"] for x in backfill["rejections"]]
+    main_by = {p["pair_id"]: p for p in pairs}
+    res_by = {p["pair_id"]: p for p in rpairs}
+    if len(set(rej_ids)) != len(rej_ids):
+        bad.append("duplicate review rejection")
+    for x in backfill["rejections"]:
+        if x["pair_id"] not in main_by:
+            bad.append(f"rejection of unknown main pair {x['pair_id']}")
+        if not x.get("reviewer") or not x.get("date"):
+            bad.append(f"rejection {x['pair_id']} lacks reviewer/date")
+    used_res = set()
+    for b in backfill["backfills"]:
+        rp, mp = res_by.get(b["reserve_pair_id"]), main_by.get(b["replaces_pair_id"])
+        if rp is None:
+            bad.append(f"backfill names unknown reserve pair {b['reserve_pair_id']}")
+            continue
+        if b["replaces_pair_id"] not in rej_ids or mp is None:
+            bad.append(f"backfill replaces {b['replaces_pair_id']} which has no recorded review rejection")
+            continue
+        if (rp["family"], rp["split"]) != (mp["family"], mp["split"]):
+            bad.append(f"backfill {b['reserve_pair_id']} differs from replaced pair in family/split")
+        if b["reserve_pair_id"] in used_res:
+            bad.append(f"reserve pair {b['reserve_pair_id']} backfilled twice")
+        used_res.add(b["reserve_pair_id"])
+    if len({b["replaces_pair_id"] for b in backfill["backfills"]}) != len(backfill["backfills"]):
+        bad.append("a rejected pair is backfilled more than once")
+    if meta.get("reserve", {}).get("policy_id") != RESERVE_POLICY_ID:
+        bad.append("corpus.json lacks the reserve policy")
+    if meta.get("reserve", {}).get("pairs") != len(rpairs):
+        bad.append("corpus.json reserve pair count differs")
+    R.add("reserve_stratum_policy", not bad, bad[:20])
 
     # V11 human slot exists and is honest -----------------------------------------------------------------------
     bad = []
