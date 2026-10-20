@@ -104,6 +104,39 @@ class ProducerReceiptTests(unittest.TestCase):
         self.assertFalse(v.passed)
         self.assertIn("after view 'dst'", v.reason)
 
+    def test_receipt_mid_line_after_case_label_is_found(self):
+        # combined logs: receipt trails `CASE(vars): ` and the OK/FAIL sits on the next line
+        clean = ('AK_GUARD_BANDS_V1 {"schema":"epyc.autokernel.guard_bands.v1","op":"MUL_MAT",'
+                 '"vars":"type_a=q4_K","output_dtype":"f32","views":[{"name":"dst"}],"violations":[]}')
+        text = "  MUL_MAT(type_a=q4_K): " + clean + "\n  OK\n  SCALE(x=1): FAIL\n"
+        got = gb.parse_receipts(text)
+        self.assertEqual(len(got), 1)
+        self.assertEqual((got[0]["op"], got[0]["vars"]), ("MUL_MAT", "type_a=q4_K"))
+        self.assertTrue(gb.verdict_from_receipt(got[0]).passed)
+
+    def test_line_start_receipt_is_unchanged(self):
+        clean = ('AK_GUARD_BANDS_V1 {"schema":"epyc.autokernel.guard_bands.v1",'
+                 '"views":[{"name":"dst"}],"violations":[]}')
+        one = gb.parse_receipts(clean)
+        self.assertEqual(one, [{"schema": gb.SCHEMA, "views": [{"name": "dst"}], "violations": []}])
+        self.assertEqual(gb.parse_receipts(clean + "\n" + clean + "\n"), one * 2)
+
+    def test_two_receipts_on_one_line_are_both_returned(self):
+        a = '{"schema":"epyc.autokernel.guard_bands.v1","op":"A","views":[],"violations":[]}'
+        b = '{"schema":"epyc.autokernel.guard_bands.v1","op":"B","views":[],"violations":[]}'
+        glued = "CASE1: AK_GUARD_BANDS_V1 " + a + "AK_GUARD_BANDS_V1 " + b + " OK"
+        spaced = "CASE1: AK_GUARD_BANDS_V1 " + a + " AK_GUARD_BANDS_V1 " + b + " OK"
+        for text in (glued, spaced):
+            self.assertEqual([r["op"] for r in gb.parse_receipts(text)], ["A", "B"])
+
+    def test_noise_and_broken_receipts_mid_line_are_skipped(self):
+        good = '{"schema":"epyc.autokernel.guard_bands.v1","op":"G","views":[],"violations":[]}'
+        text = ("AK_GUARD_BANDS_ is not a receipt; AK_GUARD_BANDS_V1 without payload\n"
+                "CASE: AK_GUARD_BANDS_V1 {broken AK_GUARD_BANDS_V1 " + good + " tail\n"
+                "no receipt here at all\n")
+        self.assertEqual([r.get("op") for r in gb.parse_receipts(text)], ["G"])
+        self.assertEqual(gb.parse_receipts("nothing\n"), [])
+
     def test_outside_view_band_has_its_own_reason(self):
         r = {"schema": gb.SCHEMA, "views": [{"name": "dst"}, {"name": "kv"}],
              "violations": [{"view": "dst", "band": "outside_view", "first_offset": 7,

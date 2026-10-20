@@ -136,15 +136,26 @@ RECEIPT_PREFIX = "AK_GUARD_BANDS_V1 "
 
 def parse_receipts(text: str) -> list[dict[str, Any]]:
     """The receipts a guard-banded `test-backend-ops` run (AKX_GUARD_BANDS=1) printed,
-    one per case, from its stderr/stdout. Lines that do not parse are skipped."""
+    one per case, from its stderr/stdout. The prefix is found ANYWHERE in the text: in a
+    combined log the receipt lands mid-line after `CASE(vars): `. Each JSON object is
+    decoded from where its prefix ends, so several receipts on one line are all returned.
+    Prefixes followed by JSON that does not parse are skipped."""
     import json
+    decoder = json.JSONDecoder()
     out = []
-    for line in text.splitlines():
-        if line.startswith(RECEIPT_PREFIX):
-            try:
-                out.append(json.loads(line[len(RECEIPT_PREFIX):]))
-            except ValueError:
-                continue
+    i = 0
+    while True:
+        j = text.find(RECEIPT_PREFIX, i)
+        if j < 0:
+            break
+        start = j + len(RECEIPT_PREFIX)
+        try:
+            obj, end = decoder.raw_decode(text, start)
+        except ValueError:
+            i = start
+            continue
+        out.append(obj)
+        i = end
     return out
 
 
