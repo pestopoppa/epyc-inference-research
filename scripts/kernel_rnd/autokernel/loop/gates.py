@@ -80,21 +80,15 @@ CASE_RECORD_LIMIT = 256
 _PARAM_TYPE_RE = re.compile(r"(?:^|,)(type(?:_[A-Za-z0-9]+)?)=([A-Za-z0-9_]+)")
 
 
-_GUARD_PREFIX = "AK_GUARD_BANDS_V1 "
-
-
 def _guard_receipt_fields(output: str) -> dict:
     """(op, vars) -> {"output_dtype", "output_rms"} from the opt-in guard-band receipt
-    lines (AKX_GUARD_BANDS=1 producer). Empty when the build does not emit them."""
+    lines (AKX_GUARD_BANDS=1 producer). Empty when the build does not emit them.
+    Parsing is shared with `guard_bands.parse_receipts`: the prefix is found anywhere in
+    a line and trailing text or several receipts on one line are handled there.
+    Imported here, not at module level: guard_bands imports this module."""
+    from . import guard_bands
     found = {}
-    for line in output.splitlines():
-        at = line.find(_GUARD_PREFIX)
-        if at < 0:
-            continue
-        try:
-            rec = json.loads(line[at + len(_GUARD_PREFIX):])
-        except ValueError:
-            continue
+    for rec in guard_bands.parse_receipts(output):
         if isinstance(rec, dict) and "op" in rec:
             rms = rec.get("output_rms")
             found[(rec["op"], rec.get("vars"))] = {

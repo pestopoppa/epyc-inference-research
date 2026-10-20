@@ -126,3 +126,29 @@ def test_guard_receipt_garbage_or_absent_stays_null():
     assert gates._guard_receipt_fields("AK_GUARD_BANDS_V1 {broken") == {}
     got = gates._guard_receipt_fields(_guard("SCALE", "x", "f32", None))
     assert got[("SCALE", "x")] == {"output_dtype": "f32", "output_rms": None}
+
+
+def test_guard_receipt_mid_line_with_trailing_text_is_read():
+    # combined log: receipt after `CASE(vars): `, trailing text on the same line
+    rec = _guard("MUL_MAT", "type_a=q4_K", "f32", 0.5)
+    got = gates._guard_receipt_fields("  MUL_MAT(type_a=q4_K): " + rec + " OK\n")
+    assert got == {("MUL_MAT", "type_a=q4_K"): {"output_dtype": "f32", "output_rms": 0.5}}
+
+
+def test_two_guard_receipts_on_one_line_are_both_read():
+    a = _guard("MUL_MAT", "type_a=q4_K", "f32", 1.0)
+    b = _guard("SCALE", "x", "f16", None)
+    got = gates._guard_receipt_fields("A: " + a + " " + b + " OK")
+    assert got == {("MUL_MAT", "type_a=q4_K"): {"output_dtype": "f32", "output_rms": 1.0},
+                   ("SCALE", "x"): {"output_dtype": "f16", "output_rms": None}}
+
+
+def test_existing_receipt_shapes_are_unchanged():
+    # line-start receipt, bool/str rms and non-str dtype must keep the old output shape
+    line = _guard("SCALE", "x", "f32", 2)
+    assert gates._guard_receipt_fields(line) == {
+        ("SCALE", "x"): {"output_dtype": "f32", "output_rms": 2.0}}
+    bad = ('AK_GUARD_BANDS_V1 {"op":"SCALE","vars":"y","output_dtype":7,"output_rms":true}\n'
+           'AK_GUARD_BANDS_V1 {"vars":"no-op-key"}\n')
+    assert gates._guard_receipt_fields(bad) == {
+        ("SCALE", "y"): {"output_dtype": None, "output_rms": None}}
