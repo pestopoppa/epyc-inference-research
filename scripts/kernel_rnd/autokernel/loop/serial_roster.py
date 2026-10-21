@@ -104,7 +104,9 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   # launch, request and campaign documents are not overridden.
                   *sr.RUNTIME_PROTOCOL_FLAGS}
         # Bare switches: instruments and rankers, never identities.
-        switches = {"--rank-prior-experiments", "--no-rank-prior-experiments", "--node-profile", *sr.RUNTIME_PROTOCOL_SWITCHES}
+        switches = {"--rank-prior-experiments", "--no-rank-prior-experiments", "--node-profile",
+                    "--require-serving-floor", "--serving-calibration-only",
+                    *sr.RUNTIME_PROTOCOL_SWITCHES}
         iterator = iter(extra)
         for arg in iterator:
             flag, equals, value = arg.partition("=")

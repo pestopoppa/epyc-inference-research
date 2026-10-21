@@ -2053,6 +2053,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="explicit startup A/A pair count for the held-out request-bound floor")
     parser.add_argument("--heldout-calibration-only", action="store_true",
                         help="finish after explicit held-out A/A calibration; draw no proposal")
+    parser.add_argument("--serving-calibration-only", action="store_true",
+                        help="finish after explicit --cpu-calibrate-serving A/A calibration: no "
+                             "reprofile, no planner, no proposal; the run ends 'stopped' with 0 "
+                             "outcomes (DS41-1017 floor window, operator 2026-10-21)")
     parser.add_argument("--experimental-branch",
                         help="explicit serving candidate branch; never the canonical champion")
     parser.add_argument("--cpu-calibrate-serving", type=int,
@@ -2828,6 +2832,11 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("held-out calibration count is below the selected instrument minimum")
     if args.heldout_calibration_only and args.cpu_calibrate_heldout is None:
         parser.error("--heldout-calibration-only requires --cpu-calibrate-heldout")
+    if args.serving_calibration_only and (
+            args.cpu_calibrate_serving is None or not args.cpu_serving_launch
+            or args.validate_source_continuation or getattr(args, "validate_source_loo", False)):
+        parser.error("--serving-calibration-only requires CPU serving with an explicit "
+                     "--cpu-calibrate-serving N and no source validation")
     cpu_launch = direct_launch if args.cpu_serving_launch else None
     try:
         keep_dims = surface_validation.parse_dimensions(args.keep_dimensions)
@@ -7088,7 +7097,12 @@ def main(argv: list[str] | None = None) -> int:
                         runtime_preparation.update(calibration=reference.to_dict(),
                             status="numeric_calibration_accepted" if solved.accepted else "calibration_failed")
                         solved.require_accepted()
-            if screen_confirmation is None and not args.validate_source_continuation:
+            if args.serving_calibration_only:
+                cpu_profile_observation.update(status="not_collected",
+                    reason="--serving-calibration-only: floor calibration, no proposal or profiling")
+                node_profile_observation.update(status="not_collected",
+                    reason="--serving-calibration-only: floor calibration, no proposal or profiling")
+            elif screen_confirmation is None and not args.validate_source_continuation:
                 reprofile()
             elif screen_confirmation is not None:
                 cpu_profile_observation.update(status="not_collected",
@@ -7392,9 +7406,12 @@ def main(argv: list[str] | None = None) -> int:
                         args.out, validation_row)
 
             publish("running", hotspot_rows=hotspot_rows)
-            if args.heldout_calibration_only:
+            if args.heldout_calibration_only or args.serving_calibration_only:
                 pooled = pool.PoolResult(outcomes=[], wall_seconds=time.time() - started)
                 outcomes = []
+                if args.serving_calibration_only:
+                    # Terminal 'stopped': serial_run accepts 0 of N iterations and stops.
+                    stopping["asked"] = True
             elif args.validate_source_continuation:
                 validation_body = surface_validation.reopen_reference(
                     source_validation_reference)

@@ -65,7 +65,8 @@ def test_heldout_floor_path_is_request_bound_and_not_public_floor(tmp_path):
 def test_calibration_only_branch_precedes_proposal_pool():
     source = (Path(__file__).parent / "run.py").read_text()
     end = source.index("        publish_held_claims()\n        elapsed = time.time() - started")
-    branch = source.rfind("            if args.heldout_calibration_only:", 0, end)
+    branch = source.rfind(
+        "            if args.heldout_calibration_only or args.serving_calibration_only:", 0, end)
     assert branch > 0
     assert "pooled = pool.PoolResult(outcomes=[]" in source[branch:end]
     assert "elif args.validate_source_continuation:" in source[branch:end]
