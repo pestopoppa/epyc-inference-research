@@ -1,0 +1,80 @@
+== honest-174-SWA.log
+0.02.060.727 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 1081, task.n_tokens = 1093, t = 5.08 ms
+== honest-abort-ATT.log
+0.01.816.040 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = kv, n_fork_tokens = 1640, task.n_tokens = 3300, t = 0.10 ms
+abort@0.1: slot 0 n_prompt_tokens 1640 cells 1640, sibling n_fork_tokens 1640 (kv)
+0.07.900.541 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = kv, n_fork_tokens = 1680, task.n_tokens = 3298, t = 0.07 ms
+abort@0.5: slot 0 n_prompt_tokens 1680 cells 1680, sibling n_fork_tokens 1680 (kv)
+0.14.592.698 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = kv, n_fork_tokens = 2720, task.n_tokens = 3301, t = 0.15 ms
+abort@1.2: slot 0 n_prompt_tokens 2720 cells 2720, sibling n_fork_tokens 2720 (kv)
+0.20.834.404 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = kv, n_fork_tokens = 2800, task.n_tokens = 3297, t = 0.14 ms
+abort@1.6: slot 0 n_prompt_tokens 2800 cells 2800, sibling n_fork_tokens 2800 (kv)
+0.27.607.081 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = kv, n_fork_tokens = 3288, task.n_tokens = 3298, t = 0.14 ms
+abort@2.2: slot 0 n_prompt_tokens 3306 cells 3306, sibling n_fork_tokens 3288 (kv)
+== honest-abort-HYB.log
+0.02.374.730 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 1251, task.n_tokens = 3300, t = 55.45 ms
+abort@0.1: slot 0 n_prompt_tokens 1251 cells 1251, sibling n_fork_tokens 1251 (end)
+0.09.491.308 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 1171, task.n_tokens = 3298, t = 8.34 ms
+abort@0.5: slot 0 n_prompt_tokens 1171 cells 1171, sibling n_fork_tokens 1171 (end)
+0.17.435.806 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 2371, task.n_tokens = 3301, t = 6.30 ms
+abort@1.2: slot 0 n_prompt_tokens 2371 cells 2371, sibling n_fork_tokens 2371 (end)
+0.24.590.495 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 2171, task.n_tokens = 3297, t = 6.51 ms
+abort@1.6: slot 0 n_prompt_tokens 2171 cells 2171, sibling n_fork_tokens 2171 (end)
+0.32.596.367 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 3211, task.n_tokens = 3298, t = 6.80 ms
+abort@2.2: slot 0 n_prompt_tokens 3211 cells 3211, sibling n_fork_tokens 3211 (end)
+== honest-abort-SWA.log
+0.01.817.845 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 408, task.n_tokens = 3276, t = 2.57 ms
+abort@0.1: slot 0 n_prompt_tokens 568 cells 1136, sibling n_fork_tokens 408 (checkpoint)
+0.08.614.461 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 408, task.n_tokens = 3274, t = 2.59 ms
+abort@0.5: slot 0 n_prompt_tokens 1328 cells 2656, sibling n_fork_tokens 408 (checkpoint)
+0.16.028.160 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 408, task.n_tokens = 3277, t = 1.49 ms
+abort@1.2: slot 0 n_prompt_tokens 2688 cells 4992, sibling n_fork_tokens 408 (checkpoint)
+0.23.851.160 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 408, task.n_tokens = 3274, t = 1.50 ms
+abort@1.6: slot 0 n_prompt_tokens 2608 cells 4912, sibling n_fork_tokens 408 (checkpoint)
+0.32.304.871 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 3239, task.n_tokens = 3274, t = 9.27 ms
+abort@2.2: slot 0 n_prompt_tokens 3282 cells 5586, sibling n_fork_tokens 3239 (checkpoint)
+== honest-busy-ATT.log
+0.00.656.595 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = kv, n_fork_tokens = 137, task.n_tokens = 147, t = 0.04 ms
+== honest-busy-HYB.log
+0.01.224.370 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 137, task.n_tokens = 147, t = 5.26 ms
+== honest-busy-SWA.log
+0.00.707.339 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 136, task.n_tokens = 146, t = 1.61 ms
+== honest-key-HYB.log
+0.01.875.081 I slot do_slot_fork: id  0 | task -1 | slot fork: src = 2 (idle), kind = checkpoint, n_fork_tokens = 114, task.n_tokens = 152, t = 2.71 ms
+0.02.216.542 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 137, task.n_tokens = 146, t = 6.92 ms
+== honest-key-SWA.log
+0.02.039.448 I slot do_slot_fork: id  0 | task -1 | slot fork: src = 2 (idle), kind = checkpoint, n_fork_tokens = 114, task.n_tokens = 151, t = 0.34 ms
+0.02.426.130 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 136, task.n_tokens = 146, t = 1.87 ms
+== honest-p2-ATT.log
+0.00.599.344 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = kv, n_fork_tokens = 137, task.n_tokens = 149, t = 0.03 ms
+== honest-p2-HYB.log
+0.01.162.811 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 137, task.n_tokens = 149, t = 8.46 ms
+== honest-p2-SWA.log
+0.00.657.835 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 136, task.n_tokens = 148, t = 1.46 ms
+== honest-same-HYB.log
+0.01.172.824 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 137, task.n_tokens = 149, t = 6.78 ms
+== honest-same-SWA.log
+0.01.152.683 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 136, task.n_tokens = 148, t = 1.17 ms
+== honest-step-HYB.log
+delay 0.09s (0.1 of prefill): source mid-prefill True (n_prompt_tokens 120), sibling n_fork_tokens 0 from slot -1
+0.03.834.741 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 274, task.n_tokens = 284, t = 4.80 ms
+delay 0.27s (0.3 of prefill): source mid-prefill True (n_prompt_tokens 354), sibling n_fork_tokens 274 from slot 0
+0.05.492.262 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 274, task.n_tokens = 287, t = 4.79 ms
+delay 0.44s (0.5 of prefill): source mid-prefill True (n_prompt_tokens 571), sibling n_fork_tokens 274 from slot 0
+delay 0.44: greedy flip at a near-tie of the fresh run, index 4, top-2 margin 0.037 nats
+0.07.130.416 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 274, task.n_tokens = 283, t = 5.81 ms
+delay 0.62s (0.7 of prefill): source mid-prefill True (n_prompt_tokens 731), sibling n_fork_tokens 274 from slot 0
+0.08.797.196 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 274, task.n_tokens = 284, t = 5.24 ms
+delay 0.80s (0.9 of prefill): source mid-prefill True (n_prompt_tokens 971), sibling n_fork_tokens 274 from slot 0
+delay 0.80: greedy flip at a near-tie of the fresh run, index 1, top-2 margin 0.065 nats
+== honest-step-SWA.log
+0.01.967.937 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 136, task.n_tokens = 284, t = 1.20 ms
+delay 0.08s (0.1 of prefill): source mid-prefill True (n_prompt_tokens 136), sibling n_fork_tokens 136 from slot 0
+0.03.495.209 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 272, task.n_tokens = 282, t = 0.94 ms
+delay 0.24s (0.3 of prefill): source mid-prefill True (n_prompt_tokens 392), sibling n_fork_tokens 272 from slot 0
+0.04.908.501 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 272, task.n_tokens = 285, t = 0.94 ms
+delay 0.40s (0.5 of prefill): source mid-prefill True (n_prompt_tokens 608), sibling n_fork_tokens 272 from slot 0
+0.06.380.546 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 272, task.n_tokens = 282, t = 0.94 ms
+delay 0.56s (0.7 of prefill): source mid-prefill True (n_prompt_tokens 808), sibling n_fork_tokens 272 from slot 0
+0.07.787.965 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 272, task.n_tokens = 282, t = 1.51 ms
+delay 0.73s (0.9 of prefill): source mid-prefill True (n_prompt_tokens 1048), sibling n_fork_tokens 272 from slot 0

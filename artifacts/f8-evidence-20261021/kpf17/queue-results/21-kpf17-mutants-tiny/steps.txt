@@ -1,0 +1,9 @@
+mut-17.1-1-ckpt_ntokens_skew OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+mut-17.1-2-ckpt_ntokens_skew OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+mut-17.1-2-skew+no_posmax_guard OK mutation ckpt_ntokens_skew,no_posmax_guard DETECTED (failed=1 passed=0)
+mut-17.1-4-fork_no_lcp OK mutation fork_no_lcp DETECTED (failed=1 passed=0)
+mut-17.2-1-fork_skip_ckpt_load OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+mut-17.2-2-fork_skip_ckpt_load OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+mut-17.2-3-fork_clobber_src FAIL MUTATION_NOT_DETECTED mut=fork_clobber_src passed=1
+mut-17.2-4-skew+no_posmax_guard OK mutation ckpt_ntokens_skew,no_posmax_guard DETECTED (failed=1 passed=0)
+mut-17.3-pin_cap_off OK mutation pin_cap_off DETECTED (failed=1 passed=0)

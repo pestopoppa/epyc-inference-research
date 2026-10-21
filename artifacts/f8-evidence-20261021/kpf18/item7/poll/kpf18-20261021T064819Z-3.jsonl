@@ -1,0 +1,37 @@
+{"t": 1792565458.72, "metrics": {"llamacpp:requests_processing": 0.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 16384, "slots_busy": 0}
+{"t": 1792565459.722, "metrics": {"llamacpp:requests_processing": 0.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565460.724, "metrics": {"llamacpp:requests_processing": 0.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 16384, "slots_busy": 0}
+{"t": 1792565461.726, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565470.749, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 22528, "slots_busy": 4}
+{"t": 1792565492.104, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565507.364, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 28672, "slots_busy": 4}
+{"t": 1792565547.034, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565571.49, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 34816, "slots_busy": 4}
+{"t": 1792565616.765, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565646.639, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 40956, "slots_busy": 4}
+{"t": 1792565677.861, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565697.606, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 47100, "slots_busy": 4}
+{"t": 1792565745.199, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565772.203, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 53244, "slots_busy": 4}
+{"t": 1792565813.344, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565825.988, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 59380, "slots_busy": 4}
+{"t": 1792565860.61, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565882.323, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 65511, "slots_busy": 4}
+{"t": 1792565933.023, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565942.185, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68179, "slots_busy": 4}
+{"t": 1792565973.115, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565974.649, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68238, "slots_busy": 4}
+{"t": 1792565976.841, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565978.288, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68320, "slots_busy": 4}
+{"t": 1792565980.588, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565982.199, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68386, "slots_busy": 3}
+{"t": 1792565983.889, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565984.986, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68439, "slots_busy": 3}
+{"t": 1792565986.603, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565987.639, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68499, "slots_busy": 3}
+{"t": 1792565989.235, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565990.309, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68551, "slots_busy": 3}
+{"t": 1792565991.948, "metrics": {"llamacpp:requests_processing": 2.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565993.001, "metrics": {"llamacpp:requests_processing": 1.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68603, "slots_busy": 1}
+{"t": 1792565994.287, "metrics": {"llamacpp:requests_processing": 0.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565995.288, "metrics": {"llamacpp:requests_processing": 0.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68604, "slots_busy": 0}

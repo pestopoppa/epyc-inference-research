@@ -1,0 +1,2557 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.0.3, pluggy-1.6.0
+rootdir: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests
+configfile: pytest.ini
+plugins: asyncio-1.3.0, timeout-2.4.0, langsmith-0.7.30, cov-7.1.0, xdist-3.8.0, hypothesis-6.151.13, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 23 deselected / 1 selected
+
+unit/test_slot_fork.py F                                                 [100%]
+
+=================================== FAILURES ===================================
+______________ test_kpf174_swa_pinned_junction_fork_equals_fresh _______________
+
+self = <urllib3.connectionpool.HTTPConnectionPool object at 0x73960f26d250>
+method = 'POST', url = '/completion'
+body = b'{"prompt": [818, 63937, 64222, 7953, 496, 15318, 2212, 236761, 7685, 9137, 668, 7971, 1679, 506, 6573, 236764, 506, ...36881, 25685, 236787], "id_slot": 1, "n_predict": 24, "cache_prompt": true, "temperature": 0.0, "return_tokens": true}'
+headers = {'User-Agent': 'python-requests/2.33.1', 'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive', 'Content-Length': '6835', 'Content-Type': 'application/json'}
+retries = Retry(total=0, connect=None, read=False, redirect=None, status=None)
+redirect = False, assert_same_host = False
+timeout = Timeout(connect=600, read=600, total=None), pool_timeout = None
+release_conn = False, chunked = False, body_pos = None, preload_content = False
+decode_content = False, response_kw = {}
+parsed_url = Url(scheme=None, auth=None, host=None, port=None, path='/completion', query=None, fragment=None)
+destination_scheme = None, conn = None, release_this_conn = True
+http_tunnel_required = False, err = None, clean_exit = False
+
+    def urlopen(  # type: ignore[override]
+        self,
+        method: str,
+        url: str,
+        body: _TYPE_BODY | None = None,
+        headers: typing.Mapping[str, str] | None = None,
+        retries: Retry | bool | int | None = None,
+        redirect: bool = True,
+        assert_same_host: bool = True,
+        timeout: _TYPE_TIMEOUT = _DEFAULT_TIMEOUT,
+        pool_timeout: int | None = None,
+        release_conn: bool | None = None,
+        chunked: bool = False,
+        body_pos: _TYPE_BODY_POSITION | None = None,
+        preload_content: bool = True,
+        decode_content: bool = True,
+        **response_kw: typing.Any,
+    ) -> BaseHTTPResponse:
+        """
+        Get a connection from the pool and perform an HTTP request. This is the
+        lowest level call for making a request, so you'll need to specify all
+        the raw details.
+    
+        .. note::
+    
+           More commonly, it's appropriate to use a convenience method
+           such as :meth:`request`.
+    
+        .. note::
+    
+           `release_conn` will only behave as expected if
+           `preload_content=False` because we want to make
+           `preload_content=False` the default behaviour someday soon without
+           breaking backwards compatibility.
+    
+        :param method:
+            HTTP request method (such as GET, POST, PUT, etc.)
+    
+        :param url:
+            The URL to perform the request on.
+    
+        :param body:
+            Data to send in the request body, either :class:`str`, :class:`bytes`,
+            an iterable of :class:`str`/:class:`bytes`, or a file-like object.
+    
+        :param headers:
+            Dictionary of custom headers to send, such as User-Agent,
+            If-None-Match, etc. If None, pool headers are used. If provided,
+            these headers completely replace any pool-specific headers.
+    
+        :param retries:
+            Configure the number of retries to allow before raising a
+            :class:`~urllib3.exceptions.MaxRetryError` exception.
+    
+            If ``None`` (default) will retry 3 times, see ``Retry.DEFAULT``. Pass a
+            :class:`~urllib3.util.retry.Retry` object for fine-grained control
+            over different types of retries.
+            Pass an integer number to retry connection errors that many times,
+            but no other types of errors. Pass zero to never retry.
+    
+            If ``False``, then retries are disabled and any exception is raised
+            immediately. Also, instead of raising a MaxRetryError on redirects,
+            the redirect response will be returned.
+    
+        :type retries: :class:`~urllib3.util.retry.Retry`, False, or an int.
+    
+        :param redirect:
+            If True, automatically handle redirects (status codes 301, 302,
+            303, 307, 308). Each redirect counts as a retry. Disabling retries
+            will disable redirect, too.
+    
+        :param assert_same_host:
+            If ``True``, will make sure that the host of the pool requests is
+            consistent else will raise HostChangedError. When ``False``, you can
+            use the pool on an HTTP proxy and request foreign hosts.
+    
+        :param timeout:
+            If specified, overrides the default timeout for this one
+            request. It may be a float (in seconds) or an instance of
+            :class:`urllib3.util.Timeout`.
+    
+        :param pool_timeout:
+            If set and the pool is set to block=True, then this method will
+            block for ``pool_timeout`` seconds and raise EmptyPoolError if no
+            connection is available within the time period.
+    
+        :param bool preload_content:
+            If True, the response's body will be preloaded into memory.
+    
+        :param bool decode_content:
+            If True, will attempt to decode the body based on the
+            'content-encoding' header.
+    
+        :param release_conn:
+            If False, then the urlopen call will not release the connection
+            back into the pool once a response is received (but will release if
+            you read the entire contents of the response such as when
+            `preload_content=True`). This is useful if you're not preloading
+            the response's content immediately. You will need to call
+            ``r.release_conn()`` on the response ``r`` to return the connection
+            back into the pool. If None, it takes the value of ``preload_content``
+            which defaults to ``True``.
+    
+        :param bool chunked:
+            If True, urllib3 will send the body using chunked transfer
+            encoding. Otherwise, urllib3 will send the body using the standard
+            content-length form. Defaults to False.
+    
+        :param int body_pos:
+            Position to seek to in file-like body in the event of a retry or
+            redirect. Typically this won't need to be set because urllib3 will
+            auto-populate the value when needed.
+        """
+        parsed_url = parse_url(url)
+        destination_scheme = parsed_url.scheme
+    
+        if headers is None:
+            headers = self.headers
+    
+        if not isinstance(retries, Retry):
+            retries = Retry.from_int(retries, redirect=redirect, default=self.retries)
+    
+        if release_conn is None:
+            release_conn = preload_content
+    
+        # Check host
+        if assert_same_host and not self.is_same_host(url):
+            raise HostChangedError(self, url, retries)
+    
+        # Ensure that the URL we're connecting to is properly encoded
+        if url.startswith("/"):
+            url = to_str(_encode_target(url))
+        else:
+            url = to_str(parsed_url.url)
+    
+        conn = None
+    
+        # Track whether `conn` needs to be released before
+        # returning/raising/recursing. Update this variable if necessary, and
+        # leave `release_conn` constant throughout the function. That way, if
+        # the function recurses, the original value of `release_conn` will be
+        # passed down into the recursive call, and its value will be respected.
+        #
+        # See issue #651 [1] for details.
+        #
+        # [1] <https://github.com/urllib3/urllib3/issues/651>
+        release_this_conn = release_conn
+    
+        http_tunnel_required = connection_requires_http_tunnel(
+            self.proxy, self.proxy_config, destination_scheme
+        )
+    
+        # Merge the proxy headers. Only done when not using HTTP CONNECT. We
+        # have to copy the headers dict so we can safely change it without those
+        # changes being reflected in anyone else's copy.
+        if not http_tunnel_required:
+            headers = headers.copy()  # type: ignore[attr-defined]
+            headers.update(self.proxy_headers)  # type: ignore[union-attr]
+    
+        # Must keep the exception bound to a separate variable or else Python 3
+        # complains about UnboundLocalError.
+        err = None
+    
+        # Keep track of whether we cleanly exited the except block. This
+        # ensures we do proper cleanup in finally.
+        clean_exit = False
+    
+        # Rewind body position, if needed. Record current position
+        # for future rewinds in the event of a redirect/retry.
+        body_pos = set_file_position(body, body_pos)
+    
+        try:
+            # Request a connection from the queue.
+            timeout_obj = self._get_timeout(timeout)
+            conn = self._get_conn(timeout=pool_timeout)
+    
+            conn.timeout = timeout_obj.connect_timeout  # type: ignore[assignment]
+    
+            # Is this a closed/new connection that requires CONNECT tunnelling?
+            if self.proxy is not None and http_tunnel_required and conn.is_closed:
+                try:
+                    self._prepare_proxy(conn)
+                except (BaseSSLError, OSError, SocketTimeout) as e:
+                    self._raise_timeout(
+                        err=e, url=self.proxy.url, timeout_value=conn.timeout
+                    )
+                    raise
+    
+            # If we're going to release the connection in ``finally:``, then
+            # the response doesn't need to know about the connection. Otherwise
+            # it will also try to release it and we'll have a double-release
+            # mess.
+            response_conn = conn if not release_conn else None
+    
+            # Make the request on the HTTPConnection object
+>           response = self._make_request(
+                conn,
+                method,
+                url,
+                timeout=timeout_obj,
+                body=body,
+                headers=headers,
+                chunked=chunked,
+                retries=retries,
+                response_conn=response_conn,
+                preload_content=preload_content,
+                decode_content=decode_content,
+                **response_kw,
+            )
+
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:1443: in getresponse
+    response.begin()
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:337: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <http.client.HTTPResponse object at 0x73960f462cb0>
+
+    def _read_status(self):
+        line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+        if len(line) > _MAXLINE:
+            raise LineTooLong("status line")
+        if self.debuglevel > 0:
+            print("reply:", repr(line))
+        if not line:
+            # Presumably, the server closed the connection before
+            # sending a valid response.
+>           raise RemoteDisconnected("Remote end closed connection without"
+                                     " response")
+E           http.client.RemoteDisconnected: Remote end closed connection without response
+
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:306: RemoteDisconnected
+
+During handling of the above exception, another exception occurred:
+
+self = <requests.adapters.HTTPAdapter object at 0x73960f4655d0>
+request = <PreparedRequest [POST]>, stream = False
+timeout = Timeout(connect=600, read=600, total=None), verify = True, cert = None
+proxies = OrderedDict()
+
+    def send(
+        self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None
+    ):
+        """Sends PreparedRequest object. Returns Response object.
+    
+        :param request: The :class:`PreparedRequest <PreparedRequest>` being sent.
+        :param stream: (optional) Whether to stream the request content.
+        :param timeout: (optional) How long to wait for the server to send
+            data before giving up, as a float, or a :ref:`(connect timeout,
+            read timeout) <timeouts>` tuple.
+        :type timeout: float or tuple or urllib3 Timeout object
+        :param verify: (optional) Either a boolean, in which case it controls whether
+            we verify the server's TLS certificate, or a string, in which case it
+            must be a path to a CA bundle to use
+        :param cert: (optional) Any user-provided SSL certificate to be trusted.
+        :param proxies: (optional) The proxies dictionary to apply to the request.
+        :rtype: requests.Response
+        """
+    
+        try:
+            conn = self.get_connection_with_tls_context(
+                request, verify, proxies=proxies, cert=cert
+            )
+        except LocationValueError as e:
+            raise InvalidURL(e, request=request)
+    
+        self.cert_verify(conn, request.url, verify, cert)
+        url = self.request_url(request, proxies)
+        self.add_headers(
+            request,
+            stream=stream,
+            timeout=timeout,
+            verify=verify,
+            cert=cert,
+            proxies=proxies,
+        )
+    
+        chunked = not (request.body is None or "Content-Length" in request.headers)
+    
+        if isinstance(timeout, tuple):
+            try:
+                connect, read = timeout
+                timeout = TimeoutSauce(connect=connect, read=read)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, "
+                    f"or a single float to set both timeouts to the same value."
+                )
+        elif isinstance(timeout, TimeoutSauce):
+            pass
+        else:
+            timeout = TimeoutSauce(connect=timeout, read=timeout)
+    
+        try:
+>           resp = conn.urlopen(
+                method=request.method,
+                url=url,
+                body=request.body,
+                headers=request.headers,
+                redirect=False,
+                assert_same_host=False,
+                preload_content=False,
+                decode_content=False,
+                retries=self.max_retries,
+                timeout=timeout,
+                chunked=chunked,
+            )
+
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py:645: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:490: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:1443: in getresponse
+    response.begin()
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:337: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <http.client.HTTPResponse object at 0x73960f462cb0>
+
+    def _read_status(self):
+        line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+        if len(line) > _MAXLINE:
+            raise LineTooLong("status line")
+        if self.debuglevel > 0:
+            print("reply:", repr(line))
+        if not line:
+            # Presumably, the server closed the connection before
+            # sending a valid response.
+>           raise RemoteDisconnected("Remote end closed connection without"
+                                     " response")
+E           urllib3.exceptions.ProtocolError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:306: ProtocolError
+
+During handling of the above exception, another exception occurred:
+
+    def test_kpf174_swa_pinned_junction_fork_equals_fresh():
+        """MUTATION: ckpt_ntokens_skew, fork_skip_ckpt_load."""
+        server.n_batch = 256
+        server.n_ubatch = 256
+        server.start()
+        build_prompts()
+        props = server.make_request("GET", "/props").body
+        if props.get("slot_fork", {}).get("mode") != "checkpoint":
+            pytest.skip("not an SWA/hybrid checkpoint-mode model")
+        long_t = tokenize(TRUNK_TEXT * 8)
+        if len(long_t) < 700:
+            pytest.skip("trunk shorter than the SWA window")
+        complete(long_t, 0, n_predict=0, checkpoint_at=[len(long_t) // 2, -1])
+        rec = [{"n_tokens": c["n_tokens"], "pos_min": c["pos_min"], "pos_max": c["pos_max"], "pinned": c["pinned"]}
+               for c in ckpts(0)]
+        rp = os.environ.get("KPF_RECORD")
+        if rp:
+            with open(rp, "a") as f:
+                f.write(json.dumps({"case": "kpf174_swa_ckpt_ranges", "ckpts": rec, "n_trunk": len(long_t)}) + "\n")
+>       child = complete(long_t + SUF[1], 1)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+unit/test_slot_fork.py:1020: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+unit/test_slot_fork.py:115: in complete
+    res = server.make_request("POST", "/completion", data=data, timeout=600)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+utils.py:383: in make_request
+    response = requests.post(url, headers=headers, json=data, timeout=timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py:592: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py:706: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <requests.adapters.HTTPAdapter object at 0x73960f4655d0>
+request = <PreparedRequest [POST]>, stream = False
+timeout = Timeout(connect=600, read=600, total=None), verify = True, cert = None
+proxies = OrderedDict()
+
+    def send(
+        self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None
+    ):
+        """Sends PreparedRequest object. Returns Response object.
+    
+        :param request: The :class:`PreparedRequest <PreparedRequest>` being sent.
+        :param stream: (optional) Whether to stream the request content.
+        :param timeout: (optional) How long to wait for the server to send
+            data before giving up, as a float, or a :ref:`(connect timeout,
+            read timeout) <timeouts>` tuple.
+        :type timeout: float or tuple or urllib3 Timeout object
+        :param verify: (optional) Either a boolean, in which case it controls whether
+            we verify the server's TLS certificate, or a string, in which case it
+            must be a path to a CA bundle to use
+        :param cert: (optional) Any user-provided SSL certificate to be trusted.
+        :param proxies: (optional) The proxies dictionary to apply to the request.
+        :rtype: requests.Response
+        """
+    
+        try:
+            conn = self.get_connection_with_tls_context(
+                request, verify, proxies=proxies, cert=cert
+            )
+        except LocationValueError as e:
+            raise InvalidURL(e, request=request)
+    
+        self.cert_verify(conn, request.url, verify, cert)
+        url = self.request_url(request, proxies)
+        self.add_headers(
+            request,
+            stream=stream,
+            timeout=timeout,
+            verify=verify,
+            cert=cert,
+            proxies=proxies,
+        )
+    
+        chunked = not (request.body is None or "Content-Length" in request.headers)
+    
+        if isinstance(timeout, tuple):
+            try:
+                connect, read = timeout
+                timeout = TimeoutSauce(connect=connect, read=read)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, "
+                    f"or a single float to set both timeouts to the same value."
+                )
+        elif isinstance(timeout, TimeoutSauce):
+            pass
+        else:
+            timeout = TimeoutSauce(connect=timeout, read=timeout)
+    
+        try:
+            resp = conn.urlopen(
+                method=request.method,
+                url=url,
+                body=request.body,
+                headers=request.headers,
+                redirect=False,
+                assert_same_host=False,
+                preload_content=False,
+                decode_content=False,
+                retries=self.max_retries,
+                timeout=timeout,
+                chunked=chunked,
+            )
+    
+        except (ProtocolError, OSError) as err:
+>           raise ConnectionError(err, request=request)
+E           requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py:660: ConnectionError
+----------------------------- Captured stdout call -----------------------------
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18985 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf --batch-size 256 --ubatch-size 256 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r2-20261020/queue-results/26-kpf17-vacuity-recheck/slots-mut-174-fork_skip_ckpt_load-SWA --no-jinja --slot-fork-min-tokens 16
+server pid=1831240, pytest pid=1831239
+Waiting for server to start...
+0.00.001.561 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.858 W srv  llama_server: -----------------
+0.00.001.860 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.860 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.860 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.860 W srv  llama_server: -----------------
+0.00.003.041 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf'
+0.00.469.599 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+Response from server {
+  "error": {
+    "message": "Loading model",
+    "type": "unavailable_error",
+    "code": 503
+  }
+}
+Waiting for server to start...
+0.00.603.097 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.603.171 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = checkpoint, min tokens = 16, cache_idle_slots = 1
+0.00.604.774 I srv  llama_server: model loaded
+0.00.604.796 I srv  llama_server: listening on http://127.0.0.1:18985
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    818,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    236743
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    7626,
+    1602,
+    506,
+    32096,
+    1586,
+    9710,
+    528,
+    506,
+    34759,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1217,
+    1551,
+    20278,
+    1602,
+    506,
+    2212,
+    735,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    837,
+    3409,
+    1053,
+    919,
+    48312,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1015,
+    1676,
+    506,
+    2212,
+    1308,
+    506,
+    64222,
+    21136,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    15642,
+    886,
+    13315,
+    1003,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    4361,
+    1806,
+    2432,
+    506,
+    64222,
+    7971,
+    1679,
+    1418,
+    9137,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    8432,
+    531,
+    506,
+    1548,
+    529,
+    13763,
+    20896,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    23097,
+    506,
+    2212,
+    496,
+    2822,
+    3822,
+    236787
+  ]
+}
+Response from server {
+  "default_generation_settings": {
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": -1,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": -1,
+      "n_predict": -1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "none",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "n_ctx": 8192
+  },
+  "total_slots": 4,
+  "model_alias": "tinyllama-2",
+  "model_ftype": "Q8_0",
+  "model_path": "/mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "media_marker": "<__media_muJUlZv7ChMygrIuMOzlsWNCob7hcMTC__>",
+  "endpoint_slots": true,
+  "endpoint_props": false,
+  "endpoint_metrics": true,
+  "ui": true,
+  "ui_settings": {},
+  "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- if messages[0]['content'] is string -%}\n        {%- set first_user_prefix = messages[0]['content'] + '\n\n' -%}\n    {%- else -%}\n        {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- endif -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<start_of_image>' }}\n            {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}",
+  "chat_template_caps": {
+    "supports_object_arguments": false,
+    "supports_parallel_tool_calls": false,
+    "supports_preserve_reasoning": false,
+    "supports_string_content": true,
+    "supports_system_role": true,
+    "supports_tool_calls": false,
+    "supports_tools": false,
+    "supports_typed_content": false
+  },
+  "bos_token": "<bos>",
+  "eos_token": "<eos>",
+  "build_info": "b10359-1fd7e2e12",
+  "is_sleeping": false,
+  "cors_proxy_enabled": false,
+  "slot_fork": {
+    "min_tokens": 16,
+    "mode": "checkpoint",
+    "checkpoint_at": true
+  }
+}
+Response from server {
+  "tokens": [
+    818,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    669,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    669,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    669,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    669,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    669,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    669,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    669,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    236743
+  ]
+}
+0.01.017.238 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.017.259 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.01.212.237 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 256 (slots 1), budget = 0, t_iter = 194.9 ms, kv_pos = 256, ms/tok = 0.761
+0.01.435.402 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 256 (slots 1), budget = 0, t_iter = 223.1 ms, kv_pos = 512, ms/tok = 0.816
+0.01.458.552 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 23.1 ms, kv_pos = 540, ms/tok = 0.816
+0.01.698.926 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 256 (slots 1), budget = 0, t_iter = 238.8 ms, kv_pos = 796, ms/tok = 0.875
+0.01.722.755 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 29 (slots 1), budget = 0, t_iter = 23.7 ms, kv_pos = 825, ms/tok = 0.875
+0.01.965.170 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 252 (slots 1), budget = 0, t_iter = 240.5 ms, kv_pos = 1077, ms/tok = 0.914
+0.01.985.408 I slot print_timing: id  0 | task 0 | prompt eval time =     968.09 ms /  1081 tokens (    0.90 ms per token,  1116.64 tokens per second)
+0.01.985.468 I slot print_timing: id  0 | task 0 |        eval time =       0.00 ms /     1 tokens (    0.00 ms per token, 1000000.00 tokens per second)
+0.01.985.477 I slot print_timing: id  0 | task 0 |       total time =     968.09 ms /  1082 tokens
+0.01.985.488 I slot print_timing: id  0 | task 0 |    graphs reused =          1
+0.01.985.577 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1081, truncated = 0
+0.01.986.058 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 19.2 ms, kv_pos = 1081, ms/tok = 0.914
+Response from server {
+  "index": 0,
+  "content": "\n",
+  "tokens": [
+    107
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 1,
+  "tokens_evaluated": 1081,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 0,
+    "n_predict": 0,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. ",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 1081,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 1081,
+    "prompt_ms": 968.087,
+    "prompt_per_token_ms": 0.8955476410730805,
+    "prompt_per_second": 1116.6351784498706,
+    "predicted_n": 1,
+    "predicted_ms": 0.001,
+    "predicted_per_token_ms": 0.001,
+    "predicted_per_second": 1000000.0,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 0
+  }
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 1081,
+    "n_prompt_tokens_processed": 1081,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 2162,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 2162,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "905b06690d8d9d83",
+    "checkpoints": [
+      {
+        "n_tokens": 540,
+        "pos_min": 0,
+        "pos_max": 539,
+        "pinned": true,
+        "size_mib": 11.006385803222656,
+        "prefix_hash": "2c289d18874ebe2b"
+      },
+      {
+        "n_tokens": 825,
+        "pos_min": 0,
+        "pos_max": 824,
+        "pinned": false,
+        "size_mib": 11.006385803222656,
+        "prefix_hash": "98119f7828711915"
+      },
+      {
+        "n_tokens": 1077,
+        "pos_min": 0,
+        "pos_max": 1076,
+        "pinned": false,
+        "size_mib": 11.006385803222656,
+        "prefix_hash": "252df7df6849d02c"
+      },
+      {
+        "n_tokens": 1081,
+        "pos_min": 0,
+        "pos_max": 1080,
+        "pinned": true,
+        "size_mib": 11.006385803222656,
+        "prefix_hash": "905b06690d8d9d83"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 2162,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 2162,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 2162,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.991.196 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+0.01.996.258 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 1081, task.n_tokens = 1093, t = 5.02 ms
+0.01.996.292 I slot launch_slot_: id  1 | task 9 | processing task, is_child = 0
+0.02.003.675 E slot   operator(): id  1 | task 9 | n_past = 1081, slot.prompt.tokens.size() = 1081, seq_id = 1, pos_min = -1
+/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/server-context.cpp:4413: pos_min == -1, but n_past > 0 - should not happen: https://github.com/ggml-org/llama.cpp/pull/13833#discussion_r2116181237
+[New LWP 1831497]
+[New LWP 1831496]
+[New LWP 1831495]
+[New LWP 1831494]
+[New LWP 1831493]
+[New LWP 1831492]
+[New LWP 1831491]
+[New LWP 1831490]
+[New LWP 1831489]
+[New LWP 1831488]
+[New LWP 1831487]
+[New LWP 1831486]
+[New LWP 1831485]
+[New LWP 1831484]
+[New LWP 1831483]
+[New LWP 1831482]
+[New LWP 1831481]
+[New LWP 1831480]
+[New LWP 1831479]
+[New LWP 1831478]
+[New LWP 1831477]
+[New LWP 1831476]
+[New LWP 1831475]
+[New LWP 1831474]
+[New LWP 1831473]
+[New LWP 1831472]
+[New LWP 1831471]
+[New LWP 1831470]
+[New LWP 1831469]
+[New LWP 1831468]
+[New LWP 1831467]
+[New LWP 1831466]
+[New LWP 1831465]
+[New LWP 1831464]
+[New LWP 1831463]
+[New LWP 1831462]
+[New LWP 1831461]
+[New LWP 1831460]
+[New LWP 1831459]
+[New LWP 1831458]
+[New LWP 1831457]
+[New LWP 1831456]
+[New LWP 1831455]
+[New LWP 1831454]
+[New LWP 1831453]
+[New LWP 1831452]
+[New LWP 1831451]
+[New LWP 1831436]
+[New LWP 1831435]
+[New LWP 1831434]
+[New LWP 1831433]
+[New LWP 1831432]
+[New LWP 1831431]
+[New LWP 1831430]
+[New LWP 1831429]
+[New LWP 1831428]
+[New LWP 1831427]
+[New LWP 1831426]
+[New LWP 1831425]
+[New LWP 1831424]
+[New LWP 1831423]
+[New LWP 1831422]
+[New LWP 1831421]
+[New LWP 1831420]
+[New LWP 1831419]
+[New LWP 1831418]
+[New LWP 1831417]
+[New LWP 1831416]
+[New LWP 1831415]
+[New LWP 1831414]
+[New LWP 1831413]
+[New LWP 1831412]
+[New LWP 1831411]
+[New LWP 1831410]
+[New LWP 1831409]
+[New LWP 1831408]
+[New LWP 1831407]
+[New LWP 1831406]
+[New LWP 1831405]
+[New LWP 1831404]
+[New LWP 1831403]
+[New LWP 1831402]
+[New LWP 1831401]
+[New LWP 1831400]
+[New LWP 1831399]
+[New LWP 1831398]
+[New LWP 1831397]
+[New LWP 1831396]
+[New LWP 1831395]
+[New LWP 1831393]
+[New LWP 1831392]
+[New LWP 1831391]
+[New LWP 1831390]
+[New LWP 1831389]
+[New LWP 1831388]
+[New LWP 1831387]
+[New LWP 1831386]
+[New LWP 1831385]
+[New LWP 1831384]
+[New LWP 1831383]
+[New LWP 1831382]
+[New LWP 1831381]
+[New LWP 1831380]
+[New LWP 1831379]
+[New LWP 1831378]
+[New LWP 1831377]
+[New LWP 1831376]
+[New LWP 1831375]
+[New LWP 1831374]
+[New LWP 1831373]
+[New LWP 1831372]
+[New LWP 1831371]
+[New LWP 1831370]
+[New LWP 1831369]
+[New LWP 1831368]
+[New LWP 1831367]
+[New LWP 1831366]
+[New LWP 1831365]
+[New LWP 1831364]
+[New LWP 1831363]
+[New LWP 1831362]
+[New LWP 1831361]
+[New LWP 1831360]
+[New LWP 1831359]
+[New LWP 1831358]
+[New LWP 1831357]
+[New LWP 1831356]
+[New LWP 1831355]
+[New LWP 1831354]
+[New LWP 1831353]
+[New LWP 1831352]
+[New LWP 1831351]
+[New LWP 1831350]
+[New LWP 1831349]
+[New LWP 1831348]
+[New LWP 1831347]
+[New LWP 1831346]
+[New LWP 1831345]
+[New LWP 1831344]
+[New LWP 1831343]
+[New LWP 1831342]
+[New LWP 1831341]
+[New LWP 1831340]
+[New LWP 1831339]
+[New LWP 1831338]
+[New LWP 1831337]
+[New LWP 1831336]
+[New LWP 1831335]
+[New LWP 1831334]
+[New LWP 1831333]
+[New LWP 1831332]
+[New LWP 1831331]
+[New LWP 1831330]
+[New LWP 1831329]
+[New LWP 1831328]
+[New LWP 1831327]
+[New LWP 1831326]
+[New LWP 1831325]
+[New LWP 1831324]
+[New LWP 1831323]
+[New LWP 1831322]
+[New LWP 1831321]
+[New LWP 1831320]
+[New LWP 1831319]
+[New LWP 1831318]
+[New LWP 1831317]
+[New LWP 1831316]
+[New LWP 1831315]
+[New LWP 1831314]
+[New LWP 1831313]
+[New LWP 1831312]
+[New LWP 1831311]
+[New LWP 1831310]
+[New LWP 1831309]
+[New LWP 1831308]
+[New LWP 1831307]
+[New LWP 1831306]
+[New LWP 1831305]
+[New LWP 1831304]
+[New LWP 1831303]
+[New LWP 1831302]
+[New LWP 1831301]
+[New LWP 1831300]
+[New LWP 1831299]
+[New LWP 1831298]
+[New LWP 1831297]
+[New LWP 1831296]
+[New LWP 1831295]
+[New LWP 1831294]
+[New LWP 1831293]
+[New LWP 1831292]
+[New LWP 1831291]
+[New LWP 1831290]
+[New LWP 1831289]
+[New LWP 1831288]
+[New LWP 1831287]
+[New LWP 1831286]
+[New LWP 1831285]
+[New LWP 1831284]
+[New LWP 1831283]
+[New LWP 1831282]
+[New LWP 1831281]
+[New LWP 1831280]
+[New LWP 1831279]
+[New LWP 1831278]
+[New LWP 1831277]
+[New LWP 1831276]
+[New LWP 1831275]
+[New LWP 1831274]
+[New LWP 1831273]
+[New LWP 1831272]
+[New LWP 1831271]
+[New LWP 1831270]
+[New LWP 1831269]
+[New LWP 1831268]
+[New LWP 1831267]
+[New LWP 1831266]
+[New LWP 1831265]
+[New LWP 1831264]
+[New LWP 1831263]
+[New LWP 1831262]
+[New LWP 1831261]
+[New LWP 1831260]
+[New LWP 1831259]
+[New LWP 1831258]
+[New LWP 1831257]
+[New LWP 1831256]
+[New LWP 1831255]
+[New LWP 1831254]
+[New LWP 1831253]
+[New LWP 1831252]
+[New LWP 1831251]
+[New LWP 1831250]
+[New LWP 1831249]
+[New LWP 1831248]
+[New LWP 1831247]
+[New LWP 1831246]
+[New LWP 1831245]
+[New LWP 1831244]
+[New LWP 1831243]
+[New LWP 1831242]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00007d5adeddc772 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#0  0x00007d5adeddc772 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x00007d5adedd013c in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#2  0x00007d5adee4ca0f in wait4 () from /lib/x86_64-linux-gnu/libc.so.6
+#3  0x00007d5ade346573 in ggml_print_backtrace () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libggml-base.so.0
+#4  0x00007d5ade346726 in ggml_abort () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libggml-base.so.0
+#5  0x00007d5adf3cf399 in server_context_impl::pre_decode()::{lambda(server_slot&)#5}::operator()(server_slot&) const () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#6  0x00007d5adf3c5311 in server_context_impl::iterate(std::vector<server_slot, std::allocator<server_slot> >&, std::function<void (server_slot&)>) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#7  0x00007d5adf3c7a2d in server_context_impl::pre_decode() () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#8  0x00007d5adf3c8153 in server_context_impl::update_slots() () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#9  0x00007d5adf353f71 in server_queue::start_loop(long) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#10 0x00007d5adf2f2b82 in llama_server(common_params&, int, char**) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#11 0x00007d5adf2f47a6 in llama_server(int, char**) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#12 0x00007d5aded5a575 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#13 0x00007d5aded5a628 in __libc_start_main () from /lib/x86_64-linux-gnu/libc.so.6
+#14 0x00005fc71d901325 in _start ()
+[Inferior 1 (process 1831240) detached]
+--------------------------- Captured stdout teardown ---------------------------
+Stopping server with pid=1831240
+=========================== short test summary info ============================
+FAILED unit/test_slot_fork.py::test_kpf174_swa_pinned_junction_fork_equals_fresh
+======================= 1 failed, 23 deselected in 2.36s =======================

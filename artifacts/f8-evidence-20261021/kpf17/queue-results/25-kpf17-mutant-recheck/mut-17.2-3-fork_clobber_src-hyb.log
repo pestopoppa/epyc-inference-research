@@ -1,0 +1,5288 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.0.3, pluggy-1.6.0
+rootdir: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests
+configfile: pytest.ini
+plugins: asyncio-1.3.0, timeout-2.4.0, langsmith-0.7.30, cov-7.1.0, xdist-3.8.0, hypothesis-6.151.13, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 23 deselected / 1 selected
+
+unit/test_slot_fork.py F                                                 [100%]
+
+=================================== FAILURES ===================================
+________________ test_kpf172_fork_from_decoding_source_no_leak _________________
+
+self = <urllib3.connectionpool.HTTPConnectionPool object at 0x7db8ee67ffd0>
+method = 'POST', url = '/completion'
+body = b'{"prompt": [760, 324, 55965, 51624, 8341, 264, 16097, 1433, 13, 6983, 11129, 551, 5947, 1441, 279, 9662, 11, 279, 25...5], "id_slot": 1, "n_predict": 24, "cache_prompt": true, "temperature": 0.0, "return_tokens": true, "slot_fork": true}'
+headers = {'User-Agent': 'python-requests/2.33.1', 'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive', 'Content-Length': '969', 'Content-Type': 'application/json'}
+retries = Retry(total=0, connect=None, read=False, redirect=None, status=None)
+redirect = False, assert_same_host = False
+timeout = Timeout(connect=600, read=600, total=None), pool_timeout = None
+release_conn = False, chunked = False, body_pos = None, preload_content = False
+decode_content = False, response_kw = {}
+parsed_url = Url(scheme=None, auth=None, host=None, port=None, path='/completion', query=None, fragment=None)
+destination_scheme = None, conn = None, release_this_conn = True
+http_tunnel_required = False, err = None, clean_exit = False
+
+    def urlopen(  # type: ignore[override]
+        self,
+        method: str,
+        url: str,
+        body: _TYPE_BODY | None = None,
+        headers: typing.Mapping[str, str] | None = None,
+        retries: Retry | bool | int | None = None,
+        redirect: bool = True,
+        assert_same_host: bool = True,
+        timeout: _TYPE_TIMEOUT = _DEFAULT_TIMEOUT,
+        pool_timeout: int | None = None,
+        release_conn: bool | None = None,
+        chunked: bool = False,
+        body_pos: _TYPE_BODY_POSITION | None = None,
+        preload_content: bool = True,
+        decode_content: bool = True,
+        **response_kw: typing.Any,
+    ) -> BaseHTTPResponse:
+        """
+        Get a connection from the pool and perform an HTTP request. This is the
+        lowest level call for making a request, so you'll need to specify all
+        the raw details.
+    
+        .. note::
+    
+           More commonly, it's appropriate to use a convenience method
+           such as :meth:`request`.
+    
+        .. note::
+    
+           `release_conn` will only behave as expected if
+           `preload_content=False` because we want to make
+           `preload_content=False` the default behaviour someday soon without
+           breaking backwards compatibility.
+    
+        :param method:
+            HTTP request method (such as GET, POST, PUT, etc.)
+    
+        :param url:
+            The URL to perform the request on.
+    
+        :param body:
+            Data to send in the request body, either :class:`str`, :class:`bytes`,
+            an iterable of :class:`str`/:class:`bytes`, or a file-like object.
+    
+        :param headers:
+            Dictionary of custom headers to send, such as User-Agent,
+            If-None-Match, etc. If None, pool headers are used. If provided,
+            these headers completely replace any pool-specific headers.
+    
+        :param retries:
+            Configure the number of retries to allow before raising a
+            :class:`~urllib3.exceptions.MaxRetryError` exception.
+    
+            If ``None`` (default) will retry 3 times, see ``Retry.DEFAULT``. Pass a
+            :class:`~urllib3.util.retry.Retry` object for fine-grained control
+            over different types of retries.
+            Pass an integer number to retry connection errors that many times,
+            but no other types of errors. Pass zero to never retry.
+    
+            If ``False``, then retries are disabled and any exception is raised
+            immediately. Also, instead of raising a MaxRetryError on redirects,
+            the redirect response will be returned.
+    
+        :type retries: :class:`~urllib3.util.retry.Retry`, False, or an int.
+    
+        :param redirect:
+            If True, automatically handle redirects (status codes 301, 302,
+            303, 307, 308). Each redirect counts as a retry. Disabling retries
+            will disable redirect, too.
+    
+        :param assert_same_host:
+            If ``True``, will make sure that the host of the pool requests is
+            consistent else will raise HostChangedError. When ``False``, you can
+            use the pool on an HTTP proxy and request foreign hosts.
+    
+        :param timeout:
+            If specified, overrides the default timeout for this one
+            request. It may be a float (in seconds) or an instance of
+            :class:`urllib3.util.Timeout`.
+    
+        :param pool_timeout:
+            If set and the pool is set to block=True, then this method will
+            block for ``pool_timeout`` seconds and raise EmptyPoolError if no
+            connection is available within the time period.
+    
+        :param bool preload_content:
+            If True, the response's body will be preloaded into memory.
+    
+        :param bool decode_content:
+            If True, will attempt to decode the body based on the
+            'content-encoding' header.
+    
+        :param release_conn:
+            If False, then the urlopen call will not release the connection
+            back into the pool once a response is received (but will release if
+            you read the entire contents of the response such as when
+            `preload_content=True`). This is useful if you're not preloading
+            the response's content immediately. You will need to call
+            ``r.release_conn()`` on the response ``r`` to return the connection
+            back into the pool. If None, it takes the value of ``preload_content``
+            which defaults to ``True``.
+    
+        :param bool chunked:
+            If True, urllib3 will send the body using chunked transfer
+            encoding. Otherwise, urllib3 will send the body using the standard
+            content-length form. Defaults to False.
+    
+        :param int body_pos:
+            Position to seek to in file-like body in the event of a retry or
+            redirect. Typically this won't need to be set because urllib3 will
+            auto-populate the value when needed.
+        """
+        parsed_url = parse_url(url)
+        destination_scheme = parsed_url.scheme
+    
+        if headers is None:
+            headers = self.headers
+    
+        if not isinstance(retries, Retry):
+            retries = Retry.from_int(retries, redirect=redirect, default=self.retries)
+    
+        if release_conn is None:
+            release_conn = preload_content
+    
+        # Check host
+        if assert_same_host and not self.is_same_host(url):
+            raise HostChangedError(self, url, retries)
+    
+        # Ensure that the URL we're connecting to is properly encoded
+        if url.startswith("/"):
+            url = to_str(_encode_target(url))
+        else:
+            url = to_str(parsed_url.url)
+    
+        conn = None
+    
+        # Track whether `conn` needs to be released before
+        # returning/raising/recursing. Update this variable if necessary, and
+        # leave `release_conn` constant throughout the function. That way, if
+        # the function recurses, the original value of `release_conn` will be
+        # passed down into the recursive call, and its value will be respected.
+        #
+        # See issue #651 [1] for details.
+        #
+        # [1] <https://github.com/urllib3/urllib3/issues/651>
+        release_this_conn = release_conn
+    
+        http_tunnel_required = connection_requires_http_tunnel(
+            self.proxy, self.proxy_config, destination_scheme
+        )
+    
+        # Merge the proxy headers. Only done when not using HTTP CONNECT. We
+        # have to copy the headers dict so we can safely change it without those
+        # changes being reflected in anyone else's copy.
+        if not http_tunnel_required:
+            headers = headers.copy()  # type: ignore[attr-defined]
+            headers.update(self.proxy_headers)  # type: ignore[union-attr]
+    
+        # Must keep the exception bound to a separate variable or else Python 3
+        # complains about UnboundLocalError.
+        err = None
+    
+        # Keep track of whether we cleanly exited the except block. This
+        # ensures we do proper cleanup in finally.
+        clean_exit = False
+    
+        # Rewind body position, if needed. Record current position
+        # for future rewinds in the event of a redirect/retry.
+        body_pos = set_file_position(body, body_pos)
+    
+        try:
+            # Request a connection from the queue.
+            timeout_obj = self._get_timeout(timeout)
+            conn = self._get_conn(timeout=pool_timeout)
+    
+            conn.timeout = timeout_obj.connect_timeout  # type: ignore[assignment]
+    
+            # Is this a closed/new connection that requires CONNECT tunnelling?
+            if self.proxy is not None and http_tunnel_required and conn.is_closed:
+                try:
+                    self._prepare_proxy(conn)
+                except (BaseSSLError, OSError, SocketTimeout) as e:
+                    self._raise_timeout(
+                        err=e, url=self.proxy.url, timeout_value=conn.timeout
+                    )
+                    raise
+    
+            # If we're going to release the connection in ``finally:``, then
+            # the response doesn't need to know about the connection. Otherwise
+            # it will also try to release it and we'll have a double-release
+            # mess.
+            response_conn = conn if not release_conn else None
+    
+            # Make the request on the HTTPConnection object
+>           response = self._make_request(
+                conn,
+                method,
+                url,
+                timeout=timeout_obj,
+                body=body,
+                headers=headers,
+                chunked=chunked,
+                retries=retries,
+                response_conn=response_conn,
+                preload_content=preload_content,
+                decode_content=decode_content,
+                **response_kw,
+            )
+
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:1443: in getresponse
+    response.begin()
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:337: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <http.client.HTTPResponse object at 0x7db8ee688f40>
+
+    def _read_status(self):
+        line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+        if len(line) > _MAXLINE:
+            raise LineTooLong("status line")
+        if self.debuglevel > 0:
+            print("reply:", repr(line))
+        if not line:
+            # Presumably, the server closed the connection before
+            # sending a valid response.
+>           raise RemoteDisconnected("Remote end closed connection without"
+                                     " response")
+E           http.client.RemoteDisconnected: Remote end closed connection without response
+
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:306: RemoteDisconnected
+
+During handling of the above exception, another exception occurred:
+
+self = <requests.adapters.HTTPAdapter object at 0x7db8ee670d50>
+request = <PreparedRequest [POST]>, stream = False
+timeout = Timeout(connect=600, read=600, total=None), verify = True, cert = None
+proxies = OrderedDict()
+
+    def send(
+        self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None
+    ):
+        """Sends PreparedRequest object. Returns Response object.
+    
+        :param request: The :class:`PreparedRequest <PreparedRequest>` being sent.
+        :param stream: (optional) Whether to stream the request content.
+        :param timeout: (optional) How long to wait for the server to send
+            data before giving up, as a float, or a :ref:`(connect timeout,
+            read timeout) <timeouts>` tuple.
+        :type timeout: float or tuple or urllib3 Timeout object
+        :param verify: (optional) Either a boolean, in which case it controls whether
+            we verify the server's TLS certificate, or a string, in which case it
+            must be a path to a CA bundle to use
+        :param cert: (optional) Any user-provided SSL certificate to be trusted.
+        :param proxies: (optional) The proxies dictionary to apply to the request.
+        :rtype: requests.Response
+        """
+    
+        try:
+            conn = self.get_connection_with_tls_context(
+                request, verify, proxies=proxies, cert=cert
+            )
+        except LocationValueError as e:
+            raise InvalidURL(e, request=request)
+    
+        self.cert_verify(conn, request.url, verify, cert)
+        url = self.request_url(request, proxies)
+        self.add_headers(
+            request,
+            stream=stream,
+            timeout=timeout,
+            verify=verify,
+            cert=cert,
+            proxies=proxies,
+        )
+    
+        chunked = not (request.body is None or "Content-Length" in request.headers)
+    
+        if isinstance(timeout, tuple):
+            try:
+                connect, read = timeout
+                timeout = TimeoutSauce(connect=connect, read=read)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, "
+                    f"or a single float to set both timeouts to the same value."
+                )
+        elif isinstance(timeout, TimeoutSauce):
+            pass
+        else:
+            timeout = TimeoutSauce(connect=timeout, read=timeout)
+    
+        try:
+>           resp = conn.urlopen(
+                method=request.method,
+                url=url,
+                body=request.body,
+                headers=request.headers,
+                redirect=False,
+                assert_same_host=False,
+                preload_content=False,
+                decode_content=False,
+                retries=self.max_retries,
+                timeout=timeout,
+                chunked=chunked,
+            )
+
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py:645: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:490: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:1443: in getresponse
+    response.begin()
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:337: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <http.client.HTTPResponse object at 0x7db8ee688f40>
+
+    def _read_status(self):
+        line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+        if len(line) > _MAXLINE:
+            raise LineTooLong("status line")
+        if self.debuglevel > 0:
+            print("reply:", repr(line))
+        if not line:
+            # Presumably, the server closed the connection before
+            # sending a valid response.
+>           raise RemoteDisconnected("Remote end closed connection without"
+                                     " response")
+E           urllib3.exceptions.ProtocolError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:306: ProtocolError
+
+During handling of the above exception, another exception occurred:
+
+    def test_kpf172_fork_from_decoding_source_no_leak():
+        """KPF-17.2(3): checkpoint_at beyond the prompt (inside the generation / unverified draft window) creates nothing, and a
+        fork taken while the source decodes (KPF_SPEC_TYPE=draft-mtp: k pending drafts) leaves the source untouched.
+        MUTATION: fork_clobber_src (fork disturbs its source), fork_skip_ckpt_load.
+    
+        Jobs 20 and 21 (2026-10-21) never forked here (no do_slot_fork line in either log), so fork_clobber_src went
+        undetected: the wait loop read next_token.n_decoded, which /slots reports from the PREVIOUS task until the new one
+        generates (48 = the base run), so it returned at once while slot 0 was still prefilling (n_prompt_tokens 64 < the
+        137-token junction), the source held no checkpoint the child could use, and the child prefilled from scratch. Now:
+        wait on n_prompt_tokens past the prompt, require the child to have forked from slot 0, check the source's state
+        directly (cells == tokens, same length as the unforked run) and compare its tokens against an A/A control (same
+        concurrency, child with slot_fork off) instead of a fixed tolerance."""
+        server.start()
+        build_prompts()
+        need_ckpt_mode()
+        prompt = TRUNK + SUF[0]
+        at = [TRUNK_LEN, len(prompt) + 3, len(prompt) + 10]
+        n_src = 96  # long enough that the source is still decoding while the child forks and prefills
+    
+        def src_state() -> tuple[int, int]:
+            s0 = slots()[0]
+            return s0.get("n_prompt_tokens", 0), s0["kv_cells"]["private"] + s0["kv_cells"]["shared"]
+    
+        base = complete(prompt, 0, n_predict=n_src, checkpoint_at=at)
+        assert all(c["n_tokens"] <= len(prompt) for c in ckpts(0)), ckpts(0)  # beyond-prompt positions never checkpointed
+        base_tok, base_cells = src_state()
+        assert base_tok == base_cells, (base_tok, base_cells)
+    
+        def concurrent(child_fork: bool) -> tuple[dict, dict]:
+            for i in (0, 1, 2):
+                erase_slot(i)
+            out: dict = {}
+            t = threading.Thread(target=lambda: out.update(complete(prompt, 0, n_predict=n_src, checkpoint_at=at)))
+            t.start()
+            deadline = time.time() + 300
+            while True:  # slot 0 has decoded >= 3 generated tokens (n_prompt_tokens counts them); never a stale field
+                s0 = slots()[0]
+                if s0["is_processing"] and s0.get("n_prompt_tokens", 0) >= len(prompt) + 3:
+                    break
+                assert t.is_alive() and time.time() < deadline, ("source never reached decoding", s0.get("n_prompt_tokens"))
+                time.sleep(0.02)
+            child = complete(TRUNK + SUF[1], 1, n_predict=24, slot_fork=child_fork)
+            busy = t.is_alive()
+            t.join()
+            if child_fork:
+                tm = child["timings"]
+                assert tm["n_fork_tokens"] >= FORK_MIN and tm["fork_src_slot"] == 0, tm  # the fork path really ran
+                assert busy, "source finished before the child returned: not a fork from a decoding source"
+            return out, child
+    
+        def matched(a: list[int], b: list[int]) -> int:
+            n = 0
+            while n < min(len(a), len(b)) and a[n] == b[n]:
+                n += 1
+            return n
+    
+        # A/A control: the same concurrency without the fork measures how far batch composition alone moves the source
+        ctrl, _ = concurrent(False)
+>       out, child = concurrent(True)
+                     ^^^^^^^^^^^^^^^^
+
+unit/test_slot_fork.py:875: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+unit/test_slot_fork.py:858: in concurrent
+    child = complete(TRUNK + SUF[1], 1, n_predict=24, slot_fork=child_fork)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+unit/test_slot_fork.py:115: in complete
+    res = server.make_request("POST", "/completion", data=data, timeout=600)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+utils.py:383: in make_request
+    response = requests.post(url, headers=headers, json=data, timeout=timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py:592: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py:706: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <requests.adapters.HTTPAdapter object at 0x7db8ee670d50>
+request = <PreparedRequest [POST]>, stream = False
+timeout = Timeout(connect=600, read=600, total=None), verify = True, cert = None
+proxies = OrderedDict()
+
+    def send(
+        self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None
+    ):
+        """Sends PreparedRequest object. Returns Response object.
+    
+        :param request: The :class:`PreparedRequest <PreparedRequest>` being sent.
+        :param stream: (optional) Whether to stream the request content.
+        :param timeout: (optional) How long to wait for the server to send
+            data before giving up, as a float, or a :ref:`(connect timeout,
+            read timeout) <timeouts>` tuple.
+        :type timeout: float or tuple or urllib3 Timeout object
+        :param verify: (optional) Either a boolean, in which case it controls whether
+            we verify the server's TLS certificate, or a string, in which case it
+            must be a path to a CA bundle to use
+        :param cert: (optional) Any user-provided SSL certificate to be trusted.
+        :param proxies: (optional) The proxies dictionary to apply to the request.
+        :rtype: requests.Response
+        """
+    
+        try:
+            conn = self.get_connection_with_tls_context(
+                request, verify, proxies=proxies, cert=cert
+            )
+        except LocationValueError as e:
+            raise InvalidURL(e, request=request)
+    
+        self.cert_verify(conn, request.url, verify, cert)
+        url = self.request_url(request, proxies)
+        self.add_headers(
+            request,
+            stream=stream,
+            timeout=timeout,
+            verify=verify,
+            cert=cert,
+            proxies=proxies,
+        )
+    
+        chunked = not (request.body is None or "Content-Length" in request.headers)
+    
+        if isinstance(timeout, tuple):
+            try:
+                connect, read = timeout
+                timeout = TimeoutSauce(connect=connect, read=read)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, "
+                    f"or a single float to set both timeouts to the same value."
+                )
+        elif isinstance(timeout, TimeoutSauce):
+            pass
+        else:
+            timeout = TimeoutSauce(connect=timeout, read=timeout)
+    
+        try:
+            resp = conn.urlopen(
+                method=request.method,
+                url=url,
+                body=request.body,
+                headers=request.headers,
+                redirect=False,
+                assert_same_host=False,
+                preload_content=False,
+                decode_content=False,
+                retries=self.max_retries,
+                timeout=timeout,
+                chunked=chunked,
+            )
+    
+        except (ProtocolError, OSError) as err:
+>           raise ConnectionError(err, request=request)
+E           requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py:660: ConnectionError
+----------------------------- Captured stdout call -----------------------------
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18984 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf --batch-size 32 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r2-20261020/queue-results/25-kpf17-mutant-recheck/slots-mut-17.2-3-fork_clobber_src-hyb --no-jinja --slot-fork-min-tokens 16
+server pid=1819327, pytest pid=1819321
+Waiting for server to start...
+0.00.001.430 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.710 W srv  llama_server: -----------------
+0.00.001.712 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.712 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.712 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.712 W srv  llama_server: -----------------
+0.00.002.874 I srv    load_model: loading model '/mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf'
+Response from server {
+  "error": {
+    "message": "Loading model",
+    "type": "unavailable_error",
+    "code": 503
+  }
+}
+Waiting for server to start...
+0.00.570.492 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.570.536 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = checkpoint, min tokens = 16, cache_idle_slots = 1
+0.00.572.611 I srv  llama_server: model loaded
+0.00.572.618 I srv  llama_server: listening on http://127.0.0.1:18984
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314,
+    279,
+    16382,
+    11,
+    279,
+    17199,
+    421,
+    5642,
+    11,
+    321,
+    279,
+    12106,
+    314,
+    279,
+    12515,
+    506,
+    41564,
+    13,
+    5875,
+    25292,
+    1578,
+    279,
+    1433,
+    13538,
+    310,
+    34227,
+    25442,
+    13,
+    3095,
+    279,
+    51624,
+    20922,
+    11,
+    279,
+    72103,
+    4998,
+    4439,
+    264,
+    3777,
+    42787,
+    310,
+    1301,
+    660,
+    314,
+    1070,
+    321,
+    27367,
+    1029,
+    1092,
+    995,
+    5324,
+    13,
+    561,
+    42787,
+    13293,
+    421,
+    42046,
+    995,
+    3512,
+    777,
+    20125,
+    303,
+    40297,
+    11,
+    421,
+    16253,
+    19340,
+    30592,
+    5642,
+    1754,
+    12828,
+    11,
+    321,
+    421,
+    279,
+    51624,
+    579,
+    88546,
+    13538,
+    8882,
+    321,
+    808,
+    932,
+    430,
+    279,
+    1578,
+    3804,
+    539,
+    13,
+    2838,
+    1048,
+    1669,
+    2526,
+    36590,
+    303,
+    279,
+    35374,
+    25,
+    338,
+    68042,
+    11,
+    264,
+    7993,
+    421,
+    11815,
+    303,
+    279,
+    20618,
+    364,
+    264,
+    1345,
+    11,
+    321,
+    2957,
+    264,
+    48335,
+    13,
+    220
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1092,
+    9572,
+    1467,
+    279,
+    42787,
+    1423,
+    14336,
+    303,
+    279,
+    35374,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1204,
+    1599,
+    25442,
+    1467,
+    279,
+    1433,
+    599,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    864,
+    3098,
+    995,
+    777,
+    42046,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    852,
+    1301,
+    279,
+    1433,
+    1238,
+    279,
+    51624,
+    20922,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    9357,
+    799,
+    11316,
+    883,
+    279,
+    51624,
+    579,
+    88546,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    1697,
+    2250,
+    2433,
+    279,
+    51624,
+    5947,
+    1441,
+    1396,
+    11129,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1092,
+    6716,
+    310,
+    279,
+    1324,
+    314,
+    19340,
+    30592,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    20052,
+    279,
+    1433,
+    264,
+    2716,
+    2192,
+    25
+  ]
+}
+Response from server {
+  "default_generation_settings": {
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": -1,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": -1,
+      "n_predict": -1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "none",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "n_ctx": 8192
+  },
+  "total_slots": 4,
+  "model_alias": "tinyllama-2",
+  "model_ftype": "Q8_0",
+  "model_path": "/mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "media_marker": "<__media_GdgkbeTeLTxk3yiTm9T7sVI6mBj6i4PY__>",
+  "endpoint_slots": true,
+  "endpoint_props": false,
+  "endpoint_metrics": true,
+  "ui": true,
+  "ui_settings": {},
+  "chat_template": "{%- set image_count = namespace(value=0) %}\n{%- set video_count = namespace(value=0) %}\n{%- macro render_content(content, do_vision_count, is_system_content=false) %}\n    {%- if content is string %}\n        {{- content }}\n    {%- elif content is iterable and content is not mapping %}\n        {%- for item in content %}\n            {%- if 'image' in item or 'image_url' in item or item.type == 'image' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain images.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set image_count.value = image_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Picture ' ~ image_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|image_pad|><|vision_end|>' }}\n            {%- elif 'video' in item or item.type == 'video' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain videos.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set video_count.value = video_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Video ' ~ video_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|video_pad|><|vision_end|>' }}\n            {%- elif 'text' in item %}\n                {{- item.text }}\n            {%- else %}\n                {{- raise_exception('Unexpected item type in content.') }}\n            {%- endif %}\n        {%- endfor %}\n    {%- elif content is none or content is undefined %}\n        {{- '' }}\n    {%- else %}\n        {{- raise_exception('Unexpected content type.') }}\n    {%- endif %}\n{%- endmacro %}\n{%- if not messages %}\n    {{- raise_exception('No messages provided.') }}\n{%- endif %}\n{%- if tools and tools is iterable and tools is not mapping %}\n    {{- '<|im_start|>system\\n' }}\n    {{- \"# Tools\\n\\nYou have access to the following functions:\\n\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\" }}\n    {{- '\\n\\nIf you choose to call a function ONLY reply in the following format with NO suffix:\\n\\n<tool_call>\\n<function=example_function_name>\\n<parameter=example_parameter_1>\\nvalue_1\\n</parameter>\\n<parameter=example_parameter_2>\\nThis is the value for the second parameter\\nthat can span\\nmultiple lines\\n</parameter>\\n</function>\\n</tool_call>\\n\\n<IMPORTANT>\\nReminder:\\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\\n- Required parameters MUST be specified\\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\\n</IMPORTANT>' }}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {%- if content %}\n            {{- '\\n\\n' + content }}\n        {%- endif %}\n    {%- endif %}\n    {{- '<|im_end|>\\n' }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {{- '<|im_start|>system\\n' + content + '<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}\n{%- for message in messages[::-1] %}\n    {%- set index = (messages|length - 1) - loop.index0 %}\n    {%- if ns.multi_step_tool and message.role == \"user\" %}\n        {%- set content = render_content(message.content, false)|trim %}\n        {%- if not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}\n            {%- set ns.multi_step_tool = false %}\n            {%- set ns.last_query_index = index %}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if ns.multi_step_tool %}\n    {{- raise_exception('No user query found in messages.') }}\n{%- endif %}\n{%- for message in messages %}\n    {%- set content = render_content(message.content, true)|trim %}\n    {%- if message.role == \"system\" %}\n        {%- if not loop.first %}\n            {{- raise_exception('System message must be at the beginning.') }}\n        {%- endif %}\n    {%- elif message.role == \"user\" %}\n        {{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is string %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- else %}\n            {%- if '</think>' in content %}\n                {%- set reasoning_content = content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}\n                {%- set content = content.split('</think>')[-1].lstrip('\\n') %}\n            {%- endif %}\n        {%- endif %}\n        {%- set reasoning_content = reasoning_content|trim %}\n        {%- if loop.index0 > ns.last_query_index %}\n            {{- '<|im_start|>' + message.role + '\\n<think>\\n' + reasoning_content + '\\n</think>\\n\\n' + content }}\n        {%- else %}\n            {{- '<|im_start|>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if tool_call.function is defined %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {%- if loop.first %}\n                    {%- if content|trim %}\n                        {{- '\\n\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- else %}\n                        {{- '<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- endif %}\n                {%- else %}\n                    {{- '\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                {%- endif %}\n                {%- if tool_call.arguments is mapping %}\n                    {%- for args_name in tool_call.arguments %}\n                        {%- set args_value = tool_call.arguments[args_name] %}\n                        {{- '<parameter=' + args_name + '>\\n' }}\n                        {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}\n                        {{- args_value }}\n                        {{- '\\n</parameter>\\n' }}\n                    {%- endfor %}\n                {%- endif %}\n                {{- '</function>\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if loop.previtem and loop.previtem.role != \"tool\" %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- content }}\n        {{- '\\n</tool_response>' }}\n        {%- if not loop.last and loop.nextitem.role != \"tool\" %}\n            {{- '<|im_end|>\\n' }}\n        {%- elif loop.last %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- else %}\n        {{- raise_exception('Unexpected message role.') }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n    {%- if enable_thinking is defined and enable_thinking is true %}\n        {{- '<think>\\n' }}\n    {%- else %}\n        {{- '<think>\\n\\n</think>\\n\\n' }}\n    {%- endif %}\n{%- endif %}",
+  "chat_template_caps": {
+    "supports_object_arguments": true,
+    "supports_parallel_tool_calls": true,
+    "supports_preserve_reasoning": false,
+    "supports_string_content": true,
+    "supports_system_role": true,
+    "supports_tool_calls": true,
+    "supports_tools": true,
+    "supports_typed_content": false
+  },
+  "bos_token": ",",
+  "eos_token": "<|im_end|>",
+  "build_info": "b10359-1fd7e2e12",
+  "is_sleeping": false,
+  "cors_proxy_enabled": false,
+  "slot_fork": {
+    "min_tokens": 16,
+    "mode": "checkpoint",
+    "checkpoint_at": true
+  }
+}
+0.01.010.528 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.010.552 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.01.046.052 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 35.4 ms, kv_pos = 32, ms/tok = 0.000
+0.01.072.454 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 26.4 ms, kv_pos = 64, ms/tok = 0.000
+0.01.095.085 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 22.5 ms, kv_pos = 96, ms/tok = 0.000
+0.01.114.276 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 24 (slots 1), budget = 0, t_iter = 19.1 ms, kv_pos = 120, ms/tok = 0.000
+0.01.136.211 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 17 (slots 1), budget = 0, t_iter = 18.9 ms, kv_pos = 137, ms/tok = 0.000
+0.01.152.173 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 11 (slots 1), budget = 0, t_iter = 13.5 ms, kv_pos = 148, ms/tok = 0.000
+0.01.168.770 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 14.3 ms, kv_pos = 152, ms/tok = 0.000
+0.01.819.260 I slot print_timing: id  0 | task 0 | prompt eval time =     158.15 ms /   152 tokens (    1.04 ms per token,   961.13 tokens per second)
+0.01.819.325 I slot print_timing: id  0 | task 0 |        eval time =     650.51 ms /    61 tokens (   10.66 ms per token,    93.77 tokens per second)
+0.01.819.350 I slot print_timing: id  0 | task 0 |       total time =     808.66 ms /   213 tokens
+0.01.819.363 I slot print_timing: id  0 | task 0 |    graphs reused =         61
+0.01.819.431 I slot      release: id  0 | task 0 | stop processing: n_tokens = 212, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " gulls\n\n<think>\n\n</think>\n\nBased on the text provided, the clerk found **gulls** drawn in the margins.\n\nThe passage states: \"She also found small drawings in the margins: **gulls**, a cat that lived in the tower for a while, and once a whale.\"",
+  "tokens": [
+    338,
+    68042,
+    271,
+    248068,
+    271,
+    248069,
+    271,
+    27775,
+    383,
+    279,
+    1414,
+    3766,
+    11,
+    279,
+    42787,
+    1669,
+    2972,
+    70,
+    68042,
+    332,
+    14336,
+    303,
+    279,
+    35374,
+    13,
+    271,
+    760,
+    20438,
+    5134,
+    25,
+    328,
+    7691,
+    1048,
+    1669,
+    2526,
+    36590,
+    303,
+    279,
+    35374,
+    25,
+    2972,
+    70,
+    68042,
+    93868,
+    264,
+    7993,
+    421,
+    11815,
+    303,
+    279,
+    20618,
+    364,
+    264,
+    1345,
+    11,
+    321,
+    2957,
+    264,
+    48335,
+    1149,
+    248044
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 61,
+  "tokens_evaluated": 152,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 96,
+    "n_predict": 96,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: what animal did the clerk find drawn in the margins? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "eos",
+  "stopping_word": "",
+  "tokens_cached": 212,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 152,
+    "prompt_ms": 158.148,
+    "prompt_per_token_ms": 1.0404473684210527,
+    "prompt_per_second": 961.1250221311683,
+    "predicted_n": 61,
+    "predicted_ms": 650.508,
+    "predicted_per_token_ms": 10.664065573770493,
+    "predicted_per_second": 93.77286674414457,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 0
+  }
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 212,
+    "n_prompt_tokens_processed": 152,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 212,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 212,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "0eccb8ffe4f3649a",
+    "checkpoints": [
+      {
+        "n_tokens": 120,
+        "pos_min": 119,
+        "pos_max": 119,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "398e4c76f6f3dfd7"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 148,
+        "pos_min": 147,
+        "pos_max": 147,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "a069854b8fbb7747"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 212,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 212,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 212,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 212,
+    "n_prompt_tokens_processed": 152,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 212,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 212,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "0eccb8ffe4f3649a",
+    "checkpoints": [
+      {
+        "n_tokens": 120,
+        "pos_min": 119,
+        "pos_max": 119,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "398e4c76f6f3dfd7"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 148,
+        "pos_min": 147,
+        "pos_max": 147,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "a069854b8fbb7747"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 212,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 212,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 212,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server {
+  "id_slot": 0,
+  "n_erased": 212
+}
+Response from server {
+  "id_slot": 1,
+  "n_erased": 0
+}
+Response from server {
+  "id_slot": 2,
+  "n_erased": 0
+}
+0.01.829.242 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.829.287 I slot launch_slot_: id  0 | task 73 | processing task, is_child = 0
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 73,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 152,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.865.144 I srv  prefill_budg: prefill-budget: iter 8: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 35.8 ms, kv_pos = 32, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 73,
+    "n_prompt_tokens": 32,
+    "n_prompt_tokens_processed": 32,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 32,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 32,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "b21d57d4dbbf9789",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 32,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 32,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 32,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.892.407 I srv  prefill_budg: prefill-budget: iter 9: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 27.2 ms, kv_pos = 64, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 73,
+    "n_prompt_tokens": 64,
+    "n_prompt_tokens_processed": 64,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 64,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 64,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "1db212fe27a4e2d8",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 64,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 64,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 64,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.916.444 I srv  prefill_budg: prefill-budget: iter 10: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 23.9 ms, kv_pos = 96, ms/tok = 0.000
+0.01.943.653 I srv  prefill_budg: prefill-budget: iter 11: decode_rows = 0 (slots 0), prompt = 24 (slots 1), budget = 0, t_iter = 27.2 ms, kv_pos = 120, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 73,
+    "n_prompt_tokens": 120,
+    "n_prompt_tokens_processed": 120,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 120,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 120,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "398e4c76f6f3dfd7",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 120,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 120,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 120,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.961.734 I srv  prefill_budg: prefill-budget: iter 12: decode_rows = 0 (slots 0), prompt = 17 (slots 1), budget = 0, t_iter = 15.8 ms, kv_pos = 137, ms/tok = 0.000
+0.01.978.808 I srv  prefill_budg: prefill-budget: iter 13: decode_rows = 0 (slots 0), prompt = 11 (slots 1), budget = 0, t_iter = 14.2 ms, kv_pos = 148, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 73,
+    "n_prompt_tokens": 148,
+    "n_prompt_tokens_processed": 148,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 148,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 148,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "a069854b8fbb7747",
+    "checkpoints": [
+      {
+        "n_tokens": 120,
+        "pos_min": 119,
+        "pos_max": 119,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "398e4c76f6f3dfd7"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 148,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 148,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 148,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.995.492 I srv  prefill_budg: prefill-budget: iter 14: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 14.2 ms, kv_pos = 152, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 73,
+    "n_prompt_tokens": 153,
+    "n_prompt_tokens_processed": 152,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": false,
+        "n_remain": 94,
+        "n_decoded": 2
+      }
+    ],
+    "kv_cells": {
+      "private": 153,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 153,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "1a80750fe5e834d5",
+    "checkpoints": [
+      {
+        "n_tokens": 120,
+        "pos_min": 119,
+        "pos_max": 119,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "398e4c76f6f3dfd7"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 148,
+        "pos_min": 147,
+        "pos_max": 147,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "a069854b8fbb7747"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 153,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 153,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 153,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 73,
+    "n_prompt_tokens": 156,
+    "n_prompt_tokens_processed": 152,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": true,
+        "n_remain": 91,
+        "n_decoded": 5
+      }
+    ],
+    "kv_cells": {
+      "private": 156,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 156,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "5da312b508b75d55",
+    "checkpoints": [
+      {
+        "n_tokens": 120,
+        "pos_min": 119,
+        "pos_max": 119,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "398e4c76f6f3dfd7"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 148,
+        "pos_min": 147,
+        "pos_max": 147,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "a069854b8fbb7747"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 156,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 156,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 156,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.02.056.390 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+0.02.056.435 I slot launch_slot_: id  1 | task 93 | processing task, is_child = 0
+0.02.095.173 I srv  prefill_budg: prefill-budget: iter 15: decode_rows = 1 (slots 1), prompt = 31 (slots 1), budget = 0, t_iter = 38.7 ms, kv_pos = 189, ms/tok = 0.000
+0.02.130.571 I srv  prefill_budg: prefill-budget: iter 16: decode_rows = 1 (slots 1), prompt = 31 (slots 1), budget = 0, t_iter = 35.3 ms, kv_pos = 221, ms/tok = 0.000
+0.02.165.806 I srv  prefill_budg: prefill-budget: iter 17: decode_rows = 1 (slots 1), prompt = 31 (slots 1), budget = 0, t_iter = 35.2 ms, kv_pos = 253, ms/tok = 0.000
+0.02.196.915 I srv  prefill_budg: prefill-budget: iter 18: decode_rows = 1 (slots 1), prompt = 24 (slots 1), budget = 0, t_iter = 31.0 ms, kv_pos = 278, ms/tok = 0.000
+0.02.232.961 I srv  prefill_budg: prefill-budget: iter 19: decode_rows = 1 (slots 1), prompt = 28 (slots 1), budget = 0, t_iter = 33.6 ms, kv_pos = 307, ms/tok = 0.000
+0.02.261.554 I srv  prefill_budg: prefill-budget: iter 20: decode_rows = 1 (slots 1), prompt = 4 (slots 1), budget = 0, t_iter = 26.1 ms, kv_pos = 312, ms/tok = 0.000
+0.02.534.185 I slot print_timing: id  1 | task 93 | prompt eval time =     205.08 ms /   149 tokens (    1.38 ms per token,   726.54 tokens per second)
+0.02.534.240 I slot print_timing: id  1 | task 93 |        eval time =     272.63 ms /    24 tokens (   11.36 ms per token,    88.03 tokens per second)
+0.02.534.247 I slot print_timing: id  1 | task 93 |       total time =     477.72 ms /   173 tokens
+0.02.534.254 I slot print_timing: id  1 | task 93 |    graphs reused =         88
+0.02.534.304 I slot      release: id  1 | task 93 | stop processing: n_tokens = 172, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The log had 40 volumes.\n\nThe log had 40 volumes.\n\nThe log had 40",
+  "tokens": [
+    561,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15
+  ],
+  "id_slot": 1,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 149,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: how many volumes did the log have? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 172,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 149,
+    "prompt_ms": 205.082,
+    "prompt_per_token_ms": 1.3763892617449665,
+    "prompt_per_second": 726.5386528315503,
+    "predicted_n": 24,
+    "predicted_ms": 272.635,
+    "predicted_per_token_ms": 11.359791666666666,
+    "predicted_per_second": 88.02978341005374,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 1,
+    "id_task": 93
+  }
+}
+0.02.818.876 I slot print_timing: id  0 | task 73 | prompt eval time =     166.10 ms /   152 tokens (    1.09 ms per token,   915.09 tokens per second)
+0.02.818.935 I slot print_timing: id  0 | task 73 |        eval time =     823.40 ms /    61 tokens (   13.50 ms per token,    74.08 tokens per second)
+0.02.818.942 I slot print_timing: id  0 | task 73 |       total time =     989.50 ms /   213 tokens
+0.02.818.948 I slot print_timing: id  0 | task 73 |    graphs reused =        113
+Response from server {
+  "index": 0,
+  "content": " gulls\n\n<think>\n\n</think>\n\nBased on the text provided, the clerk found **gulls** drawn in the margins.\n\nThe passage states: \"She also found small drawings in the margins: **gulls**, a cat that lived in the tower for a while, and once a whale.\"",
+  "tokens": [
+    338,
+    68042,
+    271,
+    248068,
+    271,
+    248069,
+    271,
+    27775,
+    383,
+    279,
+    1414,
+    3766,
+    11,
+    279,
+    42787,
+    1669,
+    2972,
+    70,
+    68042,
+    332,
+    14336,
+    303,
+    279,
+    35374,
+    13,
+    271,
+    760,
+    20438,
+    5134,
+    25,
+    328,
+    7691,
+    1048,
+    1669,
+    2526,
+    36590,
+    303,
+    279,
+    35374,
+    25,
+    2972,
+    70,
+    68042,
+    93868,
+    264,
+    7993,
+    421,
+    11815,
+    303,
+    279,
+    20618,
+    364,
+    264,
+    1345,
+    11,
+    321,
+    2957,
+    264,
+    48335,
+    1149,
+    248044
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 61,
+  "tokens_evaluated": 152,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 96,
+    "n_predict": 96,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: what animal did the clerk find drawn in the margins? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "eos",
+  "stopping_word": "",
+  "tokens_cached": 212,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 152,
+    "prompt_ms": 166.104,
+    "prompt_per_token_ms": 1.0927894736842105,
+    "prompt_per_second": 915.0893416172999,
+    "predicted_n": 61,
+    "predicted_ms": 823.399,
+    "predicted_per_token_ms": 13.498344262295081,
+    "predicted_per_second": 74.08316016900677,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 73
+  }
+}
+0.02.820.144 I slot      release: id  0 | task 73 | stop processing: n_tokens = 212, truncated = 0
+Response from server {
+  "id_slot": 0,
+  "n_erased": 212
+}
+Response from server {
+  "id_slot": 1,
+  "n_erased": 172
+}
+Response from server {
+  "id_slot": 2,
+  "n_erased": 0
+}
+0.02.826.536 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.02.826.575 I slot launch_slot_: id  0 | task 153 | processing task, is_child = 0
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 73,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 152,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 93,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 5,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.02.862.005 I srv  prefill_budg: prefill-budget: iter 21: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 35.4 ms, kv_pos = 32, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 153,
+    "n_prompt_tokens": 32,
+    "n_prompt_tokens_processed": 32,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 32,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 32,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "b21d57d4dbbf9789",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 93,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 32,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 5,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 32,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 6,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 32,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.02.888.660 I srv  prefill_budg: prefill-budget: iter 22: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 26.5 ms, kv_pos = 64, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 153,
+    "n_prompt_tokens": 64,
+    "n_prompt_tokens_processed": 64,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 64,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 64,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "1db212fe27a4e2d8",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 93,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 64,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 5,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 64,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 6,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 64,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.02.912.272 I srv  prefill_budg: prefill-budget: iter 23: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 23.4 ms, kv_pos = 96, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 153,
+    "n_prompt_tokens": 96,
+    "n_prompt_tokens_processed": 96,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 96,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 96,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "cfabd284c1524ce2",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 93,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 96,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 5,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 96,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 6,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 96,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.02.931.397 I srv  prefill_budg: prefill-budget: iter 24: decode_rows = 0 (slots 0), prompt = 24 (slots 1), budget = 0, t_iter = 19.0 ms, kv_pos = 120, ms/tok = 0.000
+0.02.949.565 I srv  prefill_budg: prefill-budget: iter 25: decode_rows = 0 (slots 0), prompt = 17 (slots 1), budget = 0, t_iter = 16.6 ms, kv_pos = 137, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 153,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 35,
+        "n_decoded": 61
+      }
+    ],
+    "kv_cells": {
+      "private": 137,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 137,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 120,
+        "pos_min": 119,
+        "pos_max": 119,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "398e4c76f6f3dfd7"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 93,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 137,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 5,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 137,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 6,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 137,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.02.964.504 I srv  prefill_budg: prefill-budget: iter 26: decode_rows = 0 (slots 0), prompt = 11 (slots 1), budget = 0, t_iter = 13.1 ms, kv_pos = 148, ms/tok = 0.000
+0.02.980.345 I srv  prefill_budg: prefill-budget: iter 27: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 14.2 ms, kv_pos = 152, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 153,
+    "n_prompt_tokens": 152,
+    "n_prompt_tokens_processed": 152,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": false,
+        "n_remain": 95,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 152,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 152,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "a2c84285a60790d8",
+    "checkpoints": [
+      {
+        "n_tokens": 120,
+        "pos_min": 119,
+        "pos_max": 119,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "398e4c76f6f3dfd7"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 148,
+        "pos_min": 147,
+        "pos_max": 147,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "a069854b8fbb7747"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 93,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 152,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 5,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 152,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 6,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 152,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 153,
+    "n_prompt_tokens": 154,
+    "n_prompt_tokens_processed": 152,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": true,
+        "n_remain": 93,
+        "n_decoded": 3
+      }
+    ],
+    "kv_cells": {
+      "private": 154,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 154,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "f7db1d64c71238b5",
+    "checkpoints": [
+      {
+        "n_tokens": 120,
+        "pos_min": 119,
+        "pos_max": 119,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "398e4c76f6f3dfd7"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 148,
+        "pos_min": 147,
+        "pos_max": 147,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "a069854b8fbb7747"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 93,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 154,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 5,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 154,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 6,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 154,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 153,
+    "n_prompt_tokens": 157,
+    "n_prompt_tokens_processed": 152,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": true,
+        "n_remain": 90,
+        "n_decoded": 6
+      }
+    ],
+    "kv_cells": {
+      "private": 157,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 157,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "0c83d0132cf3f6a5",
+    "checkpoints": [
+      {
+        "n_tokens": 120,
+        "pos_min": 119,
+        "pos_max": 119,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "398e4c76f6f3dfd7"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 148,
+        "pos_min": 147,
+        "pos_max": 147,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "a069854b8fbb7747"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 93,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 157,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 5,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 157,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 6,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 157,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.03.052.766 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/common/common.cpp:1593: failed to remove sequence 0 with p0=137, p1=-1
+
+[New LWP 1819571]
+[New LWP 1819570]
+[New LWP 1819569]
+[New LWP 1819568]
+[New LWP 1819567]
+[New LWP 1819566]
+[New LWP 1819565]
+[New LWP 1819564]
+[New LWP 1819563]
+[New LWP 1819562]
+[New LWP 1819561]
+[New LWP 1819560]
+[New LWP 1819559]
+[New LWP 1819558]
+[New LWP 1819557]
+[New LWP 1819556]
+[New LWP 1819555]
+[New LWP 1819554]
+[New LWP 1819553]
+[New LWP 1819552]
+[New LWP 1819551]
+[New LWP 1819550]
+[New LWP 1819549]
+[New LWP 1819548]
+[New LWP 1819547]
+[New LWP 1819546]
+[New LWP 1819545]
+[New LWP 1819544]
+[New LWP 1819543]
+[New LWP 1819542]
+[New LWP 1819541]
+[New LWP 1819540]
+[New LWP 1819539]
+[New LWP 1819538]
+[New LWP 1819537]
+[New LWP 1819536]
+[New LWP 1819535]
+[New LWP 1819534]
+[New LWP 1819533]
+[New LWP 1819532]
+[New LWP 1819531]
+[New LWP 1819530]
+[New LWP 1819529]
+[New LWP 1819528]
+[New LWP 1819527]
+[New LWP 1819526]
+[New LWP 1819525]
+[New LWP 1819522]
+[New LWP 1819521]
+[New LWP 1819520]
+[New LWP 1819519]
+[New LWP 1819518]
+[New LWP 1819517]
+[New LWP 1819516]
+[New LWP 1819515]
+[New LWP 1819514]
+[New LWP 1819513]
+[New LWP 1819512]
+[New LWP 1819511]
+[New LWP 1819510]
+[New LWP 1819509]
+[New LWP 1819508]
+[New LWP 1819507]
+[New LWP 1819506]
+[New LWP 1819505]
+[New LWP 1819504]
+[New LWP 1819503]
+[New LWP 1819502]
+[New LWP 1819501]
+[New LWP 1819500]
+[New LWP 1819499]
+[New LWP 1819498]
+[New LWP 1819497]
+[New LWP 1819496]
+[New LWP 1819495]
+[New LWP 1819494]
+[New LWP 1819493]
+[New LWP 1819492]
+[New LWP 1819491]
+[New LWP 1819490]
+[New LWP 1819489]
+[New LWP 1819488]
+[New LWP 1819487]
+[New LWP 1819486]
+[New LWP 1819485]
+[New LWP 1819484]
+[New LWP 1819483]
+[New LWP 1819482]
+[New LWP 1819481]
+[New LWP 1819480]
+[New LWP 1819479]
+[New LWP 1819478]
+[New LWP 1819477]
+[New LWP 1819476]
+[New LWP 1819475]
+[New LWP 1819474]
+[New LWP 1819473]
+[New LWP 1819472]
+[New LWP 1819471]
+[New LWP 1819470]
+[New LWP 1819469]
+[New LWP 1819468]
+[New LWP 1819467]
+[New LWP 1819466]
+[New LWP 1819465]
+[New LWP 1819464]
+[New LWP 1819463]
+[New LWP 1819462]
+[New LWP 1819461]
+[New LWP 1819460]
+[New LWP 1819459]
+[New LWP 1819458]
+[New LWP 1819457]
+[New LWP 1819456]
+[New LWP 1819455]
+[New LWP 1819454]
+[New LWP 1819453]
+[New LWP 1819452]
+[New LWP 1819451]
+[New LWP 1819450]
+[New LWP 1819449]
+[New LWP 1819448]
+[New LWP 1819447]
+[New LWP 1819446]
+[New LWP 1819445]
+[New LWP 1819444]
+[New LWP 1819443]
+[New LWP 1819442]
+[New LWP 1819441]
+[New LWP 1819440]
+[New LWP 1819439]
+[New LWP 1819438]
+[New LWP 1819437]
+[New LWP 1819436]
+[New LWP 1819435]
+[New LWP 1819434]
+[New LWP 1819433]
+[New LWP 1819432]
+[New LWP 1819431]
+[New LWP 1819430]
+[New LWP 1819429]
+[New LWP 1819428]
+[New LWP 1819427]
+[New LWP 1819426]
+[New LWP 1819425]
+[New LWP 1819424]
+[New LWP 1819423]
+[New LWP 1819422]
+[New LWP 1819421]
+[New LWP 1819420]
+[New LWP 1819419]
+[New LWP 1819418]
+[New LWP 1819417]
+[New LWP 1819416]
+[New LWP 1819415]
+[New LWP 1819414]
+[New LWP 1819413]
+[New LWP 1819412]
+[New LWP 1819411]
+[New LWP 1819410]
+[New LWP 1819409]
+[New LWP 1819408]
+[New LWP 1819407]
+[New LWP 1819406]
+[New LWP 1819405]
+[New LWP 1819404]
+[New LWP 1819403]
+[New LWP 1819402]
+[New LWP 1819401]
+[New LWP 1819400]
+[New LWP 1819399]
+[New LWP 1819398]
+[New LWP 1819397]
+[New LWP 1819396]
+[New LWP 1819395]
+[New LWP 1819394]
+[New LWP 1819393]
+[New LWP 1819392]
+[New LWP 1819391]
+[New LWP 1819390]
+[New LWP 1819389]
+[New LWP 1819388]
+[New LWP 1819387]
+[New LWP 1819386]
+[New LWP 1819385]
+[New LWP 1819384]
+[New LWP 1819383]
+[New LWP 1819382]
+[New LWP 1819381]
+[New LWP 1819380]
+[New LWP 1819379]
+[New LWP 1819378]
+[New LWP 1819377]
+[New LWP 1819376]
+[New LWP 1819375]
+[New LWP 1819374]
+[New LWP 1819373]
+[New LWP 1819372]
+[New LWP 1819371]
+[New LWP 1819370]
+[New LWP 1819369]
+[New LWP 1819368]
+[New LWP 1819367]
+[New LWP 1819366]
+[New LWP 1819365]
+[New LWP 1819364]
+[New LWP 1819363]
+[New LWP 1819362]
+[New LWP 1819361]
+[New LWP 1819360]
+[New LWP 1819359]
+[New LWP 1819358]
+[New LWP 1819357]
+[New LWP 1819356]
+[New LWP 1819355]
+[New LWP 1819354]
+[New LWP 1819353]
+[New LWP 1819352]
+[New LWP 1819351]
+[New LWP 1819350]
+[New LWP 1819349]
+[New LWP 1819348]
+[New LWP 1819347]
+[New LWP 1819346]
+[New LWP 1819345]
+[New LWP 1819344]
+[New LWP 1819343]
+[New LWP 1819342]
+[New LWP 1819341]
+[New LWP 1819340]
+[New LWP 1819339]
+[New LWP 1819338]
+[New LWP 1819337]
+[New LWP 1819336]
+[New LWP 1819335]
+[New LWP 1819334]
+[New LWP 1819333]
+[New LWP 1819332]
+[New LWP 1819331]
+[New LWP 1819330]
+[New LWP 1819329]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00007f12e43dc772 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#0  0x00007f12e43dc772 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x00007f12e43d013c in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#2  0x00007f12e444ca0f in wait4 () from /lib/x86_64-linux-gnu/libc.so.6
+#3  0x00007f12e3bfe573 in ggml_print_backtrace () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libggml-base.so.0
+#4  0x00007f12e3bfe726 in ggml_abort () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libggml-base.so.0
+#5  0x00007f12e4021a1d in common_context_seq_rm(llama_context*, int, int, int) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-common.so.0
+#6  0x00007f12e49af8e9 in server_context_impl::do_slot_fork(server_slot&, server_task const&, server_context_impl::slot_fork_candidate const&) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#7  0x00007f12e49d5ffa in server_context_impl::launch_slot_with_task(server_slot&, server_task&&) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#8  0x00007f12e49da08c in server_context_impl::process_single_task(server_task&&) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#9  0x00007f12e4953dcc in server_queue::start_loop(long) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#10 0x00007f12e48f2b82 in llama_server(common_params&, int, char**) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#11 0x00007f12e48f47a6 in llama_server(int, char**) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#12 0x00007f12e435a575 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#13 0x00007f12e435a628 in __libc_start_main () from /lib/x86_64-linux-gnu/libc.so.6
+#14 0x00005fbadc17c325 in _start ()
+[Inferior 1 (process 1819327) detached]
+--------------------------- Captured stdout teardown ---------------------------
+Stopping server with pid=1819327
+=============================== warnings summary ===============================
+unit/test_slot_fork.py::test_kpf172_fork_from_decoding_source_no_leak
+  /workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-2 (<lambda>)
+  
+  Traceback (most recent call last):
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+      response = self._make_request(
+                 ^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+      response = conn.getresponse()
+                 ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py", line 571, in getresponse
+      httplib_response = super().getresponse()
+                         ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 1443, in getresponse
+      response.begin()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 337, in begin
+      version, status, reason = self._read_status()
+                                ^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 306, in _read_status
+      raise RemoteDisconnected("Remote end closed connection without"
+  http.client.RemoteDisconnected: Remote end closed connection without response
+  
+  During handling of the above exception, another exception occurred:
+  
+  Traceback (most recent call last):
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py", line 645, in send
+      resp = conn.urlopen(
+             ^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+      retries = retries.increment(
+                ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/retry.py", line 490, in increment
+      raise reraise(type(error), error, _stacktrace)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/util.py", line 38, in reraise
+      raise value.with_traceback(tb)
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+      response = self._make_request(
+                 ^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+      response = conn.getresponse()
+                 ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py", line 571, in getresponse
+      httplib_response = super().getresponse()
+                         ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 1443, in getresponse
+      response.begin()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 337, in begin
+      version, status, reason = self._read_status()
+                                ^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 306, in _read_status
+      raise RemoteDisconnected("Remote end closed connection without"
+  urllib3.exceptions.ProtocolError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+  
+  During handling of the above exception, another exception occurred:
+  
+  Traceback (most recent call last):
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+      self.run()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/threading.py", line 982, in run
+      self._target(*self._args, **self._kwargs)
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/unit/test_slot_fork.py", line 849, in <lambda>
+      t = threading.Thread(target=lambda: out.update(complete(prompt, 0, n_predict=n_src, checkpoint_at=at)))
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/unit/test_slot_fork.py", line 115, in complete
+      res = server.make_request("POST", "/completion", data=data, timeout=600)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/utils.py", line 383, in make_request
+      response = requests.post(url, headers=headers, json=data, timeout=timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py", line 115, in post
+      return request("post", url, data=data, json=json, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py", line 59, in request
+      return session.request(method=method, url=url, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py", line 592, in request
+      resp = self.send(prep, **send_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py", line 706, in send
+      r = adapter.send(request, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py", line 660, in send
+      raise ConnectionError(err, request=request)
+  requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED unit/test_slot_fork.py::test_kpf172_fork_from_decoding_source_no_leak
+================= 1 failed, 23 deselected, 1 warning in 3.38s ==================

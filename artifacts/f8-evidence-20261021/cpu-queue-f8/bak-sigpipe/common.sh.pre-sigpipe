@@ -1,0 +1,41 @@
+# Sourced by DS41 parity jobs (prepared 2026-10-20). No side effects on source.
+PAR=/mnt/raid0/llm/tmp/ds41-parity-20261021
+SRC=/mnt/raid0/llm/llama.cpp-experimental-ds41-20261005
+BIN=$SRC/build-cpu/bin                      # branch experimental/ds41-ak-20261005 @3376147f8, build 2026-10-06 22:01 (> commit 21:57)
+Q4=/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf        # Sept Q4, on disk (scheduled for W7 delete: do NOT rely on it after W7)
+DSPARK=/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf                      # Sept drafter, matches Sept Q4 only
+M1017=/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-1017-MXFP4-experts-00001-of-00009.gguf
+PY=/mnt/raid0/llm/epyc-inference-research/.venv/bin/python                                     # torch 2.13 (CPU use ok), no tilelang
+export LD_LIBRARY_PATH=$BIN                  # own ggml generation; never inherit /etc/environment's
+SRV_PID=""
+ds41_need_1017() {   # exit 3 DEP_MISSING until workspace-5c marks the download complete AND all 9 shards are verified+final
+  local S=/mnt/raid0/llm/tmp/ds41-1017-swap A=/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf i f n=0
+  [ -e $S/download_1017.failed ] && { echo "DEP_MISSING: 1017 weights (download_1017.failed present)"; exit 3; }
+  [ -e $S/download_1017.done ] || { echo "DEP_MISSING: 1017 weights (no download_1017.done)"; exit 3; }
+  for i in 1 2 3 4 5 6 7 8 9; do
+    f=$A/DeepSeek-V4.1-Flash-1017-MXFP4-experts-0000$i-of-00009.gguf
+    [ -f "$f" ] && grep -q " OK $(basename $f) sha256=" $S/download_1017.log || { echo "DEP_MISSING: 1017 weights (shard $i not verified)"; exit 3; }
+    n=$((n+1))
+  done
+  [ $n = 9 ] || { echo "DEP_MISSING: 1017 weights"; exit 3; }
+}
+ds41_check_bin() {   # prove the binary is the one reasoned about (CLAUDE.md: build artifacts)
+  [ -x $BIN/llama-server ] || { echo "no llama-server at $BIN"; exit 6; }
+  ldd $BIN/llama-server | grep -E 'libllama\.so|libggml' | grep -v "$BIN" && { echo "foreign ggml/llama linkage"; exit 6; }
+  strings $BIN/libllama.so.0 | grep -q deepseek41 || { echo "binary lacks deepseek41"; exit 6; }
+  echo "BIN $(stat -c '%y' $BIN/libllama.so.0) branch=$(git -C $SRC rev-parse --short HEAD)"
+}
+kill_srv() {         # captured PID only; TERM -> KILL; verify dead
+  [ -n "${SRV_PID:-}" ] || return 0
+  kill -TERM "$SRV_PID" 2>/dev/null || true
+  for _ in $(seq 1 60); do kill -0 "$SRV_PID" 2>/dev/null || { SRV_PID=""; return 0; }; sleep 1; done
+  kill -KILL "$SRV_PID" 2>/dev/null || true; sleep 2
+  kill -0 "$SRV_PID" 2>/dev/null && echo "WARN server $SRV_PID survived SIGKILL"; SRV_PID=""
+}
+wait_ready() {       # $1 port, $2 max seconds
+  local i
+  for ((i=0;i<$2;i+=5)); do
+    kill -0 "$SRV_PID" 2>/dev/null || { echo "server died during load"; return 1; }
+    curl -sf -m 3 "http://127.0.0.1:$1/health" >/dev/null 2>&1 && return 0; sleep 5
+  done; echo "server not ready in $2 s"; return 1
+}

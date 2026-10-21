@@ -1,0 +1,8 @@
+0.00.259.898 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+n_swa = 512 (non-SWA model: floor only), mutate = none
+== checkpoint at c = 612 (N = 1324)
+  boundary floor: ctl vs 0..N run              max|d| = 0.474, top1 13 vs 13 (floor measurement)
+== checkpoint at c = 1024 (N = 1324)
+  boundary floor: ctl vs 0..N run              max|d| = 0, top1 13 vs 13 (floor measurement)
+== no-checkpoint perturbation floor = 0.474 -> eps = 0.949
+SKIP: not an SWA model (batch-boundary floor printed above)

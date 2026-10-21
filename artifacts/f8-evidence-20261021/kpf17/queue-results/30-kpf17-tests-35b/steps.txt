@@ -1,0 +1,10 @@
+f-171-ntokens-equal-requested OK passed=1 skipped=0
+f-171-offset-oracle OK passed=1 skipped=0
+f-171-abort-then-retry OK passed=1 skipped=0
+f-171-key-check OK passed=1 skipped=0
+f-172-diverge-below-junction OK passed=1 skipped=0
+f-172-same-iteration OK passed=1 skipped=0
+f-172-current-step OK passed=1 skipped=0
+f-173-pinned-cap OK passed=1 skipped=0
+f-mut-17.1-4-fork_no_lcp OK mutation fork_no_lcp DETECTED (failed=1 passed=0)
+f-mut-17.3-pin_cap_off OK mutation pin_cap_off DETECTED (failed=1 passed=0)

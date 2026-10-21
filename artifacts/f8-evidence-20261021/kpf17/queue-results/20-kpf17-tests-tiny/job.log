@@ -1,0 +1,16 @@
+[2026-10-21T00:00:03Z] provenance: branch 1fd7e2e12897db4ec401cfa393cea63ceb47a8fc llama-server sha256 defc5a094fcdd8c5d7acd912a7f7912d36a5e78d62af309015e57efc2b0eec40
+[2026-10-21T00:00:05Z] STEP kv-seq-share-0.8b OK rc=0
+[2026-10-21T00:00:10Z] STEP save-load-state-0.8b OK rc=0
+[2026-10-21T00:00:11Z] STEP state-restore-fragmented-0.8b OK rc=0
+[2026-10-21T00:00:15Z] STEP 171-ntokens-equal-requested OK passed=1 skipped=0
+[2026-10-21T00:00:20Z] STEP 171-offset-oracle OK passed=1 skipped=0
+[2026-10-21T00:00:56Z] STEP 171-abort-then-retry OK passed=1 skipped=0
+[2026-10-21T00:01:00Z] STEP 171-key-check OK passed=1 skipped=0
+[2026-10-21T00:01:06Z] STEP 172-diverge-below-junction OK passed=1 skipped=0
+[2026-10-21T00:01:15Z] STEP 172-same-iteration OK passed=1 skipped=0
+[2026-10-21T00:01:19Z] STEP 172-decoding-source OK passed=1 skipped=0
+[2026-10-21T00:01:29Z] STEP 172-current-step OK passed=1 skipped=0
+[2026-10-21T00:01:32Z] STEP 173-pinned-cap OK passed=1 skipped=0
+[2026-10-21T00:01:34Z] STEP 173-cap-zero OK passed=1 skipped=0
+[2026-10-21T00:02:03Z] STEP existing-fork-cases OK passed=12 skipped=0
+RESULT 20-kpf17-tests-tiny pass=14 fail=0

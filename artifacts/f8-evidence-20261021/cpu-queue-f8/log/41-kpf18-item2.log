@@ -1,0 +1,79 @@
+ran on q1 (24-47,120-143) under 'build[None] cs45-gates-g3' claim by agreement (pairing, nice 10)
+====================================================================================================
+KPF-18 gate plan (EXECUTE)  host Beelzebub  2026-10-20T22:07:58Z
+  out /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item2 | port 18972 | fork-min 1024 | n_predict 128 | n_probs 20 | window-id kpf18-20261020T220758Z | gpu-window-id None
+  launch prefix: taskset -c 24-47,120-143
+  gate argv (/mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/argv.frontdoor-cpu-gate.txt): -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --no-cache-idle-slots
+  - --fork-bin /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server (bin dir /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin; LD_LIBRARY_PATH /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin:/opt/rocm/lib:/usr/lib/llvm-20/lib:/opt/AMD/aocc-compiler-5.0.0/lib)
+  - CPU mode: no KFD/VRAM sampler, no :8083 refusal, no HIP residency, no mi210 claim, no GPU window
+  - shape drift ALLOWED and recorded: ["-c = '98304', gate shape expects '393216'", "-ngl = None, gate shape expects 'all'", "--spec-type = 'draft-mtp', gate shape expects 'draft-dflash'", "--spec-draft-n-max = '4', gate shape expects '7'", "--device = 'none', gate shape expects 'ROCm0'", "-b = None, gate shape expects '512'", "-ub = '2048', gate shape expects '512'", "--cache-ram = '32768', gate shape expects '65536'", "-md '' is not the DFlash2 drafter"]
+  - prompt set /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/run-20261020T163128Z/prompt_set.jsonl sha256 fe8c8c9202f71e678435717a931d3a97236968fe7b883a8748a88d1215b26662: 16 pairs
+  rate model: prefill ms/tok = (1.15 + 0.0235 x occupied_k) x 1.1; decode DFlash2 37.0-0.09/k tok/s, no-draft 30.8-0.15/k; 4-stream agg x1.3; load 90s, stop 45s
+----------------------------------------------------------------------------------------------------
+ITEM 2: 23 steps, est 6m47s
+      1m35s  [item2-fork_on-20261020T220758Z] linkage + launch + healthy + read-back: taskset -c 24-47,120-143 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --no-cache-idle-slots --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item2/slot-save/item2-fork_on-20261020T220758Z --port 18972 --metrics --slot-fork-min-tokens 1024
+      0m00s  open item-2 record
+      0m07s  item2 g0 erase all + source slot 0 = trunk+tail (4096+512), checkpoint_at [4096]
+      0m11s  item2 g0.0 S=256: fork child (slot 1) from source ckpt 4096, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m12s  item2 g0.1 S=512: fork child (slot 1) from source ckpt 4096, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m12s  item2 g0.2 S=768: fork child (slot 1) from source ckpt 4096, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m13s  item2 g0.3 S=1024: fork child (slot 1) from source ckpt 4096, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m13s  item2 g1 erase all + source slot 0 = trunk+tail (8192+512), checkpoint_at [8192]
+      0m11s  item2 g1.0 S=256: fork child (slot 1) from source ckpt 8192, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m12s  item2 g1.1 S=512: fork child (slot 1) from source ckpt 8192, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m13s  item2 g1.2 S=768: fork child (slot 1) from source ckpt 8192, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m14s  item2 g1.3 S=1024: fork child (slot 1) from source ckpt 8192, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m19s  item2 g2 erase all + source slot 0 = trunk+tail (12288+512), checkpoint_at [12288]
+      0m11s  item2 g2.0 S=256: fork child (slot 1) from source ckpt 12288, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m12s  item2 g2.1 S=512: fork child (slot 1) from source ckpt 12288, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m13s  item2 g2.2 S=768: fork child (slot 1) from source ckpt 12288, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m14s  item2 g2.3 S=1024: fork child (slot 1) from source ckpt 12288, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m26s  item2 g3 erase all + source slot 0 = trunk+tail (16384+512), checkpoint_at [16384]
+      0m12s  item2 g3.0 S=256: fork child (slot 1) from source ckpt 16384, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m13s  item2 g3.1 S=512: fork child (slot 1) from source ckpt 16384, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m14s  item2 g3.2 S=768: fork child (slot 1) from source ckpt 16384, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m15s  item2 g3.3 S=1024: fork child (slot 1) from source ckpt 16384, then source's own continuation (slot 0) from the same ckpt; 128 tok each
+      0m45s  [item2-fork_on-20261020T220758Z] SIGTERM own pid, verify dead, then finalize its records
+====================================================================================================
+TOTAL estimate: 6m47s (7 min) for items [2]; budget --budget-min 600
+PREFLIGHT: inputs PASS (live-only checks run at execute: linkage, read-back, residency, claim)
+[kpf18 22:07:58Z] item 2: [item2-fork_on-20261020T220758Z] linkage + launch + healthy + read-back: taskset -c 24-47,120-143 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --no-cache-idle-slots --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item2/slot-save/item2-fork_on-20261020T220758Z --port 18972 --metrics --slot-fork-min-tokens 1024 (est 1m35s)
+[kpf18] launch item2-fork_on-20261020T220758Z: taskset -c 24-47,120-143 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --no-cache-idle-slots --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item2/slot-save/item2-fork_on-20261020T220758Z --port 18972 --metrics --slot-fork-min-tokens 1024
+[kpf18]   done in 0m10s
+[kpf18 22:08:08Z] item 2: open item-2 record (est 0m00s)
+[kpf18]   done in 0m00s
+[kpf18 22:08:08Z] item 2: item2 g0 erase all + source slot 0 = trunk+tail (4096+512), checkpoint_at [4096] (est 0m07s)
+[kpf18]   done in 4m40s
+[kpf18 22:12:48Z] item 2: item2 g0.0 S=256: fork child (slot 1) from source ckpt 4096, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m11s)
+[kpf18]   done in 18m20s
+[kpf18 22:31:07Z] item 2: item2 g0.1 S=512: fork child (slot 1) from source ckpt 4096, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m12s)
+[kpf18]   done in 1m56s
+[kpf18 22:33:04Z] item 2: item2 g0.2 S=768: fork child (slot 1) from source ckpt 4096, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m12s)
+[kpf18]   done in 2m42s
+[kpf18 22:35:46Z] item 2: item2 g0.3 S=1024: fork child (slot 1) from source ckpt 4096, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m13s)
+[kpf18]   done in 2m06s
+[kpf18 22:37:52Z] item 2: item2 g1 erase all + source slot 0 = trunk+tail (8192+512), checkpoint_at [8192] (est 0m13s)
+[kpf18]   done in 4m22s
+[kpf18 22:42:14Z] item 2: item2 g1.0 S=256: fork child (slot 1) from source ckpt 8192, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m11s)
+[kpf18]   done in 2m12s
+[kpf18 22:44:26Z] item 2: item2 g1.1 S=512: fork child (slot 1) from source ckpt 8192, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m12s)
+[kpf18]   done in 1m04s
+[kpf18 22:45:30Z] item 2: item2 g1.2 S=768: fork child (slot 1) from source ckpt 8192, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m13s)
+[kpf18]   done in 2m03s
+[kpf18 22:47:33Z] item 2: item2 g1.3 S=1024: fork child (slot 1) from source ckpt 8192, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m14s)
+[kpf18]   done in 1m26s
+[kpf18 22:48:59Z] item 2: item2 g2 erase all + source slot 0 = trunk+tail (12288+512), checkpoint_at [12288] (est 0m19s)
+[kpf18]   done in 4m17s
+[kpf18 22:53:16Z] item 2: item2 g2.0 S=256: fork child (slot 1) from source ckpt 12288, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m11s)
+[kpf18]   done in 1m27s
+[kpf18 22:54:43Z] item 2: item2 g2.1 S=512: fork child (slot 1) from source ckpt 12288, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m12s)
+[kpf18]   done in 1m02s
+[kpf18 22:55:45Z] item 2: item2 g2.2 S=768: fork child (slot 1) from source ckpt 12288, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m13s)
+[kpf18]   done in 1m08s
+[kpf18 22:56:53Z] item 2: item2 g2.3 S=1024: fork child (slot 1) from source ckpt 12288, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m14s)
+[kpf18]   done in 2m30s
+[kpf18 22:59:23Z] item 2: item2 g3 erase all + source slot 0 = trunk+tail (16384+512), checkpoint_at [16384] (est 0m26s)
+[kpf18]   done in 6m27s
+[kpf18 23:05:51Z] item 2: item2 g3.0 S=256: fork child (slot 1) from source ckpt 16384, then source's own continuation (slot 0) from the same ckpt; 128 tok each (est 0m12s)
+[kpf18] stopped item2-fork_on-20261020T220758Z pid 811447: {'pid': 811447, 'sent': ['TERM', 'KILL'], 'at': '2026-10-20T23:07:58Z', 'returncode': -9, 'verified_dead': True}
+[kpf18] record kpf18-20261020T220808Z-1 item 2 arm fork_on: {"control_floor": [0, 0], "vs_fresh": [0, 0], "bit_exact_ckpt": [12, 11], "source_invariance": [0, 0], "off_equals_champion": [0, 0]}

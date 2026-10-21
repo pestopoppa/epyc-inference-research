@@ -1,0 +1,11 @@
+swa-cpp-normal OK rc=0
+swa-cpp-mut-use_recorded_range OK mutation DETECTED rc=1
+swa-cpp-floor-nonswa OK rc=0
+swa-server-fork OK passed=1 skipped=0
+swa-server-mut-skew OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+swa-server-171-172-173 OK passed=10 skipped=0
+kvmode-abort-then-retry OK passed=1 skipped=0
+kvmode-all-new-cases OK passed=1 skipped=2
+kvmode-inj-abort_keeps_tail OK passed=1 skipped=0
+kvmode-mut-abort_keeps_tail+no_posmax_guard OK mutation abort_keeps_tail,no_posmax_guard DETECTED (failed=1 passed=0)
+kvmode-no_posmax_guard-alone OK passed=1 skipped=0

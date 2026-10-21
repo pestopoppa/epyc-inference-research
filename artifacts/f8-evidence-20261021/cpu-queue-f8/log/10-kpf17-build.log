@@ -1,0 +1,5 @@
+[region-lock] acquiring regions ['q2'] as role='build' (timeout_s=120.0) …
+[region-lock] held ['q2'] after 0.0s wait; running: env F8Q_CPUS=48-71,144-167 taskset -c 48-71,144-167 bash /mnt/raid0/llm/tmp/cpu-queue-f8/running/10-kpf17-build.sh
+[2026-10-20T22:51:02Z] head d2ef28e10 dirty=0
+[2026-10-20T22:51:39Z] STEP build OK llama_server_sha256=8f8606e7ffa58fc72fa685a022f68d7726e8873c28dfda7ee9895cdf9fb37f5e
+RESULT 10-kpf17-build pass=1 fail=0

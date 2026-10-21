@@ -1,0 +1,5813 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.0.3, pluggy-1.6.0
+rootdir: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests
+configfile: pytest.ini
+plugins: asyncio-1.3.0, timeout-2.4.0, langsmith-0.7.30, cov-7.1.0, xdist-3.8.0, hypothesis-6.151.13, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 23 deselected / 1 selected
+
+unit/test_slot_fork.py .                                                 [100%]
+
+==================================== PASSES ====================================
+__________________ test_kpf172_source_diverges_below_junction __________________
+----------------------------- Captured stdout call -----------------------------
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18980 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf --batch-size 32 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r2-20261020/queue-results/20-kpf17-tests-tiny/slots-172-diverge-below-junction --no-jinja --slot-fork-min-tokens 16
+server pid=1218247, pytest pid=1218043
+Waiting for server to start...
+0.00.001.474 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.744 W srv  llama_server: -----------------
+0.00.001.745 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.746 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.746 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.746 W srv  llama_server: -----------------
+0.00.002.914 I srv    load_model: loading model '/mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf'
+Response from server {
+  "error": {
+    "message": "Loading model",
+    "type": "unavailable_error",
+    "code": 503
+  }
+}
+Waiting for server to start...
+0.00.732.034 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.732.081 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = checkpoint, min tokens = 16, cache_idle_slots = 1
+0.00.734.138 I srv  llama_server: model loaded
+0.00.734.145 I srv  llama_server: listening on http://127.0.0.1:18980
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314,
+    279,
+    16382,
+    11,
+    279,
+    17199,
+    421,
+    5642,
+    11,
+    321,
+    279,
+    12106,
+    314,
+    279,
+    12515,
+    506,
+    41564,
+    13,
+    5875,
+    25292,
+    1578,
+    279,
+    1433,
+    13538,
+    310,
+    34227,
+    25442,
+    13,
+    3095,
+    279,
+    51624,
+    20922,
+    11,
+    279,
+    72103,
+    4998,
+    4439,
+    264,
+    3777,
+    42787,
+    310,
+    1301,
+    660,
+    314,
+    1070,
+    321,
+    27367,
+    1029,
+    1092,
+    995,
+    5324,
+    13,
+    561,
+    42787,
+    13293,
+    421,
+    42046,
+    995,
+    3512,
+    777,
+    20125,
+    303,
+    40297,
+    11,
+    421,
+    16253,
+    19340,
+    30592,
+    5642,
+    1754,
+    12828,
+    11,
+    321,
+    421,
+    279,
+    51624,
+    579,
+    88546,
+    13538,
+    8882,
+    321,
+    808,
+    932,
+    430,
+    279,
+    1578,
+    3804,
+    539,
+    13,
+    2838,
+    1048,
+    1669,
+    2526,
+    36590,
+    303,
+    279,
+    35374,
+    25,
+    338,
+    68042,
+    11,
+    264,
+    7993,
+    421,
+    11815,
+    303,
+    279,
+    20618,
+    364,
+    264,
+    1345,
+    11,
+    321,
+    2957,
+    264,
+    48335,
+    13,
+    220
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1092,
+    9572,
+    1467,
+    279,
+    42787,
+    1423,
+    14336,
+    303,
+    279,
+    35374,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1204,
+    1599,
+    25442,
+    1467,
+    279,
+    1433,
+    599,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    864,
+    3098,
+    995,
+    777,
+    42046,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    852,
+    1301,
+    279,
+    1433,
+    1238,
+    279,
+    51624,
+    20922,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    9357,
+    799,
+    11316,
+    883,
+    279,
+    51624,
+    579,
+    88546,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    1697,
+    2250,
+    2433,
+    279,
+    51624,
+    5947,
+    1441,
+    1396,
+    11129,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1092,
+    6716,
+    310,
+    279,
+    1324,
+    314,
+    19340,
+    30592,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    20052,
+    279,
+    1433,
+    264,
+    2716,
+    2192,
+    25
+  ]
+}
+Response from server {
+  "default_generation_settings": {
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": -1,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": -1,
+      "n_predict": -1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "none",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "n_ctx": 8192
+  },
+  "total_slots": 4,
+  "model_alias": "tinyllama-2",
+  "model_ftype": "Q8_0",
+  "model_path": "/mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "media_marker": "<__media_1YLe5BSePa1e1QtxuDPHfT5SXNavfLQ4__>",
+  "endpoint_slots": true,
+  "endpoint_props": false,
+  "endpoint_metrics": true,
+  "ui": true,
+  "ui_settings": {},
+  "chat_template": "{%- set image_count = namespace(value=0) %}\n{%- set video_count = namespace(value=0) %}\n{%- macro render_content(content, do_vision_count, is_system_content=false) %}\n    {%- if content is string %}\n        {{- content }}\n    {%- elif content is iterable and content is not mapping %}\n        {%- for item in content %}\n            {%- if 'image' in item or 'image_url' in item or item.type == 'image' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain images.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set image_count.value = image_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Picture ' ~ image_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|image_pad|><|vision_end|>' }}\n            {%- elif 'video' in item or item.type == 'video' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain videos.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set video_count.value = video_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Video ' ~ video_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|video_pad|><|vision_end|>' }}\n            {%- elif 'text' in item %}\n                {{- item.text }}\n            {%- else %}\n                {{- raise_exception('Unexpected item type in content.') }}\n            {%- endif %}\n        {%- endfor %}\n    {%- elif content is none or content is undefined %}\n        {{- '' }}\n    {%- else %}\n        {{- raise_exception('Unexpected content type.') }}\n    {%- endif %}\n{%- endmacro %}\n{%- if not messages %}\n    {{- raise_exception('No messages provided.') }}\n{%- endif %}\n{%- if tools and tools is iterable and tools is not mapping %}\n    {{- '<|im_start|>system\\n' }}\n    {{- \"# Tools\\n\\nYou have access to the following functions:\\n\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\" }}\n    {{- '\\n\\nIf you choose to call a function ONLY reply in the following format with NO suffix:\\n\\n<tool_call>\\n<function=example_function_name>\\n<parameter=example_parameter_1>\\nvalue_1\\n</parameter>\\n<parameter=example_parameter_2>\\nThis is the value for the second parameter\\nthat can span\\nmultiple lines\\n</parameter>\\n</function>\\n</tool_call>\\n\\n<IMPORTANT>\\nReminder:\\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\\n- Required parameters MUST be specified\\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\\n</IMPORTANT>' }}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {%- if content %}\n            {{- '\\n\\n' + content }}\n        {%- endif %}\n    {%- endif %}\n    {{- '<|im_end|>\\n' }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {{- '<|im_start|>system\\n' + content + '<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}\n{%- for message in messages[::-1] %}\n    {%- set index = (messages|length - 1) - loop.index0 %}\n    {%- if ns.multi_step_tool and message.role == \"user\" %}\n        {%- set content = render_content(message.content, false)|trim %}\n        {%- if not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}\n            {%- set ns.multi_step_tool = false %}\n            {%- set ns.last_query_index = index %}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if ns.multi_step_tool %}\n    {{- raise_exception('No user query found in messages.') }}\n{%- endif %}\n{%- for message in messages %}\n    {%- set content = render_content(message.content, true)|trim %}\n    {%- if message.role == \"system\" %}\n        {%- if not loop.first %}\n            {{- raise_exception('System message must be at the beginning.') }}\n        {%- endif %}\n    {%- elif message.role == \"user\" %}\n        {{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is string %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- else %}\n            {%- if '</think>' in content %}\n                {%- set reasoning_content = content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}\n                {%- set content = content.split('</think>')[-1].lstrip('\\n') %}\n            {%- endif %}\n        {%- endif %}\n        {%- set reasoning_content = reasoning_content|trim %}\n        {%- if loop.index0 > ns.last_query_index %}\n            {{- '<|im_start|>' + message.role + '\\n<think>\\n' + reasoning_content + '\\n</think>\\n\\n' + content }}\n        {%- else %}\n            {{- '<|im_start|>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if tool_call.function is defined %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {%- if loop.first %}\n                    {%- if content|trim %}\n                        {{- '\\n\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- else %}\n                        {{- '<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- endif %}\n                {%- else %}\n                    {{- '\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                {%- endif %}\n                {%- if tool_call.arguments is mapping %}\n                    {%- for args_name in tool_call.arguments %}\n                        {%- set args_value = tool_call.arguments[args_name] %}\n                        {{- '<parameter=' + args_name + '>\\n' }}\n                        {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}\n                        {{- args_value }}\n                        {{- '\\n</parameter>\\n' }}\n                    {%- endfor %}\n                {%- endif %}\n                {{- '</function>\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if loop.previtem and loop.previtem.role != \"tool\" %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- content }}\n        {{- '\\n</tool_response>' }}\n        {%- if not loop.last and loop.nextitem.role != \"tool\" %}\n            {{- '<|im_end|>\\n' }}\n        {%- elif loop.last %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- else %}\n        {{- raise_exception('Unexpected message role.') }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n    {%- if enable_thinking is defined and enable_thinking is true %}\n        {{- '<think>\\n' }}\n    {%- else %}\n        {{- '<think>\\n\\n</think>\\n\\n' }}\n    {%- endif %}\n{%- endif %}",
+  "chat_template_caps": {
+    "supports_object_arguments": true,
+    "supports_parallel_tool_calls": true,
+    "supports_preserve_reasoning": false,
+    "supports_string_content": true,
+    "supports_system_role": true,
+    "supports_tool_calls": true,
+    "supports_tools": true,
+    "supports_typed_content": false
+  },
+  "bos_token": ",",
+  "eos_token": "<|im_end|>",
+  "build_info": "b10359-1fd7e2e12",
+  "is_sleeping": false,
+  "cors_proxy_enabled": false,
+  "slot_fork": {
+    "min_tokens": 16,
+    "mode": "checkpoint",
+    "checkpoint_at": true
+  }
+}
+0.01.009.078 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.009.100 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.01.044.782 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 35.6 ms, kv_pos = 32, ms/tok = 0.000
+0.01.071.725 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 26.9 ms, kv_pos = 64, ms/tok = 0.000
+0.01.095.527 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 23.7 ms, kv_pos = 96, ms/tok = 0.000
+0.01.108.570 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 9 (slots 1), budget = 0, t_iter = 13.0 ms, kv_pos = 105, ms/tok = 0.000
+0.01.132.730 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 21.8 ms, kv_pos = 133, ms/tok = 0.000
+0.01.152.130 I slot print_timing: id  0 | task 0 | prompt eval time =     142.96 ms /   137 tokens (    1.04 ms per token,   958.28 tokens per second)
+0.01.152.191 I slot print_timing: id  0 | task 0 |        eval time =       0.00 ms /     1 tokens (    0.00 ms per token, 1000000.00 tokens per second)
+0.01.152.200 I slot print_timing: id  0 | task 0 |       total time =     142.97 ms /   138 tokens
+0.01.152.212 I slot print_timing: id  0 | task 0 |    graphs reused =          2
+0.01.152.277 I slot      release: id  0 | task 0 | stop processing: n_tokens = 137, truncated = 0
+0.01.152.628 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 17.1 ms, kv_pos = 137, ms/tok = 0.000
+Response from server {
+  "index": 0,
+  "content": "1",
+  "tokens": [
+    16
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 1,
+  "tokens_evaluated": 137,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 0,
+    "n_predict": 0,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. ",
+  "has_new_line": false,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 137,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 137,
+    "prompt_ms": 142.964,
+    "prompt_per_token_ms": 1.0435328467153284,
+    "prompt_per_second": 958.2832041632859,
+    "predicted_n": 1,
+    "predicted_ms": 0.001,
+    "predicted_per_token_ms": 0.001,
+    "predicted_per_second": 1000000.0,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 0
+  }
+}
+0.01.154.735 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+0.01.163.020 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 137, task.n_tokens = 149, t = 8.25 ms
+0.01.163.114 I slot launch_slot_: id  1 | task 7 | processing task, is_child = 0
+0.01.183.409 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 8 (slots 1), budget = 0, t_iter = 12.2 ms, kv_pos = 145, ms/tok = 0.000
+0.01.200.196 I srv  prefill_budg: prefill-budget: iter 8: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 14.5 ms, kv_pos = 149, ms/tok = 0.000
+0.01.519.395 I slot print_timing: id  1 | task 7 | prompt eval time =      28.95 ms /    12 tokens (    2.41 ms per token,   414.51 tokens per second)
+0.01.519.464 I slot print_timing: id  1 | task 7 |        eval time =     319.21 ms /    24 tokens (   13.30 ms per token,    75.19 tokens per second)
+0.01.519.489 I slot print_timing: id  1 | task 7 |       total time =     348.16 ms /    36 tokens
+0.01.519.497 I slot print_timing: id  1 | task 7 |    graphs reused =         24
+0.01.519.536 I slot      release: id  1 | task 7 | stop processing: n_tokens = 172, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The log had 40 volumes.\n\nThe log had 40 volumes.\n\nThe log had 40",
+  "tokens": [
+    561,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15
+  ],
+  "id_slot": 1,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 149,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: how many volumes did the log have? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 172,
+  "timings": {
+    "cache_n": 137,
+    "prompt_n": 12,
+    "prompt_ms": 28.95,
+    "prompt_per_token_ms": 2.4125,
+    "prompt_per_second": 414.50777202072544,
+    "predicted_n": 24,
+    "predicted_ms": 319.209,
+    "predicted_per_token_ms": 13.300375,
+    "predicted_per_second": 75.18585002302567,
+    "n_fork_tokens": 137,
+    "fork_src_slot": 0,
+    "fork_src_kind": "end",
+    "id_slot": 1,
+    "id_task": 7
+  }
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 7,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 172,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 7,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 172,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 7,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 172,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.526.477 I slot get_availabl: id  2 | task -1 | selected slot by id (2)
+0.01.530.899 I slot do_slot_fork: id  2 | task -1 | slot fork: src = 1 (idle), kind = checkpoint, n_fork_tokens = 137, task.n_tokens = 150, t = 4.38 ms
+0.01.530.932 I slot launch_slot_: id  2 | task 36 | processing task, is_child = 0
+0.01.553.323 I srv  prefill_budg: prefill-budget: iter 9: decode_rows = 0 (slots 0), prompt = 9 (slots 1), budget = 0, t_iter = 15.9 ms, kv_pos = 146, ms/tok = 0.000
+0.01.568.525 I srv  prefill_budg: prefill-budget: iter 10: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 13.5 ms, kv_pos = 150, ms/tok = 0.000
+0.01.846.163 I slot print_timing: id  2 | task 36 | prompt eval time =      31.11 ms /    13 tokens (    2.39 ms per token,   417.90 tokens per second)
+0.01.846.211 I slot print_timing: id  2 | task 36 |        eval time =     277.65 ms /    24 tokens (   11.57 ms per token,    86.44 tokens per second)
+0.01.846.218 I slot print_timing: id  2 | task 36 |       total time =     308.76 ms /    37 tokens
+0.01.846.225 I slot print_timing: id  2 | task 36 |    graphs reused =         46
+0.01.846.267 I slot      release: id  2 | task 36 | stop processing: n_tokens = 173, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The clerk.\n\nThe lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of",
+  "tokens": [
+    561,
+    42787,
+    13,
+    271,
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314
+  ],
+  "id_slot": 2,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 150,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: who read the log after the keeper retired? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 173,
+  "timings": {
+    "cache_n": 137,
+    "prompt_n": 13,
+    "prompt_ms": 31.108,
+    "prompt_per_token_ms": 2.392923076923077,
+    "prompt_per_second": 417.8989327504178,
+    "predicted_n": 24,
+    "predicted_ms": 277.648,
+    "predicted_per_token_ms": 11.568666666666667,
+    "predicted_per_second": 86.44038494784762,
+    "n_fork_tokens": 137,
+    "fork_src_slot": 1,
+    "fork_src_kind": "checkpoint",
+    "id_slot": 2,
+    "id_task": 36
+  }
+}
+0.01.848.295 I slot get_availabl: id  3 | task -1 | selected slot by id (3)
+0.01.848.316 I slot launch_slot_: id  3 | task 62 | processing task, is_child = 0
+0.01.891.370 I srv  prefill_budg: prefill-budget: iter 11: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 35.3 ms, kv_pos = 32, ms/tok = 0.000
+0.01.917.688 I srv  prefill_budg: prefill-budget: iter 12: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 26.3 ms, kv_pos = 64, ms/tok = 0.000
+0.01.940.628 I srv  prefill_budg: prefill-budget: iter 13: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 22.8 ms, kv_pos = 96, ms/tok = 0.000
+0.01.959.004 I srv  prefill_budg: prefill-budget: iter 14: decode_rows = 0 (slots 0), prompt = 22 (slots 1), budget = 0, t_iter = 18.3 ms, kv_pos = 118, ms/tok = 0.000
+0.01.982.808 I srv  prefill_budg: prefill-budget: iter 15: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 22.1 ms, kv_pos = 146, ms/tok = 0.000
+0.01.999.736 I srv  prefill_budg: prefill-budget: iter 16: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 15.2 ms, kv_pos = 150, ms/tok = 0.000
+0.02.337.020 I slot print_timing: id  3 | task 62 | prompt eval time =     142.37 ms /   150 tokens (    0.95 ms per token,  1053.61 tokens per second)
+0.02.337.080 I slot print_timing: id  3 | task 62 |        eval time =     337.32 ms /    24 tokens (   14.06 ms per token,    71.15 tokens per second)
+0.02.337.087 I slot print_timing: id  3 | task 62 |       total time =     479.69 ms /   174 tokens
+0.02.337.096 I slot print_timing: id  3 | task 62 |    graphs reused =         69
+0.02.337.146 I slot      release: id  3 | task 62 | stop processing: n_tokens = 173, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The clerk.\n\nThe lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of",
+  "tokens": [
+    561,
+    42787,
+    13,
+    271,
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314
+  ],
+  "id_slot": 3,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 150,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 2,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: who read the log after the keeper retired? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 173,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 150,
+    "prompt_ms": 142.368,
+    "prompt_per_token_ms": 0.94912,
+    "prompt_per_second": 1053.6075522589347,
+    "predicted_n": 24,
+    "predicted_ms": 337.323,
+    "predicted_per_token_ms": 14.055124999999999,
+    "predicted_per_second": 71.14842450707482,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 3,
+    "id_task": 62
+  },
+  "completion_probabilities": [
+    {
+      "id": 561,
+      "token": " The",
+      "bytes": [
+        32,
+        84,
+        104,
+        101
+      ],
+      "logprob": -1.2218273878097534,
+      "top_logprobs": [
+        {
+          "id": 561,
+          "token": " The",
+          "bytes": [
+            32,
+            84,
+            104,
+            101
+          ],
+          "logprob": -1.2218273878097534
+        },
+        {
+          "id": 357,
+          "token": " A",
+          "bytes": [
+            32,
+            65
+          ],
+          "logprob": -2.1664235591888428
+        }
+      ]
+    },
+    {
+      "id": 42787,
+      "token": " clerk",
+      "bytes": [
+        32,
+        99,
+        108,
+        101,
+        114,
+        107
+      ],
+      "logprob": -0.9103125929832458,
+      "top_logprobs": [
+        {
+          "id": 42787,
+          "token": " clerk",
+          "bytes": [
+            32,
+            99,
+            108,
+            101,
+            114,
+            107
+          ],
+          "logprob": -0.9103125929832458
+        },
+        {
+          "id": 324,
+          "token": " l",
+          "bytes": [
+            32,
+            108
+          ],
+          "logprob": -2.032528877258301
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "token": ".",
+      "bytes": [
+        46
+      ],
+      "logprob": -0.8627599477767944,
+      "top_logprobs": [
+        {
+          "id": 13,
+          "token": ".",
+          "bytes": [
+            46
+          ],
+          "logprob": -0.8627599477767944
+        },
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -2.095843553543091
+        }
+      ]
+    },
+    {
+      "id": 271,
+      "token": "\n\n",
+      "bytes": [
+        10,
+        10
+      ],
+      "logprob": -0.44193151593208313,
+      "top_logprobs": [
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -0.44193151593208313
+        },
+        {
+          "id": 198,
+          "token": "\n",
+          "bytes": [
+            10
+          ],
+          "logprob": -1.8021419048309326
+        }
+      ]
+    },
+    {
+      "id": 760,
+      "token": "The",
+      "bytes": [
+        84,
+        104,
+        101
+      ],
+      "logprob": -1.7044399976730347,
+      "top_logprobs": [
+        {
+          "id": 760,
+          "token": "The",
+          "bytes": [
+            84,
+            104,
+            101
+          ],
+          "logprob": -1.7044399976730347
+        },
+        {
+          "id": 248068,
+          "token": "<think>",
+          "bytes": [
+            60,
+            116,
+            104,
+            105,
+            110,
+            107,
+            62
+          ],
+          "logprob": -2.1982107162475586
+        }
+      ]
+    },
+    {
+      "id": 324,
+      "token": " l",
+      "bytes": [
+        32,
+        108
+      ],
+      "logprob": -1.5766181945800781,
+      "top_logprobs": [
+        {
+          "id": 324,
+          "token": " l",
+          "bytes": [
+            32,
+            108
+          ],
+          "logprob": -1.5766181945800781
+        },
+        {
+          "id": 2614,
+          "token": " following",
+          "bytes": [
+            32,
+            102,
+            111,
+            108,
+            108,
+            111,
+            119,
+            105,
+            110,
+            103
+          ],
+          "logprob": -2.046205520629883
+        }
+      ]
+    },
+    {
+      "id": 55965,
+      "token": "ighthouse",
+      "bytes": [
+        105,
+        103,
+        104,
+        116,
+        104,
+        111,
+        117,
+        115,
+        101
+      ],
+      "logprob": -0.00010145224950974807,
+      "top_logprobs": [
+        {
+          "id": 55965,
+          "token": "ighthouse",
+          "bytes": [
+            105,
+            103,
+            104,
+            116,
+            104,
+            111,
+            117,
+            115,
+            101
+          ],
+          "logprob": -0.00010145224950974807
+        },
+        {
+          "id": 21204,
+          "token": "ighth",
+          "bytes": [
+            105,
+            103,
+            104,
+            116,
+            104
+          ],
+          "logprob": -9.895467758178711
+        }
+      ]
+    },
+    {
+      "id": 51624,
+      "token": " keeper",
+      "bytes": [
+        32,
+        107,
+        101,
+        101,
+        112,
+        101,
+        114
+      ],
+      "logprob": -0.002964296145364642,
+      "top_logprobs": [
+        {
+          "id": 51624,
+          "token": " keeper",
+          "bytes": [
+            32,
+            107,
+            101,
+            101,
+            112,
+            101,
+            114
+          ],
+          "logprob": -0.002964296145364642
+        },
+        {
+          "id": 8341,
+          "token": " kept",
+          "bytes": [
+            32,
+            107,
+            101,
+            112,
+            116
+          ],
+          "logprob": -7.2163238525390625
+        }
+      ]
+    },
+    {
+      "id": 8341,
+      "token": " kept",
+      "bytes": [
+        32,
+        107,
+        101,
+        112,
+        116
+      ],
+      "logprob": -0.08148343116044998,
+      "top_logprobs": [
+        {
+          "id": 8341,
+          "token": " kept",
+          "bytes": [
+            32,
+            107,
+            101,
+            112,
+            116
+          ],
+          "logprob": -0.08148343116044998
+        },
+        {
+          "id": 579,
+          "token": "'s",
+          "bytes": [
+            39,
+            115
+          ],
+          "logprob": -4.146749019622803
+        }
+      ]
+    },
+    {
+      "id": 264,
+      "token": " a",
+      "bytes": [
+        32,
+        97
+      ],
+      "logprob": -0.002851614262908697,
+      "top_logprobs": [
+        {
+          "id": 264,
+          "token": " a",
+          "bytes": [
+            32,
+            97
+          ],
+          "logprob": -0.002851614262908697
+        },
+        {
+          "id": 780,
+          "token": " his",
+          "bytes": [
+            32,
+            104,
+            105,
+            115
+          ],
+          "logprob": -7.384845733642578
+        }
+      ]
+    },
+    {
+      "id": 16097,
+      "token": " careful",
+      "bytes": [
+        32,
+        99,
+        97,
+        114,
+        101,
+        102,
+        117,
+        108
+      ],
+      "logprob": -0.05857742205262184,
+      "top_logprobs": [
+        {
+          "id": 16097,
+          "token": " careful",
+          "bytes": [
+            32,
+            99,
+            97,
+            114,
+            101,
+            102,
+            117,
+            108
+          ],
+          "logprob": -0.05857742205262184
+        },
+        {
+          "id": 15060,
+          "token": " carefully",
+          "bytes": [
+            32,
+            99,
+            97,
+            114,
+            101,
+            102,
+            117,
+            108,
+            108,
+            121
+          ],
+          "logprob": -3.8589351177215576
+        }
+      ]
+    },
+    {
+      "id": 1433,
+      "token": " log",
+      "bytes": [
+        32,
+        108,
+        111,
+        103
+      ],
+      "logprob": -0.003745588008314371,
+      "top_logprobs": [
+        {
+          "id": 1433,
+          "token": " log",
+          "bytes": [
+            32,
+            108,
+            111,
+            103
+          ],
+          "logprob": -0.003745588008314371
+        },
+        {
+          "id": 324,
+          "token": " l",
+          "bytes": [
+            32,
+            108
+          ],
+          "logprob": -7.839590549468994
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "token": ".",
+      "bytes": [
+        46
+      ],
+      "logprob": -0.07880131155252457,
+      "top_logprobs": [
+        {
+          "id": 13,
+          "token": ".",
+          "bytes": [
+            46
+          ],
+          "logprob": -0.07880131155252457
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -3.644780158996582
+        }
+      ]
+    },
+    {
+      "id": 6983,
+      "token": " Every",
+      "bytes": [
+        32,
+        69,
+        118,
+        101,
+        114,
+        121
+      ],
+      "logprob": -0.08115013688802719,
+      "top_logprobs": [
+        {
+          "id": 6983,
+          "token": " Every",
+          "bytes": [
+            32,
+            69,
+            118,
+            101,
+            114,
+            121
+          ],
+          "logprob": -0.08115013688802719
+        },
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -4.100177764892578
+        }
+      ]
+    },
+    {
+      "id": 11129,
+      "token": " evening",
+      "bytes": [
+        32,
+        101,
+        118,
+        101,
+        110,
+        105,
+        110,
+        103
+      ],
+      "logprob": -0.00255224690772593,
+      "top_logprobs": [
+        {
+          "id": 11129,
+          "token": " evening",
+          "bytes": [
+            32,
+            101,
+            118,
+            101,
+            110,
+            105,
+            110,
+            103
+          ],
+          "logprob": -0.00255224690772593
+        },
+        {
+          "id": 3603,
+          "token": " night",
+          "bytes": [
+            32,
+            110,
+            105,
+            103,
+            104,
+            116
+          ],
+          "logprob": -6.777134418487549
+        }
+      ]
+    },
+    {
+      "id": 551,
+      "token": " he",
+      "bytes": [
+        32,
+        104,
+        101
+      ],
+      "logprob": -0.011821429245173931,
+      "top_logprobs": [
+        {
+          "id": 551,
+          "token": " he",
+          "bytes": [
+            32,
+            104,
+            101
+          ],
+          "logprob": -0.011821429245173931
+        },
+        {
+          "id": 1292,
+          "token": " she",
+          "bytes": [
+            32,
+            115,
+            104,
+            101
+          ],
+          "logprob": -4.542907238006592
+        }
+      ]
+    },
+    {
+      "id": 5947,
+      "token": " wrote",
+      "bytes": [
+        32,
+        119,
+        114,
+        111,
+        116,
+        101
+      ],
+      "logprob": -0.0030575599521398544,
+      "top_logprobs": [
+        {
+          "id": 5947,
+          "token": " wrote",
+          "bytes": [
+            32,
+            119,
+            114,
+            111,
+            116,
+            101
+          ],
+          "logprob": -0.0030575599521398544
+        },
+        {
+          "id": 5158,
+          "token": " written",
+          "bytes": [
+            32,
+            119,
+            114,
+            105,
+            116,
+            116,
+            101,
+            110
+          ],
+          "logprob": -7.6680755615234375
+        }
+      ]
+    },
+    {
+      "id": 1441,
+      "token": " down",
+      "bytes": [
+        32,
+        100,
+        111,
+        119,
+        110
+      ],
+      "logprob": -0.0003942432231269777,
+      "top_logprobs": [
+        {
+          "id": 1441,
+          "token": " down",
+          "bytes": [
+            32,
+            100,
+            111,
+            119,
+            110
+          ],
+          "logprob": -0.0003942432231269777
+        },
+        {
+          "id": 680,
+          "token": " out",
+          "bytes": [
+            32,
+            111,
+            117,
+            116
+          ],
+          "logprob": -9.943567276000977
+        }
+      ]
+    },
+    {
+      "id": 279,
+      "token": " the",
+      "bytes": [
+        32,
+        116,
+        104,
+        101
+      ],
+      "logprob": -0.007170035038143396,
+      "top_logprobs": [
+        {
+          "id": 279,
+          "token": " the",
+          "bytes": [
+            32,
+            116,
+            104,
+            101
+          ],
+          "logprob": -0.007170035038143396
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -5.976500034332275
+        }
+      ]
+    },
+    {
+      "id": 9662,
+      "token": " wind",
+      "bytes": [
+        32,
+        119,
+        105,
+        110,
+        100
+      ],
+      "logprob": -0.012454800307750702,
+      "top_logprobs": [
+        {
+          "id": 9662,
+          "token": " wind",
+          "bytes": [
+            32,
+            119,
+            105,
+            110,
+            100
+          ],
+          "logprob": -0.012454800307750702
+        },
+        {
+          "id": 2423,
+          "token": " ...",
+          "bytes": [
+            32,
+            46,
+            46,
+            46
+          ],
+          "logprob": -6.213512420654297
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "token": ",",
+      "bytes": [
+        44
+      ],
+      "logprob": -0.004807446151971817,
+      "top_logprobs": [
+        {
+          "id": 11,
+          "token": ",",
+          "bytes": [
+            44
+          ],
+          "logprob": -0.004807446151971817
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -5.806540489196777
+        }
+      ]
+    },
+    {
+      "id": 279,
+      "token": " the",
+      "bytes": [
+        32,
+        116,
+        104,
+        101
+      ],
+      "logprob": -0.0008638655417598784,
+      "top_logprobs": [
+        {
+          "id": 279,
+          "token": " the",
+          "bytes": [
+            32,
+            116,
+            104,
+            101
+          ],
+          "logprob": -0.0008638655417598784
+        },
+        {
+          "id": 2423,
+          "token": " ...",
+          "bytes": [
+            32,
+            46,
+            46,
+            46
+          ],
+          "logprob": -8.86041259765625
+        }
+      ]
+    },
+    {
+      "id": 2521,
+      "token": " height",
+      "bytes": [
+        32,
+        104,
+        101,
+        105,
+        103,
+        104,
+        116
+      ],
+      "logprob": -0.001511762267909944,
+      "top_logprobs": [
+        {
+          "id": 2521,
+          "token": " height",
+          "bytes": [
+            32,
+            104,
+            101,
+            105,
+            103,
+            104,
+            116
+          ],
+          "logprob": -0.001511762267909944
+        },
+        {
+          "id": 34124,
+          "token": " heights",
+          "bytes": [
+            32,
+            104,
+            101,
+            105,
+            103,
+            104,
+            116,
+            115
+          ],
+          "logprob": -7.336447715759277
+        }
+      ]
+    },
+    {
+      "id": 314,
+      "token": " of",
+      "bytes": [
+        32,
+        111,
+        102
+      ],
+      "logprob": -0.000260565837379545,
+      "top_logprobs": [
+        {
+          "id": 314,
+          "token": " of",
+          "bytes": [
+            32,
+            111,
+            102
+          ],
+          "logprob": -0.000260565837379545
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -9.446368217468262
+        }
+      ]
+    }
+  ]
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 173,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 7,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 173,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 36,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 13,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 173,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 4,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 62,
+    "n_prompt_tokens": 173,
+    "n_prompt_tokens_processed": 150,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 2,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 173,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 173,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "6234cf005fc8efe0",
+    "checkpoints": [
+      {
+        "n_tokens": 118,
+        "pos_min": 117,
+        "pos_max": 117,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "161857e91ec0d838"
+      },
+      {
+        "n_tokens": 146,
+        "pos_min": 145,
+        "pos_max": 145,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b2e3bf24e3856e66"
+      }
+    ]
+  }
+]
+Stopping server with pid=1218247
+0.02.340.940 I srv    operator(): operator(): cleaning up before exit...
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18980 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf --batch-size 32 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r2-20261020/queue-results/20-kpf17-tests-tiny/slots-172-diverge-below-junction --no-jinja --slot-fork-min-tokens 16 --no-cache-idle-slots
+server pid=1219751, pytest pid=1218043
+Waiting for server to start...
+0.00.001.568 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.895 W srv  llama_server: -----------------
+0.00.001.897 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.897 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.897 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.897 W srv  llama_server: -----------------
+0.00.003.069 I srv    load_model: loading model '/mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf'
+Response from server {
+  "error": {
+    "message": "Loading model",
+    "type": "unavailable_error",
+    "code": 503
+  }
+}
+Waiting for server to start...
+0.00.696.139 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.696.187 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = checkpoint, min tokens = 16, cache_idle_slots = 0
+0.00.698.833 I srv  llama_server: model loaded
+0.00.698.839 I srv  llama_server: listening on http://127.0.0.1:18980
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314,
+    279,
+    16382,
+    11,
+    279,
+    17199,
+    421,
+    5642,
+    11,
+    321,
+    279,
+    12106,
+    314,
+    279,
+    12515,
+    506,
+    41564,
+    13,
+    5875,
+    25292,
+    1578,
+    279,
+    1433,
+    13538,
+    310,
+    34227,
+    25442,
+    13,
+    3095,
+    279,
+    51624,
+    20922,
+    11,
+    279,
+    72103,
+    4998,
+    4439,
+    264,
+    3777,
+    42787,
+    310,
+    1301,
+    660,
+    314,
+    1070,
+    321,
+    27367,
+    1029,
+    1092,
+    995,
+    5324,
+    13,
+    561,
+    42787,
+    13293,
+    421,
+    42046,
+    995,
+    3512,
+    777,
+    20125,
+    303,
+    40297,
+    11,
+    421,
+    16253,
+    19340,
+    30592,
+    5642,
+    1754,
+    12828,
+    11,
+    321,
+    421,
+    279,
+    51624,
+    579,
+    88546,
+    13538,
+    8882,
+    321,
+    808,
+    932,
+    430,
+    279,
+    1578,
+    3804,
+    539,
+    13,
+    2838,
+    1048,
+    1669,
+    2526,
+    36590,
+    303,
+    279,
+    35374,
+    25,
+    338,
+    68042,
+    11,
+    264,
+    7993,
+    421,
+    11815,
+    303,
+    279,
+    20618,
+    364,
+    264,
+    1345,
+    11,
+    321,
+    2957,
+    264,
+    48335,
+    13,
+    220
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1092,
+    9572,
+    1467,
+    279,
+    42787,
+    1423,
+    14336,
+    303,
+    279,
+    35374,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1204,
+    1599,
+    25442,
+    1467,
+    279,
+    1433,
+    599,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    864,
+    3098,
+    995,
+    777,
+    42046,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    852,
+    1301,
+    279,
+    1433,
+    1238,
+    279,
+    51624,
+    20922,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    9357,
+    799,
+    11316,
+    883,
+    279,
+    51624,
+    579,
+    88546,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    1697,
+    2250,
+    2433,
+    279,
+    51624,
+    5947,
+    1441,
+    1396,
+    11129,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1092,
+    6716,
+    310,
+    279,
+    1324,
+    314,
+    19340,
+    30592,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    20052,
+    279,
+    1433,
+    264,
+    2716,
+    2192,
+    25
+  ]
+}
+Response from server {
+  "default_generation_settings": {
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": -1,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": -1,
+      "n_predict": -1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "none",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "n_ctx": 8192
+  },
+  "total_slots": 4,
+  "model_alias": "tinyllama-2",
+  "model_ftype": "Q8_0",
+  "model_path": "/mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "media_marker": "<__media_b85SHnsdJpiLoHHTDC50A4enRC8nqaaM__>",
+  "endpoint_slots": true,
+  "endpoint_props": false,
+  "endpoint_metrics": true,
+  "ui": true,
+  "ui_settings": {},
+  "chat_template": "{%- set image_count = namespace(value=0) %}\n{%- set video_count = namespace(value=0) %}\n{%- macro render_content(content, do_vision_count, is_system_content=false) %}\n    {%- if content is string %}\n        {{- content }}\n    {%- elif content is iterable and content is not mapping %}\n        {%- for item in content %}\n            {%- if 'image' in item or 'image_url' in item or item.type == 'image' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain images.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set image_count.value = image_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Picture ' ~ image_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|image_pad|><|vision_end|>' }}\n            {%- elif 'video' in item or item.type == 'video' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain videos.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set video_count.value = video_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Video ' ~ video_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|video_pad|><|vision_end|>' }}\n            {%- elif 'text' in item %}\n                {{- item.text }}\n            {%- else %}\n                {{- raise_exception('Unexpected item type in content.') }}\n            {%- endif %}\n        {%- endfor %}\n    {%- elif content is none or content is undefined %}\n        {{- '' }}\n    {%- else %}\n        {{- raise_exception('Unexpected content type.') }}\n    {%- endif %}\n{%- endmacro %}\n{%- if not messages %}\n    {{- raise_exception('No messages provided.') }}\n{%- endif %}\n{%- if tools and tools is iterable and tools is not mapping %}\n    {{- '<|im_start|>system\\n' }}\n    {{- \"# Tools\\n\\nYou have access to the following functions:\\n\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\" }}\n    {{- '\\n\\nIf you choose to call a function ONLY reply in the following format with NO suffix:\\n\\n<tool_call>\\n<function=example_function_name>\\n<parameter=example_parameter_1>\\nvalue_1\\n</parameter>\\n<parameter=example_parameter_2>\\nThis is the value for the second parameter\\nthat can span\\nmultiple lines\\n</parameter>\\n</function>\\n</tool_call>\\n\\n<IMPORTANT>\\nReminder:\\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\\n- Required parameters MUST be specified\\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\\n</IMPORTANT>' }}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {%- if content %}\n            {{- '\\n\\n' + content }}\n        {%- endif %}\n    {%- endif %}\n    {{- '<|im_end|>\\n' }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {{- '<|im_start|>system\\n' + content + '<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}\n{%- for message in messages[::-1] %}\n    {%- set index = (messages|length - 1) - loop.index0 %}\n    {%- if ns.multi_step_tool and message.role == \"user\" %}\n        {%- set content = render_content(message.content, false)|trim %}\n        {%- if not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}\n            {%- set ns.multi_step_tool = false %}\n            {%- set ns.last_query_index = index %}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if ns.multi_step_tool %}\n    {{- raise_exception('No user query found in messages.') }}\n{%- endif %}\n{%- for message in messages %}\n    {%- set content = render_content(message.content, true)|trim %}\n    {%- if message.role == \"system\" %}\n        {%- if not loop.first %}\n            {{- raise_exception('System message must be at the beginning.') }}\n        {%- endif %}\n    {%- elif message.role == \"user\" %}\n        {{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is string %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- else %}\n            {%- if '</think>' in content %}\n                {%- set reasoning_content = content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}\n                {%- set content = content.split('</think>')[-1].lstrip('\\n') %}\n            {%- endif %}\n        {%- endif %}\n        {%- set reasoning_content = reasoning_content|trim %}\n        {%- if loop.index0 > ns.last_query_index %}\n            {{- '<|im_start|>' + message.role + '\\n<think>\\n' + reasoning_content + '\\n</think>\\n\\n' + content }}\n        {%- else %}\n            {{- '<|im_start|>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if tool_call.function is defined %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {%- if loop.first %}\n                    {%- if content|trim %}\n                        {{- '\\n\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- else %}\n                        {{- '<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- endif %}\n                {%- else %}\n                    {{- '\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                {%- endif %}\n                {%- if tool_call.arguments is mapping %}\n                    {%- for args_name in tool_call.arguments %}\n                        {%- set args_value = tool_call.arguments[args_name] %}\n                        {{- '<parameter=' + args_name + '>\\n' }}\n                        {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}\n                        {{- args_value }}\n                        {{- '\\n</parameter>\\n' }}\n                    {%- endfor %}\n                {%- endif %}\n                {{- '</function>\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if loop.previtem and loop.previtem.role != \"tool\" %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- content }}\n        {{- '\\n</tool_response>' }}\n        {%- if not loop.last and loop.nextitem.role != \"tool\" %}\n            {{- '<|im_end|>\\n' }}\n        {%- elif loop.last %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- else %}\n        {{- raise_exception('Unexpected message role.') }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n    {%- if enable_thinking is defined and enable_thinking is true %}\n        {{- '<think>\\n' }}\n    {%- else %}\n        {{- '<think>\\n\\n</think>\\n\\n' }}\n    {%- endif %}\n{%- endif %}",
+  "chat_template_caps": {
+    "supports_object_arguments": true,
+    "supports_parallel_tool_calls": true,
+    "supports_preserve_reasoning": false,
+    "supports_string_content": true,
+    "supports_system_role": true,
+    "supports_tool_calls": true,
+    "supports_tools": true,
+    "supports_typed_content": false
+  },
+  "bos_token": ",",
+  "eos_token": "<|im_end|>",
+  "build_info": "b10359-1fd7e2e12",
+  "is_sleeping": false,
+  "cors_proxy_enabled": false,
+  "slot_fork": {
+    "min_tokens": 16,
+    "mode": "checkpoint",
+    "checkpoint_at": true
+  }
+}
+0.01.010.527 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.010.550 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.01.046.941 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 36.3 ms, kv_pos = 32, ms/tok = 0.000
+0.01.075.264 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 28.3 ms, kv_pos = 64, ms/tok = 0.000
+0.01.101.050 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 25.7 ms, kv_pos = 96, ms/tok = 0.000
+0.01.116.556 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 9 (slots 1), budget = 0, t_iter = 15.4 ms, kv_pos = 105, ms/tok = 0.000
+0.01.146.323 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 27.1 ms, kv_pos = 133, ms/tok = 0.000
+0.01.169.230 I slot print_timing: id  0 | task 0 | prompt eval time =     158.63 ms /   137 tokens (    1.16 ms per token,   863.62 tokens per second)
+0.01.169.277 I slot print_timing: id  0 | task 0 |        eval time =       0.00 ms /     1 tokens (    0.00 ms per token, 1000000.00 tokens per second)
+0.01.169.285 I slot print_timing: id  0 | task 0 |       total time =     158.63 ms /   138 tokens
+0.01.169.296 I slot print_timing: id  0 | task 0 |    graphs reused =          2
+0.01.169.360 I slot      release: id  0 | task 0 | stop processing: n_tokens = 137, truncated = 0
+0.01.169.378 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 19.9 ms, kv_pos = 137, ms/tok = 0.000
+Response from server {
+  "index": 0,
+  "content": "1",
+  "tokens": [
+    16
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 1,
+  "tokens_evaluated": 137,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 0,
+    "n_predict": 0,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. ",
+  "has_new_line": false,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 137,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 137,
+    "prompt_ms": 158.634,
+    "prompt_per_token_ms": 1.157912408759124,
+    "prompt_per_second": 863.6231829242156,
+    "predicted_n": 1,
+    "predicted_ms": 0.001,
+    "predicted_per_token_ms": 0.001,
+    "predicted_per_second": 1000000.0,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 0
+  }
+}
+0.01.171.974 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+0.01.181.694 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 137, task.n_tokens = 149, t = 9.68 ms
+0.01.181.818 I slot launch_slot_: id  1 | task 7 | processing task, is_child = 0
+0.01.234.815 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 8 (slots 1), budget = 0, t_iter = 52.9 ms, kv_pos = 282, ms/tok = 0.000
+0.01.255.409 I srv  prefill_budg: prefill-budget: iter 8: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 18.1 ms, kv_pos = 286, ms/tok = 0.000
+0.01.573.862 I slot print_timing: id  1 | task 7 | prompt eval time =      73.55 ms /    12 tokens (    6.13 ms per token,   163.16 tokens per second)
+0.01.573.904 I slot print_timing: id  1 | task 7 |        eval time =     318.46 ms /    24 tokens (   13.27 ms per token,    75.36 tokens per second)
+0.01.573.911 I slot print_timing: id  1 | task 7 |       total time =     392.01 ms /    36 tokens
+0.01.573.919 I slot print_timing: id  1 | task 7 |    graphs reused =         24
+0.01.573.960 I slot      release: id  1 | task 7 | stop processing: n_tokens = 172, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The log had 40 volumes.\n\nThe log had 40 volumes.\n\nThe log had 40",
+  "tokens": [
+    561,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15
+  ],
+  "id_slot": 1,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 149,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: how many volumes did the log have? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 172,
+  "timings": {
+    "cache_n": 137,
+    "prompt_n": 12,
+    "prompt_ms": 73.548,
+    "prompt_per_token_ms": 6.1290000000000004,
+    "prompt_per_second": 163.15875346712352,
+    "predicted_n": 24,
+    "predicted_ms": 318.463,
+    "predicted_per_token_ms": 13.269291666666668,
+    "predicted_per_second": 75.36197297645252,
+    "n_fork_tokens": 137,
+    "fork_src_slot": 0,
+    "fork_src_kind": "end",
+    "id_slot": 1,
+    "id_task": 7
+  }
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 7,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 35,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 172,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.580.467 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.589.661 I slot launch_slot_: id  0 | task 34 | processing task, is_child = 0
+0.01.636.198 I srv  prefill_budg: prefill-budget: iter 9: decode_rows = 0 (slots 0), prompt = 18 (slots 1), budget = 0, t_iter = 46.1 ms, kv_pos = 190, ms/tok = 0.000
+0.01.667.112 I srv  prefill_budg: prefill-budget: iter 10: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 28.6 ms, kv_pos = 218, ms/tok = 0.000
+0.01.686.135 I srv  prefill_budg: prefill-budget: iter 11: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 16.8 ms, kv_pos = 222, ms/tok = 0.000
+0.01.703.167 I slot print_timing: id  0 | task 34 | prompt eval time =      96.41 ms /    50 tokens (    1.93 ms per token,   518.60 tokens per second)
+0.01.703.199 I slot print_timing: id  0 | task 34 |        eval time =      17.04 ms /     2 tokens (    8.52 ms per token,   117.36 tokens per second)
+0.01.703.222 I slot print_timing: id  0 | task 34 |       total time =     113.46 ms /    52 tokens
+0.01.703.230 I slot print_timing: id  0 | task 34 |    graphs reused =         24
+0.01.703.261 I slot      release: id  0 | task 34 | stop processing: n_tokens = 51, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " 2",
+  "tokens": [
+    220,
+    17
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 2,
+  "tokens_evaluated": 50,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 2,
+    "n_predict": 2,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years Question: which season had more storms? Answer:",
+  "has_new_line": false,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 51,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 50,
+    "prompt_ms": 96.414,
+    "prompt_per_token_ms": 1.92828,
+    "prompt_per_second": 518.5968842699193,
+    "predicted_n": 2,
+    "predicted_ms": 17.042,
+    "predicted_per_token_ms": 8.521,
+    "predicted_per_second": 117.35711770918905,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 34
+  }
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 34,
+    "n_prompt_tokens": 51,
+    "n_prompt_tokens_processed": 50,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 2,
+      "n_predict": 2,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 2
+      }
+    ],
+    "kv_cells": {
+      "private": 51,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 223,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "0f291406564309ca",
+    "checkpoints": [
+      {
+        "n_tokens": 18,
+        "pos_min": 17,
+        "pos_max": 17,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "acfaafed0eb7c055"
+      },
+      {
+        "n_tokens": 46,
+        "pos_min": 45,
+        "pos_max": 45,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "be60da6593ba8bd7"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 7,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 172,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 223,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 223,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 223,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.708.990 I slot get_availabl: id  2 | task -1 | selected slot by id (2)
+0.01.714.261 I slot do_slot_fork: id  2 | task -1 | slot fork: src = 1 (idle), kind = checkpoint, n_fork_tokens = 137, task.n_tokens = 150, t = 5.23 ms
+0.01.714.297 I slot launch_slot_: id  2 | task 40 | processing task, is_child = 0
+0.01.729.573 I srv  prefill_budg: prefill-budget: iter 12: decode_rows = 0 (slots 0), prompt = 9 (slots 1), budget = 0, t_iter = 15.2 ms, kv_pos = 369, ms/tok = 0.000
+0.01.749.915 I srv  prefill_budg: prefill-budget: iter 13: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 17.8 ms, kv_pos = 373, ms/tok = 0.000
+0.02.039.357 I slot print_timing: id  2 | task 40 | prompt eval time =      35.58 ms /    13 tokens (    2.74 ms per token,   365.39 tokens per second)
+0.02.039.414 I slot print_timing: id  2 | task 40 |        eval time =     289.45 ms /    24 tokens (   12.06 ms per token,    82.92 tokens per second)
+0.02.039.421 I slot print_timing: id  2 | task 40 |       total time =     325.03 ms /    37 tokens
+0.02.039.428 I slot print_timing: id  2 | task 40 |    graphs reused =         45
+0.02.039.469 I slot      release: id  2 | task 40 | stop processing: n_tokens = 173, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The clerk.\n\nThe lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of",
+  "tokens": [
+    561,
+    42787,
+    13,
+    271,
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314
+  ],
+  "id_slot": 2,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 150,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: who read the log after the keeper retired? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 173,
+  "timings": {
+    "cache_n": 137,
+    "prompt_n": 13,
+    "prompt_ms": 35.578,
+    "prompt_per_token_ms": 2.736769230769231,
+    "prompt_per_second": 365.39434481983244,
+    "predicted_n": 24,
+    "predicted_ms": 289.451,
+    "predicted_per_token_ms": 12.060458333333335,
+    "predicted_per_second": 82.91558847611512,
+    "n_fork_tokens": 137,
+    "fork_src_slot": 1,
+    "fork_src_kind": "checkpoint",
+    "id_slot": 2,
+    "id_task": 40
+  }
+}
+0.02.042.995 I slot get_availabl: id  3 | task -1 | selected slot by id (3)
+0.02.043.023 I slot launch_slot_: id  3 | task 66 | processing task, is_child = 0
+0.02.078.641 I srv  prefill_budg: prefill-budget: iter 14: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 35.6 ms, kv_pos = 428, ms/tok = 0.000
+0.02.104.666 I srv  prefill_budg: prefill-budget: iter 15: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 26.0 ms, kv_pos = 460, ms/tok = 0.000
+0.02.127.174 I srv  prefill_budg: prefill-budget: iter 16: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 22.5 ms, kv_pos = 492, ms/tok = 0.000
+0.02.145.333 I srv  prefill_budg: prefill-budget: iter 17: decode_rows = 0 (slots 0), prompt = 22 (slots 1), budget = 0, t_iter = 18.1 ms, kv_pos = 514, ms/tok = 0.000
+0.02.168.542 I srv  prefill_budg: prefill-budget: iter 18: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 20.9 ms, kv_pos = 542, ms/tok = 0.000
+0.02.186.315 I srv  prefill_budg: prefill-budget: iter 19: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 15.6 ms, kv_pos = 546, ms/tok = 0.000
+0.02.472.347 I slot print_timing: id  3 | task 66 | prompt eval time =     141.69 ms /   150 tokens (    0.94 ms per token,  1058.62 tokens per second)
+0.02.472.354 I slot print_timing: id  3 | task 66 |        eval time =     286.61 ms /    24 tokens (   11.94 ms per token,    83.74 tokens per second)
+0.02.472.355 I slot print_timing: id  3 | task 66 |       total time =     428.31 ms /   174 tokens
+0.02.472.356 I slot print_timing: id  3 | task 66 |    graphs reused =         68
+0.02.472.390 I slot      release: id  3 | task 66 | stop processing: n_tokens = 173, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The clerk.\n\nThe lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of",
+  "tokens": [
+    561,
+    42787,
+    13,
+    271,
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314
+  ],
+  "id_slot": 3,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 150,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 2,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: who read the log after the keeper retired? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 173,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 150,
+    "prompt_ms": 141.694,
+    "prompt_per_token_ms": 0.9446266666666666,
+    "prompt_per_second": 1058.6192781628015,
+    "predicted_n": 24,
+    "predicted_ms": 286.612,
+    "predicted_per_token_ms": 11.942166666666667,
+    "predicted_per_second": 83.73689866439646,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 3,
+    "id_task": 66
+  },
+  "completion_probabilities": [
+    {
+      "id": 561,
+      "token": " The",
+      "bytes": [
+        32,
+        84,
+        104,
+        101
+      ],
+      "logprob": -1.2218273878097534,
+      "top_logprobs": [
+        {
+          "id": 561,
+          "token": " The",
+          "bytes": [
+            32,
+            84,
+            104,
+            101
+          ],
+          "logprob": -1.2218273878097534
+        },
+        {
+          "id": 357,
+          "token": " A",
+          "bytes": [
+            32,
+            65
+          ],
+          "logprob": -2.1664235591888428
+        }
+      ]
+    },
+    {
+      "id": 42787,
+      "token": " clerk",
+      "bytes": [
+        32,
+        99,
+        108,
+        101,
+        114,
+        107
+      ],
+      "logprob": -0.9194005727767944,
+      "top_logprobs": [
+        {
+          "id": 42787,
+          "token": " clerk",
+          "bytes": [
+            32,
+            99,
+            108,
+            101,
+            114,
+            107
+          ],
+          "logprob": -0.9194005727767944
+        },
+        {
+          "id": 324,
+          "token": " l",
+          "bytes": [
+            32,
+            108
+          ],
+          "logprob": -2.004951000213623
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "token": ".",
+      "bytes": [
+        46
+      ],
+      "logprob": -0.8391314148902893,
+      "top_logprobs": [
+        {
+          "id": 13,
+          "token": ".",
+          "bytes": [
+            46
+          ],
+          "logprob": -0.8391314148902893
+        },
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -2.113236427307129
+        }
+      ]
+    },
+    {
+      "id": 271,
+      "token": "\n\n",
+      "bytes": [
+        10,
+        10
+      ],
+      "logprob": -0.4326108992099762,
+      "top_logprobs": [
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -0.4326108992099762
+        },
+        {
+          "id": 198,
+          "token": "\n",
+          "bytes": [
+            10
+          ],
+          "logprob": -1.7747035026550293
+        }
+      ]
+    },
+    {
+      "id": 760,
+      "token": "The",
+      "bytes": [
+        84,
+        104,
+        101
+      ],
+      "logprob": -1.7114636898040771,
+      "top_logprobs": [
+        {
+          "id": 760,
+          "token": "The",
+          "bytes": [
+            84,
+            104,
+            101
+          ],
+          "logprob": -1.7114636898040771
+        },
+        {
+          "id": 248068,
+          "token": "<think>",
+          "bytes": [
+            60,
+            116,
+            104,
+            105,
+            110,
+            107,
+            62
+          ],
+          "logprob": -2.1025540828704834
+        }
+      ]
+    },
+    {
+      "id": 324,
+      "token": " l",
+      "bytes": [
+        32,
+        108
+      ],
+      "logprob": -1.5429760217666626,
+      "top_logprobs": [
+        {
+          "id": 324,
+          "token": " l",
+          "bytes": [
+            32,
+            108
+          ],
+          "logprob": -1.5429760217666626
+        },
+        {
+          "id": 2614,
+          "token": " following",
+          "bytes": [
+            32,
+            102,
+            111,
+            108,
+            108,
+            111,
+            119,
+            105,
+            110,
+            103
+          ],
+          "logprob": -2.0674681663513184
+        }
+      ]
+    },
+    {
+      "id": 55965,
+      "token": "ighthouse",
+      "bytes": [
+        105,
+        103,
+        104,
+        116,
+        104,
+        111,
+        117,
+        115,
+        101
+      ],
+      "logprob": -8.73842291184701e-05,
+      "top_logprobs": [
+        {
+          "id": 55965,
+          "token": "ighthouse",
+          "bytes": [
+            105,
+            103,
+            104,
+            116,
+            104,
+            111,
+            117,
+            115,
+            101
+          ],
+          "logprob": -8.73842291184701e-05
+        },
+        {
+          "id": 21204,
+          "token": "ighth",
+          "bytes": [
+            105,
+            103,
+            104,
+            116,
+            104
+          ],
+          "logprob": -9.997135162353516
+        }
+      ]
+    },
+    {
+      "id": 51624,
+      "token": " keeper",
+      "bytes": [
+        32,
+        107,
+        101,
+        101,
+        112,
+        101,
+        114
+      ],
+      "logprob": -0.003275507828220725,
+      "top_logprobs": [
+        {
+          "id": 51624,
+          "token": " keeper",
+          "bytes": [
+            32,
+            107,
+            101,
+            101,
+            112,
+            101,
+            114
+          ],
+          "logprob": -0.003275507828220725
+        },
+        {
+          "id": 8341,
+          "token": " kept",
+          "bytes": [
+            32,
+            107,
+            101,
+            112,
+            116
+          ],
+          "logprob": -7.106076717376709
+        }
+      ]
+    },
+    {
+      "id": 8341,
+      "token": " kept",
+      "bytes": [
+        32,
+        107,
+        101,
+        112,
+        116
+      ],
+      "logprob": -0.08473870903253555,
+      "top_logprobs": [
+        {
+          "id": 8341,
+          "token": " kept",
+          "bytes": [
+            32,
+            107,
+            101,
+            112,
+            116
+          ],
+          "logprob": -0.08473870903253555
+        },
+        {
+          "id": 579,
+          "token": "'s",
+          "bytes": [
+            39,
+            115
+          ],
+          "logprob": -4.102326393127441
+        }
+      ]
+    },
+    {
+      "id": 264,
+      "token": " a",
+      "bytes": [
+        32,
+        97
+      ],
+      "logprob": -0.002630232833325863,
+      "top_logprobs": [
+        {
+          "id": 264,
+          "token": " a",
+          "bytes": [
+            32,
+            97
+          ],
+          "logprob": -0.002630232833325863
+        },
+        {
+          "id": 780,
+          "token": " his",
+          "bytes": [
+            32,
+            104,
+            105,
+            115
+          ],
+          "logprob": -7.486860275268555
+        }
+      ]
+    },
+    {
+      "id": 16097,
+      "token": " careful",
+      "bytes": [
+        32,
+        99,
+        97,
+        114,
+        101,
+        102,
+        117,
+        108
+      ],
+      "logprob": -0.058932479470968246,
+      "top_logprobs": [
+        {
+          "id": 16097,
+          "token": " careful",
+          "bytes": [
+            32,
+            99,
+            97,
+            114,
+            101,
+            102,
+            117,
+            108
+          ],
+          "logprob": -0.058932479470968246
+        },
+        {
+          "id": 15060,
+          "token": " carefully",
+          "bytes": [
+            32,
+            99,
+            97,
+            114,
+            101,
+            102,
+            117,
+            108,
+            108,
+            121
+          ],
+          "logprob": -3.855365037918091
+        }
+      ]
+    },
+    {
+      "id": 1433,
+      "token": " log",
+      "bytes": [
+        32,
+        108,
+        111,
+        103
+      ],
+      "logprob": -0.003492067800834775,
+      "top_logprobs": [
+        {
+          "id": 1433,
+          "token": " log",
+          "bytes": [
+            32,
+            108,
+            111,
+            103
+          ],
+          "logprob": -0.003492067800834775
+        },
+        {
+          "id": 324,
+          "token": " l",
+          "bytes": [
+            32,
+            108
+          ],
+          "logprob": -7.876038551330566
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "token": ".",
+      "bytes": [
+        46
+      ],
+      "logprob": -0.07666653394699097,
+      "top_logprobs": [
+        {
+          "id": 13,
+          "token": ".",
+          "bytes": [
+            46
+          ],
+          "logprob": -0.07666653394699097
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -3.6975982189178467
+        }
+      ]
+    },
+    {
+      "id": 6983,
+      "token": " Every",
+      "bytes": [
+        32,
+        69,
+        118,
+        101,
+        114,
+        121
+      ],
+      "logprob": -0.08181443810462952,
+      "top_logprobs": [
+        {
+          "id": 6983,
+          "token": " Every",
+          "bytes": [
+            32,
+            69,
+            118,
+            101,
+            114,
+            121
+          ],
+          "logprob": -0.08181443810462952
+        },
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -4.127525806427002
+        }
+      ]
+    },
+    {
+      "id": 11129,
+      "token": " evening",
+      "bytes": [
+        32,
+        101,
+        118,
+        101,
+        110,
+        105,
+        110,
+        103
+      ],
+      "logprob": -0.0027859837282449007,
+      "top_logprobs": [
+        {
+          "id": 11129,
+          "token": " evening",
+          "bytes": [
+            32,
+            101,
+            118,
+            101,
+            110,
+            105,
+            110,
+            103
+          ],
+          "logprob": -0.0027859837282449007
+        },
+        {
+          "id": 3603,
+          "token": " night",
+          "bytes": [
+            32,
+            110,
+            105,
+            103,
+            104,
+            116
+          ],
+          "logprob": -6.7161993980407715
+        }
+      ]
+    },
+    {
+      "id": 551,
+      "token": " he",
+      "bytes": [
+        32,
+        104,
+        101
+      ],
+      "logprob": -0.012395838275551796,
+      "top_logprobs": [
+        {
+          "id": 551,
+          "token": " he",
+          "bytes": [
+            32,
+            104,
+            101
+          ],
+          "logprob": -0.012395838275551796
+        },
+        {
+          "id": 1292,
+          "token": " she",
+          "bytes": [
+            32,
+            115,
+            104,
+            101
+          ],
+          "logprob": -4.493659973144531
+        }
+      ]
+    },
+    {
+      "id": 5947,
+      "token": " wrote",
+      "bytes": [
+        32,
+        119,
+        114,
+        111,
+        116,
+        101
+      ],
+      "logprob": -0.0030190576799213886,
+      "top_logprobs": [
+        {
+          "id": 5947,
+          "token": " wrote",
+          "bytes": [
+            32,
+            119,
+            114,
+            111,
+            116,
+            101
+          ],
+          "logprob": -0.0030190576799213886
+        },
+        {
+          "id": 5158,
+          "token": " written",
+          "bytes": [
+            32,
+            119,
+            114,
+            105,
+            116,
+            116,
+            101,
+            110
+          ],
+          "logprob": -7.756248474121094
+        }
+      ]
+    },
+    {
+      "id": 1441,
+      "token": " down",
+      "bytes": [
+        32,
+        100,
+        111,
+        119,
+        110
+      ],
+      "logprob": -0.0003786803863476962,
+      "top_logprobs": [
+        {
+          "id": 1441,
+          "token": " down",
+          "bytes": [
+            32,
+            100,
+            111,
+            119,
+            110
+          ],
+          "logprob": -0.0003786803863476962
+        },
+        {
+          "id": 680,
+          "token": " out",
+          "bytes": [
+            32,
+            111,
+            117,
+            116
+          ],
+          "logprob": -10.047123908996582
+        }
+      ]
+    },
+    {
+      "id": 279,
+      "token": " the",
+      "bytes": [
+        32,
+        116,
+        104,
+        101
+      ],
+      "logprob": -0.006592318881303072,
+      "top_logprobs": [
+        {
+          "id": 279,
+          "token": " the",
+          "bytes": [
+            32,
+            116,
+            104,
+            101
+          ],
+          "logprob": -0.006592318881303072
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -6.144789218902588
+        }
+      ]
+    },
+    {
+      "id": 9662,
+      "token": " wind",
+      "bytes": [
+        32,
+        119,
+        105,
+        110,
+        100
+      ],
+      "logprob": -0.012511834502220154,
+      "top_logprobs": [
+        {
+          "id": 9662,
+          "token": " wind",
+          "bytes": [
+            32,
+            119,
+            105,
+            110,
+            100
+          ],
+          "logprob": -0.012511834502220154
+        },
+        {
+          "id": 8831,
+          "token": " weather",
+          "bytes": [
+            32,
+            119,
+            101,
+            97,
+            116,
+            104,
+            101,
+            114
+          ],
+          "logprob": -6.2981181144714355
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "token": ",",
+      "bytes": [
+        44
+      ],
+      "logprob": -0.005092272534966469,
+      "top_logprobs": [
+        {
+          "id": 11,
+          "token": ",",
+          "bytes": [
+            44
+          ],
+          "logprob": -0.005092272534966469
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -5.755532741546631
+        }
+      ]
+    },
+    {
+      "id": 279,
+      "token": " the",
+      "bytes": [
+        32,
+        116,
+        104,
+        101
+      ],
+      "logprob": -0.0009219126659445465,
+      "top_logprobs": [
+        {
+          "id": 279,
+          "token": " the",
+          "bytes": [
+            32,
+            116,
+            104,
+            101
+          ],
+          "logprob": -0.0009219126659445465
+        },
+        {
+          "id": 2423,
+          "token": " ...",
+          "bytes": [
+            32,
+            46,
+            46,
+            46
+          ],
+          "logprob": -8.793213844299316
+        }
+      ]
+    },
+    {
+      "id": 2521,
+      "token": " height",
+      "bytes": [
+        32,
+        104,
+        101,
+        105,
+        103,
+        104,
+        116
+      ],
+      "logprob": -0.0015620862832292914,
+      "top_logprobs": [
+        {
+          "id": 2521,
+          "token": " height",
+          "bytes": [
+            32,
+            104,
+            101,
+            105,
+            103,
+            104,
+            116
+          ],
+          "logprob": -0.0015620862832292914
+        },
+        {
+          "id": 34124,
+          "token": " heights",
+          "bytes": [
+            32,
+            104,
+            101,
+            105,
+            103,
+            104,
+            116,
+            115
+          ],
+          "logprob": -7.3221588134765625
+        }
+      ]
+    },
+    {
+      "id": 314,
+      "token": " of",
+      "bytes": [
+        32,
+        111,
+        102
+      ],
+      "logprob": -0.00024923807359300554,
+      "top_logprobs": [
+        {
+          "id": 314,
+          "token": " of",
+          "bytes": [
+            32,
+            111,
+            102
+          ],
+          "logprob": -0.00024923807359300554
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -9.46165943145752
+        }
+      ]
+    }
+  ]
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 34,
+    "n_prompt_tokens": 51,
+    "n_prompt_tokens_processed": 50,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 2,
+      "n_predict": 2,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 2
+      }
+    ],
+    "kv_cells": {
+      "private": 51,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 432,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "0f291406564309ca",
+    "checkpoints": [
+      {
+        "n_tokens": 18,
+        "pos_min": 17,
+        "pos_max": 17,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "acfaafed0eb7c055"
+      },
+      {
+        "n_tokens": 46,
+        "pos_min": 45,
+        "pos_max": 45,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "be60da6593ba8bd7"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 7,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 35,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 432,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 40,
+    "n_prompt_tokens": 173,
+    "n_prompt_tokens_processed": 13,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 36,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 432,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "6234cf005fc8efe0",
+    "checkpoints": [
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 146,
+        "pos_min": 145,
+        "pos_max": 145,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b2e3bf24e3856e66"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 66,
+    "n_prompt_tokens": 173,
+    "n_prompt_tokens_processed": 150,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 2,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 173,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 432,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "6234cf005fc8efe0",
+    "checkpoints": [
+      {
+        "n_tokens": 118,
+        "pos_min": 117,
+        "pos_max": 117,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "161857e91ec0d838"
+      },
+      {
+        "n_tokens": 146,
+        "pos_min": 145,
+        "pos_max": 145,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b2e3bf24e3856e66"
+      }
+    ]
+  }
+]
+--------------------------- Captured stdout teardown ---------------------------
+Stopping server with pid=1219751
+0.02.477.148 I srv    operator(): operator(): cleaning up before exit...
+=========================== short test summary info ============================
+PASSED unit/test_slot_fork.py::test_kpf172_source_diverges_below_junction
+======================= 1 passed, 23 deselected in 5.06s =======================

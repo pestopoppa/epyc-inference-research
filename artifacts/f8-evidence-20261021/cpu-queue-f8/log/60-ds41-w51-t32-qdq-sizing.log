@@ -1,0 +1,3 @@
+[region-lock] acquiring regions ['q2'] as role='build' (timeout_s=120.0) …
+[region-lock] held ['q2'] after 0.0s wait; running: env F8Q_CPUS=48-71,144-167 taskset -c 48-71,144-167 bash /mnt/raid0/llm/tmp/cpu-queue-f8/running/60-ds41-w51-t32-qdq-sizing.sh
+RESULT ds41-w51-t32-qdq-sizing proxy-grade fp8_qdq/q8_0 NMSE ratio: {'gaussian': 24.7, 'laplace': 15.5, 'outlier_channels_x30': 4.7} ; evidence=/mnt/raid0/llm/tmp/ds41-parity-20261021/ds41-w51-t32-qdq-sizing/evidence-readonly.txt,/mnt/raid0/llm/tmp/ds41-parity-20261021/ds41-w51-t32-qdq-sizing/evidence-remote.txt ; real-weight steps NOT run (no reference weights/tilelang)

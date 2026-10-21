@@ -1,0 +1,23 @@
+0.00.507.715 I main: no prompt provided, generating 100 (n_batch) random tokens
+0.00.507.723 I main: the input prompt is 100 tokens
+0.01.079.957 I cmn  common_promp: saved session before last token to dump_state.bin, n_new = 100
+
+=== Test 1: baseline ===
+99978 120020 98093 100280 150351 49588 19160 165102 20963 82 13 271 1639 3351 15 15 
+
+=== Test 2: sequence removal isolation ===
+PASS
+
+=== Test 3: state load ===
+99978 120020 98093 100280 150351 49588 19160 165102 20963 82 13 271 1639 3351 15 15 
+PASS
+
+=== Test 4: seq copy (host) ===
+99978 120020 98093 100280 150351 49588 19160 165102 20963 82 13 271 1639 3351 15 15 
+PASS
+
+=== Test 5: seq copy (device) ===
+99978 120020 98093 100280 150351 49588 19160 165102 20963 82 13 271 1639 3351 15 15 
+PASS
+
+All tests passed.

@@ -1,0 +1,212 @@
+diff --git a/tools/server/tests/unit/test_slot_fork.py b/tools/server/tests/unit/test_slot_fork.py
+index cf8a6a6df..807aa5bd0 100644
+--- a/tools/server/tests/unit/test_slot_fork.py
++++ b/tools/server/tests/unit/test_slot_fork.py
+@@ -109,9 +109,11 @@ def create_server():
+ 
+ 
+ def complete(prompt: list[int], id_slot: int, n_predict: int = 24, **extra) -> dict:
++    # top-2 logprobs on every request: same_as_fresh compares BOTH sides' distributions, not only sampled tokens
+     data = {"prompt": prompt, "id_slot": id_slot, "n_predict": n_predict, "cache_prompt": True,
+-            "temperature": 0.0, "return_tokens": True}
++            "temperature": 0.0, "return_tokens": True, "n_probs": 2}
+     data.update(extra)
++    data["n_probs"] = max(2, int(data.get("n_probs") or 0))
+     res = server.make_request("POST", "/completion", data=data, timeout=600)
+     assert res.status_code == 200, res.body
+     return res.body
+@@ -256,11 +258,9 @@ def test_fork_from_busy_source():
+         time.sleep(0.05)
+ 
+     child = complete(TRUNK + SUF[5], 1)
+-    busy = th.is_alive()
+     th.join()
+-    t = child["timings"]
+     assert_forked(child, "busy source", TRUNK_LEN, src=0)
+-    assert busy, "source finished before the child returned: not a fork from a busy source"
++    assert child["timings"]["fork_src_busy"], ("the server took the fork from an idle source", child["timings"])
+ 
+     # child and source ran concurrently, the baselines alone: batch composition alone can move greedy
+     # output on a unified KV pool (RTG-57), so only the head is asserted here. KPF-18 item 1/3 measure this
+@@ -396,10 +396,17 @@ def test_p2_epoch_hash_ladder_and_ids():
+     if sf["mode"] == "kv":
+         assert ss[0]["prefix_hash"] != ss[1]["prefix_hash"]
+ 
+-    # an appending continuation on the same slot does not bump the epoch
++    # an appending continuation on the same slot does not bump the epoch - unless the server itself truncates what the
++    # slot holds: on an SWA cache pre_decode restores the newest checkpoint whenever pos_next <= n_swa (pos_min_thold is
++    # 0, so `pos_min >= pos_min_thold` always holds - upstream's gate) and re-decodes from there (job 26: gemma bumped).
++    # Truncation below the held length is exactly what the epoch must report, so the rule follows cache_n.
+     e1 = ss[1]["content_epoch"]
+-    complete(TRUNK + SUF[1] + c["tokens"], 1, n_predict=4)
+-    assert slots()[1]["content_epoch"] == e1
++    held = slots()[1]["n_prompt_tokens"]
++    r = complete(TRUNK + SUF[1] + c["tokens"], 1, n_predict=4)
++    if r["timings"]["cache_n"] >= held:
++        assert slots()[1]["content_epoch"] == e1, (held, r["timings"])
++    else:
++        assert slots()[1]["content_epoch"] > e1, (held, r["timings"])
+ 
+     # a diverging prompt on the same slot truncates below what it held: bump
+     complete(TRUNK + SUF[2], 1, n_predict=4, slot_fork=False)
+@@ -463,13 +470,13 @@ def server_mode() -> str:
+ # on the server) that removes its guard; the mutation run must make the case FAIL (see the cpu-queue job scripts).
+ # ---------------------------------------------------------------------------------------------------------------
+ 
+-LOGPROB_FLOOR = 0.05  # fresh-vs-fresh floor on the first generated token's logprob (CPU, differing batch shapes)
+-# A greedy flip is accepted only where the fresh run's top-2 logprobs are this close. Any change of float evaluation order
+-# (batch boundaries, batch composition, KV cell placement) moves CPU logprobs: measured 2026-10-20 on gemma-3-1b, the
+-# slot's OWN checkpoint continuation (no fork at all), the fork and a fresh prefill of TRUNK+SUF[1] differ by up to 0.06
+-# nats at token 1, and at token 3 the top-2 (19566 vs 3026) are 0.07-0.25 nats apart, so job 23's "fork vs fresh"
+-# divergence at index 3 was that near-tie flipping, not the fork (the logit-level floor is in test-kpf-swa-checkpoint).
+-TIE_MARGIN = 0.5
++# Oracle floors for fork vs fresh (see same_as_fresh). Any change of float evaluation order (batch boundaries, batch
++# composition, KV cell placement) moves CPU logprobs: 2026-10-20 on gemma-3-1b the slot's OWN checkpoint continuation (no
++# fork), the fork and a fresh prefill differed by up to 0.06 nats at token 1, and job 23 saw a legitimate flip at a
++# near-tie. The values are set from the honest/mutant measurement recorded in the commit that introduced them;
++# KPF_DRIFT_FLOOR / KPF_TIE_MARGIN override them for a measurement run.
++DRIFT_FLOOR = float(os.environ.get("KPF_DRIFT_FLOOR", "0.15"))
++TIE_MARGIN = float(os.environ.get("KPF_TIE_MARGIN", "0.3"))
+ 
+ 
+ def need_ckpt_mode():
+@@ -483,33 +490,40 @@ def fresh(prompt: list[int], id_slot: int, n_predict: int = 24, **extra) -> dict
+     return complete(prompt, id_slot, n_predict=n_predict, slot_fork=False, cache_prompt=False, **extra)
+ 
+ 
+-def first_logprob(body: dict):
+-    try:
+-        return body["completion_probabilities"][0]["logprob"]
+-    except (KeyError, IndexError, TypeError):
+-        return None
++def top2(body: dict, i: int) -> dict[int, float]:
++    probs = body.get("completion_probabilities") or []
++    if i >= len(probs):
++        return {}
++    return {c["id"]: c["logprob"] for c in probs[i].get("top_logprobs", [])[:2]}
+ 
+ 
+ def same_as_fresh(a: dict, b: dict, what: str):
+-    """a equals the fresh run b token for token, except that ONE greedy flip to b's runner-up is accepted at a position
+-    where b's top-2 are within TIE_MARGIN; past such a flip the two continuations legitimately differ, so the comparison
+-    stops there. A wrong state diverges where b is confident, or to a token outside b's top-2."""
++    """a (fork) equals the fresh run b, judged on BOTH sides' top-2 logprobs, not only on the sampled tokens:
++    - DRIFT: at every compared position the logprobs a and b give b's top-2 tokens must agree within DRIFT_FLOOR
++      (a token missing from a's top-2 counts as infinite drift);
++    - at most ONE greedy flip, only between the same two tokens in swapped order, and only if the flip distance
++      (margin_a + margin_b = how far the logit gap between those two tokens moved) is below TIE_MARGIN; past it the
++      continuations legitimately differ, so the comparison stops there.
++    Job 25 (2026-10-21) showed why both are needed: with fork_skip_ckpt_load on the tiny hybrid the child (fresh
++    recurrent state under correct attention cells) differed from fresh only by an index-0 flip of margin 0.43, which the
++    old one-sided 0.5-nat rule accepted."""
+     ta, tb = a["tokens"], b["tokens"]
+-    probs = b.get("completion_probabilities") or []
++    drift, flip = 0.0, None
+     for i, (x, y) in enumerate(zip(ta, tb)):
++        pa, pb = top2(a, i), top2(b, i)
++        assert len(pb) == 2 and len(pa) == 2, (what, "top-2 logprobs missing", i, pa, pb)
+         if x == y:
++            drift = max([drift] + [abs(pa[t] - pb[t]) if t in pa else float("inf") for t in pb])
+             continue
+-        tops = probs[i].get("top_logprobs", []) if i < len(probs) else []
+-        margin = tops[0]["logprob"] - tops[1]["logprob"] if len(tops) >= 2 else None
+-        assert margin is not None and margin < TIE_MARGIN and x == tops[1]["id"] and y == tops[0]["id"], \
+-            (what, f"diverged at {i}", ta, tb, tops[:2])
+-        print(f"{what}: greedy flip at a near-tie of the fresh run, index {i}, top-2 margin {margin:.3f} nats")
++        ok = set(pa) == set(pb) == {x, y}
++        dist = (pa[x] - pa[y]) + (pb[y] - pb[x]) if ok else float("inf")
++        flip = (i, dist)
++        assert dist < TIE_MARGIN, (what, f"diverged at {i}", f"flip distance {dist:.3f}", ta, tb, pa, pb)
+         break
+     else:
+         assert len(ta) == len(tb), (what, ta, tb)
+-    la, lb = first_logprob(a), first_logprob(b)
+-    if la is not None and lb is not None:
+-        assert abs(la - lb) < LOGPROB_FLOOR, (what, la, lb)
++    print(f"{what}: fork vs fresh drift {drift:.3f} nats" + (f", flip at {flip[0]} distance {flip[1]:.3f}" if flip else ""))
++    assert drift < DRIFT_FLOOR, (what, f"logprob drift {drift:.3f} >= {DRIFT_FLOOR}", ta, tb)
+ 
+ 
+ def ckpts(i: int) -> list[dict]:
+@@ -802,14 +816,15 @@ def test_kpf172_fork_same_iteration_as_source_erase():
+         th = [threading.Thread(target=src_side), threading.Thread(target=dst_side)]
+         [x.start() for x in th]
+         [x.join() for x in th]
+-        same_as_fresh(out["b"], fresh(TRUNK + SUF[(r + 1) % 8], 2, n_probs=1), f"round {r}")
+         n_f = out["b"]["timings"]["n_fork_tokens"]
+         if n_f > 0:
+-            # dst holds its OWN pinned clone of the junction (was `... or True`, i.e. never checked)
++            # dst holds its OWN pinned clone of the junction (was `... or True`, i.e. never checked). Read BEFORE the
++            # fresh run: its launch purges the idle slot 1 under cache_idle_slots (job 26 read it after: empty list)
+             n_forks += 1
+             assert out["b"]["timings"]["fork_src_slot"] == 0, out["b"]["timings"]
+             assert any(c["pinned"] and c["n_tokens"] == n_f for c in ckpts(1)), (r, n_f, ckpts(1))
+         assert_ckpt_offsets(slots(), f"round {r}")
++        same_as_fresh(out["b"], fresh(TRUNK + SUF[(r + 1) % 8], 2, n_probs=1), f"round {r}")
+     # the race is real only if dst forked in some round (job 20: 6 of 8 rounds forked from slot 0)
+     assert n_forks >= 1, "dst never forked from the source in 8 rounds: the case would be vacuous"
+ 
+@@ -839,8 +854,7 @@ def test_kpf172_fork_from_decoding_source_no_leak():
+ 
+     base = complete(prompt, 0, n_predict=n_src, checkpoint_at=at)
+     assert all(c["n_tokens"] <= len(prompt) for c in ckpts(0)), ckpts(0)  # beyond-prompt positions never checkpointed
+-    base_tok, base_cells = src_state()
+-    assert base_tok == base_cells, (base_tok, base_cells)
++    base_tok, base_cells = src_state()  # cells per token differ by cache type (iSWA counts base + SWA cells: job 25)
+ 
+     def concurrent(child_fork: bool) -> tuple[dict, dict]:
+         for i in (0, 1, 2):
+@@ -856,12 +870,12 @@ def test_kpf172_fork_from_decoding_source_no_leak():
+             assert t.is_alive() and time.time() < deadline, ("source never reached decoding", s0.get("n_prompt_tokens"))
+             time.sleep(0.02)
+         child = complete(TRUNK + SUF[1], 1, n_predict=24, slot_fork=child_fork)
+-        busy = t.is_alive()
+         t.join()
+         if child_fork:
+-            tm = child["timings"]
+-            assert tm["n_fork_tokens"] >= FORK_MIN and tm["fork_src_slot"] == 0, tm  # the fork path really ran
+-            assert busy, "source finished before the child returned: not a fork from a decoding source"
++            assert_forked(child, "fork from decoding source", FORK_MIN, src=0)  # the fork path really ran
++            # the server's own record (fork_src_busy): job 40's 35B source hit EOS at 35 tokens, so "source thread still
++            # alive when the child returned" was the wrong proxy
++            assert child["timings"]["fork_src_busy"], ("fork taken from an idle source", child["timings"])
+         return out, child
+ 
+     def matched(a: list[int], b: list[int]) -> int:
+@@ -874,9 +888,10 @@ def test_kpf172_fork_from_decoding_source_no_leak():
+     ctrl, _ = concurrent(False)
+     out, child = concurrent(True)
+     tok, cells = src_state()
+-    # the source's own state, directly: every position it holds is a computed cell, and it holds as many as unforked
+-    assert tok == cells, ("source cells != its tokens after the fork", tok, cells)
++    # the source's own state, directly: as many tokens and as many KV cells as the unforked run (fork_clobber_src drops
++    # the cells past the junction)
+     assert tok == base_tok, ("source length changed by the fork", tok, base_tok)
++    assert cells == base_cells, ("source KV cells changed by the fork", cells, base_cells)
+     m_ctrl, m_fork = matched(ctrl["tokens"], base["tokens"]), matched(out["tokens"], base["tokens"])
+     print(f"source vs unforked: A/A control matches {m_ctrl}/{len(base['tokens'])}, forked run {m_fork}")
+     if m_ctrl == len(base["tokens"]):
+@@ -922,7 +937,7 @@ def test_kpf172_fork_from_checkpoint_of_current_step():
+         print(f"delay {delay:.2f}s ({frac} of prefill): source mid-prefill {mid} (n_prompt_tokens "
+               f"{s0.get('n_prompt_tokens')}), sibling n_fork_tokens {n_f} from slot {sib['timings'].get('fork_src_slot')}")
+         assert n_f == 0 or n_f in js or n_f >= 2 * TRUNK_LEN - 1, (delay, sib["timings"])
+-        if mid and n_f > 0 and sib["timings"]["fork_src_slot"] == 0:
++        if n_f > 0 and sib["timings"]["fork_src_slot"] == 0 and sib["timings"]["fork_src_busy"]:
+             mid_forks += 1
+         same_as_fresh(sib, fresh(sib_prompt, 2, n_predict=8, n_probs=1), f"delay {delay:.2f}")
+         assert_ckpt_offsets(slots(), f"delay {delay:.2f}")
+@@ -1026,7 +1041,13 @@ def test_kpf174_swa_pinned_junction_fork_equals_fresh():
+ def test_kpf191_fork_drafter_state_equals_unforked():
+     """KPF-19.1: forking an MTP-drafter slot gives the destination the same drafter state as an unforked slot: same
+     tokens and same draft_n / draft_n_accepted. Run once without and once with KPF_DFT_FULL=1 (--slot-fork-dft-full).
+-    MUTATION: dft_partial_noop (emulates #30514: PARTIAL_ONLY restores nothing) must fail WITHOUT the flag and pass WITH it."""
++    dft_partial_noop (emulates #30514: PARTIAL_ONLY restores nothing) is OUTPUT-NEUTRAL here, with or without the flag
++    (job 40, 2026-10-21: not detected, rightly). On the fork path a plain drafter's [0, p) cells are first SHARED by
++    common_context_seq_cp_attn(ctx_dft) (seq_cp on a plain llama_kv_cache); today's load_dft then seq_rm's dst and writes a
++    PRIVATE copy of the same cells (llama_kv_cache::state_read_meta), so dropping it changes memory, not content. The fork
++    path is therefore already independent of #30514 for plain drafters; KPF-19.1's remaining exposure is elsewhere
++    (checkpoint restores in pre_decode rely on seq_rm(pos_max + 1, -1) leaving drafter cells in place). Expected: PASS
++    with the mutation in both flag states."""
+     if not os.environ.get("KPF_SPEC_TYPE"):
+         pytest.skip("needs KPF_SPEC_TYPE=draft-mtp on an MTP model")
+     server.start()

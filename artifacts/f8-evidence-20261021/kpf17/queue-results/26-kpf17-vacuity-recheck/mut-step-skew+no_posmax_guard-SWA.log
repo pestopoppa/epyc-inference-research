@@ -1,0 +1,1083 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.0.3, pluggy-1.6.0
+rootdir: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests
+configfile: pytest.ini
+plugins: asyncio-1.3.0, timeout-2.4.0, langsmith-0.7.30, cov-7.1.0, xdist-3.8.0, hypothesis-6.151.13, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 23 deselected / 1 selected
+
+unit/test_slot_fork.py F                                                 [100%]
+
+=================================== FAILURES ===================================
+_______________ test_kpf172_fork_from_checkpoint_of_current_step _______________
+
+    def test_kpf172_fork_from_checkpoint_of_current_step():
+        """KPF-17.2(4): siblings arriving at staggered moments while the trunk-first source creates its pinned checkpoints
+        never fork from a half-built one: every sibling == fresh, forks land only on completed junctions.
+        MUTATION: ckpt_ntokens_skew + no_posmax_guard (a mislabelled / not-yet-valid checkpoint becomes selectable)."""
+        server.n_batch = 40
+        server.n_ubatch = 40
+        server.start()
+        build_prompts()
+        need_ckpt_mode()
+        big = TRUNK * 8
+        js = [TRUNK_LEN, 2 * TRUNK_LEN, 3 * TRUNK_LEN]
+        # Job 20 (tiny hybrid) never exercised this: every sibling forked from an IDLE source (the trunk had finished, and
+        # the trunk request itself forked from the previous round's fresh run on slot 2 instead of prefilling). Now the
+        # trunk prefills from scratch (slot_fork off, slots 2/3 erased), the delays are fractions of a measured solo
+        # prefill, and at least one sibling must fork from slot 0 while it is still prefilling.
+        solo = complete(big + SUF[0], 3, n_predict=1, slot_fork=False, cache_prompt=False)
+        t_pp = solo["timings"]["prompt_ms"] / 1000.0
+        erase_slot(3)
+        mid_forks = 0
+        for k, frac in enumerate((0.1, 0.3, 0.5, 0.7, 0.9)):
+            delay = frac * t_pp
+            for i in (0, 1, 2):
+                erase_slot(i)
+            t = threading.Thread(target=lambda: complete(big + SUF[0], 0, n_predict=2, checkpoint_at=js, slot_fork=False))
+            t.start()
+            time.sleep(delay)
+            s0 = slots()[0]
+            mid = s0["is_processing"] and s0.get("n_prompt_tokens", 0) < len(big)
+            sib_prompt = big[: 2 * TRUNK_LEN] + SUF[1 + k]
+            sib = complete(sib_prompt, 1, n_predict=8)
+            t.join()
+            n_f = sib["timings"]["n_fork_tokens"]
+            print(f"delay {delay:.2f}s ({frac} of prefill): source mid-prefill {mid} (n_prompt_tokens "
+                  f"{s0.get('n_prompt_tokens')}), sibling n_fork_tokens {n_f} from slot {sib['timings'].get('fork_src_slot')}")
+>           assert n_f == 0 or n_f in js or n_f >= 2 * TRUNK_LEN - 1, (delay, sib["timings"])
+E           AssertionError: (0.08241490000000001, {'cache_n': 135, 'fork_src_kind': 'checkpoint', 'fork_src_slot': 0, 'id_slot': 1, ...})
+E           assert (137 == 0 or 137 in [136, 272, 408] or 137 >= ((2 * 136) - 1))
+
+unit/test_slot_fork.py:924: AssertionError
+----------------------------- Captured stdout call -----------------------------
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18985 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf --batch-size 40 --ubatch-size 40 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r2-20261020/queue-results/26-kpf17-vacuity-recheck/slots-mut-step-skew+no_posmax_guard-SWA --no-jinja --slot-fork-min-tokens 16
+server pid=1830958, pytest pid=1830956
+Waiting for server to start...
+0.00.001.637 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.948 W srv  llama_server: -----------------
+0.00.001.950 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.950 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.950 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.950 W srv  llama_server: -----------------
+0.00.003.144 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf'
+0.00.454.447 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+Response from server {
+  "error": {
+    "message": "Loading model",
+    "type": "unavailable_error",
+    "code": 503
+  }
+}
+Waiting for server to start...
+0.00.582.665 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.582.717 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = checkpoint, min tokens = 16, cache_idle_slots = 1
+0.00.584.119 I srv  llama_server: model loaded
+0.00.584.181 I srv  llama_server: listening on http://127.0.0.1:18985
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    818,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    236743
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    7626,
+    1602,
+    506,
+    32096,
+    1586,
+    9710,
+    528,
+    506,
+    34759,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1217,
+    1551,
+    20278,
+    1602,
+    506,
+    2212,
+    735,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    837,
+    3409,
+    1053,
+    919,
+    48312,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1015,
+    1676,
+    506,
+    2212,
+    1308,
+    506,
+    64222,
+    21136,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    15642,
+    886,
+    13315,
+    1003,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    4361,
+    1806,
+    2432,
+    506,
+    64222,
+    7971,
+    1679,
+    1418,
+    9137,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    8432,
+    531,
+    506,
+    1548,
+    529,
+    13763,
+    20896,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    23097,
+    506,
+    2212,
+    496,
+    2822,
+    3822,
+    236787
+  ]
+}
+Response from server {
+  "default_generation_settings": {
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": -1,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": -1,
+      "n_predict": -1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "none",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "n_ctx": 8192
+  },
+  "total_slots": 4,
+  "model_alias": "tinyllama-2",
+  "model_ftype": "Q8_0",
+  "model_path": "/mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "media_marker": "<__media_BYlU0qBTNqTNEDfdGYF6KXRfWggx8cmi__>",
+  "endpoint_slots": true,
+  "endpoint_props": false,
+  "endpoint_metrics": true,
+  "ui": true,
+  "ui_settings": {},
+  "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- if messages[0]['content'] is string -%}\n        {%- set first_user_prefix = messages[0]['content'] + '\n\n' -%}\n    {%- else -%}\n        {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- endif -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<start_of_image>' }}\n            {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}",
+  "chat_template_caps": {
+    "supports_object_arguments": false,
+    "supports_parallel_tool_calls": false,
+    "supports_preserve_reasoning": false,
+    "supports_string_content": true,
+    "supports_system_role": true,
+    "supports_tool_calls": false,
+    "supports_tools": false,
+    "supports_typed_content": false
+  },
+  "bos_token": "<bos>",
+  "eos_token": "<eos>",
+  "build_info": "b10359-1fd7e2e12",
+  "is_sleeping": false,
+  "cors_proxy_enabled": false,
+  "slot_fork": {
+    "min_tokens": 16,
+    "mode": "checkpoint",
+    "checkpoint_at": true
+  }
+}
+0.01.036.668 I slot get_availabl: id  3 | task -1 | selected slot by id (3)
+0.01.036.693 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0
+0.01.071.699 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 34.9 ms, kv_pos = 40, ms/tok = 0.000
+0.01.103.603 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 31.9 ms, kv_pos = 80, ms/tok = 0.000
+0.01.129.583 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 25.9 ms, kv_pos = 120, ms/tok = 0.000
+0.01.155.452 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 25.8 ms, kv_pos = 160, ms/tok = 0.000
+0.01.181.404 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 25.9 ms, kv_pos = 200, ms/tok = 0.000
+0.01.207.858 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 26.4 ms, kv_pos = 240, ms/tok = 0.000
+0.01.235.449 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.5 ms, kv_pos = 280, ms/tok = 0.000
+0.01.262.075 I srv  prefill_budg: prefill-budget: iter 8: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 26.5 ms, kv_pos = 320, ms/tok = 0.000
+0.01.290.130 I srv  prefill_budg: prefill-budget: iter 9: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.0 ms, kv_pos = 360, ms/tok = 0.000
+0.01.317.822 I srv  prefill_budg: prefill-budget: iter 10: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.6 ms, kv_pos = 400, ms/tok = 0.000
+0.01.345.559 I srv  prefill_budg: prefill-budget: iter 11: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.7 ms, kv_pos = 440, ms/tok = 0.000
+0.01.373.875 I srv  prefill_budg: prefill-budget: iter 12: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.2 ms, kv_pos = 480, ms/tok = 0.000
+0.01.403.368 I srv  prefill_budg: prefill-budget: iter 13: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.4 ms, kv_pos = 520, ms/tok = 0.000
+0.01.432.345 I srv  prefill_budg: prefill-budget: iter 14: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.9 ms, kv_pos = 560, ms/tok = 0.000
+0.01.461.058 I srv  prefill_budg: prefill-budget: iter 15: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.7 ms, kv_pos = 600, ms/tok = 0.000
+0.01.490.504 I srv  prefill_budg: prefill-budget: iter 16: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.4 ms, kv_pos = 640, ms/tok = 0.000
+0.01.519.578 I srv  prefill_budg: prefill-budget: iter 17: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.0 ms, kv_pos = 680, ms/tok = 0.000
+0.01.548.046 I srv  prefill_budg: prefill-budget: iter 18: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.4 ms, kv_pos = 720, ms/tok = 0.000
+0.01.577.343 I srv  prefill_budg: prefill-budget: iter 19: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.2 ms, kv_pos = 760, ms/tok = 0.000
+0.01.607.078 I srv  prefill_budg: prefill-budget: iter 20: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.7 ms, kv_pos = 800, ms/tok = 0.000
+0.01.636.344 I srv  prefill_budg: prefill-budget: iter 21: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.2 ms, kv_pos = 840, ms/tok = 0.000
+0.01.665.584 I srv  prefill_budg: prefill-budget: iter 22: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.1 ms, kv_pos = 880, ms/tok = 0.000
+0.01.695.166 I srv  prefill_budg: prefill-budget: iter 23: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.5 ms, kv_pos = 920, ms/tok = 0.000
+0.01.724.473 I srv  prefill_budg: prefill-budget: iter 24: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.2 ms, kv_pos = 960, ms/tok = 0.000
+0.01.753.321 I srv  prefill_budg: prefill-budget: iter 25: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.8 ms, kv_pos = 1000, ms/tok = 0.000
+0.01.783.368 I srv  prefill_budg: prefill-budget: iter 26: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 30.0 ms, kv_pos = 1040, ms/tok = 0.000
+0.01.803.856 I srv  prefill_budg: prefill-budget: iter 27: decode_rows = 0 (slots 0), prompt = 23 (slots 1), budget = 0, t_iter = 20.4 ms, kv_pos = 1063, ms/tok = 0.000
+0.01.832.594 I srv  prefill_budg: prefill-budget: iter 28: decode_rows = 0 (slots 0), prompt = 36 (slots 1), budget = 0, t_iter = 27.2 ms, kv_pos = 1099, ms/tok = 0.000
+0.01.860.906 I slot print_timing: id  3 | task 0 | prompt eval time =     824.15 ms /  1103 tokens (    0.75 ms per token,  1338.35 tokens per second)
+0.01.860.964 I slot print_timing: id  3 | task 0 |        eval time =       0.00 ms /     1 tokens (    0.00 ms per token, 1000000.00 tokens per second)
+0.01.860.973 I slot print_timing: id  3 | task 0 |       total time =     824.15 ms /  1104 tokens
+0.01.860.985 I slot print_timing: id  3 | task 0 |    graphs reused =         22
+0.01.861.075 I slot      release: id  3 | task 0 | stop processing: n_tokens = 1103, truncated = 0
+0.01.861.542 I srv  prefill_budg: prefill-budget: iter 29: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 27.3 ms, kv_pos = 1103, ms/tok = 0.000
+Response from server {
+  "index": 0,
+  "content": " a",
+  "tokens": [
+    496
+  ],
+  "id_slot": 3,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 1,
+  "tokens_evaluated": 1103,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 1,
+    "n_predict": 1,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: what animal did the clerk find drawn in the margins? Answer:",
+  "has_new_line": false,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 1103,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 1103,
+    "prompt_ms": 824.149,
+    "prompt_per_token_ms": 0.7471885766092475,
+    "prompt_per_second": 1338.3502255053393,
+    "predicted_n": 1,
+    "predicted_ms": 0.001,
+    "predicted_per_token_ms": 0.001,
+    "predicted_per_second": 1000000.0,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 3,
+    "id_task": 0
+  }
+}
+Response from server {
+  "id_slot": 3,
+  "n_erased": 1103
+}
+Response from server {
+  "id_slot": 0,
+  "n_erased": 0
+}
+Response from server {
+  "id_slot": 1,
+  "n_erased": 0
+}
+Response from server {
+  "id_slot": 2,
+  "n_erased": 0
+}
+0.01.868.511 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.868.596 I slot launch_slot_: id  0 | task 34 | processing task, is_child = 0
+0.01.894.130 I srv  prefill_budg: prefill-budget: iter 30: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 25.5 ms, kv_pos = 40, ms/tok = 0.000
+0.01.919.263 I srv  prefill_budg: prefill-budget: iter 31: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 25.0 ms, kv_pos = 80, ms/tok = 0.000
+0.01.944.595 I srv  prefill_budg: prefill-budget: iter 32: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 25.3 ms, kv_pos = 120, ms/tok = 0.000
+0.01.960.646 I srv  prefill_budg: prefill-budget: iter 33: decode_rows = 0 (slots 0), prompt = 16 (slots 1), budget = 0, t_iter = 16.0 ms, kv_pos = 136, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 34,
+    "n_prompt_tokens": 136,
+    "n_prompt_tokens_processed": 136,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 2,
+      "n_predict": 2,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 0
+      }
+    ],
+    "kv_cells": {
+      "private": 272,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 272,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "0495cecacf6bcbbc",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 272,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 272,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 0,
+    "n_prompt_tokens_processed": 1103,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 1,
+      "n_predict": 1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 272,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.988.925 I srv  prefill_budg: prefill-budget: iter 34: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.4 ms, kv_pos = 176, ms/tok = 0.000
+0.01.988.996 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+0.01.990.276 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 137, task.n_tokens = 284, t = 1.23 ms
+0.01.990.293 I slot launch_slot_: id  1 | task 41 | processing task, is_child = 0
+0.02.016.905 I srv  prefill_budg: prefill-budget: iter 35: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 26.6 ms, kv_pos = 352, ms/tok = 0.000
+0.02.043.195 I srv  prefill_budg: prefill-budget: iter 36: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 26.2 ms, kv_pos = 392, ms/tok = 0.000
+0.02.069.843 I srv  prefill_budg: prefill-budget: iter 37: decode_rows = 0 (slots 0), prompt = 40 (slots 2), budget = 0, t_iter = 26.2 ms, kv_pos = 431, ms/tok = 0.000
+0.02.098.524 I srv  prefill_budg: prefill-budget: iter 38: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.5 ms, kv_pos = 471, ms/tok = 0.000
+0.02.125.809 I srv  prefill_budg: prefill-budget: iter 39: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.2 ms, kv_pos = 511, ms/tok = 0.000
+0.02.153.386 I srv  prefill_budg: prefill-budget: iter 40: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.5 ms, kv_pos = 551, ms/tok = 0.000
+0.02.181.321 I srv  prefill_budg: prefill-budget: iter 41: decode_rows = 0 (slots 0), prompt = 40 (slots 2), budget = 0, t_iter = 27.8 ms, kv_pos = 591, ms/tok = 0.000
+0.02.211.114 I srv  prefill_budg: prefill-budget: iter 42: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.5 ms, kv_pos = 631, ms/tok = 0.000
+0.02.240.067 I srv  prefill_budg: prefill-budget: iter 43: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.9 ms, kv_pos = 671, ms/tok = 0.000
+0.02.268.321 I srv  prefill_budg: prefill-budget: iter 44: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.2 ms, kv_pos = 711, ms/tok = 0.000
+0.02.297.343 I srv  prefill_budg: prefill-budget: iter 45: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.9 ms, kv_pos = 751, ms/tok = 0.000
+0.02.326.700 I srv  prefill_budg: prefill-budget: iter 46: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.3 ms, kv_pos = 791, ms/tok = 0.000
+0.02.355.053 I srv  prefill_budg: prefill-budget: iter 47: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.3 ms, kv_pos = 831, ms/tok = 0.000
+0.02.384.341 I srv  prefill_budg: prefill-budget: iter 48: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.2 ms, kv_pos = 871, ms/tok = 0.000
+0.02.413.427 I srv  prefill_budg: prefill-budget: iter 49: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.0 ms, kv_pos = 911, ms/tok = 0.000
+0.02.442.233 I srv  prefill_budg: prefill-budget: iter 50: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.7 ms, kv_pos = 951, ms/tok = 0.000
+0.02.471.493 I srv  prefill_budg: prefill-budget: iter 51: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.2 ms, kv_pos = 991, ms/tok = 0.000
+0.02.501.733 I srv  prefill_budg: prefill-budget: iter 52: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 30.2 ms, kv_pos = 1031, ms/tok = 0.000
+0.02.530.997 I srv  prefill_budg: prefill-budget: iter 53: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.2 ms, kv_pos = 1071, ms/tok = 0.000
+0.02.559.828 I srv  prefill_budg: prefill-budget: iter 54: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.7 ms, kv_pos = 1111, ms/tok = 0.000
+0.02.589.215 I srv  prefill_budg: prefill-budget: iter 55: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.3 ms, kv_pos = 1151, ms/tok = 0.000
+0.02.619.185 I srv  prefill_budg: prefill-budget: iter 56: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.9 ms, kv_pos = 1191, ms/tok = 0.000
+0.02.648.336 I srv  prefill_budg: prefill-budget: iter 57: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.1 ms, kv_pos = 1231, ms/tok = 0.000
+0.02.676.771 I srv  prefill_budg: prefill-budget: iter 58: decode_rows = 0 (slots 0), prompt = 40 (slots 2), budget = 0, t_iter = 28.3 ms, kv_pos = 1271, ms/tok = 0.000
+0.02.707.996 I srv  prefill_budg: prefill-budget: iter 59: decode_rows = 0 (slots 0), prompt = 40 (slots 2), budget = 0, t_iter = 29.7 ms, kv_pos = 1311, ms/tok = 0.000
+0.02.738.952 I srv  prefill_budg: prefill-budget: iter 60: decode_rows = 0 (slots 0), prompt = 36 (slots 2), budget = 0, t_iter = 29.2 ms, kv_pos = 1347, ms/tok = 0.000
+0.02.769.722 I slot print_timing: id  0 | task 34 | prompt eval time =     870.31 ms /  1103 tokens (    0.79 ms per token,  1267.37 tokens per second)
+0.02.769.795 I slot print_timing: id  0 | task 34 |        eval time =      30.77 ms /     2 tokens (   15.39 ms per token,    64.99 tokens per second)
+0.02.769.803 I slot print_timing: id  0 | task 34 |       total time =     901.08 ms /  1105 tokens
+0.02.769.812 I slot print_timing: id  0 | task 34 |    graphs reused =         36
+0.02.769.894 I slot      release: id  0 | task 34 | stop processing: n_tokens = 1104, truncated = 0
+0.02.770.306 I srv  prefill_budg: prefill-budget: iter 61: decode_rows = 1 (slots 1), prompt = 36 (slots 1), budget = 0, t_iter = 30.3 ms, kv_pos = 1384, ms/tok = 0.000
+Response from server {
+  "index": 0,
+  "content": " a cat",
+  "tokens": [
+    496,
+    5866
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 2,
+  "tokens_evaluated": 1103,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 2,
+    "n_predict": 2,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: what animal did the clerk find drawn in the margins? Answer:",
+  "has_new_line": false,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 1104,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 1103,
+    "prompt_ms": 870.306,
+    "prompt_per_token_ms": 0.789035358114234,
+    "prompt_per_second": 1267.3703272182427,
+    "predicted_n": 2,
+    "predicted_ms": 30.775,
+    "predicted_per_token_ms": 15.3875,
+    "predicted_per_second": 64.98781478472786,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 34
+  }
+}
+0.02.788.591 I srv  prefill_budg: prefill-budget: iter 62: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 16.9 ms, kv_pos = 1388, ms/tok = 0.000
+0.02.896.082 I slot print_timing: id  1 | task 41 | prompt eval time =     745.28 ms /   149 tokens (    5.00 ms per token,   199.93 tokens per second)
+0.02.896.138 I slot print_timing: id  1 | task 41 |        eval time =     107.50 ms /     8 tokens (   13.44 ms per token,    74.42 tokens per second)
+0.02.896.146 I slot print_timing: id  1 | task 41 |       total time =     852.78 ms /   157 tokens
+0.02.896.154 I slot print_timing: id  1 | task 41 |    graphs reused =         42
+0.02.896.495 I slot      release: id  1 | task 41 | stop processing: n_tokens = 291, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " 40 volumes. Question: how",
+  "tokens": [
+    236743,
+    236812,
+    236771,
+    20278,
+    236761,
+    19566,
+    236787,
+    1217
+  ],
+  "id_slot": 1,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 8,
+  "tokens_evaluated": 284,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 8,
+    "n_predict": 8,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: how many volumes did the log have? Answer:",
+  "has_new_line": false,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 291,
+  "timings": {
+    "cache_n": 135,
+    "prompt_n": 149,
+    "prompt_ms": 745.279,
+    "prompt_per_token_ms": 5.001872483221477,
+    "prompt_per_second": 199.92512871018772,
+    "predicted_n": 8,
+    "predicted_ms": 107.498,
+    "predicted_per_token_ms": 13.43725,
+    "predicted_per_second": 74.41998920910156,
+    "n_fork_tokens": 137,
+    "fork_src_slot": 0,
+    "fork_src_kind": "checkpoint",
+    "id_slot": 1,
+    "id_task": 41
+  }
+}
+delay 0.08s (0.1 of prefill): source mid-prefill True (n_prompt_tokens 136), sibling n_fork_tokens 137 from slot 0
+--------------------------- Captured stdout teardown ---------------------------
+Stopping server with pid=1830958
+0.02.931.521 I srv    operator(): operator(): cleaning up before exit...
+=========================== short test summary info ============================
+FAILED unit/test_slot_fork.py::test_kpf172_fork_from_checkpoint_of_current_step
+======================= 1 failed, 23 deselected in 3.06s =======================

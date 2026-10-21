@@ -1,0 +1,7 @@
+[2026-10-21T06:31:07Z] provenance: branch a7af56dff883fe1aa509169de70ee086b0872740 llama-server sha256 defc5a094fcdd8c5d7acd912a7f7912d36a5e78d62af309015e57efc2b0eec40
+[2026-10-21T06:31:12Z] STEP 172-decoding-source-hyb OK passed=1 skipped=0
+[2026-10-21T06:31:15Z] STEP 172-decoding-source-swa FAIL passed=0 failed=1 skipped=0 rc=1
+[2026-10-21T06:31:19Z] STEP mut-17.2-3-fork_clobber_src-hyb OK mutation fork_clobber_src DETECTED (failed=1 passed=0)
+[2026-10-21T06:31:21Z] STEP mut-17.2-3-fork_clobber_src-swa OK mutation fork_clobber_src DETECTED (failed=1 passed=0)
+[2026-10-21T06:31:26Z] STEP mut-17.2-3-fork_skip_ckpt_load-hyb FAIL MUTATION_NOT_DETECTED mut=fork_skip_ckpt_load passed=1
+RESULT 25-kpf17-mutant-recheck pass=3 fail=2

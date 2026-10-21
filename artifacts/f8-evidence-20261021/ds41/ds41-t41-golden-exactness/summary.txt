@@ -1,0 +1,2 @@
+T41 diff plain vs dspark_batched: 16/16 sequences diverge (zero tolerance); first rows: [1, 1, 1, 1, 1, 1, 1, 1]
+T41 diff plain vs dspark_serial: 16/16 sequences diverge (zero tolerance); first rows: [1, 1, 1, 1, 1, 1, 1, 1]

@@ -1,0 +1,372 @@
+llama_model_loader: loaded meta data with 20 key-value pairs and 0 tensors from models/ggml-vocab-qwen2.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen2
+llama_model_loader: - kv   1:                               general.name str              = qwen2
+llama_model_loader: - kv   2:                          qwen2.block_count u32              = 32
+llama_model_loader: - kv   3:                       qwen2.context_length u32              = 32768
+llama_model_loader: - kv   4:                     qwen2.embedding_length u32              = 4096
+llama_model_loader: - kv   5:                  qwen2.feed_forward_length u32              = 11008
+llama_model_loader: - kv   6:                 qwen2.attention.head_count u32              = 32
+llama_model_loader: - kv   7:              qwen2.attention.head_count_kv u32              = 32
+llama_model_loader: - kv   8:                       qwen2.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv   9:     qwen2.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  10:                          general.file_type u32              = 1
+llama_model_loader: - kv  11:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  12:                         tokenizer.ggml.pre str              = qwen2
+llama_model_loader: - kv  13:                      tokenizer.ggml.tokens arr[str,151936]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  14:                  tokenizer.ggml.token_type arr[i32,151936]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  15:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  16:                tokenizer.ggml.eos_token_id u32              = 151643
+llama_model_loader: - kv  17:            tokenizer.ggml.padding_token_id u32              = 151643
+llama_model_loader: - kv  18:                tokenizer.ggml.bos_token_id u32              = 151643
+llama_model_loader: - kv  19:                    tokenizer.chat_template str              = {% for message in messages %}{% if lo...
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = F16
+print_info: file size   = 0.00 MiB (-nan BPW) 
+init_tokenizer: initializing tokenizer for type 2
+load: 0 unused tokens
+load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: control token: 151644 '<|im_start|>' is not marked as EOG
+load: printing all EOG tokens:
+load:   - 128247 ('</s>')
+load:   - 151643 ('<|endoftext|>')
+load:   - 151645 ('<|im_end|>')
+load: special tokens cache size = 294
+load: token to piece cache size = 0.9338 MB
+print_info: arch                  = qwen2
+print_info: vocab_only            = 1
+print_info: no_alloc              = 0
+print_info: vocab type            = BPE
+print_info: n_vocab               = 151936
+print_info: n_merges              = 151387
+print_info: BOS token             = 151643 '<|endoftext|>'
+print_info: EOS token             = 151643 '<|endoftext|>'
+print_info: EOT token             = 151645 '<|im_end|>'
+print_info: PAD token             = 151643 '<|endoftext|>'
+print_info: LF token              = 198 'Ċ'
+print_info: EOG token             = 128247 '</s>'
+print_info: EOG token             = 151643 '<|endoftext|>'
+print_info: EOG token             = 151645 '<|im_end|>'
+print_info: max token length      = 256
+llama_model_load: vocab only - skipping tensors
+llama_model_loader: loaded meta data with 20 key-value pairs and 0 tensors from models/ggml-vocab-qwen35.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen2
+llama_model_loader: - kv   1:                               general.name str              = qwen2
+llama_model_loader: - kv   2:                          qwen2.block_count u32              = 32
+llama_model_loader: - kv   3:                       qwen2.context_length u32              = 32768
+llama_model_loader: - kv   4:                     qwen2.embedding_length u32              = 4096
+llama_model_loader: - kv   5:                  qwen2.feed_forward_length u32              = 11008
+llama_model_loader: - kv   6:                 qwen2.attention.head_count u32              = 32
+llama_model_loader: - kv   7:              qwen2.attention.head_count_kv u32              = 32
+llama_model_loader: - kv   8:                       qwen2.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv   9:     qwen2.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  10:                          general.file_type u32              = 1
+llama_model_loader: - kv  11:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  12:                         tokenizer.ggml.pre str              = qwen35
+llama_model_loader: - kv  13:                      tokenizer.ggml.tokens arr[str,151936]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  14:                  tokenizer.ggml.token_type arr[i32,151936]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  15:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  16:                tokenizer.ggml.eos_token_id u32              = 151643
+llama_model_loader: - kv  17:            tokenizer.ggml.padding_token_id u32              = 151643
+llama_model_loader: - kv  18:                tokenizer.ggml.bos_token_id u32              = 151643
+llama_model_loader: - kv  19:                    tokenizer.chat_template str              = {% for message in messages %}{% if lo...
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = F16
+print_info: file size   = 0.00 MiB (-nan BPW) 
+init_tokenizer: initializing tokenizer for type 2
+load: 0 unused tokens
+load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: control token: 151644 '<|im_start|>' is not marked as EOG
+load: printing all EOG tokens:
+load:   - 128247 ('</s>')
+load:   - 151643 ('<|endoftext|>')
+load:   - 151645 ('<|im_end|>')
+load: special tokens cache size = 294
+load: token to piece cache size = 0.9338 MB
+print_info: arch                  = qwen2
+print_info: vocab_only            = 1
+print_info: no_alloc              = 0
+print_info: vocab type            = BPE
+print_info: n_vocab               = 151936
+print_info: n_merges              = 151387
+print_info: BOS token             = 151643 '<|endoftext|>'
+print_info: EOS token             = 151643 '<|endoftext|>'
+print_info: EOT token             = 151645 '<|im_end|>'
+print_info: PAD token             = 151643 '<|endoftext|>'
+print_info: LF token              = 198 'Ċ'
+print_info: EOG token             = 128247 '</s>'
+print_info: EOG token             = 151643 '<|endoftext|>'
+print_info: EOG token             = 151645 '<|im_end|>'
+print_info: max token length      = 256
+llama_model_load: vocab only - skipping tensors
+llama_model_loader: loaded meta data with 42 key-value pairs and 0 tensors from models/ggml-vocab-gemma-4.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = gemma4
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = 47b6801b24d15ff9bcd8c96dfaea0be9ed3a0301
+llama_model_loader: - kv   3:                           general.finetune str              = 47b6801b24d15ff9bcd8c96dfaea0be9ed3a0301
+llama_model_loader: - kv   4:                         gemma4.block_count u32              = 30
+llama_model_loader: - kv   5:                      gemma4.context_length u32              = 262144
+llama_model_loader: - kv   6:                    gemma4.embedding_length u32              = 2816
+llama_model_loader: - kv   7:                 gemma4.feed_forward_length u32              = 2112
+llama_model_loader: - kv   8:                gemma4.attention.head_count u32              = 16
+llama_model_loader: - kv   9:             gemma4.attention.head_count_kv arr[i32,30]      = [8, 8, 8, 8, 8, 2, 8, 8, 8, 8, 8, 2, ...
+llama_model_loader: - kv  10:                      gemma4.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  11:                  gemma4.rope.freq_base_swa f32              = 10000.000000
+llama_model_loader: - kv  12:    gemma4.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  13:                        gemma4.expert_count u32              = 128
+llama_model_loader: - kv  14:                   gemma4.expert_used_count u32              = 8
+llama_model_loader: - kv  15:                gemma4.attention.key_length u32              = 512
+llama_model_loader: - kv  16:              gemma4.attention.value_length u32              = 512
+llama_model_loader: - kv  17:                          general.file_type u32              = 1
+llama_model_loader: - kv  18:             gemma4.final_logit_softcapping f32              = 30.000000
+llama_model_loader: - kv  19:            gemma4.attention.sliding_window u32              = 1024
+llama_model_loader: - kv  20:          gemma4.attention.shared_kv_layers u32              = 0
+llama_model_loader: - kv  21:    gemma4.embedding_length_per_layer_input u32              = 0
+llama_model_loader: - kv  22:    gemma4.attention.sliding_window_pattern arr[bool,30]     = [true, true, true, true, true, false,...
+llama_model_loader: - kv  23:            gemma4.attention.key_length_swa u32              = 256
+llama_model_loader: - kv  24:          gemma4.attention.value_length_swa u32              = 256
+llama_model_loader: - kv  25:          gemma4.expert_feed_forward_length u32              = 704
+llama_model_loader: - kv  26:                gemma4.rope.dimension_count u32              = 512
+llama_model_loader: - kv  27:            gemma4.rope.dimension_count_swa u32              = 256
+llama_model_loader: - kv  28:               general.quantization_version u32              = 2
+llama_model_loader: - kv  29:                       tokenizer.ggml.model str              = gemma4
+llama_model_loader: - kv  30:                      tokenizer.ggml.tokens arr[str,262144]  = ["<pad>", "<eos>", "<bos>", "<unk>", ...
+llama_model_loader: - kv  31:                      tokenizer.ggml.scores arr[f32,262144]  = [-1000.000000, -1000.000000, -1000.00...
+llama_model_loader: - kv  32:                  tokenizer.ggml.token_type arr[i32,262144]  = [3, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  33:                      tokenizer.ggml.merges arr[str,514906]  = ["\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n \n", ...
+llama_model_loader: - kv  34:                tokenizer.ggml.bos_token_id u32              = 2
+llama_model_loader: - kv  35:                tokenizer.ggml.eos_token_id u32              = 1
+llama_model_loader: - kv  36:            tokenizer.ggml.unknown_token_id u32              = 3
+llama_model_loader: - kv  37:            tokenizer.ggml.padding_token_id u32              = 0
+llama_model_loader: - kv  38:               tokenizer.ggml.mask_token_id u32              = 4
+llama_model_loader: - kv  39:                    tokenizer.chat_template str              = {%- macro format_parameters(propertie...
+llama_model_loader: - kv  40:            tokenizer.ggml.add_space_prefix bool             = false
+llama_model_loader: - kv  41:               tokenizer.ggml.add_bos_token bool             = true
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = F16
+print_info: file size   = 0.00 MiB (-nan BPW) 
+init_tokenizer: initializing tokenizer for type 2
+load: 0 unused tokens
+load: control token: 258884 '<|video|>' is not marked as EOG
+load: control token: 255999 '<|image>' is not marked as EOG
+load: control token: 258882 '<image|>' is not marked as EOG
+load: control token: 258883 '<audio|>' is not marked as EOG
+load: control token:     98 '<|think|>' is not marked as EOG
+load: control token:    105 '<|turn>' is not marked as EOG
+load: control token: 258880 '<|image|>' is not marked as EOG
+load: control token:      2 '<bos>' is not marked as EOG
+load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: control token:      0 '<pad>' is not marked as EOG
+load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: control token:     46 '<|tool>' is not marked as EOG
+load: control token:     47 '<tool|>' is not marked as EOG
+load: control token: 256000 '<|audio>' is not marked as EOG
+load: control token:      3 '<unk>' is not marked as EOG
+load: control token: 258881 '<|audio|>' is not marked as EOG
+load: control token:      4 '<mask>' is not marked as EOG
+load: printing all EOG tokens:
+load:   - 1 ('<eos>')
+load:   - 50 ('<|tool_response>')
+load:   - 106 ('<turn|>')
+load:   - 212 ('</s>')
+load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+load: special tokens cache size = 24
+load: token to piece cache size = 1.9445 MB
+print_info: arch                  = gemma4
+print_info: vocab_only            = 1
+print_info: no_alloc              = 0
+print_info: vocab type            = BPE
+print_info: n_vocab               = 262144
+print_info: n_merges              = 514906
+print_info: BOS token             = 2 '<bos>'
+print_info: EOS token             = 1 '<eos>'
+print_info: UNK token             = 3 '<unk>'
+print_info: PAD token             = 0 '<pad>'
+print_info: MASK token            = 4 '<mask>'
+print_info: LF token              = 107 '
+'
+print_info: EOG token             = 1 '<eos>'
+print_info: EOG token             = 50 '<|tool_response>'
+print_info: EOG token             = 106 '<turn|>'
+print_info: max token length      = 93
+llama_model_load: vocab only - skipping tensors
+llama_model_loader: loaded meta data with 26 key-value pairs and 0 tensors from models/ggml-vocab-phi-3.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = phi3
+llama_model_loader: - kv   1:                               general.name str              = Phi3
+llama_model_loader: - kv   2:                        phi3.context_length u32              = 4096
+llama_model_loader: - kv   3:  phi3.rope.scaling.original_context_length u32              = 4096
+llama_model_loader: - kv   4:                      phi3.embedding_length u32              = 3072
+llama_model_loader: - kv   5:                   phi3.feed_forward_length u32              = 8192
+llama_model_loader: - kv   6:                           phi3.block_count u32              = 32
+llama_model_loader: - kv   7:                  phi3.attention.head_count u32              = 32
+llama_model_loader: - kv   8:               phi3.attention.head_count_kv u32              = 32
+llama_model_loader: - kv   9:      phi3.attention.layer_norm_rms_epsilon f32              = 0.000010
+llama_model_loader: - kv  10:                  phi3.rope.dimension_count u32              = 96
+llama_model_loader: - kv  11:                        phi3.rope.freq_base f32              = 10000.000000
+llama_model_loader: - kv  12:                          general.file_type u32              = 1
+llama_model_loader: - kv  13:                       tokenizer.ggml.model str              = llama
+llama_model_loader: - kv  14:                         tokenizer.ggml.pre str              = default
+llama_model_loader: - kv  15:                      tokenizer.ggml.tokens arr[str,32064]   = ["<unk>", "<s>", "</s>", "<0x00>", "<...
+llama_model_loader: - kv  16:                      tokenizer.ggml.scores arr[f32,32064]   = [-1000.000000, -1000.000000, -1000.00...
+llama_model_loader: - kv  17:                  tokenizer.ggml.token_type arr[i32,32064]   = [3, 3, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6, ...
+llama_model_loader: - kv  18:                tokenizer.ggml.bos_token_id u32              = 1
+llama_model_loader: - kv  19:                tokenizer.ggml.eos_token_id u32              = 32000
+llama_model_loader: - kv  20:            tokenizer.ggml.unknown_token_id u32              = 0
+llama_model_loader: - kv  21:            tokenizer.ggml.padding_token_id u32              = 32000
+llama_model_loader: - kv  22:               tokenizer.ggml.add_bos_token bool             = true
+llama_model_loader: - kv  23:               tokenizer.ggml.add_eos_token bool             = false
+llama_model_loader: - kv  24:                    tokenizer.chat_template str              = {{ bos_token }}{% for message in mess...
+llama_model_loader: - kv  25:               general.quantization_version u32              = 2
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = F16
+print_info: file size   = 0.00 MiB (-nan BPW) 
+init_tokenizer: initializing tokenizer for type 1
+load: 0 unused tokens
+load: control token:  32008 '<|placeholder5|>' is not marked as EOG
+load: control token:  32006 '<|system|>' is not marked as EOG
+load: control token:  32002 '<|placeholder1|>' is not marked as EOG
+load: control token:  32001 '<|assistant|>' is not marked as EOG
+load: control token:  32004 '<|placeholder3|>' is not marked as EOG
+load: control token:  32003 '<|placeholder2|>' is not marked as EOG
+load: control token:      0 '<unk>' is not marked as EOG
+load: control token:  32005 '<|placeholder4|>' is not marked as EOG
+load: control token:  32010 '<|user|>' is not marked as EOG
+load: control-looking token:      2 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: control token:  32009 '<|placeholder6|>' is not marked as EOG
+load: control token:      1 '<s>' is not marked as EOG
+load: printing all EOG tokens:
+load:   - 2 ('</s>')
+load:   - 32000 ('<|endoftext|>')
+load:   - 32007 ('<|end|>')
+load: special tokens cache size = 67
+load: token to piece cache size = 0.1690 MB
+print_info: arch                  = phi3
+print_info: vocab_only            = 1
+print_info: no_alloc              = 0
+print_info: vocab type            = SPM
+print_info: n_vocab               = 32064
+print_info: n_merges              = 0
+print_info: BOS token             = 1 '<s>'
+print_info: EOS token             = 32000 '<|endoftext|>'
+print_info: EOT token             = 32007 '<|end|>'
+print_info: UNK token             = 0 '<unk>'
+print_info: PAD token             = 32000 '<|endoftext|>'
+print_info: LF token              = 13 '<0x0A>'
+print_info: EOG token             = 2 '</s>'
+print_info: EOG token             = 32000 '<|endoftext|>'
+print_info: EOG token             = 32007 '<|end|>'
+print_info: max token length      = 48
+llama_model_load: vocab only - skipping tensors
+qwen2 / Qwen2.5-7B-Instruct
+  chat (system/user/multipart)       ok    tokens plain=63 guarded=95  ctrl plain=15 guarded=9 template=9  spans=7 spellings=6
+  chat + tools + tool result         ok    tokens plain=266 guarded=330  ctrl plain=25 guarded=13 template=13  spans=12 spellings=12
+  continue_final_message             ok    tokens plain=82 guarded=130  ctrl plain=20 guarded=11 template=11  spans=10 spellings=9
+qwen35 / Qwen3.5-4B
+  chat (system/user/multipart)       ok    tokens plain=66 guarded=98  ctrl plain=15 guarded=9 template=9  spans=7 spellings=6
+  chat + tools + tool result         ok    tokens plain=383 guarded=447  ctrl plain=25 guarded=13 template=13  spans=12 spellings=12
+  continue_final_message             ok    tokens plain=88 guarded=136  ctrl plain=20 guarded=11 template=11  spans=10 spellings=9
+gemma-4 / gemma-4-31B-it
+  chat (system/user/multipart)       ok    tokens plain=66 guarded=80  ctrl plain=17 guarded=11 template=11  spans=6 spellings=6
+  chat + tools + tool result         ok    tokens plain=149 guarded=177  ctrl plain=26 guarded=14 template=14  spans=15 spellings=12
+  continue_final_message             ok    tokens plain=89 guarded=110  ctrl plain=22 guarded=13 template=13  spans=9 spellings=9
+phi-3 / role-composed markers
+  chat (system/user/multipart)       ok    tokens plain=45 guarded=81  ctrl plain=16 guarded=10 template=10  spans=8 spellings=6
+  continue_final_message             ok    tokens plain=59 guarded=113  ctrl plain=21 guarded=12 template=12  spans=11 spellings=9
+86/86 checks passed
+intree_rc=0
+llama_model_loader: loaded meta data with 28 key-value pairs and 290 tensors from /mnt/raid0/llm/models/QuantFactory/Qwen2.5-0.5B-GGUF/Qwen2.5-0.5B.Q8_0.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen2
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Models
+llama_model_loader: - kv   3:                         general.size_label str              = 494M
+llama_model_loader: - kv   4:                            general.license str              = apache-2.0
+llama_model_loader: - kv   5:                       general.license.link str              = https://huggingface.co/Qwen/Qwen2.5-0...
+llama_model_loader: - kv   6:                               general.tags arr[str,1]       = ["text-generation"]
+llama_model_loader: - kv   7:                          general.languages arr[str,1]       = ["en"]
+llama_model_loader: - kv   8:                          qwen2.block_count u32              = 24
+llama_model_loader: - kv   9:                       qwen2.context_length u32              = 32768
+llama_model_loader: - kv  10:                     qwen2.embedding_length u32              = 896
+llama_model_loader: - kv  11:                  qwen2.feed_forward_length u32              = 4864
+llama_model_loader: - kv  12:                 qwen2.attention.head_count u32              = 14
+llama_model_loader: - kv  13:              qwen2.attention.head_count_kv u32              = 2
+llama_model_loader: - kv  14:                       qwen2.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  15:     qwen2.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  16:                          general.file_type u32              = 7
+llama_model_loader: - kv  17:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  18:                         tokenizer.ggml.pre str              = qwen2
+llama_model_loader: - kv  19:                      tokenizer.ggml.tokens arr[str,151936]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  20:                  tokenizer.ggml.token_type arr[i32,151936]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  21:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  22:                tokenizer.ggml.eos_token_id u32              = 151645
+llama_model_loader: - kv  23:            tokenizer.ggml.padding_token_id u32              = 151643
+llama_model_loader: - kv  24:                tokenizer.ggml.bos_token_id u32              = 151643
+llama_model_loader: - kv  25:               tokenizer.ggml.add_bos_token bool             = false
+llama_model_loader: - kv  26:                    tokenizer.chat_template str              = {%- if tools %}\n    {{- '<|im_start|>...
+llama_model_loader: - kv  27:               general.quantization_version u32              = 2
+llama_model_loader: - type  f32:  121 tensors
+llama_model_loader: - type q8_0:  169 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = Q8_0
+print_info: file size   = 500.79 MiB (8.50 BPW) 
+init_tokenizer: initializing tokenizer for type 2
+load: 0 unused tokens
+load: control token: 151660 '<|fim_middle|>' is not marked as EOG
+load: control token: 151659 '<|fim_prefix|>' is not marked as EOG
+load: control token: 151653 '<|vision_end|>' is not marked as EOG
+load: control token: 151648 '<|box_start|>' is not marked as EOG
+load: control token: 151646 '<|object_ref_start|>' is not marked as EOG
+load: control token: 151649 '<|box_end|>' is not marked as EOG
+load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: control token: 151655 '<|image_pad|>' is not marked as EOG
+load: control token: 151651 '<|quad_end|>' is not marked as EOG
+load: control token: 151647 '<|object_ref_end|>' is not marked as EOG
+load: control token: 151652 '<|vision_start|>' is not marked as EOG
+load: control token: 151654 '<|vision_pad|>' is not marked as EOG
+load: control token: 151656 '<|video_pad|>' is not marked as EOG
+load: control token: 151644 '<|im_start|>' is not marked as EOG
+load: control token: 151661 '<|fim_suffix|>' is not marked as EOG
+load: control token: 151650 '<|quad_start|>' is not marked as EOG
+load: printing all EOG tokens:
+load:   - 128247 ('</s>')
+load:   - 151643 ('<|endoftext|>')
+load:   - 151645 ('<|im_end|>')
+load:   - 151662 ('<|fim_pad|>')
+load:   - 151663 ('<|repo_name|>')
+load:   - 151664 ('<|file_sep|>')
+load: special tokens cache size = 23
+load: token to piece cache size = 0.9310 MB
+print_info: arch                  = qwen2
+print_info: vocab_only            = 1
+print_info: no_alloc              = 0
+print_info: vocab type            = BPE
+print_info: n_vocab               = 151936
+print_info: n_merges              = 151387
+print_info: BOS token             = 151643 '<|endoftext|>'
+print_info: EOS token             = 151645 '<|im_end|>'
+print_info: EOT token             = 151645 '<|im_end|>'
+print_info: PAD token             = 151643 '<|endoftext|>'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 151659 '<|fim_prefix|>'
+print_info: FIM SUF token         = 151661 '<|fim_suffix|>'
+print_info: FIM MID token         = 151660 '<|fim_middle|>'
+print_info: FIM PAD token         = 151662 '<|fim_pad|>'
+print_info: FIM REP token         = 151663 '<|repo_name|>'
+print_info: FIM SEP token         = 151664 '<|file_sep|>'
+print_info: EOG token             = 128247 '</s>'
+print_info: EOG token             = 151643 '<|endoftext|>'
+print_info: EOG token             = 151645 '<|im_end|>'
+print_info: EOG token             = 151662 '<|fim_pad|>'
+print_info: EOG token             = 151663 '<|repo_name|>'
+print_info: EOG token             = 151664 '<|file_sep|>'
+print_info: max token length      = 256
+llama_model_load: vocab only - skipping tensors
+/mnt/raid0/llm/models/QuantFactory/Qwen2.5-0.5B-GGUF/Qwen2.5-0.5B.Q8_0.gguf
+  chat (system/user/multipart)       ok    tokens plain=63 guarded=95  ctrl plain=15 guarded=9 template=9  spans=7 spellings=6
+  chat + tools + tool result         ok    tokens plain=254 guarded=318  ctrl plain=25 guarded=13 template=13  spans=12 spellings=12
+  continue_final_message             ok    tokens plain=82 guarded=130  ctrl plain=20 guarded=11 template=11  spans=10 spellings=9
+24/24 checks passed
+qwen_rc=0

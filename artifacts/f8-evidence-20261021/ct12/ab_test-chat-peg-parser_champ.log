@@ -1,0 +1,69 @@
+native
+  content with reasoning (no generation_prompt)
+  content with reasoning (no generation_prompt) (4 assertion(s))                [PASS]
+  content without reasoning (no generation_prompt)
+  content without reasoning (no generation_prompt) (4 assertion(s))             [PASS]
+  content with reasoning_format = none (tags appear in content)
+  content with reasoning_format = none (tags appear in content) (4 assertion(s)) [PASS]
+  content with reasoning generation_prompt
+  content with reasoning generation_prompt (4 assertion(s))                     [PASS]
+  content with reasoning generation_prompt and reasoning_format = none
+  content with reasoning generation_prompt and reasoning_format = none (4 assertion(s)) [PASS]
+  content with closed reasoning generation_prompt (empty reasoning discarded)
+  content with closed reasoning generation_prompt (empty reasoning discarded) (4 assertion(s)) [PASS]
+  tools with reasoning generation_prompt
+  tools with reasoning generation_prompt (6 assertion(s))                       [PASS]
+  parallel tools with reasoning generation_prompt
+  parallel tools with reasoning generation_prompt (12 assertion(s))             [PASS]
+  response_format with reasoning generation_prompt
+  response_format with reasoning generation_prompt (4 assertion(s))             [PASS]
+native (46 assertion(s))                                                        [PASS]
+qwen3 coder
+  incremental parsing
+  incremental parsing (39 assertion(s))                                         [PASS]
+qwen3 coder (39 assertion(s))                                                   [PASS]
+qwen3 non-coder
+  tool call parsing
+  tool call parsing (6 assertion(s))                                            [PASS]
+  incremental parsing
+  incremental parsing (43 assertion(s))                                         [PASS]
+qwen3 non-coder (49 assertion(s))                                               [PASS]
+comparison
+  current_parse
+  current_parse                                                                 [PASS]
+  [bench] current_parse_benchmark complete
+  [bench] current_parse_benchmark complete (n=100 avg=9us rate=109769/s)        [PASS]
+  [bench] current_parse_benchmark incremental
+  [bench] current_parse_benchmark incremental (n=20 avg=614us rate=1628/s)      [PASS]
+comparison                                                                      [PASS]
+prefix tool names
+  parse long tool name
+  parse long tool name (4 assertion(s))                                         [PASS]
+  incremental parse long tool name
+  incremental parse long tool name (38 assertion(s))                            [PASS]
+  parse short tool name
+  parse short tool name (4 assertion(s))                                        [PASS]
+prefix tool names (46 assertion(s))                                             [PASS]
+tagged peg parser
+  basic tag extraction
+  basic tag extraction (3 assertion(s))                                         [PASS]
+  duplicate tags overwrite
+  duplicate tags overwrite (2 assertion(s))                                     [PASS]
+  no tags extracted
+  no tags extracted (2 assertion(s))                                            [PASS]
+  structured extraction
+  structured extraction (3 assertion(s))                                        [PASS]
+  partial parse
+  partial parse (3 assertion(s))                                                [PASS]
+  find in the middle
+  find in the middle (1 assertion(s))                                           [PASS]
+  fail find in the middle
+  fail find in the middle (1 assertion(s))                                      [PASS]
+  find function tag with name
+  find function tag with name (3 assertion(s))                                  [PASS]
+tagged peg parser (18 assertion(s))                                             [PASS]
+
+tests      : 32
+assertions : 198
+failures   : 0
+exceptions : 0

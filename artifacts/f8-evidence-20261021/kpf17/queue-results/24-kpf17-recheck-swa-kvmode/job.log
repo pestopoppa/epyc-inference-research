@@ -1,0 +1,13 @@
+[2026-10-21T00:01:12Z] provenance: branch 1fd7e2e12897db4ec401cfa393cea63ceb47a8fc llama-server sha256 defc5a094fcdd8c5d7acd912a7f7912d36a5e78d62af309015e57efc2b0eec40
+[2026-10-21T00:01:26Z] STEP swa-cpp-normal OK rc=0
+[2026-10-21T00:01:39Z] STEP swa-cpp-mut-use_recorded_range OK mutation DETECTED rc=1
+[2026-10-21T00:01:42Z] STEP swa-cpp-floor-nonswa OK rc=0
+[2026-10-21T00:01:48Z] STEP swa-server-fork OK passed=1 skipped=0
+[2026-10-21T00:01:52Z] STEP swa-server-mut-skew OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+[2026-10-21T00:03:08Z] STEP swa-server-171-172-173 OK passed=10 skipped=0
+[2026-10-21T00:03:39Z] STEP kvmode-abort-then-retry OK passed=1 skipped=0
+[2026-10-21T00:04:17Z] STEP kvmode-all-new-cases OK passed=1 skipped=2
+[2026-10-21T00:04:54Z] STEP kvmode-inj-abort_keeps_tail OK passed=1 skipped=0
+[2026-10-21T00:04:57Z] STEP kvmode-mut-abort_keeps_tail+no_posmax_guard OK mutation abort_keeps_tail,no_posmax_guard DETECTED (failed=1 passed=0)
+[2026-10-21T00:05:28Z] STEP kvmode-no_posmax_guard-alone OK passed=1 skipped=0
+RESULT 24-kpf17-recheck-swa-kvmode pass=11 fail=0

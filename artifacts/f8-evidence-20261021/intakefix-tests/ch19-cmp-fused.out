@@ -1,0 +1,5 @@
+Q4_K nt=1  nmse=0.000e+00 maxabs=0.000e+00 ok
+Q4_K nt=8  nmse=0.000e+00 maxabs=0.000e+00 ok
+Q8_0 nt=1  nmse=0.000e+00 maxabs=0.000e+00 ok
+Q8_0 nt=8  nmse=0.000e+00 maxabs=0.000e+00 ok
+RESULT test-moe-fused-upgate pass=4 fail=0

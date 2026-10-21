@@ -1,0 +1,1009 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.0.3, pluggy-1.6.0
+rootdir: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests
+configfile: pytest.ini
+plugins: asyncio-1.3.0, timeout-2.4.0, langsmith-0.7.30, cov-7.1.0, xdist-3.8.0, hypothesis-6.151.13, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 23 deselected / 1 selected
+
+unit/test_slot_fork.py F                                                 [100%]
+
+=================================== FAILURES ===================================
+________________ test_kpf172_fork_from_decoding_source_no_leak _________________
+
+    def test_kpf172_fork_from_decoding_source_no_leak():
+        """KPF-17.2(3): checkpoint_at beyond the prompt (inside the generation / unverified draft window) creates nothing, and a
+        fork taken while the source decodes (KPF_SPEC_TYPE=draft-mtp: k pending drafts) leaves the source untouched.
+        MUTATION: fork_clobber_src (fork disturbs its source), fork_skip_ckpt_load.
+    
+        Jobs 20 and 21 (2026-10-21) never forked here (no do_slot_fork line in either log), so fork_clobber_src went
+        undetected: the wait loop read next_token.n_decoded, which /slots reports from the PREVIOUS task until the new one
+        generates (48 = the base run), so it returned at once while slot 0 was still prefilling (n_prompt_tokens 64 < the
+        137-token junction), the source held no checkpoint the child could use, and the child prefilled from scratch. Now:
+        wait on n_prompt_tokens past the prompt, require the child to have forked from slot 0, check the source's state
+        directly (cells == tokens, same length as the unforked run) and compare its tokens against an A/A control (same
+        concurrency, child with slot_fork off) instead of a fixed tolerance."""
+        server.start()
+        build_prompts()
+        need_ckpt_mode()
+        prompt = TRUNK + SUF[0]
+        at = [TRUNK_LEN, len(prompt) + 3, len(prompt) + 10]
+        n_src = 96  # long enough that the source is still decoding while the child forks and prefills
+    
+        def src_state() -> tuple[int, int]:
+            s0 = slots()[0]
+            return s0.get("n_prompt_tokens", 0), s0["kv_cells"]["private"] + s0["kv_cells"]["shared"]
+    
+        base = complete(prompt, 0, n_predict=n_src, checkpoint_at=at)
+        assert all(c["n_tokens"] <= len(prompt) for c in ckpts(0)), ckpts(0)  # beyond-prompt positions never checkpointed
+        base_tok, base_cells = src_state()
+>       assert base_tok == base_cells, (base_tok, base_cells)
+E       AssertionError: (246, 492)
+E       assert 246 == 492
+
+unit/test_slot_fork.py:843: AssertionError
+----------------------------- Captured stdout call -----------------------------
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18984 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf --batch-size 32 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r2-20261020/queue-results/25-kpf17-mutant-recheck/slots-172-decoding-source-swa --no-jinja --slot-fork-min-tokens 16
+server pid=1819049, pytest pid=1819047
+Waiting for server to start...
+0.00.001.421 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.697 W srv  llama_server: -----------------
+0.00.001.699 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.699 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.699 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.699 W srv  llama_server: -----------------
+0.00.002.894 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf'
+0.00.316.913 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.468.647 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.468.704 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = checkpoint, min tokens = 16, cache_idle_slots = 1
+0.00.469.964 I srv  llama_server: model loaded
+0.00.469.973 I srv  llama_server: listening on http://127.0.0.1:18984
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    818,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    236743
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    7626,
+    1602,
+    506,
+    32096,
+    1586,
+    9710,
+    528,
+    506,
+    34759,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1217,
+    1551,
+    20278,
+    1602,
+    506,
+    2212,
+    735,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    837,
+    3409,
+    1053,
+    919,
+    48312,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1015,
+    1676,
+    506,
+    2212,
+    1308,
+    506,
+    64222,
+    21136,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    15642,
+    886,
+    13315,
+    1003,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    4361,
+    1806,
+    2432,
+    506,
+    64222,
+    7971,
+    1679,
+    1418,
+    9137,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    8432,
+    531,
+    506,
+    1548,
+    529,
+    13763,
+    20896,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    23097,
+    506,
+    2212,
+    496,
+    2822,
+    3822,
+    236787
+  ]
+}
+Response from server {
+  "default_generation_settings": {
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": -1,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": -1,
+      "n_predict": -1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "none",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "n_ctx": 8192
+  },
+  "total_slots": 4,
+  "model_alias": "tinyllama-2",
+  "model_ftype": "Q8_0",
+  "model_path": "/mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "media_marker": "<__media_idM70b2CVfLV1GTuZPtMSjKqtwV1KXAO__>",
+  "endpoint_slots": true,
+  "endpoint_props": false,
+  "endpoint_metrics": true,
+  "ui": true,
+  "ui_settings": {},
+  "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- if messages[0]['content'] is string -%}\n        {%- set first_user_prefix = messages[0]['content'] + '\n\n' -%}\n    {%- else -%}\n        {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- endif -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<start_of_image>' }}\n            {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}",
+  "chat_template_caps": {
+    "supports_object_arguments": false,
+    "supports_parallel_tool_calls": false,
+    "supports_preserve_reasoning": false,
+    "supports_string_content": true,
+    "supports_system_role": true,
+    "supports_tool_calls": false,
+    "supports_tools": false,
+    "supports_typed_content": false
+  },
+  "bos_token": "<bos>",
+  "eos_token": "<eos>",
+  "build_info": "b10359-1fd7e2e12",
+  "is_sleeping": false,
+  "cors_proxy_enabled": false,
+  "slot_fork": {
+    "min_tokens": 16,
+    "mode": "checkpoint",
+    "checkpoint_at": true
+  }
+}
+0.00.508.695 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.00.508.713 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.00.545.027 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 36.3 ms, kv_pos = 32, ms/tok = 0.000
+0.00.568.651 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 23.6 ms, kv_pos = 64, ms/tok = 0.000
+0.00.823.234 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 254.5 ms, kv_pos = 96, ms/tok = 0.000
+0.00.842.191 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 23 (slots 1), budget = 0, t_iter = 18.9 ms, kv_pos = 119, ms/tok = 0.000
+0.00.858.832 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 17 (slots 1), budget = 0, t_iter = 15.7 ms, kv_pos = 136, ms/tok = 0.000
+0.00.872.972 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 11 (slots 1), budget = 0, t_iter = 13.5 ms, kv_pos = 147, ms/tok = 0.000
+0.00.888.886 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 15.2 ms, kv_pos = 151, ms/tok = 0.000
+0.02.162.169 I slot print_timing: id  0 | task 0 | prompt eval time =     380.11 ms /   151 tokens (    2.52 ms per token,   397.25 tokens per second)
+0.02.162.229 I slot print_timing: id  0 | task 0 |        eval time =    1273.30 ms /    96 tokens (   13.26 ms per token,    75.39 tokens per second)
+0.02.162.236 I slot print_timing: id  0 | task 0 |       total time =    1653.41 ms /   247 tokens
+0.02.162.249 I slot print_timing: id  0 | task 0 |    graphs reused =         97
+0.02.162.312 I slot      release: id  0 | task 0 | stop processing: n_tokens = 246, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " a cat that lived in the tower for a while. Question: what was the keeper's handwriting? Answer: smaller and neater as the years went by. Question: what changed? Answer: storms had become more frequent in autumn, that fewer fishing boats passed each decade, and the keeper's handwriting grew smaller and neter. Question: what did the clerk notice? Answer: small drawings in the margins: gulls, a cat that lived in the tower for a",
+  "tokens": [
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236761,
+    19566,
+    236787,
+    1144,
+    691,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    236881,
+    25685,
+    236787,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    19566,
+    236787,
+    1144,
+    6692,
+    236881,
+    25685,
+    236787,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    589,
+    236761,
+    19566,
+    236787,
+    1144,
+    1602,
+    506,
+    32096,
+    6303,
+    236881,
+    25685,
+    236787,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 96,
+  "tokens_evaluated": 151,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 96,
+    "n_predict": 96,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: what animal did the clerk find drawn in the margins? Answer:",
+  "has_new_line": false,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 246,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 151,
+    "prompt_ms": 380.11,
+    "prompt_per_token_ms": 2.517284768211921,
+    "prompt_per_second": 397.2534266396569,
+    "predicted_n": 96,
+    "predicted_ms": 1273.299,
+    "predicted_per_token_ms": 13.26353125,
+    "predicted_per_second": 75.39470305089378,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 0
+  }
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 246,
+    "n_prompt_tokens_processed": 151,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 96
+      }
+    ],
+    "kv_cells": {
+      "private": 492,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 492,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "eb08a113b0b7d568",
+    "checkpoints": [
+      {
+        "n_tokens": 119,
+        "pos_min": 0,
+        "pos_max": 118,
+        "pinned": false,
+        "size_mib": 2.5585289001464844,
+        "prefix_hash": "e8c4fe4ac1c3a1f3"
+      },
+      {
+        "n_tokens": 136,
+        "pos_min": 0,
+        "pos_max": 135,
+        "pinned": true,
+        "size_mib": 2.9239578247070312,
+        "prefix_hash": "0495cecacf6bcbbc"
+      },
+      {
+        "n_tokens": 147,
+        "pos_min": 0,
+        "pos_max": 146,
+        "pinned": false,
+        "size_mib": 3.160411834716797,
+        "prefix_hash": "b43ce1a610cdc1c3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 492,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 492,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 492,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 246,
+    "n_prompt_tokens_processed": 151,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 96,
+      "n_predict": 96,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 96
+      }
+    ],
+    "kv_cells": {
+      "private": 492,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 492,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "eb08a113b0b7d568",
+    "checkpoints": [
+      {
+        "n_tokens": 119,
+        "pos_min": 0,
+        "pos_max": 118,
+        "pinned": false,
+        "size_mib": 2.5585289001464844,
+        "prefix_hash": "e8c4fe4ac1c3a1f3"
+      },
+      {
+        "n_tokens": 136,
+        "pos_min": 0,
+        "pos_max": 135,
+        "pinned": true,
+        "size_mib": 2.9239578247070312,
+        "prefix_hash": "0495cecacf6bcbbc"
+      },
+      {
+        "n_tokens": 147,
+        "pos_min": 0,
+        "pos_max": 146,
+        "pinned": false,
+        "size_mib": 3.160411834716797,
+        "prefix_hash": "b43ce1a610cdc1c3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 492,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 492,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 492,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+--------------------------- Captured stdout teardown ---------------------------
+Stopping server with pid=1819049
+0.02.195.823 I srv    operator(): operator(): cleaning up before exit...
+=========================== short test summary info ============================
+FAILED unit/test_slot_fork.py::test_kpf172_fork_from_decoding_source_no_leak
+======================= 1 failed, 23 deselected in 2.31s =======================

@@ -1,0 +1,23 @@
+binary : /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server
+expect : libraries under /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin
+
+  OK   libllama-server-impl.so      -> /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/libllama-server-impl.so
+  OK   libllama-common.so.0         -> /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/libllama-common.so.0
+  OK   libmtmd.so.0                 -> /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/libmtmd.so.0
+  OK   libllama.so.0                -> /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/libllama.so.0
+  OK   libggml.so.0                 -> /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/libggml.so.0
+  OK   libggml-base.so.0            -> /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/libggml-base.so.0
+  OK   libggml-cpu.so.0             -> /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/libggml-cpu.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin
+         2	/opt/rocm/lib
+         3	/usr/lib/llvm-20/lib
+         4	/opt/AMD/aocc-compiler-5.0.0/lib
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.

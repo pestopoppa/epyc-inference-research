@@ -1,0 +1,36 @@
+{"t": 1792564519.705, "metrics": {"llamacpp:requests_processing": 0.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 16384, "slots_busy": 0}
+{"t": 1792564520.707, "metrics": {"llamacpp:requests_processing": 0.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564521.709, "metrics": {"llamacpp:requests_processing": 0.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 16384, "slots_busy": 0}
+{"t": 1792564522.711, "metrics": {"llamacpp:requests_processing": 1.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564526.629, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 20732, "slots_busy": 4}
+{"t": 1792564547.212, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564561.689, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 26876, "slots_busy": 4}
+{"t": 1792564598.525, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564620.859, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 33020, "slots_busy": 4}
+{"t": 1792564664.131, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564693.961, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 39160, "slots_busy": 4}
+{"t": 1792564719.774, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564736.608, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 45304, "slots_busy": 4}
+{"t": 1792564778.621, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564803.592, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 51448, "slots_busy": 4}
+{"t": 1792564858.119, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564868.322, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 57592, "slots_busy": 4}
+{"t": 1792564897.935, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564917.672, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 63724, "slots_busy": 4}
+{"t": 1792564965.396, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792564993.677, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68177, "slots_busy": 4}
+{"t": 1792565032.032, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565033.762, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68261, "slots_busy": 4}
+{"t": 1792565035.729, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565037.118, "metrics": {"llamacpp:requests_processing": 4.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68345, "slots_busy": 4}
+{"t": 1792565039.075, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565040.394, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68421, "slots_busy": 3}
+{"t": 1792565041.991, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565043.0, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68471, "slots_busy": 3}
+{"t": 1792565044.615, "metrics": {"llamacpp:requests_processing": 3.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565045.696, "metrics": {"llamacpp:requests_processing": 2.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68527, "slots_busy": 2}
+{"t": 1792565047.398, "metrics": {"llamacpp:requests_processing": 2.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565048.469, "metrics": {"llamacpp:requests_processing": 1.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68569, "slots_busy": 1}
+{"t": 1792565049.787, "metrics": {"llamacpp:requests_processing": 1.0, "llamacpp:requests_deferred": 0.0}}
+{"t": 1792565050.855, "metrics": {"llamacpp:requests_processing": 1.0, "llamacpp:requests_deferred": 0.0}, "slots_sum_n_prompt_tokens": 68604, "slots_busy": 0}
+{"t": 1792565051.93, "metrics": {"llamacpp:requests_processing": 0.0, "llamacpp:requests_deferred": 0.0}}

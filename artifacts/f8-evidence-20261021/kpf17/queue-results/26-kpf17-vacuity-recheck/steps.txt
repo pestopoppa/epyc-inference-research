@@ -1,0 +1,28 @@
+honest-busy-HYB OK passed=1 skipped=0
+honest-p2-HYB OK passed=1 skipped=0
+honest-abort-HYB OK passed=1 skipped=0
+honest-key-HYB OK passed=1 skipped=0
+honest-same-HYB FAIL passed=0 failed=1 skipped=0 rc=1
+honest-step-HYB OK passed=1 skipped=0
+honest-busy-SWA OK passed=1 skipped=0
+honest-p2-SWA FAIL passed=0 failed=1 skipped=0 rc=1
+honest-abort-SWA OK passed=1 skipped=0
+honest-key-SWA OK passed=1 skipped=0
+honest-same-SWA FAIL passed=0 failed=1 skipped=0 rc=1
+honest-step-SWA OK passed=1 skipped=0
+honest-174-SWA OK passed=1 skipped=0
+honest-busy-ATT OK passed=1 skipped=0
+honest-p2-ATT OK passed=1 skipped=0
+honest-abort-ATT OK passed=1 skipped=0
+mut-busy-fork_skip_ckpt_load-HYB OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+mut-key-fork_no_lcp-HYB OK mutation fork_no_lcp DETECTED (failed=1 passed=0)
+mut-same-fork_skip_ckpt_load-HYB OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+mut-step-skew+no_posmax_guard-HYB OK mutation ckpt_ntokens_skew,no_posmax_guard DETECTED (failed=1 passed=0)
+mut-busy-fork_skip_ckpt_load-SWA OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+mut-key-fork_no_lcp-SWA OK mutation fork_no_lcp DETECTED (failed=1 passed=0)
+mut-same-fork_skip_ckpt_load-SWA OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+mut-step-skew+no_posmax_guard-SWA OK mutation ckpt_ntokens_skew,no_posmax_guard DETECTED (failed=1 passed=0)
+mut-174-fork_skip_ckpt_load-SWA OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+mut-174-ckpt_ntokens_skew-SWA OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+inj-abort-abort_keeps_tail-ATT OK passed=1 skipped=0
+mut-abort-abort_keeps_tail+no_posmax_guard-ATT OK mutation abort_keeps_tail,no_posmax_guard DETECTED (failed=1 passed=0)

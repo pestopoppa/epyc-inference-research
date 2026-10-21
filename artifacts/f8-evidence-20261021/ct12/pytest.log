@@ -1,0 +1,15 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.7.0 -- /home/node/.cache/uv/builds-v0/.tmpPkegOZ/bin/python
+rootdir: /mnt/raid0/llm/worktrees/ct12-is-input-20261021/tools/server/tests
+configfile: pytest.ini
+collecting ... collected 7 items
+
+unit/test_chat_special_tokens.py::test_control_ids_are_live_in_the_vocab PASSED [ 14%]
+unit/test_chat_special_tokens.py::test_user_content_is_literal_on_chat_path PASSED [ 28%]
+unit/test_chat_special_tokens.py::test_template_markers_stay_control_tokens PASSED [ 42%]
+unit/test_chat_special_tokens.py::test_raw_completion_still_parses_specials PASSED [ 57%]
+unit/test_chat_special_tokens.py::test_tool_result_and_multipart_are_literal PASSED [ 71%]
+unit/test_chat_special_tokens.py::test_client_cannot_supply_spans_on_chat_path PASSED [ 85%]
+unit/test_chat_special_tokens.py::test_opt_out_flag_restores_parsing PASSED [100%]
+
+============================== 7 passed in 4.45s ===============================

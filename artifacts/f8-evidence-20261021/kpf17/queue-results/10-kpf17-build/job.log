@@ -1,0 +1,4 @@
+[2026-10-20T22:26:34Z] head 1f453d022 dirty=0
+[2026-10-20T22:51:02Z] head d2ef28e10 dirty=0
+[2026-10-20T22:51:39Z] STEP build OK llama_server_sha256=8f8606e7ffa58fc72fa685a022f68d7726e8873c28dfda7ee9895cdf9fb37f5e
+RESULT 10-kpf17-build pass=1 fail=0

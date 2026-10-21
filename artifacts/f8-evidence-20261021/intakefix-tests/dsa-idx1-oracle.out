@@ -1,0 +1,12 @@
+ref ran (full contract)                      ok
+oracle-A ran                                 ok
+A bit-equal: -1 holes+len+extra+sink         ok
+A bit-equal: no sink                         ok
+A bit-equal: no extra, no sink               ok
+oracle-B ran                                 ok
+B bit-equal vs full-KV masked dense          ok
+all-invalid => zeros                         ok
+single slot => exactly V row                 ok
+index >= rows rejected                       ok
+index < -1 rejected                          ok
+RESULT test-dsa-sparse-attn-oracle pass=11 fail=0

@@ -1,0 +1,7035 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.0.3, pluggy-1.6.0
+rootdir: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests
+configfile: pytest.ini
+plugins: asyncio-1.3.0, timeout-2.4.0, langsmith-0.7.30, cov-7.1.0, xdist-3.8.0, hypothesis-6.151.13, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 23 deselected / 1 selected
+
+unit/test_slot_fork.py .                                                 [100%]
+
+==================================== PASSES ====================================
+__________________ test_kpf171_pinned_ntokens_equal_requested __________________
+----------------------------- Captured stdout call -----------------------------
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18980 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf --batch-size 32 --ubatch-size 32 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /tmp/kpf171-n3fxwp1_ --no-jinja --slot-fork-min-tokens 16 --no-cache-idle-slots
+server pid=1208476, pytest pid=1208419
+Waiting for server to start...
+0.00.001.515 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.837 W srv  llama_server: -----------------
+0.00.001.838 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.839 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.839 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.839 W srv  llama_server: -----------------
+0.00.003.029 I srv    load_model: loading model '/mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf'
+Response from server {
+  "error": {
+    "message": "Loading model",
+    "type": "unavailable_error",
+    "code": 503
+  }
+}
+Waiting for server to start...
+0.00.643.384 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.643.436 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = checkpoint, min tokens = 16, cache_idle_slots = 0
+0.00.645.543 I srv  llama_server: model loaded
+0.00.645.551 I srv  llama_server: listening on http://127.0.0.1:18980
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314,
+    279,
+    16382,
+    11,
+    279,
+    17199,
+    421,
+    5642,
+    11,
+    321,
+    279,
+    12106,
+    314,
+    279,
+    12515,
+    506,
+    41564,
+    13,
+    5875,
+    25292,
+    1578,
+    279,
+    1433,
+    13538,
+    310,
+    34227,
+    25442,
+    13,
+    3095,
+    279,
+    51624,
+    20922,
+    11,
+    279,
+    72103,
+    4998,
+    4439,
+    264,
+    3777,
+    42787,
+    310,
+    1301,
+    660,
+    314,
+    1070,
+    321,
+    27367,
+    1029,
+    1092,
+    995,
+    5324,
+    13,
+    561,
+    42787,
+    13293,
+    421,
+    42046,
+    995,
+    3512,
+    777,
+    20125,
+    303,
+    40297,
+    11,
+    421,
+    16253,
+    19340,
+    30592,
+    5642,
+    1754,
+    12828,
+    11,
+    321,
+    421,
+    279,
+    51624,
+    579,
+    88546,
+    13538,
+    8882,
+    321,
+    808,
+    932,
+    430,
+    279,
+    1578,
+    3804,
+    539,
+    13,
+    2838,
+    1048,
+    1669,
+    2526,
+    36590,
+    303,
+    279,
+    35374,
+    25,
+    338,
+    68042,
+    11,
+    264,
+    7993,
+    421,
+    11815,
+    303,
+    279,
+    20618,
+    364,
+    264,
+    1345,
+    11,
+    321,
+    2957,
+    264,
+    48335,
+    13,
+    220
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1092,
+    9572,
+    1467,
+    279,
+    42787,
+    1423,
+    14336,
+    303,
+    279,
+    35374,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1204,
+    1599,
+    25442,
+    1467,
+    279,
+    1433,
+    599,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    864,
+    3098,
+    995,
+    777,
+    42046,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    852,
+    1301,
+    279,
+    1433,
+    1238,
+    279,
+    51624,
+    20922,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    9357,
+    799,
+    11316,
+    883,
+    279,
+    51624,
+    579,
+    88546,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    1697,
+    2250,
+    2433,
+    279,
+    51624,
+    5947,
+    1441,
+    1396,
+    11129,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15380,
+    25,
+    1092,
+    6716,
+    310,
+    279,
+    1324,
+    314,
+    19340,
+    30592,
+    30,
+    21134,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    20052,
+    279,
+    1433,
+    264,
+    2716,
+    2192,
+    25
+  ]
+}
+Response from server {
+  "default_generation_settings": {
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": -1,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": -1,
+      "n_predict": -1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "none",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "n_ctx": 8192
+  },
+  "total_slots": 4,
+  "model_alias": "tinyllama-2",
+  "model_ftype": "Q8_0",
+  "model_path": "/mnt/raid0/llm/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "media_marker": "<__media_X6QWswaWZx7SpNqfDgEZFuIcmj7J9Ujf__>",
+  "endpoint_slots": true,
+  "endpoint_props": false,
+  "endpoint_metrics": true,
+  "ui": true,
+  "ui_settings": {},
+  "chat_template": "{%- set image_count = namespace(value=0) %}\n{%- set video_count = namespace(value=0) %}\n{%- macro render_content(content, do_vision_count, is_system_content=false) %}\n    {%- if content is string %}\n        {{- content }}\n    {%- elif content is iterable and content is not mapping %}\n        {%- for item in content %}\n            {%- if 'image' in item or 'image_url' in item or item.type == 'image' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain images.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set image_count.value = image_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Picture ' ~ image_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|image_pad|><|vision_end|>' }}\n            {%- elif 'video' in item or item.type == 'video' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain videos.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set video_count.value = video_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Video ' ~ video_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|video_pad|><|vision_end|>' }}\n            {%- elif 'text' in item %}\n                {{- item.text }}\n            {%- else %}\n                {{- raise_exception('Unexpected item type in content.') }}\n            {%- endif %}\n        {%- endfor %}\n    {%- elif content is none or content is undefined %}\n        {{- '' }}\n    {%- else %}\n        {{- raise_exception('Unexpected content type.') }}\n    {%- endif %}\n{%- endmacro %}\n{%- if not messages %}\n    {{- raise_exception('No messages provided.') }}\n{%- endif %}\n{%- if tools and tools is iterable and tools is not mapping %}\n    {{- '<|im_start|>system\\n' }}\n    {{- \"# Tools\\n\\nYou have access to the following functions:\\n\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\" }}\n    {{- '\\n\\nIf you choose to call a function ONLY reply in the following format with NO suffix:\\n\\n<tool_call>\\n<function=example_function_name>\\n<parameter=example_parameter_1>\\nvalue_1\\n</parameter>\\n<parameter=example_parameter_2>\\nThis is the value for the second parameter\\nthat can span\\nmultiple lines\\n</parameter>\\n</function>\\n</tool_call>\\n\\n<IMPORTANT>\\nReminder:\\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\\n- Required parameters MUST be specified\\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\\n</IMPORTANT>' }}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {%- if content %}\n            {{- '\\n\\n' + content }}\n        {%- endif %}\n    {%- endif %}\n    {{- '<|im_end|>\\n' }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {{- '<|im_start|>system\\n' + content + '<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}\n{%- for message in messages[::-1] %}\n    {%- set index = (messages|length - 1) - loop.index0 %}\n    {%- if ns.multi_step_tool and message.role == \"user\" %}\n        {%- set content = render_content(message.content, false)|trim %}\n        {%- if not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}\n            {%- set ns.multi_step_tool = false %}\n            {%- set ns.last_query_index = index %}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if ns.multi_step_tool %}\n    {{- raise_exception('No user query found in messages.') }}\n{%- endif %}\n{%- for message in messages %}\n    {%- set content = render_content(message.content, true)|trim %}\n    {%- if message.role == \"system\" %}\n        {%- if not loop.first %}\n            {{- raise_exception('System message must be at the beginning.') }}\n        {%- endif %}\n    {%- elif message.role == \"user\" %}\n        {{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is string %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- else %}\n            {%- if '</think>' in content %}\n                {%- set reasoning_content = content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}\n                {%- set content = content.split('</think>')[-1].lstrip('\\n') %}\n            {%- endif %}\n        {%- endif %}\n        {%- set reasoning_content = reasoning_content|trim %}\n        {%- if loop.index0 > ns.last_query_index %}\n            {{- '<|im_start|>' + message.role + '\\n<think>\\n' + reasoning_content + '\\n</think>\\n\\n' + content }}\n        {%- else %}\n            {{- '<|im_start|>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if tool_call.function is defined %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {%- if loop.first %}\n                    {%- if content|trim %}\n                        {{- '\\n\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- else %}\n                        {{- '<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- endif %}\n                {%- else %}\n                    {{- '\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                {%- endif %}\n                {%- if tool_call.arguments is mapping %}\n                    {%- for args_name in tool_call.arguments %}\n                        {%- set args_value = tool_call.arguments[args_name] %}\n                        {{- '<parameter=' + args_name + '>\\n' }}\n                        {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}\n                        {{- args_value }}\n                        {{- '\\n</parameter>\\n' }}\n                    {%- endfor %}\n                {%- endif %}\n                {{- '</function>\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if loop.previtem and loop.previtem.role != \"tool\" %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- content }}\n        {{- '\\n</tool_response>' }}\n        {%- if not loop.last and loop.nextitem.role != \"tool\" %}\n            {{- '<|im_end|>\\n' }}\n        {%- elif loop.last %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- else %}\n        {{- raise_exception('Unexpected message role.') }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n    {%- if enable_thinking is defined and enable_thinking is true %}\n        {{- '<think>\\n' }}\n    {%- else %}\n        {{- '<think>\\n\\n</think>\\n\\n' }}\n    {%- endif %}\n{%- endif %}",
+  "chat_template_caps": {
+    "supports_object_arguments": true,
+    "supports_parallel_tool_calls": true,
+    "supports_preserve_reasoning": false,
+    "supports_string_content": true,
+    "supports_system_role": true,
+    "supports_tool_calls": true,
+    "supports_tools": true,
+    "supports_typed_content": false
+  },
+  "bos_token": ",",
+  "eos_token": "<|im_end|>",
+  "build_info": "b10359-1fd7e2e12",
+  "is_sleeping": false,
+  "cors_proxy_enabled": false,
+  "slot_fork": {
+    "min_tokens": 16,
+    "mode": "checkpoint",
+    "checkpoint_at": true
+  }
+}
+0.01.010.606 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.010.632 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.01.010.634 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+0.01.010.640 I slot launch_slot_: id  1 | task 1 | processing task, is_child = 0
+0.01.082.528 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 71.8 ms, kv_pos = 32, ms/tok = 0.000
+0.01.110.058 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 32 (slots 2), budget = 0, t_iter = 27.5 ms, kv_pos = 64, ms/tok = 0.000
+0.01.135.888 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 23.5 ms, kv_pos = 96, ms/tok = 0.000
+0.01.159.394 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 32 (slots 2), budget = 0, t_iter = 23.4 ms, kv_pos = 128, ms/tok = 0.000
+0.01.189.345 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 20 (slots 2), budget = 0, t_iter = 27.7 ms, kv_pos = 148, ms/tok = 0.000
+0.01.226.841 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 32 (slots 2), budget = 0, t_iter = 32.6 ms, kv_pos = 180, ms/tok = 0.000
+0.01.267.750 I slot print_timing: id  0 | task 0 | prompt eval time =     257.06 ms /   137 tokens (    1.88 ms per token,   532.94 tokens per second)
+0.01.267.802 I slot print_timing: id  0 | task 0 |        eval time =       0.00 ms /     1 tokens (    0.00 ms per token, 1000000.00 tokens per second)
+0.01.267.823 I slot print_timing: id  0 | task 0 |       total time =     257.06 ms /   138 tokens
+0.01.267.839 I slot print_timing: id  0 | task 0 |    graphs reused =          1
+Response from server {
+  "index": 0,
+  "content": "1",
+  "tokens": [
+    16
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 1,
+  "tokens_evaluated": 137,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 0,
+    "n_predict": 0,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. ",
+  "has_new_line": false,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 137,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 137,
+    "prompt_ms": 257.064,
+    "prompt_per_token_ms": 1.8763795620437957,
+    "prompt_per_second": 532.9412130831232,
+    "predicted_n": 1,
+    "predicted_ms": 0.001,
+    "predicted_per_token_ms": 0.001,
+    "predicted_per_second": 1000000.0,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 0
+  }
+}
+0.01.267.907 I slot      release: id  0 | task 0 | stop processing: n_tokens = 137, truncated = 0
+0.01.268.251 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 28 (slots 2), budget = 0, t_iter = 37.0 ms, kv_pos = 208, ms/tok = 0.000
+0.01.285.125 I srv  prefill_budg: prefill-budget: iter 8: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 14.5 ms, kv_pos = 212, ms/tok = 0.000
+0.01.857.622 I slot print_timing: id  1 | task 1 | prompt eval time =     202.54 ms /    75 tokens (    2.70 ms per token,   370.30 tokens per second)
+0.01.857.674 I slot print_timing: id  1 | task 1 |        eval time =     572.51 ms /    48 tokens (   11.93 ms per token,    83.84 tokens per second)
+0.01.857.681 I slot print_timing: id  1 | task 1 |       total time =     775.05 ms /   123 tokens
+0.01.857.688 I slot print_timing: id  1 | task 1 |    graphs reused =         46
+0.01.857.974 I slot      release: id  1 | task 1 | stop processing: n_tokens = 122, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The clerk found a fox.\n\nQuestion: What is the relationship between the number of pages in the log and the number of volumes?\nAnswer: The number of pages in the log is 40.\n\nQuestion: What is the",
+  "tokens": [
+    561,
+    42787,
+    1669,
+    264,
+    37550,
+    13,
+    271,
+    14162,
+    25,
+    3437,
+    369,
+    279,
+    4864,
+    1881,
+    279,
+    1324,
+    314,
+    6602,
+    303,
+    279,
+    1433,
+    321,
+    279,
+    1324,
+    314,
+    25442,
+    30,
+    198,
+    15666,
+    25,
+    561,
+    1324,
+    314,
+    6602,
+    303,
+    279,
+    1433,
+    369,
+    220,
+    19,
+    15,
+    13,
+    271,
+    14162,
+    25,
+    3437,
+    369,
+    279
+  ],
+  "id_slot": 1,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 48,
+  "tokens_evaluated": 75,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 48,
+    "n_predict": 48,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to Question: what animal did the clerk find drawn in the margins? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 122,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 75,
+    "prompt_ms": 202.54,
+    "prompt_per_token_ms": 2.700533333333333,
+    "prompt_per_second": 370.2972252394589,
+    "predicted_n": 48,
+    "predicted_ms": 572.508,
+    "predicted_per_token_ms": 11.92725,
+    "predicted_per_second": 83.84162317382464,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 1,
+    "id_task": 1
+  }
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 137,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 259,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 1,
+    "n_prompt_tokens": 122,
+    "n_prompt_tokens_processed": 75,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 48,
+      "n_predict": 48,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 48
+      }
+    ],
+    "kv_cells": {
+      "private": 122,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 259,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "792604e6e7e11d8a",
+    "checkpoints": [
+      {
+        "n_tokens": 43,
+        "pos_min": 42,
+        "pos_max": 42,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "480c72e65895f0e7"
+      },
+      {
+        "n_tokens": 47,
+        "pos_min": 46,
+        "pos_max": 46,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "21542105dc626070"
+      },
+      {
+        "n_tokens": 71,
+        "pos_min": 70,
+        "pos_max": 70,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "e6bdcaef0e4e9093"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 259,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 259,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 137,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 259,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 1,
+    "n_prompt_tokens": 122,
+    "n_prompt_tokens_processed": 75,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 48,
+      "n_predict": 48,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 48
+      }
+    ],
+    "kv_cells": {
+      "private": 122,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 259,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "792604e6e7e11d8a",
+    "checkpoints": [
+      {
+        "n_tokens": 43,
+        "pos_min": 42,
+        "pos_max": 42,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "480c72e65895f0e7"
+      },
+      {
+        "n_tokens": 47,
+        "pos_min": 46,
+        "pos_max": 46,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "21542105dc626070"
+      },
+      {
+        "n_tokens": 71,
+        "pos_min": 70,
+        "pos_max": 70,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "e6bdcaef0e4e9093"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 259,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 259,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.863.191 I slot get_availabl: id  2 | task -1 | selected slot by id (2)
+0.01.874.558 I slot do_slot_fork: id  2 | task -1 | slot fork: src = 0 (idle), kind = end, n_fork_tokens = 137, task.n_tokens = 149, t = 11.34 ms
+0.01.874.675 I slot launch_slot_: id  2 | task 59 | processing task, is_child = 0
+0.01.889.181 I srv  prefill_budg: prefill-budget: iter 9: decode_rows = 0 (slots 0), prompt = 8 (slots 1), budget = 0, t_iter = 14.5 ms, kv_pos = 404, ms/tok = 0.000
+0.01.905.692 I srv  prefill_budg: prefill-budget: iter 10: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 14.2 ms, kv_pos = 408, ms/tok = 0.000
+0.02.162.018 I slot print_timing: id  2 | task 59 | prompt eval time =      30.98 ms /    12 tokens (    2.58 ms per token,   387.37 tokens per second)
+0.02.162.064 I slot print_timing: id  2 | task 59 |        eval time =     256.34 ms /    24 tokens (   10.68 ms per token,    93.63 tokens per second)
+0.02.162.070 I slot print_timing: id  2 | task 59 |       total time =     287.32 ms /    36 tokens
+0.02.162.077 I slot print_timing: id  2 | task 59 |    graphs reused =         68
+0.02.162.116 I slot      release: id  2 | task 59 | stop processing: n_tokens = 172, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The log had 40 volumes.\n\nThe log had 40 volumes.\n\nThe log had 40",
+  "tokens": [
+    561,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15
+  ],
+  "id_slot": 2,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 149,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: how many volumes did the log have? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 172,
+  "timings": {
+    "cache_n": 137,
+    "prompt_n": 12,
+    "prompt_ms": 30.978,
+    "prompt_per_token_ms": 2.5815,
+    "prompt_per_second": 387.3716831299632,
+    "predicted_n": 24,
+    "predicted_ms": 256.34,
+    "predicted_per_token_ms": 10.680833333333332,
+    "predicted_per_second": 93.62565342903957,
+    "n_fork_tokens": 137,
+    "fork_src_slot": 0,
+    "fork_src_kind": "end",
+    "id_slot": 2,
+    "id_task": 59
+  }
+}
+0.02.164.040 I slot get_availabl: id  3 | task -1 | selected slot by id (3)
+0.02.164.076 I slot launch_slot_: id  3 | task 85 | processing task, is_child = 0
+0.02.198.976 I srv  prefill_budg: prefill-budget: iter 11: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 34.9 ms, kv_pos = 463, ms/tok = 0.000
+0.02.224.872 I srv  prefill_budg: prefill-budget: iter 12: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 25.8 ms, kv_pos = 495, ms/tok = 0.000
+0.02.247.584 I srv  prefill_budg: prefill-budget: iter 13: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 22.7 ms, kv_pos = 527, ms/tok = 0.000
+0.02.265.285 I srv  prefill_budg: prefill-budget: iter 14: decode_rows = 0 (slots 0), prompt = 21 (slots 1), budget = 0, t_iter = 17.6 ms, kv_pos = 548, ms/tok = 0.000
+0.02.288.608 I srv  prefill_budg: prefill-budget: iter 15: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 21.1 ms, kv_pos = 576, ms/tok = 0.000
+0.02.306.825 I srv  prefill_budg: prefill-budget: iter 16: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 16.0 ms, kv_pos = 580, ms/tok = 0.000
+0.02.603.383 I slot print_timing: id  3 | task 85 | prompt eval time =     141.08 ms /   149 tokens (    0.95 ms per token,  1056.14 tokens per second)
+0.02.603.440 I slot print_timing: id  3 | task 85 |        eval time =     297.20 ms /    24 tokens (   12.38 ms per token,    80.75 tokens per second)
+0.02.603.447 I slot print_timing: id  3 | task 85 |       total time =     438.28 ms /   173 tokens
+0.02.603.454 I slot print_timing: id  3 | task 85 |    graphs reused =         91
+0.02.603.497 I slot      release: id  3 | task 85 | stop processing: n_tokens = 172, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " The log had 40 volumes.\n\nThe log had 40 volumes.\n\nThe log had 40",
+  "tokens": [
+    561,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15,
+    25442,
+    13,
+    271,
+    760,
+    1433,
+    995,
+    220,
+    19,
+    15
+  ],
+  "id_slot": 3,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 149,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 2,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: how many volumes did the log have? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 172,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 149,
+    "prompt_ms": 141.08,
+    "prompt_per_token_ms": 0.9468456375838927,
+    "prompt_per_second": 1056.1383612134957,
+    "predicted_n": 24,
+    "predicted_ms": 297.204,
+    "predicted_per_token_ms": 12.3835,
+    "predicted_per_second": 80.7526143658901,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 3,
+    "id_task": 85
+  },
+  "completion_probabilities": [
+    {
+      "id": 561,
+      "token": " The",
+      "bytes": [
+        32,
+        84,
+        104,
+        101
+      ],
+      "logprob": -1.266254186630249,
+      "top_logprobs": [
+        {
+          "id": 561,
+          "token": " The",
+          "bytes": [
+            32,
+            84,
+            104,
+            101
+          ],
+          "logprob": -1.266254186630249
+        },
+        {
+          "id": 220,
+          "token": " ",
+          "bytes": [
+            32
+          ],
+          "logprob": -1.6966683864593506
+        }
+      ]
+    },
+    {
+      "id": 1433,
+      "token": " log",
+      "bytes": [
+        32,
+        108,
+        111,
+        103
+      ],
+      "logprob": -0.2470535784959793,
+      "top_logprobs": [
+        {
+          "id": 1433,
+          "token": " log",
+          "bytes": [
+            32,
+            108,
+            111,
+            103
+          ],
+          "logprob": -0.2470535784959793
+        },
+        {
+          "id": 51624,
+          "token": " keeper",
+          "bytes": [
+            32,
+            107,
+            101,
+            101,
+            112,
+            101,
+            114
+          ],
+          "logprob": -2.983145236968994
+        }
+      ]
+    },
+    {
+      "id": 995,
+      "token": " had",
+      "bytes": [
+        32,
+        104,
+        97,
+        100
+      ],
+      "logprob": -0.11491409689188004,
+      "top_logprobs": [
+        {
+          "id": 995,
+          "token": " had",
+          "bytes": [
+            32,
+            104,
+            97,
+            100
+          ],
+          "logprob": -0.11491409689188004
+        },
+        {
+          "id": 557,
+          "token": " was",
+          "bytes": [
+            32,
+            119,
+            97,
+            115
+          ],
+          "logprob": -3.3104193210601807
+        }
+      ]
+    },
+    {
+      "id": 220,
+      "token": " ",
+      "bytes": [
+        32
+      ],
+      "logprob": -1.172316074371338,
+      "top_logprobs": [
+        {
+          "id": 220,
+          "token": " ",
+          "bytes": [
+            32
+          ],
+          "logprob": -1.172316074371338
+        },
+        {
+          "id": 34227,
+          "token": " forty",
+          "bytes": [
+            32,
+            102,
+            111,
+            114,
+            116,
+            121
+          ],
+          "logprob": -1.8350740671157837
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "token": "4",
+      "bytes": [
+        52
+      ],
+      "logprob": -0.46341583132743835,
+      "top_logprobs": [
+        {
+          "id": 19,
+          "token": "4",
+          "bytes": [
+            52
+          ],
+          "logprob": -0.46341583132743835
+        },
+        {
+          "id": 18,
+          "token": "3",
+          "bytes": [
+            51
+          ],
+          "logprob": -1.2707374095916748
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "token": "0",
+      "bytes": [
+        48
+      ],
+      "logprob": -0.01917910762131214,
+      "top_logprobs": [
+        {
+          "id": 15,
+          "token": "0",
+          "bytes": [
+            48
+          ],
+          "logprob": -0.01917910762131214
+        },
+        {
+          "id": 19,
+          "token": "4",
+          "bytes": [
+            52
+          ],
+          "logprob": -5.050417900085449
+        }
+      ]
+    },
+    {
+      "id": 25442,
+      "token": " volumes",
+      "bytes": [
+        32,
+        118,
+        111,
+        108,
+        117,
+        109,
+        101,
+        115
+      ],
+      "logprob": -0.043857142329216,
+      "top_logprobs": [
+        {
+          "id": 25442,
+          "token": " volumes",
+          "bytes": [
+            32,
+            118,
+            111,
+            108,
+            117,
+            109,
+            101,
+            115
+          ],
+          "logprob": -0.043857142329216
+        },
+        {
+          "id": 15,
+          "token": "0",
+          "bytes": [
+            48
+          ],
+          "logprob": -4.1844000816345215
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "token": ".",
+      "bytes": [
+        46
+      ],
+      "logprob": -0.1788962334394455,
+      "top_logprobs": [
+        {
+          "id": 13,
+          "token": ".",
+          "bytes": [
+            46
+          ],
+          "logprob": -0.1788962334394455
+        },
+        {
+          "id": 30,
+          "token": "?",
+          "bytes": [
+            63
+          ],
+          "logprob": -3.49489426612854
+        }
+      ]
+    },
+    {
+      "id": 271,
+      "token": "\n\n",
+      "bytes": [
+        10,
+        10
+      ],
+      "logprob": -0.6003020405769348,
+      "top_logprobs": [
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -0.6003020405769348
+        },
+        {
+          "id": 198,
+          "token": "\n",
+          "bytes": [
+            10
+          ],
+          "logprob": -1.4603331089019775
+        }
+      ]
+    },
+    {
+      "id": 760,
+      "token": "The",
+      "bytes": [
+        84,
+        104,
+        101
+      ],
+      "logprob": -1.7026137113571167,
+      "top_logprobs": [
+        {
+          "id": 760,
+          "token": "The",
+          "bytes": [
+            84,
+            104,
+            101
+          ],
+          "logprob": -1.7026137113571167
+        },
+        {
+          "id": 248068,
+          "token": "<think>",
+          "bytes": [
+            60,
+            116,
+            104,
+            105,
+            110,
+            107,
+            62
+          ],
+          "logprob": -2.695873260498047
+        }
+      ]
+    },
+    {
+      "id": 1433,
+      "token": " log",
+      "bytes": [
+        32,
+        108,
+        111,
+        103
+      ],
+      "logprob": -1.6372475624084473,
+      "top_logprobs": [
+        {
+          "id": 1433,
+          "token": " log",
+          "bytes": [
+            32,
+            108,
+            111,
+            103
+          ],
+          "logprob": -1.6372475624084473
+        },
+        {
+          "id": 324,
+          "token": " l",
+          "bytes": [
+            32,
+            108
+          ],
+          "logprob": -1.9240249395370483
+        }
+      ]
+    },
+    {
+      "id": 995,
+      "token": " had",
+      "bytes": [
+        32,
+        104,
+        97,
+        100
+      ],
+      "logprob": -0.21907435357570648,
+      "top_logprobs": [
+        {
+          "id": 995,
+          "token": " had",
+          "bytes": [
+            32,
+            104,
+            97,
+            100
+          ],
+          "logprob": -0.21907435357570648
+        },
+        {
+          "id": 557,
+          "token": " was",
+          "bytes": [
+            32,
+            119,
+            97,
+            115
+          ],
+          "logprob": -3.034902572631836
+        }
+      ]
+    },
+    {
+      "id": 220,
+      "token": " ",
+      "bytes": [
+        32
+      ],
+      "logprob": -0.13323763012886047,
+      "top_logprobs": [
+        {
+          "id": 220,
+          "token": " ",
+          "bytes": [
+            32
+          ],
+          "logprob": -0.13323763012886047
+        },
+        {
+          "id": 34227,
+          "token": " forty",
+          "bytes": [
+            32,
+            102,
+            111,
+            114,
+            116,
+            121
+          ],
+          "logprob": -4.1769561767578125
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "token": "4",
+      "bytes": [
+        52
+      ],
+      "logprob": -0.08769511431455612,
+      "top_logprobs": [
+        {
+          "id": 19,
+          "token": "4",
+          "bytes": [
+            52
+          ],
+          "logprob": -0.08769511431455612
+        },
+        {
+          "id": 18,
+          "token": "3",
+          "bytes": [
+            51
+          ],
+          "logprob": -2.722588539123535
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "token": "0",
+      "bytes": [
+        48
+      ],
+      "logprob": -0.006002163980156183,
+      "top_logprobs": [
+        {
+          "id": 15,
+          "token": "0",
+          "bytes": [
+            48
+          ],
+          "logprob": -0.006002163980156183
+        },
+        {
+          "id": 16,
+          "token": "1",
+          "bytes": [
+            49
+          ],
+          "logprob": -6.295098781585693
+        }
+      ]
+    },
+    {
+      "id": 25442,
+      "token": " volumes",
+      "bytes": [
+        32,
+        118,
+        111,
+        108,
+        117,
+        109,
+        101,
+        115
+      ],
+      "logprob": -0.013181819580495358,
+      "top_logprobs": [
+        {
+          "id": 25442,
+          "token": " volumes",
+          "bytes": [
+            32,
+            118,
+            111,
+            108,
+            117,
+            109,
+            101,
+            115
+          ],
+          "logprob": -0.013181819580495358
+        },
+        {
+          "id": 13,
+          "token": ".",
+          "bytes": [
+            46
+          ],
+          "logprob": -5.750387191772461
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "token": ".",
+      "bytes": [
+        46
+      ],
+      "logprob": -0.12477303296327591,
+      "top_logprobs": [
+        {
+          "id": 13,
+          "token": ".",
+          "bytes": [
+            46
+          ],
+          "logprob": -0.12477303296327591
+        },
+        {
+          "id": 11,
+          "token": ",",
+          "bytes": [
+            44
+          ],
+          "logprob": -3.488859176635742
+        }
+      ]
+    },
+    {
+      "id": 271,
+      "token": "\n\n",
+      "bytes": [
+        10,
+        10
+      ],
+      "logprob": -0.49416986107826233,
+      "top_logprobs": [
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -0.49416986107826233
+        },
+        {
+          "id": 198,
+          "token": "\n",
+          "bytes": [
+            10
+          ],
+          "logprob": -1.3743215799331665
+        }
+      ]
+    },
+    {
+      "id": 760,
+      "token": "The",
+      "bytes": [
+        84,
+        104,
+        101
+      ],
+      "logprob": -0.8547741770744324,
+      "top_logprobs": [
+        {
+          "id": 760,
+          "token": "The",
+          "bytes": [
+            84,
+            104,
+            101
+          ],
+          "logprob": -0.8547741770744324
+        },
+        {
+          "id": 248068,
+          "token": "<think>",
+          "bytes": [
+            60,
+            116,
+            104,
+            105,
+            110,
+            107,
+            62
+          ],
+          "logprob": -2.8472096920013428
+        }
+      ]
+    },
+    {
+      "id": 1433,
+      "token": " log",
+      "bytes": [
+        32,
+        108,
+        111,
+        103
+      ],
+      "logprob": -0.421059250831604,
+      "top_logprobs": [
+        {
+          "id": 1433,
+          "token": " log",
+          "bytes": [
+            32,
+            108,
+            111,
+            103
+          ],
+          "logprob": -0.421059250831604
+        },
+        {
+          "id": 42787,
+          "token": " clerk",
+          "bytes": [
+            32,
+            99,
+            108,
+            101,
+            114,
+            107
+          ],
+          "logprob": -2.6307857036590576
+        }
+      ]
+    },
+    {
+      "id": 995,
+      "token": " had",
+      "bytes": [
+        32,
+        104,
+        97,
+        100
+      ],
+      "logprob": -0.030702173709869385,
+      "top_logprobs": [
+        {
+          "id": 995,
+          "token": " had",
+          "bytes": [
+            32,
+            104,
+            97,
+            100
+          ],
+          "logprob": -0.030702173709869385
+        },
+        {
+          "id": 682,
+          "token": " has",
+          "bytes": [
+            32,
+            104,
+            97,
+            115
+          ],
+          "logprob": -4.7372355461120605
+        }
+      ]
+    },
+    {
+      "id": 220,
+      "token": " ",
+      "bytes": [
+        32
+      ],
+      "logprob": -0.025983499363064766,
+      "top_logprobs": [
+        {
+          "id": 220,
+          "token": " ",
+          "bytes": [
+            32
+          ],
+          "logprob": -0.025983499363064766
+        },
+        {
+          "id": 34227,
+          "token": " forty",
+          "bytes": [
+            32,
+            102,
+            111,
+            114,
+            116,
+            121
+          ],
+          "logprob": -5.039344310760498
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "token": "4",
+      "bytes": [
+        52
+      ],
+      "logprob": -0.0663108080625534,
+      "top_logprobs": [
+        {
+          "id": 19,
+          "token": "4",
+          "bytes": [
+            52
+          ],
+          "logprob": -0.0663108080625534
+        },
+        {
+          "id": 18,
+          "token": "3",
+          "bytes": [
+            51
+          ],
+          "logprob": -2.882780075073242
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "token": "0",
+      "bytes": [
+        48
+      ],
+      "logprob": -0.003903726814314723,
+      "top_logprobs": [
+        {
+          "id": 15,
+          "token": "0",
+          "bytes": [
+            48
+          ],
+          "logprob": -0.003903726814314723
+        },
+        {
+          "id": 16,
+          "token": "1",
+          "bytes": [
+            49
+          ],
+          "logprob": -6.469939708709717
+        }
+      ]
+    }
+  ]
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 1,
+    "n_prompt_tokens": 122,
+    "n_prompt_tokens_processed": 75,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 48,
+      "n_predict": 48,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 48
+      }
+    ],
+    "kv_cells": {
+      "private": 122,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "792604e6e7e11d8a",
+    "checkpoints": [
+      {
+        "n_tokens": 43,
+        "pos_min": 42,
+        "pos_max": 42,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "480c72e65895f0e7"
+      },
+      {
+        "n_tokens": 47,
+        "pos_min": 46,
+        "pos_max": 46,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "21542105dc626070"
+      },
+      {
+        "n_tokens": 71,
+        "pos_min": 70,
+        "pos_max": 70,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "e6bdcaef0e4e9093"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 59,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 35,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 85,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 2,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 172,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 117,
+        "pos_min": 116,
+        "pos_max": 116,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "113a144da3eae661"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 1,
+    "n_prompt_tokens": 122,
+    "n_prompt_tokens_processed": 75,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 48,
+      "n_predict": 48,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 48
+      }
+    ],
+    "kv_cells": {
+      "private": 122,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "792604e6e7e11d8a",
+    "checkpoints": [
+      {
+        "n_tokens": 43,
+        "pos_min": 42,
+        "pos_max": 42,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "480c72e65895f0e7"
+      },
+      {
+        "n_tokens": 47,
+        "pos_min": 46,
+        "pos_max": 46,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "21542105dc626070"
+      },
+      {
+        "n_tokens": 71,
+        "pos_min": 70,
+        "pos_max": 70,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "e6bdcaef0e4e9093"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 59,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 35,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 85,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 2,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 172,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 117,
+        "pos_min": 116,
+        "pos_max": 116,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "113a144da3eae661"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 1,
+    "n_prompt_tokens": 122,
+    "n_prompt_tokens_processed": 75,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 48,
+      "n_predict": 48,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 48
+      }
+    ],
+    "kv_cells": {
+      "private": 122,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "792604e6e7e11d8a",
+    "checkpoints": [
+      {
+        "n_tokens": 43,
+        "pos_min": 42,
+        "pos_max": 42,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "480c72e65895f0e7"
+      },
+      {
+        "n_tokens": 47,
+        "pos_min": 46,
+        "pos_max": 46,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "21542105dc626070"
+      },
+      {
+        "n_tokens": 71,
+        "pos_min": 70,
+        "pos_max": 70,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "e6bdcaef0e4e9093"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 59,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 35,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 85,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 2,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 172,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 466,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 117,
+        "pos_min": 116,
+        "pos_max": 116,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "113a144da3eae661"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  }
+]
+0.02.636.706 I slot save_slot_ch: id  0 | task -1 | appended 5 context checkpoint(s) (96.331 MiB) to '/tmp/kpf171-n3fxwp1_/k.bin'
+Response from server {
+  "id_slot": 0,
+  "filename": "k.bin",
+  "n_saved": 137,
+  "n_written": 122899260,
+  "timings": {
+    "save_ms": 26.759
+  }
+}
+0.02.650.035 I slot load_slot_ch: id  3 | task -1 | restored 5 context checkpoint(s) from '/tmp/kpf171-n3fxwp1_/k.bin'
+Response from server {
+  "id_slot": 3,
+  "filename": "k.bin",
+  "n_restored": 137,
+  "n_read": 122899260,
+  "timings": {
+    "restore_ms": 12.285
+  }
+}
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 1,
+    "n_prompt_tokens": 122,
+    "n_prompt_tokens_processed": 75,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 48,
+      "n_predict": 48,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 48
+      }
+    ],
+    "kv_cells": {
+      "private": 122,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "792604e6e7e11d8a",
+    "checkpoints": [
+      {
+        "n_tokens": 43,
+        "pos_min": 42,
+        "pos_max": 42,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "480c72e65895f0e7"
+      },
+      {
+        "n_tokens": 47,
+        "pos_min": 46,
+        "pos_max": 46,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "21542105dc626070"
+      },
+      {
+        "n_tokens": 71,
+        "pos_min": 70,
+        "pos_max": 70,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "e6bdcaef0e4e9093"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 59,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 35,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 85,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 2,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 137,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 1,
+    "n_prompt_tokens": 122,
+    "n_prompt_tokens_processed": 75,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 48,
+      "n_predict": 48,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 48
+      }
+    ],
+    "kv_cells": {
+      "private": 122,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "792604e6e7e11d8a",
+    "checkpoints": [
+      {
+        "n_tokens": 43,
+        "pos_min": 42,
+        "pos_max": 42,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "480c72e65895f0e7"
+      },
+      {
+        "n_tokens": 47,
+        "pos_min": 46,
+        "pos_max": 46,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "21542105dc626070"
+      },
+      {
+        "n_tokens": 71,
+        "pos_min": 70,
+        "pos_max": 70,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "e6bdcaef0e4e9093"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 59,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 35,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 85,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 2,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 137,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 137,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 0,
+      "n_predict": 0,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 1
+      }
+    ],
+    "kv_cells": {
+      "private": 0,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 1,
+    "n_prompt_tokens": 122,
+    "n_prompt_tokens_processed": 75,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 48,
+      "n_predict": 48,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 48
+      }
+    ],
+    "kv_cells": {
+      "private": 122,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "792604e6e7e11d8a",
+    "checkpoints": [
+      {
+        "n_tokens": 43,
+        "pos_min": 42,
+        "pos_max": 42,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "480c72e65895f0e7"
+      },
+      {
+        "n_tokens": 47,
+        "pos_min": 46,
+        "pos_max": 46,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "21542105dc626070"
+      },
+      {
+        "n_tokens": 71,
+        "pos_min": 70,
+        "pos_max": 70,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "e6bdcaef0e4e9093"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 59,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 35,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 85,
+    "n_prompt_tokens": 137,
+    "n_prompt_tokens_processed": 149,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 2,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 137,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 431,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "96fa20848d3be0a3",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 105,
+        "pos_min": 104,
+        "pos_max": 104,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "323faa8ddc9d3c47"
+      },
+      {
+        "n_tokens": 133,
+        "pos_min": 132,
+        "pos_max": 132,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "8216074fabd3fd5e"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      }
+    ]
+  }
+]
+Response from server {
+  "tokens": [
+    1057,
+    47517,
+    43697,
+    1414,
+    883,
+    34103,
+    6852,
+    321,
+    279,
+    1560,
+    20947,
+    1893,
+    6730,
+    10480,
+    1472,
+    279,
+    38300,
+    13,
+    82178,
+    43697,
+    1414,
+    883,
+    34103,
+    6852,
+    321,
+    279,
+    1560,
+    20947,
+    1893,
+    6730,
+    10480,
+    1472,
+    279,
+    38300,
+    13,
+    82178,
+    43697,
+    1414,
+    883,
+    34103,
+    6852,
+    321,
+    279,
+    1560,
+    20947,
+    1893,
+    6730,
+    10480,
+    1472,
+    279,
+    38300,
+    13,
+    220
+  ]
+}
+0.02.655.210 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.02.666.235 I slot launch_slot_: id  0 | task 123 | processing task, is_child = 0
+0.02.694.305 I srv  prefill_budg: prefill-budget: iter 17: decode_rows = 0 (slots 0), prompt = 21 (slots 1), budget = 0, t_iter = 27.5 ms, kv_pos = 452, ms/tok = 0.000
+0.02.721.693 I srv  prefill_budg: prefill-budget: iter 18: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 25.2 ms, kv_pos = 480, ms/tok = 0.000
+0.02.737.342 I srv  prefill_budg: prefill-budget: iter 19: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 13.4 ms, kv_pos = 484, ms/tok = 0.000
+0.02.749.853 I slot print_timing: id  0 | task 123 | prompt eval time =      71.07 ms /    53 tokens (    1.34 ms per token,   745.74 tokens per second)
+0.02.749.896 I slot print_timing: id  0 | task 123 |        eval time =      12.52 ms /     2 tokens (    6.26 ms per token,   159.73 tokens per second)
+0.02.749.904 I slot print_timing: id  0 | task 123 |       total time =      83.59 ms /    55 tokens
+0.02.749.912 I slot print_timing: id  0 | task 123 |    graphs reused =         91
+0.02.749.945 I slot      release: id  0 | task 123 | stop processing: n_tokens = 54, truncated = 0
+Response from server {
+  "index": 0,
+  "content": "1.",
+  "tokens": [
+    16,
+    13
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 2,
+  "tokens_evaluated": 53,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 2,
+    "n_predict": 2,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "Completely unrelated text about volcanoes and the way molten rock moves through the crust. Completely unrelated text about volcanoes and the way molten rock moves through the crust. Completely unrelated text about volcanoes and the way molten rock moves through the crust. ",
+  "has_new_line": false,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 54,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 53,
+    "prompt_ms": 71.07,
+    "prompt_per_token_ms": 1.340943396226415,
+    "prompt_per_second": 745.74363303785,
+    "predicted_n": 2,
+    "predicted_ms": 12.521,
+    "predicted_per_token_ms": 6.2605,
+    "predicted_per_second": 159.7316508266113,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 123
+  }
+}
+0.02.752.163 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.02.763.508 I slot do_slot_fork: id  0 | task -1 | slot fork: src = 2 (idle), kind = checkpoint, n_fork_tokens = 137, task.n_tokens = 147, t = 5.14 ms
+0.02.763.547 I slot launch_slot_: id  0 | task 128 | processing task, is_child = 0
+0.02.775.323 I srv  prefill_budg: prefill-budget: iter 20: decode_rows = 0 (slots 0), prompt = 6 (slots 1), budget = 0, t_iter = 11.7 ms, kv_pos = 574, ms/tok = 0.000
+0.02.791.390 I srv  prefill_budg: prefill-budget: iter 21: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 13.8 ms, kv_pos = 578, ms/tok = 0.000
+0.03.051.602 I slot print_timing: id  0 | task 128 | prompt eval time =      27.80 ms /    10 tokens (    2.78 ms per token,   359.70 tokens per second)
+0.03.051.664 I slot print_timing: id  0 | task 128 |        eval time =     260.22 ms /    24 tokens (   10.84 ms per token,    92.23 tokens per second)
+0.03.051.671 I slot print_timing: id  0 | task 128 |       total time =     288.02 ms /    34 tokens
+0.03.051.677 I slot print_timing: id  0 | task 128 |    graphs reused =        113
+0.03.051.714 I slot      release: id  0 | task 128 | stop processing: n_tokens = 170, truncated = 0
+Response from server {
+  "index": 0,
+  "content": " Autumn.\n\nThe lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the",
+  "tokens": [
+    57784,
+    13,
+    271,
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314,
+    279
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 147,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: which season had more storms? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 170,
+  "timings": {
+    "cache_n": 137,
+    "prompt_n": 10,
+    "prompt_ms": 27.801,
+    "prompt_per_token_ms": 2.7801,
+    "prompt_per_second": 359.69929139239593,
+    "predicted_n": 24,
+    "predicted_ms": 260.222,
+    "predicted_per_token_ms": 10.842583333333332,
+    "predicted_per_second": 92.22894297945601,
+    "n_fork_tokens": 137,
+    "fork_src_slot": 2,
+    "fork_src_kind": "checkpoint",
+    "id_slot": 0,
+    "id_task": 128
+  }
+}
+0.03.053.703 I slot get_availabl: id  3 | task -1 | selected slot by id (3)
+0.03.053.729 I slot launch_slot_: id  3 | task 154 | processing task, is_child = 0
+0.03.089.225 I srv  prefill_budg: prefill-budget: iter 22: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 35.4 ms, kv_pos = 496, ms/tok = 0.000
+0.03.115.814 I srv  prefill_budg: prefill-budget: iter 23: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 26.5 ms, kv_pos = 528, ms/tok = 0.000
+0.03.138.865 I srv  prefill_budg: prefill-budget: iter 24: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 23.0 ms, kv_pos = 560, ms/tok = 0.000
+0.03.155.818 I srv  prefill_budg: prefill-budget: iter 25: decode_rows = 0 (slots 0), prompt = 19 (slots 1), budget = 0, t_iter = 16.9 ms, kv_pos = 579, ms/tok = 0.000
+0.03.179.101 I srv  prefill_budg: prefill-budget: iter 26: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 21.6 ms, kv_pos = 607, ms/tok = 0.000
+0.03.196.083 I srv  prefill_budg: prefill-budget: iter 27: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 15.2 ms, kv_pos = 611, ms/tok = 0.000
+0.03.487.764 I slot print_timing: id  3 | task 154 | prompt eval time =     141.04 ms /   147 tokens (    0.96 ms per token,  1042.26 tokens per second)
+0.03.487.815 I slot print_timing: id  3 | task 154 |        eval time =     291.93 ms /    24 tokens (   12.16 ms per token,    82.21 tokens per second)
+0.03.487.822 I slot print_timing: id  3 | task 154 |       total time =     432.97 ms /   171 tokens
+0.03.487.833 I slot print_timing: id  3 | task 154 |    graphs reused =        136
+Response from server {
+  "index": 0,
+  "content": " Autumn.\n\nThe lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the",
+  "tokens": [
+    57784,
+    13,
+    271,
+    760,
+    324,
+    55965,
+    51624,
+    8341,
+    264,
+    16097,
+    1433,
+    13,
+    6983,
+    11129,
+    551,
+    5947,
+    1441,
+    279,
+    9662,
+    11,
+    279,
+    2521,
+    314,
+    279
+  ],
+  "id_slot": 3,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 24,
+  "tokens_evaluated": 147,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 24,
+    "n_predict": 24,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 2,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale.  Question: which season had more storms? Answer:",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 170,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 147,
+    "prompt_ms": 141.04,
+    "prompt_per_token_ms": 0.9594557823129252,
+    "prompt_per_second": 1042.2575155984118,
+    "predicted_n": 24,
+    "predicted_ms": 291.933,
+    "predicted_per_token_ms": 12.163874999999999,
+    "predicted_per_second": 82.2106442231608,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 3,
+    "id_task": 154
+  },
+  "completion_probabilities": [
+    {
+      "id": 57784,
+      "token": " Autumn",
+      "bytes": [
+        32,
+        65,
+        117,
+        116,
+        117,
+        109,
+        110
+      ],
+      "logprob": -1.9941469430923462,
+      "top_logprobs": [
+        {
+          "id": 57784,
+          "token": " Autumn",
+          "bytes": [
+            32,
+            65,
+            117,
+            116,
+            117,
+            109,
+            110
+          ],
+          "logprob": -1.9941469430923462
+        },
+        {
+          "id": 40297,
+          "token": " autumn",
+          "bytes": [
+            32,
+            97,
+            117,
+            116,
+            117,
+            109,
+            110
+          ],
+          "logprob": -2.3467469215393066
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "token": ".",
+      "bytes": [
+        46
+      ],
+      "logprob": -1.0782712697982788,
+      "top_logprobs": [
+        {
+          "id": 13,
+          "token": ".",
+          "bytes": [
+            46
+          ],
+          "logprob": -1.0782712697982788
+        },
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -1.2607721090316772
+        }
+      ]
+    },
+    {
+      "id": 271,
+      "token": "\n\n",
+      "bytes": [
+        10,
+        10
+      ],
+      "logprob": -0.5597953796386719,
+      "top_logprobs": [
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -0.5597953796386719
+        },
+        {
+          "id": 198,
+          "token": "\n",
+          "bytes": [
+            10
+          ],
+          "logprob": -1.7522162199020386
+        }
+      ]
+    },
+    {
+      "id": 760,
+      "token": "The",
+      "bytes": [
+        84,
+        104,
+        101
+      ],
+      "logprob": -2.018341541290283,
+      "top_logprobs": [
+        {
+          "id": 760,
+          "token": "The",
+          "bytes": [
+            84,
+            104,
+            101
+          ],
+          "logprob": -2.018341541290283
+        },
+        {
+          "id": 248068,
+          "token": "<think>",
+          "bytes": [
+            60,
+            116,
+            104,
+            105,
+            110,
+            107,
+            62
+          ],
+          "logprob": -2.3055198192596436
+        }
+      ]
+    },
+    {
+      "id": 324,
+      "token": " l",
+      "bytes": [
+        32,
+        108
+      ],
+      "logprob": -1.5335856676101685,
+      "top_logprobs": [
+        {
+          "id": 324,
+          "token": " l",
+          "bytes": [
+            32,
+            108
+          ],
+          "logprob": -1.5335856676101685
+        },
+        {
+          "id": 42787,
+          "token": " clerk",
+          "bytes": [
+            32,
+            99,
+            108,
+            101,
+            114,
+            107
+          ],
+          "logprob": -2.2911376953125
+        }
+      ]
+    },
+    {
+      "id": 55965,
+      "token": "ighthouse",
+      "bytes": [
+        105,
+        103,
+        104,
+        116,
+        104,
+        111,
+        117,
+        115,
+        101
+      ],
+      "logprob": -4.95922940899618e-05,
+      "top_logprobs": [
+        {
+          "id": 55965,
+          "token": "ighthouse",
+          "bytes": [
+            105,
+            103,
+            104,
+            116,
+            104,
+            111,
+            117,
+            115,
+            101
+          ],
+          "logprob": -4.95922940899618e-05
+        },
+        {
+          "id": 21204,
+          "token": "ighth",
+          "bytes": [
+            105,
+            103,
+            104,
+            116,
+            104
+          ],
+          "logprob": -10.47920036315918
+        }
+      ]
+    },
+    {
+      "id": 51624,
+      "token": " keeper",
+      "bytes": [
+        32,
+        107,
+        101,
+        101,
+        112,
+        101,
+        114
+      ],
+      "logprob": -0.0034156893379986286,
+      "top_logprobs": [
+        {
+          "id": 51624,
+          "token": " keeper",
+          "bytes": [
+            32,
+            107,
+            101,
+            101,
+            112,
+            101,
+            114
+          ],
+          "logprob": -0.0034156893379986286
+        },
+        {
+          "id": 8341,
+          "token": " kept",
+          "bytes": [
+            32,
+            107,
+            101,
+            112,
+            116
+          ],
+          "logprob": -6.969885349273682
+        }
+      ]
+    },
+    {
+      "id": 8341,
+      "token": " kept",
+      "bytes": [
+        32,
+        107,
+        101,
+        112,
+        116
+      ],
+      "logprob": -0.1270284354686737,
+      "top_logprobs": [
+        {
+          "id": 8341,
+          "token": " kept",
+          "bytes": [
+            32,
+            107,
+            101,
+            112,
+            116
+          ],
+          "logprob": -0.1270284354686737
+        },
+        {
+          "id": 579,
+          "token": "'s",
+          "bytes": [
+            39,
+            115
+          ],
+          "logprob": -3.2120275497436523
+        }
+      ]
+    },
+    {
+      "id": 264,
+      "token": " a",
+      "bytes": [
+        32,
+        97
+      ],
+      "logprob": -0.00365148251876235,
+      "top_logprobs": [
+        {
+          "id": 264,
+          "token": " a",
+          "bytes": [
+            32,
+            97
+          ],
+          "logprob": -0.00365148251876235
+        },
+        {
+          "id": 780,
+          "token": " his",
+          "bytes": [
+            32,
+            104,
+            105,
+            115
+          ],
+          "logprob": -6.837430000305176
+        }
+      ]
+    },
+    {
+      "id": 16097,
+      "token": " careful",
+      "bytes": [
+        32,
+        99,
+        97,
+        114,
+        101,
+        102,
+        117,
+        108
+      ],
+      "logprob": -0.06336847692728043,
+      "top_logprobs": [
+        {
+          "id": 16097,
+          "token": " careful",
+          "bytes": [
+            32,
+            99,
+            97,
+            114,
+            101,
+            102,
+            117,
+            108
+          ],
+          "logprob": -0.06336847692728043
+        },
+        {
+          "id": 15060,
+          "token": " carefully",
+          "bytes": [
+            32,
+            99,
+            97,
+            114,
+            101,
+            102,
+            117,
+            108,
+            108,
+            121
+          ],
+          "logprob": -3.922468662261963
+        }
+      ]
+    },
+    {
+      "id": 1433,
+      "token": " log",
+      "bytes": [
+        32,
+        108,
+        111,
+        103
+      ],
+      "logprob": -0.0028684709686785936,
+      "top_logprobs": [
+        {
+          "id": 1433,
+          "token": " log",
+          "bytes": [
+            32,
+            108,
+            111,
+            103
+          ],
+          "logprob": -0.0028684709686785936
+        },
+        {
+          "id": 324,
+          "token": " l",
+          "bytes": [
+            32,
+            108
+          ],
+          "logprob": -7.8343505859375
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "token": ".",
+      "bytes": [
+        46
+      ],
+      "logprob": -0.0545382983982563,
+      "top_logprobs": [
+        {
+          "id": 13,
+          "token": ".",
+          "bytes": [
+            46
+          ],
+          "logprob": -0.0545382983982563
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -4.49915075302124
+        }
+      ]
+    },
+    {
+      "id": 6983,
+      "token": " Every",
+      "bytes": [
+        32,
+        69,
+        118,
+        101,
+        114,
+        121
+      ],
+      "logprob": -0.07952310144901276,
+      "top_logprobs": [
+        {
+          "id": 6983,
+          "token": " Every",
+          "bytes": [
+            32,
+            69,
+            118,
+            101,
+            114,
+            121
+          ],
+          "logprob": -0.07952310144901276
+        },
+        {
+          "id": 271,
+          "token": "\n\n",
+          "bytes": [
+            10,
+            10
+          ],
+          "logprob": -4.019739151000977
+        }
+      ]
+    },
+    {
+      "id": 11129,
+      "token": " evening",
+      "bytes": [
+        32,
+        101,
+        118,
+        101,
+        110,
+        105,
+        110,
+        103
+      ],
+      "logprob": -0.004946824163198471,
+      "top_logprobs": [
+        {
+          "id": 11129,
+          "token": " evening",
+          "bytes": [
+            32,
+            101,
+            118,
+            101,
+            110,
+            105,
+            110,
+            103
+          ],
+          "logprob": -0.004946824163198471
+        },
+        {
+          "id": 3603,
+          "token": " night",
+          "bytes": [
+            32,
+            110,
+            105,
+            103,
+            104,
+            116
+          ],
+          "logprob": -6.234152793884277
+        }
+      ]
+    },
+    {
+      "id": 551,
+      "token": " he",
+      "bytes": [
+        32,
+        104,
+        101
+      ],
+      "logprob": -0.01766589842736721,
+      "top_logprobs": [
+        {
+          "id": 551,
+          "token": " he",
+          "bytes": [
+            32,
+            104,
+            101
+          ],
+          "logprob": -0.01766589842736721
+        },
+        {
+          "id": 1292,
+          "token": " she",
+          "bytes": [
+            32,
+            115,
+            104,
+            101
+          ],
+          "logprob": -4.130088806152344
+        }
+      ]
+    },
+    {
+      "id": 5947,
+      "token": " wrote",
+      "bytes": [
+        32,
+        119,
+        114,
+        111,
+        116,
+        101
+      ],
+      "logprob": -0.003362580668181181,
+      "top_logprobs": [
+        {
+          "id": 5947,
+          "token": " wrote",
+          "bytes": [
+            32,
+            119,
+            114,
+            111,
+            116,
+            101
+          ],
+          "logprob": -0.003362580668181181
+        },
+        {
+          "id": 1000,
+          "token": " would",
+          "bytes": [
+            32,
+            119,
+            111,
+            117,
+            108,
+            100
+          ],
+          "logprob": -7.5628509521484375
+        }
+      ]
+    },
+    {
+      "id": 1441,
+      "token": " down",
+      "bytes": [
+        32,
+        100,
+        111,
+        119,
+        110
+      ],
+      "logprob": -0.0003049838705919683,
+      "top_logprobs": [
+        {
+          "id": 1441,
+          "token": " down",
+          "bytes": [
+            32,
+            100,
+            111,
+            119,
+            110
+          ],
+          "logprob": -0.0003049838705919683
+        },
+        {
+          "id": 680,
+          "token": " out",
+          "bytes": [
+            32,
+            111,
+            117,
+            116
+          ],
+          "logprob": -9.642204284667969
+        }
+      ]
+    },
+    {
+      "id": 279,
+      "token": " the",
+      "bytes": [
+        32,
+        116,
+        104,
+        101
+      ],
+      "logprob": -0.0045940144918859005,
+      "top_logprobs": [
+        {
+          "id": 279,
+          "token": " the",
+          "bytes": [
+            32,
+            116,
+            104,
+            101
+          ],
+          "logprob": -0.0045940144918859005
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -6.7839765548706055
+        }
+      ]
+    },
+    {
+      "id": 9662,
+      "token": " wind",
+      "bytes": [
+        32,
+        119,
+        105,
+        110,
+        100
+      ],
+      "logprob": -0.013295067474246025,
+      "top_logprobs": [
+        {
+          "id": 9662,
+          "token": " wind",
+          "bytes": [
+            32,
+            119,
+            105,
+            110,
+            100
+          ],
+          "logprob": -0.013295067474246025
+        },
+        {
+          "id": 8831,
+          "token": " weather",
+          "bytes": [
+            32,
+            119,
+            101,
+            97,
+            116,
+            104,
+            101,
+            114
+          ],
+          "logprob": -5.537600517272949
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "token": ",",
+      "bytes": [
+        44
+      ],
+      "logprob": -0.002745579229667783,
+      "top_logprobs": [
+        {
+          "id": 11,
+          "token": ",",
+          "bytes": [
+            44
+          ],
+          "logprob": -0.002745579229667783
+        },
+        {
+          "id": 1076,
+          "token": "...",
+          "bytes": [
+            46,
+            46,
+            46
+          ],
+          "logprob": -7.010415077209473
+        }
+      ]
+    },
+    {
+      "id": 279,
+      "token": " the",
+      "bytes": [
+        32,
+        116,
+        104,
+        101
+      ],
+      "logprob": -0.0007146169664338231,
+      "top_logprobs": [
+        {
+          "id": 279,
+          "token": " the",
+          "bytes": [
+            32,
+            116,
+            104,
+            101
+          ],
+          "logprob": -0.0007146169664338231
+        },
+        {
+          "id": 321,
+          "token": " and",
+          "bytes": [
+            32,
+            97,
+            110,
+            100
+          ],
+          "logprob": -9.070935249328613
+        }
+      ]
+    },
+    {
+      "id": 2521,
+      "token": " height",
+      "bytes": [
+        32,
+        104,
+        101,
+        105,
+        103,
+        104,
+        116
+      ],
+      "logprob": -0.00217560981400311,
+      "top_logprobs": [
+        {
+          "id": 2521,
+          "token": " height",
+          "bytes": [
+            32,
+            104,
+            101,
+            105,
+            103,
+            104,
+            116
+          ],
+          "logprob": -0.00217560981400311
+        },
+        {
+          "id": 34124,
+          "token": " heights",
+          "bytes": [
+            32,
+            104,
+            101,
+            105,
+            103,
+            104,
+            116,
+            115
+          ],
+          "logprob": -7.150050640106201
+        }
+      ]
+    },
+    {
+      "id": 314,
+      "token": " of",
+      "bytes": [
+        32,
+        111,
+        102
+      ],
+      "logprob": -0.00017877030768431723,
+      "top_logprobs": [
+        {
+          "id": 314,
+          "token": " of",
+          "bytes": [
+            32,
+            111,
+            102
+          ],
+          "logprob": -0.00017877030768431723
+        },
+        {
+          "id": 11,
+          "token": ",",
+          "bytes": [
+            44
+          ],
+          "logprob": -9.570026397705078
+        }
+      ]
+    },
+    {
+      "id": 279,
+      "token": " the",
+      "bytes": [
+        32,
+        116,
+        104,
+        101
+      ],
+      "logprob": -0.0005686111398972571,
+      "top_logprobs": [
+        {
+          "id": 279,
+          "token": " the",
+          "bytes": [
+            32,
+            116,
+            104,
+            101
+          ],
+          "logprob": -0.0005686111398972571
+        },
+        {
+          "id": 16382,
+          "token": " waves",
+          "bytes": [
+            32,
+            119,
+            97,
+            118,
+            101,
+            115
+          ],
+          "logprob": -7.562591552734375
+        }
+      ]
+    }
+  ]
+}
+0.03.490.386 I slot      release: id  3 | task 154 | stop processing: n_tokens = 170, truncated = 0
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 128,
+    "n_prompt_tokens": 170,
+    "n_prompt_tokens_processed": 10,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 33,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 497,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 3,
+    "prefix_hash": "1188af9f8b2dc7b9",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 143,
+        "pos_min": 142,
+        "pos_max": 142,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "a9d326f9a03ecb33"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 1,
+    "n_prompt_tokens": 122,
+    "n_prompt_tokens_processed": 75,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 48,
+      "n_predict": 48,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 48
+      }
+    ],
+    "kv_cells": {
+      "private": 122,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 497,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "792604e6e7e11d8a",
+    "checkpoints": [
+      {
+        "n_tokens": 43,
+        "pos_min": 42,
+        "pos_max": 42,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "480c72e65895f0e7"
+      },
+      {
+        "n_tokens": 47,
+        "pos_min": 46,
+        "pos_max": 46,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "21542105dc626070"
+      },
+      {
+        "n_tokens": 71,
+        "pos_min": 70,
+        "pos_max": 70,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "e6bdcaef0e4e9093"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 59,
+    "n_prompt_tokens": 172,
+    "n_prompt_tokens_processed": 12,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 35,
+      "shared": 137
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 497,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "e93aa39d2a4b336c",
+    "checkpoints": [
+      {
+        "n_tokens": 48,
+        "pos_min": 47,
+        "pos_max": 47,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "b33ad222b5773903"
+      },
+      {
+        "n_tokens": 96,
+        "pos_min": 95,
+        "pos_max": 95,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "cfabd284c1524ce2"
+      },
+      {
+        "n_tokens": 137,
+        "pos_min": 136,
+        "pos_max": 136,
+        "pinned": true,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "96fa20848d3be0a3"
+      },
+      {
+        "n_tokens": 145,
+        "pos_min": 144,
+        "pos_max": 144,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "ec3d453a481ce4ea"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 154,
+    "n_prompt_tokens": 170,
+    "n_prompt_tokens_processed": 147,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 24,
+      "n_predict": 24,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 2,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": false,
+        "has_new_line": false,
+        "n_remain": 0,
+        "n_decoded": 24
+      }
+    ],
+    "kv_cells": {
+      "private": 170,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 497,
+      "shared": 137
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 2,
+    "prefix_hash": "1188af9f8b2dc7b9",
+    "checkpoints": [
+      {
+        "n_tokens": 115,
+        "pos_min": 114,
+        "pos_max": 114,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "4154582f676828c8"
+      },
+      {
+        "n_tokens": 143,
+        "pos_min": 142,
+        "pos_max": 142,
+        "pinned": false,
+        "size_mib": 19.266063690185547,
+        "prefix_hash": "a9d326f9a03ecb33"
+      }
+    ]
+  }
+]
+--------------------------- Captured stdout teardown ---------------------------
+Stopping server with pid=1208476
+0.03.500.608 I srv    operator(): operator(): cleaning up before exit...
+=========================== short test summary info ============================
+PASSED unit/test_slot_fork.py::test_kpf171_pinned_ntokens_equal_requested
+======================= 1 passed, 23 deselected in 3.67s =======================

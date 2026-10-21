@@ -1,0 +1,94 @@
+2026-10-20T22:05:57Z [w1] start
+2026-10-20T22:05:57Z [w2] start
+2026-10-20T22:07:57Z [w1] run 40-kpf18-item1 on pair:q1 (max 7200s)
+2026-10-20T22:07:58Z [w2] run 41-kpf18-item2 on pair:q1 (max 3600s)
+2026-10-20T22:08:30Z [w1] start
+2026-10-20T22:08:30Z [w2] start
+2026-10-20T22:15:31Z [w1] run 42-kpf18-item5 on q2 (max 5400s)
+2026-10-20T22:15:31Z [w2] defer 43-kpf18-item7 (needs 7200s, would cross 00:15Z)
+2026-10-20T22:26:33Z [w2] run 05-ct12-probe on q3 (max 900s)
+2026-10-20T22:26:33Z [w2] end 05-ct12-probe rc=1
+2026-10-20T22:26:33Z [w2] run 10-kpf17-build on q3 (max 3600s)
+2026-10-20T22:27:07Z [w2] end 10-kpf17-build rc=2
+2026-10-20T22:27:07Z [w2] defer 43-kpf18-item7 (needs 7200s, would cross 00:15Z)
+2026-10-20T22:28:07Z [w2] defer 43-kpf18-item7 (needs 7200s, would cross 00:15Z)
+2026-10-20T22:29:07Z [w2] defer 43-kpf18-item7 (needs 7200s, would cross 00:15Z)
+2026-10-20T22:29:25Z [pairguard q1] start guarding PIDs 810978 811346 on q1 (host claim: build[None] cs45-gates-g3)
+2026-10-20T22:30:32Z [w2] start
+2026-10-20T22:31:11Z [pairguard q1] host released q1 — taking it under own claim
+2026-10-20T22:47:34Z [w2] defer 50-intakefix-build (needs 5400s, would cross 00:15Z)
+2026-10-20T22:48:34Z [w2] run 05-ct12-probe on q3 (max 900s)
+2026-10-20T22:51:02Z [w1] end 42-kpf18-item5 rc=0
+2026-10-20T22:51:02Z [w1] run 10-kpf17-build on q2 (max 3600s)
+2026-10-20T22:51:41Z [w1] end 10-kpf17-build rc=0
+2026-10-20T22:51:41Z [w1] defer 43-kpf18-item7 (needs 7200s, would cross 00:15Z)
+2026-10-20T22:51:48Z [w2] end 05-ct12-probe rc=0
+2026-10-20T22:51:48Z [w2] run 60-ds41-t33-token-parity on q2 (max 3600s)
+2026-10-20T22:51:48Z [w2] end 60-ds41-t33-token-parity rc=6
+2026-10-20T22:51:48Z [w2] run 60-ds41-w51-t32-qdq-sizing on q2 (max 900s)
+2026-10-20T22:51:51Z [w2] end 60-ds41-w51-t32-qdq-sizing rc=0
+2026-10-20T22:52:37Z [dep-release] kpf17 tests released (build.ok)
+2026-10-20T22:52:41Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T22:52:51Z [w2] run 22-kpf17-tests-kvmode on q2 (max 3600s)
+2026-10-20T22:52:54Z [w2] end 22-kpf17-tests-kvmode rc=3
+2026-10-20T22:52:54Z [w2] run 23-kpf174-swa on q2 (max 3600s)
+2026-10-20T22:52:56Z [w2] end 23-kpf174-swa rc=3
+2026-10-20T22:53:41Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T22:54:41Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T22:55:41Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T22:56:41Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T22:57:42Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T22:58:42Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T22:59:42Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T23:00:42Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T23:01:42Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T23:02:42Z [w1] defer 20-kpf17-tests-tiny (needs 5400s, would cross 00:15Z)
+2026-10-20T23:06:58Z [w1] start
+2026-10-20T23:12:04Z [main] requeued 22,23,60-t33 after strings|grep -q SIGPIPE false-negative fix
+2026-10-20T23:12:58Z [w2] run 22-kpf17-tests-kvmode on q2 (max 3600s)
+2026-10-20T23:12:59Z [w1] run 23-kpf174-swa on q3 (max 3600s)
+2026-10-20T23:14:01Z [w2] end 22-kpf17-tests-kvmode rc=1
+2026-10-20T23:14:01Z [w2] run 06-ct12-served-path on q2 (max 900s)
+2026-10-20T23:14:23Z [w2] end 06-ct12-served-path rc=0
+2026-10-20T23:14:23Z [w2] run 60-ds41-t33-token-parity on q2 (max 3600s)
+2026-10-20T23:14:59Z [w1] end 23-kpf174-swa rc=1
+2026-10-20T23:17:13Z [main] PAIR_OK restored (both workers on pairguard code)
+2026-10-20T23:17:38Z [w2] end 60-ds41-t33-token-parity rc=0
+2026-10-20T23:39:15Z [pairguard q1] own claim held until jobs ended
+2026-10-20T23:39:15Z [pairguard q1] done
+2026-10-20T23:39:30Z [orphan-watch] item1/item2 finished; q1 pairlock released
+2026-10-21T00:00:03Z [w1] run 20-kpf17-tests-tiny on q0 (max 5400s)
+2026-10-21T00:00:41Z [w2] run 21-kpf17-mutants-tiny on q1 (max 5400s)
+2026-10-21T00:01:12Z [w2] end 21-kpf17-mutants-tiny rc=1
+2026-10-21T00:01:12Z [w2] run 24-kpf17-recheck-swa-kvmode on q1 (max 3600s)
+2026-10-21T00:02:05Z [w1] end 20-kpf17-tests-tiny rc=0
+2026-10-21T00:02:06Z [w1] run 30-kpf17-tests-35b on q0 (max 7200s)
+2026-10-21T00:03:44Z [main] parked all pending jobs (midnight crossing-check bug started 20/24/30 at 00:00-00:02Z); restore to pending/ after 06:30Z
+2026-10-21T00:05:30Z [w2] end 24-kpf17-recheck-swa-kvmode rc=0
+2026-10-21T00:07:57Z [w1] end 30-kpf17-tests-35b rc=0
+2026-10-21T06:31:03Z [main] released parked jobs after W2
+2026-10-21T06:31:07Z [w1] run 25-kpf17-mutant-recheck on q0 (max 3600s)
+2026-10-21T06:31:28Z [w1] end 25-kpf17-mutant-recheck rc=1
+2026-10-21T06:31:28Z [w1] run 26-kpf17-vacuity-recheck on q0 (max 5400s)
+2026-10-21T06:31:40Z [w2] run 40-kpf17-19-mtp-35b on q1 (max 7200s)
+2026-10-21T06:32:41Z [w2] end 40-kpf17-19-mtp-35b rc=1
+2026-10-21T06:32:41Z [w2] run 43-kpf18-item7 on q1 (max 7200s)
+2026-10-21T06:35:32Z [w1] end 26-kpf17-vacuity-recheck rc=1
+2026-10-21T06:35:32Z [w1] run 50-intakefix-build on q0 (max 5400s)
+2026-10-21T06:36:18Z [w1] end 50-intakefix-build rc=0
+2026-10-21T06:36:18Z [w1] run 60-ds41-t41-golden-exactness on q0 (max 7200s)
+2026-10-21T06:36:47Z [dep-release] intakefix tests released
+2026-10-21T07:01:24Z [w1] end 60-ds41-t41-golden-exactness rc=0
+2026-10-21T07:01:24Z [w1] run 51-intakefix-tests on q0 (max 900s)
+2026-10-21T07:01:27Z [w1] end 51-intakefix-tests rc=1
+2026-10-21T07:01:27Z [w1] run 60-ds41-t51-ninv-q4 on q0 (max 5400s)
+2026-10-21T07:02:25Z [w1] end 60-ds41-t51-ninv-q4 rc=0
+2026-10-21T07:02:25Z [w1] run 61-ds41-t33-template-parity on q0 (max 3600s)
+2026-10-21T07:03:12Z [w1] end 61-ds41-t33-template-parity rc=0
+2026-10-21T07:03:44Z [w2] end 43-kpf18-item7 rc=0
+2026-10-21T08:24:45Z [release-1017] held DS41 1017 jobs moved to pending
+2026-10-21T08:24:45Z [w2] run 60-ds41-t33-token-parity-1017 on q0 (max 3600s)
+2026-10-21T08:25:13Z [w1] run 60-ds41-t51-ninv-1017 on q1 (max 5400s)
+2026-10-21T08:27:23Z [w2] end 60-ds41-t33-token-parity-1017 rc=0
+2026-10-21T08:27:52Z [w1] end 60-ds41-t51-ninv-1017 rc=0
+2026-10-21T08:53:02Z [window-guard] armed: park jobs that would cross 11:25Z; release after 14:35Z

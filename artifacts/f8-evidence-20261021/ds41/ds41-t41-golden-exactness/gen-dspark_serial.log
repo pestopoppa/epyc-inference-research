@@ -1,0 +1,16 @@
+dspark_serial ctx=512 p=0 n_prompt=453 draft_n=39 accepted=18
+dspark_serial ctx=512 p=1 n_prompt=458 draft_n=52 accepted=13
+dspark_serial ctx=512 p=2 n_prompt=456 draft_n=36 accepted=19
+dspark_serial ctx=512 p=3 n_prompt=450 draft_n=42 accepted=17
+dspark_serial ctx=512 p=4 n_prompt=457 draft_n=40 accepted=16
+dspark_serial ctx=512 p=5 n_prompt=458 draft_n=24 accepted=22
+dspark_serial ctx=512 p=6 n_prompt=455 draft_n=41 accepted=17
+dspark_serial ctx=512 p=7 n_prompt=451 draft_n=39 accepted=17
+dspark_serial ctx=2048 p=0 n_prompt=1783 draft_n=38 accepted=18
+dspark_serial ctx=2048 p=1 n_prompt=1788 draft_n=40 accepted=17
+dspark_serial ctx=2048 p=2 n_prompt=1786 draft_n=36 accepted=19
+dspark_serial ctx=2048 p=3 n_prompt=1780 draft_n=41 accepted=17
+dspark_serial ctx=2048 p=4 n_prompt=1787 draft_n=49 accepted=14
+dspark_serial ctx=2048 p=5 n_prompt=1788 draft_n=26 accepted=21
+dspark_serial ctx=2048 p=6 n_prompt=1785 draft_n=44 accepted=15
+dspark_serial ctx=2048 p=7 n_prompt=1781 draft_n=38 accepted=18

@@ -1,0 +1,16 @@
+plain ctx=512 p=0 n_prompt=453 draft_n=None accepted=None
+plain ctx=512 p=1 n_prompt=458 draft_n=None accepted=None
+plain ctx=512 p=2 n_prompt=456 draft_n=None accepted=None
+plain ctx=512 p=3 n_prompt=450 draft_n=None accepted=None
+plain ctx=512 p=4 n_prompt=457 draft_n=None accepted=None
+plain ctx=512 p=5 n_prompt=458 draft_n=None accepted=None
+plain ctx=512 p=6 n_prompt=455 draft_n=None accepted=None
+plain ctx=512 p=7 n_prompt=451 draft_n=None accepted=None
+plain ctx=2048 p=0 n_prompt=1783 draft_n=None accepted=None
+plain ctx=2048 p=1 n_prompt=1788 draft_n=None accepted=None
+plain ctx=2048 p=2 n_prompt=1786 draft_n=None accepted=None
+plain ctx=2048 p=3 n_prompt=1780 draft_n=None accepted=None
+plain ctx=2048 p=4 n_prompt=1787 draft_n=None accepted=None
+plain ctx=2048 p=5 n_prompt=1788 draft_n=None accepted=None
+plain ctx=2048 p=6 n_prompt=1785 draft_n=None accepted=None
+plain ctx=2048 p=7 n_prompt=1781 draft_n=None accepted=None

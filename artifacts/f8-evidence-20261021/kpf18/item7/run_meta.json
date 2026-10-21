@@ -1,0 +1,57 @@
+{
+ "args": {
+  "cmd": "item7",
+  "fork_bin": "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server",
+  "champion_bin": "/mnt/raid0/llm/tmp/kv-prefix-fork/champ-e3322/build-cpu/bin/llama-server",
+  "fork_bin_prefill_budget": "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server",
+  "prefill_budget_args": "--prefill-budget-decoding 256",
+  "argv_file": "/mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/argv.frontdoor-cpu-gate.txt",
+  "argv_out": "/mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/argv.8083-gate.txt",
+  "launch_prefix": "taskset -c 24-47,120-143",
+  "port": 18974,
+  "fork_min": 1024,
+  "prompt_set": "/mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/run-20261020T163128Z/prompt_set.jsonl",
+  "build_prompt_set": false,
+  "corpus": "/mnt/raid0/llm/tmp/ds41-c95/contexts/C*/prompt.inline.txt",
+  "out": "/mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item7",
+  "window_id": "kpf18-20261021T063241Z",
+  "gpu_window_id": null,
+  "dry_run": false,
+  "n_predict": 128,
+  "n_probs": 20,
+  "trigger_tokens": 32,
+  "item7_n_predict": 128,
+  "item1_groups": null,
+  "item2_groups": null,
+  "item3_groups": null,
+  "item4_groups": null,
+  "item5_groups": null,
+  "item6_groups": null,
+  "item3_suffix": 2,
+  "item4_suffix": 1,
+  "budget_min": 600.0,
+  "vram_ceiling_gib": 62.5,
+  "vram_free_max_gib": 2.0,
+  "load_timeout_s": 900,
+  "card": "/sys/class/drm/card2/device",
+  "allow_shape_drift": true,
+  "no_device_claim": "CPU mode: no GPU used",
+  "cpu": true
+ },
+ "items": [
+  7
+ ],
+ "estimate_s": 1039.6205998553678,
+ "started": "2026-10-21T06:32:41Z",
+ "notes": [
+  "--fork-bin /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server (bin dir /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin; LD_LIBRARY_PATH /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin:/opt/rocm/lib:/usr/lib/llvm-20/lib:/opt/AMD/aocc-compiler-5.0.0/lib)",
+  "CPU mode: no KFD/VRAM sampler, no :8083 refusal, no HIP residency, no mi210 claim, no GPU window",
+  "shape drift ALLOWED and recorded: [\"-c = '98304', gate shape expects '393216'\", \"-ngl = None, gate shape expects 'all'\", \"--spec-type = 'draft-mtp', gate shape expects 'draft-dflash'\", \"--spec-draft-n-max = '4', gate shape expects '7'\", \"--device = 'none', gate shape expects 'ROCm0'\", \"-b = None, gate shape expects '512'\", \"-ub = '2048', gate shape expects '512'\", \"--cache-ram = '32768', gate shape expects '65536'\", \"-md '' is not the DFlash2 drafter\"]",
+  "prompt set /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/run-20261020T163128Z/prompt_set.jsonl sha256 fe8c8c9202f71e678435717a931d3a97236968fe7b883a8748a88d1215b26662: 16 pairs"
+ ],
+ "device_claim": "CPU mode: no GPU used",
+ "region_lock": {
+  "KPF18_NO_REGION_LOCK": null,
+  "KPF18_CPU_LIST": "184-191"
+ }
+}

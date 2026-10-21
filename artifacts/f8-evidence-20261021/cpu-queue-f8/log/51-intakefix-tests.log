@@ -1,0 +1,24 @@
+[region-lock] acquiring regions ['q0'] as role='build' (timeout_s=120.0) …
+[region-lock] held ['q0'] after 0.0s wait; running: env F8Q_CPUS=0-23,96-119 taskset -c 0-23,96-119 bash /mnt/raid0/llm/tmp/cpu-queue-f8/running/51-intakefix-tests.sh
+PASS dsa-idx1-oracle
+PASS spec-rng1-poskey
+PASS spec-rng1-default-sampling-regression
+PASS ds41-b31-gate
+PASS ch19-write-unfused
+PASS ch19-flag0-must-not-fuse
+PASS ch19-cmp-fused
+FAIL ch19-fused-path-engaged (marker missing: fusion fell through, NMSE above is then vacuous)
+PASS ch19-ctest-smoke
+PASS ch19-iqk-ser-flag0
+PASS ch19-iqk-ser-flag1
+Q4_K nt=1  nmse=0.000e+00 maxabs=0.000e+00 ok
+Q4_K nt=8  nmse=0.000e+00 maxabs=0.000e+00 ok
+Q8_0 nt=1  nmse=0.000e+00 maxabs=0.000e+00 ok
+Q8_0 nt=8  nmse=0.000e+00 maxabs=0.000e+00 ok
+RESULT test-moe-fused-upgate pass=4 fail=0
+RESULT test-moe-fused-upgate smoke pass=1 fail=0
+RESULT test-moe-fused-upgate pass=1 fail=0
+RESULT test-dsv41-engram-gate pass=14 fail=0
+RESULT test-dsa-sparse-attn-oracle pass=11 fail=0
+RESULT test-spec-rng-poskey fail=0
+RESULT 51-intakefix-tests pass=10 fail=1

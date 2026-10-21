@@ -1,0 +1,19 @@
+n_swa = 512 (non-SWA model: floor only), mutate = none
+  boundary floor: ctl vs 0..N run              max|d| = 0.474, top1 13 vs 13 (floor measurement)
+  boundary floor: ctl vs 0..N run              max|d| = 0, top1 13 vs 13 (floor measurement)
+== no-checkpoint perturbation floor = 0.474 -> eps = 0.949
+SKIP: not an SWA model (batch-boundary floor printed above)
+  boundary floor: ctl vs 0..N run              max|d| = 0.324, top1 236761 vs 236761 (floor measurement)
+KPF174 c=612 n_swa=512 recorded=[0,611] real_restored=[100,611] window_start=100 covers_window=yes RECORDED_RANGE_DIFFERS
+  placement floor: continuation vs ctl         max|d| = 0, top1 236761 vs 236761 (floor measurement)
+  boundary floor: ctl vs 0..N run              max|d| = 0, top1 236761 vs 236761 (floor measurement)
+KPF174 c=1024 n_swa=512 recorded=[0,1023] real_restored=[512,1023] window_start=512 covers_window=yes RECORDED_RANGE_DIFFERS
+  placement floor: continuation vs ctl         max|d| = 0.331, top1 236761 vs 236761 (floor measurement)
+== no-checkpoint perturbation floor = 0.331 -> eps = 0.663
+  boundary floor: ctl vs 0..N run              max|d| = 0.324, top1 236761 vs 236761 (floor measurement)
+KPF174 c=612 n_swa=512 recorded=[0,611] real_restored=[100,611] window_start=100 covers_window=yes RECORDED_RANGE_DIFFERS
+  placement floor: continuation vs ctl         max|d| = 0, top1 236761 vs 236761 (floor measurement)
+  boundary floor: ctl vs 0..N run              max|d| = 0, top1 236761 vs 236761 (floor measurement)
+KPF174 c=1024 n_swa=512 recorded=[0,1023] real_restored=[512,1023] window_start=512 covers_window=yes RECORDED_RANGE_DIFFERS
+  placement floor: continuation vs ctl         max|d| = 0.331, top1 236761 vs 236761 (floor measurement)
+== no-checkpoint perturbation floor = 0.331 -> eps = 0.663

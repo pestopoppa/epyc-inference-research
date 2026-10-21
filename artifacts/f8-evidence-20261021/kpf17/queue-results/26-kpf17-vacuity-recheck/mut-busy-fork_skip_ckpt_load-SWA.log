@@ -1,0 +1,1785 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.0.3, pluggy-1.6.0
+rootdir: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests
+configfile: pytest.ini
+plugins: asyncio-1.3.0, timeout-2.4.0, langsmith-0.7.30, cov-7.1.0, xdist-3.8.0, hypothesis-6.151.13, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 23 deselected / 1 selected
+
+unit/test_slot_fork.py F                                                 [100%]
+
+=================================== FAILURES ===================================
+__________________________ test_fork_from_busy_source __________________________
+
+self = <urllib3.connectionpool.HTTPConnectionPool object at 0x747776f4f990>
+method = 'POST', url = '/completion'
+body = b'{"prompt": [818, 63937, 64222, 7953, 496, 15318, 2212, 236761, 7685, 9137, 668, 7971, 1679, 506, 6573, 236764, 506, ..., 1418, 9137, 236787], "id_slot": 1, "n_predict": 24, "cache_prompt": true, "temperature": 0.0, "return_tokens": true}'
+headers = {'User-Agent': 'python-requests/2.33.1', 'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive', 'Content-Length': '1008', 'Content-Type': 'application/json'}
+retries = Retry(total=0, connect=None, read=False, redirect=None, status=None)
+redirect = False, assert_same_host = False
+timeout = Timeout(connect=600, read=600, total=None), pool_timeout = None
+release_conn = False, chunked = False, body_pos = None, preload_content = False
+decode_content = False, response_kw = {}
+parsed_url = Url(scheme=None, auth=None, host=None, port=None, path='/completion', query=None, fragment=None)
+destination_scheme = None, conn = None, release_this_conn = True
+http_tunnel_required = False, err = None, clean_exit = False
+
+    def urlopen(  # type: ignore[override]
+        self,
+        method: str,
+        url: str,
+        body: _TYPE_BODY | None = None,
+        headers: typing.Mapping[str, str] | None = None,
+        retries: Retry | bool | int | None = None,
+        redirect: bool = True,
+        assert_same_host: bool = True,
+        timeout: _TYPE_TIMEOUT = _DEFAULT_TIMEOUT,
+        pool_timeout: int | None = None,
+        release_conn: bool | None = None,
+        chunked: bool = False,
+        body_pos: _TYPE_BODY_POSITION | None = None,
+        preload_content: bool = True,
+        decode_content: bool = True,
+        **response_kw: typing.Any,
+    ) -> BaseHTTPResponse:
+        """
+        Get a connection from the pool and perform an HTTP request. This is the
+        lowest level call for making a request, so you'll need to specify all
+        the raw details.
+    
+        .. note::
+    
+           More commonly, it's appropriate to use a convenience method
+           such as :meth:`request`.
+    
+        .. note::
+    
+           `release_conn` will only behave as expected if
+           `preload_content=False` because we want to make
+           `preload_content=False` the default behaviour someday soon without
+           breaking backwards compatibility.
+    
+        :param method:
+            HTTP request method (such as GET, POST, PUT, etc.)
+    
+        :param url:
+            The URL to perform the request on.
+    
+        :param body:
+            Data to send in the request body, either :class:`str`, :class:`bytes`,
+            an iterable of :class:`str`/:class:`bytes`, or a file-like object.
+    
+        :param headers:
+            Dictionary of custom headers to send, such as User-Agent,
+            If-None-Match, etc. If None, pool headers are used. If provided,
+            these headers completely replace any pool-specific headers.
+    
+        :param retries:
+            Configure the number of retries to allow before raising a
+            :class:`~urllib3.exceptions.MaxRetryError` exception.
+    
+            If ``None`` (default) will retry 3 times, see ``Retry.DEFAULT``. Pass a
+            :class:`~urllib3.util.retry.Retry` object for fine-grained control
+            over different types of retries.
+            Pass an integer number to retry connection errors that many times,
+            but no other types of errors. Pass zero to never retry.
+    
+            If ``False``, then retries are disabled and any exception is raised
+            immediately. Also, instead of raising a MaxRetryError on redirects,
+            the redirect response will be returned.
+    
+        :type retries: :class:`~urllib3.util.retry.Retry`, False, or an int.
+    
+        :param redirect:
+            If True, automatically handle redirects (status codes 301, 302,
+            303, 307, 308). Each redirect counts as a retry. Disabling retries
+            will disable redirect, too.
+    
+        :param assert_same_host:
+            If ``True``, will make sure that the host of the pool requests is
+            consistent else will raise HostChangedError. When ``False``, you can
+            use the pool on an HTTP proxy and request foreign hosts.
+    
+        :param timeout:
+            If specified, overrides the default timeout for this one
+            request. It may be a float (in seconds) or an instance of
+            :class:`urllib3.util.Timeout`.
+    
+        :param pool_timeout:
+            If set and the pool is set to block=True, then this method will
+            block for ``pool_timeout`` seconds and raise EmptyPoolError if no
+            connection is available within the time period.
+    
+        :param bool preload_content:
+            If True, the response's body will be preloaded into memory.
+    
+        :param bool decode_content:
+            If True, will attempt to decode the body based on the
+            'content-encoding' header.
+    
+        :param release_conn:
+            If False, then the urlopen call will not release the connection
+            back into the pool once a response is received (but will release if
+            you read the entire contents of the response such as when
+            `preload_content=True`). This is useful if you're not preloading
+            the response's content immediately. You will need to call
+            ``r.release_conn()`` on the response ``r`` to return the connection
+            back into the pool. If None, it takes the value of ``preload_content``
+            which defaults to ``True``.
+    
+        :param bool chunked:
+            If True, urllib3 will send the body using chunked transfer
+            encoding. Otherwise, urllib3 will send the body using the standard
+            content-length form. Defaults to False.
+    
+        :param int body_pos:
+            Position to seek to in file-like body in the event of a retry or
+            redirect. Typically this won't need to be set because urllib3 will
+            auto-populate the value when needed.
+        """
+        parsed_url = parse_url(url)
+        destination_scheme = parsed_url.scheme
+    
+        if headers is None:
+            headers = self.headers
+    
+        if not isinstance(retries, Retry):
+            retries = Retry.from_int(retries, redirect=redirect, default=self.retries)
+    
+        if release_conn is None:
+            release_conn = preload_content
+    
+        # Check host
+        if assert_same_host and not self.is_same_host(url):
+            raise HostChangedError(self, url, retries)
+    
+        # Ensure that the URL we're connecting to is properly encoded
+        if url.startswith("/"):
+            url = to_str(_encode_target(url))
+        else:
+            url = to_str(parsed_url.url)
+    
+        conn = None
+    
+        # Track whether `conn` needs to be released before
+        # returning/raising/recursing. Update this variable if necessary, and
+        # leave `release_conn` constant throughout the function. That way, if
+        # the function recurses, the original value of `release_conn` will be
+        # passed down into the recursive call, and its value will be respected.
+        #
+        # See issue #651 [1] for details.
+        #
+        # [1] <https://github.com/urllib3/urllib3/issues/651>
+        release_this_conn = release_conn
+    
+        http_tunnel_required = connection_requires_http_tunnel(
+            self.proxy, self.proxy_config, destination_scheme
+        )
+    
+        # Merge the proxy headers. Only done when not using HTTP CONNECT. We
+        # have to copy the headers dict so we can safely change it without those
+        # changes being reflected in anyone else's copy.
+        if not http_tunnel_required:
+            headers = headers.copy()  # type: ignore[attr-defined]
+            headers.update(self.proxy_headers)  # type: ignore[union-attr]
+    
+        # Must keep the exception bound to a separate variable or else Python 3
+        # complains about UnboundLocalError.
+        err = None
+    
+        # Keep track of whether we cleanly exited the except block. This
+        # ensures we do proper cleanup in finally.
+        clean_exit = False
+    
+        # Rewind body position, if needed. Record current position
+        # for future rewinds in the event of a redirect/retry.
+        body_pos = set_file_position(body, body_pos)
+    
+        try:
+            # Request a connection from the queue.
+            timeout_obj = self._get_timeout(timeout)
+            conn = self._get_conn(timeout=pool_timeout)
+    
+            conn.timeout = timeout_obj.connect_timeout  # type: ignore[assignment]
+    
+            # Is this a closed/new connection that requires CONNECT tunnelling?
+            if self.proxy is not None and http_tunnel_required and conn.is_closed:
+                try:
+                    self._prepare_proxy(conn)
+                except (BaseSSLError, OSError, SocketTimeout) as e:
+                    self._raise_timeout(
+                        err=e, url=self.proxy.url, timeout_value=conn.timeout
+                    )
+                    raise
+    
+            # If we're going to release the connection in ``finally:``, then
+            # the response doesn't need to know about the connection. Otherwise
+            # it will also try to release it and we'll have a double-release
+            # mess.
+            response_conn = conn if not release_conn else None
+    
+            # Make the request on the HTTPConnection object
+>           response = self._make_request(
+                conn,
+                method,
+                url,
+                timeout=timeout_obj,
+                body=body,
+                headers=headers,
+                chunked=chunked,
+                retries=retries,
+                response_conn=response_conn,
+                preload_content=preload_content,
+                decode_content=decode_content,
+                **response_kw,
+            )
+
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:1443: in getresponse
+    response.begin()
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:337: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <http.client.HTTPResponse object at 0x747776f46fe0>
+
+    def _read_status(self):
+        line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+        if len(line) > _MAXLINE:
+            raise LineTooLong("status line")
+        if self.debuglevel > 0:
+            print("reply:", repr(line))
+        if not line:
+            # Presumably, the server closed the connection before
+            # sending a valid response.
+>           raise RemoteDisconnected("Remote end closed connection without"
+                                     " response")
+E           http.client.RemoteDisconnected: Remote end closed connection without response
+
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:306: RemoteDisconnected
+
+During handling of the above exception, another exception occurred:
+
+self = <requests.adapters.HTTPAdapter object at 0x747776f48b50>
+request = <PreparedRequest [POST]>, stream = False
+timeout = Timeout(connect=600, read=600, total=None), verify = True, cert = None
+proxies = OrderedDict()
+
+    def send(
+        self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None
+    ):
+        """Sends PreparedRequest object. Returns Response object.
+    
+        :param request: The :class:`PreparedRequest <PreparedRequest>` being sent.
+        :param stream: (optional) Whether to stream the request content.
+        :param timeout: (optional) How long to wait for the server to send
+            data before giving up, as a float, or a :ref:`(connect timeout,
+            read timeout) <timeouts>` tuple.
+        :type timeout: float or tuple or urllib3 Timeout object
+        :param verify: (optional) Either a boolean, in which case it controls whether
+            we verify the server's TLS certificate, or a string, in which case it
+            must be a path to a CA bundle to use
+        :param cert: (optional) Any user-provided SSL certificate to be trusted.
+        :param proxies: (optional) The proxies dictionary to apply to the request.
+        :rtype: requests.Response
+        """
+    
+        try:
+            conn = self.get_connection_with_tls_context(
+                request, verify, proxies=proxies, cert=cert
+            )
+        except LocationValueError as e:
+            raise InvalidURL(e, request=request)
+    
+        self.cert_verify(conn, request.url, verify, cert)
+        url = self.request_url(request, proxies)
+        self.add_headers(
+            request,
+            stream=stream,
+            timeout=timeout,
+            verify=verify,
+            cert=cert,
+            proxies=proxies,
+        )
+    
+        chunked = not (request.body is None or "Content-Length" in request.headers)
+    
+        if isinstance(timeout, tuple):
+            try:
+                connect, read = timeout
+                timeout = TimeoutSauce(connect=connect, read=read)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, "
+                    f"or a single float to set both timeouts to the same value."
+                )
+        elif isinstance(timeout, TimeoutSauce):
+            pass
+        else:
+            timeout = TimeoutSauce(connect=timeout, read=timeout)
+    
+        try:
+>           resp = conn.urlopen(
+                method=request.method,
+                url=url,
+                body=request.body,
+                headers=request.headers,
+                redirect=False,
+                assert_same_host=False,
+                preload_content=False,
+                decode_content=False,
+                retries=self.max_retries,
+                timeout=timeout,
+                chunked=chunked,
+            )
+
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py:645: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:490: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:1443: in getresponse
+    response.begin()
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:337: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <http.client.HTTPResponse object at 0x747776f46fe0>
+
+    def _read_status(self):
+        line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+        if len(line) > _MAXLINE:
+            raise LineTooLong("status line")
+        if self.debuglevel > 0:
+            print("reply:", repr(line))
+        if not line:
+            # Presumably, the server closed the connection before
+            # sending a valid response.
+>           raise RemoteDisconnected("Remote end closed connection without"
+                                     " response")
+E           urllib3.exceptions.ProtocolError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py:306: ProtocolError
+
+During handling of the above exception, another exception occurred:
+
+    def test_fork_from_busy_source():
+        global server
+        server = make_server(no_cache_idle_slots=True)
+        server.start()
+        build_prompts()
+    
+        busy_prompt = TRUNK + SUF[4]
+        result = {}
+    
+        def run_busy():
+            result["busy"] = complete(busy_prompt, 0, n_predict=256, checkpoint_at=[TRUNK_LEN])
+    
+        th = threading.Thread(target=run_busy)
+        th.start()
+        # wait until slot 0 is generating. Not next_token.n_decoded: /slots reports it from the slot's PREVIOUS task until
+        # the new one generates. n_prompt_tokens past the prompt can only be advanced by the current task.
+        deadline = time.time() + 300
+        while True:
+            s0 = slots()[0]
+            if s0["is_processing"] and s0.get("n_prompt_tokens", 0) > len(busy_prompt):
+                break
+            if not th.is_alive() or time.time() > deadline:
+                pytest.fail(f"source never started generating (n_prompt_tokens {s0.get('n_prompt_tokens')})")
+            time.sleep(0.05)
+    
+>       child = complete(TRUNK + SUF[5], 1)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+unit/test_slot_fork.py:258: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+unit/test_slot_fork.py:115: in complete
+    res = server.make_request("POST", "/completion", data=data, timeout=600)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+utils.py:383: in make_request
+    response = requests.post(url, headers=headers, json=data, timeout=timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py:592: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py:706: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <requests.adapters.HTTPAdapter object at 0x747776f48b50>
+request = <PreparedRequest [POST]>, stream = False
+timeout = Timeout(connect=600, read=600, total=None), verify = True, cert = None
+proxies = OrderedDict()
+
+    def send(
+        self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None
+    ):
+        """Sends PreparedRequest object. Returns Response object.
+    
+        :param request: The :class:`PreparedRequest <PreparedRequest>` being sent.
+        :param stream: (optional) Whether to stream the request content.
+        :param timeout: (optional) How long to wait for the server to send
+            data before giving up, as a float, or a :ref:`(connect timeout,
+            read timeout) <timeouts>` tuple.
+        :type timeout: float or tuple or urllib3 Timeout object
+        :param verify: (optional) Either a boolean, in which case it controls whether
+            we verify the server's TLS certificate, or a string, in which case it
+            must be a path to a CA bundle to use
+        :param cert: (optional) Any user-provided SSL certificate to be trusted.
+        :param proxies: (optional) The proxies dictionary to apply to the request.
+        :rtype: requests.Response
+        """
+    
+        try:
+            conn = self.get_connection_with_tls_context(
+                request, verify, proxies=proxies, cert=cert
+            )
+        except LocationValueError as e:
+            raise InvalidURL(e, request=request)
+    
+        self.cert_verify(conn, request.url, verify, cert)
+        url = self.request_url(request, proxies)
+        self.add_headers(
+            request,
+            stream=stream,
+            timeout=timeout,
+            verify=verify,
+            cert=cert,
+            proxies=proxies,
+        )
+    
+        chunked = not (request.body is None or "Content-Length" in request.headers)
+    
+        if isinstance(timeout, tuple):
+            try:
+                connect, read = timeout
+                timeout = TimeoutSauce(connect=connect, read=read)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, "
+                    f"or a single float to set both timeouts to the same value."
+                )
+        elif isinstance(timeout, TimeoutSauce):
+            pass
+        else:
+            timeout = TimeoutSauce(connect=timeout, read=timeout)
+    
+        try:
+            resp = conn.urlopen(
+                method=request.method,
+                url=url,
+                body=request.body,
+                headers=request.headers,
+                redirect=False,
+                assert_same_host=False,
+                preload_content=False,
+                decode_content=False,
+                retries=self.max_retries,
+                timeout=timeout,
+                chunked=chunked,
+            )
+    
+        except (ProtocolError, OSError) as err:
+>           raise ConnectionError(err, request=request)
+E           requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py:660: ConnectionError
+----------------------------- Captured stdout call -----------------------------
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18985 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf --batch-size 32 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r2-20261020/queue-results/26-kpf17-vacuity-recheck/slots-mut-busy-fork_skip_ckpt_load-SWA --no-jinja --slot-fork-min-tokens 16 --no-cache-idle-slots
+server pid=1830103, pytest pid=1830093
+Waiting for server to start...
+0.00.001.601 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.925 W srv  llama_server: -----------------
+0.00.001.927 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.927 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.927 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.927 W srv  llama_server: -----------------
+0.00.003.103 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf'
+0.00.394.289 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+Response from server {
+  "error": {
+    "message": "Loading model",
+    "type": "unavailable_error",
+    "code": 503
+  }
+}
+Waiting for server to start...
+0.00.581.069 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.581.146 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = checkpoint, min tokens = 16, cache_idle_slots = 0
+0.00.582.582 I srv  llama_server: model loaded
+0.00.582.588 I srv  llama_server: listening on http://127.0.0.1:18985
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    818,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    236743
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    7626,
+    1602,
+    506,
+    32096,
+    1586,
+    9710,
+    528,
+    506,
+    34759,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1217,
+    1551,
+    20278,
+    1602,
+    506,
+    2212,
+    735,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    837,
+    3409,
+    1053,
+    919,
+    48312,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1015,
+    1676,
+    506,
+    2212,
+    1308,
+    506,
+    64222,
+    21136,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    15642,
+    886,
+    13315,
+    1003,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    4361,
+    1806,
+    2432,
+    506,
+    64222,
+    7971,
+    1679,
+    1418,
+    9137,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    8432,
+    531,
+    506,
+    1548,
+    529,
+    13763,
+    20896,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    23097,
+    506,
+    2212,
+    496,
+    2822,
+    3822,
+    236787
+  ]
+}
+0.01.014.973 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.014.999 I slot launch_slot_: id  0 | task 1 | processing task, is_child = 0
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 0,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.043.190 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 28.1 ms, kv_pos = 32, ms/tok = 0.000
+0.01.071.929 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 28.7 ms, kv_pos = 64, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 1,
+    "n_prompt_tokens": 64,
+    "n_prompt_tokens_processed": 64,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 256,
+      "n_predict": 256,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 0
+      }
+    ],
+    "kv_cells": {
+      "private": 128,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 128,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "9311c1a3acc7505a",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 128,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 128,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 128,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.095.897 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 23.7 ms, kv_pos = 96, ms/tok = 0.000
+0.01.112.049 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 18 (slots 1), budget = 0, t_iter = 16.1 ms, kv_pos = 114, ms/tok = 0.000
+0.01.207.276 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 22 (slots 1), budget = 0, t_iter = 94.6 ms, kv_pos = 136, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 1,
+    "n_prompt_tokens": 136,
+    "n_prompt_tokens_processed": 136,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 256,
+      "n_predict": 256,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 0
+      }
+    ],
+    "kv_cells": {
+      "private": 272,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 272,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "0495cecacf6bcbbc",
+    "checkpoints": [
+      {
+        "n_tokens": 114,
+        "pos_min": 0,
+        "pos_max": 113,
+        "pinned": false,
+        "size_mib": 2.4510498046875,
+        "prefix_hash": "7a686d1c4f0a21d5"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 272,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 272,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 272,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.221.098 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 6 (slots 1), budget = 0, t_iter = 12.6 ms, kv_pos = 142, ms/tok = 0.000
+0.01.238.199 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 16.3 ms, kv_pos = 146, ms/tok = 0.000
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": true,
+    "id_task": 1,
+    "n_prompt_tokens": 148,
+    "n_prompt_tokens_processed": 146,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 256,
+      "n_predict": 256,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": false,
+        "n_remain": 253,
+        "n_decoded": 3
+      }
+    ],
+    "kv_cells": {
+      "private": 296,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 296,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "b1d580876edcf319",
+    "checkpoints": [
+      {
+        "n_tokens": 114,
+        "pos_min": 0,
+        "pos_max": 113,
+        "pinned": false,
+        "size_mib": 2.4510498046875,
+        "prefix_hash": "7a686d1c4f0a21d5"
+      },
+      {
+        "n_tokens": 136,
+        "pos_min": 0,
+        "pos_max": 135,
+        "pinned": true,
+        "size_mib": 2.9239578247070312,
+        "prefix_hash": "0495cecacf6bcbbc"
+      },
+      {
+        "n_tokens": 142,
+        "pos_min": 0,
+        "pos_max": 141,
+        "pinned": false,
+        "size_mib": 3.0529327392578125,
+        "prefix_hash": "e84dff8be25dab82"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 296,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 296,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 10496,
+      "used": 296,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.285.797 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+0.01.287.193 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 136, task.n_tokens = 146, t = 1.30 ms
+0.01.287.241 I slot launch_slot_: id  1 | task 15 | processing task, is_child = 0
+0.01.287.268 E slot   operator(): id  1 | task 15 | n_past = 136, slot.prompt.tokens.size() = 136, seq_id = 1, pos_min = -1
+/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/server-context.cpp:4413: pos_min == -1, but n_past > 0 - should not happen: https://github.com/ggml-org/llama.cpp/pull/13833#discussion_r2116181237
+[New LWP 1830345]
+[New LWP 1830344]
+[New LWP 1830343]
+[New LWP 1830342]
+[New LWP 1830341]
+[New LWP 1830340]
+[New LWP 1830339]
+[New LWP 1830338]
+[New LWP 1830337]
+[New LWP 1830336]
+[New LWP 1830335]
+[New LWP 1830334]
+[New LWP 1830333]
+[New LWP 1830332]
+[New LWP 1830331]
+[New LWP 1830330]
+[New LWP 1830329]
+[New LWP 1830328]
+[New LWP 1830327]
+[New LWP 1830326]
+[New LWP 1830325]
+[New LWP 1830324]
+[New LWP 1830323]
+[New LWP 1830322]
+[New LWP 1830321]
+[New LWP 1830320]
+[New LWP 1830319]
+[New LWP 1830318]
+[New LWP 1830317]
+[New LWP 1830316]
+[New LWP 1830315]
+[New LWP 1830314]
+[New LWP 1830313]
+[New LWP 1830312]
+[New LWP 1830311]
+[New LWP 1830310]
+[New LWP 1830309]
+[New LWP 1830308]
+[New LWP 1830307]
+[New LWP 1830306]
+[New LWP 1830305]
+[New LWP 1830304]
+[New LWP 1830303]
+[New LWP 1830302]
+[New LWP 1830301]
+[New LWP 1830300]
+[New LWP 1830299]
+[New LWP 1830298]
+[New LWP 1830297]
+[New LWP 1830296]
+[New LWP 1830295]
+[New LWP 1830294]
+[New LWP 1830293]
+[New LWP 1830292]
+[New LWP 1830291]
+[New LWP 1830290]
+[New LWP 1830289]
+[New LWP 1830288]
+[New LWP 1830287]
+[New LWP 1830286]
+[New LWP 1830285]
+[New LWP 1830284]
+[New LWP 1830283]
+[New LWP 1830282]
+[New LWP 1830281]
+[New LWP 1830280]
+[New LWP 1830279]
+[New LWP 1830278]
+[New LWP 1830277]
+[New LWP 1830276]
+[New LWP 1830275]
+[New LWP 1830274]
+[New LWP 1830273]
+[New LWP 1830272]
+[New LWP 1830271]
+[New LWP 1830270]
+[New LWP 1830269]
+[New LWP 1830268]
+[New LWP 1830267]
+[New LWP 1830266]
+[New LWP 1830265]
+[New LWP 1830264]
+[New LWP 1830263]
+[New LWP 1830262]
+[New LWP 1830261]
+[New LWP 1830260]
+[New LWP 1830259]
+[New LWP 1830258]
+[New LWP 1830257]
+[New LWP 1830256]
+[New LWP 1830255]
+[New LWP 1830254]
+[New LWP 1830253]
+[New LWP 1830252]
+[New LWP 1830251]
+[New LWP 1830250]
+[New LWP 1830249]
+[New LWP 1830248]
+[New LWP 1830247]
+[New LWP 1830246]
+[New LWP 1830245]
+[New LWP 1830244]
+[New LWP 1830243]
+[New LWP 1830242]
+[New LWP 1830241]
+[New LWP 1830240]
+[New LWP 1830239]
+[New LWP 1830238]
+[New LWP 1830237]
+[New LWP 1830236]
+[New LWP 1830235]
+[New LWP 1830234]
+[New LWP 1830233]
+[New LWP 1830232]
+[New LWP 1830231]
+[New LWP 1830230]
+[New LWP 1830229]
+[New LWP 1830228]
+[New LWP 1830227]
+[New LWP 1830226]
+[New LWP 1830225]
+[New LWP 1830224]
+[New LWP 1830223]
+[New LWP 1830222]
+[New LWP 1830221]
+[New LWP 1830220]
+[New LWP 1830219]
+[New LWP 1830218]
+[New LWP 1830217]
+[New LWP 1830216]
+[New LWP 1830215]
+[New LWP 1830214]
+[New LWP 1830213]
+[New LWP 1830212]
+[New LWP 1830211]
+[New LWP 1830210]
+[New LWP 1830209]
+[New LWP 1830208]
+[New LWP 1830207]
+[New LWP 1830206]
+[New LWP 1830205]
+[New LWP 1830204]
+[New LWP 1830203]
+[New LWP 1830202]
+[New LWP 1830201]
+[New LWP 1830200]
+[New LWP 1830199]
+[New LWP 1830198]
+[New LWP 1830197]
+[New LWP 1830196]
+[New LWP 1830195]
+[New LWP 1830194]
+[New LWP 1830193]
+[New LWP 1830192]
+[New LWP 1830191]
+[New LWP 1830190]
+[New LWP 1830189]
+[New LWP 1830188]
+[New LWP 1830187]
+[New LWP 1830186]
+[New LWP 1830185]
+[New LWP 1830184]
+[New LWP 1830183]
+[New LWP 1830182]
+[New LWP 1830181]
+[New LWP 1830180]
+[New LWP 1830179]
+[New LWP 1830178]
+[New LWP 1830177]
+[New LWP 1830176]
+[New LWP 1830175]
+[New LWP 1830174]
+[New LWP 1830173]
+[New LWP 1830172]
+[New LWP 1830171]
+[New LWP 1830170]
+[New LWP 1830169]
+[New LWP 1830168]
+[New LWP 1830167]
+[New LWP 1830166]
+[New LWP 1830165]
+[New LWP 1830164]
+[New LWP 1830163]
+[New LWP 1830162]
+[New LWP 1830161]
+[New LWP 1830160]
+[New LWP 1830159]
+[New LWP 1830158]
+[New LWP 1830157]
+[New LWP 1830156]
+[New LWP 1830155]
+[New LWP 1830154]
+[New LWP 1830153]
+[New LWP 1830152]
+[New LWP 1830151]
+[New LWP 1830150]
+[New LWP 1830149]
+[New LWP 1830148]
+[New LWP 1830147]
+[New LWP 1830146]
+[New LWP 1830145]
+[New LWP 1830144]
+[New LWP 1830143]
+[New LWP 1830142]
+[New LWP 1830141]
+[New LWP 1830140]
+[New LWP 1830139]
+[New LWP 1830138]
+[New LWP 1830137]
+[New LWP 1830136]
+[New LWP 1830135]
+[New LWP 1830134]
+[New LWP 1830133]
+[New LWP 1830132]
+[New LWP 1830131]
+[New LWP 1830130]
+[New LWP 1830129]
+[New LWP 1830128]
+[New LWP 1830127]
+[New LWP 1830126]
+[New LWP 1830125]
+[New LWP 1830124]
+[New LWP 1830123]
+[New LWP 1830122]
+[New LWP 1830121]
+[New LWP 1830120]
+[New LWP 1830119]
+[New LWP 1830118]
+[New LWP 1830117]
+[New LWP 1830116]
+[New LWP 1830115]
+[New LWP 1830114]
+[New LWP 1830113]
+[New LWP 1830112]
+[New LWP 1830111]
+[New LWP 1830110]
+[New LWP 1830109]
+[New LWP 1830108]
+[New LWP 1830107]
+[New LWP 1830106]
+[New LWP 1830105]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x000071db2a5dc772 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#0  0x000071db2a5dc772 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x000071db2a5d013c in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#2  0x000071db2a64ca0f in wait4 () from /lib/x86_64-linux-gnu/libc.so.6
+#3  0x000071db29dfe573 in ggml_print_backtrace () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libggml-base.so.0
+#4  0x000071db29dfe726 in ggml_abort () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libggml-base.so.0
+#5  0x000071db2abcf399 in server_context_impl::pre_decode()::{lambda(server_slot&)#5}::operator()(server_slot&) const () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#6  0x000071db2abc5311 in server_context_impl::iterate(std::vector<server_slot, std::allocator<server_slot> >&, std::function<void (server_slot&)>) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#7  0x000071db2abc7a2d in server_context_impl::pre_decode() () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#8  0x000071db2abc8153 in server_context_impl::update_slots() () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#9  0x000071db2ab53f71 in server_queue::start_loop(long) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#10 0x000071db2aaf2b82 in llama_server(common_params&, int, char**) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#11 0x000071db2aaf47a6 in llama_server(int, char**) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#12 0x000071db2a55a575 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#13 0x000071db2a55a628 in __libc_start_main () from /lib/x86_64-linux-gnu/libc.so.6
+#14 0x000057ed32641325 in _start ()
+[Inferior 1 (process 1830103) detached]
+--------------------------- Captured stdout teardown ---------------------------
+Stopping server with pid=1830103
+=============================== warnings summary ===============================
+unit/test_slot_fork.py::test_fork_from_busy_source
+  /workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-1 (run_busy)
+  
+  Traceback (most recent call last):
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+      response = self._make_request(
+                 ^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+      response = conn.getresponse()
+                 ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py", line 571, in getresponse
+      httplib_response = super().getresponse()
+                         ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 1443, in getresponse
+      response.begin()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 337, in begin
+      version, status, reason = self._read_status()
+                                ^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 306, in _read_status
+      raise RemoteDisconnected("Remote end closed connection without"
+  http.client.RemoteDisconnected: Remote end closed connection without response
+  
+  During handling of the above exception, another exception occurred:
+  
+  Traceback (most recent call last):
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py", line 645, in send
+      resp = conn.urlopen(
+             ^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+      retries = retries.increment(
+                ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/retry.py", line 490, in increment
+      raise reraise(type(error), error, _stacktrace)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/util.py", line 38, in reraise
+      raise value.with_traceback(tb)
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+      response = self._make_request(
+                 ^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+      response = conn.getresponse()
+                 ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py", line 571, in getresponse
+      httplib_response = super().getresponse()
+                         ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 1443, in getresponse
+      response.begin()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 337, in begin
+      version, status, reason = self._read_status()
+                                ^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 306, in _read_status
+      raise RemoteDisconnected("Remote end closed connection without"
+  urllib3.exceptions.ProtocolError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+  
+  During handling of the above exception, another exception occurred:
+  
+  Traceback (most recent call last):
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+      self.run()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/threading.py", line 982, in run
+      self._target(*self._args, **self._kwargs)
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/unit/test_slot_fork.py", line 243, in run_busy
+      result["busy"] = complete(busy_prompt, 0, n_predict=256, checkpoint_at=[TRUNK_LEN])
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/unit/test_slot_fork.py", line 115, in complete
+      res = server.make_request("POST", "/completion", data=data, timeout=600)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/utils.py", line 383, in make_request
+      response = requests.post(url, headers=headers, json=data, timeout=timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py", line 115, in post
+      return request("post", url, data=data, json=json, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py", line 59, in request
+      return session.request(method=method, url=url, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py", line 592, in request
+      resp = self.send(prep, **send_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py", line 706, in send
+      r = adapter.send(request, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py", line 660, in send
+      raise ConnectionError(err, request=request)
+  requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED unit/test_slot_fork.py::test_fork_from_busy_source - requests.exceptio...
+================= 1 failed, 23 deselected, 1 warning in 1.68s ==================

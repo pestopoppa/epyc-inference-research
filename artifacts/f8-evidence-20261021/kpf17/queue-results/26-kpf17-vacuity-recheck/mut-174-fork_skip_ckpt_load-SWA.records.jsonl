@@ -1,0 +1,1 @@
+{"case": "kpf174_swa_ckpt_ranges", "ckpts": [{"n_tokens": 540, "pos_min": 0, "pos_max": 539, "pinned": true}, {"n_tokens": 825, "pos_min": 0, "pos_max": 824, "pinned": false}, {"n_tokens": 1077, "pos_min": 0, "pos_max": 1076, "pinned": false}, {"n_tokens": 1081, "pos_min": 0, "pos_max": 1080, "pinned": true}], "n_trunk": 1081}

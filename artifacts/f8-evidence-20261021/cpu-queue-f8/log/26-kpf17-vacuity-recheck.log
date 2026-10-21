@@ -1,0 +1,32 @@
+[region-lock] acquiring regions ['q0'] as role='build' (timeout_s=120.0) …
+[region-lock] held ['q0'] after 0.0s wait; running: env F8Q_CPUS=0-23,96-119 taskset -c 0-23,96-119 bash /mnt/raid0/llm/tmp/cpu-queue-f8/running/26-kpf17-vacuity-recheck.sh
+[2026-10-21T06:31:28Z] provenance: branch a7af56dff883fe1aa509169de70ee086b0872740 llama-server sha256 defc5a094fcdd8c5d7acd912a7f7912d36a5e78d62af309015e57efc2b0eec40
+[2026-10-21T06:31:36Z] STEP honest-busy-HYB OK passed=1 skipped=0
+[2026-10-21T06:31:38Z] STEP honest-p2-HYB OK passed=1 skipped=0
+[2026-10-21T06:32:15Z] STEP honest-abort-HYB OK passed=1 skipped=0
+[2026-10-21T06:32:18Z] STEP honest-key-HYB OK passed=1 skipped=0
+[2026-10-21T06:32:21Z] STEP honest-same-HYB FAIL passed=0 failed=1 skipped=0 rc=1
+[2026-10-21T06:32:31Z] STEP honest-step-HYB OK passed=1 skipped=0
+[2026-10-21T06:32:40Z] STEP honest-busy-SWA OK passed=1 skipped=0
+[2026-10-21T06:32:42Z] STEP honest-p2-SWA FAIL passed=0 failed=1 skipped=0 rc=1
+[2026-10-21T06:33:18Z] STEP honest-abort-SWA OK passed=1 skipped=0
+[2026-10-21T06:33:21Z] STEP honest-key-SWA OK passed=1 skipped=0
+[2026-10-21T06:33:24Z] STEP honest-same-SWA FAIL passed=0 failed=1 skipped=0 rc=1
+[2026-10-21T06:33:33Z] STEP honest-step-SWA OK passed=1 skipped=0
+[2026-10-21T06:33:37Z] STEP honest-174-SWA OK passed=1 skipped=0
+[2026-10-21T06:33:45Z] STEP honest-busy-ATT OK passed=1 skipped=0
+[2026-10-21T06:33:47Z] STEP honest-p2-ATT OK passed=1 skipped=0
+[2026-10-21T06:34:18Z] STEP honest-abort-ATT OK passed=1 skipped=0
+[2026-10-21T06:34:23Z] STEP mut-busy-fork_skip_ckpt_load-HYB OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+[2026-10-21T06:34:26Z] STEP mut-key-fork_no_lcp-HYB OK mutation fork_no_lcp DETECTED (failed=1 passed=0)
+[2026-10-21T06:34:29Z] STEP mut-same-fork_skip_ckpt_load-HYB OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+[2026-10-21T06:34:33Z] STEP mut-step-skew+no_posmax_guard-HYB OK mutation ckpt_ntokens_skew,no_posmax_guard DETECTED (failed=1 passed=0)
+[2026-10-21T06:34:35Z] STEP mut-busy-fork_skip_ckpt_load-SWA OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+[2026-10-21T06:34:38Z] STEP mut-key-fork_no_lcp-SWA OK mutation fork_no_lcp DETECTED (failed=1 passed=0)
+[2026-10-21T06:34:40Z] STEP mut-same-fork_skip_ckpt_load-SWA OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+[2026-10-21T06:34:43Z] STEP mut-step-skew+no_posmax_guard-SWA OK mutation ckpt_ntokens_skew,no_posmax_guard DETECTED (failed=1 passed=0)
+[2026-10-21T06:34:46Z] STEP mut-174-fork_skip_ckpt_load-SWA OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+[2026-10-21T06:34:50Z] STEP mut-174-ckpt_ntokens_skew-SWA OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+[2026-10-21T06:35:27Z] STEP inj-abort-abort_keeps_tail-ATT OK passed=1 skipped=0
+[2026-10-21T06:35:30Z] STEP mut-abort-abort_keeps_tail+no_posmax_guard-ATT OK mutation abort_keeps_tail,no_posmax_guard DETECTED (failed=1 passed=0)
+RESULT 26-kpf17-vacuity-recheck pass=25 fail=3

@@ -1,0 +1,12 @@
+server 1211727 started side=A tmpl=embedded bin=/mnt/raid0/llm/kernels/builds/cpu-20261020-dd3d9721c/bin/llama-server
+server 1211727 stopped (verified dead)
+server 1211995 started side=A tmpl=epyc-qwen3x-v1 bin=/mnt/raid0/llm/kernels/builds/cpu-20261020-dd3d9721c/bin/llama-server
+server 1211995 stopped (verified dead)
+server 1212286 started side=A tmpl=qwen35 bin=/mnt/raid0/llm/kernels/builds/cpu-20261020-dd3d9721c/bin/llama-server
+server 1212286 stopped (verified dead)
+server 1213343 started side=B tmpl=embedded bin=/mnt/raid0/llm/worktrees/ct12-is-input-20261021/build-cpu/bin/llama-server
+server 1213343 stopped (verified dead)
+server 1214647 started side=B tmpl=epyc-qwen3x-v1 bin=/mnt/raid0/llm/worktrees/ct12-is-input-20261021/build-cpu/bin/llama-server
+server 1214647 stopped (verified dead)
+server 1215672 started side=B tmpl=qwen35 bin=/mnt/raid0/llm/worktrees/ct12-is-input-20261021/build-cpu/bin/llama-server
+server 1215672 stopped (verified dead)

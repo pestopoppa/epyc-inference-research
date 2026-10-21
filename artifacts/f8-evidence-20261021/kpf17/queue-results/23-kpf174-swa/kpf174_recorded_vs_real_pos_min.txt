@@ -1,0 +1,4 @@
+KPF174 c=612 n_swa=512 recorded=[0,611] real_restored=[100,611] window_start=100 covers_window=yes RECORDED_RANGE_DIFFERS
+KPF174 c=1024 n_swa=512 recorded=[0,1023] real_restored=[512,1023] window_start=512 covers_window=yes RECORDED_RANGE_DIFFERS
+KPF174 c=612 n_swa=512 recorded=[0,611] real_restored=[100,611] window_start=100 covers_window=yes RECORDED_RANGE_DIFFERS
+KPF174 c=1024 n_swa=512 recorded=[0,1023] real_restored=[512,1023] window_start=512 covers_window=yes RECORDED_RANGE_DIFFERS

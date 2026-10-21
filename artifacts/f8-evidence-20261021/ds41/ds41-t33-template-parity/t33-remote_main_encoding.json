@@ -1,0 +1,172 @@
+{
+ "label": "remote_main_encoding",
+ "encoding_py_sha256": "13231c592e958fb39e2af6001dae69d90e7a36b265702b9b390236fb387599e2",
+ "rows": [
+  {
+   "case": "golden1",
+   "oracle_matches_golden_text": true,
+   "oracle_n": 622,
+   "served_n": 622,
+   "served_n_addspecial": 623,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": 586,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>Reasoning E",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "golden2",
+   "oracle_matches_golden_text": true,
+   "oracle_n": 60,
+   "served_n": 99,
+   "served_n_addspecial": 100,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": 6,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>You are a h",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "golden3",
+   "oracle_matches_golden_text": true,
+   "oracle_n": 657,
+   "served_n": 705,
+   "served_n_addspecial": 706,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": 6,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>该助手为DeepSee",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "golden4",
+   "oracle_matches_golden_text": true,
+   "oracle_n": 132,
+   "served_n": 155,
+   "served_n_addspecial": 156,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": 6,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>该助手为DeepSee",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "golden5",
+   "oracle_matches_golden_text": true,
+   "oracle_n": 96,
+   "served_error": "{'error': 'HTTP Error 500: Internal Server Error'}"
+  },
+  {
+   "case": "tool_call_roundtrip",
+   "oracle_n": 381,
+   "served_n": 407,
+   "served_n_addspecial": 408,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": 6,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>sys\n\n## Too",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "tool_result_only_user_turn",
+   "oracle_n": 399,
+   "served_n": 427,
+   "served_n_addspecial": 428,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": 6,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>sys\n\n## Too",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "thinking",
+   "oracle_n": 47,
+   "served_n": 46,
+   "served_n_addspecial": 47,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": null,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>Reasoning E",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "thinking_effort_high",
+   "oracle_n": 47,
+   "served_n": 46,
+   "served_n_addspecial": 47,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": null,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>Reasoning E",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "thinking_effort_max",
+   "oracle_n": 47,
+   "served_n": 46,
+   "served_n_addspecial": 47,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": null,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>Reasoning E",
+   "served_ctx": "<｜System｜>Reasoning Effort: 100 (range 1-1",
+   "pass": false
+  },
+  {
+   "case": "effort_int_75",
+   "oracle_n": 47,
+   "served_n": 46,
+   "served_n_addspecial": 47,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": null,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>Reasoning E",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "mid_system",
+   "oracle_n": 37,
+   "served_n": 66,
+   "served_n_addspecial": 67,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": 3,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜User｜>hi<｜Assistant",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "reasoning_retention_prefix",
+   "oracle_n": 62,
+   "served_n": 61,
+   "served_n_addspecial": 62,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": null,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>Reasoning E",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  },
+  {
+   "case": "reasoning_retention_nonprefix",
+   "oracle_n": 79,
+   "served_n": 78,
+   "served_n_addspecial": 79,
+   "text_first_div_char": 2,
+   "id_first_div": 0,
+   "id_first_div_addspecial": null,
+   "oracle_ctx": "<｜begin▁of▁sentence｜><｜System｜>Reasoning E",
+   "served_ctx": "<｜System｜>Reasoning Effort: 75 (range 1-10",
+   "pass": false
+  }
+ ]
+}

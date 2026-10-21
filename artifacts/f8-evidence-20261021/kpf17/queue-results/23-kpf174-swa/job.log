@@ -1,0 +1,7 @@
+[2026-10-20T23:12:59Z] provenance: branch d2ef28e108f28f132971456468dab15049a80083 llama-server sha256 8f8606e7ffa58fc72fa685a022f68d7726e8873c28dfda7ee9895cdf9fb37f5e
+[2026-10-20T23:13:23Z] STEP swa-cpp-normal FAIL rc=1
+[2026-10-20T23:13:36Z] STEP swa-cpp-mut-use_recorded_range OK mutation DETECTED rc=1
+[2026-10-20T23:13:42Z] STEP swa-server-fork OK passed=1 skipped=0
+[2026-10-20T23:13:49Z] STEP swa-server-mut-skew OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+[2026-10-20T23:14:56Z] STEP swa-server-171-172-173 FAIL passed=6 failed=4 skipped=0 rc=1
+RESULT 23-kpf174-swa pass=3 fail=2

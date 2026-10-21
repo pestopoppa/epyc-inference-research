@@ -1,0 +1,1009 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.0.3, pluggy-1.6.0
+rootdir: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests
+configfile: pytest.ini
+plugins: asyncio-1.3.0, timeout-2.4.0, langsmith-0.7.30, cov-7.1.0, xdist-3.8.0, hypothesis-6.151.13, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 23 deselected / 1 selected
+
+unit/test_slot_fork.py F                                                 [100%]
+
+=================================== FAILURES ===================================
+_______________ test_kpf172_fork_same_iteration_as_source_erase ________________
+
+    def test_kpf172_fork_same_iteration_as_source_erase():
+        """KPF-17.2(2): a fork launched in the same update_slots iteration in which the source's checkpoint erase loop
+        (--ctx-checkpoints 2) or prompt_clear runs: dst holds its own cloned checkpoint, output == fresh. Timing is raced
+        over 8 rounds. MUTATION: fork_skip_ckpt_load."""
+        global server
+        server.stop()
+        server = make_server(ctx_checkpoints=2)
+        server.start()
+        build_prompts()
+        need_ckpt_mode()
+        n_forks = 0
+        for r in range(8):
+            erase_slot(0)
+            erase_slot(1)
+            complete(TRUNK, 0, n_predict=0, checkpoint_at=[-1])
+            bar = threading.Barrier(2)
+            out: dict = {}
+    
+            def src_side():
+                bar.wait()
+                out["a"] = complete(TRUNK[: 30 + r] + SUF[r % 8], 0, n_predict=4, slot_fork=False, checkpoint_at=[20, -1])
+    
+            def dst_side():
+                bar.wait()
+                out["b"] = complete(TRUNK + SUF[(r + 1) % 8], 1)
+    
+            th = [threading.Thread(target=src_side), threading.Thread(target=dst_side)]
+            [x.start() for x in th]
+            [x.join() for x in th]
+>           same_as_fresh(out["b"], fresh(TRUNK + SUF[(r + 1) % 8], 2, n_probs=1), f"round {r}")
+                          ^^^^^^^^
+E           KeyError: 'b'
+
+unit/test_slot_fork.py:805: KeyError
+----------------------------- Captured stdout call -----------------------------
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18985 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf --batch-size 32 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r2-20261020/queue-results/26-kpf17-vacuity-recheck/slots-mut-same-fork_skip_ckpt_load-SWA --no-jinja --slot-fork-min-tokens 16 --ctx-checkpoints 2
+server pid=1830678, pytest pid=1830677
+Waiting for server to start...
+0.00.001.630 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.938 W srv  llama_server: -----------------
+0.00.001.940 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.940 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.940 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.940 W srv  llama_server: -----------------
+0.00.003.130 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf'
+0.00.409.524 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+Response from server {
+  "error": {
+    "message": "Loading model",
+    "type": "unavailable_error",
+    "code": 503
+  }
+}
+Waiting for server to start...
+0.00.529.895 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.529.957 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = checkpoint, min tokens = 16, cache_idle_slots = 1
+0.00.531.610 I srv  llama_server: model loaded
+0.00.531.633 I srv  llama_server: listening on http://127.0.0.1:18985
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    818,
+    63937,
+    64222,
+    7953,
+    496,
+    15318,
+    2212,
+    236761,
+    7685,
+    9137,
+    668,
+    7971,
+    1679,
+    506,
+    6573,
+    236764,
+    506,
+    3558,
+    529,
+    506,
+    11707,
+    236764,
+    506,
+    19916,
+    600,
+    6915,
+    236764,
+    532,
+    506,
+    10348,
+    529,
+    506,
+    7217,
+    657,
+    14711,
+    236761,
+    7178,
+    19925,
+    1518,
+    506,
+    2212,
+    13958,
+    531,
+    28959,
+    20278,
+    236761,
+    3026,
+    506,
+    64222,
+    21136,
+    236764,
+    506,
+    53676,
+    4408,
+    4733,
+    496,
+    3184,
+    32096,
+    531,
+    1676,
+    784,
+    529,
+    1091,
+    532,
+    101213,
+    1144,
+    1053,
+    6692,
+    236761,
+    669,
+    32096,
+    14275,
+    600,
+    48312,
+    1053,
+    3291,
+    919,
+    17597,
+    528,
+    16273,
+    236764,
+    600,
+    18661,
+    13763,
+    20896,
+    6915,
+    1546,
+    15588,
+    236764,
+    532,
+    600,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    13958,
+    7100,
+    532,
+    770,
+    918,
+    618,
+    506,
+    1518,
+    3939,
+    684,
+    236761,
+    2625,
+    992,
+    1765,
+    1944,
+    26523,
+    528,
+    506,
+    34759,
+    236787,
+    549,
+    57751,
+    236764,
+    496,
+    5866,
+    600,
+    11742,
+    528,
+    506,
+    18515,
+    573,
+    496,
+    1651,
+    236764,
+    532,
+    3622,
+    496,
+    47389,
+    236761,
+    236743
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    7626,
+    1602,
+    506,
+    32096,
+    1586,
+    9710,
+    528,
+    506,
+    34759,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1217,
+    1551,
+    20278,
+    1602,
+    506,
+    2212,
+    735,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    837,
+    3409,
+    1053,
+    919,
+    48312,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1015,
+    1676,
+    506,
+    2212,
+    1308,
+    506,
+    64222,
+    21136,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    15642,
+    886,
+    13315,
+    1003,
+    506,
+    64222,
+    236789,
+    236751,
+    97675,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    4361,
+    1806,
+    2432,
+    506,
+    64222,
+    7971,
+    1679,
+    1418,
+    9137,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    19566,
+    236787,
+    1144,
+    8432,
+    531,
+    506,
+    1548,
+    529,
+    13763,
+    20896,
+    236881,
+    25685,
+    236787
+  ]
+}
+Response from server {
+  "tokens": [
+    23097,
+    506,
+    2212,
+    496,
+    2822,
+    3822,
+    236787
+  ]
+}
+Response from server {
+  "default_generation_settings": {
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": -1,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": -1,
+      "n_predict": -1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "none",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "n_ctx": 8192
+  },
+  "total_slots": 4,
+  "model_alias": "tinyllama-2",
+  "model_ftype": "Q8_0",
+  "model_path": "/mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "media_marker": "<__media_84XbUTGZGUgewitbauJdzzKKIuNstLMv__>",
+  "endpoint_slots": true,
+  "endpoint_props": false,
+  "endpoint_metrics": true,
+  "ui": true,
+  "ui_settings": {},
+  "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- if messages[0]['content'] is string -%}\n        {%- set first_user_prefix = messages[0]['content'] + '\n\n' -%}\n    {%- else -%}\n        {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- endif -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<start_of_image>' }}\n            {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}",
+  "chat_template_caps": {
+    "supports_object_arguments": false,
+    "supports_parallel_tool_calls": false,
+    "supports_preserve_reasoning": false,
+    "supports_string_content": true,
+    "supports_system_role": true,
+    "supports_tool_calls": false,
+    "supports_tools": false,
+    "supports_typed_content": false
+  },
+  "bos_token": "<bos>",
+  "eos_token": "<eos>",
+  "build_info": "b10359-1fd7e2e12",
+  "is_sleeping": false,
+  "cors_proxy_enabled": false,
+  "slot_fork": {
+    "min_tokens": 16,
+    "mode": "checkpoint",
+    "checkpoint_at": true
+  }
+}
+Response from server {
+  "id_slot": 0,
+  "n_erased": 0
+}
+Response from server {
+  "id_slot": 1,
+  "n_erased": 0
+}
+0.01.018.300 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.018.327 I slot launch_slot_: id  0 | task 2 | processing task, is_child = 0
+0.01.041.898 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 23.5 ms, kv_pos = 32, ms/tok = 0.000
+0.01.063.471 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 21.5 ms, kv_pos = 64, ms/tok = 0.000
+0.01.085.309 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 32 (slots 1), budget = 0, t_iter = 21.7 ms, kv_pos = 96, ms/tok = 0.000
+0.01.098.005 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 8 (slots 1), budget = 0, t_iter = 12.6 ms, kv_pos = 104, ms/tok = 0.000
+0.01.119.871 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 28 (slots 1), budget = 0, t_iter = 21.0 ms, kv_pos = 132, ms/tok = 0.000
+0.01.135.415 W slot create_check: id  0 | task 2 | erasing old context checkpoint (pos_min = 0, pos_max = 103, n_tokens = 104, size = 2.236 MiB)
+0.01.137.368 I slot print_timing: id  0 | task 2 | prompt eval time =     118.98 ms /   136 tokens (    0.87 ms per token,  1143.03 tokens per second)
+0.01.137.396 I slot print_timing: id  0 | task 2 |        eval time =       0.00 ms /     1 tokens (    0.00 ms per token, 1000000.00 tokens per second)
+0.01.137.405 I slot print_timing: id  0 | task 2 |       total time =     118.98 ms /   137 tokens
+0.01.137.418 I slot print_timing: id  0 | task 2 |    graphs reused =          3
+0.01.137.475 I slot      release: id  0 | task 2 | stop processing: n_tokens = 136, truncated = 0
+0.01.137.888 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 17.3 ms, kv_pos = 136, ms/tok = 0.000
+Response from server {
+  "index": 0,
+  "content": "\n",
+  "tokens": [
+    107
+  ],
+  "id_slot": 0,
+  "stop": true,
+  "model": "tinyllama-2",
+  "tokens_predicted": 1,
+  "tokens_evaluated": 136,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 40,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 8192,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "stop": [],
+    "max_tokens": 0,
+    "n_predict": 0,
+    "n_keep": 0,
+    "n_discard": 0,
+    "kv_streaming_sink": 0,
+    "kv_streaming_window": 0,
+    "ignore_eos": false,
+    "stream": false,
+    "logit_bias": [],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none",
+    "speculative.n_max": 3,
+    "timings_per_token": false,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "The lighthouse keeper kept a careful log. Every evening he wrote down the wind, the height of the waves, the ships that passed, and the colour of the sky at sunset. Over thirty years the log grew to forty volumes. When the keeper retired, the harbour office asked a young clerk to read all of them and summarise what had changed. The clerk noticed that storms had become more frequent in autumn, that fewer fishing boats passed each decade, and that the keeper's handwriting grew smaller and neater as the years went by. She also found small drawings in the margins: gulls, a cat that lived in the tower for a while, and once a whale. ",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 136,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 136,
+    "prompt_ms": 118.982,
+    "prompt_per_token_ms": 0.8748676470588235,
+    "prompt_per_second": 1143.030038157032,
+    "predicted_n": 1,
+    "predicted_ms": 0.001,
+    "predicted_per_token_ms": 0.001,
+    "predicted_per_second": 1000000.0,
+    "n_fork_tokens": 0,
+    "fork_src_slot": -1,
+    "fork_src_kind": "none",
+    "id_slot": 0,
+    "id_task": 2
+  }
+}
+0.01.141.008 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+0.01.142.222 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = checkpoint, n_fork_tokens = 136, task.n_tokens = 148, t = 1.16 ms
+0.01.142.237 I slot launch_slot_: id  1 | task 10 | processing task, is_child = 0
+0.01.143.989 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.01.144.019 I slot launch_slot_: id  0 | task 9 | processing task, is_child = 0
+0.01.144.050 E slot   operator(): id  1 | task 10 | n_past = 136, slot.prompt.tokens.size() = 136, seq_id = 1, pos_min = -1
+/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/server-context.cpp:4413: pos_min == -1, but n_past > 0 - should not happen: https://github.com/ggml-org/llama.cpp/pull/13833#discussion_r2116181237
+[New LWP 1830924]
+[New LWP 1830923]
+[New LWP 1830922]
+[New LWP 1830921]
+[New LWP 1830920]
+[New LWP 1830919]
+[New LWP 1830918]
+[New LWP 1830917]
+[New LWP 1830916]
+[New LWP 1830915]
+[New LWP 1830914]
+[New LWP 1830913]
+[New LWP 1830912]
+[New LWP 1830911]
+[New LWP 1830910]
+[New LWP 1830909]
+[New LWP 1830908]
+[New LWP 1830907]
+[New LWP 1830906]
+[New LWP 1830905]
+[New LWP 1830904]
+[New LWP 1830903]
+[New LWP 1830902]
+[New LWP 1830901]
+[New LWP 1830900]
+[New LWP 1830899]
+[New LWP 1830898]
+[New LWP 1830897]
+[New LWP 1830896]
+[New LWP 1830895]
+[New LWP 1830894]
+[New LWP 1830893]
+[New LWP 1830892]
+[New LWP 1830891]
+[New LWP 1830890]
+[New LWP 1830889]
+[New LWP 1830888]
+[New LWP 1830887]
+[New LWP 1830886]
+[New LWP 1830885]
+[New LWP 1830884]
+[New LWP 1830883]
+[New LWP 1830882]
+[New LWP 1830881]
+[New LWP 1830880]
+[New LWP 1830879]
+[New LWP 1830878]
+[New LWP 1830873]
+[New LWP 1830872]
+[New LWP 1830871]
+[New LWP 1830870]
+[New LWP 1830869]
+[New LWP 1830868]
+[New LWP 1830867]
+[New LWP 1830866]
+[New LWP 1830865]
+[New LWP 1830864]
+[New LWP 1830863]
+[New LWP 1830862]
+[New LWP 1830861]
+[New LWP 1830860]
+[New LWP 1830859]
+[New LWP 1830858]
+[New LWP 1830857]
+[New LWP 1830856]
+[New LWP 1830855]
+[New LWP 1830854]
+[New LWP 1830853]
+[New LWP 1830852]
+[New LWP 1830851]
+[New LWP 1830850]
+[New LWP 1830849]
+[New LWP 1830848]
+[New LWP 1830847]
+[New LWP 1830846]
+[New LWP 1830845]
+[New LWP 1830844]
+[New LWP 1830843]
+[New LWP 1830842]
+[New LWP 1830841]
+[New LWP 1830840]
+[New LWP 1830839]
+[New LWP 1830838]
+[New LWP 1830837]
+[New LWP 1830836]
+[New LWP 1830835]
+[New LWP 1830834]
+[New LWP 1830833]
+[New LWP 1830832]
+[New LWP 1830831]
+[New LWP 1830830]
+[New LWP 1830829]
+[New LWP 1830828]
+[New LWP 1830827]
+[New LWP 1830826]
+[New LWP 1830825]
+[New LWP 1830824]
+[New LWP 1830823]
+[New LWP 1830822]
+[New LWP 1830821]
+[New LWP 1830820]
+[New LWP 1830819]
+[New LWP 1830818]
+[New LWP 1830817]
+[New LWP 1830816]
+[New LWP 1830815]
+[New LWP 1830814]
+[New LWP 1830813]
+[New LWP 1830812]
+[New LWP 1830811]
+[New LWP 1830810]
+[New LWP 1830809]
+[New LWP 1830808]
+[New LWP 1830807]
+[New LWP 1830806]
+[New LWP 1830805]
+[New LWP 1830804]
+[New LWP 1830803]
+[New LWP 1830802]
+[New LWP 1830801]
+[New LWP 1830800]
+[New LWP 1830799]
+[New LWP 1830798]
+[New LWP 1830797]
+[New LWP 1830796]
+[New LWP 1830795]
+[New LWP 1830794]
+[New LWP 1830793]
+[New LWP 1830792]
+[New LWP 1830791]
+[New LWP 1830790]
+[New LWP 1830789]
+[New LWP 1830788]
+[New LWP 1830787]
+[New LWP 1830786]
+[New LWP 1830785]
+[New LWP 1830784]
+[New LWP 1830783]
+[New LWP 1830782]
+[New LWP 1830781]
+[New LWP 1830780]
+[New LWP 1830779]
+[New LWP 1830778]
+[New LWP 1830777]
+[New LWP 1830776]
+[New LWP 1830775]
+[New LWP 1830774]
+[New LWP 1830773]
+[New LWP 1830772]
+[New LWP 1830771]
+[New LWP 1830770]
+[New LWP 1830769]
+[New LWP 1830768]
+[New LWP 1830767]
+[New LWP 1830766]
+[New LWP 1830765]
+[New LWP 1830764]
+[New LWP 1830763]
+[New LWP 1830762]
+[New LWP 1830761]
+[New LWP 1830760]
+[New LWP 1830759]
+[New LWP 1830758]
+[New LWP 1830757]
+[New LWP 1830756]
+[New LWP 1830755]
+[New LWP 1830754]
+[New LWP 1830753]
+[New LWP 1830752]
+[New LWP 1830751]
+[New LWP 1830750]
+[New LWP 1830749]
+[New LWP 1830748]
+[New LWP 1830747]
+[New LWP 1830746]
+[New LWP 1830745]
+[New LWP 1830744]
+[New LWP 1830743]
+[New LWP 1830742]
+[New LWP 1830741]
+[New LWP 1830740]
+[New LWP 1830739]
+[New LWP 1830738]
+[New LWP 1830737]
+[New LWP 1830736]
+[New LWP 1830735]
+[New LWP 1830734]
+[New LWP 1830733]
+[New LWP 1830732]
+[New LWP 1830731]
+[New LWP 1830730]
+[New LWP 1830729]
+[New LWP 1830728]
+[New LWP 1830727]
+[New LWP 1830726]
+[New LWP 1830725]
+[New LWP 1830724]
+[New LWP 1830723]
+[New LWP 1830722]
+[New LWP 1830721]
+[New LWP 1830720]
+[New LWP 1830719]
+[New LWP 1830718]
+[New LWP 1830717]
+[New LWP 1830716]
+[New LWP 1830715]
+[New LWP 1830714]
+[New LWP 1830713]
+[New LWP 1830712]
+[New LWP 1830711]
+[New LWP 1830710]
+[New LWP 1830709]
+[New LWP 1830708]
+[New LWP 1830707]
+[New LWP 1830706]
+[New LWP 1830705]
+[New LWP 1830704]
+[New LWP 1830703]
+[New LWP 1830702]
+[New LWP 1830701]
+[New LWP 1830700]
+[New LWP 1830699]
+[New LWP 1830698]
+[New LWP 1830697]
+[New LWP 1830696]
+[New LWP 1830695]
+[New LWP 1830694]
+[New LWP 1830693]
+[New LWP 1830692]
+[New LWP 1830691]
+[New LWP 1830690]
+[New LWP 1830689]
+[New LWP 1830688]
+[New LWP 1830687]
+[New LWP 1830686]
+[New LWP 1830685]
+[New LWP 1830684]
+[New LWP 1830683]
+[New LWP 1830682]
+[New LWP 1830681]
+[New LWP 1830680]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x0000713c773dc772 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#0  0x0000713c773dc772 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x0000713c773d013c in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#2  0x0000713c7744ca0f in wait4 () from /lib/x86_64-linux-gnu/libc.so.6
+#3  0x0000713c76bfe573 in ggml_print_backtrace () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libggml-base.so.0
+#4  0x0000713c76bfe726 in ggml_abort () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libggml-base.so.0
+#5  0x0000713c779cf399 in server_context_impl::pre_decode()::{lambda(server_slot&)#5}::operator()(server_slot&) const () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#6  0x0000713c779c5311 in server_context_impl::iterate(std::vector<server_slot, std::allocator<server_slot> >&, std::function<void (server_slot&)>) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#7  0x0000713c779c7a2d in server_context_impl::pre_decode() () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#8  0x0000713c779c8153 in server_context_impl::update_slots() () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#9  0x0000713c77953f71 in server_queue::start_loop(long) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#10 0x0000713c778f2b82 in llama_server(common_params&, int, char**) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#11 0x0000713c778f47a6 in llama_server(int, char**) () from /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+#12 0x0000713c7735a575 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#13 0x0000713c7735a628 in __libc_start_main () from /lib/x86_64-linux-gnu/libc.so.6
+#14 0x00005bbb74a05325 in _start ()
+[Inferior 1 (process 1830678) detached]
+--------------------------- Captured stdout teardown ---------------------------
+Stopping server with pid=1830678
+=============================== warnings summary ===============================
+unit/test_slot_fork.py::test_kpf172_fork_same_iteration_as_source_erase
+  /workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-1 (src_side)
+  
+  Traceback (most recent call last):
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+      response = self._make_request(
+                 ^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+      response = conn.getresponse()
+                 ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py", line 571, in getresponse
+      httplib_response = super().getresponse()
+                         ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 1443, in getresponse
+      response.begin()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 337, in begin
+      version, status, reason = self._read_status()
+                                ^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 306, in _read_status
+      raise RemoteDisconnected("Remote end closed connection without"
+  http.client.RemoteDisconnected: Remote end closed connection without response
+  
+  During handling of the above exception, another exception occurred:
+  
+  Traceback (most recent call last):
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py", line 645, in send
+      resp = conn.urlopen(
+             ^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+      retries = retries.increment(
+                ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/retry.py", line 490, in increment
+      raise reraise(type(error), error, _stacktrace)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/util.py", line 38, in reraise
+      raise value.with_traceback(tb)
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+      response = self._make_request(
+                 ^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+      response = conn.getresponse()
+                 ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py", line 571, in getresponse
+      httplib_response = super().getresponse()
+                         ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 1443, in getresponse
+      response.begin()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 337, in begin
+      version, status, reason = self._read_status()
+                                ^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 306, in _read_status
+      raise RemoteDisconnected("Remote end closed connection without"
+  urllib3.exceptions.ProtocolError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+  
+  During handling of the above exception, another exception occurred:
+  
+  Traceback (most recent call last):
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+      self.run()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/threading.py", line 982, in run
+      self._target(*self._args, **self._kwargs)
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/unit/test_slot_fork.py", line 796, in src_side
+      out["a"] = complete(TRUNK[: 30 + r] + SUF[r % 8], 0, n_predict=4, slot_fork=False, checkpoint_at=[20, -1])
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/unit/test_slot_fork.py", line 115, in complete
+      res = server.make_request("POST", "/completion", data=data, timeout=600)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/utils.py", line 383, in make_request
+      response = requests.post(url, headers=headers, json=data, timeout=timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py", line 115, in post
+      return request("post", url, data=data, json=json, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py", line 59, in request
+      return session.request(method=method, url=url, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py", line 592, in request
+      resp = self.send(prep, **send_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py", line 706, in send
+      r = adapter.send(request, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py", line 660, in send
+      raise ConnectionError(err, request=request)
+  requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+unit/test_slot_fork.py::test_kpf172_fork_same_iteration_as_source_erase
+  /workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-2 (dst_side)
+  
+  Traceback (most recent call last):
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+      response = self._make_request(
+                 ^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+      response = conn.getresponse()
+                 ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py", line 571, in getresponse
+      httplib_response = super().getresponse()
+                         ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 1443, in getresponse
+      response.begin()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 337, in begin
+      version, status, reason = self._read_status()
+                                ^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 306, in _read_status
+      raise RemoteDisconnected("Remote end closed connection without"
+  http.client.RemoteDisconnected: Remote end closed connection without response
+  
+  During handling of the above exception, another exception occurred:
+  
+  Traceback (most recent call last):
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py", line 645, in send
+      resp = conn.urlopen(
+             ^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+      retries = retries.increment(
+                ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/retry.py", line 490, in increment
+      raise reraise(type(error), error, _stacktrace)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/util/util.py", line 38, in reraise
+      raise value.with_traceback(tb)
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+      response = self._make_request(
+                 ^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+      response = conn.getresponse()
+                 ^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/urllib3/connection.py", line 571, in getresponse
+      httplib_response = super().getresponse()
+                         ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 1443, in getresponse
+      response.begin()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 337, in begin
+      version, status, reason = self._read_status()
+                                ^^^^^^^^^^^^^^^^^^^
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/http/client.py", line 306, in _read_status
+      raise RemoteDisconnected("Remote end closed connection without"
+  urllib3.exceptions.ProtocolError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+  
+  During handling of the above exception, another exception occurred:
+  
+  Traceback (most recent call last):
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+      self.run()
+    File "/home/node/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/threading.py", line 982, in run
+      self._target(*self._args, **self._kwargs)
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/unit/test_slot_fork.py", line 800, in dst_side
+      out["b"] = complete(TRUNK + SUF[(r + 1) % 8], 1)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/unit/test_slot_fork.py", line 115, in complete
+      res = server.make_request("POST", "/completion", data=data, timeout=600)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests/utils.py", line 383, in make_request
+      response = requests.post(url, headers=headers, json=data, timeout=timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py", line 115, in post
+      return request("post", url, data=data, json=json, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/api.py", line 59, in request
+      return session.request(method=method, url=url, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py", line 592, in request
+      resp = self.send(prep, **send_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/sessions.py", line 706, in send
+      r = adapter.send(request, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/repos/epyc-orchestrator/.venv/lib/python3.11/site-packages/requests/adapters.py", line 660, in send
+      raise ConnectionError(err, request=request)
+  requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED unit/test_slot_fork.py::test_kpf172_fork_same_iteration_as_source_erase
+================= 1 failed, 23 deselected, 2 warnings in 1.41s =================

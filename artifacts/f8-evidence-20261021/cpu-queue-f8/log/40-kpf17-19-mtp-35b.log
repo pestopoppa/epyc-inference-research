@@ -1,0 +1,10 @@
+[region-lock] acquiring regions ['q1'] as role='build' (timeout_s=120.0) …
+[region-lock] held ['q1'] after 0.0s wait; running: env F8Q_CPUS=24-47,120-143 taskset -c 24-47,120-143 bash /mnt/raid0/llm/tmp/cpu-queue-f8/running/40-kpf17-19-mtp-35b.sh
+[2026-10-21T06:31:40Z] provenance: branch a7af56dff883fe1aa509169de70ee086b0872740 llama-server sha256 defc5a094fcdd8c5d7acd912a7f7912d36a5e78d62af309015e57efc2b0eec40
+[2026-10-21T06:31:53Z] STEP m-171-ntokens-mtp OK passed=1 skipped=0
+[2026-10-21T06:32:07Z] STEP m-172-decoding-source-mtp FAIL passed=0 failed=1 skipped=0 rc=1
+[2026-10-21T06:32:15Z] STEP m-191-partial-flag-off OK passed=1 skipped=0
+[2026-10-21T06:32:23Z] STEP m-191-full-flag-on OK passed=1 skipped=0
+[2026-10-21T06:32:31Z] STEP m-191-mut-partial-noop-off FAIL MUTATION_NOT_DETECTED mut=dft_partial_noop passed=1
+[2026-10-21T06:32:39Z] STEP m-191-mut-partial-noop-on OK passed=1 skipped=0
+RESULT 40-kpf17-19-mtp-35b pass=4 fail=2

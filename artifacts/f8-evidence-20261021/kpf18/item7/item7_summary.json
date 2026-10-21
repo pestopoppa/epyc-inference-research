@@ -1,0 +1,25 @@
+{
+ "windows": [
+  {
+   "window_id": "kpf18-20261021T063241Z-item7-A1",
+   "arm": "fork_off",
+   "run_id": "kpf18-20261021T063245Z-1"
+  },
+  {
+   "window_id": "kpf18-20261021T063241Z-item7-B1",
+   "arm": "fork_on",
+   "run_id": "kpf18-20261021T064422Z-2"
+  },
+  {
+   "window_id": "kpf18-20261021T063241Z-item7-A2",
+   "arm": "fork_off",
+   "run_id": "kpf18-20261021T064819Z-3"
+  },
+  {
+   "window_id": "kpf18-20261021T063241Z-item7-B2",
+   "arm": "fork_on",
+   "run_id": "kpf18-20261021T070004Z-4"
+  }
+ ],
+ "note": "pairs windows A1/B1/A2/B2; no verdict word"
+}

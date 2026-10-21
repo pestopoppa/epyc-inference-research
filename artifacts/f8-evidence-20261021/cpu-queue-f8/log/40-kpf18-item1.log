@@ -1,0 +1,61 @@
+ran on q1 (24-47,120-143) under 'build[None] cs45-gates-g3' claim by agreement (pairing, nice 10)
+====================================================================================================
+KPF-18 gate plan (EXECUTE)  host Beelzebub  2026-10-20T22:07:58Z
+  out /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item1 | port 18971 | fork-min 1024 | n_predict 128 | n_probs 20 | window-id kpf18-20261020T220758Z | gpu-window-id None
+  launch prefix: taskset -c 24-47,120-143
+  gate argv (/mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/argv.frontdoor-cpu-gate.txt): -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --no-cache-idle-slots
+  - --fork-bin /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server (bin dir /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin; LD_LIBRARY_PATH /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin:/opt/rocm/lib:/usr/lib/llvm-20/lib:/opt/AMD/aocc-compiler-5.0.0/lib)
+  - CPU mode: no KFD/VRAM sampler, no :8083 refusal, no HIP residency, no mi210 claim, no GPU window
+  - shape drift ALLOWED and recorded: ["-c = '98304', gate shape expects '393216'", "-ngl = None, gate shape expects 'all'", "--spec-type = 'draft-mtp', gate shape expects 'draft-dflash'", "--spec-draft-n-max = '4', gate shape expects '7'", "--device = 'none', gate shape expects 'ROCm0'", "-b = None, gate shape expects '512'", "-ub = '2048', gate shape expects '512'", "--cache-ram = '32768', gate shape expects '65536'", "-md '' is not the DFlash2 drafter"]
+  - prompt set /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/run-20261020T163128Z/prompt_set.jsonl sha256 fe8c8c9202f71e678435717a931d3a97236968fe7b883a8748a88d1215b26662: 16 pairs
+  rate model: prefill ms/tok = (1.15 + 0.0235 x occupied_k) x 1.1; decode DFlash2 37.0-0.09/k tok/s, no-draft 30.8-0.15/k; 4-stream agg x1.3; load 90s, stop 45s
+----------------------------------------------------------------------------------------------------
+ITEM 1: 13 steps, est 14m10s
+      1m35s  [item1-fork_on-20261020T220758Z] linkage + launch + healthy + read-back: taskset -c 24-47,120-143 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --no-cache-idle-slots --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item1/slot-save/item1-fork_on-20261020T220758Z --port 18971 --metrics --slot-fork-min-tokens 1024
+      0m00s  open item-1 records (DFlash2 on, DFlash2 off)
+      0m12s  item1 g1 erase all + trunk-first T=8192 (slot 0, n_predict 0, checkpoint_at [-1])
+      1m00s  item1 g1.0 T=8192 S=256: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3
+      1m01s  item1 g1.1 T=8192 S=512: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3
+      1m03s  item1 g1.2 T=8192 S=768: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3
+      1m04s  item1 g1.3 T=8192 S=1024: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3
+      0m25s  item1 g3 erase all + trunk-first T=16384 (slot 0, n_predict 0, checkpoint_at [-1])
+      1m43s  item1 g3.0 T=16384 S=256: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3
+      1m45s  item1 g3.1 T=16384 S=512: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3
+      1m47s  item1 g3.2 T=16384 S=768: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3
+      1m49s  item1 g3.3 T=16384 S=1024: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3
+      0m45s  [item1-fork_on-20261020T220758Z] SIGTERM own pid, verify dead, then finalize its records
+====================================================================================================
+TOTAL estimate: 14m10s (14 min) for items [1]; budget --budget-min 600
+PREFLIGHT: inputs PASS (live-only checks run at execute: linkage, read-back, residency, claim)
+[kpf18 22:07:58Z] item 1: [item1-fork_on-20261020T220758Z] linkage + launch + healthy + read-back: taskset -c 24-47,120-143 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --no-cache-idle-slots --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item1/slot-save/item1-fork_on-20261020T220758Z --port 18971 --metrics --slot-fork-min-tokens 1024 (est 1m35s)
+[kpf18] launch item1-fork_on-20261020T220758Z: taskset -c 24-47,120-143 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --no-cache-idle-slots --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item1/slot-save/item1-fork_on-20261020T220758Z --port 18971 --metrics --slot-fork-min-tokens 1024
+[kpf18]   done in 0m10s
+[kpf18 22:08:08Z] item 1: open item-1 records (DFlash2 on, DFlash2 off) (est 0m00s)
+[kpf18]   done in 0m00s
+[kpf18 22:08:08Z] item 1: item1 g1 erase all + trunk-first T=8192 (slot 0, n_predict 0, checkpoint_at [-1]) (est 0m12s)
+[kpf18]   done in 8m35s
+[kpf18 22:16:42Z] item 1: item1 g1.0 T=8192 S=256: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3 (est 1m00s)
+[kpf18]   done in 24m31s
+[kpf18 22:41:13Z] item 1: item1 g1.1 T=8192 S=512: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3 (est 1m01s)
+[kpf18]   done in 9m32s
+[kpf18 22:50:46Z] item 1: item1 g1.2 T=8192 S=768: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3 (est 1m03s)
+[kpf18]   done in 8m20s
+[kpf18 22:59:06Z] item 1: item1 g1.3 T=8192 S=1024: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3 (est 1m04s)
+[kpf18]   done in 9m13s
+[kpf18 23:08:19Z] item 1: item1 g3 erase all + trunk-first T=16384 (slot 0, n_predict 0, checkpoint_at [-1]) (est 0m25s)
+[kpf18]   done in 2m52s
+[kpf18 23:11:10Z] item 1: item1 g3.0 T=16384 S=256: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3 (est 1m43s)
+[kpf18]   done in 7m13s
+[kpf18 23:18:23Z] item 1: item1 g3.1 T=16384 S=512: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3 (est 1m45s)
+[kpf18]   done in 6m39s
+[kpf18 23:25:03Z] item 1: item1 g3.2 T=16384 S=768: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3 (est 1m47s)
+[kpf18]   done in 6m59s
+[kpf18 23:32:02Z] item 1: item1 g3.3 T=16384 S=1024: fresh A (slot 2) + fresh B (slot 3) full prefill, fork child (slot 1), 128 tok each; DFlash2-off re-runs x3 (est 1m49s)
+[kpf18]   done in 7m01s
+[kpf18 23:39:03Z] item 1: [item1-fork_on-20261020T220758Z] SIGTERM own pid, verify dead, then finalize its records (est 0m45s)
+[kpf18] stopped item1-fork_on-20261020T220758Z pid 811148: {'pid': 811148, 'sent': ['TERM'], 'at': '2026-10-20T23:39:03Z', 'returncode': 0, 'verified_dead': True}
+[kpf18] record kpf18-20261020T220808Z-1 item 1 arm fork_on: {"control_floor": [8, 8], "vs_fresh": [8, 8], "bit_exact_ckpt": [0, 0], "source_invariance": [0, 0], "off_equals_champion": [0, 0], "vs_fresh_B": [8, 8]}
+[kpf18] record kpf18-20261020T220808Z-2 item 1 arm fork_on: {"control_floor": [8, 8], "vs_fresh": [8, 8], "bit_exact_ckpt": [0, 0], "source_invariance": [0, 0], "off_equals_champion": [0, 0], "vs_fresh_B": [8, 8]}
+[kpf18]   done in 0m04s
+[kpf18] exit rc=0 (0 ok, 2 refused, 3 abort, 4 error, 5 preempted/drained, 75 claim held)
+RESULT 40-kpf18-item1 rc=0

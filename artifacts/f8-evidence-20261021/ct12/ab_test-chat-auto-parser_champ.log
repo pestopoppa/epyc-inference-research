@@ -1,0 +1,223 @@
+diff_split
+  calculate_diff_split basic
+  calculate_diff_split basic (12 assertion(s))                                  [PASS]
+  calculate_diff_split identical
+  calculate_diff_split identical (16 assertion(s))                              [PASS]
+  calculate_diff_split common prefix
+  calculate_diff_split common prefix (12 assertion(s))                          [PASS]
+  calculate_diff_split common suffix
+  calculate_diff_split common suffix (12 assertion(s))                          [PASS]
+  calculate_diff_split common both
+  calculate_diff_split common both (16 assertion(s))                            [PASS]
+  calculate_diff_split empty cases
+  calculate_diff_split empty cases (20 assertion(s))                            [PASS]
+  calculate_diff_split no common
+  calculate_diff_split no common (12 assertion(s))                              [PASS]
+  calculate_diff_split single char
+  calculate_diff_split single char (16 assertion(s))                            [PASS]
+  calculate_diff_split overlaps
+  calculate_diff_split overlaps (20 assertion(s))                               [PASS]
+  calculate_diff_split tag boundaries
+  calculate_diff_split tag boundaries (31 assertion(s))                         [PASS]
+  calculate_diff_split generation prompt
+  calculate_diff_split generation prompt (6 assertion(s))                       [PASS]
+diff_split (173 assertion(s))                                                   [PASS]
+common_prefix
+  until_common_prefix basic
+  until_common_prefix basic (6 assertion(s))                                    [PASS]
+common_prefix (6 assertion(s))                                                  [PASS]
+common_suffix
+  after_common_suffix basic
+  after_common_suffix basic (7 assertion(s))                                    [PASS]
+common_suffix (7 assertion(s))                                                  [PASS]
+compare_variants
+  compare_variants basic
+  compare_variants basic (2 assertion(s))                                       [PASS]
+  compare_variants messages modifier
+  compare_variants messages modifier (3 assertion(s))                           [PASS]
+  compare_variants tools modifier
+  compare_variants tools modifier (3 assertion(s))                              [PASS]
+  compare_variants both modifiers
+  compare_variants both modifiers (3 assertion(s))                              [PASS]
+  compare_variants template failure
+  compare_variants template failure (1 assertion(s))                            [PASS]
+  compare_variants identity
+  compare_variants identity (5 assertion(s))                                    [PASS]
+compare_variants (17 assertion(s))                                              [PASS]
+segments
+  single_square_marker
+  single_square_marker (6 assertion(s))                                         [PASS]
+  single_diagonal_marker
+  single_diagonal_marker (6 assertion(s))                                       [PASS]
+  paired_markers
+  paired_markers (6 assertion(s))                                               [PASS]
+  double_different_markers
+  double_different_markers (8 assertion(s))                                     [PASS]
+  in_between
+  in_between (12 assertion(s))                                                  [PASS]
+segments (38 assertion(s))                                                      [PASS]
+seed_oss_diffs
+  Seed-OSS tool presence
+  Seed-OSS tool presence (14 assertion(s))                                      [PASS]
+  Seed-OSS call count
+  Seed-OSS call count (14 assertion(s))                                         [PASS]
+  Seed-OSS function names
+  Seed-OSS function names (5 assertion(s))                                      [PASS]
+  Seed-OSS argument count
+  Seed-OSS argument count (8 assertion(s))                                      [PASS]
+  Seed-OSS args presence
+  Seed-OSS args presence (10 assertion(s))                                      [PASS]
+  Seed-OSS tool with reasoning
+  Seed-OSS tool with reasoning (10 assertion(s))                                [PASS]
+seed_oss_diffs (61 assertion(s))                                                [PASS]
+cohere
+  Cohere reasoning detection
+  Cohere reasoning detection (7 assertion(s))                                   [PASS]
+cohere (7 assertion(s))                                                         [PASS]
+nemotron
+  Nemotron reasoning detection
+  Nemotron reasoning detection (7 assertion(s))                                 [PASS]
+  Nemotron tool format
+  Nemotron tool format (14 assertion(s))                                        [PASS]
+nemotron (21 assertion(s))                                                      [PASS]
+laguna
+  Laguna reasoning detection
+  Laguna reasoning detection (4 assertion(s))                                   [PASS]
+  Laguna tool format
+  Laguna tool format (2 assertion(s))                                           [PASS]
+  Laguna stop string
+  Laguna stop string (2 assertion(s))                                           [PASS]
+laguna (8 assertion(s))                                                         [PASS]
+laguna-s
+  Laguna-S(v8) reasoning detection
+  Laguna-S(v8) reasoning detection (4 assertion(s))                             [PASS]
+  Laguna-S(v8) tool format
+  Laguna-S(v8) tool format (2 assertion(s))                                     [PASS]
+laguna-s (6 assertion(s))                                                       [PASS]
+laguna-xs2
+  Laguna-XS.2(v5) reasoning detection
+  Laguna-XS.2(v5) reasoning detection (4 assertion(s))                          [PASS]
+  Laguna-XS.2(v5) tool format
+  Laguna-XS.2(v5) tool format (2 assertion(s))                                  [PASS]
+laguna-xs2 (6 assertion(s))                                                     [PASS]
+smollm3
+  SmolLM3 reasoning detection
+  SmolLM3 reasoning detection (9 assertion(s))                                  [PASS]
+smollm3 (9 assertion(s))                                                        [PASS]
+standard_json_tools
+  OpenAI format
+  OpenAI format (5 assertion(s))                                                [PASS]
+  Cohere format
+  Cohere format (5 assertion(s))                                                [PASS]
+  function-as-key format
+  function-as-key format (5 assertion(s))                                       [PASS]
+standard_json_tools (15 assertion(s))                                           [PASS]
+normalize_quotes_to_json
+  basic single to double quotes
+  basic single to double quotes (1 assertion(s))                                [PASS]
+  escaped single quote inside single-quoted string
+  escaped single quote inside single-quoted string (1 assertion(s))             [PASS]
+  double quote inside single-quoted string
+  double quote inside single-quoted string (1 assertion(s))                     [PASS]
+  nested backslash escapes
+  nested backslash escapes (1 assertion(s))                                     [PASS]
+  newline escapes
+  newline escapes (1 assertion(s))                                              [PASS]
+  mixed quotes
+  mixed quotes (1 assertion(s))                                                 [PASS]
+  embedded quotes - the test case
+  embedded quotes - the test case (5 assertion(s))                              [PASS]
+normalize_quotes_to_json (11 assertion(s))                                      [PASS]
+tagged_args_embedded_quotes
+tagged_args_embedded_quotes (8 assertion(s))                                    [PASS]
+role_markers_all_templates
+  Bielik-11B-v3.0-Instruct.jinja
+  Bielik-11B-v3.0-Instruct.jinja (3 assertion(s))                               [PASS]
+  HuggingFaceTB-SmolLM3-3B.jinja
+  HuggingFaceTB-SmolLM3-3B.jinja (3 assertion(s))                               [PASS]
+  MiMo-VL.jinja
+  MiMo-VL.jinja (3 assertion(s))                                                [PASS]
+  NousResearch-Hermes-2-Pro-Llama-3-8B-tool_use.jinja
+  NousResearch-Hermes-2-Pro-Llama-3-8B-tool_use.jinja (3 assertion(s))          [PASS]
+  NousResearch-Hermes-3-Llama-3.1-8B-tool_use.jinja
+  NousResearch-Hermes-3-Llama-3.1-8B-tool_use.jinja (3 assertion(s))            [PASS]
+  NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja
+  NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja (3 assertion(s))                    [PASS]
+  Qwen3.5-4B.jinja
+  Qwen3.5-4B.jinja (3 assertion(s))                                             [PASS]
+  Qwen3-Coder.jinja
+  Qwen3-Coder.jinja (3 assertion(s))                                            [PASS]
+  Qwen-Qwen2.5-7B-Instruct.jinja
+  Qwen-Qwen2.5-7B-Instruct.jinja (3 assertion(s))                               [PASS]
+  Qwen-Qwen3-0.6B.jinja
+  Qwen-Qwen3-0.6B.jinja (3 assertion(s))                                        [PASS]
+  Qwen-QwQ-32B.jinja
+  Qwen-QwQ-32B.jinja (3 assertion(s))                                           [PASS]
+  StepFun3.5-Flash.jinja
+  StepFun3.5-Flash.jinja (3 assertion(s))                                       [PASS]
+  deepseek-ai-DeepSeek-R1-Distill-Llama-8B.jinja
+  deepseek-ai-DeepSeek-R1-Distill-Llama-8B.jinja (3 assertion(s))               [PASS]
+  deepseek-ai-DeepSeek-R1-Distill-Qwen-32B.jinja
+  deepseek-ai-DeepSeek-R1-Distill-Qwen-32B.jinja (3 assertion(s))               [PASS]
+  deepseek-ai-DeepSeek-V3.1.jinja
+  deepseek-ai-DeepSeek-V3.1.jinja (3 assertion(s))                              [PASS]
+  llama-cpp-deepseek-r1.jinja
+  llama-cpp-deepseek-r1.jinja (3 assertion(s))                                  [PASS]
+  meetkai-functionary-medium-v3.1.jinja
+  meetkai-functionary-medium-v3.1.jinja (3 assertion(s))                        [PASS]
+  meta-llama-Llama-3.1-8B-Instruct.jinja
+  meta-llama-Llama-3.1-8B-Instruct.jinja (3 assertion(s))                       [PASS]
+  meta-llama-Llama-3.2-3B-Instruct.jinja
+  meta-llama-Llama-3.2-3B-Instruct.jinja (3 assertion(s))                       [PASS]
+  meta-llama-Llama-3.3-70B-Instruct.jinja
+  meta-llama-Llama-3.3-70B-Instruct.jinja (3 assertion(s))                      [PASS]
+  fireworks-ai-llama-3-firefunction-v2.jinja
+  fireworks-ai-llama-3-firefunction-v2.jinja (3 assertion(s))                   [PASS]
+  microsoft-Phi-3.5-mini-instruct.jinja
+  microsoft-Phi-3.5-mini-instruct.jinja (3 assertion(s))                        [PASS]
+  GLM-4.6.jinja
+  GLM-4.6.jinja (3 assertion(s))                                                [PASS]
+  unsloth-Apriel-1.5.jinja
+  unsloth-Apriel-1.5.jinja (3 assertion(s))                                     [PASS]
+  GLM-4.7-Flash.jinja
+  GLM-4.7-Flash.jinja (3 assertion(s))                                          [PASS]
+  google-gemma-2-2b-it.jinja
+  google-gemma-2-2b-it.jinja (3 assertion(s))                                   [PASS]
+  ibm-granite-granite-3.3-2B-Instruct.jinja
+  ibm-granite-granite-3.3-2B-Instruct.jinja (3 assertion(s))                    [PASS]
+  ibm-granite-granite-4.0.jinja
+  ibm-granite-granite-4.0.jinja (3 assertion(s))                                [PASS]
+  CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja
+  CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja (3 assertion(s))          [PASS]
+  CohereForAI-c4ai-command-r-plus-tool_use.jinja
+  CohereForAI-c4ai-command-r-plus-tool_use.jinja (3 assertion(s))               [PASS]
+  mistralai-Mistral-Nemo-Instruct-2407.jinja
+  mistralai-Mistral-Nemo-Instruct-2407.jinja (3 assertion(s))                   [PASS]
+  Mistral-Small-3.2-24B-Instruct-2506.jinja
+  Mistral-Small-3.2-24B-Instruct-2506.jinja (3 assertion(s))                    [PASS]
+  Apertus-8B-Instruct.jinja
+  Apertus-8B-Instruct.jinja (3 assertion(s))                                    [PASS]
+  Apriel-1.6-15b-Thinker-fixed.jinja
+  Apriel-1.6-15b-Thinker-fixed.jinja (3 assertion(s))                           [PASS]
+  ByteDance-Seed-OSS.jinja
+  ByteDance-Seed-OSS.jinja (3 assertion(s))                                     [PASS]
+  GigaChat3.1-10B-A1.8B.jinja
+  GigaChat3.1-10B-A1.8B.jinja (3 assertion(s))                                  [PASS]
+  MiniMax-M2.jinja
+  MiniMax-M2.jinja (3 assertion(s))                                             [PASS]
+  tencent-Hy3.jinja
+  tencent-Hy3.jinja (3 assertion(s))                                            [PASS]
+  NVIDIA-Nemotron-Nano-v2.jinja
+  NVIDIA-Nemotron-Nano-v2.jinja (3 assertion(s))                                [PASS]
+  Reka-Edge.jinja
+  Reka-Edge.jinja (3 assertion(s))                                              [PASS]
+  llama-cpp-rwkv-world.jinja
+  llama-cpp-rwkv-world.jinja (3 assertion(s))                                   [PASS]
+  upstage-Solar-Open-100B.jinja
+  upstage-Solar-Open-100B.jinja (3 assertion(s))                                [PASS]
+role_markers_all_templates (126 assertion(s))                                   [PASS]
+
+tests      : 109
+assertions : 519
+failures   : 0
+exceptions : 0

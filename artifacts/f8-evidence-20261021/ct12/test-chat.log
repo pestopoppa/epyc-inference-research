@@ -1,0 +1,2460 @@
+srv  server_chat_: unsupported Responses tool type 'web_search' skipped
+srv  server_chat_: unsupported Responses tool type 'image_generation' skipped
+srv  server_chat_: unsupported Responses tool type 'mcp' skipped
+srv  server_chat_: unsupported Responses tool type 'namespace' skipped
+srv  server_chat_: unsupported Responses tool type 'web_search' skipped
+srv  server_chat_: unsupported Responses tool type 'image_generation' skipped
+srv  server_chat_: unsupported Responses tool type 'mcp' skipped
+srv  server_chat_: unsupported Responses tool type 'namespace' skipped
+Test 1 passed: developer role changed to system
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+I'm
+thinking
+</think>
+
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+I'm
+thinking
+</think>
+
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+I'm
+thinking
+</think>
+
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+<tool_call>
+<function=special_function_with_opt>
+<parameter=arg1>
+1
+</parameter>
+<parameter=arg2>
+2
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+<tool_call>
+<function=python>
+<parameter=code>
+def hello():
+    print("Hello, world!")
+
+hello()
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+<tool_call>
+<function=edit>
+<parameter=filename>
+foo.c
+</parameter>
+<parameter=oldString>
+#iclunde
+</parameter>
+<parameter=newString>
+#include
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+<tool_call>
+<function=edit>
+<parameter=filename>
+foo.c
+</parameter>
+<parameter=oldString>
+#iclunde
+</parameter>
+<parameter=newString>
+#include
+
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+<tool_call>
+<function=python>
+<parameter=code>
+    print("Hello, world!")
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+I need to output the invoice details in JSON
+</think>
+
+{"amount": 123.45, "date": "2025-12-03"}
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+Let's call a tool: <tool_call>
+<function=python>
+<parameter=code>
+def hello():
+    print("Not the real call!")
+
+hello()
+</parameter>
+</function>
+</tool_call>
+</think>
+
+<tool_call>
+<function=python>
+<parameter=code>
+def hello():
+    print("Hello, world!")
+
+hello()
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+<tool_call>
+<function=empty_args>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+<tool_call>
+<function=empty_args_no_props>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+<think>
+
+</think>
+
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+</think>
+
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+</think>
+
+<tool_call>
+<function=run_in_terminal>
+<parameter=command>
+pwd
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+</think>
+
+Let me inspect the current directory.
+<tool_call>
+<function=run_in_terminal>
+<parameter=command>
+pwd
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+</think>
+
+Let me inspect the current directory.
+<tool_call>
+<function=run_in_terminal>
+<parameter=command>
+pwd
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+I should inspect the directory.
+</think>
+
+Let me inspect it now.
+<tool_call>
+<function=run_in_terminal>
+<parameter=command>
+pwd
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+I might call <tool_call> later, but I am still thinking.
+</think>
+
+Final answer without tools.
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+ thinking
+</think>
+
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+I need to run a terminal command.
+</think>
+
+<tool_call>
+<function=run_in_terminal>
+<parameter=command>
+pwd
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+I need to run a terminal command.
+</think>
+
+Let me inspect the current directory.
+<tool_call>
+<function=run_in_terminal>
+<parameter=command>
+pwd
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3.5-4B.jinja][0m
+</think>
+
+<tool_call>
+<function=run_in_terminal>
+<parameter=command>
+pwd
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+[THINK]I'm
+thinking[/THINK]Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+[THINK]I'm
+thinking[/THINK]Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+[TOOL_CALLS]special_function[ARGS]{"arg1":1}
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+[THINK]I'm
+thinking[/THINK][TOOL_CALLS]special_function[ARGS]{"arg1":1}
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+[TOOL_CALLS]special_function[ARGS]{"arg1": 1}[TOOL_CALLS]special_function_with_opt[ARGS]{"arg1": 1, "arg2": 2}
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+[THINK]I need to output the invoice details in JSON[/THINK]```json
+{"amount": 123.45, "date": "2025-12-03"}
+```
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+[THINK]Let me think about [TOOL_CALLS]special_function[ARGS]{"arg1":1} and more[/THINK][TOOL_CALLS]special_function[ARGS]{"arg1": 1}
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/mistralai-Ministral-3-14B-Reasoning-2512.jinja][0m
+ thinking[/THINK]Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+I'm
+thinking
+</think>
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+I'm
+thinking
+</think>
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+I'm
+thinking
+</think>
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+<tool_call>
+<function=special_function_with_opt>
+<parameter=arg1>
+1
+</parameter>
+<parameter=arg2>
+2
+</parameter>
+</function>
+</tool_call>
+
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+<tool_call>
+<function=python>
+<parameter=code>
+def hello():
+    print("Hello, world!")
+
+hello()
+</parameter>
+</function>
+</tool_call>
+
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+I need to output the invoice details in JSON
+</think>
+{"amount": 123.45, "date": "2025-12-03"}
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+Let's call a tool: <tool_call>
+<function=python>
+<parameter=code>
+def hello():
+    print("Not the real call!")
+
+hello()
+</parameter>
+</function>
+</tool_call>
+</think>
+<tool_call>
+<function=python>
+<parameter=code>
+def hello():
+    print("Hello, world!")
+
+hello()
+</parameter>
+</function>
+</tool_call>
+
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.jinja][0m
+ thinking
+</think>
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja][0m
+<|START_RESPONSE|>Hello, world!
+What's up?<|END_RESPONSE|>
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja][0m
+<|START_THINKING|>I'm
+thinking<|END_THINKING|><|START_RESPONSE|>Hello, world!
+What's up?<|END_RESPONSE|>
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja][0m
+<|START_THINKING|>I'm
+thinking<|END_THINKING|><|START_RESPONSE|>Hello, world!
+What's up?<|END_RESPONSE|>
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja][0m
+<|START_THINKING|>I'm
+thinking<|END_THINKING|><|START_ACTION|>[
+    {"tool_call_id": "0", "tool_name": "special_function", "parameters": {"arg1": 1}}
+]<|END_ACTION|>
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja][0m
+<|START_THINKING|>I'm
+thinking<|END_THINKING|><|START_ACTION|>[
+    {"tool_call_id": "0", "tool_name": "special_function", 
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja][0m
+<|START_THINKING|><|END_THINKING|><|START_ACTION|>[
+    {"tool_call_id": "0", "tool_name": "special_function", "parameters": {"arg1": 1}}
+]<|END_ACTION|>
+
+
+[38;5;126m[models/templates/Cohere2MoE.jinja][0m
+I'm
+thinking<|END_THINKING|><|START_TEXT|>Hello, world!
+What's up?<|END_TEXT|>
+
+
+[38;5;126m[models/templates/Cohere2MoE.jinja][0m
+I'm
+thinking<|END_THINKING|><|START_TEXT|>Hello, world!
+What's up?<|END_TEXT|>
+
+
+[38;5;126m[models/templates/Cohere2MoE.jinja][0m
+<|END_THINKING|><|START_TEXT|>Hello, world!
+What's up?<|END_TEXT|>
+
+
+[38;5;126m[models/templates/Cohere2MoE.jinja][0m
+I'm
+thinking<|END_THINKING|><|START_ACTION|>[
+    {"tool_call_id": "0", "tool_name": "special_function", "parameters": {"arg1": 1}}
+]<|END_ACTION|>
+
+
+[38;5;126m[models/templates/Cohere2MoE.jinja][0m
+<|END_THINKING|><|START_ACTION|>[
+    {"tool_call_id": "0", "tool_name": "special_function", "parameters": {"arg1": 1}}
+]<|END_ACTION|>
+
+
+[38;5;126m[models/templates/Cohere2MoE.jinja][0m
+<|END_THINKING|><|START_ACTION|>[
+    {"tool_call_id": "0", "tool_name": "todo_list", "parameters": {"todos": ["buy milk", "walk dog"]}}
+]<|END_ACTION|>
+
+
+[38;5;126m[models/templates/Cohere2MoE.jinja][0m
+I'm
+thinking<|END_THINKING|><|START_ACTION|>[
+    {"tool_call_id": "0", "tool_name": "special_function", "parameters": {"arg1": 1}},
+    {"tool_call_id": "1", "tool_name": "python", "parameters": {"code": "print('hey')"}}
+]<|END_ACTION|>
+
+
+[38;5;126m[models/templates/Cohere2MoE.jinja][0m
+I'm
+thinking<|END_THINKING|><|START_TEXT|>Hello, world!
+What's up?<|END_TEXT|>
+
+
+[38;5;126m[models/templates/Cohere2MoE.jinja][0m
+I'm
+thinking<|END_THINKING|><|START_ACTION|>[
+    {"tool_call_id": "0", "tool_name": "special_function", 
+
+
+[38;5;126m[models/templates/google-gemma-2-2b-it.jinja][0m
+Hello, world!
+
+
+[38;5;126m[models/templates/google-gemma-2-2b-it.jinja][0m
+Line 1
+Line 2
+Line 3
+
+
+[38;5;126m[models/templates/google-gemma-2-2b-it.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+Hello, world!
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|channel>thought
+I'm
+thinking<channel|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|channel>thought<channel|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|channel>thought
+I'm
+thinking<channel|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:get_time{city:<|"|>London<|"|>}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:get_time{city:<|"|>San Francisco<|"|>}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:empty_args{}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+Hello, world!
+What's up?<|tool_call>call:get_time{city:<|"|>Paris<|"|>}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:get_time{city:<|"|>London<|"|>}<tool_call|><|tool_call>call:get_weather{city:<|"|>Paris<|"|>}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:special_function{arg1:42}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:special_function{arg1:-7}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:amount{orig:3.14}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:toggle{enabled:true}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:toggle{enabled:false}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:set_nullable{value:null}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:todo_list{todos:[<|"|>buy milk<|"|>,<|"|>walk dog<|"|>]}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:set_config{config:{theme:<|"|>dark<|"|>,count:3}}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:todo_list{todos:[]}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:set_config{config:{}}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|tool_call>call:amount{orig:1.5e10}<tool_call|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|channel>thought
+<channel|>Hello, world!
+What's up?<channel|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|channel>thought
+<channel|>Hello, world!
+What's up?<|channel>thought
+<channel|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|channel>thought
+<channel|>Hello, world!
+What's up?<|channel>thought
+<channel|><channel|>
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+<|channel><|channel>thought
+<channel|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/google-gemma-4-31B-it.jinja][0m
+ thinking<channel|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen-QwQ-32B.jinja][0m
+Let me think about this...
+</think>
+The answer is 42.
+
+
+[38;5;126m[models/templates/Qwen-QwQ-32B.jinja][0m
+</think>Hello, world!
+
+
+[38;5;126m[models/templates/Qwen-QwQ-32B.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen-QwQ-32B.jinja][0m
+ thinking
+</think>
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/NousResearch-Hermes-2-Pro-Llama-3-8B-tool_use.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}</tool_call>
+
+
+[38;5;126m[models/templates/NousResearch-Hermes-2-Pro-Llama-3-8B-tool_use.jinja][0m
+Hello, world!
+What's up?<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}</tool_call>
+
+
+[38;5;126m[models/templates/NousResearch-Hermes-2-Pro-Llama-3-8B-tool_use.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/google-gemma-2-2b-it.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/ibm-granite-granite-3.3-2B-Instruct.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/ibm-granite-granite-3.3-2B-Instruct.jinja][0m
+<think>I'm
+thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/ibm-granite-granite-3.3-2B-Instruct.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/ibm-granite-granite-3.3-2B-Instruct.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/ibm-granite-granite-4.0.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/ibm-granite-granite-4.0.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}
+</tool_call>
+
+
+[38;5;126m[models/templates/ibm-granite-granite-4.0.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/ibm-granite-granite-4.1.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/ibm-granite-granite-4.1.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}
+</tool_call>
+
+
+[38;5;126m[models/templates/ByteDance-Seed-OSS.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/ByteDance-Seed-OSS.jinja][0m
+<seed:think>I'm thinking about the answer</seed:think>
+Hello, world!
+
+
+[38;5;126m[models/templates/ByteDance-Seed-OSS.jinja][0m
+<seed:tool_call>
+<function=special_function>
+<parameter=arg1>1</parameter>
+</function>
+</seed:tool_call>
+
+
+[38;5;126m[models/templates/ByteDance-Seed-OSS.jinja][0m
+<seed:tool_call>
+<function=special_function>
+<parameter=arg1>1</parameter>
+</function>
+</seed:tool_call>
+<seed:tool_call>
+<function=special_function_with_opt>
+<parameter=arg1>1</parameter>
+<parameter=arg2>2</parameter>
+</function>
+</seed:tool_call>
+
+
+[38;5;126m[models/templates/ByteDance-Seed-OSS.jinja][0m
+<seed:tool_call>
+<function=todo_list>
+<parameter=todos>[{"item": "Check stuff", "selected": false}, {"item": "Prepare stuff", "selected": true}]</parameter>
+</function>
+</seed:tool_call>
+
+
+[38;5;126m[models/templates/ByteDance-Seed-OSS.jinja][0m
+<seed:tool_call>
+<function=edit>
+<parameter=filename>foo.cpp</parameter>
+<parameter=oldString>def foo(arg = "14"):
+    return arg + "bar"
+</parameter>
+<parameter=newString>def foo(arg = "15"):
+    pass
+</parameter>
+</function>
+</seed:tool_call>
+
+
+[38;5;126m[models/templates/ByteDance-Seed-OSS.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/ByteDance-Seed-OSS.jinja][0m
+ thinking</seed:think>
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+1
+</parameter>
+</function>
+</tool_call>
+<tool_call>
+<function=special_function_with_opt>
+<parameter=arg1>
+1
+</parameter>
+<parameter=arg2>
+2
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=python>
+<parameter=code>
+def hello():
+    print("Hello, world!")
+
+hello()
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=python>
+<parameter=code>
+格
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=html>
+<parameter=markup>
+<html>
+ <head>
+  <title>Hello!</title>
+ </head>
+</html>
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=todo_list>
+<parameter=todos>
+[{"item": "Check stuff", "selected": false}, {"item": "Prepare stuff", "selected": true}]
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=tool_2req_4opt>
+<parameter=req1>
+hello
+</parameter>
+<parameter=req2>
+42
+</parameter>
+<parameter=opt4>
+100
+</parameter>
+<parameter=opt2>
+200
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=tool_2req_5opt>
+<parameter=req1>
+world
+</parameter>
+<parameter=req2>
+7
+</parameter>
+<parameter=opt5>
+last
+</parameter>
+<parameter=opt3>
+middle
+</parameter>
+<parameter=opt1>
+first
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=tool_2req_5opt>
+<parameter=req1>
+test
+</parameter>
+<parameter=req2>
+99
+</parameter>
+<parameter=opt3>
+c
+</parameter>
+<parameter=opt1>
+a
+</parameter>
+<parameter=opt5>
+e
+</parameter>
+<parameter=opt4>
+4
+</parameter>
+<parameter=opt2>
+2
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=set_nullable_str>
+<parameter=name>
+hello world
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=set_nullable_str_nf>
+<parameter=name>
+hello world
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=set_nullable_int>
+<parameter=count>
+42
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+<tool_call>
+<function=set_unit>
+<parameter=unit>
+celsius
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen3-Coder.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.1.jinja][0m
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>get_time<｜tool▁sep｜>{"city": "XYZCITY"}<｜tool▁call▁end｜><｜tool▁calls▁end｜>
+
+Template supports tool calls but does not natively describe tools. The fallback behaviour used may produce bad results, inspect prompt w/ --verbose & consider overriding the template.
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.1.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.1.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.1.jinja][0m
+REASONING</think><｜tool▁calls▁begin｜><｜tool▁call▁begin｜>get_time<｜tool▁sep｜>{"city": "Tokyo"}<｜tool▁call▁end｜><｜tool▁calls▁end｜>
+
+Template supports tool calls but does not natively describe tools. The fallback behaviour used may produce bad results, inspect prompt w/ --verbose & consider overriding the template.
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.1.jinja][0m
+REASONING</think>CONTENT<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>get_time<｜tool▁sep｜>{"city": "Paris"}<｜tool▁call▁end｜><｜tool▁call▁begin｜>get_weather<｜tool▁sep｜>{"city": "Paris"}<｜tool▁call▁end｜><｜tool▁calls▁end｜>
+
+Template supports tool calls but does not natively describe tools. The fallback behaviour used may produce bad results, inspect prompt w/ --verbose & consider overriding the template.
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.1.jinja][0m
+REASONING</think>
+CONTENT
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.1.jinja][0m
+CONTENT
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+I'm
+thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Let me check the time</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="get_time">
+<｜DSML｜parameter name="city" string="true">Tokyo</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="special_function">
+<｜DSML｜parameter name="arg1" string="false">1</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Calling both</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="get_time">
+<｜DSML｜parameter name="city" string="true">Paris</｜DSML｜parameter>
+</｜DSML｜invoke>
+<｜DSML｜invoke name="get_weather">
+<｜DSML｜parameter name="city" string="true">Paris</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Thinking about it</think>Let me call the function.
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="special_function">
+<｜DSML｜parameter name="arg1" string="false">1</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Test negative</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="magic_int">
+<｜DSML｜parameter name="ref" string="false">-14</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Test decimal</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="amount">
+<｜DSML｜parameter name="orig" string="false">3.14</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Test boolean</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="toggle">
+<｜DSML｜parameter name="enabled" string="false">true</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Test array</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="todo_list">
+<｜DSML｜parameter name="todos" string="false">["buy milk","walk dog"]</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Test object</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="set_config">
+<｜DSML｜parameter name="config" string="false">{"theme":"dark","level":2}</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="get_time">
+<｜DSML｜parameter name="city" string="true">XYZCITY</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+Multi-arg call</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="magic_int">
+<｜DSML｜parameter name="ref" string="false">42</｜DSML｜parameter>
+<｜DSML｜parameter name="name" string="true">foo bar</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-V3.2.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/GLM-4.6.jinja][0m
+<tool_call>special_function
+<arg_key>arg1</arg_key>
+<arg_value>1</arg_value>
+</tool_call>
+
+
+[38;5;126m[models/templates/GLM-4.7-Flash.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/GLM-4.7-Flash.jinja][0m
+I'm
+thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/GLM-4.7-Flash.jinja][0m
+<tool_call>special_function<arg_key>arg1</arg_key><arg_value>1</arg_value></tool_call>
+
+
+[38;5;126m[models/templates/GLM-4.7-Flash.jinja][0m
+I'm
+thinking</think><tool_call>special_function<arg_key>arg1</arg_key><arg_value>1</arg_value></tool_call>
+
+
+[38;5;126m[models/templates/GLM-4.7-Flash.jinja][0m
+<tool_call>special_function<arg_key>arg1</arg_key><arg_value>1</arg_value></tool_call><tool_call>special_function_with_opt<arg_key>arg1</arg_key><arg_value>1</arg_value><arg_key>arg2</arg_key><arg_value>2</arg_value></tool_call>
+
+
+[38;5;126m[models/templates/GLM-4.7-Flash.jinja][0m
+Let me read the diff content.</think><tool_call>read_file_diff_md</tool_call>
+
+
+[38;5;126m[models/templates/GLM-4.7-Flash.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/GLM-4.7-Flash.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<think>I'm thinking about this</think><|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+Hello, world!
+What's up?<|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_end|><|tool_call_begin|>functions.special_function_with_opt:1<|tool_call_argument_begin|>{"arg1": 1, "arg2": 2}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<think>I need to call two functions</think><|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_end|><|tool_call_begin|>functions.python:1<|tool_call_argument_begin|>{"code": "print('hey')"}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<|tool_calls_section_begin|><|tool_call_begin|>functions.python:0<|tool_call_argument_begin|>{"code": "def hello():\n    print(\"Hello, world!\")\n\nhello()"}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<|tool_calls_section_begin|><|tool_call_begin|>functions.empty_args:0<|tool_call_argument_begin|>{}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_end|><|tool_call_begin|>functions.python:1<|tool_call_argument_begin|>{"code": "print(1)"}<|tool_call_end|><|tool_call_begin|>functions.html:2<|tool_call_argument_begin|>{"markup": "<p>test</p>"}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<think>I need to call two functions<|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_end|><|tool_call_begin|>functions.python:1<|tool_call_argument_begin|>{"code": "print('hey')"}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<think>I need to call two functions<|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_begin|>functions.python:1<|tool_call_argument_begin|>{"code": "print('hey')"}
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+<|tool_call_begin|>functions.execute_command:0<|tool_call_argument_begin|>{"command": "ls -lah", "cwd": "/home/jarvis/development/exllamav3", "timeout": 10}
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/Kimi-K2-Thinking.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/moonshotai-Kimi-K2.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/moonshotai-Kimi-K2.jinja][0m
+<|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/Kimi-K2-Instruct.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Kimi-K2-Instruct.jinja][0m
+<|tool_calls_section_begin|><|tool_call_begin|>functions.special_function:0<|tool_call_argument_begin|>{"arg1": 1}<|tool_call_end|><|tool_calls_section_end|>
+
+
+[38;5;126m[models/templates/moonshotai-Kimi-K2.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/moonshotai-Kimi-K2.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[special_function(arg1=1)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[get_time(city="XYZCITY")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[toggle(enabled=True)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[set_nullable(value=None)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[set_config(config={"enabled": True, "count": 3})]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[set_config(config={"enabled": true, "note": null})]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[Calendar.create_event(title="demo", participants=["Alice", "Bob"], metadata={"priority": "high", "reminder": true})]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+Use this format: [link text](url). Example: [Wikipedia](https://www.wikipedia.org).
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[python(code="def hello():\n    print('hey')")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[python(code="First line\nSecond line\tindented")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[python(code="print(\"hi\")")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+Let me check the time.<|tool_call_start|>[get_time(city="Paris")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[special_function(arg1=1), special_function_with_opt(arg1=1, arg2=2)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[special_function(arg1=
+
+
+[38;5;126m[models/templates/LFM2-8B-A1B.jinja][0m
+<|tool_call_start|>[empty_args()]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[special_function(arg1=1)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[get_time(city="XYZCITY")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[toggle(enabled=True)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[set_nullable(value=None)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[set_config(config={"enabled": True, "count": 3})]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[set_config(config={"enabled": true, "note": null})]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[Calendar.create_event(title="demo", participants=["Alice", "Bob"], metadata={"priority": "high", "reminder": true})]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+Use this format: [link text](url). Example: [Wikipedia](https://www.wikipedia.org).
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[python(code="def hello():\n    print('hey')")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[python(code="First line\nSecond line\tindented")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[python(code="print(\"hi\")")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+Let me check the time.<|tool_call_start|>[get_time(city="Paris")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[special_function(arg1=1), special_function_with_opt(arg1=1, arg2=2)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[special_function(arg1=
+
+
+[38;5;126m[models/templates/LFM2.5-Instruct.jinja][0m
+<|tool_call_start|>[empty_args()]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[special_function(arg1=1)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[get_time(city="XYZCITY")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[toggle(enabled=True)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[set_nullable(value=None)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[set_config(config={"enabled": True, "count": 3})]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[set_config(config={"enabled": true, "note": null})]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[Calendar.create_event(title="demo", participants=["Alice", "Bob"], metadata={"priority": "high", "reminder": true})]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+Use this format: [link text](url). Example: [Wikipedia](https://www.wikipedia.org).
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[python(code="def hello():\n    print('hey')")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[python(code="First line\nSecond line\tindented")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[python(code="print(\"hi\")")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+Let me check the time.<|tool_call_start|>[get_time(city="Paris")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[special_function(arg1=1), special_function_with_opt(arg1=1, arg2=2)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[special_function(arg1=
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<|tool_call_start|>[empty_args()]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<think>I'm
+thinking</think><|tool_call_start|>[special_function(arg1=1)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<think>I need to call a function</think>Let me check the time.<|tool_call_start|>[get_time(city="Paris")]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<think>Let me think about <|tool_call_start|>[special_function(arg1=1)]<|tool_call_end|> hmm</think><|tool_call_start|>[special_function(arg1=1)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<think>I'm
+thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+<think>I'm
+thinking</think><|tool_call_start|>[special_function(arg1=1)]<|tool_call_end|>
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/LFM2.5-8B-A1B.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+<tool_call>
+{"name": "get_time", "arguments": {"city": "XYZCITY"}}</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+I'm
+thinking
+</think>
+
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}</tool_call><tool_call>
+{"name": "special_function_with_opt", "arguments": {"arg1": 1, "arg2": 2}}</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+I need to call a function
+</think>
+
+Let me check the time.<tool_call>
+{"name": "get_time", "arguments": {"city": "XYZCITY"}}</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1":
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+<tool_call>
+{"name": "empty_args", "arguments": {}}</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+Let me think about <tool_call>
+{"name": "special_function", "arguments": {"arg1": 2}}</tool_call> hmm
+</think>
+
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+ thinking
+</think>
+
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Apertus-8B-Instruct.jinja][0m
+<|tools_prefix|>[{"special_function": {"arg1": 1}}]<|tools_suffix|>
+
+
+[38;5;126m[models/templates/Apertus-8B-Instruct.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/MiniMax-M2.jinja][0m
+
+</think>
+
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/MiniMax-M2.jinja][0m
+I'm
+thinking
+</think>
+
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/MiniMax-M2.jinja][0m
+Let's call a tool:
+</think>
+
+<minimax:tool_call>
+<invoke name="empty_args">
+</invoke>
+</minimax:tool_call>
+
+
+[38;5;126m[models/templates/MiniMax-M2.jinja][0m
+
+</think>
+
+<minimax:tool_call>
+<invoke name="special_function">
+<parameter name="arg1">1</parameter>
+</invoke>
+</minimax:tool_call>
+
+
+[38;5;126m[models/templates/MiniMax-M2.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/MiniMax-M2.jinja][0m
+ thinking
+</think>
+
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-Nano-v2.jinja][0m
+I'm
+thinking
+</think>
+<TOOLCALL>[{"name": "special_function", "arguments": {"arg1": 1}}]</TOOLCALL>
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-Nano-v2.jinja][0m
+I'm
+thinking
+</think>
+
+<TOOLCALL>[{"name": "special_function", "arguments": {"arg1": 1}}]</TOOLCALL>
+
+
+
+[38;5;126m[models/templates/NVIDIA-Nemotron-Nano-v2.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja][0m
+<|START_RESPONSE|>Hello, world!
+What's up?<|END_RESPONSE|>
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r7b-12-2024-tool_use.jinja][0m
+<|START_THINKING|>I'm
+thinking<|END_THINKING|><|START_ACTION|>[
+    {"tool_call_id": "0", "tool_name": "special_function", "parameters": {"arg1": 1}}
+]<|END_ACTION|>
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r-plus-tool_use.jinja][0m
+<|CHATBOT_TOKEN|>Hello, world!
+What's up?<|END_OF_TURN_TOKEN|>
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r-plus-tool_use.jinja][0m
+Action:
+```json
+[{"tool_name": "special_function", "parameters": {"arg1": 1}}]
+```
+
+
+[38;5;126m[models/templates/CohereForAI-c4ai-command-r-plus-tool_use.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/mistralai-Mistral-Nemo-Instruct-2407.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/mistralai-Mistral-Nemo-Instruct-2407.jinja][0m
+[TOOL_CALLS][{"name": "special_function", "arguments": {"arg1": 1}, "id": "123456789"}]
+
+
+[38;5;126m[models/templates/mistralai-Mistral-Nemo-Instruct-2407.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/meetkai-functionary-medium-v3.1.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/meetkai-functionary-medium-v3.1.jinja][0m
+<function=special_function>{"arg1": 1}</function>
+
+
+[38;5;126m[models/templates/meetkai-functionary-medium-v3.1.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/meetkai-functionary-medium-v3.2.jinja][0m
+all
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/meetkai-functionary-medium-v3.2.jinja][0m
+special_function
+{"arg1": 1}
+
+
+[38;5;126m[models/templates/meetkai-functionary-medium-v3.2.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/fireworks-ai-llama-3-firefunction-v2.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/fireworks-ai-llama-3-firefunction-v2.jinja][0m
+ functools[{"name": "special_function", "arguments": {"arg1": 1}}]
+
+Template supports tool calls but does not natively describe tools. The fallback behaviour used may produce bad results, inspect prompt w/ --verbose & consider overriding the template.
+Template supports tool calls but does not natively describe tools. The fallback behaviour used may produce bad results, inspect prompt w/ --verbose & consider overriding the template.
+
+[38;5;126m[models/templates/fireworks-ai-llama-3-firefunction-v2.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-R1-Distill-Llama-8B.jinja][0m
+</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-R1-Distill-Llama-8B.jinja][0m
+I'm
+thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-R1-Distill-Llama-8B.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-R1-Distill-Llama-8B.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/llama-cpp-deepseek-r1.jinja][0m
+</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/llama-cpp-deepseek-r1.jinja][0m
+I'm
+thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/llama-cpp-deepseek-r1.jinja][0m
+</think><｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>special_function
+```json
+{"arg1": 1}```<｜tool▁call▁end｜><｜tool▁calls▁end｜>
+
+
+[38;5;126m[models/templates/llama-cpp-deepseek-r1.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/llama-cpp-deepseek-r1.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-R1-Distill-Qwen-32B.jinja][0m
+</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-R1-Distill-Qwen-32B.jinja][0m
+I'm
+thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-R1-Distill-Qwen-32B.jinja][0m
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>special_function
+```json
+{"arg1": 1}```<｜tool▁call▁end｜><｜tool▁calls▁end｜>
+
+Template supports tool calls but does not natively describe tools. The fallback behaviour used may produce bad results, inspect prompt w/ --verbose & consider overriding the template.
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-R1-Distill-Qwen-32B.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/deepseek-ai-DeepSeek-R1-Distill-Qwen-32B.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/MiMo-VL.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/MiMo-VL.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}
+</tool_call>
+
+
+[38;5;126m[models/templates/MiMo-VL.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/NousResearch-Hermes-3-Llama-3.1-8B-tool_use.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/NousResearch-Hermes-3-Llama-3.1-8B-tool_use.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}
+</tool_call>
+
+
+[38;5;126m[models/templates/NousResearch-Hermes-3-Llama-3.1-8B-tool_use.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen-Qwen2.5-7B-Instruct.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Qwen-Qwen2.5-7B-Instruct.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}
+</tool_call>
+
+
+[38;5;126m[models/templates/Qwen-Qwen2.5-7B-Instruct.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+I'm
+thinking
+</think>
+
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}
+</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+Hello, world!
+What's up?
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}
+</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+I'm
+thinking
+</think>
+
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}
+</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg1": 1}}
+</tool_call>
+<tool_call>
+{"name": "special_function_with_opt", "arguments": {"arg1": 1, "arg2": 2}}
+</tool_call>
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+<tool_call>
+{"name": "special_function", "arguments": {"arg
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/Reka-Edge.jinja][0m
+ thinking
+</think>
+
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/unsloth-Apriel-1.5.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/unsloth-Apriel-1.5.jinja][0m
+<tool_calls>[{"name": "special_function", "arguments": {"arg1": 1}}]</tool_calls>
+
+
+[38;5;126m[models/templates/unsloth-Apriel-1.5.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/Apriel-1.6-15b-Thinker-fixed.jinja][0m
+I'm
+thinking
+[BEGIN FINAL RESPONSE]
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Apriel-1.6-15b-Thinker-fixed.jinja][0m
+I'm
+thinking
+[BEGIN FINAL RESPONSE]
+<tool_calls>[{"name": "special_function", "arguments": {"arg1": 1}}]</tool_calls>
+
+
+[38;5;126m[models/templates/Apriel-1.6-15b-Thinker-fixed.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/Apriel-1.6-15b-Thinker-fixed.jinja][0m
+ thinking
+[BEGIN FINAL RESPONSE]
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Mistral-Small-3.2-24B-Instruct-2506.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/Mistral-Small-3.2-24B-Instruct-2506.jinja][0m
+[TOOL_CALLS]special_function[CALL_ID]123456789[ARGS]{"arg1": 1}
+
+
+[38;5;126m[models/templates/Mistral-Small-3.2-24B-Instruct-2506.jinja][0m
+[TOOL_CALLS]special_function[CALL_ID]000000001[ARGS]{"arg1": 1}[TOOL_CALLS]special_function_with_opt[CALL_ID]000000002[ARGS]{"arg1": 1, "arg2": 2}
+
+
+[38;5;126m[models/templates/Mistral-Small-3.2-24B-Instruct-2506.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/unsloth-mistral-Devstral-Small-2507.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/unsloth-mistral-Devstral-Small-2507.jinja][0m
+[TOOL_CALLS]special_function[ARGS]{"arg1": 1}
+
+
+[38;5;126m[models/templates/unsloth-mistral-Devstral-Small-2507.jinja][0m
+Hello, world!
+What's up?[TOOL_CALLS]special_function[ARGS]{"arg1": 1}
+
+
+[38;5;126m[models/templates/meta-llama-Llama-3.1-8B-Instruct.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/meta-llama-Llama-3.1-8B-Instruct.jinja][0m
+```json
+"42"
+```
+
+
+[38;5;126m[models/templates/meta-llama-Llama-3.1-8B-Instruct.jinja][0m
+"42"
+
+
+
+[38;5;126m[models/templates/meta-llama-Llama-3.1-8B-Instruct.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/meta-llama-Llama-3.2-3B-Instruct.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/meta-llama-Llama-3.2-3B-Instruct.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/meta-llama-Llama-3.3-70B-Instruct.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/meta-llama-Llama-3.3-70B-Instruct.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>final<|message|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>commentary<|message|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis<|message|>I'm
+thinking<|end|><|start|>assistant<|channel|>final<|message|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis<|message|>I'm
+thinking<|end|><|start|>assistant<|channel|>final<|message|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis<|message|>I'm
+thinking
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+ to=functions.special_function<|channel|>analysis<|message|>{"arg1": 1}
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis to=functions.special_function<|message|>{"arg1": 1}
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+ to=functions.special_function<|channel|>analysis <|constrain|>json<|message|>{"arg1": 1}
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>commentary to=functions.special_function<|message|>{"arg1": 1}
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis<|message|>I'm
+thinking<|end|><|start|>assistant to=functions.special_function<|channel|>analysis<|message|>{"arg1": 1}
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis<|message|>Thinking about edit...<|end|><|start|>assistant<|channel|>commentary to=functions.edit <|constrain|>json<|message|>{"oldString": "if (part < railCount - 1) {", "newString": "if (part < 4) {", "replaceAll": false}
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis<|message|>I need to output the invoice details in JSON<|end|><|start|>assistant<|channel|>final <|constrain|>json<|message|>{"amount": 123.45, "date": "2025-12-03"}
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis<|message|>I will execute python to say hello<|end|><|start|>assistant to=container.exec<|channel|>commentary<|message|>python3 -c 'print("hello")'
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis<|message|>I will execute python to say hello<|end|><|start|>assistant<|channel|>commentary to=python <|constrain|>code<|message|>print("hello")
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>commentary to=assistant<|channel|>analysis<|message|>I'm
+thinking<|end|><|start|>assistant<|channel|>final<|message|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+<|channel|>analysis<|message|>I'm
+thinking<|end|><|start|>assistant<|channel|>commentary to=assistant<|channel|>final<|message|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/openai-gpt-oss-120b.jinja][0m
+ thinking<|end|><|start|>assistant<|channel|>final<|message|>Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+I was thinking
+</think>
+Now I'm not.
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Let me call the magic tool
+</think>
+<tool_call>
+<function=magic>
+<parameter=name>
+fooBar
+</parameter>
+<parameter=ref>
+5123123
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Let me call the special function
+</think>
+<tool_call>
+<function=special_function>
+<parameter=arg1>
+42555916
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Let me call the special function with opt
+</think>
+<tool_call>
+<function=special_function_with_opt>
+<parameter=arg1>
+42555916
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Let me call the magic_int function
+</think>
+<tool_call>
+<function=magic_int>
+<parameter=ref>
+42555916
+</parameter>
+<parameter=name>
+baz
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Call string_param with empty text
+</think>
+<tool_call>
+<function=string_param>
+<parameter=text>
+
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Test simple quoted unquoted
+</think>
+<tool_call>
+<function=quoted_unquoted>
+<parameter=quoted>
+"foo"
+</parameter>
+<parameter=unquoted>
+foo
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Test complex quoted unquoted
+</think>
+<tool_call>
+<function=quoted_unquoted>
+<parameter=quoted>
+"printf(\"foo\");"
+</parameter>
+<parameter=unquoted>
+printf("foo");
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Test negative number
+</think>
+<tool_call>
+<function=magic_int>
+<parameter=ref>
+-14
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Test decimal number
+</think>
+<tool_call>
+<function=amount>
+<parameter=orig>
+3.14
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+Test imaginary number
+</think>
+<tool_call>
+<function=imaginary_number>
+<parameter=number>
+{ "real": 3.14, "imaginary": 2.71 }
+</parameter>
+</function>
+</tool_call>
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/StepFun3.5-Flash.jinja][0m
+ thinking
+</think>
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/GigaChat3-10B-A1.8B.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/GigaChat3-10B-A1.8B.jinja][0m
+<|message_sep|>
+
+function call<|role_sep|>
+{"name": "special_function", "arguments": {"arg1": 1}}
+
+
+[38;5;126m[models/templates/GigaChat3-10B-A1.8B.jinja][0m
+Hello, world!
+What's up?<|message_sep|>
+
+function call<|role_sep|>
+{"name": "special_function", "arguments": {"arg1": 1}}
+
+
+[38;5;126m[models/templates/GigaChat3-10B-A1.8B.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/GigaChat3.1-10B-A1.8B.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/GigaChat3.1-10B-A1.8B.jinja][0m
+<|function_call|>{"name": "special_function", "arguments": {"arg1": 1}}
+
+
+[38;5;126m[models/templates/GigaChat3.1-10B-A1.8B.jinja][0m
+Hello, world!
+What's up?<|function_call|>{"name": "special_function", "arguments": {"arg1": 1}}
+
+
+[38;5;126m[models/templates/GigaChat3.1-10B-A1.8B.jinja][0m
+world!
+What's up?
+
+
+[38;5;126m[models/templates/openbmb-MiniCPM5-1B.jinja][0m
+Hello, world!
+What's up?
+
+
+[38;5;126m[models/templates/openbmb-MiniCPM5-1B.jinja][0m
+<function name="python"><param name="code">print('Hello, World!')</param></function>
+
+
+[38;5;126m[models/templates/openbmb-MiniCPM5-1B.jinja][0m
+<function name="empty_args"></function>
+
+
+[38;5;126m[models/templates/openbmb-MiniCPM5-1B.jinja][0m
+<function name="python"><param name="code">print('x')</param></function>
+
+
+[38;5;126m[models/templates/openbmb-MiniCPM5-1B.jinja][0m
+<function name="html"><param name="markup"><![CDATA[<a href="/x">hi</a> </param>]]></param></function>
+
+
+[38;5;126m[models/templates/openbmb-MiniCPM5-1B.jinja][0m
+I'm thinking</think><function name="python"><param name="code">print('hey')</param></function>
+
+
+[38;5;126m[models/templates/openbmb-MiniCPM5-1B.jinja][0m
+<function name="python"><param name="code">print('x')</param></function>
+<function name="python"><param name="code">print('y')</param></function>
+
+
+[38;5;126m[models/templates/openbmb-MiniCPM5-1B.jinja][0m
+ thinking</think>Hello, world!
+What's up?
+
+
+[chat] All tests passed!

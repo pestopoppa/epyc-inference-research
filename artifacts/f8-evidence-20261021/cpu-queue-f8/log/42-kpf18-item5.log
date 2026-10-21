@@ -1,0 +1,55 @@
+[region-lock] acquiring regions ['q2'] as role='build' (timeout_s=120.0) …
+[region-lock] held ['q2'] after 0.0s wait; running: env F8Q_CPUS=48-71,144-167 taskset -c 48-71,144-167 bash /mnt/raid0/llm/tmp/cpu-queue-f8/running/42-kpf18-item5.sh
+====================================================================================================
+KPF-18 gate plan (EXECUTE)  host Beelzebub  2026-10-20T22:15:31Z
+  out /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item5 | port 18973 | fork-min 1024 | n_predict 128 | n_probs 20 | window-id kpf18-20261020T221531Z | gpu-window-id None
+  launch prefix: taskset -c 48-71,144-167
+  gate argv (/mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/argv.frontdoor-cpu-gate.txt): -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --no-cache-idle-slots
+  - --fork-bin /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server (bin dir /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin; LD_LIBRARY_PATH /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin:/opt/rocm/lib:/usr/lib/llvm-20/lib:/opt/AMD/aocc-compiler-5.0.0/lib)
+  - CPU mode: no KFD/VRAM sampler, no :8083 refusal, no HIP residency, no mi210 claim, no GPU window
+  - shape drift ALLOWED and recorded: ["-c = '98304', gate shape expects '393216'", "-ngl = None, gate shape expects 'all'", "--spec-type = 'draft-mtp', gate shape expects 'draft-dflash'", "--spec-draft-n-max = '4', gate shape expects '7'", "--device = 'none', gate shape expects 'ROCm0'", "-b = None, gate shape expects '512'", "-ub = '2048', gate shape expects '512'", "--cache-ram = '32768', gate shape expects '65536'", "-md '' is not the DFlash2 drafter"]
+  - prompt set /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/run-20261020T163128Z/prompt_set.jsonl sha256 fe8c8c9202f71e678435717a931d3a97236968fe7b883a8748a88d1215b26662: 16 pairs
+  rate model: prefill ms/tok = (1.15 + 0.0235 x occupied_k) x 1.1; decode DFlash2 37.0-0.09/k tok/s, no-draft 30.8-0.15/k; 4-stream agg x1.3; load 90s, stop 45s
+----------------------------------------------------------------------------------------------------
+ITEM 5: 10 steps, est 12m20s
+      1m35s  [item5-cis_on-20261020T221531Z] linkage + launch + healthy + read-back: taskset -c 48-71,144-167 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item5/slot-save/item5-cis_on-20261020T221531Z --cache-idle-slots --port 18973 --metrics --slot-fork-min-tokens 1024
+      0m00s  open item-5 record (cis_on)
+      0m54s  item5 [cis_on] g0 T=4096: passes A (filler in slot 2) / B (filler overwrites the source slot 0); invariant + used checks at every step; continuation 128 tok compared
+      2m56s  item5 [cis_on] g3 T=16384: passes A (filler in slot 2) / B (filler overwrites the source slot 0); invariant + used checks at every step; continuation 128 tok compared
+      0m45s  [item5-cis_on-20261020T221531Z] SIGTERM own pid, verify dead, then finalize its records
+      1m35s  [item5-cis_off-20261020T221531Z] linkage + launch + healthy + read-back: taskset -c 48-71,144-167 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item5/slot-save/item5-cis_off-20261020T221531Z --no-cache-idle-slots --port 18973 --metrics --slot-fork-min-tokens 1024
+      0m00s  open item-5 record (cis_off)
+      0m54s  item5 [cis_off] g0 T=4096: passes A (filler in slot 2) / B (filler overwrites the source slot 0); invariant + used checks at every step; continuation 128 tok compared
+      2m56s  item5 [cis_off] g3 T=16384: passes A (filler in slot 2) / B (filler overwrites the source slot 0); invariant + used checks at every step; continuation 128 tok compared
+      0m45s  [item5-cis_off-20261020T221531Z] SIGTERM own pid, verify dead, then finalize its records
+====================================================================================================
+TOTAL estimate: 12m20s (12 min) for items [5]; budget --budget-min 600
+PREFLIGHT: inputs PASS (live-only checks run at execute: linkage, read-back, residency, claim)
+[kpf18 22:15:31Z] item 5: [item5-cis_on-20261020T221531Z] linkage + launch + healthy + read-back: taskset -c 48-71,144-167 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item5/slot-save/item5-cis_on-20261020T221531Z --cache-idle-slots --port 18973 --metrics --slot-fork-min-tokens 1024 (est 1m35s)
+[kpf18] launch item5-cis_on-20261020T221531Z: taskset -c 48-71,144-167 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item5/slot-save/item5-cis_on-20261020T221531Z --cache-idle-slots --port 18973 --metrics --slot-fork-min-tokens 1024
+[kpf18]   done in 0m06s
+[kpf18 22:15:37Z] item 5: open item-5 record (cis_on) (est 0m00s)
+[kpf18]   done in 0m00s
+[kpf18 22:15:37Z] item 5: item5 [cis_on] g0 T=4096: passes A (filler in slot 2) / B (filler overwrites the source slot 0); invariant + used checks at every step; continuation 128 tok compared (est 0m54s)
+[kpf18]   done in 2m43s
+[kpf18 22:18:20Z] item 5: item5 [cis_on] g3 T=16384: passes A (filler in slot 2) / B (filler overwrites the source slot 0); invariant + used checks at every step; continuation 128 tok compared (est 2m56s)
+[kpf18]   done in 17m03s
+[kpf18 22:35:23Z] item 5: [item5-cis_on-20261020T221531Z] SIGTERM own pid, verify dead, then finalize its records (est 0m45s)
+[kpf18] stopped item5-cis_on-20261020T221531Z pid 2699239: {'pid': 2699239, 'sent': ['TERM'], 'at': '2026-10-20T22:35:23Z', 'returncode': 0, 'verified_dead': True}
+[kpf18] record kpf18-20261020T221537Z-1 item 5 arm fork_on: {"control_floor": [0, 0], "vs_fresh": [0, 0], "bit_exact_ckpt": [0, 0], "source_invariance": [0, 0], "off_equals_champion": [0, 0], "seq_bit_continuation": [2, 2]}
+[kpf18]   done in 0m04s
+[kpf18 22:35:27Z] item 5: [item5-cis_off-20261020T221531Z] linkage + launch + healthy + read-back: taskset -c 48-71,144-167 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item5/slot-save/item5-cis_off-20261020T221531Z --no-cache-idle-slots --port 18973 --metrics --slot-fork-min-tokens 1024 (est 1m35s)
+[kpf18] launch item5-cis_off-20261020T221531Z: taskset -c 48-71,144-167 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r-20261020/build-cpu/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 -np 4 -c 98304 -t 24 -tb 24 -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap --cache-ram 32768 --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device none --device-draft none --kv-unified --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/rerun-20261021/item5/slot-save/item5-cis_off-20261020T221531Z --no-cache-idle-slots --port 18973 --metrics --slot-fork-min-tokens 1024
+[kpf18]   done in 0m06s
+[kpf18 22:35:33Z] item 5: open item-5 record (cis_off) (est 0m00s)
+[kpf18]   done in 0m00s
+[kpf18 22:35:33Z] item 5: item5 [cis_off] g0 T=4096: passes A (filler in slot 2) / B (filler overwrites the source slot 0); invariant + used checks at every step; continuation 128 tok compared (est 0m54s)
+[kpf18]   done in 2m09s
+[kpf18 22:37:42Z] item 5: item5 [cis_off] g3 T=16384: passes A (filler in slot 2) / B (filler overwrites the source slot 0); invariant + used checks at every step; continuation 128 tok compared (est 2m56s)
+[kpf18]   done in 13m16s
+[kpf18 22:50:58Z] item 5: [item5-cis_off-20261020T221531Z] SIGTERM own pid, verify dead, then finalize its records (est 0m45s)
+[kpf18] stopped item5-cis_off-20261020T221531Z pid 2670768: {'pid': 2670768, 'sent': ['TERM'], 'at': '2026-10-20T22:50:58Z', 'returncode': 0, 'verified_dead': True}
+[kpf18] record kpf18-20261020T223533Z-2 item 5 arm fork_on: {"control_floor": [0, 0], "vs_fresh": [0, 0], "bit_exact_ckpt": [0, 0], "source_invariance": [0, 0], "off_equals_champion": [0, 0], "seq_bit_continuation": [2, 2]}
+[kpf18]   done in 0m03s
+[kpf18] exit rc=0 (0 ok, 2 refused, 3 abort, 4 error, 5 preempted/drained, 75 claim held)
+RESULT 42-kpf18-item5 rc=0

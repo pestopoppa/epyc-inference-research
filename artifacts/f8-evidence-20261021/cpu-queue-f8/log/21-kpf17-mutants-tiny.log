@@ -1,0 +1,13 @@
+[region-lock] acquiring regions ['q1'] as role='build' (timeout_s=120.0) …
+[region-lock] held ['q1'] after 0.0s wait; running: env F8Q_CPUS=24-47,120-143 taskset -c 24-47,120-143 bash /mnt/raid0/llm/tmp/cpu-queue-f8/running/21-kpf17-mutants-tiny.sh
+[2026-10-21T00:00:41Z] provenance: branch 1fd7e2e12897db4ec401cfa393cea63ceb47a8fc llama-server sha256 defc5a094fcdd8c5d7acd912a7f7912d36a5e78d62af309015e57efc2b0eec40
+[2026-10-21T00:00:44Z] STEP mut-17.1-1-ckpt_ntokens_skew OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+[2026-10-21T00:00:47Z] STEP mut-17.1-2-ckpt_ntokens_skew OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+[2026-10-21T00:00:49Z] STEP mut-17.1-2-skew+no_posmax_guard OK mutation ckpt_ntokens_skew,no_posmax_guard DETECTED (failed=1 passed=0)
+[2026-10-21T00:00:53Z] STEP mut-17.1-4-fork_no_lcp OK mutation fork_no_lcp DETECTED (failed=1 passed=0)
+[2026-10-21T00:00:56Z] STEP mut-17.2-1-fork_skip_ckpt_load OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+[2026-10-21T00:01:01Z] STEP mut-17.2-2-fork_skip_ckpt_load OK mutation fork_skip_ckpt_load DETECTED (failed=1 passed=0)
+[2026-10-21T00:01:05Z] STEP mut-17.2-3-fork_clobber_src FAIL MUTATION_NOT_DETECTED mut=fork_clobber_src passed=1
+[2026-10-21T00:01:08Z] STEP mut-17.2-4-skew+no_posmax_guard OK mutation ckpt_ntokens_skew,no_posmax_guard DETECTED (failed=1 passed=0)
+[2026-10-21T00:01:10Z] STEP mut-17.3-pin_cap_off OK mutation pin_cap_off DETECTED (failed=1 passed=0)
+RESULT 21-kpf17-mutants-tiny pass=8 fail=1

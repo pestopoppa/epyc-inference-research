@@ -1,0 +1,12 @@
+[2026-10-21T00:02:06Z] provenance: branch 1fd7e2e12897db4ec401cfa393cea63ceb47a8fc llama-server sha256 defc5a094fcdd8c5d7acd912a7f7912d36a5e78d62af309015e57efc2b0eec40
+[2026-10-21T00:02:42Z] STEP f-171-ntokens-equal-requested OK passed=1 skipped=0
+[2026-10-21T00:03:03Z] STEP f-171-offset-oracle OK passed=1 skipped=0
+[2026-10-21T00:06:23Z] STEP f-171-abort-then-retry OK passed=1 skipped=0
+[2026-10-21T00:06:33Z] STEP f-171-key-check OK passed=1 skipped=0
+[2026-10-21T00:06:45Z] STEP f-172-diverge-below-junction OK passed=1 skipped=0
+[2026-10-21T00:07:12Z] STEP f-172-same-iteration OK passed=1 skipped=0
+[2026-10-21T00:07:38Z] STEP f-172-current-step OK passed=1 skipped=0
+[2026-10-21T00:07:44Z] STEP f-173-pinned-cap OK passed=1 skipped=0
+[2026-10-21T00:07:52Z] STEP f-mut-17.1-4-fork_no_lcp OK mutation fork_no_lcp DETECTED (failed=1 passed=0)
+[2026-10-21T00:07:55Z] STEP f-mut-17.3-pin_cap_off OK mutation pin_cap_off DETECTED (failed=1 passed=0)
+RESULT 30-kpf17-tests-35b pass=10 fail=0

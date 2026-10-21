@@ -1,0 +1,4 @@
+-rwxr-xr-x 1 node node 17984 2026-10-20 22:51:32.193760390 +0000 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server
+-rwxr-xr-x 1 node node 7266352 2026-10-20 22:51:32.035729997 +0000 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-server-impl.so
+lrwxrwxrwx 1 node node 20 2026-10-20 22:51:08.021484119 +0000 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/libllama-common.so -> libllama-common.so.0
+-rwxr-xr-x 1 node node 48928 2026-10-20 22:51:33.360930258 +0000 /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/test-kpf-swa-checkpoint

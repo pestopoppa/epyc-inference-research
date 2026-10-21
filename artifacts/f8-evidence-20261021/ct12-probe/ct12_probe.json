@@ -1,0 +1,3880 @@
+{
+ "tokenize_bin": "/mnt/raid0/llm/kernels/builds/cpu-20261020-dd3d9721c/bin",
+ "models": [
+  {
+   "model": "/mnt/raid0/llm/models/QuantFactory/Qwen2.5-0.5B-GGUF/Qwen2.5-0.5B.Q8_0.gguf",
+   "from": "roles/draft_qwen25",
+   "arch": "qwen2",
+   "name": "Models",
+   "template_family": "chatml",
+   "has_template": true,
+   "results": [
+    {
+     "spelling": "<|im_start|>",
+     "id_parse_special": [
+      151644
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      318,
+      4906,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|im_end|>",
+     "id_parse_special": [
+      151645
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      318,
+      6213,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|endoftext|>",
+     "id_parse_special": [
+      151643
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      8691,
+      723,
+      427,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<think>",
+     "id_parse_special": [
+      13708,
+      766,
+      29
+     ],
+     "id_no_parse": [
+      13708,
+      766,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</think>",
+     "id_parse_special": [
+      522,
+      26865,
+      29
+     ],
+     "id_no_parse": [
+      522,
+      26865,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_call>",
+     "id_parse_special": [
+      151657
+     ],
+     "id_no_parse": [
+      151657
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_call>",
+     "id_parse_special": [
+      151658
+     ],
+     "id_no_parse": [
+      151658
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_response>",
+     "id_parse_special": [
+      27,
+      14172,
+      9655,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      14172,
+      9655,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_response>",
+     "id_parse_special": [
+      522,
+      14172,
+      9655,
+      29
+     ],
+     "id_no_parse": [
+      522,
+      14172,
+      9655,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|vision_start|>",
+     "id_parse_special": [
+      151652
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      13013,
+      4906,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|vision_end|>",
+     "id_parse_special": [
+      151653
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      13013,
+      6213,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|image_pad|>",
+     "id_parse_special": [
+      151655
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1805,
+      30290,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_prefix|>",
+     "id_parse_special": [
+      151659
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      69,
+      318,
+      13974,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_middle|>",
+     "id_parse_special": [
+      151660
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      69,
+      318,
+      62580,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_suffix|>",
+     "id_parse_special": [
+      151661
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      69,
+      318,
+      37151,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|object_ref_start|>",
+     "id_parse_special": [
+      151646
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1700,
+      7793,
+      4906,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<start_of_turn>",
+     "id_parse_special": [
+      27,
+      2468,
+      3575,
+      37274,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      2468,
+      3575,
+      37274,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<end_of_turn>",
+     "id_parse_special": [
+      27,
+      408,
+      3575,
+      37274,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      408,
+      3575,
+      37274,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<bos>",
+     "id_parse_special": [
+      33177,
+      436,
+      29
+     ],
+     "id_no_parse": [
+      33177,
+      436,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<eos>",
+     "id_parse_special": [
+      27,
+      84399,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      84399,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<turn|>",
+     "id_parse_special": [
+      27,
+      412,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      412,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|turn>",
+     "id_parse_special": [
+      27,
+      91,
+      412,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      412,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|channel>",
+     "id_parse_special": [
+      27,
+      91,
+      10119,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      10119,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<channel|>",
+     "id_parse_special": [
+      27,
+      10119,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      10119,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|begin_of_text|>",
+     "id_parse_special": [
+      27,
+      91,
+      7265,
+      3575,
+      4326,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      7265,
+      3575,
+      4326,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|eot_id|>",
+     "id_parse_special": [
+      27,
+      91,
+      68,
+      354,
+      842,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      68,
+      354,
+      842,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<s>",
+     "id_parse_special": [
+      44047,
+      29
+     ],
+     "id_no_parse": [
+      44047,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</s>",
+     "id_parse_special": [
+      128247
+     ],
+     "id_no_parse": [
+      522,
+      82,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<tools>",
+     "id_parse_special": [
+      27,
+      15918,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      15918,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tools>",
+     "id_parse_special": [
+      522,
+      15918,
+      29
+     ],
+     "id_no_parse": [
+      522,
+      15918,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    }
+   ],
+   "open_spellings": [
+    "<|im_start|>",
+    "<|im_end|>",
+    "<|endoftext|>",
+    "<|vision_start|>",
+    "<|vision_end|>",
+    "<|image_pad|>",
+    "<|fim_prefix|>",
+    "<|fim_middle|>",
+    "<|fim_suffix|>",
+    "<|object_ref_start|>",
+    "</s>"
+   ]
+  },
+  {
+   "model": "/mnt/raid0/llm/models/Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0.gguf",
+   "from": "roles/draft_qwen3_coder_0_75b",
+   "arch": "qwen3",
+   "name": "Qwen3 Coder Instruct DRAFT 0.75B",
+   "template_family": "raw",
+   "has_template": false,
+   "results": [
+    {
+     "spelling": "<|im_start|>",
+     "id_parse_special": [
+      151644
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      318,
+      4906,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|im_end|>",
+     "id_parse_special": [
+      151645
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      318,
+      6213,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|endoftext|>",
+     "id_parse_special": [
+      151643
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      8691,
+      723,
+      427,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<think>",
+     "id_parse_special": [
+      151667
+     ],
+     "id_no_parse": [
+      151667
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</think>",
+     "id_parse_special": [
+      151668
+     ],
+     "id_no_parse": [
+      151668
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_call>",
+     "id_parse_special": [
+      151657
+     ],
+     "id_no_parse": [
+      151657
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_call>",
+     "id_parse_special": [
+      151658
+     ],
+     "id_no_parse": [
+      151658
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_response>",
+     "id_parse_special": [
+      151665
+     ],
+     "id_no_parse": [
+      151665
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_response>",
+     "id_parse_special": [
+      151666
+     ],
+     "id_no_parse": [
+      151666
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|vision_start|>",
+     "id_parse_special": [
+      151652
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      13013,
+      4906,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|vision_end|>",
+     "id_parse_special": [
+      151653
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      13013,
+      6213,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|image_pad|>",
+     "id_parse_special": [
+      151655
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1805,
+      30290,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_prefix|>",
+     "id_parse_special": [
+      151659
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      69,
+      318,
+      13974,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_middle|>",
+     "id_parse_special": [
+      151660
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      69,
+      318,
+      62580,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_suffix|>",
+     "id_parse_special": [
+      151661
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      69,
+      318,
+      37151,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|object_ref_start|>",
+     "id_parse_special": [
+      151646
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1700,
+      7793,
+      4906,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<start_of_turn>",
+     "id_parse_special": [
+      27,
+      2468,
+      3575,
+      37274,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      2468,
+      3575,
+      37274,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<end_of_turn>",
+     "id_parse_special": [
+      27,
+      408,
+      3575,
+      37274,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      408,
+      3575,
+      37274,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<bos>",
+     "id_parse_special": [
+      33177,
+      436,
+      29
+     ],
+     "id_no_parse": [
+      33177,
+      436,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<eos>",
+     "id_parse_special": [
+      27,
+      84399,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      84399,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<turn|>",
+     "id_parse_special": [
+      27,
+      412,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      412,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|turn>",
+     "id_parse_special": [
+      27,
+      91,
+      412,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      412,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|channel>",
+     "id_parse_special": [
+      27,
+      91,
+      10119,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      10119,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<channel|>",
+     "id_parse_special": [
+      27,
+      10119,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      10119,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|begin_of_text|>",
+     "id_parse_special": [
+      27,
+      91,
+      7265,
+      3575,
+      4326,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      7265,
+      3575,
+      4326,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|eot_id|>",
+     "id_parse_special": [
+      27,
+      91,
+      68,
+      354,
+      842,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      68,
+      354,
+      842,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<s>",
+     "id_parse_special": [
+      44047,
+      29
+     ],
+     "id_no_parse": [
+      44047,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</s>",
+     "id_parse_special": [
+      128247
+     ],
+     "id_no_parse": [
+      522,
+      82,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    }
+   ],
+   "open_spellings": [
+    "<|im_start|>",
+    "<|im_end|>",
+    "<|endoftext|>",
+    "<|vision_start|>",
+    "<|vision_end|>",
+    "<|image_pad|>",
+    "<|fim_prefix|>",
+    "<|fim_middle|>",
+    "<|fim_suffix|>",
+    "<|object_ref_start|>",
+    "</s>"
+   ]
+  },
+  {
+   "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+   "from": "server_mode/frontdoor/model_path",
+   "arch": "qwen35moe",
+   "name": "Qwen3.6-35B-A3B",
+   "template_family": "chatml",
+   "has_template": true,
+   "results": [
+    {
+     "spelling": "<|im_start|>",
+     "id_parse_special": [
+      248045
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      316,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|im_end|>",
+     "id_parse_special": [
+      248046
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      316,
+      6018,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|endoftext|>",
+     "id_parse_special": [
+      248044
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      8426,
+      703,
+      419,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<think>",
+     "id_parse_special": [
+      248068
+     ],
+     "id_no_parse": [
+      248068
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</think>",
+     "id_parse_special": [
+      248069
+     ],
+     "id_no_parse": [
+      248069
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_call>",
+     "id_parse_special": [
+      248058
+     ],
+     "id_no_parse": [
+      248058
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_call>",
+     "id_parse_special": [
+      248059
+     ],
+     "id_no_parse": [
+      248059
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_response>",
+     "id_parse_special": [
+      248066
+     ],
+     "id_no_parse": [
+      248066
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_response>",
+     "id_parse_special": [
+      248067
+     ],
+     "id_no_parse": [
+      248067
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|vision_start|>",
+     "id_parse_special": [
+      248053
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      12640,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|vision_end|>",
+     "id_parse_special": [
+      248054
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      12640,
+      6018,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|image_pad|>",
+     "id_parse_special": [
+      248056
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1742,
+      29302,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_prefix|>",
+     "id_parse_special": [
+      248060
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      13573,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_middle|>",
+     "id_parse_special": [
+      248061
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      60470,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_suffix|>",
+     "id_parse_special": [
+      248062
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      35920,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|object_ref_start|>",
+     "id_parse_special": [
+      248047
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1640,
+      7547,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<start_of_turn>",
+     "id_parse_special": [
+      27,
+      2388,
+      3456,
+      36040,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      2388,
+      3456,
+      36040,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<end_of_turn>",
+     "id_parse_special": [
+      27,
+      400,
+      3456,
+      36040,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      400,
+      3456,
+      36040,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<bos>",
+     "id_parse_special": [
+      32075,
+      428,
+      29
+     ],
+     "id_no_parse": [
+      32075,
+      428,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<eos>",
+     "id_parse_special": [
+      27,
+      81486,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      81486,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<turn|>",
+     "id_parse_special": [
+      27,
+      404,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      404,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|turn>",
+     "id_parse_special": [
+      27,
+      91,
+      404,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      404,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|channel>",
+     "id_parse_special": [
+      27,
+      91,
+      9819,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      9819,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<channel|>",
+     "id_parse_special": [
+      27,
+      9819,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      9819,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|begin_of_text|>",
+     "id_parse_special": [
+      27,
+      91,
+      7038,
+      3456,
+      4185,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      7038,
+      3456,
+      4185,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|eot_id|>",
+     "id_parse_special": [
+      27,
+      91,
+      68,
+      349,
+      816,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      68,
+      349,
+      816,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<s>",
+     "id_parse_special": [
+      42589,
+      29
+     ],
+     "id_no_parse": [
+      42589,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</s>",
+     "id_parse_special": [
+      510,
+      82,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      82,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|video_pad|>",
+     "id_parse_special": [
+      248057
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      9691,
+      29302,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<tools>",
+     "id_parse_special": [
+      27,
+      15449,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      15449,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tools>",
+     "id_parse_special": [
+      510,
+      15449,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      15449,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</parameter>",
+     "id_parse_special": [
+      510,
+      15704,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      15704,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</function>",
+     "id_parse_special": [
+      510,
+      1628,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      1628,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    }
+   ],
+   "open_spellings": [
+    "<|im_start|>",
+    "<|im_end|>",
+    "<|endoftext|>",
+    "<|vision_start|>",
+    "<|vision_end|>",
+    "<|image_pad|>",
+    "<|fim_prefix|>",
+    "<|fim_middle|>",
+    "<|fim_suffix|>",
+    "<|object_ref_start|>",
+    "<|video_pad|>"
+   ]
+  },
+  {
+   "model": "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+   "from": "server_mode/coder_escalation/draft",
+   "arch": "dflash",
+   "name": "Qwen3.8-27B-DFlash2",
+   "template_family": "chatml",
+   "has_template": true,
+   "results": [],
+   "error": "RuntimeError('llama-tokenize rc=1: ')"
+  },
+  {
+   "model": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+   "from": "server_mode/coder_escalation/model_path",
+   "arch": "qwen35",
+   "name": "Qwen3.8-27B",
+   "template_family": "chatml",
+   "has_template": true,
+   "results": [
+    {
+     "spelling": "<|im_start|>",
+     "id_parse_special": [
+      248045
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      316,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|im_end|>",
+     "id_parse_special": [
+      248046
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      316,
+      6018,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|endoftext|>",
+     "id_parse_special": [
+      248044
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      8426,
+      703,
+      419,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<think>",
+     "id_parse_special": [
+      248068
+     ],
+     "id_no_parse": [
+      248068
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</think>",
+     "id_parse_special": [
+      248069
+     ],
+     "id_no_parse": [
+      248069
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_call>",
+     "id_parse_special": [
+      248058
+     ],
+     "id_no_parse": [
+      248058
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_call>",
+     "id_parse_special": [
+      248059
+     ],
+     "id_no_parse": [
+      248059
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_response>",
+     "id_parse_special": [
+      248066
+     ],
+     "id_no_parse": [
+      248066
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_response>",
+     "id_parse_special": [
+      248067
+     ],
+     "id_no_parse": [
+      248067
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|vision_start|>",
+     "id_parse_special": [
+      248053
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      12640,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|vision_end|>",
+     "id_parse_special": [
+      248054
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      12640,
+      6018,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|image_pad|>",
+     "id_parse_special": [
+      248056
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1742,
+      29302,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_prefix|>",
+     "id_parse_special": [
+      248060
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      13573,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_middle|>",
+     "id_parse_special": [
+      248061
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      60470,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_suffix|>",
+     "id_parse_special": [
+      248062
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      35920,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|object_ref_start|>",
+     "id_parse_special": [
+      248047
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1640,
+      7547,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<start_of_turn>",
+     "id_parse_special": [
+      27,
+      2388,
+      3456,
+      36040,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      2388,
+      3456,
+      36040,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<end_of_turn>",
+     "id_parse_special": [
+      27,
+      400,
+      3456,
+      36040,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      400,
+      3456,
+      36040,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<bos>",
+     "id_parse_special": [
+      32075,
+      428,
+      29
+     ],
+     "id_no_parse": [
+      32075,
+      428,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<eos>",
+     "id_parse_special": [
+      27,
+      81486,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      81486,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<turn|>",
+     "id_parse_special": [
+      27,
+      404,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      404,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|turn>",
+     "id_parse_special": [
+      27,
+      91,
+      404,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      404,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|channel>",
+     "id_parse_special": [
+      27,
+      91,
+      9819,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      9819,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<channel|>",
+     "id_parse_special": [
+      27,
+      9819,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      9819,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|begin_of_text|>",
+     "id_parse_special": [
+      27,
+      91,
+      7038,
+      3456,
+      4185,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      7038,
+      3456,
+      4185,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|eot_id|>",
+     "id_parse_special": [
+      27,
+      91,
+      68,
+      349,
+      816,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      68,
+      349,
+      816,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<s>",
+     "id_parse_special": [
+      42589,
+      29
+     ],
+     "id_no_parse": [
+      42589,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</s>",
+     "id_parse_special": [
+      510,
+      82,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      82,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|video_pad|>",
+     "id_parse_special": [
+      248057
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      9691,
+      29302,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<tools>",
+     "id_parse_special": [
+      27,
+      15449,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      15449,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tools>",
+     "id_parse_special": [
+      510,
+      15449,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      15449,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</parameter>",
+     "id_parse_special": [
+      510,
+      15704,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      15704,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</function>",
+     "id_parse_special": [
+      510,
+      1628,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      1628,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    }
+   ],
+   "open_spellings": [
+    "<|im_start|>",
+    "<|im_end|>",
+    "<|endoftext|>",
+    "<|vision_start|>",
+    "<|vision_end|>",
+    "<|image_pad|>",
+    "<|fim_prefix|>",
+    "<|fim_middle|>",
+    "<|fim_suffix|>",
+    "<|object_ref_start|>",
+    "<|video_pad|>"
+   ]
+  },
+  {
+   "model": "/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf",
+   "from": "server_mode/worker_vision/model/path",
+   "arch": "qwen3vlmoe",
+   "name": "Qwen_Qwen3 VL 30B A3B Instruct",
+   "template_family": "chatml",
+   "has_template": true,
+   "results": [
+    {
+     "spelling": "<|im_start|>",
+     "id_parse_special": [
+      151644
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      318,
+      4906,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|im_end|>",
+     "id_parse_special": [
+      151645
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      318,
+      6213,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|endoftext|>",
+     "id_parse_special": [
+      151643
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      8691,
+      723,
+      427,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<think>",
+     "id_parse_special": [
+      151667
+     ],
+     "id_no_parse": [
+      151667
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</think>",
+     "id_parse_special": [
+      151668
+     ],
+     "id_no_parse": [
+      151668
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_call>",
+     "id_parse_special": [
+      151657
+     ],
+     "id_no_parse": [
+      151657
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_call>",
+     "id_parse_special": [
+      151658
+     ],
+     "id_no_parse": [
+      151658
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_response>",
+     "id_parse_special": [
+      151665
+     ],
+     "id_no_parse": [
+      151665
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_response>",
+     "id_parse_special": [
+      151666
+     ],
+     "id_no_parse": [
+      151666
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|vision_start|>",
+     "id_parse_special": [
+      151652
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      13013,
+      4906,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|vision_end|>",
+     "id_parse_special": [
+      151653
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      13013,
+      6213,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|image_pad|>",
+     "id_parse_special": [
+      151655
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1805,
+      30290,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_prefix|>",
+     "id_parse_special": [
+      151659
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      69,
+      318,
+      13974,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_middle|>",
+     "id_parse_special": [
+      151660
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      69,
+      318,
+      62580,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_suffix|>",
+     "id_parse_special": [
+      151661
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      69,
+      318,
+      37151,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|object_ref_start|>",
+     "id_parse_special": [
+      151646
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1700,
+      7793,
+      4906,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<start_of_turn>",
+     "id_parse_special": [
+      27,
+      2468,
+      3575,
+      37274,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      2468,
+      3575,
+      37274,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<end_of_turn>",
+     "id_parse_special": [
+      27,
+      408,
+      3575,
+      37274,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      408,
+      3575,
+      37274,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<bos>",
+     "id_parse_special": [
+      33177,
+      436,
+      29
+     ],
+     "id_no_parse": [
+      33177,
+      436,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<eos>",
+     "id_parse_special": [
+      27,
+      84399,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      84399,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<turn|>",
+     "id_parse_special": [
+      27,
+      412,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      412,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|turn>",
+     "id_parse_special": [
+      27,
+      91,
+      412,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      412,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|channel>",
+     "id_parse_special": [
+      27,
+      91,
+      10119,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      10119,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<channel|>",
+     "id_parse_special": [
+      27,
+      10119,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      10119,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|begin_of_text|>",
+     "id_parse_special": [
+      27,
+      91,
+      7265,
+      3575,
+      4326,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      7265,
+      3575,
+      4326,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|eot_id|>",
+     "id_parse_special": [
+      27,
+      91,
+      68,
+      354,
+      842,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      68,
+      354,
+      842,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<s>",
+     "id_parse_special": [
+      44047,
+      29
+     ],
+     "id_no_parse": [
+      44047,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</s>",
+     "id_parse_special": [
+      128247
+     ],
+     "id_no_parse": [
+      522,
+      82,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|video_pad|>",
+     "id_parse_special": [
+      151656
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      9986,
+      30290,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<tools>",
+     "id_parse_special": [
+      27,
+      15918,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      15918,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tools>",
+     "id_parse_special": [
+      522,
+      15918,
+      29
+     ],
+     "id_no_parse": [
+      522,
+      15918,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    }
+   ],
+   "open_spellings": [
+    "<|im_start|>",
+    "<|im_end|>",
+    "<|endoftext|>",
+    "<|vision_start|>",
+    "<|vision_end|>",
+    "<|image_pad|>",
+    "<|fim_prefix|>",
+    "<|fim_middle|>",
+    "<|fim_suffix|>",
+    "<|object_ref_start|>",
+    "</s>",
+    "<|video_pad|>"
+   ]
+  },
+  {
+   "model": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+   "from": "server_mode/architect_general/draft",
+   "arch": "qwen4exp",
+   "name": "Ckpt_Q38",
+   "template_family": "chatml",
+   "has_template": true,
+   "results": [
+    {
+     "spelling": "<|im_start|>",
+     "id_parse_special": [
+      248045
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      316,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|im_end|>",
+     "id_parse_special": [
+      248046
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      316,
+      6018,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|endoftext|>",
+     "id_parse_special": [
+      248044
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      8426,
+      703,
+      419,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<think>",
+     "id_parse_special": [
+      248068
+     ],
+     "id_no_parse": [
+      248068
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</think>",
+     "id_parse_special": [
+      248069
+     ],
+     "id_no_parse": [
+      248069
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_call>",
+     "id_parse_special": [
+      248058
+     ],
+     "id_no_parse": [
+      248058
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_call>",
+     "id_parse_special": [
+      248059
+     ],
+     "id_no_parse": [
+      248059
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_response>",
+     "id_parse_special": [
+      248066
+     ],
+     "id_no_parse": [
+      248066
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_response>",
+     "id_parse_special": [
+      248067
+     ],
+     "id_no_parse": [
+      248067
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|vision_start|>",
+     "id_parse_special": [
+      248053
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      12640,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|vision_end|>",
+     "id_parse_special": [
+      248054
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      12640,
+      6018,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|image_pad|>",
+     "id_parse_special": [
+      248056
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1742,
+      29302,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_prefix|>",
+     "id_parse_special": [
+      248060
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      13573,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_middle|>",
+     "id_parse_special": [
+      248061
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      60470,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_suffix|>",
+     "id_parse_special": [
+      248062
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      35920,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|object_ref_start|>",
+     "id_parse_special": [
+      248047
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1640,
+      7547,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<start_of_turn>",
+     "id_parse_special": [
+      27,
+      2388,
+      3456,
+      36040,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      2388,
+      3456,
+      36040,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<end_of_turn>",
+     "id_parse_special": [
+      27,
+      400,
+      3456,
+      36040,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      400,
+      3456,
+      36040,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<bos>",
+     "id_parse_special": [
+      32075,
+      428,
+      29
+     ],
+     "id_no_parse": [
+      32075,
+      428,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<eos>",
+     "id_parse_special": [
+      27,
+      81486,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      81486,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<turn|>",
+     "id_parse_special": [
+      27,
+      404,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      404,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|turn>",
+     "id_parse_special": [
+      27,
+      91,
+      404,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      404,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|channel>",
+     "id_parse_special": [
+      27,
+      91,
+      9819,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      9819,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<channel|>",
+     "id_parse_special": [
+      27,
+      9819,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      9819,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|begin_of_text|>",
+     "id_parse_special": [
+      27,
+      91,
+      7038,
+      3456,
+      4185,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      7038,
+      3456,
+      4185,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|eot_id|>",
+     "id_parse_special": [
+      27,
+      91,
+      68,
+      349,
+      816,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      68,
+      349,
+      816,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<s>",
+     "id_parse_special": [
+      42589,
+      29
+     ],
+     "id_no_parse": [
+      42589,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</s>",
+     "id_parse_special": [
+      510,
+      82,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      82,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|video_pad|>",
+     "id_parse_special": [
+      248057
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      9691,
+      29302,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<tools>",
+     "id_parse_special": [
+      27,
+      15449,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      15449,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tools>",
+     "id_parse_special": [
+      510,
+      15449,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      15449,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</parameter>",
+     "id_parse_special": [
+      510,
+      15704,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      15704,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</function>",
+     "id_parse_special": [
+      510,
+      1628,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      1628,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    }
+   ],
+   "open_spellings": [
+    "<|im_start|>",
+    "<|im_end|>",
+    "<|endoftext|>",
+    "<|vision_start|>",
+    "<|vision_end|>",
+    "<|image_pad|>",
+    "<|fim_prefix|>",
+    "<|fim_middle|>",
+    "<|fim_suffix|>",
+    "<|object_ref_start|>",
+    "<|video_pad|>"
+   ]
+  },
+  {
+   "model": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+   "from": "server_mode/architect_general/model",
+   "arch": "qwen4exp",
+   "name": "Qwen3.8 Flash Next",
+   "template_family": "chatml",
+   "has_template": true,
+   "results": [
+    {
+     "spelling": "<|im_start|>",
+     "id_parse_special": [
+      248045
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      316,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|im_end|>",
+     "id_parse_special": [
+      248046
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      316,
+      6018,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": true,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|endoftext|>",
+     "id_parse_special": [
+      248044
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      8426,
+      703,
+      419,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<think>",
+     "id_parse_special": [
+      248068
+     ],
+     "id_no_parse": [
+      248068
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</think>",
+     "id_parse_special": [
+      248069
+     ],
+     "id_no_parse": [
+      248069
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_call>",
+     "id_parse_special": [
+      248058
+     ],
+     "id_no_parse": [
+      248058
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_call>",
+     "id_parse_special": [
+      248059
+     ],
+     "id_no_parse": [
+      248059
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<tool_response>",
+     "id_parse_special": [
+      248066
+     ],
+     "id_no_parse": [
+      248066
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tool_response>",
+     "id_parse_special": [
+      248067
+     ],
+     "id_no_parse": [
+      248067
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|vision_start|>",
+     "id_parse_special": [
+      248053
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      12640,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|vision_end|>",
+     "id_parse_special": [
+      248054
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      12640,
+      6018,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|image_pad|>",
+     "id_parse_special": [
+      248056
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1742,
+      29302,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_prefix|>",
+     "id_parse_special": [
+      248060
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      13573,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_middle|>",
+     "id_parse_special": [
+      248061
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      60470,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|fim_suffix|>",
+     "id_parse_special": [
+      248062
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      244288,
+      35920,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<|object_ref_start|>",
+     "id_parse_special": [
+      248047
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      1640,
+      7547,
+      4747,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<start_of_turn>",
+     "id_parse_special": [
+      27,
+      2388,
+      3456,
+      36040,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      2388,
+      3456,
+      36040,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<end_of_turn>",
+     "id_parse_special": [
+      27,
+      400,
+      3456,
+      36040,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      400,
+      3456,
+      36040,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<bos>",
+     "id_parse_special": [
+      32075,
+      428,
+      29
+     ],
+     "id_no_parse": [
+      32075,
+      428,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<eos>",
+     "id_parse_special": [
+      27,
+      81486,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      81486,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<turn|>",
+     "id_parse_special": [
+      27,
+      404,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      404,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|turn>",
+     "id_parse_special": [
+      27,
+      91,
+      404,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      404,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|channel>",
+     "id_parse_special": [
+      27,
+      91,
+      9819,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      9819,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<channel|>",
+     "id_parse_special": [
+      27,
+      9819,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      9819,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|begin_of_text|>",
+     "id_parse_special": [
+      27,
+      91,
+      7038,
+      3456,
+      4185,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      7038,
+      3456,
+      4185,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|eot_id|>",
+     "id_parse_special": [
+      27,
+      91,
+      68,
+      349,
+      816,
+      91,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      68,
+      349,
+      816,
+      91,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<s>",
+     "id_parse_special": [
+      42589,
+      29
+     ],
+     "id_no_parse": [
+      42589,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</s>",
+     "id_parse_special": [
+      510,
+      82,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      82,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "<|video_pad|>",
+     "id_parse_special": [
+      248057
+     ],
+     "id_no_parse": [
+      27,
+      91,
+      9691,
+      29302,
+      91,
+      29
+     ],
+     "is_control_token": true,
+     "user_text_count_delta": 1,
+     "user_text_became_control": true,
+     "fixed_by_no_parse_special_on_whole_prompt_would_also_break_template": false,
+     "status": "OPEN"
+    },
+    {
+     "spelling": "<tools>",
+     "id_parse_special": [
+      27,
+      15449,
+      29
+     ],
+     "id_no_parse": [
+      27,
+      15449,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</tools>",
+     "id_parse_special": [
+      510,
+      15449,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      15449,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</parameter>",
+     "id_parse_special": [
+      510,
+      15704,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      15704,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    },
+    {
+     "spelling": "</function>",
+     "id_parse_special": [
+      510,
+      1628,
+      29
+     ],
+     "id_no_parse": [
+      510,
+      1628,
+      29
+     ],
+     "is_control_token": false,
+     "status": "not-control"
+    }
+   ],
+   "open_spellings": [
+    "<|im_start|>",
+    "<|im_end|>",
+    "<|endoftext|>",
+    "<|vision_start|>",
+    "<|vision_end|>",
+    "<|image_pad|>",
+    "<|fim_prefix|>",
+    "<|fim_middle|>",
+    "<|fim_suffix|>",
+    "<|object_ref_start|>",
+    "<|video_pad|>"
+   ]
+  }
+ ]
+}

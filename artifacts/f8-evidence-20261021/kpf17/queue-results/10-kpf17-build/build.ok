@@ -1,0 +1,4 @@
+branch_sha=1fd7e2e12897db4ec401cfa393cea63ceb47a8fc
+llama_server_sha256=defc5a094fcdd8c5d7acd912a7f7912d36a5e78d62af309015e57efc2b0eec40
+built_utc=2026-10-20T23:57:51Z
+note=rebuilt in place by the KPF-17 conformance-fix subagent (was d2ef28e10 / 8f8606e7...); commits f3a3bb4b1 1f9b2a8bf 1fd7e2e12

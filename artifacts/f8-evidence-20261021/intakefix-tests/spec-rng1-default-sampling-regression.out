@@ -1,0 +1,507 @@
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:68 (test_temp)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:71 (test_temp)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:68 (test_temp)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:71 (test_temp)
+0: 0.000000 (-inf)
+1: 0.000000 (-inf)
+2: 0.000000 (-inf)
+3: 1.000000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:79 (test_temp_ext)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:82 (test_temp_ext)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:79 (test_temp_ext)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:82 (test_temp_ext)
+0: 0.000000 (-inf)
+1: 0.000000 (-inf)
+2: 0.000000 (-inf)
+3: 1.000000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:90 (test_top_k)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:93 (test_top_k)
+3: 1.000000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:90 (test_top_k)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:93 (test_top_k)
+3: 0.444444 (-0.916291)
+2: 0.333333 (-1.203973)
+1: 0.222222 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:90 (test_top_k)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:93 (test_top_k)
+3: 0.400000 (-0.916291)
+2: 0.300000 (-1.203973)
+1: 0.200000 (-1.609438)
+0: 0.100000 (-2.302585)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:90 (test_top_k)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:93 (test_top_k)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:101 (test_top_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:104 (test_top_p)
+3: 1.000000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:101 (test_top_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:104 (test_top_p)
+3: 0.571429 (-0.916291)
+2: 0.428571 (-1.203973)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:101 (test_top_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:104 (test_top_p)
+3: 0.444444 (-0.916291)
+2: 0.333333 (-1.203973)
+1: 0.222222 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:101 (test_top_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:104 (test_top_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:112 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:115 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:112 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:115 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:112 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:115 (test_min_p)
+1: 0.222222 (-1.609438)
+2: 0.333333 (-1.203973)
+3: 0.444444 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:112 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:115 (test_min_p)
+1: 0.222222 (-1.609438)
+2: 0.333333 (-1.203973)
+3: 0.444444 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:112 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:115 (test_min_p)
+2: 0.428571 (-1.203973)
+3: 0.571429 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:112 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:115 (test_min_p)
+2: 0.428571 (-1.203973)
+3: 0.571429 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:112 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:115 (test_min_p)
+3: 1.000000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:112 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:115 (test_min_p)
+3: 1.000000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:112 (test_min_p)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:115 (test_min_p)
+3: 1.000000 (-0.916291)
+-
+XTC should:
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:123 (test_xtc)
+0: 0.400000 (-0.916291)
+1: 0.300000 (-1.203973)
+2: 0.200000 (-1.609438)
+3: 0.100000 (-2.302585)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:125 (test_xtc)
+3: 0.100000 (-2.302585)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:123 (test_xtc)
+0: 0.400000 (-0.916291)
+1: 0.300000 (-1.203973)
+2: 0.200000 (-1.609438)
+3: 0.100000 (-2.302585)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:125 (test_xtc)
+2: 0.200000 (-1.609438)
+3: 0.100000 (-2.302585)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:123 (test_xtc)
+0: 0.400000 (-0.916291)
+1: 0.300000 (-1.203973)
+2: 0.200000 (-1.609438)
+3: 0.100000 (-2.302585)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:125 (test_xtc)
+1: 0.300000 (-1.203973)
+2: 0.200000 (-1.609438)
+3: 0.100000 (-2.302585)
+-
+XTC should not:
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:123 (test_xtc)
+0: 0.400000 (-0.916291)
+1: 0.300000 (-1.203973)
+2: 0.200000 (-1.609438)
+3: 0.100000 (-2.302585)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:125 (test_xtc)
+0: 0.400000 (-0.916291)
+1: 0.300000 (-1.203973)
+2: 0.200000 (-1.609438)
+3: 0.100000 (-2.302585)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:133 (test_typical)
+0: 0.970000 (-0.030459)
+1: 0.010000 (-4.605170)
+2: 0.010000 (-4.605170)
+3: 0.010000 (-4.605170)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:135 (test_typical)
+0: 0.970000 (-0.030459)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:133 (test_typical)
+0: 0.400000 (-0.916291)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:135 (test_typical)
+1: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:154 (test_penalties)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:157 (test_penalties)
+0: 0.000000 (-80.471893)
+1: 0.250000 (-1.609438)
+2: 0.250000 (-1.609438)
+3: 0.250000 (-1.609438)
+4: 0.250000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:154 (test_penalties)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:157 (test_penalties)
+0: 0.000000 (-80.471893)
+1: 0.000000 (-80.471893)
+2: 0.000000 (-80.471893)
+3: 0.500000 (-1.609438)
+4: 0.500000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:154 (test_penalties)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:157 (test_penalties)
+0: 0.000000 (-80.471893)
+1: 0.000000 (-80.471893)
+2: 0.000000 (-80.471893)
+3: 0.500000 (-1.609438)
+4: 0.500000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:154 (test_penalties)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:157 (test_penalties)
+0: 0.000011 (-11.609438)
+1: 0.249997 (-1.609438)
+2: 0.249997 (-1.609438)
+3: 0.249997 (-1.609438)
+4: 0.249997 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:154 (test_penalties)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:157 (test_penalties)
+0: 0.000023 (-11.609438)
+1: 0.000023 (-11.609438)
+2: 0.000023 (-11.609438)
+3: 0.499966 (-1.609438)
+4: 0.499966 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:154 (test_penalties)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:157 (test_penalties)
+0: 0.000000 (-21.609438)
+1: 0.000023 (-11.609438)
+2: 0.000023 (-11.609438)
+3: 0.499977 (-1.609438)
+4: 0.499977 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:178 (test_dry)
+0: 0.250000 (-1.386294)
+1: 0.250000 (-1.386294)
+2: 0.250000 (-1.386294)
+3: 0.250000 (-1.386294)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:181 (test_dry)
+0: 0.250000 (-1.386294)
+1: 0.250000 (-1.386294)
+2: 0.250000 (-1.386294)
+3: 0.250000 (-1.386294)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:178 (test_dry)
+0: 0.250000 (-1.386294)
+1: 0.250000 (-1.386294)
+2: 0.250000 (-1.386294)
+3: 0.250000 (-1.386294)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:181 (test_dry)
+0: 0.296923 (-1.386294)
+1: 0.296923 (-1.386294)
+2: 0.109232 (-2.386294)
+3: 0.296923 (-1.386294)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:178 (test_dry)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:181 (test_dry)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:178 (test_dry)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:181 (test_dry)
+0: 0.241818 (-1.609438)
+1: 0.241818 (-1.609438)
+2: 0.032727 (-3.609438)
+3: 0.241818 (-1.609438)
+4: 0.241818 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:178 (test_dry)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:181 (test_dry)
+0: 0.200000 (-1.609438)
+1: 0.200000 (-1.609438)
+2: 0.200000 (-1.609438)
+3: 0.200000 (-1.609438)
+4: 0.200000 (-1.609438)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:188 (test_top_n_sigma)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:191 (test_top_n_sigma)
+0: 0.000000 (-inf)
+1: 0.000000 (-inf)
+2: 0.428571 (-1.203973)
+3: 0.571429 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:188 (test_top_n_sigma)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:191 (test_top_n_sigma)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:188 (test_top_n_sigma)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+/mnt/raid0/llm/worktrees/intake-fixes-20261020/tests/test-sampling.cpp:191 (test_top_n_sigma)
+0: 0.100000 (-2.302585)
+1: 0.200000 (-1.609438)
+2: 0.300000 (-1.203973)
+3: 0.400000 (-0.916291)
+-
+Sampler queue   k OK with n_vocab=10000 top_k=10000 top_p=1.000000 min_p=1.000000
+Sampler queue   k OK with n_vocab=10000 top_k=    1 top_p=1.000000 min_p=1.000000
+Sampler queue   p OK with n_vocab=10000 top_k=10000 top_p=1.000000 min_p=1.000000
+Sampler queue   p OK with n_vocab=10000 top_k=10000 top_p=0.000000 min_p=1.000000
+Sampler queue   m OK with n_vocab=10000 top_k=10000 top_p=1.000000 min_p=1.000000
+Sampler queue   m OK with n_vocab=10000 top_k=10000 top_p=1.000000 min_p=0.000000
+Sampler queue   k OK with n_vocab=10000 top_k=  100 top_p=1.000000 min_p=1.000000
+Sampler queue   p OK with n_vocab=10000 top_k=10000 top_p=0.000300 min_p=1.000000
+Sampler queue   p OK with n_vocab=10000 top_k=10000 top_p=0.800000 min_p=1.000000
+Sampler queue   m OK with n_vocab=10000 top_k=10000 top_p=1.000000 min_p=0.999890
+Sampler queue   m OK with n_vocab=10000 top_k=10000 top_p=1.000000 min_p=0.100000
+Sampler queue  kp OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue  km OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue  pk OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue  pm OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue  mk OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue  mp OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.999890
+Sampler queue  mp OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue kpm OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue kmp OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue pkm OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue pmk OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue mkp OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+Sampler queue mpk OK with n_vocab=10000 top_k=  100 top_p=0.800000 min_p=0.100000
+OK
+llama_sampler_init_top_k (40)              :   76.000 us/iter
+llama_sampler_init_top_p (0.8f, 1)         : 8950.625 us/iter
+llama_sampler_init_min_p (0.2f, 1)         :  818.875 us/iter
+llama_sampler_init_typical(0.5f, 1)        : 15234.250 us/iter
+llama_sampler_init_xtc (1.0f, 0.1f, 1, 1)  : 9690.531 us/iter

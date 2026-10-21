@@ -1,0 +1,7 @@
+main : processed prompt on seq 0, 1, 2 (70 tokens each)
+main : saved seq 1 state, 21063932 bytes
+main : cleared seq 1 to create fragmentation
+main : restored state into seq 1, 21063932 bytes
+main : successfully decoded with restored state, generated: '
+'
+main : SUCCESS - state restore works with fragmented KV cache

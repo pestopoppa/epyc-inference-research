@@ -1,0 +1,5 @@
+172-decoding-source-hyb OK passed=1 skipped=0
+172-decoding-source-swa FAIL passed=0 failed=1 skipped=0 rc=1
+mut-17.2-3-fork_clobber_src-hyb OK mutation fork_clobber_src DETECTED (failed=1 passed=0)
+mut-17.2-3-fork_clobber_src-swa OK mutation fork_clobber_src DETECTED (failed=1 passed=0)
+mut-17.2-3-fork_skip_ckpt_load-hyb FAIL MUTATION_NOT_DETECTED mut=fork_skip_ckpt_load passed=1

@@ -1,0 +1,5 @@
+[region-lock] acquiring regions ['q0'] as role='build' (timeout_s=120.0) …
+[region-lock] held ['q0'] after 0.0s wait; running: env F8Q_CPUS=0-23,96-119 taskset -c 0-23,96-119 bash /mnt/raid0/llm/tmp/cpu-queue-f8/running/50-intakefix-build.sh
+src=6b8291de5dfdd798c09f76c3ad1801098ebd1c59 start=2026-10-21T06:35:33Z
+end=2026-10-21T06:36:18Z rc=0
+RESULT 50-intakefix-build pass=6 fail=0

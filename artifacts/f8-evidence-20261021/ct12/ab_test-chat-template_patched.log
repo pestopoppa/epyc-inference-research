@@ -1,0 +1,341 @@
+Built-in chat templates:
+  bailing
+  bailing-think
+  bailing2
+  chatglm3
+  chatglm4
+  chatml
+  command-r
+  deepseek
+  deepseek-ocr
+  deepseek2
+  deepseek3
+  exaone-moe
+  exaone3
+  exaone4
+  falcon3
+  gemma
+  gigachat
+  glmedge
+  gpt-oss
+  granite
+  granite-4.0
+  granite-4.1
+  grok-2
+  hunyuan-dense
+  hunyuan-moe
+  hunyuan-vl
+  kimi-k2
+  llama2
+  llama2-sys
+  llama2-sys-bos
+  llama2-sys-strip
+  llama3
+  llama4
+  megrez
+  minicpm
+  mistral-v1
+  mistral-v3
+  mistral-v3-tekken
+  mistral-v7
+  mistral-v7-tekken
+  monarch
+  openchat
+  orion
+  pangu-embedded
+  phi3
+  phi4
+  rwkv-world
+  seed_oss
+  smolvlm
+  solar-open
+  vicuna
+  vicuna-orca
+  yandex
+  zephyr
+
+
+=== teknium/OpenHermes-2.5-Mistral-7B ===
+
+
+
+=== mistralai/Mistral-7B-Instruct-v0.2 (NOTE: Old pre-v1 without a system prompt) ===
+
+
+
+=== TheBloke/FusionNet_34Bx2_MoE-AWQ ===
+
+
+
+=== bofenghuang/vigogne-2-70b-chat ===
+
+
+
+=== mlabonne/AlphaMonarch-7B ===
+
+
+
+=== google/gemma-7b-it ===
+
+
+
+=== OrionStarAI/Orion-14B-Chat ===
+
+
+
+=== openchat/openchat-3.5-0106 ===
+
+
+
+=== deepseek-ai/deepseek-coder-33b-instruct ===
+
+
+
+=== eachadea/vicuna-13b-1.1 ===
+
+
+
+=== Orca-Vicuna ===
+
+
+
+=== CohereForAI/c4ai-command-r-plus ===
+
+
+
+=== Llama-3 ===
+
+
+
+=== Phi-3-mini ===
+
+
+
+=== Phi-3-small ===
+
+
+
+=== Phi-3-medium ===
+
+
+
+=== Phi-3-vision ===
+
+
+
+=== ChatGLM3 ===
+
+
+
+=== ChatGLM4 ===
+
+
+
+=== GLMEdge ===
+
+
+
+=== MiniCPM-3B-OpenHermes-2.5-v2-GGUF ===
+
+
+
+=== DeepSeek-V2 ===
+
+
+
+=== ibm-granite/granite-3.0-8b-instruct ===
+
+
+
+=== mistralai/Mistral-7B-Instruct-v0.2 (mistralai 'v1' template with a system prompt) ===
+
+
+
+=== Mistral-Large-Instruct-2407 (mistralai 'v3' template; modified to have system prompt at start) ===
+
+
+
+=== Mistral-Nemo-Instruct-2407 (mistralai 'v3-tekken' template; modified to have system prompt at start) ===
+
+
+
+=== mistralai/Mistral-Large-Instruct-2411 (mistralai 'v7' template) ===
+
+
+
+=== ai-sage/GigaChat-20B-A3B-instruct ===
+
+
+
+=== Infinigence/Megrez-3B-Instruct ===
+
+
+
+=== phi-4 ===
+
+
+
+=== yandex/YandexGPT-5-Lite-8B-instruct ===
+
+
+
+=== inclusionAI/Ling-lite ===
+
+
+
+=== ByteDance-Seed/Seed-OSS-36B-Instruct ===
+
+
+
+=== ibm-granite/granite-3.x (tool call) ===
+
+
+
+=== ibm-granite/granite-4.0 (tool call) ===
+
+
+
+=== ibm-granite/granite-4.1 (tool call) ===
+
+
+
+=== teknium/OpenHermes-2.5-Mistral-7B (jinja) ===
+
+
+
+=== mistralai/Mistral-7B-Instruct-v0.2 (NOTE: Old pre-v1 without a system prompt) (jinja) ===
+
+
+
+=== TheBloke/FusionNet_34Bx2_MoE-AWQ (jinja) ===
+
+
+
+=== bofenghuang/vigogne-2-70b-chat (jinja) ===
+
+
+
+=== mlabonne/AlphaMonarch-7B (jinja) ===
+
+
+
+=== google/gemma-7b-it (jinja) ===
+
+
+
+=== OrionStarAI/Orion-14B-Chat (jinja) ===
+
+
+
+=== openchat/openchat-3.5-0106 (jinja) ===
+
+
+
+=== deepseek-ai/deepseek-coder-33b-instruct (jinja) ===
+
+
+
+=== eachadea/vicuna-13b-1.1 (jinja) ===
+
+
+
+=== Orca-Vicuna (jinja) ===
+
+
+
+=== CohereForAI/c4ai-command-r-plus (jinja) ===
+
+
+
+=== Llama-3 (jinja) ===
+
+
+
+=== Phi-3-mini (jinja) ===
+
+
+
+=== Phi-3-small (jinja) ===
+
+
+
+=== Phi-3-medium (jinja) ===
+
+
+
+=== Phi-3-vision (jinja) ===
+
+
+
+=== ChatGLM3 (jinja) ===
+
+
+
+=== ChatGLM4 (jinja) ===
+
+
+
+=== GLMEdge (jinja) ===
+
+
+
+=== MiniCPM-3B-OpenHermes-2.5-v2-GGUF (jinja) ===
+
+
+
+=== DeepSeek-V2 (jinja) ===
+
+
+
+=== ibm-granite/granite-3.0-8b-instruct (jinja) ===
+
+
+
+=== mistralai/Mistral-7B-Instruct-v0.2 (mistralai 'v1' template with a system prompt) (jinja) ===
+
+
+
+=== Mistral-Large-Instruct-2407 (mistralai 'v3' template; modified to have system prompt at start) (jinja) ===
+
+
+
+=== Mistral-Nemo-Instruct-2407 (mistralai 'v3-tekken' template; modified to have system prompt at start) (jinja) ===
+
+
+
+=== mistralai/Mistral-Large-Instruct-2411 (mistralai 'v7' template) (jinja) ===
+
+
+
+=== Infinigence/Megrez-3B-Instruct (jinja) ===
+
+
+
+=== phi-4 (jinja) ===
+
+
+
+=== yandex/YandexGPT-5-Lite-8B-instruct (jinja) ===
+
+
+
+=== inclusionAI/Ling-lite (jinja) ===
+
+
+
+=== ByteDance-Seed/Seed-OSS-36B-Instruct (jinja) ===
+
+
+
+=== ibm-granite/granite-3.x (tool call) (jinja) ===
+
+
+
+=== ibm-granite/granite-4.0 (tool call) (jinja) ===
+
+
+
+=== ibm-granite/granite-4.1 (tool call) (jinja) ===
+
+
+OK: All tests passed successfully.

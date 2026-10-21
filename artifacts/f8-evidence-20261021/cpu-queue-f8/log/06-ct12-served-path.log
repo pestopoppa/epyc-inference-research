@@ -1,0 +1,4 @@
+[region-lock] acquiring regions ['q2'] as role='build' (timeout_s=120.0) …
+[region-lock] held ['q2'] after 0.0s wait; running: env F8Q_CPUS=48-71,144-167 taskset -c 48-71,144-167 bash /mnt/raid0/llm/tmp/cpu-queue-f8/running/06-ct12-served-path.sh
+{"n_base": 172, "n_inj": 187, "n_brk": 201, "im_end_literal_tokens": [27, 91, 316, 6018, 91, 29], "im_end_special_tokens": [248046], "verdict": "OPEN"}
+RESULT 06-ct12-served-path verdict=OPEN n_inj=187 n_brk=201

@@ -1,0 +1,5 @@
+swa-cpp-normal FAIL rc=1
+swa-cpp-mut-use_recorded_range OK mutation DETECTED rc=1
+swa-server-fork OK passed=1 skipped=0
+swa-server-mut-skew OK mutation ckpt_ntokens_skew DETECTED (failed=1 passed=0)
+swa-server-171-172-173 FAIL passed=6 failed=4 skipped=0 rc=1

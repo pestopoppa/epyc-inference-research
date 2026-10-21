@@ -1,0 +1,23 @@
+== n_rs_seq = 0, recurrent = 0, hybrid = 1, n_swa = 0
+  [source only] size=1024 used=64 shared=0 | priv=(64,0,0,0) shr=(0,0,0,0)
+  [after fork] size=1024 used=64 shared=40 | priv=(24,0,0,0) shr=(40,40,0,0)
+  [fork suffix] size=1024 used=73 shared=40 | priv=(24,9,0,0) shr=(40,40,0,0)
+  fork vs fresh (suffix)             max|d| = 0, bit-identical = yes, top1 220 vs 220
+  fork vs full-state copy (suffix)   max|d| = 0, bit-identical = yes, top1 220 vs 220
+  source continuation vs no-fork     max|d| = 0, bit-identical = yes, top1 68 vs 68
+  fork state across src purge        20805380 bytes, identical = yes
+  [source purged] size=1024 used=49 shared=0 | priv=(0,49,0,0) shr=(0,0,0,0)
+  fork continuation after src purge  max|d| = 0.27, bit-identical = no, top1 53795 vs 53795
+  [seq_keep(1)] size=1024 used=50 shared=0 | priv=(0,50,0,0) shr=(0,0,0,0)
+== n_rs_seq = 8, recurrent = 0, hybrid = 1, n_swa = 0
+  [source only] size=1024 used=64 shared=0 | priv=(64,0,0,0) shr=(0,0,0,0)
+  [after fork] size=1024 used=64 shared=40 | priv=(24,0,0,0) shr=(40,40,0,0)
+  [fork suffix] size=1024 used=73 shared=40 | priv=(24,9,0,0) shr=(40,40,0,0)
+  fork vs fresh (suffix)             max|d| = 0, bit-identical = yes, top1 220 vs 220
+  fork vs full-state copy (suffix)   max|d| = 0, bit-identical = yes, top1 220 vs 220
+  source continuation vs no-fork     max|d| = 0, bit-identical = yes, top1 68 vs 68
+  fork state across src purge        20805380 bytes, identical = yes
+  [source purged] size=1024 used=49 shared=0 | priv=(0,49,0,0) shr=(0,0,0,0)
+  fork continuation after src purge  max|d| = 0.27, bit-identical = no, top1 53795 vs 53795
+  [seq_keep(1)] size=1024 used=50 shared=0 | priv=(0,50,0,0) shr=(0,0,0,0)
+main : OK

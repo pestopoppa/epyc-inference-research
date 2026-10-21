@@ -1,0 +1,3 @@
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=16 activation=15 n_as=4)
+IQK/reference telemetry: max_abs=3.8147e-06 max_rel=5.97736e-05 normalized_squared_error=8.91916e-15 elementwise_limit=0.0001+0.001*abs(ref) normalized_squared_error_limit=1e-05
+IQK MUL_MAT_ID numerical comparison passed

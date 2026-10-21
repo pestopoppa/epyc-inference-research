@@ -1,0 +1,866 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.0.3, pluggy-1.6.0
+rootdir: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/tools/server/tests
+configfile: pytest.ini
+plugins: asyncio-1.3.0, timeout-2.4.0, langsmith-0.7.30, cov-7.1.0, xdist-3.8.0, hypothesis-6.151.13, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 23 deselected / 1 selected
+
+unit/test_slot_fork.py F                                                 [100%]
+
+=================================== FAILURES ===================================
+_________________________ test_kpf171_abort_then_retry _________________________
+
+    def test_kpf171_abort_then_retry():
+        """KPF-17.1(3): abort a trunk-first request at several offsets mid-prefill, send a sibling right after the cancel lands:
+        output == fresh and the fork never reads the aborted slot's cells beyond its decoded n_past.
+    
+        How a slot cancelled mid-prefill is treated (server-context.cpp): the cancel is a queue task, handled between
+        update_slots iterations (SERVER_TASK_TYPE_CANCEL -> release()); prompt tokens are appended only in the iteration
+        whose batch decodes them, and a failed decode prompt_clear()s every processing slot. So at any fork launch a source's
+        prompt tokens equal its decoded cells, and the kv-mode guard `src_pos_max < p - 1` in find_fork_source is
+        defence in depth that no reachable state exercises: LLAMA_KPF_MUTATE=no_posmax_guard ALONE is undetectable by
+        construction (job 22, 2026-10-20). In kv mode this case asserts that invariant directly (n_prompt_tokens == cells).
+        MUTATIONS (kv mode, pure-attention model): abort_keeps_tail is a fault injection (a cancelled mid-prefill slot keeps
+        the next n_batch prompt tokens it never decoded, i.e. the state upstream's "handle ret == 2 (abort)" TODO would create)
+        -> must still PASS, the guard skips that source; abort_keeps_tail,no_posmax_guard -> must FAIL (forks cells that
+        were never computed). On hybrids the checkpoint list only holds decoded positions, so this case is the output oracle.
+    
+        Job 22 never aborted anything: the old request was non-streaming, so requests.post returned only after the server
+        finished (every slot-0 release showed the full 703 tokens). The client now hangs up with a read timeout, and then
+        sends NOTHING for 1.2 s: a non-streaming handler notices the hang-up only when its 1 s result wait times out
+        (server_response::recv_with_timeout restarts the full wait on every notify, i.e. on ANY task's result), so polling
+        /slots right away starves the disconnect check and the task runs to completion. The cancel therefore lands on a
+        1 s tick of the request's wait; the delays below put the hang-up before ticks 1, 1, 2, 2 and 3."""
+        import requests
+        inject = "abort_keeps_tail" in os.environ.get("LLAMA_KPF_MUTATE", "").split(",")
+        server.n_batch = 40
+        server.n_ubatch = 40
+        server.start()
+        build_prompts()
+        kv = server_mode() == "kv"
+        # long enough that a cancel landing up to ~1 s (HTTP_POLLING_SECONDS) after the hang-up is still mid-prefill: TRUNK*12
+        # (1647 tokens) prefilled in 1.2 s on gemma-3-1b with 24 threads and no round was cancelled. TRUNK*24 keeps slot 0 +
+        # the sibling + the fresh run inside the 8192-cell pool.
+        big = TRUNK * 24
+        url = f"http://{server.server_host}:{server.server_port}/completion"
+        aborted, tail_seen = 0, 0
+        for k, delay in enumerate((0.1, 0.5, 1.2, 1.6, 2.2)):
+            try:
+                requests.post(url, json={"prompt": big + SUF[0], "id_slot": 0, "n_predict": 4, "cache_prompt": True,
+                                         "checkpoint_at": [TRUNK_LEN, 2 * TRUNK_LEN, 3 * TRUNK_LEN]}, timeout=(10, delay))
+            except requests.exceptions.ReadTimeout:
+                pass  # the client hung up: the server cancels the task at its next poll
+            time.sleep(1.2)  # no traffic: let the handler's 1 s wait time out and see the closed connection
+            for _ in range(200):
+                if not slots()[0]["is_processing"]:
+                    break
+                time.sleep(0.05)
+            s0 = slots()[0]
+            assert not s0["is_processing"], s0
+            n_tok = s0.get("n_prompt_tokens", 0)
+            cells = s0["kv_cells"]["private"] + s0["kv_cells"]["shared"]
+            aborted += int(n_tok < len(big))
+            if kv:
+                if inject:
+                    tail_seen += int(n_tok > cells)
+                else:
+                    assert n_tok == cells, (delay, n_tok, cells)  # the invariant that makes the guard unreachable
+            sib_prompt = big + SUF[1 + k]
+>           sib = complete(sib_prompt, 1, n_predict=8)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+unit/test_slot_fork.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prompt = [785, 326, 57909, 53416, 8604, 264, ...], id_slot = 1, n_predict = 8
+extra = {}
+data = {'cache_prompt': True, 'id_slot': 1, 'n_predict': 8, 'prompt': [785, 326, 57909, 53416, 8604, 264, ...], ...}
+res = <utils.ServerResponse object at 0x712ffbb8a950>, @py_assert1 = 500
+@py_assert4 = 200, @py_assert3 = False
+@py_format6 = '500\n{500 = <utils.ServerResponse object at 0x712ffbb8a950>.status_code\n} == 200'
+@py_format8 = "{'error': {'code': 500, 'message': 'Invalid input batch.', 'type': 'server_error'}}\n>assert 500\n{500 = <utils.ServerResponse object at 0x712ffbb8a950>.status_code\n} == 200"
+
+    def complete(prompt: list[int], id_slot: int, n_predict: int = 24, **extra) -> dict:
+        data = {"prompt": prompt, "id_slot": id_slot, "n_predict": n_predict, "cache_prompt": True,
+                "temperature": 0.0, "return_tokens": True}
+        data.update(extra)
+        res = server.make_request("POST", "/completion", data=data, timeout=600)
+>       assert res.status_code == 200, res.body
+E       AssertionError: {'error': {'code': 500, 'message': 'Invalid input batch.', 'type': 'server_error'}}
+E       assert 500 == 200
+E        +  where 500 = <utils.ServerResponse object at 0x712ffbb8a950>.status_code
+
+unit/test_slot_fork.py:116: AssertionError
+----------------------------- Captured stdout call -----------------------------
+tests: starting server with: /mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server --host 127.0.0.1 --port 18986 --temp 0.0 --seed 42 --offline --model /mnt/raid0/llm/models/Qwen2.5-0.5B-Instruct-f16.gguf --batch-size 40 --ubatch-size 40 --threads 48 --metrics --kv-unified --slots --alias tinyllama-2 --ctx-size 8192 --parallel 4 --n-predict 24 --slot-save-path /mnt/raid0/llm/tmp/kv-prefix-fork/p1r2-20261020/queue-results/24-kpf17-recheck-swa-kvmode/slots-kvmode-mut-abort_keeps_tail+no_posmax_guard --no-jinja --slot-fork-min-tokens 16
+server pid=1242744, pytest pid=1242741
+Waiting for server to start...
+0.00.001.966 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.002.312 W srv  llama_server: -----------------
+0.00.002.314 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.002.314 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.002.314 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.002.315 W srv  llama_server: -----------------
+0.00.003.537 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen2.5-0.5B-Instruct-f16.gguf'
+0.00.288.861 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.439.217 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.00.439.285 I srv  init_slot_fo: cross-slot prefix fork enabled: mode = kv, min tokens = 16, cache_idle_slots = 1
+0.00.440.916 I srv  llama_server: model loaded
+0.00.440.941 I srv  llama_server: listening on http://127.0.0.1:18986
+Response from server {
+  "status": "ok"
+}
+Response from server {
+  "tokens": [
+    785,
+    326,
+    57909,
+    53416,
+    8604,
+    264,
+    16585,
+    1487,
+    13,
+    7209,
+    11458,
+    566,
+    6139,
+    1495,
+    279,
+    9956,
+    11,
+    279,
+    2608,
+    315,
+    279,
+    16876,
+    11,
+    279,
+    17727,
+    429,
+    5823,
+    11,
+    323,
+    279,
+    12463,
+    315,
+    279,
+    12884,
+    518,
+    42984,
+    13,
+    6065,
+    26127,
+    1635,
+    279,
+    1487,
+    13938,
+    311,
+    35398,
+    26282,
+    13,
+    3197,
+    279,
+    53416,
+    21583,
+    11,
+    279,
+    74642,
+    5163,
+    4588,
+    264,
+    3908,
+    44257,
+    311,
+    1349,
+    678,
+    315,
+    1105,
+    323,
+    28285,
+    1064,
+    1128,
+    1030,
+    5497,
+    13,
+    576,
+    44257,
+    13686,
+    429,
+    43483,
+    1030,
+    3635,
+    803,
+    20757,
+    304,
+    41674,
+    11,
+    429,
+    16745,
+    19948,
+    31631,
+    5823,
+    1817,
+    13212,
+    11,
+    323,
+    429,
+    279,
+    53416,
+    594,
+    91709,
+    13938,
+    9155,
+    323,
+    834,
+    962,
+    438,
+    279,
+    1635,
+    3937,
+    553,
+    13,
+    2932,
+    1083,
+    1730,
+    2613,
+    37840,
+    304,
+    279,
+    36582,
+    25,
+    342,
+    70423,
+    11,
+    264,
+    8251,
+    429,
+    12163,
+    304,
+    279,
+    21271,
+    369,
+    264,
+    1393,
+    11,
+    323,
+    3055,
+    264,
+    50019,
+    13,
+    220
+  ]
+}
+Response from server {
+  "tokens": [
+    15846,
+    25,
+    1128,
+    9864,
+    1521,
+    279,
+    44257,
+    1477,
+    14764,
+    304,
+    279,
+    36582,
+    30,
+    21806,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15846,
+    25,
+    1246,
+    1657,
+    26282,
+    1521,
+    279,
+    1487,
+    614,
+    30,
+    21806,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15846,
+    25,
+    892,
+    3200,
+    1030,
+    803,
+    43483,
+    30,
+    21806,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15846,
+    25,
+    879,
+    1349,
+    279,
+    1487,
+    1283,
+    279,
+    53416,
+    21583,
+    30,
+    21806,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    9645,
+    825,
+    11652,
+    911,
+    279,
+    53416,
+    594,
+    91709,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    1759,
+    2326,
+    2513,
+    279,
+    53416,
+    6139,
+    1495,
+    1449,
+    11458,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    15846,
+    25,
+    1128,
+    6932,
+    311,
+    279,
+    1372,
+    315,
+    19948,
+    31631,
+    30,
+    21806,
+    25
+  ]
+}
+Response from server {
+  "tokens": [
+    20678,
+    279,
+    1487,
+    264,
+    2805,
+    2265,
+    25
+  ]
+}
+Response from server {
+  "default_generation_settings": {
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": -1,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": -1,
+      "n_predict": -1,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "none",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "n_ctx": 8192
+  },
+  "total_slots": 4,
+  "model_alias": "tinyllama-2",
+  "model_ftype": "F16",
+  "model_path": "/mnt/raid0/llm/models/Qwen2.5-0.5B-Instruct-f16.gguf",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "media_marker": "<__media_hqgzOtcbBTGps4TN819Ifq0aPiUpyeLu__>",
+  "endpoint_slots": true,
+  "endpoint_props": false,
+  "endpoint_metrics": true,
+  "ui": true,
+  "ui_settings": {},
+  "chat_template": "{%- if tools %}\n    {{- '<|im_start|>system\\n' }}\n    {%- if messages[0]['role'] == 'system' %}\n        {{- messages[0]['content'] }}\n    {%- else %}\n        {{- 'You are Qwen, created by Alibaba Cloud. You are a helpful assistant.' }}\n    {%- endif %}\n    {{- \"\\n\\n# Tools\\n\\nYou may call one or more functions to assist with the user query.\\n\\nYou are provided with function signatures within <tools></tools> XML tags:\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\\n\\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\\n<tool_call>\\n{\\\"name\\\": <function-name>, \\\"arguments\\\": <args-json-object>}\\n</tool_call><|im_end|>\\n\" }}\n{%- else %}\n    {%- if messages[0]['role'] == 'system' %}\n        {{- '<|im_start|>system\\n' + messages[0]['content'] + '<|im_end|>\\n' }}\n    {%- else %}\n        {{- '<|im_start|>system\\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- for message in messages %}\n    {%- if (message.role == \"user\") or (message.role == \"system\" and not loop.first) or (message.role == \"assistant\" and not message.tool_calls) %}\n        {{- '<|im_start|>' + message.role + '\\n' + message.content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {{- '<|im_start|>' + message.role }}\n        {%- if message.content %}\n            {{- '\\n' + message.content }}\n        {%- endif %}\n        {%- for tool_call in message.tool_calls %}\n            {%- if tool_call.function is defined %}\n                {%- set tool_call = tool_call.function %}\n            {%- endif %}\n            {{- '\\n<tool_call>\\n{\"name\": \"' }}\n            {{- tool_call.name }}\n            {{- '\", \"arguments\": ' }}\n            {{- tool_call.arguments | tojson }}\n            {{- '}\\n</tool_call>' }}\n        {%- endfor %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != \"tool\") %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- message.content }}\n        {{- '\\n</tool_response>' }}\n        {%- if loop.last or (messages[loop.index0 + 1].role != \"tool\") %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n{%- endif %}",
+  "chat_template_caps": {
+    "supports_object_arguments": true,
+    "supports_parallel_tool_calls": true,
+    "supports_preserve_reasoning": false,
+    "supports_string_content": true,
+    "supports_system_role": true,
+    "supports_tool_calls": true,
+    "supports_tools": true,
+    "supports_typed_content": false
+  },
+  "bos_token": "<|endoftext|>",
+  "eos_token": "<|im_end|>",
+  "build_info": "b10359-1fd7e2e12",
+  "is_sleeping": false,
+  "cors_proxy_enabled": false,
+  "slot_fork": {
+    "min_tokens": 16,
+    "mode": "kv",
+    "checkpoint_at": true
+  }
+}
+0.00.512.775 I slot get_availabl: id  0 | task -1 | selected slot by id (0)
+0.00.512.820 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.00.531.181 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 18.3 ms, kv_pos = 40, ms/tok = 0.000
+0.00.549.421 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 18.2 ms, kv_pos = 80, ms/tok = 0.000
+0.00.568.003 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 18.5 ms, kv_pos = 120, ms/tok = 0.000
+0.00.586.961 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 18.9 ms, kv_pos = 160, ms/tok = 0.000
+0.00.606.249 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 19.2 ms, kv_pos = 200, ms/tok = 0.000
+0.00.626.058 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 19.7 ms, kv_pos = 240, ms/tok = 0.000
+0.00.646.346 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 20.2 ms, kv_pos = 280, ms/tok = 0.000
+0.00.666.479 I srv  prefill_budg: prefill-budget: iter 8: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 20.0 ms, kv_pos = 320, ms/tok = 0.000
+0.00.686.954 I srv  prefill_budg: prefill-budget: iter 9: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 20.4 ms, kv_pos = 360, ms/tok = 0.000
+0.00.707.622 I srv  prefill_budg: prefill-budget: iter 10: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 20.6 ms, kv_pos = 400, ms/tok = 0.000
+0.00.728.847 I srv  prefill_budg: prefill-budget: iter 11: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 21.1 ms, kv_pos = 440, ms/tok = 0.000
+0.00.750.227 I srv  prefill_budg: prefill-budget: iter 12: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 21.3 ms, kv_pos = 480, ms/tok = 0.000
+0.00.772.271 I srv  prefill_budg: prefill-budget: iter 13: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 22.0 ms, kv_pos = 520, ms/tok = 0.000
+0.00.794.276 I srv  prefill_budg: prefill-budget: iter 14: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 21.9 ms, kv_pos = 560, ms/tok = 0.000
+0.00.816.527 I srv  prefill_budg: prefill-budget: iter 15: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 22.2 ms, kv_pos = 600, ms/tok = 0.000
+0.00.839.128 I srv  prefill_budg: prefill-budget: iter 16: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 22.5 ms, kv_pos = 640, ms/tok = 0.000
+0.00.862.162 I srv  prefill_budg: prefill-budget: iter 17: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 22.9 ms, kv_pos = 680, ms/tok = 0.000
+0.00.885.562 I srv  prefill_budg: prefill-budget: iter 18: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 23.3 ms, kv_pos = 720, ms/tok = 0.000
+0.00.909.234 I srv  prefill_budg: prefill-budget: iter 19: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 23.6 ms, kv_pos = 760, ms/tok = 0.000
+0.00.933.697 I srv  prefill_budg: prefill-budget: iter 20: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 24.4 ms, kv_pos = 800, ms/tok = 0.000
+0.00.967.756 I srv  prefill_budg: prefill-budget: iter 21: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 34.0 ms, kv_pos = 840, ms/tok = 0.000
+0.00.992.343 I srv  prefill_budg: prefill-budget: iter 22: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 24.5 ms, kv_pos = 880, ms/tok = 0.000
+0.01.017.097 I srv  prefill_budg: prefill-budget: iter 23: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 24.7 ms, kv_pos = 920, ms/tok = 0.000
+0.01.042.410 I srv  prefill_budg: prefill-budget: iter 24: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 25.2 ms, kv_pos = 960, ms/tok = 0.000
+0.01.067.964 I srv  prefill_budg: prefill-budget: iter 25: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 25.5 ms, kv_pos = 1000, ms/tok = 0.000
+0.01.094.459 I srv  prefill_budg: prefill-budget: iter 26: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 26.4 ms, kv_pos = 1040, ms/tok = 0.000
+0.01.120.751 I srv  prefill_budg: prefill-budget: iter 27: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 26.2 ms, kv_pos = 1080, ms/tok = 0.000
+0.01.147.274 I srv  prefill_budg: prefill-budget: iter 28: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 26.4 ms, kv_pos = 1120, ms/tok = 0.000
+0.01.174.313 I srv  prefill_budg: prefill-budget: iter 29: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.0 ms, kv_pos = 1160, ms/tok = 0.000
+0.01.201.585 I srv  prefill_budg: prefill-budget: iter 30: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.2 ms, kv_pos = 1200, ms/tok = 0.000
+0.01.229.305 I srv  prefill_budg: prefill-budget: iter 31: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.6 ms, kv_pos = 1240, ms/tok = 0.000
+0.01.257.129 I srv  prefill_budg: prefill-budget: iter 32: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 27.7 ms, kv_pos = 1280, ms/tok = 0.000
+0.01.285.769 I srv  prefill_budg: prefill-budget: iter 33: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.6 ms, kv_pos = 1320, ms/tok = 0.000
+0.01.314.376 I srv  prefill_budg: prefill-budget: iter 34: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.5 ms, kv_pos = 1360, ms/tok = 0.000
+0.01.343.262 I srv  prefill_budg: prefill-budget: iter 35: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 28.8 ms, kv_pos = 1400, ms/tok = 0.000
+0.01.372.537 I srv  prefill_budg: prefill-budget: iter 36: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.2 ms, kv_pos = 1440, ms/tok = 0.000
+0.01.402.092 I srv  prefill_budg: prefill-budget: iter 37: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.5 ms, kv_pos = 1480, ms/tok = 0.000
+0.01.431.843 I srv  prefill_budg: prefill-budget: iter 38: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 29.7 ms, kv_pos = 1520, ms/tok = 0.000
+0.01.462.246 I srv  prefill_budg: prefill-budget: iter 39: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 30.3 ms, kv_pos = 1560, ms/tok = 0.000
+0.01.492.726 I srv  prefill_budg: prefill-budget: iter 40: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 30.4 ms, kv_pos = 1600, ms/tok = 0.000
+0.01.514.056 W srv          stop: cancel task, id_task = 0
+0.01.524.027 I srv  prefill_budg: prefill-budget: iter 41: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 31.2 ms, kv_pos = 1640, ms/tok = 0.000
+0.01.524.108 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1680, truncated = 0
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 1680,
+    "n_prompt_tokens_processed": 1640,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 4,
+      "n_predict": 4,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 0
+      }
+    ],
+    "kv_cells": {
+      "private": 1640,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 1640,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "408de67fc6f6f233",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 1640,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 1640,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 1640,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+Response from server [
+  {
+    "id": 0,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "id_task": 0,
+    "n_prompt_tokens": 1680,
+    "n_prompt_tokens_processed": 1640,
+    "n_prompt_tokens_cache": 0,
+    "params": {
+      "seed": 42,
+      "temperature": 0.0,
+      "dynatemp_range": 0.0,
+      "dynatemp_exponent": 1.0,
+      "top_k": 40,
+      "top_p": 0.949999988079071,
+      "min_p": 0.05000000074505806,
+      "top_n_sigma": -1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612,
+      "typical_p": 1.0,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "dry_multiplier": 0.0,
+      "dry_base": 1.75,
+      "dry_allowed_length": 2,
+      "dry_penalty_last_n": 8192,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.10000000149011612,
+      "max_tokens": 4,
+      "n_predict": 4,
+      "n_keep": 0,
+      "n_discard": 0,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "ignore_eos": false,
+      "stream": false,
+      "n_probs": 0,
+      "min_keep": 0,
+      "chat_format": "Content-only",
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "generation_prompt": "",
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "speculative.types": "none",
+      "speculative.n_max": 3,
+      "timings_per_token": false,
+      "post_sampling_probs": false,
+      "backend_sampling": false,
+      "lora": []
+    },
+    "next_token": [
+      {
+        "has_next_token": true,
+        "has_new_line": false,
+        "n_remain": -1,
+        "n_decoded": 0
+      }
+    ],
+    "kv_cells": {
+      "private": 1640,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 1640,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 0,
+    "prefix_hash": "408de67fc6f6f233",
+    "checkpoints": []
+  },
+  {
+    "id": 1,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 1640,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 2,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 1640,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  },
+  {
+    "id": 3,
+    "n_ctx": 8192,
+    "speculative": false,
+    "is_processing": false,
+    "kv_cells": {
+      "private": 0,
+      "shared": 0
+    },
+    "kv_pool": {
+      "size": 8192,
+      "used": 1640,
+      "shared": 0
+    },
+    "fork": {
+      "n_fork_tokens": 0,
+      "src_slot": -1,
+      "src_kind": "none"
+    },
+    "content_epoch": 1,
+    "prefix_hash": "14650fb0739d0383",
+    "checkpoints": []
+  }
+]
+0.01.818.606 I slot get_availabl: id  1 | task -1 | selected slot by id (1)
+0.01.818.744 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (idle), kind = kv, n_fork_tokens = 1680, task.n_tokens = 3300, t = 0.10 ms
+0.01.818.747 I slot launch_slot_: id  1 | task 45 | processing task, is_child = 0
+0.01.821.064 E init: the tokens of sequence 1 in the input batch have inconsistent sequence positions:
+ - the last position stored in the memory module of the context (i.e. the KV cache) for sequence 1 is X = 1639
+ - the tokens for sequence 1 in the input batch have a starting position of Y = 1680
+ it is required that the sequence positions remain consecutive: Y = X + 1
+0.01.821.067 E decode: failed to initialize batch
+0.01.821.068 E llama_decode: failed to decode, ret = -1
+0.01.821.070 E srv        decode: Invalid input batch. off = 0, n_batch = 40, ret = -1
+0.01.821.071 E srv    send_error: task id = 45, error: Invalid input batch.
+0.01.821.075 I slot      release: id  1 | task 45 | stop processing: n_tokens = 1720, truncated = 0
+0.01.821.088 W srv          stop: cancel task, id_task = 45
+0.01.821.277 E srv  update_slots: decode() failed: Invalid input batch.
+0.01.821.293 I srv  prefill_budg: prefill-budget: iter 42: decode_rows = 0 (slots 0), prompt = 40 (slots 1), budget = 0, t_iter = 0.2 ms, kv_pos = 0, ms/tok = 0.000
+Response from server {
+  "error": {
+    "code": 500,
+    "message": "Invalid input batch.",
+    "type": "server_error"
+  }
+}
+--------------------------- Captured stdout teardown ---------------------------
+Stopping server with pid=1242744
+0.01.862.607 I srv    operator(): operator(): cleaning up before exit...
+=========================== short test summary info ============================
+FAILED unit/test_slot_fork.py::test_kpf171_abort_then_retry - AssertionError:...
+======================= 1 failed, 23 deselected in 2.00s =======================

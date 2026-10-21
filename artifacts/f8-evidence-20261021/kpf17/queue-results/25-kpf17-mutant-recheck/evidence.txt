@@ -1,0 +1,3 @@
+0.03.143.342 I slot do_slot_fork: id  1 | task -1 | slot fork: src = 0 (busy), kind = checkpoint, n_fork_tokens = 137, task.n_tokens = 149, t = 5.14 ms
+source vs unforked: A/A control matches 61/61, forked run 61
+        Jobs 20 and 21 (2026-10-21) never forked here (no do_slot_fork line in either log), so fork_clobber_src went

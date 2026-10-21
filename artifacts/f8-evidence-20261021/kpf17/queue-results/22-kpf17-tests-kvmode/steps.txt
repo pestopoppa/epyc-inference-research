@@ -1,0 +1,3 @@
+kvmode-abort-then-retry OK passed=1 skipped=0
+kvmode-all-new-cases OK passed=1 skipped=2
+kvmode-mut-no_posmax_guard FAIL MUTATION_NOT_DETECTED mut=no_posmax_guard passed=1

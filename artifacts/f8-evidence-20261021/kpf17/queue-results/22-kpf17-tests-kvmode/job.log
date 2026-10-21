@@ -1,0 +1,5 @@
+[2026-10-20T23:12:58Z] provenance: branch d2ef28e108f28f132971456468dab15049a80083 llama-server sha256 8f8606e7ffa58fc72fa685a022f68d7726e8873c28dfda7ee9895cdf9fb37f5e
+[2026-10-20T23:13:10Z] STEP kvmode-abort-then-retry OK passed=1 skipped=0
+[2026-10-20T23:13:46Z] STEP kvmode-all-new-cases OK passed=1 skipped=2
+[2026-10-20T23:13:59Z] STEP kvmode-mut-no_posmax_guard FAIL MUTATION_NOT_DETECTED mut=no_posmax_guard passed=1
+RESULT 22-kpf17-tests-kvmode pass=2 fail=1
