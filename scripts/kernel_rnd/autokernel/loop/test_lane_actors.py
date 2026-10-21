@@ -298,9 +298,14 @@ def test_two_lane_run_puts_lane_one_on_the_external_model_and_leaves_lane_zero_a
     assert lanes["lane0"]["backend"].model == QWEN
     assert lanes["lane0"]["seat"] == global_lanes["lane0"]["seat"]
     assert lanes["lane0"]["seat"].thinking_for("author") == "medium"
+    # The belief reader's config carries each run's own store as a source root (a fresh temp
+    # dir per fixture), so compare it with the store normalised away.
+    import dataclasses
+    assert dataclasses.replace(lanes["lane0"]["belief"], source_roots=()) == \
+        dataclasses.replace(global_lanes["lane0"]["belief"], source_roots=())
     assert {key: value for key, value in lanes["lane0"].items()
-            if key not in {"should_stop", "sandbox_scratch"}} == \
+            if key not in {"should_stop", "sandbox_scratch", "belief"}} == \
         {key: value for key, value in global_lanes["lane0"].items()
-         if key not in {"should_stop", "sandbox_scratch"}}
+         if key not in {"should_stop", "sandbox_scratch", "belief"}}
     # Without the flag both lanes are the global planner (the historical pool).
     assert global_lanes["lane1"]["backend"].model == QWEN

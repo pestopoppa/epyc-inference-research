@@ -179,7 +179,7 @@ class AuthorThinkingConfig(unittest.TestCase):
         # The planner/author seat takes it; the critic's seat construction does not.
         critic = source[source.index("make_critic=lambda worker"):][:600]
         self.assertNotIn("_actor_thinking", critic)
-        planner = source[source.index("def make_planner(worker)"):][:1400]
+        planner = source[source.index("def make_planner(worker)"):][:2400]
         self.assertIn("**_actor_thinking(args)", planner)
 
 

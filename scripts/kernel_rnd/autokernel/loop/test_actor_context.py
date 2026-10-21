@@ -212,7 +212,10 @@ def assert_snapshot_only(case, env, body, ws=None, role=None):
     """`role="critic"`: its knobs-off config also carries the never-ask permission block
     (`actor_opencode_config.CRITIC_NEVER_ASK`; an auto-rejected ask ends its session)."""
     from autokernel.loop import actor_opencode_config as aoc
-    case.assertEqual(set(env or {}), {"OPENCODE_CONFIG", actors.SEAT_ENV_PLAIN_CONFIG},
+    # The planner's belief summary (`AK_ACTOR_BELIEF_CONTEXT`) rides every planner call now
+    # that belief context is mandatory; it is evidence for the metrics row, not a seat knob.
+    case.assertEqual(set(env or {}) - {actors.BELIEF_ENV},
+                     {"OPENCODE_CONFIG", actors.SEAT_ENV_PLAIN_CONFIG},
                      "knobs off: the snapshot-off config and nothing else (no arm, no trim)")
     case.assertEqual(env[actors.SEAT_ENV_PLAIN_CONFIG], "1")
     expect = dict(SNAPSHOT_ONLY_CONFIG)

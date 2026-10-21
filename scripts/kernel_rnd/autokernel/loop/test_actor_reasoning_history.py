@@ -193,7 +193,7 @@ class RunFlag(unittest.TestCase):
         self.assertIn("DEFAULT_PLANNER_REASONING_HISTORY", block)
         self.assertIn("REASONING_HISTORY_CHOICES", block)
         # The proposal planner's seat takes it; the critic and panel members do not.
-        planner = source[source.index("def make_planner(worker)"):][:1600]
+        planner = source[source.index("def make_planner(worker)"):][:2600]
         self.assertIn("**_actor_reasoning_history(args)", planner)
         critic = source[source.index("make_critic=lambda worker"):][:600]
         self.assertNotIn("_actor_reasoning_history", critic)

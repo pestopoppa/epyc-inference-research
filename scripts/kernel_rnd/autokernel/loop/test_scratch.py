@@ -702,8 +702,10 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "actors.py:_record_call:open-write": (1, "evidence: VB-AK-SEAT call record log (append)"),
     "actors.py:_record_metrics:mkdir": (2, "evidence: actor_call_metrics log and session exports"),
     "actors.py:_record_metrics:open-write": (1, "evidence: actor_call_metrics log (append)"),
-    "belief_context.py:write_receipt:mkdir": (1, "evidence: belief receipt log"),
-    "belief_context.py:write_receipt:open-write": (1, "evidence: belief receipt log (append)"),
+    "belief_context.py:_append:mkdir": (1, "evidence: belief receipt / degraded-mode logs"),
+    "belief_context.py:_append:open-write": (1, "evidence: belief receipt / degraded-mode logs (append)"),
+    "belief_context.py:DegradedWork._locked:mkdir": (1, "evidence: degraded-mode log dir (flock)"),
+    "belief_context.py:DegradedWork._locked:open-write": (1, "evidence: degraded-mode flock file"),
     "cpu_window.py:CpuWindow._event:mkdir": (1, "evidence: CPU window event log beside the published window file"),
     "cpu_window.py:CpuWindow._event:open-write": (1, "evidence: CPU window event log (append) peers tail"),
     # -- ak-check sandbox (lane/ak-sandbox): everything it builds lives in the check dir

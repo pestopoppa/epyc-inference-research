@@ -61,7 +61,12 @@ MODES = ("required",)
 ANSWER_SCHEMA = "epyc.vidya.loop_beliefs.v1"
 LEDGER_STATE_SCHEMA = "epyc.vidya.ledger_state.v1"
 SEED_CHECK_SCHEMA = "epyc.vidya.seed_check.v1"
-DEFAULT_READER_TIMEOUT_S = 30.0       # prepare may run an incremental ingest
+# prepare reads the intake index, verifies/folds the ~30k-frame ledger and lists each source
+# store, and may run an incremental ingest: measured 5.5 s with no source stores plus ~2.4 s
+# per store, and 24-26 s (one 30 s TIMEOUT) with three stores at host load average ~600
+# (2026-10-21). A 30 s deadline refused planning and raised the alarm on a healthy ledger;
+# the planner call it gates takes minutes.
+DEFAULT_READER_TIMEOUT_S = 120.0
 DEFAULT_ALARM_TIMEOUT_S = 10.0
 DEFAULT_ESCALATE_AFTER_S = 3600.0
 RECEIPT_SCHEMA = "epyc.vidya.planner_evidence_receipt.v2"
