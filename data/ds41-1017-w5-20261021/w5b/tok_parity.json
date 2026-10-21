@@ -1,0 +1,180 @@
+[
+ {
+  "id": "s12",
+  "n_cpp": 7,
+  "cpp_bos": true,
+  "n_hf": 6,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "The",
+   "\u0120capital",
+   "\u0120city",
+   "\u0120of",
+   "\u0120France",
+   "\u0120is"
+  ]
+ },
+ {
+  "id": "q40",
+  "n_cpp": 41,
+  "cpp_bos": true,
+  "n_hf": 40,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "\u0120then",
+   "\u0120give",
+   "\u0120the",
+   "\u0120final",
+   "\u0120time",
+   ".\u010a",
+   "Answer",
+   ":"
+  ]
+ },
+ {
+  "id": "p90",
+  "n_cpp": 65,
+  "cpp_bos": true,
+  "n_hf": 64,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "\u0120curious",
+   "\u0120twelve",
+   "-year",
+   "-old",
+   "\u0120student",
+   ".\u010a\u010a",
+   "Paragraph",
+   ":"
+  ]
+ },
+ {
+  "id": "p220",
+  "n_cpp": 235,
+  "cpp_bos": true,
+  "n_hf": 234,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "\u0120then",
+   "\u0120state",
+   "\u0120the",
+   "\u0120final",
+   "\u0120list",
+   ".\u010a\u010a",
+   "Answer",
+   ":"
+  ]
+ },
+ {
+  "id": "long2k",
+  "n_cpp": 2041,
+  "cpp_bos": true,
+  "n_hf": 2040,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "\u0120and",
+   "\u0120what",
+   "\u0120is",
+   "\u0120his",
+   "\u0120profession",
+   "?\u010a",
+   "Answer",
+   ":"
+  ]
+ },
+ {
+  "id": "len1200",
+  "n_cpp": 309,
+  "cpp_bos": true,
+  "n_hf": 308,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "\u0120and",
+   "\u0120what",
+   "\u0120is",
+   "\u0120his",
+   "\u0120profession",
+   "?\u010a",
+   "Answer",
+   ":"
+  ]
+ },
+ {
+  "id": "len2400",
+  "n_cpp": 600,
+  "cpp_bos": true,
+  "n_hf": 599,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "\u0120and",
+   "\u0120what",
+   "\u0120is",
+   "\u0120his",
+   "\u0120profession",
+   "?\u010a",
+   "Answer",
+   ":"
+  ]
+ },
+ {
+  "id": "len4800",
+  "n_cpp": 1149,
+  "cpp_bos": true,
+  "n_hf": 1148,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "\u0120and",
+   "\u0120what",
+   "\u0120is",
+   "\u0120his",
+   "\u0120profession",
+   "?\u010a",
+   "Answer",
+   ":"
+  ]
+ },
+ {
+  "id": "len9000",
+  "n_cpp": 2041,
+  "cpp_bos": true,
+  "n_hf": 2040,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "\u0120and",
+   "\u0120what",
+   "\u0120is",
+   "\u0120his",
+   "\u0120profession",
+   "?\u010a",
+   "Answer",
+   ":"
+  ]
+ },
+ {
+  "id": "qfirst9000",
+  "n_cpp": 2030,
+  "cpp_bos": true,
+  "n_hf": 2029,
+  "identical_after_bos": true,
+  "first_diff": null,
+  "tail_cpp": [
+   "ro",
+   "\u010a\u010a",
+   "The",
+   "\u0120subject",
+   "\u0120of",
+   "\u0120the",
+   "\u0120article",
+   "\u0120is"
+  ]
+ }
+]
