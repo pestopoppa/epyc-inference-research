@@ -1,7 +1,7 @@
 """Tests for the PRELIMINARY DeepSeek-V4.1-Flash canonical recipe.
 
-These are contract tests, not artifact tests: nothing here touches the 483 GiB
-GGUF, the experimental build, or the host. They exist so the two limitations the
+These are contract tests, not artifact tests: nothing here reads the 467 GiB
+split GGUF, the experimental build, or the host. They exist so the two limitations the
 module advertises cannot be quietly removed — a recipe that stops SAYING it is
 spec-dec-incomplete while still BEING spec-dec-incomplete is the exact failure
 the module was written to prevent.
@@ -10,6 +10,7 @@ the module was written to prevent.
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -70,6 +71,13 @@ class TestSpecDecLanded(unittest.TestCase):
 
 
 class TestGreedyExactness(unittest.TestCase):
+
+    def setUp(self):
+        # Command-shape tests: simulate a ratified drafter (W6 pass). The default,
+        # un-ratified state is pinned by TestDrafterPending.
+        patcher = mock.patch.object(R, "assert_drafter_ready", lambda: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
     def test_upstream_exactness_claim_is_recorded_as_false_here(self):
         self.assertFalse(R.GREEDY_EXACTNESS["holds_here"])
         self.assertFalse(R.GREEDY_EXACTNESS["measured_here"])
@@ -107,6 +115,13 @@ class TestGreedyExactness(unittest.TestCase):
 
 
 class TestSpecDecRefusals(unittest.TestCase):
+
+    def setUp(self):
+        # Command-shape tests: simulate a ratified drafter (W6 pass). The default,
+        # un-ratified state is pinned by TestDrafterPending.
+        patcher = mock.patch.object(R, "assert_drafter_ready", lambda: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
     def test_serve_refuses_an_unknown_variant(self):
         with self.assertRaises(R.RecipeViolation):
             R.build_serve_command(variant="fastest-please")
@@ -219,10 +234,83 @@ class TestBinaryIdentity(unittest.TestCase):
 
 
 class TestArtifact(unittest.TestCase):
-    def test_arch_and_joined_size(self):
+    def test_trunk_is_the_1017_split(self):
         self.assertEqual(R.TRUNK_ARCH, "deepseek41")
-        self.assertEqual(R.TRUNK_BYTES, 518_596_067_328)
         self.assertEqual(R.TRUNK_TENSORS, 1046)
+        self.assertEqual(R.TRUNK_GGUF_VERSION, 3)
+        self.assertEqual(len(R.TRUNK_SHARDS), 9)
+        self.assertEqual(R.TRUNK_GGUF, R.TRUNK_SHARDS[0][0])
+        self.assertIn("1017-MXFP4-experts-00001-of-00009", R.TRUNK_GGUF)
+        self.assertEqual(sum(b for _p, b, _s in R.TRUNK_SHARDS), R.TRUNK_BYTES)
+        self.assertEqual(R.TRUNK_BYTES, 501_602_535_360)
+        for path, _b, sha in R.TRUNK_SHARDS:
+            self.assertEqual(len(sha), 64, path)
+        self.assertEqual(R.TRUNK_EXPERT_TYPE, "MXFP4")
+
+    def test_retired_trunk_is_refused_by_name(self):
+        self.assertEqual(R.RETIRED_TRUNK["bytes"], 518_596_067_328)
+        with self.assertRaises(R.RecipeViolation):
+            R.assert_artifacts_exist(R.RETIRED_TRUNK["path"])
+        with self.assertRaises(R.RecipeViolation):
+            R.assert_artifacts_exist("/nowhere/else.gguf")
+
+    def test_historical_numbers_name_the_file_they_were_measured_on(self):
+        self.assertEqual(R.MEASURED["artifact"], R.RETIRED_TRUNK["path"])
+        self.assertEqual(R.MEASURED_SERVING["artifact"], R.RETIRED_TRUNK["path"])
+        self.assertEqual(R.MEASURED_SERVING["drafter"], R.RETIRED_DRAFT_GGUF)
+
+    def test_every_shard_is_checked(self):
+        sizes = {p: b for p, b, _s in R.TRUNK_SHARDS}
+        missing = R.TRUNK_SHARDS[4][0]
+        with mock.patch.object(R.os.path, "isfile", lambda p: p != missing), \
+                mock.patch.object(R.os.path, "getsize", lambda p: sizes[p]):
+            with self.assertRaisesRegex(R.RecipeViolation, "00005-of-00009"):
+                R.assert_artifacts_exist()
+        wrong = R.TRUNK_SHARDS[8][0]
+        with mock.patch.object(R.os.path, "isfile", lambda p: True), \
+                mock.patch.object(R.os.path, "getsize",
+                                  lambda p: sizes[p] - (p == wrong)):
+            with self.assertRaisesRegex(R.RecipeViolation, "00009-of-00009"):
+                R.assert_artifacts_exist()
+        with mock.patch.object(R.os.path, "isfile", lambda p: True), \
+                mock.patch.object(R.os.path, "getsize", lambda p: sizes[p]):
+            R.assert_artifacts_exist()
+
+    def test_sampling_contract_recorded(self):
+        self.assertEqual(R.RECOMMENDED_SAMPLING["temperature"], 1.0)
+        self.assertEqual(R.RECOMMENDED_SAMPLING["top_p"], 1.0)
+        self.assertIn("intake-2121#record", R.RECOMMENDED_SAMPLING["source"])
+
+
+class TestDrafterPending(unittest.TestCase):
+    """DS41-W6 has not passed: spec launches refuse, plain launches never look."""
+
+    def test_drafter_is_not_ready_and_unpinned(self):
+        self.assertFalse(R.DRAFT_READY)
+        self.assertIsNone(R.DRAFT_SHA256)
+        self.assertIn("1017-DSpark", R.DRAFT_GGUF)
+        self.assertNotEqual(R.DRAFT_GGUF, R.RETIRED_DRAFT_GGUF)
+
+    def test_spec_launch_refuses_even_if_a_file_exists(self):
+        with mock.patch.object(R.os.path, "isfile", lambda p: True):
+            with self.assertRaisesRegex(R.RecipeViolation, "spec_dec=False"):
+                R.build_serve_command()
+
+    def test_plain_launch_never_consults_the_drafter(self):
+        def boom():
+            raise AssertionError("plain launch consulted the drafter")
+        with mock.patch.object(R, "assert_drafter_ready", boom), \
+                mock.patch.object(R.os.path, "isfile", lambda p: False):
+            cmd, env = R.build_serve_command(spec_dec=False)
+        self.assertNotIn("-md", cmd)
+        self.assertNotIn(R.RETIRED_DRAFT_GGUF, cmd)
+        self.assertEqual(cmd[cmd.index("-m") + 1], R.TRUNK_GGUF)
+
+    def test_ratified_drafter_is_the_1017_one(self):
+        with mock.patch.object(R, "assert_drafter_ready", lambda: None):
+            cmd, _ = R.build_serve_command()
+        self.assertEqual(cmd[cmd.index("-md") + 1], R.DRAFT_GGUF)
+        self.assertNotIn(R.RETIRED_DRAFT_GGUF, cmd)
 
 
 if __name__ == "__main__":

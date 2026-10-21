@@ -58,7 +58,7 @@ import canonical_recipe as CR  # noqa: E402  (the global recipe this one overlay
 
 
 RECIPE_ID = "deepseek-v41-flash-cpu"
-RECIPE_REVISION = "2026-09-23b"   # DSpark drafter landed; see §5
+RECIPE_REVISION = "2026-10-21a"   # DS41-W7: 1017 MXFP4 9-shard trunk; drafter pending (W6)
 SURFACE = "cpu"          # decode AND prefill; see THREADS / THREADS_BATCH
 
 
@@ -116,41 +116,102 @@ STATUS = {
 # ---------------------------------------------------------------------------
 # 1. ARTIFACT IDENTITY
 # ---------------------------------------------------------------------------
-# The joined Q4 serving artifact. `.part1` + `.part2` were published separately
-# and MUST be joined: blk.14.engram_embd straddles the boundary.
-TRUNK_GGUF = (
-    "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/"
-    "DeepSeek-V4.1-Flash-Q4.gguf"
+# ★ 2026-10-21 DS41-W7 CUTOVER: the trunk is antirez's 1017 finetune, MXFP4 experts,
+#   a 9-shard SPLIT named by its first shard (qwen38_flash_next_recipe.TRUNK_SHARDS
+#   precedent). Checking TRUNK_GGUF alone would certify 49 GB of a 502 GB artifact,
+#   which is why TRUNK_SHARDS exists and every validator iterates it.
+#   W5 correctness (load, coherence, ppl) PASSED 2026-10-21 before this landed.
+TRUNK_DIR = "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf"
+_TRUNK_STEM = TRUNK_DIR + "/DeepSeek-V4.1-Flash-1017-MXFP4-experts-{:05d}-of-00009.gguf"
+TRUNK_GGUF = _TRUNK_STEM.format(1)
+# (path, bytes, sha256). sha256 = the HF-LFS digests download_1017.sh verified before
+# each rename (/mnt/raid0/llm/tmp/ds41-1017-swap/download_1017.log `OK` lines, last one
+# 2026-10-21T08:22:38Z); bytes = stat 2026-10-21. Same table as
+# scripts/benchmark/ds41_1017_capture.py SHARDS_1017.
+TRUNK_SHARDS = (
+    (_TRUNK_STEM.format(1), 49_353_784_544,
+     "636918b09de6253bf41af29f06aac3ceeda220e46379d8a2058ef92c4e433ed8"),
+    (_TRUNK_STEM.format(2), 49_412_635_712,
+     "b26d3fc1e6ae1be6c52665542f3c1fee6a33791478f26e6cd90b5a75940a9f96"),
+    (_TRUNK_STEM.format(3), 49_582_960_352,
+     "20c7fe7adb0578336d8a5e5f9eed521aeb88e8c119ba46e0916cdaab28931c80"),
+    (_TRUNK_STEM.format(4), 49_418_206_432,
+     "67592ba15870c4292a615666adcc2736b53cc345b2cccb1c36710a0a6caf15b4"),
+    (_TRUNK_STEM.format(5), 49_412_829_632,
+     "ecd04e0aa71bfab8cfe79ea7fef7f35b6be0b6772455139e2081d6ce1dcc18ed"),
+    (_TRUNK_STEM.format(6), 49_257_603_776,
+     "88214e0cc80fbae578b80c114527e6ce725199684e0b6849475c7d00b3d0f54c"),
+    (_TRUNK_STEM.format(7), 2_406_482_112,
+     "38939faf3e4258f3ae333f0fa1954ce89515b75ceee90d37bf4ebe5fafe285e6"),
+    (_TRUNK_STEM.format(8), 101_377_628_544,
+     "a9d1634da2ac57459a64b10b69ddedfadda7dcde0e71ca6e55bea7c293c4a9f0"),
+    (_TRUNK_STEM.format(9), 101_380_404_256,
+     "b9832b355288c005da6ef444d02424464dd27f6ebdefeadbec2244264eb65285"),
 )
-TRUNK_BYTES = 518_596_067_328          # 482.98 GiB, verified DS41-A2 2026-09-23
-TRUNK_ARCH = "deepseek41"              # general.architecture
-TRUNK_TENSORS = 1046                   # blk.0-39 only
+TRUNK_BYTES = 501_602_535_360          # sum over TRUNK_SHARDS (467.16 GiB)
+TRUNK_PROVENANCE = "hf:antirez/deepseek-v4.1-flash-gguf 1017 MXFP4-experts, 9 shards"
+TRUNK_ARCH = "deepseek41"              # general.architecture (shard 1 header, 2026-10-21)
+TRUNK_TENSORS = 1046                   # split.tensors.count; blk.0-39 only
+# GGUF FORMAT version. The header says 3, exactly as the Sept file did: the cutover
+# changes the artifact, not the container format, so this constant is re-verified,
+# not incremented (a 4 here would be a false claim about the file).
 TRUNK_GGUF_VERSION = 3
-TRUNK_ALIGNMENT = 16384
+TRUNK_ALIGNMENT = 32                   # general.alignment (Sept Q4: 16384)
+# Tensor count by dtype over all 9 shards (gguf-py header parse 2026-10-21). The
+# routed experts ffn_{gate,up,down}_exps are MXFP4 (120 = 40 layers x 3); shared
+# experts Q8_0. The Sept file's experts were Q4_K, so every Q4_K expert-path AK keep
+# (DS41 keeps 3/4, X4_T) does NOT apply to this trunk (DS41-W8).
+TRUNK_QUANT_CENSUS = {"F32": 493, "Q8_0": 321, "MXFP4": 120, "F16": 110, "I8": 2}
+TRUNK_EXPERT_TYPE = "MXFP4"
+
+# The Sept artifact this recipe served until 2026-10-21. Kept as a record so the
+# historical MEASURED/MEASURED_SERVING blocks below keep naming the file they were
+# measured on; _trunk_parts() REFUSES it by name. Its full-file sha256 was never
+# recorded (identity = name + size + the two published part digests, DS41-A2).
+RETIRED_TRUNK = {
+    "path": TRUNK_DIR + "/DeepSeek-V4.1-Flash-Q4.gguf",
+    "status": "RETIRED 2026-10-21 (DS41-W7); deletion operator-owned after W5",
+    "bytes": 518_596_067_328,          # 482.98 GiB, verified DS41-A2 2026-09-23
+    "sha256": None,
+    "part_sha256_short": {"part1": "6442b1f9", "part2": "7c3e1064"},
+    "expert_type": "Q4_K",
+    "alignment": 16384,
+}
 
 # ★ THE TENSOR THE ARTIFACT DOES NOT HAVE. Zero `mtp.*` tensors: antirez's
 # converter drops every mtp.*/vision.*/aligner.* tensor
-# (gguf-tools/deepseek41_quantize.py:149), and vcruz's GGUF strips them too. The
-# earlier "MTP retained" reading came from the embedded HF-config KV string,
-# which antirez writes and never reads. This is why the DRAFTER IS A SEPARATE
+# (gguf-tools/deepseek41_quantize.py:149). This is why the DRAFTER IS A SEPARATE
 # FILE (below) rather than a block inside the trunk GGUF.
 TRUNK_MTP_TENSORS = 0
 
-# ★ THE DRAFTER, 2026-09-23b. Built from the official shards 44-46 (the 2,401
-#   mtp.* tensors the trunk artifact does not carry), NOT from a re-download.
-#   It is a SEPARATE GGUF passed with -md; --spec-type draft-dspark selects the
-#   DSpark accept/verify shape (anchor-first block layout + Markov head), which
-#   is NOT the same code path as draft-mtp (sequential nextn depth).
-DRAFT_GGUF = "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf"
-DRAFT_BYTES = 10_004_008_256           # 9.32 GiB, on disk 2026-09-23
+# ★ THE DRAFTER. A SEPARATE GGUF passed with -md; --spec-type draft-dspark selects the
+#   DSpark accept/verify shape. It must be built from the SAME finetune as the trunk:
+#   the Sept drafter (RETIRED_DRAFT_GGUF) was converted from the Sept checkpoint's
+#   mtp.* shards and does NOT match the 1017 trunk. The 1017 drafter is DS41-W6 and
+#   has not passed, so DRAFT_READY is False and build_serve_command(spec_dec=True)
+#   REFUSES -- structurally, before it looks at the disk -- instead of pairing the
+#   Sept drafter with the 1017 trunk. spec_dec=False never touches any drafter field.
+#   Flip DRAFT_READY only together with DRAFT_BYTES and DRAFT_SHA256 (W6 pass).
+DRAFT_GGUF = "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-1017-DSpark.gguf"
+DRAFT_READY = False
+DRAFT_BYTES: Optional[int] = None
+DRAFT_SHA256: Optional[str] = None
+DRAFT_PENDING_REASON = (
+    "the 1017 DSpark drafter (DS41-W6) has not passed its gates; the Sept drafter "
+    "does not match the 1017 trunk"
+)
 DRAFT_SPEC_TYPE = "draft-dspark"
+RETIRED_DRAFT_GGUF = "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf"
+RETIRED_DRAFT_BYTES = 10_004_008_256   # Sept drafter, 9.32 GiB; pairs with RETIRED_TRUNK only
 
-TRUNK_PART_SHA256 = {
-    # As published; both verified against their published digests, DS41-A2.
-    "part1": "6442b1f9",   # short form as the handoff records it
-    "part2": "7c3e1064",
+# ★ DS41-W7.1 — the vendor sampling contract (intake-2121#record): the 1017 model card
+#   recommends temperature 1.0 / top_p 1.0. Quality and A/B harnesses send it
+#   explicitly or record the deviation. It is a recommendation, not a server default.
+RECOMMENDED_SAMPLING = {
+    "temperature": 1.0,
+    "top_p": 1.0,
+    "source": "antirez/deepseek-v4.1-flash 1017 model card (intake-2121#record)",
 }
-TRUNK_PART2_RETAINED = True   # 39 GB, deletable once the join is trusted
 
 
 # ---------------------------------------------------------------------------
@@ -325,8 +386,10 @@ SPEC_DEC = {
 
     # --- LANDED 2026-09-23b ---
     "draft_gguf": DRAFT_GGUF,
+    "draft_ready": DRAFT_READY,
     "draft_gguf_source": "official shards 44-46 (~8 GB, 2,401 mtp.* tensors)",
-    "draft_gguf_download_state": "PRESENT on disk (converted 2026-09-23)",
+    "draft_gguf_download_state": ("1017 drafter PENDING (DS41-W6); the Sept drafter "
+                                  "was converted 2026-09-23 and matches only the Sept trunk"),
     "draft_gguf_conversion": "done: shards 44-46 -> DeepSeek-V4.1-Flash-DSpark.gguf",
 
     "spec_type": "draft-dspark",           # --spec-type draft-dspark
@@ -582,7 +645,7 @@ MEASURED = {
     "instrument_class": "bench",
     "category": "CANDIDATE",
     "binary": f"{KERNEL_BRANCH} @ {KERNEL_COMMIT} (build {KERNEL_BUILD_NUMBER})",
-    "artifact": TRUNK_GGUF,
+    "artifact": RETIRED_TRUNK["path"],   # Sept Q4: NOT the current trunk
     "spec_dec": "NONE — no drafter exists (see SPEC_DEC)",
     "protocol": None,   # ★ no protocol citation => OBSERVATION, not a decision-gating claim
     "tg128_tps_by_threads":  {24: 12.89, 48: 13.18, 96: (12.74, 12.81), 192: 4.99},
@@ -617,8 +680,8 @@ MEASURED_SERVING = {
     "reps": None,                # ★ unrecorded; a single-window read
     "binary": f"{KERNEL_BRANCH} @ {KERNEL_COMMIT} + {KERNEL_WORKTREE_PATCHES}",
     "binary_bindir": os.path.join(KERNEL_SOURCE_ROOT, "build-cpu"),
-    "artifact": TRUNK_GGUF,
-    "drafter": DRAFT_GGUF,
+    "artifact": RETIRED_TRUNK["path"],   # Sept Q4: NOT the current trunk
+    "drafter": RETIRED_DRAFT_GGUF,
     "threads": THREADS,
     "arms_tps": {
         # (greedy, temp 0.7)
@@ -776,8 +839,7 @@ def build_serve_command(
                 f"  note     : {v['honest_note']}\n"
                 f"  measure  : {GREEDY_EXACTNESS['measurement']}"
             )
-        if not os.path.isfile(DRAFT_GGUF):
-            raise RecipeViolation(f"drafter GGUF not found: {DRAFT_GGUF}")
+        assert_drafter_ready()
         if v["spec_exact_env"]:
             env["LLAMA_SPEC_EXACT"] = v["spec_exact_env"]
 
@@ -893,15 +955,61 @@ def assert_no_silent_spec_dec_claim(text: str) -> None:
                 )
 
 
-def assert_artifacts_exist(model: str = TRUNK_GGUF) -> None:
-    if not os.path.isfile(model):
-        raise RecipeViolation(f"artifact not found: {model}")
-    size = os.path.getsize(model)
-    if size != TRUNK_BYTES:
+def _trunk_parts(model: str) -> tuple:
+    """(path, bytes, sha256) for every file the trunk consists of. The trunk is a SPLIT
+    named by its first shard, so certifying ``model`` alone would certify one ninth."""
+    if model == TRUNK_GGUF:
+        return TRUNK_SHARDS
+    if os.path.realpath(model) == os.path.realpath(RETIRED_TRUNK["path"]):
         raise RecipeViolation(
-            f"{model} is {size} bytes, recipe expects {TRUNK_BYTES} "
-            f"(482.98 GiB, both parts joined — an unjoined part1 is 480.0 GB)"
+            f"{model} is the RETIRED Sept trunk ({RETIRED_TRUNK['status']}); "
+            f"this recipe's trunk is {TRUNK_GGUF} (9 shards)"
         )
+    raise RecipeViolation(f"{model} is not this recipe's trunk ({TRUNK_GGUF})")
+
+
+def assert_artifacts_exist(model: str = TRUNK_GGUF) -> None:
+    """Presence + SIZE of every trunk shard. Size is a cheap identity check that
+    catches a missing, truncated or swapped shard without hashing 502 GB; use
+    assert_artifact_digests() when the stakes justify the read. Never checks the
+    drafter: a no-draft launch must not depend on it (assert_drafter_ready)."""
+    for path, want_bytes, _sha in _trunk_parts(model):
+        if not os.path.isfile(path):
+            raise RecipeViolation(f"artifact missing: {path}")
+        got = os.path.getsize(path)
+        if got != want_bytes:
+            raise RecipeViolation(f"{path}: {got} bytes, recipe pins {want_bytes}")
+
+
+def assert_artifact_digests(model: str = TRUNK_GGUF) -> None:
+    """Full sha256 of every trunk shard. Reads ~502 GB; run it when promoting or when
+    a number disagrees with the recipe, not on every serve."""
+    import hashlib
+    for path, _bytes, want in _trunk_parts(model):
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 24), b""):
+                h.update(chunk)
+        if h.hexdigest() != want:
+            raise RecipeViolation(f"{path}: sha256 {h.hexdigest()} != recipe {want}")
+
+
+def assert_drafter_ready() -> None:
+    """The drafter is usable only when it is RATIFIED for this trunk (DRAFT_READY)
+    AND present at its pinned size. Fails closed on the flag first, so a missing
+    1017 drafter can never be papered over by the Sept file still on disk."""
+    if not DRAFT_READY:
+        raise RecipeViolation(
+            f"speculative decoding is unavailable for {RECIPE_ID} rev "
+            f"{RECIPE_REVISION}: {DRAFT_PENDING_REASON}.\n"
+            "Pass spec_dec=False for the no-draft launch. Never substitute "
+            f"{RETIRED_DRAFT_GGUF}: it matches only the retired Sept trunk."
+        )
+    if not os.path.isfile(DRAFT_GGUF):
+        raise RecipeViolation(f"drafter GGUF not found: {DRAFT_GGUF}")
+    if DRAFT_BYTES is not None and os.path.getsize(DRAFT_GGUF) != DRAFT_BYTES:
+        raise RecipeViolation(
+            f"{DRAFT_GGUF}: {os.path.getsize(DRAFT_GGUF)} bytes, recipe pins {DRAFT_BYTES}")
 
 
 def assert_binary_exists() -> None:
@@ -930,7 +1038,10 @@ STATUS_BANNER = (
     f"  threads    : -t {THREADS} decode / -tb {THREADS_BATCH} prefill "
     f"(llama-bench CANNOT express the split; llama-server can)\n"
     f"  binary     : {KERNEL_BRANCH} @ {KERNEL_COMMIT} — EXPERIMENTAL, unpromoted\n"
-    f"  spec decode: {SPEC_DEC_STATUS.upper()} — {SPEC_DEC['drafter_name']} drafter, "
+    f"  trunk      : 1017 MXFP4-experts, {len(TRUNK_SHARDS)} shards, {TRUNK_BYTES} bytes\n"
+    f"  ★ DRAFTER  : {'READY' if DRAFT_READY else 'PENDING (DS41-W6) -- spec_dec=True REFUSES; serve spec_dec=False'}\n"
+    "  ★ NUMBERS  : MEASURED / MEASURED_SERVING below are SEPT Q4 numbers (RETIRED_TRUNK)\n"
+    f"  spec decode: {SPEC_DEC_STATUS.upper()} (Sept) — {SPEC_DEC['drafter_name']} drafter, "
     f"--spec-type {DRAFT_SPEC_TYPE}, variants {sorted(SPEC_DEC_VARIANTS)}\n"
     f"               temp>0: {MEASURED_SERVING['arms_tps']['dspark_block_2'][1]} t/s "
     f"(block 2) vs {MEASURED_SERVING['arms_tps']['control_no_drafter'][1]} control "

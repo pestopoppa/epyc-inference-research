@@ -13,10 +13,15 @@ low-bit CPU routes edit.
 
 PROVENANCE (2026-10-06 round 13, read-only header parse of the SERVED models -- the
 models in each lane's resolved launch record, not a drafter or a sibling model):
-  * DS41: `/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/
-    DeepSeek-V4.1-Flash-Q4.gguf` ("deepseek41"): `n_routed_experts=384`,
-    `num_experts_per_tok=6`, `n_shared_experts=1`; `ffn_{gate,up}_exps [5120, 2304, 384]`
-    and `ffn_down_exps [2304, 5120, 384]` (Q4_K); `ffn_*_shexp` at (5120, 2304) (Q8_0).
+  * DS41 (re-read 2026-10-21, DS41-W7 cutover): `/mnt/raid0/llm/models/antirez/
+    deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-1017-MXFP4-experts-0000{1..9}-of-00009.gguf`
+    ("deepseek41"): `n_routed_experts=384`, `num_experts_per_tok=6`,
+    `n_shared_experts=1`; `ffn_{gate,up}_exps [5120, 2304, 384]` and `ffn_down_exps
+    [2304, 5120, 384]` (MXFP4); `ffn_*_shexp` at (5120, 2304) (Q8_0). Dims are identical
+    to the retired Sept `DeepSeek-V4.1-Flash-Q4.gguf`, whose experts were Q4_K.
+    ★ MXFP4 is NOT a witness type, so the DS41 routed (bundle-tier) corpus is EMPTY and
+    `load_manifest` refuses it -> the routed gate reads `oracle_unavailable` for DS41,
+    never a vacuous pass. Covering MXFP4 experts is DS41-W8.
   * Q38FN: `/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/
     Qwen3.8-Flash-Next-UD-IQ4_XS-0000{1,2,3}-of-00003.gguf` ("qwen4exp"):
     `expert_count=512`, `expert_used_count=10`, `embedding_length=2560`,
@@ -200,8 +205,9 @@ class MoeProfile:
 LANE_PROFILES: dict[str, MoeProfile] = {
     "ds41": MoeProfile(
         "ds41", "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/"
-        "DeepSeek-V4.1-Flash-Q4.gguf", expert_count=384, expert_used=6, hidden=5120,
-        expert_ff=2304, shexp_ff=2304, gate_up_types=("Q4_K",), down_types=("Q4_K",)),
+        "DeepSeek-V4.1-Flash-1017-MXFP4-experts-00001-of-00009.gguf", expert_count=384,
+        expert_used=6, hidden=5120, expert_ff=2304, shexp_ff=2304,
+        gate_up_types=("MXFP4",), down_types=("MXFP4",)),
     "q38fn": MoeProfile(
         "q38fn", "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/"
         "Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf", expert_count=512, expert_used=10,
@@ -328,6 +334,16 @@ def lane_for_model(model) -> "str | None":
     return None
 
 
+def _served_types(types: set, direction: str) -> tuple[str, ...]:
+    """Every stored expert type of `direction`: witness types in witness order, then
+    any non-witness type (e.g. DS41-1017's MXFP4) sorted. Dropping non-witness types
+    here would make a GGUF whose experts are ALL non-witness read as typeless and
+    disagree with its own LANE_PROFILES row; the corpora still filter to witnesses."""
+    have = {t for d, t in types if d == direction}
+    return tuple(t for t in WITNESS_TYPES if t in have) + tuple(
+        sorted(have - set(WITNESS_TYPES)))
+
+
 def moe_profile_from_gguf(paths, lane: str, *,
                           gguf_py: str = "/mnt/raid0/llm/llama.cpp/gguf-py") -> MoeProfile:
     """Re-derive a lane's `MoeProfile` from its GGUF shard(s) (read-only header parse).
@@ -366,8 +382,8 @@ def moe_profile_from_gguf(paths, lane: str, *,
     known = LANE_PROFILES.get(lane)
     return MoeProfile(lane, str(paths[0]), expert_count=count, expert_used=used,
                       hidden=gate[0], expert_ff=gate[1], shexp_ff=shexp[1],
-                      gate_up_types=tuple(t for t in WITNESS_TYPES if ("gate_up", t) in types),
-                      down_types=tuple(t for t in WITNESS_TYPES if ("down", t) in types),
+                      gate_up_types=_served_types(types, "gate_up"),
+                      down_types=_served_types(types, "down"),
                       extra_types=known.extra_types if known else ())
 
 

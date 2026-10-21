@@ -31,7 +31,7 @@ def _served_recipe():
 
 def test_served_shapes_derive_from_each_lanes_served_gguf():
     """Round-13: dims and expert counts come from the SERVED models' GGUF headers
-    (DS41 DeepSeek-V4.1-Flash-Q4: 384 experts / 6 used, 5120 x 2304; Q38FN
+    (DS41 DeepSeek-V4.1-Flash-1017 MXFP4: 384 experts / 6 used, 5120 x 2304; Q38FN
     Qwen3.8-Flash-Next: 512 / 10, 2560 x 640) -- never a drafter or a sibling model."""
     by_name = {s.name: s for s in ssc.SERVED_SHAPES}
     assert by_name["ds41_expert_gate_up"] == ssc.ServedShape(
@@ -597,7 +597,8 @@ def test_the_candidate_corpus_is_lane_partitioned():
         assert names and all(name.startswith(lane + "_") for name in names)
     assert len(ssc.canonical_triples(lane="ds41")) == 340
     assert len(ssc.canonical_triples(lane="q38fn")) == 230
-    assert len(ssc.calibration_triples("ds41")) == 348
+    # DS41-1017: MXFP4 experts -> no routed triples (340 + 0; Sept Q4_K was 340 + 8)
+    assert len(ssc.calibration_triples("ds41")) == 340
     assert len(ssc.calibration_triples("q38fn")) == 250
 
 
@@ -658,13 +659,15 @@ def test_the_same_case_key_and_seed_for_the_bound_and_calibrate_variants():
 @pytest.mark.parametrize("routed", [False, True])
 def test_the_gate_refuses_a_test_backend_ops_built_before_seeding(tmp_path, routed):
     """Round-17: both gate checks (candidate and routed corpus) refuse a stale binary
-    before running or judging anything."""
+    before running or judging anything. The routed arm uses q38fn: DS41-1017's MXFP4
+    experts leave the DS41 routed corpus empty (refused by load_manifest)."""
+    lane = "q38fn" if routed else "ds41"
     cases = ssc.case_set(ANCHOR_NMSE, routed=routed, lane="ds41") if not routed else None
     manifest = tmp_path / "manifest.json"
     if routed:
-        anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples("ds41")}
-        cases = ssc.case_set(anchor, routed=True, lane="ds41")
-    ssc.write_manifest(manifest, cases, routed=routed, lane="ds41")
+        anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples(lane)}
+        cases = ssc.case_set(anchor, routed=True, lane=lane)
+    ssc.write_manifest(manifest, cases, routed=routed, lane=lane)
     build = tmp_path / "build"
     (build / "bin").mkdir(parents=True)
     set_id = ssc.ROUTED_CASE_SET_ID if routed else ssc.CASE_SET_ID
@@ -676,7 +679,7 @@ def test_the_gate_refuses_a_test_backend_ops_built_before_seeding(tmp_path, rout
     try:
         verdict = gates.check_served_shape_case_set(
             build, resolved_recipe=_served_recipe(), manifest_path=manifest,
-            routed=routed, lane="ds41")
+            routed=routed, lane=lane)
     finally:
         monkey.undo()
     assert verdict.passed is False and verdict.gate == "oracle_unavailable"
@@ -717,3 +720,24 @@ def test_input_hashes_compare_by_case_key_regardless_of_order():
     assert ssc.input_hash_mismatches({"k1": "a"}, {}) == ["k1"]
     with pytest.raises(ValueError):
         ssc.parse_input_hashes(calib + f"\n{ssc.INPUT_HASH_MARKER}\tk1\tdddd")
+
+
+def test_ds41_1017_mxfp4_experts_leave_the_routed_corpus_empty_and_refused(tmp_path):
+    """DS41-W7: the 1017 trunk's experts are MXFP4, not a witness type. The routed
+    corpus is therefore empty and its manifest is REFUSED (oracle_unavailable), never
+    a vacuous 0/0 pass. Covering MXFP4 is DS41-W8."""
+    prof = ssc.LANE_PROFILES["ds41"]
+    assert "1017-MXFP4-experts-00001-of-00009" in prof.model
+    assert prof.gate_up_types == ("MXFP4",) and prof.down_types == ("MXFP4",)
+    assert ssc.routed_types("ds41") == ()
+    assert ssc.canonical_triples(routed=True, lane="ds41") == ()
+    path = tmp_path / "routed.json"
+    ssc.write_manifest(path, (), routed=True, lane="ds41")
+    with pytest.raises(ssc.ManifestRefused):
+        ssc.load_manifest(path, routed=True, lane="ds41")
+
+
+def test_served_types_keep_non_witness_types():
+    types = {("gate_up", "MXFP4"), ("down", "MXFP4"), ("gate_up", "Q4_K")}
+    assert ssc._served_types(types, "gate_up") == ("Q4_K", "MXFP4")
+    assert ssc._served_types(types, "down") == ("MXFP4",)
