@@ -298,8 +298,10 @@ class FakeClient:
     tests exercise the arm plumbing and record building, not the server). Generated tokens and logprobs are a pure
     function of the prompt, so a fork and a cold run of the same prompt are bit-identical."""
 
-    def __init__(self, n_min=1024, ub=2048, enabled=True, hole=None, expose=False, drafter_hit=None, ignore_cache_flag=False):
+    def __init__(self, n_min=1024, ub=2048, enabled=True, hole=None, expose=False, drafter_hit=None, ignore_cache_flag=False,
+                 chat_fails=False):
         self.n_min, self.ub, self.enabled = n_min, ub, enabled
+        self.chat_fails = chat_fails
         self.expose, self.drafter_hit, self.ignore_cache_flag = expose, drafter_hit, ignore_cache_flag
         self.slots_state = {i: {"tokens": [], "ckpts": [], "last_fork": 0, "comps": {}} for i in range(4)}
         self.n_forks = self.n_fork_tokens = 0
@@ -317,6 +319,22 @@ class FakeClient:
                                          "pinned": c["pinned"], "prefix_hash": lad[c["n_tokens"]]} for c in st["ckpts"]],
                         "fork": {"n_fork_tokens": st["last_fork"], **st.get("comps", {})}})
         return out
+
+    def _req(self, method, path, body=None, timeout=0):
+        """/detokenize and /v1/chat/completions, with a word-per-token tokenizer so a longer conversation extends the
+        shorter one's token ids (what a chat template does to a growing message list)."""
+        if path == "/detokenize":
+            return 200, {"content": " ".join("w" for _ in body["tokens"])}
+        if path == "/v1/chat/completions":
+            if self.chat_fails:
+                return 500, "chat template error"
+            n_words = sum(len(m["content"].split()) for m in body["messages"])
+            ids = [(i * 31 + 7) % 50000 for i in range(n_words)]
+            r = self.complete({"prompt": ids, "n_predict": body["max_tokens"], "id_slot": body["id_slot"],
+                               "cache_prompt": body.get("cache_prompt", True)})
+            return 200, {"usage": {"prompt_tokens": len(ids)}, "choices": [{"message": {"content": "ok"}}],
+                         "timings": r["timings"]}
+        return 404, ""
 
     def metrics(self):
         return {"llamacpp:slot_forks_total": float(self.n_forks), "llamacpp:slot_fork_tokens_total": float(self.n_fork_tokens),
@@ -746,3 +764,130 @@ def test_plan_and_preflight_182(tmp_path):
 
 def test_rules_182_cover_all_five_parts():
     assert set(A.RULES[182]) == {"common", "parity", "attribution", "vacuity", "cold", "policy"}
+
+
+# ================================================================ KPF-18.3
+def test_eval_183_cost_flags_a_split_cost_only_above_the_without_arm_spread():
+    def rows(with_, without):
+        return ([{"group": 0, "arm": "ckpt", "rep": i, "prompt_ms": v, "prompt_per_second": 1000 / v, "wall_s": v / 1000}
+                 for i, v in enumerate(with_)]
+                + [{"group": 0, "arm": "noCkpt", "rep": i, "prompt_ms": v, "prompt_per_second": 1000 / v, "wall_s": v / 1000}
+                   for i, v in enumerate(without)])
+    r = A.eval_183_cost(rows([105, 106, 104, 107, 105], [100, 101, 99, 100, 100]))
+    g = r["groups"]["0"]
+    assert g["delta"] == pytest.approx(0.05) and g["noise_floor_without"] == pytest.approx(0.02)
+    assert g["trigger_intra_batch_capture_followup"] is True and r["n_groups_triggering"] == 1
+    r = A.eval_183_cost(rows([100, 101, 99, 100, 100], [100, 101, 99, 100, 100]))
+    assert r["groups"]["0"]["trigger_intra_batch_capture_followup"] is False
+    r = A.eval_183_cost(rows([110, 110], [100, 100]))                        # 2 reps: no floor can be measured
+    assert r["groups"]["0"]["trigger_intra_batch_capture_followup"] is None and r["n_groups_unmeasured"] == 1
+    assert r["measurement_class"] == "timing_indicative"
+
+
+def test_eval_183_long_floor_abstention_and_fork_requirement():
+    def run(lp_shift=0.0, n=40):
+        toks_ = list(range(1, n + 1))
+        return {"tokens": toks_, "probs": [{"id": t, "logprob": -0.5 - lp_shift * (i % 3)} for i, t in enumerate(toks_)]}
+    child, a_, b_ = run(0.00001), run(0.0), run(0.001)
+    r = A.eval_183_long(child, a_, b_, n_fork=60000, T=60000, n_task=60512)
+    assert r["abstain"] is False and r["within_floor"] is True and r["predeclared_rule_satisfied"] is True
+    assert r["common_greedy_prefix"] == 40
+    far = run(0.5)
+    r = A.eval_183_long(far, a_, b_, n_fork=60000, T=60000, n_task=60512)
+    assert r["within_floor"] is False and r["predeclared_rule_satisfied"] is False
+    assert A.eval_183_long(child, a_, b_, n_fork=0, T=60000, n_task=60512)["predeclared_rule_satisfied"] is False   # never forked
+    assert A.eval_183_long(child, a_, b_, n_fork=60000, T=60000, n_task=30000)["predeclared_rule_satisfied"] is False  # < 50k
+    short = run(0.0, n=8)
+    r = A.eval_183_long(short, short, short, n_fork=60000, T=60000, n_task=60512)
+    assert r["abstain"] is True and r["predeclared_rule_satisfied"] is None
+
+
+def test_classify_lane_checkpoints():
+    c = A.classify_lane_checkpoints([900, 2000, 3001, 3005], 3005, 2048)
+    assert c["near_end"] == [2000, 3001, 3005] and c["mid_prompt"] == [900]
+
+
+def test_cost_arm_alternates_order_and_records_the_timing_rows(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_183_cost(env, [0, 1], 3)
+    rows = R.extra["cost_rows"]
+    assert len(rows) == 12 and {r["arm"] for r in rows} == {"ckpt", "noCkpt"}
+    g0 = [r["arm"] for r in rows if r["group"] == 0]
+    assert g0 == ["ckpt", "noCkpt", "noCkpt", "ckpt", "ckpt", "noCkpt"]        # A B / B A / A B
+    assert R.extra["rule_result"]["groups"]["0"]["trigger_intra_batch_capture_followup"] is False
+    assert R.extra["measurement_class"] == "timing_indicative"
+    cells = [c for c in R.extra["cells"] if c["role"] == "cost_request"]
+    assert [c["checkpoint_at"] for c in cells[:2]] == [[4096], None] and all(c["n_fork_tokens"] == 0 for c in cells)
+
+
+def test_end_checkpoint_position_and_multi_turn(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_183_end(env, 0, 64)
+    rr = R.extra["rule_result"]
+    assert rr["end_checkpoint"]["where"] == "prompt_end" and rr["end_checkpoint"]["pinned"] == [4352]
+    assert rr["turn2_fork"]["required"] == 4352 + 64 and rr["turn2_fork"]["gap"] == 0 and rr["predeclared_rule_satisfied"] is True
+    # a server that only reaches the prompt end (not the reply) records the gap instead
+    ctx2, env2 = mk_env(tmp_path / "b", cpu_spec)
+    ctx2.client.hole = lambda ids, p: min(p, 4352)
+    rr2 = A.run_183_end(env2, 0, 64).extra["rule_result"]
+    assert rr2["turn2_fork"]["gap"] == 64 and rr2["turn2_fork"]["covered"] is False and rr2["predeclared_rule_satisfied"] is False
+
+
+def test_lane_probe_tags_both_lanes_and_records_a_chat_failure_without_aborting(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_183_lane(env, 0, 3000)
+    rr = R.extra["rule_result"]
+    assert rr["lanes_recorded"] == ["chat", "completion_raw"] and rr["n_probe_errors"] == 0
+    raw, chat = rr["probes"]
+    assert raw["mid_prompt"] == [] and len(chat["near_end"]) == 2 and chat["turn2_n_fork_tokens"] == 3001
+    assert set(R.lanes) == {"completion_raw", "chat"}
+    ctx2, env2 = mk_env(tmp_path / "b", cpu_spec)
+    ctx2.client.chat_fails = True
+    rr2 = A.run_183_lane(env2, 0, 3000).extra["rule_result"]
+    assert rr2["n_probe_errors"] == 1 and rr2["lanes_recorded"] == ["completion_raw"]
+
+
+def test_long_prompt_arm_with_a_lowered_threshold(tmp_path, cpu_spec, monkeypatch):
+    monkeypatch.setattr(A, "MIN_LONG_PROMPT", 4000)          # the CPU spec has no 50k trunk; the arm logic is the same
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_183_long(env, 0)
+    rr = R.extra["rule_result"]
+    assert rr["forked_at_T"] is True and rr["abstain"] is False and rr["predeclared_rule_satisfied"] is True
+    assert rr["n_task"] == 4352 and rr["common_greedy_prefix"] == 32
+    assert R.checks["prompt_ge_50k"][0]["ok"] is True
+
+
+def test_plan_183_gpu_defaults_are_cost_and_long_prompt(tmp_path):
+    ctx, args = mk_plan_ctx(tmp_path)
+    steps = A.BUILDERS[183](ctx, GATE)
+    descs = [s.desc for s in steps]
+    assert len(steps) == 4 and "linkage + launch" in descs[0] and descs[1].startswith("183.1") and descs[2].startswith("183.4")
+    assert "60512-token prompt (g5)" in descs[2]
+    assert 300 < sum(s.est_s for s in steps) < 4 * 3600
+    probs, notes = A.PREFLIGHTS[183](ctx, GATE)
+    assert probs == [] and any("GPU default 1,4" in n for n in notes) and any("183.4 long trunk group 5" in n for n in notes)
+    args.kpf183_reps = 2
+    assert any("noise floor" in p for p in A.PREFLIGHTS[183](ctx, GATE)[0])
+    args.kpf183_reps = 5
+    args.kpf183_parts = "1,2,3,4"
+    assert [s.desc[:5] for s in A.BUILDERS[183](ctx, GATE)][1:5] == ["183.1", "183.2", "183.3", "183.4"]
+    args.kpf183_parts = "7"
+    assert any("subset of 1,2,3,4" in p for p in A.PREFLIGHTS[183](ctx, GATE)[0])
+
+
+def test_plan_183_cpu_defaults_are_end_checkpoint_and_lane_and_part_4_is_refused(tmp_path, cpu_spec):
+    args = mk_args(tmp_path)
+    ctx = GATE.Ctx(args, GATE.PromptSet.from_spec(), CPU_ARGV, ["taskset"], {})
+    descs = [s.desc for s in A.BUILDERS[183](ctx, GATE)]
+    assert [d[:5] for d in descs[1:3]] == ["183.2", "183.3"]
+    probs, notes = A.PREFLIGHTS[183](ctx, GATE)
+    assert probs == [] and any("--cpu default 2,3" in n for n in notes)
+    args.kpf183_parts = "4"
+    assert any("needs a trunk >= 50000" in p for p in A.PREFLIGHTS[183](ctx, GATE)[0])
+
+
+def test_rules_183_and_the_three_commands_wire_to_three_items():
+    assert set(A.RULES[183]) == {"common", "cost", "end", "lane", "long"}
+    assert A.ARM_CMDS["kpf18arms"] == [181, 182, 183] and set(A.BUILDERS) == {181, 182, 183}
+    assert set(A.PREFLIGHTS) == {181, 182, 183}
+    assert A.rules_for([181, 182, 183]).keys() == {"181", "182", "183"}

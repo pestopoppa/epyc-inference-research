@@ -1398,3 +1398,342 @@ def GATE_SUFFIXES(gate) -> list[int]:
 
 BUILDERS[182] = build_182
 PREFLIGHTS[182] = preflight_182
+
+
+# ================================================================ KPF-18.3  chunk-split cost, end-ckpt, lane, >=50k warm-vs-cold
+MIN_LONG_PROMPT = 50000
+MIN_COMMON_POSITIONS = 16
+MIN_COST_REPS = 3
+
+RULES[183] = {
+    "common": ("Same controls as 18.1/18.2 (manifest, fork-off baseline, raw cells, every request counted, counts not a "
+               "pass word). Resource classes: part 1 = timing, INDICATIVE (may share the GPU with other work; the "
+               "comparison is within one launch, alternating A B B A, against its own noise floor); parts 2, 3, 4 = "
+               "correctness."),
+    "cost": ("(1) Same trunk length T, cold slot, prefill only (n_predict 1, no fork): checkpoint_at=[T] on trunk+tail vs "
+             "no checkpoint_at, alternating A B / B A for `reps` repeats per group (reps >= 3). Per group: delta = "
+             "median(prompt_ms with) / median(prompt_ms without) - 1; noise floor = (max - min) / median of the WITHOUT arm. "
+             "trigger_intra_batch_capture_followup = (delta > noise floor). The trigger is a flag for a measurement-only "
+             "follow-up, not a verdict; prompt tokens/s and wall are recorded beside prompt_ms."),
+    "end": ("(2) After a request with checkpoint_at=[-1] and a reply of `reply` tokens, read the pinned checkpoints of its "
+            "slot: prompt_end (n_tokens == n_prompt), generation_end (n_prompt + reply, or one less) or other/absent. "
+            "Then turn 2 = turn-1 prompt + the reply's token ids + a new suffix is sent to another slot (fork) and to "
+            "the same slot (own reuse). SATISFIED iff the fork's n_fork_tokens >= n_prompt + reply; otherwise the gap "
+            "(required - n_fork_tokens) is recorded, and the same for the own-slot reuse via cache_n."),
+    "lane": ("(3) Each trunk request records its lane: completion_raw (/completion: near-end checkpoints only, "
+             "pinned ones from checkpoint_at) or chat (/v1/chat/completions with message delimiters: user-start "
+             "checkpoints as well). A raw trunk and a chat trunk are prefilled and their checkpoint positions are "
+             "classified into near_end (within 4 + ub of the prompt end) and mid_prompt; a chat turn 2 on another slot "
+             "records its n_fork_tokens. RECORDED ONLY (no verdict); an HTTP error on the chat probe is recorded as the "
+             "probe's own result, not an abort."),
+    "long": ("(4) On a trunk of >= 50000 tokens with a shared prefix: slot 0 prefills trunk+tail with checkpoint_at=[T]; the "
+             "fork child (trunk+suffix0, slot 1) and two cold runs (cache_prompt false, slots 2 and 3) decode n_predict "
+             "tokens at T=0 under the same (alone) batch composition. d(x, y) = mean |logprob_x - logprob_y| of the sampled "
+             "token over the greedy prefix common to all three runs (>= 16 positions, else the arm abstains). "
+             "SATISFIED iff the fork child forked at T and max(d(child, coldA), d(child, coldB)) <= max(d(coldA, coldB), "
+             "1e-4). A needle-retrieval pass alone never closes the case; none is used."),
+}
+
+
+def classify_lane_checkpoints(ckpt_ns: list[int], n_prompt: int, ub: int) -> dict:
+    near_end = sorted(n for n in ckpt_ns if n_prompt - (4 + ub) <= n <= n_prompt)
+    mid = sorted(n for n in ckpt_ns if n < n_prompt - (4 + ub))
+    return {"near_end": near_end, "mid_prompt": mid, "n_checkpoints": len(ckpt_ns), "n_prompt": n_prompt, "ub": ub}
+
+
+def eval_183_cost(rows: list[dict]) -> dict:
+    """rows: one per cold prefill: {group, arm: 'ckpt'|'noCkpt', rep, prompt_ms, prompt_per_second, wall_s}."""
+    out = {}
+    for g in sorted({r["group"] for r in rows}):
+        a = [r["prompt_ms"] for r in rows if r["group"] == g and r["arm"] == "ckpt" and r.get("prompt_ms") is not None]
+        b = [r["prompt_ms"] for r in rows if r["group"] == g and r["arm"] == "noCkpt" and r.get("prompt_ms") is not None]
+        ma, mb = median_or_none(a), median_or_none(b)
+        spread_b = ((max(b) - min(b)) / mb) if len(b) >= MIN_COST_REPS and mb else None
+        spread_a = ((max(a) - min(a)) / ma) if len(a) >= MIN_COST_REPS and ma else None
+        delta = (ma / mb - 1.0) if ma and mb else None
+        trig = (delta > spread_b) if (delta is not None and spread_b is not None) else None
+        out[str(g)] = {"n_with": len(a), "n_without": len(b), "median_prompt_ms_with": ma, "median_prompt_ms_without": mb,
+                       "delta": delta, "noise_floor_without": spread_b, "spread_with": spread_a,
+                       "median_prompt_per_second_with": median_or_none([r.get("prompt_per_second") for r in rows
+                                                                          if r["group"] == g and r["arm"] == "ckpt"]),
+                       "median_prompt_per_second_without": median_or_none([r.get("prompt_per_second") for r in rows
+                                                                             if r["group"] == g and r["arm"] == "noCkpt"]),
+                       "median_wall_s_with": median_or_none([r.get("wall_s") for r in rows if r["group"] == g and r["arm"] == "ckpt"]),
+                       "median_wall_s_without": median_or_none([r.get("wall_s") for r in rows if r["group"] == g and r["arm"] == "noCkpt"]),
+                       "trigger_intra_batch_capture_followup": trig}
+    trig_all = [v["trigger_intra_batch_capture_followup"] for v in out.values()]
+    return {"groups": out, "n_groups": len(out), "n_groups_triggering": sum(1 for t in trig_all if t),
+            "n_groups_unmeasured": sum(1 for t in trig_all if t is None),
+            "measurement_class": "timing_indicative"}
+
+
+def eval_183_long(child: dict, cold_a: dict, cold_b: dict, *, n_fork: int | None, T: int, n_task: int) -> dict:
+    pre = common_prefix_len([child, cold_a, cold_b])
+    base = {"n_task": n_task, "T": T, "n_fork_tokens": n_fork, "forked_at_T": (n_fork == T) if n_fork is not None else None,
+            "common_greedy_prefix": pre, "prompt_ge_50k": n_task >= MIN_LONG_PROMPT}
+    if pre < MIN_COMMON_POSITIONS:
+        return {**base, "abstain": True, "reason": f"common greedy prefix {pre} < {MIN_COMMON_POSITIONS}",
+                "predeclared_rule_satisfied": None}
+    fa, fb, ab = (mean_abs_dlogprob(child, cold_a, pre), mean_abs_dlogprob(child, cold_b, pre),
+                  mean_abs_dlogprob(cold_a, cold_b, pre))
+    if None in (fa["mean_abs_dlogprob"], fb["mean_abs_dlogprob"], ab["mean_abs_dlogprob"]):
+        return {**base, "abstain": True, "reason": "a run carries no sampled-token logprobs",
+                "predeclared_rule_satisfied": None}
+    worst = max(fa["mean_abs_dlogprob"], fb["mean_abs_dlogprob"])
+    floor = max(ab["mean_abs_dlogprob"], FLOOR_EPS)
+    return {**base, "abstain": False, "d_fork_vs_coldA": fa, "d_fork_vs_coldB": fb, "d_coldA_vs_coldB": ab,
+            "worst_fork_vs_cold": worst, "floor_used": floor, "within_floor": worst <= floor,
+            "predeclared_rule_satisfied": bool(base["forked_at_T"] and base["prompt_ge_50k"] and worst <= floor)}
+
+
+def eval_183_end(cls: dict, gap_fork: dict, gap_own: dict) -> dict:
+    return {"end_checkpoint": cls, "turn2_fork": gap_fork, "turn2_own_slot": gap_own,
+            "predeclared_rule_satisfied": gap_fork.get("covered")}
+
+
+def run_183_cost(env: Env, groups: list[int], reps: int):
+    gate, ctx = env.gate, env.ctx
+    arm = "chunk_split_cost"
+    R = open_run(env, 183, arm, rule=RULES[183]["cost"], arm_key="cost", reps=reps, measurement_class="timing_indicative",
+                 grade_note="timing INDICATIVE: n=reps per cell inside one launch; the comparison is the with/without ratio "
+                            "against the without-arm's own spread, not an absolute speed")
+    rows = []
+    for g in groups:
+        grp = gate.G(ctx, g)
+        T = grp["T"]
+        ids = grp["trunk"] + grp["src_tail"]
+        for rep in range(reps):
+            order = [("ckpt", [T]), ("noCkpt", None)]
+            if rep % 2:
+                order.reverse()
+            for name, ck in order:
+                ctx.check_boundary()
+                env.erase_all()
+                r, cell = env.send(R, "cost_request", ids, 0, n_predict=1, arm=arm, cell_id=f"g{g}.r{rep}.{name}", fork=False,
+                                   ckpt=ck, group=g, cost_arm=name, rep=rep)
+                t = r.get("timings") or {}
+                row = {"group": g, "arm": name, "rep": rep, "prompt_ms": t.get("prompt_ms"),
+                       "prompt_per_second": t.get("prompt_per_second"), "wall_s": r.get("wall_s"), "prompt_n": t.get("prompt_n"),
+                       "n_task": len(ids)}
+                cell.update({k: v for k, v in row.items() if k not in cell})
+                rows.append(row)
+    env.erase_all()
+    close_counts(env, R)
+    R.extra["cost_rows"] = rows
+    R.extra["rule_result"] = eval_183_cost(rows)
+    return R
+
+
+def run_183_end(env: Env, g: int, reply_n: int):
+    gate, ctx = env.gate, env.ctx
+    arm = "end_ckpt_position_and_multi_turn"
+    R = open_run(env, 183, arm, rule=RULES[183]["end"], arm_key="end", reply_n=reply_n)
+    grp = gate.G(ctx, g)
+    P1 = grp["trunk"] + grp["suffixes"][0]
+    env.erase_all()
+    r1, c1 = env.send(R, "turn1", P1, 0, n_predict=reply_n, arm=arm, cell_id="turn1", fork=False, ckpt=[-1], group=g)
+    reply = list(r1.get("tokens") or [])
+    s0 = slot_by_id(ctx.client.slots(), 0)
+    pinned = [c["n_tokens"] for c in checkpoint_set(s0) if c["pinned"]]
+    cls = classify_end_ckpt(pinned, len(P1), len(reply))
+    user2 = (grp["suffixes"][1] or [])[:256]
+    P2 = P1 + reply + user2
+    f, fc = env.send(R, "turn2_fork", P2, 1, n_predict=16, arm=arm, cell_id="turn2_fork", fork=True, group=g,
+                     required=len(P1) + len(reply))
+    gap_fork = multi_turn_gap(len(P1), len(reply), fc["n_fork_tokens"])
+    o, oc = env.send(R, "turn2_own_slot", P2, 0, n_predict=16, arm=arm, cell_id="turn2_own", fork=False, group=g,
+                     required=len(P1) + len(reply))
+    gap_own = multi_turn_gap(len(P1), len(reply), oc.get("cache_n"))
+    env.erase_all()
+    close_counts(env, R)
+    R.extra["rule_result"] = eval_183_end(cls, gap_fork, gap_own)
+    R.extra["end_checkpoint_position"] = cls
+    return R
+
+
+def _chat_body(text_msgs: list[dict], slot: int, n: int = 16) -> dict:
+    return {"model": "kpf18", "messages": text_msgs, "max_tokens": n, "temperature": 0.0, "id_slot": slot,
+            "cache_prompt": True}
+
+
+def run_183_lane(env: Env, g: int, probe_tokens: int):
+    gate, ctx = env.gate, env.ctx
+    arm = "request_lane"
+    R = open_run(env, 183, arm, rule=RULES[183]["lane"], arm_key="lane", chat_probe_tokens=probe_tokens)
+    grp = gate.G(ctx, g)
+    ub = ub_from_argv(list(env.srv.argv))
+    probes: list[dict] = []
+    # -- raw /completion lane
+    env.erase_all()
+    P = grp["trunk"][:probe_tokens] + grp["suffixes"][0]
+    env.send(R, "trunk_raw", P, 0, n_predict=1, arm=arm, cell_id="raw", fork=False, lane="completion_raw", group=g)
+    s0 = slot_by_id(ctx.client.slots(), 0)
+    ns = [c["n_tokens"] for c in checkpoint_set(s0)]
+    probes.append({"lane": "completion_raw", "n_prompt": len(P), **classify_lane_checkpoints(ns, len(P), ub)})
+    # -- chat lane (message delimiters present): a one-user-message prompt, then a second turn on another slot
+    env.erase_all()
+    chat: dict = {"lane": "chat"}
+    try:
+        st, body = ctx.client._req("POST", "/detokenize", {"tokens": grp["trunk"][:probe_tokens]}, timeout=600)
+        if st != 200:
+            raise RuntimeError(f"/detokenize HTTP {st}")
+        text = body["content"] if isinstance(body, dict) else str(body)
+        m1 = [{"role": "user", "content": text + "\n\nReply with one short sentence."}]
+        st, res = ctx.client._req("POST", "/v1/chat/completions", _chat_body(m1, 0), timeout=3600)
+        if st != 200 or not isinstance(res, dict):
+            raise RuntimeError(f"chat turn 1 HTTP {st}: {str(res)[:200]}")
+        n_prompt = int((res.get("usage") or {}).get("prompt_tokens") or 0)
+        s0 = slot_by_id(ctx.client.slots(), 0)
+        ns = [c["n_tokens"] for c in checkpoint_set(s0)]
+        chat.update(n_prompt=n_prompt, **classify_lane_checkpoints(ns, n_prompt, ub),
+                    pinned=[c["n_tokens"] for c in checkpoint_set(s0) if c["pinned"]])
+        reply = (((res.get("choices") or [{}])[0]).get("message") or {}).get("content") or ""
+        m2 = m1 + [{"role": "assistant", "content": reply}, {"role": "user", "content": "And one more short sentence."}]
+        st, res2 = ctx.client._req("POST", "/v1/chat/completions", _chat_body(m2, 1), timeout=3600)
+        if st != 200 or not isinstance(res2, dict):
+            raise RuntimeError(f"chat turn 2 HTTP {st}: {str(res2)[:200]}")
+        t2 = res2.get("timings") or {}
+        chat.update(turn2_n_fork_tokens=t2.get("n_fork_tokens"), turn2_fork_src_kind=t2.get("fork_src_kind"),
+                    turn2_cache_n=t2.get("cache_n"), turn2_prompt_n=t2.get("prompt_n"))
+        R.obs("trunk_chat", checkpoint_set=ns, n_fork_tokens=t2.get("n_fork_tokens"), lane="chat")
+    except Exception as exc:  # noqa: BLE001 - the lane probe is an observation: its failure is its result
+        chat["error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+    probes.append(chat)
+    env.erase_all()
+    close_counts(env, R)
+    R.extra["lane_probes"] = probes
+    R.extra["rule_result"] = {"lanes_recorded": sorted({p["lane"] for p in probes if not p.get("error")}),
+                              "n_probe_errors": sum(1 for p in probes if p.get("error")), "probes": probes,
+                              "predeclared_rule_satisfied": None}
+    return R
+
+
+def run_183_long(env: Env, g: int):
+    gate, ctx, a = env.gate, env.ctx, env.ctx.args
+    arm = "warm_vs_cold_long_prompt"
+    n = a.n_predict
+    R = open_run(env, 183, arm, rule=RULES[183]["long"], arm_key="long")
+    grp = gate.G(ctx, g)
+    T, trunk = grp["T"], grp["trunk"]
+    P = trunk + grp["suffixes"][0]
+    ctx.check_boundary()
+    env.erase_all()
+    env.send(R, "source", trunk + grp["src_tail"], 0, n_predict=0, arm=arm, cell_id="src", fork=False, ckpt=[T], group=g)
+    r, cell = env.send(R, "child", P, 1, n_predict=n, arm=arm, cell_id="fork_child", fork=True, n_probs=a.n_probs, expected=T,
+                       group=g)
+    ca, _ = env.send(R, "fresh_A", P, 2, n_predict=n, arm=arm, cell_id="cold_A", fork=False, cache=False, n_probs=a.n_probs, group=g)
+    cb, _ = env.send(R, "fresh_B", P, 3, n_predict=n, arm=arm, cell_id="cold_B", fork=False, cache=False, n_probs=a.n_probs, group=g)
+    R.check("prompt_ge_50k", len(P) >= MIN_LONG_PROMPT, len(P))
+    env.erase_all()
+    close_counts(env, R)
+    R.extra["rule_result"] = eval_183_long(r, ca, cb, n_fork=cell["n_fork_tokens"], T=T, n_task=len(P))
+    return R
+
+
+def _long_group183(ctx) -> int | None:
+    a = ctx.args
+    if a.kpf183_long_group is not None:
+        return int(a.kpf183_long_group)
+    for g in sorted(ctx.ps.groups):
+        if ctx.ps.groups[g]["T"] >= MIN_LONG_PROMPT:
+            return g
+    return None
+
+
+def _parts183(ctx, gate) -> list[str]:
+    a = ctx.args
+    if a.kpf183_parts:
+        return [x.strip() for x in a.kpf183_parts.split(",") if x.strip()]
+    return ["2", "3"] if gate.CPU_MODE else ["1", "4"]
+
+
+def build_183(ctx, gate) -> list:
+    a = ctx.args
+    Step, Srv = gate.Step, server_cls(gate)
+    parts = _parts183(ctx, gate)
+    cfgs = get_configs(ctx, gate)
+    name, argv = cfgs[0]
+    srv = Srv(ctx, f"kpf183-{name}-{gate.utc_tag()}", Path(a.fork_bin), a.fork_min, argv)
+    env = Env(ctx, gate, srv, name)
+    steps = gate.start_steps(ctx, srv)
+
+    def S_(g):
+        return gate.G(ctx, g)
+
+    if "1" in parts:
+        groups = groups_arg(a.kpf183_groups, [0, 3])
+        est = sum(2 * a.kpf183_reps * (gate.pf_s(S_(g)["T"] + gate.SRC_TAIL, 0) + gate.dec_s(1, S_(g)["T"], True)
+                                       + 3 * gate.REQ_OVERHEAD_S) for g in groups)
+        steps.append(Step(f"183.1 chunk-split cost groups {groups}: {a.kpf183_reps} x (checkpoint_at=[T] / none) alternating, "
+                          f"cold prefill T+tail, timing INDICATIVE (rule cost)", est,
+                          lambda: run_183_cost(env, groups, a.kpf183_reps)))
+    if "2" in parts:
+        g = 0
+        T = S_(g)["T"]
+        est = gate.pf_s(T + S_(g)["suffix_lens"][0], 0) + gate.dec_s(a.kpf183_reply, T, True) + \
+            gate.pf_s(256 + a.kpf183_reply, T) + gate.pf_s(256 + a.kpf183_reply, T) + 10 * gate.REQ_OVERHEAD_S
+        steps.append(Step(f"183.2 end-checkpoint position + multi-turn (turn-2 resends turn-1 prompt+reply) g{g}, reply "
+                          f"{a.kpf183_reply} tok (rule end)", est, lambda: run_183_end(env, g, a.kpf183_reply)))
+    if "3" in parts:
+        g = 0
+        n = a.kpf183_chat_probe_tokens
+        est = 2 * gate.pf_s(n + 512, 0) + gate.pf_s(100, n) + 8 * gate.REQ_OVERHEAD_S
+        steps.append(Step(f"183.3 request lane tag: raw /completion trunk vs /v1/chat/completions trunk ({n} tok), checkpoint "
+                          f"classification, chat turn 2 on another slot (rule lane)", est,
+                          lambda: run_183_lane(env, g, n)))
+    if "4" in parts:
+        g = _long_group183(ctx)
+        if g is not None:
+            T, S0 = S_(g)["T"], S_(g)["suffix_lens"][0]
+            est = gate.pf_s(T + gate.SRC_TAIL, 0) + gate.pf_s(S0, T) + gate.dec_s(a.n_predict, T, True) + \
+                2 * (gate.pf_s(T + S0, 2 * T) + gate.dec_s(a.n_predict, 2 * T, True)) + 6 * gate.REQ_OVERHEAD_S
+            steps.append(Step(f"183.4 warm-vs-cold dlogprob on a {T + S0}-token prompt (g{g}): fork child vs 2 cold runs, "
+                              f"{a.n_predict} tok at T=0 (rule long)", est, lambda: run_183_long(env, g)))
+    steps.append(gate.stop_step(srv))
+    return steps
+
+
+def preflight_183(ctx, gate) -> tuple[list[str], list[str]]:
+    a = ctx.args
+    probs: list[str] = []
+    notes: list[str] = []
+    try:
+        get_configs(ctx, gate)
+    except (ValueError, OSError) as exc:
+        return [f"KPF-18.3 drafter configurations: {exc}"], notes
+    parts = _parts183(ctx, gate)
+    if not parts or not set(parts) <= {"1", "2", "3", "4"}:
+        probs.append(f"--kpf183-parts {parts!r}: use a subset of 1,2,3,4")
+        return probs, notes
+    if a.fork_min < 1:
+        probs.append("KPF-18.3 needs --fork-min >= 1")
+    notes.append(f"183 parts {parts} ({'--cpu default 2,3' if gate.CPU_MODE and not a.kpf183_parts else 'GPU default 1,4' if not a.kpf183_parts else 'explicit'}); "
+                 "resource class: part 1 timing INDICATIVE, parts 2/3/4 correctness")
+    if "1" in parts:
+        groups = groups_arg(a.kpf183_groups, [0, 3])
+        for g in groups:
+            if g not in ctx.ps.groups:
+                probs.append(f"KPF-18.3 part 1 trunk group {g} not in the prompt set")
+        if a.kpf183_reps < MIN_COST_REPS:
+            probs.append(f"--kpf183-reps {a.kpf183_reps} < {MIN_COST_REPS}: no noise floor can be measured")
+    if "2" in parts:
+        if a.kpf183_reply < 8:
+            probs.append("--kpf183-reply must be >= 8")
+        if 0 not in ctx.ps.groups:
+            probs.append("KPF-18.3 part 2 needs trunk group 0")
+    if "3" in parts and a.kpf183_chat_probe_tokens < 256:
+        probs.append("--kpf183-chat-probe-tokens must be >= 256")
+    if "4" in parts:
+        g = _long_group183(ctx)
+        if g is None or g not in ctx.ps.groups:
+            probs.append(f"KPF-18.3 part 4 needs a trunk >= {MIN_LONG_PROMPT} tokens: none in this prompt set "
+                         f"(spec {'CPU' if gate.CPU_MODE else 'GPU'}); run it in the GPU window")
+        elif ctx.ps.groups[g]["T"] < MIN_LONG_PROMPT:
+            probs.append(f"--kpf183-long-group {g}: T {ctx.ps.groups[g]['T']} < {MIN_LONG_PROMPT}")
+        else:
+            notes.append(f"183.4 long trunk group {g}: T {ctx.ps.groups[g]['T']}")
+    return probs, notes
+
+
+BUILDERS[183] = build_183
+PREFLIGHTS[183] = preflight_183
