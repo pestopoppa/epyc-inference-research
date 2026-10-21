@@ -891,3 +891,138 @@ def test_rules_183_and_the_three_commands_wire_to_three_items():
     assert A.ARM_CMDS["kpf18arms"] == [181, 182, 183] and set(A.BUILDERS) == {181, 182, 183}
     assert set(A.PREFLIGHTS) == {181, 182, 183}
     assert A.rules_for([181, 182, 183]).keys() == {"181", "182", "183"}
+
+
+# ================================================================ KPF-18.0e: item 2 judged at the A/A floor
+def _cmp(top1=True, prefix=256, maxabs=0.0, kld=0.0, identical=False, tokens_identical=None):
+    return {"top1": top1, "prefix": prefix, "maxabs_union": maxabs, "maxabs_intersection": maxabs, "kld": kld,
+            "identical": identical, "tokens_identical": identical if tokens_identical is None else tokens_identical,
+            "n_cmp": 256, "len_a": 256, "len_b": 256}
+
+
+def test_judge_item2_without_an_aa_control_is_unjudgeable_never_a_pass():
+    j = A.judge_item2([_cmp(identical=True)], [], 256)
+    assert j["judgeable"] is False and j["predeclared_rule_satisfied"] is None and "not a pass" in j["reason"]
+    assert A.judge_item2([], [_cmp(identical=True)], 256)["predeclared_rule_satisfied"] is None
+
+
+def test_judge_item2_zero_floor_makes_bit_identity_owed():
+    aa = [_cmp(identical=True) for _ in range(3)]
+    ok = A.judge_item2([_cmp(identical=True), _cmp(identical=True)], aa, 256)
+    assert ok["bit_identity_owed"] is True and ok["predeclared_rule_satisfied"] is True and ok["n_ok"] == 2
+    assert ok["floor_thin"] is False
+    # a fork pair that is only within eps but not bit-identical fails while the A/A floor is zero
+    bad = A.judge_item2([_cmp(identical=True), _cmp(identical=False, maxabs=1e-6, kld=1e-9)], aa, 256)
+    assert bad["predeclared_rule_satisfied"] is False and bad["not_ok_pairs"] == [1]
+    assert bad["per_pair"][1]["identical_ok"] is False
+
+
+def test_judge_item2_nonzero_floor_accepts_a_fork_difference_inside_it():
+    # the A/A control itself differs (placement non-invariance): maxabs up to 0.04, KL up to 2e-3, shortest prefix 43
+    aa = [_cmp(maxabs=0.04, kld=2e-3, prefix=43), _cmp(maxabs=0.01, kld=1e-4, prefix=256), _cmp(identical=True)]
+    inside = _cmp(maxabs=0.03, kld=1e-3, prefix=60)
+    j = A.judge_item2([inside], aa, 256)
+    assert j["bit_identity_owed"] is False and j["aa_floor"]["max_maxabs"] == 0.04 and j["aa_floor"]["prefix_min"] == 43
+    assert j["predeclared_rule_satisfied"] is True and j["n_within"] == 1 and j["n_prefix_ok"] == 1
+    assert j["fork_bit_identical"] == 0
+
+
+def test_judge_item2_fails_each_axis_beyond_the_floor_and_counts_it():
+    aa = [_cmp(maxabs=0.04, kld=2e-3, prefix=43), _cmp(maxabs=0.02, kld=1e-3, prefix=100), _cmp(identical=True)]
+    cases = [_cmp(maxabs=0.05, kld=1e-3, prefix=100),      # max-abs beyond the floor
+             _cmp(maxabs=0.01, kld=5e-3, prefix=100),      # KL beyond the floor
+             _cmp(maxabs=0.01, kld=1e-3, prefix=42),       # greedy prefix shorter than the shortest A/A prefix
+             _cmp(top1=False, maxabs=0.0, kld=0.0),        # first token flips
+             _cmp(maxabs=0.01, kld=1e-3, prefix=200)]      # fine
+    j = A.judge_item2(cases, aa, 256)
+    assert j["n_pairs"] == 5 and j["n_ok"] == 1 and j["n_not_ok"] == 4 and j["not_ok_pairs"] == [0, 1, 2, 3]
+    assert j["predeclared_rule_satisfied"] is False
+    assert [r["maxabs_ok"] for r in j["per_pair"][:2]] == [False, True]
+    assert j["per_pair"][1]["kld_ok"] is False and j["per_pair"][2]["prefix_ok"] is False and j["per_pair"][3]["top1"] is False
+
+
+def test_judge_item2_flags_a_thin_floor_and_none_handling():
+    j = A.judge_item2([_cmp(identical=True)], [_cmp(identical=True)], 256)
+    assert j["floor_thin"] is True and j["n_aa"] == 1
+    # missing prob data (n_probs 0) cannot be within a floor: conservative failure, not a crash
+    nop = _cmp(identical=False); nop["maxabs_union"] = None; nop["kld"] = None
+    assert A.judge_item2([nop], [_cmp(maxabs=0.1, kld=0.1, prefix=10)], 256)["predeclared_rule_satisfied"] is False
+
+
+class _PlacementNoiseClient(FakeClient):
+    """FakeClient whose first-position probability depends on the request's call parity, the way a placement-sensitive
+    kernel's does: an own continuation sits at 0 or `wobble_own` below the clean value (so own-vs-own replicates differ by
+    up to `wobble_own`), a fork child sits a constant `wobble_fork` below it."""
+
+    def __init__(self, *a, wobble_own=0.0, wobble_fork=0.0, **kw):
+        super().__init__(*a, **kw)
+        self.wobble_own, self.wobble_fork, self.calls = wobble_own, wobble_fork, 0
+
+    def complete(self, body, timeout=0):
+        r = super().complete(body, timeout)
+        self.calls += 1
+        is_child = bool((r.get("timings") or {}).get("n_fork_tokens"))
+        if is_child:
+            w = self.wobble_fork
+        else:
+            w = self.wobble_own * (self.calls % 2)
+        if w and r["probs"]:
+            for pr in r["probs"]:
+                pr["top_logprobs"][0]["logprob"] -= w
+        return r
+
+
+def _item2_run(tmp_path, cpu_spec, client, aa_repeats, groups=(0,)):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    client.n_min, client.ub = ctx.client.n_min, ctx.client.ub
+    ctx.client = client
+    R = GATE.Run(ctx, 2, "fork_on", env.srv, True)
+    n = ctx.args.n_predict
+    for g in groups:
+        T = GATE.G(ctx, g)["T"]
+        if aa_repeats == 0:
+            GATE.item2_seed_source(ctx, R, g, T)
+        for i in range(2):
+            GATE.item2_pair(ctx, R, g, i, T, n, ctx.args.n_probs, aa_repeats)
+    return ctx, R, ARMS_JUDGE(R, n)
+
+
+def ARMS_JUDGE(R, n):
+    return A.judge_item2(R.eq.get("item2_fork_vs_own", []), R.eq.get("item2_aa_control", []), n)
+
+
+def test_item2_pair_records_the_aa_control_beside_every_fork_vs_own_pair(tmp_path, cpu_spec):
+    ctx, R, j = _item2_run(tmp_path, cpu_spec, FakeClient(), aa_repeats=2)
+    assert len(R.eq["item2_fork_vs_own"]) == 2 and len(R.eq["item2_aa_control"]) == 4 and len(R.eq["item2_fork_repeat"]) == 4
+    assert len(R.ident["bit_exact_ckpt"]) == 2                      # the legacy bit-exact count is still recorded
+    assert j["judgeable"] is True and j["n_pairs"] == 2 and j["n_aa"] == 4
+    # deterministic fake: fork == cold == own, A/A bit-identical -> floor zero -> bit-identity owed and met
+    assert j["bit_identity_owed"] is True and j["predeclared_rule_satisfied"] is True
+
+
+def test_item2_pair_with_aa_zero_is_the_legacy_flow_and_unjudgeable(tmp_path, cpu_spec):
+    ctx, R, j = _item2_run(tmp_path, cpu_spec, FakeClient(), aa_repeats=0)
+    assert len(R.eq["item2_fork_vs_own"]) == 2 and "item2_aa_control" not in R.eq
+    assert j["judgeable"] is False and j["predeclared_rule_satisfied"] is None
+
+
+def test_item2_a_fork_that_deviates_more_than_the_floor_fails_and_one_inside_it_passes(tmp_path, cpu_spec):
+    # own-vs-own wobbles by 0.02 in probability space; a fork child wobbling by the same amount is inside the floor
+    ctx, R, j = _item2_run(tmp_path, cpu_spec, _PlacementNoiseClient(wobble_own=0.02, wobble_fork=0.02), aa_repeats=2)
+    assert j["bit_identity_owed"] is False and j["aa_floor"]["max_maxabs"] > 0
+    assert j["predeclared_rule_satisfied"] is True, j
+    # a fork child far outside that floor must fail every pair
+    ctx2, R2, j2 = _item2_run(tmp_path / "far", cpu_spec, _PlacementNoiseClient(wobble_own=0.02, wobble_fork=0.9), aa_repeats=2)
+    assert j2["predeclared_rule_satisfied"] is False and j2["n_not_ok"] == 2
+
+
+def test_item2_plan_estimate_grows_with_aa_repeats_and_ends_with_the_judgement_step(tmp_path):
+    ctx, args = mk_plan_ctx(tmp_path, item2_groups="0", item2_aa_repeats=0)
+    legacy = GATE.item2(ctx)
+    args.item2_aa_repeats = 2
+    with_aa = GATE.item2(ctx)
+    assert sum(s.est_s for s in with_aa) > sum(s.est_s for s in legacy)
+    assert any("2 A/A repeat" in s.desc for s in with_aa) and any("NO A/A control" in s.desc for s in legacy)
+    for steps in (legacy, with_aa):
+        assert "judge item 2" in steps[-2].desc and steps[-1].desc.endswith("then finalize its records")
+    assert "NOT owed" in A.ITEM2_RULE and "UNJUDGEABLE" in A.ITEM2_RULE

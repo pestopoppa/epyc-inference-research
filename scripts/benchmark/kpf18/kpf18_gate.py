@@ -1352,6 +1352,52 @@ def item1(ctx: Ctx) -> list[Step]:
 
 
 # ---- item 2
+def item2_seed_source(ctx: Ctx, R: "Run", g: int, T: int, role: str = "source") -> None:
+    """Erase every slot, then slot 0 = trunk + src_tail with a pinned junction at T (the source's checkpoint)."""
+    ctx.check_boundary()
+    erase_all(ctx)
+    grp = G(ctx, g)
+    r = ctx.client.complete(body_for(cat(grp["trunk"], grp["src_tail"]), 0, 0, fork=False, ckpt=[T], n_probs=0))
+    R.row(role, r, group=g)
+    ck = [c for c in (ctx.client.slots()[0].get("checkpoints") or []) if c.get("n_tokens") == T]
+    R.check("source_has_pinned_junction", bool(ck and ck[0].get("pinned")), [g, ck])
+
+
+def item2_replicate(ctx: Ctx, R: "Run", g: int, i: int, T: int, n: int, n_probs: int, *, reseed: bool, rep: int):
+    """One (fork child from the source's pinned junction, then the source's own continuation from the same junction)
+    replicate. With `reseed` the source is rebuilt from an empty pool first, so every replicate starts from the SAME state
+    (same slot history, same cell placement, same batch composition) - that is what makes own-vs-own an A/A floor."""
+    grp = G(ctx, g)
+    if reseed:
+        item2_seed_source(ctx, R, g, T, role="source_reseed")
+    ctx.check_boundary()
+    P = cat(grp["trunk"], grp["suffixes"][i])
+    ctx.client.erase(1)
+    C = R.row("fork_child", ctx.client.complete(body_for(P, n, 1, fork=True, n_probs=n_probs)),
+              group=g, suffix=i, slot=1, rep=rep)
+    R.check("fork_kind_checkpoint", C["timings"].get("fork_src_kind") == "checkpoint"
+            and C["timings"].get("n_fork_tokens") == T,
+            [g, i, rep, C["timings"].get("fork_src_kind"), C["timings"].get("n_fork_tokens")])
+    O = R.row("source_own", ctx.client.complete(body_for(P, n, 0, fork=False, cache=True, n_probs=n_probs)),
+              group=g, suffix=i, slot=0, rep=rep)
+    R.check("source_restored_own_ckpt_T", O["timings"].get("cache_n") == T, [g, i, rep, O["timings"].get("cache_n")])
+    return C, O
+
+
+def item2_pair(ctx: Ctx, R: "Run", g: int, i: int, T: int, n: int, n_probs: int, aa_repeats: int) -> None:
+    """KPF-18.0e: replicate 0 is the original fork-vs-own comparison; each A/A repeat re-runs the identical replicate from
+    a reseeded state and records own-vs-own (the A/A floor) and fork-vs-fork. `aa_repeats == 0` = the legacy flow
+    (no reseed, no floor: item 2 is then UNJUDGEABLE, never a pass)."""
+    C, O = item2_replicate(ctx, R, g, i, T, n, n_probs, reseed=aa_repeats > 0, rep=0)
+    cmp = compare(C, O, n)
+    R.ident.setdefault("bit_exact_ckpt", []).append(cmp)
+    R.eq.setdefault("item2_fork_vs_own", []).append(cmp)
+    for k in range(1, aa_repeats + 1):
+        C2, O2 = item2_replicate(ctx, R, g, i, T, n, n_probs, reseed=True, rep=k)
+        R.eq.setdefault("item2_aa_control", []).append(compare(O, O2, n))      # own vs own: the A/A floor
+        R.eq.setdefault("item2_fork_repeat", []).append(compare(C, C2, n))     # fork vs fork repeat
+
+
 def item2(ctx: Ctx) -> list[Step]:
     a = ctx.args
     srv = Server(ctx, f"item2-fork_on-{utc_tag()}", Path(a.fork_bin), a.fork_min)
@@ -1359,38 +1405,31 @@ def item2(ctx: Ctx) -> list[Step]:
     state: dict = {}
     steps.append(Step("open item-2 record", 0, lambda: state.update(r=Run(ctx, 2, "fork_on", srv, True))))
     n = a.n_predict
+    aa = int(getattr(a, "item2_aa_repeats", 1) or 0)
     for g in gsel(ctx, a.item2_groups, sorted(ctx.ps.groups)):
         T = G(ctx, g)["T"]
-
-        def source(g=g, T=T):  # fix: bind T now (late-binding closure sent the LAST group's T)
-            ctx.check_boundary()
-            erase_all(ctx)
-            grp = G(ctx, g)
-            r = ctx.client.complete(body_for(cat(grp["trunk"], grp["src_tail"]), 0, 0, fork=False, ckpt=[T], n_probs=0))
-            state["r"].row("source", r, group=g)
-            ck = [c for c in (ctx.client.slots()[0].get("checkpoints") or []) if c.get("n_tokens") == T]
-            state["r"].check("source_has_pinned_junction", bool(ck and ck[0].get("pinned")), [g, ck])
-        steps.append(Step(f"item2 g{g} erase all + source slot 0 = trunk+tail ({T}+{SRC_TAIL}), checkpoint_at [{T}]",
-                          pf_s(T + SRC_TAIL, 0) + REQ_OVERHEAD_S, source))
+        if aa == 0:  # legacy flow: one source per group, shared by every suffix
+            steps.append(Step(f"item2 g{g} erase all + source slot 0 = trunk+tail ({T}+{SRC_TAIL}), checkpoint_at [{T}]",
+                              pf_s(T + SRC_TAIL, 0) + REQ_OVERHEAD_S,
+                              lambda g=g, T=T: item2_seed_source(ctx, state["r"], g, T)))
         for i, S in enumerate(G(ctx, g)["suffix_lens"]):
-            def pair(g=g, i=i, T=T):  # fix: bind T now
-                ctx.check_boundary()
-                grp = G(ctx, g)
-                P = cat(grp["trunk"], grp["suffixes"][i])
-                R = state["r"]
-                ctx.client.erase(1)
-                C = R.row("fork_child", ctx.client.complete(body_for(P, n, 1, fork=True, n_probs=a.n_probs)),
-                          group=g, suffix=i, slot=1)
-                R.check("fork_kind_checkpoint", C["timings"].get("fork_src_kind") == "checkpoint"
-                        and C["timings"].get("n_fork_tokens") == T,
-                        [g, i, C["timings"].get("fork_src_kind"), C["timings"].get("n_fork_tokens")])
-                O = R.row("source_own", ctx.client.complete(body_for(P, n, 0, fork=False, cache=True, n_probs=a.n_probs)),
-                          group=g, suffix=i, slot=0)
-                R.check("source_restored_own_ckpt_T", O["timings"].get("cache_n") == T, [g, i, O["timings"].get("cache_n")])
-                R.ident.setdefault("bit_exact_ckpt", []).append(compare(C, O, n))
+            reps = 1 + aa
+            est = reps * (pf_s(T + SRC_TAIL, 0) + 2 * pf_s(S, 2 * T) + 2 * dec_s(n, 2 * T, True) + 4 * REQ_OVERHEAD_S) \
+                if aa else 2 * pf_s(S, 2 * T) + 2 * dec_s(n, 2 * T, True) + 3 * REQ_OVERHEAD_S
             steps.append(Step(f"item2 g{g}.{i} S={S}: fork child (slot 1) from source ckpt {T}, then source's own "
-                              f"continuation (slot 0) from the same ckpt; {n} tok each",
-                              2 * pf_s(S, 2 * T + S) + 2 * dec_s(n, 2 * T, True) + 3 * REQ_OVERHEAD_S, pair))
+                              f"continuation (slot 0) from the same ckpt; {n} tok each; "
+                              + (f"{aa} A/A repeat(s) from a reseeded source (KPF-18.0e floor)" if aa else
+                                 "NO A/A control (legacy; item 2 will be UNJUDGEABLE)"),
+                              est, lambda g=g, i=i, T=T: item2_pair(ctx, state["r"], g, i, T, n, a.n_probs, aa)))
+
+    def judge():
+        R = state["r"]
+        j = ARMS.judge_item2(R.eq.get("item2_fork_vs_own", []), R.eq.get("item2_aa_control", []), n)
+        R.extra["item2_judgement"] = j
+        R.extra["item2_rule"] = ARMS.ITEM2_RULE
+        print(f"[kpf18] item2 judged at the A/A floor: n_pairs={j['n_pairs']} n_aa={j['n_aa']} "
+              f"n_ok={j.get('n_ok')} rule_satisfied={j['predeclared_rule_satisfied']}", flush=True)
+    steps.append(Step("judge item 2 at the measured A/A floor (KPF-18.0e; pure, no request)", 0, judge))
     steps.append(stop_step(srv))
     return steps
 
@@ -1982,6 +2021,8 @@ def main() -> int:
     ap.add_argument("--item7-n-predict", type=int, default=256)
     for k in (1, 2, 3, 4, 5, 6):
         ap.add_argument(f"--item{k}-groups", default=None, help="comma list of trunk-group indices 0..7")
+    ap.add_argument("--item2-aa-repeats", type=int, default=1,
+                    help="KPF-18.0e: A/A repeats per item-2 pair (own-vs-own floor from a reseeded source); 0 = legacy, UNJUDGEABLE")
     ap.add_argument("--item3-suffix", type=int, default=2)
     ap.add_argument("--item4-suffix", type=int, default=1)
     ap.add_argument("--budget-min", type=float, default=None)

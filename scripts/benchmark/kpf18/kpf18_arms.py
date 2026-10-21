@@ -249,6 +249,57 @@ def floor_stats(floors: list[dict]) -> dict:
             "prefix_median": statistics.median(pre) if pre else None, "prefix_min": pre[0] if pre else None}
 
 
+# ---------------------------------------------------------------- KPF-18.0e: item 2 judged at the A/A floor
+ITEM2_MIN_AA = 3   # fewer A/A pairs than this is recorded as a thin floor (still judged, flagged)
+ITEM2_RULE = (
+    "KPF-18 item 2 (KPF-18.0e): bit-identity of fork-from-checkpoint vs the source's own continuation is NOT owed when KV "
+    "cell placement differs (GPU batch non-invariance; CPU/Gemma: 0.04 nats at token 1). Judge every fork-vs-own pair "
+    "against the measured A/A floor: the source's own continuation from the same checkpoint run twice from an identical "
+    "reseeded state (same slot history, same batch composition). A pair is OK iff first-token top-1 agrees AND first-token "
+    "top-k max-abs prob and coarse KL are no larger than the A/A maximum (lifted to FLOOR_EPS) AND the identical-greedy-"
+    "prefix length is no shorter than the shortest A/A prefix. If EVERY A/A pair is bit-identical (floor zero) bit-identity "
+    "is owed and every fork pair must also be bit-identical. No A/A control => UNJUDGEABLE (rule result None), never a "
+    "pass. Counts are reported, not a pass word; the A/A control rate is the floor every item-2 number is read against.")
+
+
+def judge_item2(fork_vs_own: list[dict], aa: list[dict], n_cmp: int) -> dict:
+    """Pure evaluator for KPF-18.0e. `fork_vs_own` / `aa` are gate.compare() dicts (fork child vs source's own continuation;
+    own vs own repeat). Returns counts plus predeclared_rule_satisfied True / False / None (None = unjudgeable)."""
+    pairs = [c for c in fork_vs_own if c]
+    ctl = [c for c in aa if c]
+    out: dict = {"rule": ITEM2_RULE, "n_pairs": len(pairs), "n_aa": len(ctl), "n_cmp": n_cmp,
+                 "min_aa_for_a_firm_floor": ITEM2_MIN_AA}
+    if not pairs or not ctl:
+        out.update(judgeable=False, predeclared_rule_satisfied=None,
+                   reason=("no fork-vs-own pairs recorded" if not pairs else
+                           "no A/A control recorded: item 2 cannot be judged at the floor (this is not a pass)"),
+                   fork_bit_identical=sum(1 for c in pairs if c.get("identical")),
+                   fork_tokens_identical=sum(1 for c in pairs if c.get("tokens_identical")))
+        return out
+    fl = floor_stats(ctl)
+    aa_bit = sum(1 for c in ctl if c.get("identical"))
+    owed = aa_bit == len(ctl)
+    per = []
+    for k, vs in enumerate(pairs):
+        w = within_floor(vs, fl["max_maxabs"], fl["max_kld"])
+        pref_ok = vs.get("prefix", 0) >= (fl["prefix_min"] or 0)
+        ident_ok = (not owed) or bool(vs.get("identical"))
+        per.append({"pair": k, "top1": w["top1"], "maxabs_ok": w["maxabs_ok"], "kld_ok": w["kld_ok"], "within": w["within"],
+                    "prefix": vs.get("prefix"), "prefix_ok": pref_ok, "identical": bool(vs.get("identical")),
+                    "identical_ok": ident_ok, "ok": bool(w["within"] and pref_ok and ident_ok)})
+    n_ok = sum(1 for r in per if r["ok"])
+    out.update(
+        judgeable=True, aa_floor=fl, aa_bit_identical=aa_bit, aa_tokens_identical=sum(1 for c in ctl if c.get("tokens_identical")),
+        bit_identity_owed=owed, floor_thin=len(ctl) < ITEM2_MIN_AA,
+        n_ok=n_ok, n_top1=sum(1 for r in per if r["top1"]), n_within=sum(1 for r in per if r["within"]),
+        n_prefix_ok=sum(1 for r in per if r["prefix_ok"]), n_not_ok=len(per) - n_ok,
+        fork_bit_identical=sum(1 for r in per if r["identical"]),
+        fork_tokens_identical=sum(1 for c in pairs if c.get("tokens_identical")),
+        not_ok_pairs=[r["pair"] for r in per if not r["ok"]], per_pair=per,
+        predeclared_rule_satisfied=(n_ok == len(per)))
+    return out
+
+
 def median_or_none(xs: list[float]):
     xs = [x for x in xs if x is not None]
     return statistics.median(xs) if xs else None
