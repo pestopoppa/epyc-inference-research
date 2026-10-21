@@ -1,0 +1,23 @@
+{
+ "gaussian": {
+  "q8_0_b32": 2.8597742129932158e-05,
+  "fp8_e4m3_ue8m0_b32 (wo_a input / window KV QDQ)": 0.0007062875665724277,
+  "fp4_e2m1_ue8m0_b32 (indexer K/Q QDQ)": 0.013335909694433212,
+  "fp4_e2m1_e4m3_b16 (compressed KV QDQ)": 0.009064978919923306,
+  "ratio_fp8qdq_over_q8_0": 24.69731922763174
+ },
+ "laplace": {
+  "q8_0_b32": 4.5280929043656215e-05,
+  "fp8_e4m3_ue8m0_b32 (wo_a input / window KV QDQ)": 0.0007021394558250904,
+  "fp4_e2m1_ue8m0_b32 (indexer K/Q QDQ)": 0.01747276447713375,
+  "fp4_e2m1_e4m3_b16 (compressed KV QDQ)": 0.008571816608309746,
+  "ratio_fp8qdq_over_q8_0": 15.506295269431073
+ },
+ "outlier_channels_x30": {
+  "q8_0_b32": 0.00015031768998596817,
+  "fp8_e4m3_ue8m0_b32 (wo_a input / window KV QDQ)": 0.0007118270150385797,
+  "fp4_e2m1_ue8m0_b32 (indexer K/Q QDQ)": 0.026293348520994186,
+  "fp4_e2m1_e4m3_b16 (compressed KV QDQ)": 0.0065917763859033585,
+  "ratio_fp8qdq_over_q8_0": 4.735483994631817
+ }
+}

@@ -1,0 +1,24 @@
+== remote main model.py: sha e5decd76fe70fd56
+13:    act_quant,
+14:    fp4_act_quant,
+187:        x, s = act_quant(x, fp8_block_size, scale_fmt, scale_dtype)
+197:        x, s = act_quant(x, fp8_block_size, scale_fmt, scale_dtype)
+546:            fp4_act_quant(k, fp4_block_size, True)
+549:            shared_attn.index_k = self.k_cache
+553:        fp4_act_quant(q, fp4_block_size, True)
+555:        index_k = shared_attn.index_k[:bsz, : end_pos // ratio]
+557:        index_score = torch.einsum("bshd,btd->bsht", q, index_k)
+646:        self.wo_a = ColumnParallelLinear(
+708:        act_quant(kv, fp8_block_size, scale_fmt, scale_dtype, True)
+761:            fp4_act_quant(latent, 16, True, scale_dtype=torch.float8_e4m3fn)
+784:        # wo_a is block-diagonal over groups (each projects only its own heads), hence einsum not
+787:        act_quant(o, fp8_block_size, scale_fmt, scale_dtype, True)
+788:        wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
+789:        o = torch.einsum("bsgd,grd->bsgr", o, wo_a)
+1044:        act_quant(main_kv, fp8_block_size, scale_fmt, scale_dtype, True)
+1064:        act_quant(kv, fp8_block_size, scale_fmt, scale_dtype, True)
+1073:        act_quant(o, fp8_block_size, scale_fmt, scale_dtype, True)
+1074:        wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
+1075:        o = torch.einsum("bsgd,grd->bsgr", o, wo_a)
+1172:    resetting between forwards. Sources: compress_kv and index_k from kv_source_layers, topk_idxs
+1177:        self.index_k: torch.Tensor | None = None

@@ -1,0 +1,53 @@
+== reference (on-disk Sept copy) model.py index-key path L540-556
+                self.freqs_cis[: seqlen - seqlen % ratio : ratio]
+                if start_pos == 0
+                else self.freqs_cis[start_pos + 1 - ratio].unsqueeze(0)
+            )
+            k = self.k_norm(self.wk(latent))
+            apply_rotary_emb(k[..., -rd:], freqs)
+            fp4_act_quant(k, fp4_block_size, True)
+            self.k_cache[:bsz, start_pos // ratio : start_pos // ratio + k.size(1)] = k
+            shared_attn.index_k = self.k_cache
+
+        q = self.wq_b(qr).unflatten(-1, (self.n_local_heads, self.index_head_dim))
+        apply_rotary_emb(q[..., -rd:], self.freqs_cis[start_pos:end_pos])
+        fp4_act_quant(q, fp4_block_size, True)
+
+        index_k = shared_attn.index_k[:bsz, : end_pos // ratio]
+        weights = self.weights_proj(x) * (self.softmax_scale * self.n_heads**-0.5)
+        index_score = torch.einsum("bshd,btd->bsht", q, index_k)
+== reference wo_a call sites (Sept copy: expect NO act_quant before wo_a)
+645:        self.wo_a = ColumnParallelLinear(
+783:        # wo_a is block-diagonal over groups (each projects only its own heads), hence einsum not
+786:        wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
+787:        o = torch.einsum("bsgd,grd->bsgr", o, wo_a)
+1071:        wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
+1072:        o = torch.einsum("bsgd,grd->bsgr", o, wo_a)
+== port: index-key owner path
+// The layer whose compressed plane (or indexer-key plane) this layer reads. Sources own a plane;
+// every other layer of the same ratio run reads the most recent preceding source's
+// (model.py:746-748 / :763 and model.py:537-548, SPEC.md 4.4 / 5.1; ds4.c:40623's owner index).
+static int dsv41_source_layer(const llama_hparams & hp, int il, bool index_key) {
+    const uint32_t ratio = hp.dsv4_compress_ratios[il];
+
+    for (int j = il; j >= 0; --j) {
+        if (hp.dsv4_compress_ratios[j] != ratio) {
+            break;
+        }
+        // only a KV source can produce index keys, because they are projected from its latent
+        if (hp.dsv41_is_kv_source[j] && (!index_key || hp.dsv41_is_index_source[j])) {
+            return j;
+        }
+    }
+
+    return -1;
+}
+
+ggml_tensor * llama_model_deepseek41::graph::build_v41_compressed_kv_from_state(
+        ggml_tensor * kv_state,
+294:        // the file stores wo_a as (n_head*n_embd_head/o_groups, o_lora_rank*o_groups); reshape on load
+295:        layer.wo_a          = create_tensor(tn(LLM_TENSOR_ATTN_OUT_A,    "weight", i), {n_head * n_embd_head / o_groups, o_lora_rank, o_groups}, TENSOR_ALLOW_RESHAPE);
+1221:    ggml_tensor * oa = ggml_mul_mat(ctx0, layer.wo_a, out);
+1222:    cb(oa, "attn_wo_a", il);
+== port branch/commit
+3376147f8 2026-10-06 21:57:32 +0000 tests: AK served-shape case set (calibrated 2026-10-06, sharded re-measure)
