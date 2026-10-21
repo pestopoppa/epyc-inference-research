@@ -1,0 +1,33 @@
+# KPF-18 gate argv (production :8083 argv minus binary/--port, plus the -b 512 -ub 512 + --no-cache-idle-slots
+# package named in kv-prefix-fork-and-paged-attention.md). The runner adds --port, --metrics,
+# --slot-fork-min-tokens and its own --slot-save-path; item 4 adds the prefill-budget args.
+# source: /mnt/raid0/llm/epyc-orchestrator/logs/server_launches/8083.json (schema epyc.stack.server_launch.v1, launched_at 2026-10-04T02:48:09.776Z,
+#   pid 1703677, launcher scripts/server/orchestrator_stack.py reload architect_critic, stack_commit ff92a580ea1a0a35c7eb803a4ad325d63bc810b1,
+#   argv_sha256 b865820d557feac6a513e47324f0f58b4d60cb98275b2b2db6c1aca9f199ad64 (recomputed match: True))
+# launch prefix in that record: numactl --membind=3 -- taskset -c 184-191
+# production binary in that record: /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server (NOT used here; the runner takes --fork-bin/--champion-bin)
+# changes vs the record: removed --port 8083; -ub 2048 -> -b 512 -ub 512; added --no-cache-idle-slots
+-m /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+--host 127.0.0.1
+-np 4
+-c 393216
+-t 8
+-ub 512
+--flash-attn on
+--jinja
+-ctk q8_0
+-ctv q8_0
+--kv-unified
+--no-mmap
+-ngl all
+--cache-ram 65536
+--chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja
+-md /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+-ngld 99
+--spec-type draft-dflash
+--spec-draft-n-max 7
+--device ROCm0
+--slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_critic
+--device-draft ROCm0
+-b 512
+--no-cache-idle-slots
