@@ -173,6 +173,14 @@ WITNESSES = {
         symbol_pattern=r"^ggml_repack_get_optimal_repack_type$", active=None,
         quants=("IQ4_NL", "Q4_0", "Q4_K"), ops=("MUL_MAT", "MUL_MAT_ID"),
         expert_modes=("alternating", "single"), reference="ppl_contract"),
+    # 2026-10-21: the x86 repack GEMV template (DS41-1017 MXFP4 experts; shared with
+    # Q4_0/IQ4_NL). No backend-ops case reaches it: engagement AND numerics are proven by
+    # the CPU_REPACK probe (`cpu_repack_cases.py`: tensor->extra, repacked layout, and a
+    # one-scale witness in the repacked buffer), run by the ppl_contract layer (a).
+    "cpu_repack_gemv": RouteWitness(
+        op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
+        quants=("MXFP4", "IQ4_NL", "Q4_0"), ops=("MUL_MAT", "MUL_MAT_ID"),
+        expert_modes=("alternating", "single"), reference="ppl_contract"),
     "iqk_kquants_q6_iq4xs_dequant": RouteWitness(
         op="MUL_MAT", case=f"type_a=q6_K,type_b=f32,m=16,n=16,k=256,{_DENSE}",
         breakpoint=("rbreak", r"mul_mat_qY_K_q8_2_X4_T<.*DequantizerQ6K_AVX2"),

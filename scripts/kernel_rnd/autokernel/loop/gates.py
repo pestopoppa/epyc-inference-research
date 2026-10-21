@@ -731,6 +731,32 @@ CPU_SOURCE_ROUTES = (
         admitted_text=("hunks inside the repack type-claim (which types repack takes when "
                        "GGML_IQK is on) and the repack MUL_MAT_ID walk; the packed layouts, "
                        "gemv/gemm kernels and the GGML_IQK env read unchanged")),
+    # 2026-10-21 (DS41-1017 seeds S2-S4, store inbox 30): the x86 repack GEMV that serves
+    # every DS41-1017 MXFP4 expert (`gemv_q4_b32_8x8_q8_0_lut_avx<block_mxfp4x8>`, reached
+    # from `ggml_gemv_mxfp4_8x8_q8_0`). The template is SHARED with block_q4_0x8 and
+    # block_iq4_nlx8 (Q38FN serves IQ4_NL through it), so a keep here runs the shared-type
+    # cases of the CPU_REPACK oracle too (`cpu_repack_cases.touches_repack`). No
+    # test-backend-ops case reaches it (PPL_CONTRACT_NO_OP_ORACLE); its op oracle is
+    # `check_cpu_repack_case_set`, and a lane without a calibrated CPU_REPACK manifest
+    # refuses the keep.
+    CpuSourceRoute(
+        route="cpu_repack_gemv",
+        path="ggml/src/ggml-cpu/arch/x86/repack.cpp",
+        symbols=("gemv_q4_b32_8x8_q8_0_lut_avx", "ggml_gemv_mxfp4_8x8_q8_0"),
+        bodies=(("gemv_q4_b32_8x8_q8_0_lut_avx",
+                 "static void gemv_q4_b32_8x8_q8_0_lut_avx(int n, float * GGML_RESTRICT s, size_t bs, "
+                 "const void * GGML_RESTRICT vx, const void * GGML_RESTRICT vy, int nr, int nc, "
+                 "__m256i signextendlut) {"),
+                ("ggml_gemv_mxfp4_8x8_q8_0",
+                 "void ggml_gemv_mxfp4_8x8_q8_0(int n, float * GGML_RESTRICT s, size_t bs, "
+                 "const void * GGML_RESTRICT vx, const void * GGML_RESTRICT vy, int nr, int nc) {")),
+        ops=("MUL_MAT", "MUL_MAT_ID"),
+        new_helpers=True,
+        forbidden_added=r"getenv\(|#pragma omp|_Pragma|#define|#undef|#include \"",
+        numerics="ppl_contract",
+        admitted_text=("hunks inside the shared 8x8 q4-b32 GEMV template body or the MXFP4 GEMV "
+                       "entry, plus new static helpers; the GEMM template, the other entries, the "
+                       "block layouts and the repack itself unchanged")),
     # Q6_K/IQ4_XS dequantizers (seed 6 widening): DequantizerQ6K_AVX2's own kernel body
     # (mul_mat_qY_K_q8_2_X4_T, a DIFFERENT template than Q4_K/Q5_K's mul_mat_qX_K_q8_2_X4_T,
     # so this route cannot collide with the existing Q4_K/Q5_K ad-hoc admission) and
@@ -2586,6 +2612,52 @@ def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
     return Verdict(gate, verdict.passed, verdict.reason, verdict.detail)
 
 
+def check_cpu_repack_case_set(build_dir: Path, *, resolved_recipe, manifest_path: Path,
+                              lane: "str | None", include_shared: bool = False,
+                              _check: "Callable | None" = None) -> Verdict:
+    """The CPU_REPACK oracle (operator 2026-10-21): MUL_MAT_ID through the repacked expert
+    kernel on the lane's real served experts (DS41-1017: `mxfp4_8x8_q8_0`), plus the shared
+    GEMV template's Q4_0/IQ4_NL instantiations when `include_shared`, against an independent
+    double reference, bounded by the anchor's own calibrated NMSE / max error. FAILS CLOSED:
+    no case set, no or stale manifest, a probe without the case-set literals (or a TEST
+    FIXTURE build), or any case where the repack path did not engage is
+    `oracle_unavailable`; a bound violation is a numerical refusal. See
+    `cpu_repack_cases.py`. `_check` is a test seam with `check_case_set`'s signature."""
+    from . import cpu_repack_cases as crc
+
+    if not crc.lane_has_cases(lane):
+        return Verdict("oracle_unavailable", False,
+                       f"no CPU_REPACK case set for lane {lane!r}")
+    try:
+        launch = served_launch(resolved_recipe)
+    except (ValueError, TypeError) as exc:
+        return Verdict("oracle_unavailable", False,
+                       f"served backend thread count is unknown ({exc}); refusing to run "
+                       "the CPU_REPACK cases at an uncontrolled thread count")
+    result = (_check or crc.check_case_set)(
+        Path(build_dir), Path(manifest_path), lane=lane, include_shared=include_shared,
+        threads=launch["threads"],
+        launch_env=dict(getattr(resolved_recipe, "launch_env", None) or {}) or None,
+        topology_prefix=tuple(launch["prefix"]))
+    gate = ("cpu_repack_case_set" if result.status != "unavailable" else "oracle_unavailable")
+    return Verdict(gate, result.status == "pass", result.reason, result.detail)
+
+
+#: `cpu_repack_cases.REPACK_ROUTES`, duplicated to keep this module's import graph lazy;
+#: `test_cpu_repack_cases.py` cross-checks the two stay equal.
+_REPACK_ROUTES = frozenset({"cpu_repack_mmid", "cpu_repack_gemv"})
+
+
+def _cpu_repack_manifest_for(served_shape_manifest, model) -> "Path | None":
+    """`<store>/cpu_repack/manifest.json` (beside `<store>/served_shape/`) for a lane that
+    carries a CPU_REPACK case set; None for every other lane (behaviour unchanged)."""
+    from . import cpu_repack_cases as crc
+
+    if served_shape_manifest is None or not crc.lane_has_cases(_lane_for_model(model)):
+        return None
+    return Path(served_shape_manifest).parent.parent / crc.STORE_SUBDIR / "manifest.json"
+
+
 def check_model_output_identity(*, anchor_recipe, candidate_recipe, requests,
                                 window=None, repeats: int = 1, record_dir=None) -> Verdict:
     """Whole-model gate for a `model_identity` route (`cpu_weight_placement`)."""
@@ -2934,7 +3006,9 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
 #    the served widths -- not a literal NMSE float on the model's served (m, k), which
 #    needs a served-shape case set (`test-backend-ops --test-file`) and a tighter bound;
 #  * test-backend-ops never allocates the CPU_REPACK extra buffer, so no op oracle
-#    reaches `repack.cpp`: routes in PPL_CONTRACT_NO_OP_ORACLE are refused at layer (a);
+#    reaches `repack.cpp`: routes in PPL_CONTRACT_NO_OP_ORACLE are refused at layer (a)
+#    unless the lane carries a calibrated CPU_REPACK manifest (2026-10-21,
+#    `check_cpu_repack_case_set`), which then runs on every ppl_contract keep of that lane;
 #  * the anchor generations and candidate builds must carry PPL_CONTRACT_TOOL_TARGETS;
 #    a build without them fails layers (b)-(d) with a named reason.
 PPL_CORPUS = "/mnt/raid0/llm/data/wikitext2_test.txt"
@@ -2944,8 +3018,11 @@ PPL_CHUNKS, PPL_CTX, PPL_BATCH, PPL_REL_BAR = 32, 512, 512, 0.005
 #: Layer (a): the activation-width ("n") values a decode step (1) and a speculative
 #: verify step (2-5) actually serve; test-backend-ops case strings carry `,n=<int>,`.
 PPL_CONTRACT_SERVED_WIDTHS = (1, 2, 3, 4, 5)
-#: Layer (a): routes whose window no test-backend-ops case can reach (see above).
-PPL_CONTRACT_NO_OP_ORACLE = frozenset({"cpu_repack_mmid"})
+#: Layer (a): routes whose window no test-backend-ops case can reach (see above). Since
+#: 2026-10-21 their op oracle is the CPU_REPACK probe (`check_cpu_repack_case_set`,
+#: `cpu_repack_cases.py`): admitted only on a lane with a calibrated CPU_REPACK manifest
+#: (DS41), refused everywhere else exactly as before.
+PPL_CONTRACT_NO_OP_ORACLE = frozenset({"cpu_repack_mmid", "cpu_repack_gemv"})
 #: Layer (c): the existing T0 coherence floor (campaign.py:3054), reused verbatim.
 PPL_CONTRACT_AGREEMENT_FLOOR = 0.98
 #: Layer (c): "production-length" -- the tool's own prompt token count must reach this.
@@ -3602,8 +3679,11 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
                          served_shape_manifest: "Path | None" = None,
                          routed_manifest: "Path | None" = None,
                          routed_lane: "str | None" = None,
+                         cpu_repack_manifest: "Path | None" = None,
+                         cpu_repack_shared: bool = False,
                          _op_correctness=None,
-                         _check_served_shape_case_set=None) -> Verdict:
+                         _check_served_shape_case_set=None,
+                         _check_cpu_repack=None) -> Verdict:
     """Layer (a): test-backend-ops vs the independent `use_ref=true` reference at the
     served widths (decode N=1, verify 2-5), for EVERY quant type the suite carries --
     never narrowed to the route's witness quants: a whitelist / kernel-selection edit
@@ -3618,11 +3698,19 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
     review) leaves this layer's pre-existing behaviour untouched -- the real pipeline
     call site now always passes a manifest path; a caller that does not is making an
     explicit, reviewable choice to run layer (a) without served-shape evidence.
-    `_check_served_shape_case_set` is a test seam."""
-    if route_name in PPL_CONTRACT_NO_OP_ORACLE:
+
+    `cpu_repack_manifest` (2026-10-21): the CPU_REPACK oracle (`check_cpu_repack_case_set`)
+    -- the only check that runs the repacked expert kernel the DS41-1017 server uses.
+    Given, it runs after the served-shape corpora and FAILS CLOSED (missing manifest, case
+    set or repack engagement refuses the layer); `cpu_repack_shared` adds the shared GEMV
+    template's Q4_0/IQ4_NL cases. A route in `PPL_CONTRACT_NO_OP_ORACLE` is refused
+    without it, as before. `_check_served_shape_case_set` / `_check_cpu_repack` are test
+    seams."""
+    if route_name in PPL_CONTRACT_NO_OP_ORACLE and cpu_repack_manifest is None:
         return Verdict("ppl_contract_nmse_unavailable", False,
                        f"route {route_name} has no op-level oracle: test-backend-ops never "
-                       "allocates the CPU_REPACK extra buffer, so no case reaches its window")
+                       "allocates the CPU_REPACK extra buffer, so no case reaches its window, "
+                       f"and lane {routed_lane!r} carries no CPU_REPACK case set")
     run = _op_correctness or op_correctness
     width_pattern = "|".join(str(w) for w in PPL_CONTRACT_SERVED_WIDTHS)
     params_filter = rf"(^|,)n=({width_pattern})(,|$)"
@@ -3652,10 +3740,21 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
                            else "ppl_contract_nmse", False,
                            f"{label} suite refused: {served_verdict.reason}",
                            served_verdict.detail)
+    repack_note = ""
+    if cpu_repack_manifest is not None:
+        repack = (_check_cpu_repack or check_cpu_repack_case_set)(
+            candidate_build, resolved_recipe=resolved_recipe, manifest_path=cpu_repack_manifest,
+            lane=routed_lane, include_shared=cpu_repack_shared)
+        if not repack.passed:
+            unavailable = repack.gate == "oracle_unavailable"
+            return Verdict("ppl_contract_nmse_unavailable" if unavailable
+                           else "ppl_contract_nmse", False,
+                           f"CPU_REPACK suite refused: {repack.reason}", repack.detail)
+        repack_note = f"; CPU_REPACK suite passed ({repack.reason})"
     return Verdict("ppl_contract_nmse", True,
                    f"served-width suite ({params_filter}), all types, passed for "
                    f"{', '.join(ops)}" + "".join(f"; {label} suite passed"
-                                                 for label, _m, _e in corpora))
+                                                 for label, _m, _e in corpora) + repack_note)
 
 
 def _prefix_agreement(candidate, anchor) -> tuple[float, "int | None"]:
@@ -4027,6 +4126,11 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
         ("nmse", lambda: ppl_contract_op_nmse(
             candidate_build, resolved_recipe=resolved_recipe, route_name=route_name,
             served_shape_manifest=served_shape_manifest,
+            # 2026-10-21: a lane with a CPU_REPACK case set (DS41) also runs the repacked
+            # expert kernel; its manifest sits next to the served-shape one in the store.
+            # Shared-template cases for a repack-route keep and at the bundle tier.
+            cpu_repack_manifest=_cpu_repack_manifest_for(served_shape_manifest, model),
+            cpu_repack_shared=(route_name in _REPACK_ROUTES or "ppl" in layer_names),
             # Round-12: the 128-expert routed corpus runs at the BUNDLE tier only.
             routed_manifest=(Path(served_shape_manifest).with_name("manifest-routed.json")
                              if served_shape_manifest is not None
@@ -4158,7 +4262,7 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "backend_ops_selector", "compiles",
            "cpu_source_route", "deterministic",
            "affected_op_scope", "check_cpu_fa_case_set", "check_cpu_fa_perf_screen",
-           "check_served_shape_case_set", "op_correctness_sharded",
+           "check_served_shape_case_set", "check_cpu_repack_case_set", "op_correctness_sharded",
            "SERVED_SHAPE_CASE_SET_DEFAULT_SHARDS",
            "check_cpu_fa_reference", "check_cpu_fa_real_mask_identity",
            "check_cpu_gdn_reference", "check_cpu_iqk_reference",

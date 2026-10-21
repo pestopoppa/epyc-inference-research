@@ -97,6 +97,7 @@ from . import procguard
 from . import ak_check
 from . import noop_build
 from . import cpu_window
+from . import cpu_repack_cases
 from . import resume as resume_mod
 from . import bestof
 
@@ -3904,6 +3905,21 @@ def main(argv: list[str] | None = None) -> int:
                         "changed": sorted(set(changed + untracked))}
                 elif admitted_route is not None and admitted_route.numerics == "ppl_contract":
                     keep_numerics[hypothesis.mechanism_id] = {"class": "ppl_contract"}
+            # 2026-10-21 (operator, DS41-1017): on a lane with a CPU_REPACK case set every CPU
+            # keep must run the REPACKED expert kernel the server uses (test-backend-ops never
+            # does). A ppl_contract route already runs it inside layer (a)
+            # (`gates.ppl_contract_op_nmse`); this covers every other route and edit. Fails
+            # closed: no manifest in `<store>/cpu_repack/` refuses the keep.
+            repack_lane = gates._lane_for_model(args.model)
+            repack_extra = bool(cpu_launch and cpu_repack_cases.lane_has_cases(repack_lane)
+                                and not (admitted_route is not None
+                                         and admitted_route.numerics == "ppl_contract"))
+
+            def repack_check(arm):
+                return gates.check_cpu_repack_case_set(
+                    worker.build_dir, resolved_recipe=arm,
+                    manifest_path=cpu_repack_cases.manifest_path(args.store), lane=repack_lane,
+                    include_shared=cpu_repack_cases.touches_repack(changed + untracked))
             if screen_confirmation is not None:
                 cpu_screen.verify_restored(screen_confirmation, worker, screen_prepared["launch"],
                                            args.store, hypothesis)
@@ -3922,6 +3938,8 @@ def main(argv: list[str] | None = None) -> int:
                         target_symbol=hypothesis.target_symbol))
                 if cpu_launch and (route_edit or multi_edit):
                     checks.extend(lambda ref=ref: ref(arm) for ref in route_references)
+                if repack_extra:
+                    checks.append(lambda: repack_check(arm))
                 return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
@@ -3965,6 +3983,8 @@ def main(argv: list[str] | None = None) -> int:
             if cpu_launch and (route_edit or multi_edit):
                 checks.extend(lambda ref=ref: ref(_cpu_arm(direct_launch, worker.build_dir))
                               for ref in route_references)
+            if repack_extra:
+                checks.append(lambda: repack_check(_cpu_arm(direct_launch, worker.build_dir)))
             if not direct_launch:
                 checks.extend((
                     lambda: gates.deterministic(worker.build_dir, args.model),

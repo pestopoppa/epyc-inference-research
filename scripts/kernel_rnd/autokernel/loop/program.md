@@ -170,8 +170,11 @@ class, or before the disabled-build stub.
   wikitext2 |delta ppl| <= 0.5% vs the anchor and no cumulative growth vs the frozen
   production kernel; greedy agreement >= 0.98 on two >=4096-token wikitext prompts; a
   1024-token repetition canary relative to the anchor), ALL required, fail-closed, and
-  re-run on the whole bundle before the champion of record folds. `cpu_repack_mmid`
-  has no op-level oracle (test-backend-ops never uses the repack buffer) and is refused. Every file below has an
+  re-run on the whole bundle before the champion of record folds. `cpu_repack_mmid` and
+  `cpu_repack_gemv` have no test-backend-ops oracle (it never uses the repack buffer):
+  they are refused unless the lane carries a calibrated CPU_REPACK manifest
+  (`<store>/cpu_repack/manifest.json`, `cpu_repack_cases.py`; today DS41 only), whose
+  probe runs the repacked kernel on real served experts. Every file below has an
   x86_64 implementation above a top-level `#else` / `__aarch64__` arm redefining
   several of the same symbols; every route's window ends before that arm.
   - **`iqk_iquants_dequant`**: `ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp`, target
@@ -189,6 +192,20 @@ class, or before the disabled-build stub.
     `ggml_repack_get_optimal_repack_type` or `forward_mul_mat_id` (Q38FN seed 3). A type
     admitted into iqk by `iqk_type_whitelist` still needs repack to release it here, or
     it falls back to the generic un-repacked path.
+  - **`cpu_repack_gemv`** (2026-10-21, DS41-1017 seeds S2-S4):
+    `ggml/src/ggml-cpu/arch/x86/repack.cpp`, target `gemv_q4_b32_8x8_q8_0_lut_avx` (the
+    8x8 q4-b32 GEMV template every DS41-1017 MXFP4 expert runs through) or the
+    `ggml_gemv_mxfp4_8x8_q8_0` entry, plus new static helpers. The template is SHARED
+    with `block_q4_0x8` and `block_iq4_nlx8` (Q38FN serves IQ4_NL through it): guard a
+    change with `if constexpr (std::is_same_v<block_tx8, block_mxfp4x8>)` or expect it
+    to be judged on all three. Any repack edit runs the CPU_REPACK oracle's shared
+    Q4_0/IQ4_NL cases too.
+  - **CPU_REPACK oracle (2026-10-21)**: on a lane with a CPU_REPACK case set (DS41) EVERY
+    CPU keep -- any route, ppl_contract layer (a) and the bundle alike -- must pass
+    `gates.check_cpu_repack_case_set`: MUL_MAT_ID through CPU_REPACK on 4 real 1017 MXFP4
+    expert slices at widths 1-512 against an independent double reference, bounded by
+    the anchor's own NMSE and max error (x3, capped), with repack engagement proven per
+    case. A missing manifest refuses the keep.
   - **`iqk_kquants_q6_iq4xs_dequant`** / **`iqk_kquants_set_kernels`**: both
     `ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp` (Q38FN seed 6). The first widens the
     existing Q4_K/Q5_K dot admission to `DequantizerQ6K_AVX2`'s own kernel body
