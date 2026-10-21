@@ -151,6 +151,16 @@ class TestKit(unittest.TestCase):
             rec = kit.build_pin_record(res, j.pin.claim_fields(), "x")
             self.assertEqual(rec["judge_pin"]["model"], "fake-judge-q8")
 
+    def test_flatten_3way(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "3way_x.jsonl"
+            p.write_text(json.dumps({"suite": "simpleqa", "question_id": "q", "prompt": "P?", "expected": "E",
+                                     "role_results": {"frontdoor:direct": {"answer": "<think>x</think> E it is"}}}) + "\n"
+                         + json.dumps({"suite": "math", "prompt": "m", "expected": "1", "role_results": {"a": {"answer": "1"}}}) + "\n")
+            rows = kit.flatten_3way([p])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]["output"], rows[0]["task"]), ("E it is", "simpleqa"))
+
     def test_kappa_edge_cases(self):
         self.assertEqual(kit.cohen_kappa([(1, 1), (0, 0), (1, 1), (0, 0)]), 1.0)
         self.assertIsNone(kit.cohen_kappa([(1, 1), (1, 1)]))  # no variance

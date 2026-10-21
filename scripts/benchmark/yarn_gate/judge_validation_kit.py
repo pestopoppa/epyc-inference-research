@@ -3,6 +3,7 @@
 
 Subcommands (run in order)::
 
+    flatten --sources 3way_*.jsonl --out rows.jsonl             # optional: logged free-text QA (simpleqa, hotpotqa)
     select  --source rows.jsonl [--n 50] [--seed 20261021] --out items.jsonl
     sheet   --items items.jsonl --out labels_sheet.csv          # BLIND: no judge verdict column
     judge   --items items.jsonl --port P --judge-model M --out judged.jsonl   # needs a served judge
@@ -89,6 +90,26 @@ def select_items(rows: list[dict], n: int = 50, seed: int = 20261021, strata_key
     return out
 
 
+def flatten_3way(paths, suites=("simpleqa", "hotpotqa"), tail_chars=600) -> list[dict]:
+    """Flatten logged ``3way_*.jsonl`` eval records (existing judged-type free-text QA) into kit rows.
+    Output = the answer after any ``</think>``, last ``tail_chars`` characters. ``task`` = suite."""
+    rows = []
+    for p in paths:
+        for line in Path(p).read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("suite") not in suites or "role_results" not in r:
+                continue
+            for role_key, rr in r["role_results"].items():
+                ans = str((rr or {}).get("answer") or "")
+                ans = ans.split("</think>")[-1].strip()[-tail_chars:]
+                rows.append({"task": r["suite"], "question": r.get("prompt", ""), "answer": r.get("expected", ""),
+                             "output": ans, "role": role_key, "qid": r.get("question_id")})
+    return rows
+
+
 def write_sheet(items: list[dict], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
@@ -172,6 +193,9 @@ def main(argv=None) -> int:
     s.add_argument("--strata-key", default="task")
     s.add_argument("--map", nargs="*", default=[], help="question=KEY reference=KEY candidate=KEY")
     s.add_argument("--out", required=True)
+    fl = sub.add_parser("flatten", help="flatten logged 3way_*.jsonl eval records into select-able rows")
+    fl.add_argument("--sources", nargs="+", required=True)
+    fl.add_argument("--out", required=True)
     sh = sub.add_parser("sheet")
     sh.add_argument("--items", required=True)
     sh.add_argument("--out", required=True)
@@ -197,6 +221,10 @@ def main(argv=None) -> int:
         items = select_items(_read_rows(Path(args.source)), args.n, args.seed, args.strata_key, mp)
         _write_jsonl(Path(args.out), items)
         print(f"selected {len(items)} items -> {args.out}")
+    elif args.cmd == "flatten":
+        rows = flatten_3way(args.sources)
+        _write_jsonl(Path(args.out), rows)
+        print(f"flattened {len(rows)} rows -> {args.out}")
     elif args.cmd == "sheet":
         write_sheet(_read_rows(Path(args.items)), Path(args.out))
         print(f"sheet -> {args.out} (fill human_label with 1/0; do NOT look at judge output first)")

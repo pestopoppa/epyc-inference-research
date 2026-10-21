@@ -21,7 +21,10 @@ from typing import Any, Callable, Iterable, Mapping
 NATIVE_CTX = 262144
 DEFAULT_RESERVE = 4096
 BIN_STEP = 32768
-MEASURED_SOURCES = ("served_tokenizer", "server_timings")
+#: "model_tokenizer_json" = the served model's own tokenizer.json read offline (same vocabulary, no server);
+#: llama.cpp's /tokenize can differ by a few tokens (special tokens), so the first window re-checks against
+#: server_timings prompt_n and that value supersedes this one.
+MEASURED_SOURCES = ("served_tokenizer", "server_timings", "model_tokenizer_json")
 #: a cell whose real median differs from its nominal target by more than this is flagged.
 NOMINAL_MISMATCH_FRAC = 0.10
 
