@@ -1,0 +1,557 @@
+{
+ "schema": "epyc.coherence_gate.v1",
+ "library": "coherence_gate 1.0.0",
+ "degeneracy_classifier": "degeneracy.v2",
+ "degeneracy_lineage": "inf70-degeneracy.v2 (gpu-block-27b-20261003/degeneracy.py, 2026-10-04)",
+ "graders": "answer-graders.v1",
+ "decoding": "greedy (asserted by the caller; tier 0 identity is only decisive under greedy)",
+ "tokenizer": null,
+ "text_only_declared": false,
+ "judge": null,
+ "anchor": null,
+ "anchor_named": false,
+ "truth_rows_without_id": 0,
+ "items": [
+  {
+   "id": "s12",
+   "tier": 1,
+   "verdict": "PASS",
+   "reasons": [
+    "diverged; answer correct -> correct"
+   ],
+   "identity": {
+    "identical": false,
+    "basis": "sha256(text)+token_ids",
+    "base_sha256": "5147bf0293bc2c3b39d160fc5c1a760260fd73e03ec412daf04d16dbf20ada74",
+    "cand_sha256": "7d8413f5ca10b16626f8d0dac8e7795dc221d0efea412e57aaba93b925910a16"
+   },
+   "degeneracy": {
+    "base": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "OK",
+     "review": false,
+     "reasons": [],
+     "soft": [],
+     "n": 32,
+     "finish": "limit",
+     "uniq": 0.781,
+     "uniq_floor": 0.3,
+     "top": 0.094,
+     "run": 1,
+     "words": 25,
+     "ascii_ok": 1.0,
+     "loop": null,
+     "v1_cls": "COHERENT"
+    },
+    "cand": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "OK",
+     "review": false,
+     "reasons": [],
+     "soft": [],
+     "n": 32,
+     "finish": "limit",
+     "uniq": 0.781,
+     "uniq_floor": 0.3,
+     "top": 0.094,
+     "run": 1,
+     "words": 25,
+     "ascii_ok": 1.0,
+     "loop": null,
+     "v1_cls": "COHERENT"
+    },
+    "severity": {
+     "base": 0,
+     "cand": 0
+    },
+    "token_provenance": {
+     "base": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     },
+     "cand": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     }
+    }
+   },
+   "answer_check": {
+    "base": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "Paris"
+     ],
+     "extracted": [
+      "Paris"
+     ],
+     "status": "correct"
+    },
+    "cand": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "Paris"
+     ],
+     "extracted": [
+      "Paris"
+     ],
+     "status": "correct"
+    }
+   },
+   "judge": null,
+   "texts": {
+    "base": {
+     "text": " Paris. Paris is known for its art, culture, and history. It is home to famous landmarks like the Eiffel Tower and the Louvre Museum. The",
+     "sha256": "5147bf0293bc2c3b39d160fc5c1a760260fd73e03ec412daf04d16dbf20ada74",
+     "n_chars": 137
+    },
+    "cand": {
+     "text": " Paris. Paris is known for its art, fashion, and culture. It is home to famous landmarks like the Eiffel Tower and the Louvre Museum. The",
+     "sha256": "7d8413f5ca10b16626f8d0dac8e7795dc221d0efea412e57aaba93b925910a16",
+     "n_chars": 137
+    }
+   }
+  },
+  {
+   "id": "q40",
+   "tier": 1,
+   "verdict": "PASS",
+   "reasons": [
+    "diverged; answer correct -> correct"
+   ],
+   "identity": {
+    "identical": false,
+    "basis": "sha256(text)+token_ids",
+    "base_sha256": "fa332707308192639af743a396542cf4d5bf4c15f68b84b26b64e9dca5f87071",
+    "cand_sha256": "811e91b5e7459230866330200e610e005635e94a379d00737ec21a0a0f0179c6"
+   },
+   "degeneracy": {
+    "base": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "SHORT",
+     "n": 7,
+     "finish": "eos",
+     "eos_short": false,
+     "v1_cls": "EARLY-EOS"
+    },
+    "cand": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "OK",
+     "review": false,
+     "reasons": [],
+     "soft": [],
+     "n": 41,
+     "finish": "eos",
+     "uniq": 0.463,
+     "uniq_floor": 0.3,
+     "top": 0.171,
+     "run": 1,
+     "words": 18,
+     "ascii_ok": 0.964,
+     "loop": null,
+     "v1_cls": "COHERENT"
+    },
+    "severity": {
+     "base": 0,
+     "cand": 0
+    },
+    "token_provenance": {
+     "base": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     },
+     "cand": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     }
+    }
+   },
+   "answer_check": {
+    "base": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "5:45"
+     ],
+     "extracted": [
+      "5:45"
+     ],
+     "status": "correct"
+    },
+    "cand": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "5:45"
+     ],
+     "extracted": [
+      "5:45"
+     ],
+     "status": "correct"
+    }
+   },
+   "judge": null,
+   "texts": {
+    "base": {
+     "text": " 5:45 pm\n",
+     "sha256": "fa332707308192639af743a396542cf4d5bf4c15f68b84b26b64e9dca5f87071",
+     "n_chars": 9
+    },
+    "cand": {
+     "text": " 5:45 pm\nSolution: 3:00 + 2 hours = 5:00; plus 45 minutes = 5:45 pm.\nFinal: 5:45 pm",
+     "sha256": "811e91b5e7459230866330200e610e005635e94a379d00737ec21a0a0f0179c6",
+     "n_chars": 83
+    }
+   }
+  },
+  {
+   "id": "p90",
+   "tier": 1,
+   "verdict": "PASS",
+   "reasons": [
+    "diverged; answer correct -> correct"
+   ],
+   "identity": {
+    "identical": false,
+    "basis": "sha256(text)+token_ids",
+    "base_sha256": "8068cf3e04c54f89f3275b0ff21bd7b6f5d1aa2b88c975f8d6cd4886dcdaf621",
+    "cand_sha256": "643c873377757b460c58b8b984d2e464e2d28128583d8adb83e6f2cf5f680956"
+   },
+   "degeneracy": {
+    "base": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "OK",
+     "review": false,
+     "reasons": [],
+     "soft": [],
+     "n": 103,
+     "finish": "eos",
+     "uniq": 0.699,
+     "uniq_floor": 0.3,
+     "top": 0.058,
+     "run": 1,
+     "words": 90,
+     "ascii_ok": 1.0,
+     "loop": null,
+     "v1_cls": "COHERENT"
+    },
+    "cand": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "OK",
+     "review": false,
+     "reasons": [],
+     "soft": [],
+     "n": 85,
+     "finish": "eos",
+     "uniq": 0.694,
+     "uniq_floor": 0.3,
+     "top": 0.047,
+     "run": 1,
+     "words": 76,
+     "ascii_ok": 1.0,
+     "loop": null,
+     "v1_cls": "COHERENT"
+    },
+    "severity": {
+     "base": 0,
+     "cand": 0
+    },
+    "token_provenance": {
+     "base": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     },
+     "cand": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     }
+    }
+   },
+   "answer_check": {
+    "base": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "scatter"
+     ],
+     "extracted": [
+      "scatter"
+     ],
+     "status": "correct"
+    },
+    "cand": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "scatter"
+     ],
+     "extracted": [
+      "scatter"
+     ],
+     "status": "correct"
+    }
+   },
+   "judge": null,
+   "texts": {
+    "base": {
+     "text": " The sky looks blue during the day because air molecules scatter sunlight, and they scatter short blue wavelengths much more than longer red ones. This scattering sends blue light in all directions, so we see blue overhead. At sunset, sunlight travels through a much longer path of atmosphere, so most blue light gets scattered away before it reaches our eyes. The remaining light that reaches us is mostly red and orange, making the sky look warm-colored near the horizon. This happens because of Rayleigh scattering, which depends strongly on wavelength.",
+     "sha256": "8068cf3e04c54f89f3275b0ff21bd7b6f5d1aa2b88c975f8d6cd4886dcdaf621",
+     "n_chars": 556
+    },
+    "cand": {
+     "text": " The sky looks blue during the day because air molecules scatter sunlight, and they scatter short blue wavelengths much more than long red ones. This scattering process is called Rayleigh scattering. At sunset, sunlight travels through a much longer path of atmosphere, so most of the blue light is scattered away before it reaches our eyes. The remaining light that reaches us is mostly red and orange, which is why the sky turns red at sunset.",
+     "sha256": "643c873377757b460c58b8b984d2e464e2d28128583d8adb83e6f2cf5f680956",
+     "n_chars": 445
+    }
+   }
+  },
+  {
+   "id": "p220",
+   "tier": 1,
+   "verdict": "BOTH_BAD",
+   "reasons": [
+    "degeneracy DEGENERATE (base) / DEGENERATE (cand)"
+   ],
+   "identity": {
+    "identical": false,
+    "basis": "sha256(text)+token_ids",
+    "base_sha256": "7ee90bb44578832cd5d2b00ed110de139b61cf2dde345d6adb6d03259c7c9042",
+    "cand_sha256": "5051d7d535e3a024ac4e5cfd3df8ca4e696743436117883e29eb30a10594769c"
+   },
+   "degeneracy": {
+    "base": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "DEGENERATE",
+     "review": false,
+     "reasons": [
+      "uniq+stuck"
+     ],
+     "soft": [
+      "uniq_low"
+     ],
+     "n": 158,
+     "finish": "eos",
+     "uniq": 0.234,
+     "uniq_floor": 0.3,
+     "top": 0.152,
+     "run": 1,
+     "words": 62,
+     "ascii_ok": 0.969,
+     "loop": null,
+     "v1_cls": "SALAD"
+    },
+    "cand": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "DEGENERATE",
+     "review": false,
+     "reasons": [
+      "uniq+stuck"
+     ],
+     "soft": [
+      "uniq_low"
+     ],
+     "n": 198,
+     "finish": "eos",
+     "uniq": 0.242,
+     "uniq_floor": 0.3,
+     "top": 0.141,
+     "run": 1,
+     "words": 102,
+     "ascii_ok": 0.983,
+     "loop": null,
+     "v1_cls": "SALAD"
+    },
+    "severity": {
+     "base": 2,
+     "cand": 2
+    },
+    "token_provenance": {
+     "base": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     },
+     "cand": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     }
+    }
+   },
+   "answer_check": {
+    "base": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "(1, 6)",
+      "(8, 12)",
+      "(15, 18)"
+     ],
+     "extracted": [],
+     "status": "wrong"
+    },
+    "cand": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "(1, 6)",
+      "(8, 12)",
+      "(15, 18)"
+     ],
+     "extracted": [
+      "(1, 6)",
+      "(8, 12)",
+      "(15, 18)"
+     ],
+     "status": "correct"
+    }
+   },
+   "judge": null,
+   "texts": {
+    "base": {
+     "text": " First sort by start: [(1,3), (2,6), (8,10), (10,12), (15,18)]. Start with current = (1,3). Next (2,6): 2 ≤ 3, so merge to (1,6). Next (8,10): 8 > 6, so output (1,6), current = (8,10). Next (10,12): 10 ≤ 10, so merge to (8,12). Next (15,18): 15 > 12, so output (8,12), current = (15,18). Finish: output (15,18). Final result: [(1,6), (8,12), (15,18)].",
+     "sha256": "7ee90bb44578832cd5d2b00ed110de139b61cf2dde345d6adb6d03259c7c9042",
+     "n_chars": 351
+    },
+    "cand": {
+     "text": " First, sort the pairs by start value: [(1, 3), (2, 6), (8, 10), (10, 12), (15, 18)]. Then start with the first pair as the current interval: (1, 3). Next pair (2, 6): since 2 ≤ 3, merge to (1, 6). Next pair (8, 10): since 8 > 6, append (1, 6) to output and set current to (8, 10). Next pair (10, 12): since 10 ≤ 10, merge to (8, 12). Next pair (15, 18): since 15 > 12, append (8, 12) and set current to (15, 18). Finally append (15, 18). The result is [(1, 6), (8, 12), (15, 18)].",
+     "sha256": "5051d7d535e3a024ac4e5cfd3df8ca4e696743436117883e29eb30a10594769c",
+     "n_chars": 481
+    }
+   }
+  },
+  {
+   "id": "long2k",
+   "tier": 0,
+   "verdict": "PASS",
+   "reasons": [
+    "byte-identical (sha256(text)+token_ids)",
+    "shared answer: unanswered in both arms"
+   ],
+   "identity": {
+    "identical": true,
+    "basis": "sha256(text)+token_ids",
+    "base_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cand_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "degeneracy": {
+    "base": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "SHORT",
+     "n": 1,
+     "finish": "eos",
+     "eos_short": true,
+     "v1_cls": "EARLY-EOS"
+    },
+    "cand": {
+     "classifier": "degeneracy.v2",
+     "semantic": "unchecked",
+     "cls": "SHORT",
+     "n": 1,
+     "finish": "eos",
+     "eos_short": true,
+     "v1_cls": "EARLY-EOS"
+    },
+    "severity": {
+     "base": 0,
+     "cand": 0
+    },
+    "token_provenance": {
+     "base": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     },
+     "cand": {
+      "mode": "token_ids",
+      "source": "row.token_ids",
+      "calibrated": true
+     }
+    }
+   },
+   "answer_check": {
+    "base": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "actor"
+     ],
+     "extracted": [],
+     "status": "unanswered"
+    },
+    "cand": {
+     "grader": "needle",
+     "version": "answer-graders.v1",
+     "expected": [
+      "actor"
+     ],
+     "extracted": [],
+     "status": "unanswered"
+    }
+   },
+   "judge": null,
+   "texts": {
+    "base": {
+     "text": "",
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "n_chars": 0
+    },
+    "cand": {
+     "text": "",
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "n_chars": 0
+    }
+   }
+  }
+ ],
+ "aggregate": {
+  "n": 5,
+  "identical": 1,
+  "pass": 4,
+  "regressions": 0,
+  "both_bad": 1,
+  "needs_review": 0,
+  "by_tier": {
+   "0": 1,
+   "1": 4
+  },
+  "identical_with_shared_defect": 1,
+  "token_modes": {
+   "base:token_ids": 5,
+   "cand:token_ids": 5
+  },
+  "judge_given": false,
+  "gate": "PASS",
+  "gate_reasons": []
+ },
+ "inputs": {
+  "base": {
+   "path": "/mnt/raid0/llm/tmp/ds41-w5-20261021/runs/coh-sept-q4.rows.jsonl",
+   "sha256": "7833844bbd6976286d54a6dd41d1291236c4e6d5dd436d8592c7922595487768"
+  },
+  "cand": {
+   "path": "/mnt/raid0/llm/tmp/ds41-w5-20261021/runs/coh-1017.rows.jsonl",
+   "sha256": "2fed5aae5e39b8dc89fd1c3224040ca1982adbd16711888d100133ff8aaf41bb"
+  },
+  "truth": {
+   "path": "/mnt/raid0/llm/tmp/ds41-w5-20261021/bin/truth.jsonl",
+   "sha256": "38950ea8b33d6cac6cdfa51201e06849d3dec979595d8a02e42c42ea01f18fab"
+  }
+ }
+}

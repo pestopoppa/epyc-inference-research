@@ -1,0 +1,56 @@
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.262.768 W load: control-looking token: 128802 '<｜fim▁end｜>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.269.083 W load: control-looking token: 128800 '<｜fim▁hole｜>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.270.970 W load: control-looking token: 128801 '<｜fim▁begin｜>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.311.795 W model has unused tensor blk.0.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.311.893 W model has unused tensor blk.1.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.311.981 W model has unused tensor blk.2.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.043 W model has unused tensor blk.3.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.109 W model has unused tensor blk.4.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.172 W model has unused tensor blk.5.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.233 W model has unused tensor blk.6.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.294 W model has unused tensor blk.7.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.372 W model has unused tensor blk.8.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.431 W model has unused tensor blk.9.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.493 W model has unused tensor blk.10.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.553 W model has unused tensor blk.11.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.616 W model has unused tensor blk.12.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.677 W model has unused tensor blk.13.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.766 W model has unused tensor blk.14.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.831 W model has unused tensor blk.15.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.893 W model has unused tensor blk.16.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.312.955 W model has unused tensor blk.17.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.016 W model has unused tensor blk.18.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.083 W model has unused tensor blk.19.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.164 W model has unused tensor blk.20.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.223 W model has unused tensor blk.21.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.286 W model has unused tensor blk.22.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.347 W model has unused tensor blk.23.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.412 W model has unused tensor blk.24.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.474 W model has unused tensor blk.25.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.534 W model has unused tensor blk.26.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.598 W model has unused tensor blk.27.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.665 W model has unused tensor blk.28.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.730 W model has unused tensor blk.29.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.792 W model has unused tensor blk.30.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.855 W model has unused tensor blk.31.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.924 W model has unused tensor blk.32.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.313.988 W model has unused tensor blk.33.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.314.054 W model has unused tensor blk.34.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.314.149 W model has unused tensor blk.35.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.314.224 W model has unused tensor blk.36.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.314.290 W model has unused tensor blk.37.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.314.357 W model has unused tensor blk.38.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.314.427 W model has unused tensor blk.39.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=384)
+0.14.368.564 I 
+0.14.368.705 I system_info: n_threads = 24 (n_threads_batch = 24) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.14.368.725 I perplexity: tokenizing the input ..
+0.14.834.617 I perplexity: tokenization took 465.881 ms
+0.14.834.747 I perplexity: calculating perplexity over 32 chunks, n_ctx=512, batch_size=512, n_seq=1
+0.25.117.665 I perplexity: 10.28 seconds per pass - ETA 5.48 minutes
+[1]1.9804,[2]3.1357,[3]2.4115,[4]2.1356,[5]1.9671,[6]1.9000,[7]1.8786,[8]1.8562,[9]1.8304,[10]1.7947,[11]1.8392,[12]1.9906,[13]1.9948,[14]2.1118,[15]2.2315,[16]2.2715,[17]2.4520,[18]2.5870,[19]2.5354,[20]2.4844,[21]2.5615,[22]2.5053,[23]2.4563,[24]2.4665,[25]2.4505,[26]2.4141,[27]2.4589,[28]2.4470,[29]2.5152,[30]2.5521,[31]2.6039,[32]2.6122,
+5.00.471.258 I Final estimate: PPL = 2.6122 +/- 0.06551
+

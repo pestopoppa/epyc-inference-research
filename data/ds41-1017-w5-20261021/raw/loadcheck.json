@@ -1,0 +1,133 @@
+{
+ "1": {
+  "n_tensors": 185,
+  "alignment": "32",
+  "types": {
+   "F16": 21,
+   "F32": 89,
+   "Q8_0": 56,
+   "MXFP4": 19
+  },
+  "kv": {
+   "general.architecture": "deepseek41",
+   "general.source.url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+   "general.source.revision": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+   "general.alignment": 32,
+   "split.no": 0,
+   "split.tensors.count": 1046,
+   "split.count": 9
+  }
+ },
+ "2": {
+  "n_tensors": 180,
+  "alignment": 32,
+  "types": {
+   "MXFP4": 20,
+   "Q8_0": 55,
+   "F16": 19,
+   "F32": 86
+  },
+  "kv": {
+   "split.no": 1,
+   "split.tensors.count": 1046,
+   "split.count": 9
+  }
+ },
+ "3": {
+  "n_tensors": 164,
+  "alignment": 32,
+  "types": {
+   "MXFP4": 20,
+   "Q8_0": 50,
+   "F16": 18,
+   "F32": 76
+  },
+  "kv": {
+   "split.no": 2,
+   "split.tensors.count": 1046,
+   "split.count": 9
+  }
+ },
+ "4": {
+  "n_tensors": 181,
+  "alignment": 32,
+  "types": {
+   "MXFP4": 20,
+   "F16": 20,
+   "F32": 86,
+   "Q8_0": 55
+  },
+  "kv": {
+   "split.no": 3,
+   "split.tensors.count": 1046,
+   "split.count": 9
+  }
+ },
+ "5": {
+  "n_tensors": 177,
+  "alignment": 32,
+  "types": {
+   "MXFP4": 20,
+   "Q8_0": 55,
+   "F16": 18,
+   "F32": 84
+  },
+  "kv": {
+   "split.no": 4,
+   "split.tensors.count": 1046,
+   "split.count": 9
+  }
+ },
+ "6": {
+  "n_tensors": 156,
+  "alignment": 32,
+  "types": {
+   "MXFP4": 20,
+   "Q8_0": 50,
+   "F16": 14,
+   "F32": 72
+  },
+  "kv": {
+   "split.no": 5,
+   "split.tensors.count": 1046,
+   "split.count": 9
+  }
+ },
+ "7": {
+  "n_tensors": 1,
+  "alignment": 32,
+  "types": {
+   "MXFP4": 1
+  },
+  "kv": {
+   "split.no": 6,
+   "split.tensors.count": 1046,
+   "split.count": 9
+  }
+ },
+ "8": {
+  "n_tensors": 1,
+  "alignment": 32,
+  "types": {
+   "I8": 1
+  },
+  "kv": {
+   "split.no": 7,
+   "split.tensors.count": 1046,
+   "split.count": 9
+  }
+ },
+ "9": {
+  "n_tensors": 1,
+  "alignment": 32,
+  "types": {
+   "I8": 1
+  },
+  "kv": {
+   "split.no": 8,
+   "split.tensors.count": 1046,
+   "split.count": 9
+  }
+ },
+ "note": "reduced from the full gguf-py header dump (engram hash-multiplier KVs omitted)"
+}

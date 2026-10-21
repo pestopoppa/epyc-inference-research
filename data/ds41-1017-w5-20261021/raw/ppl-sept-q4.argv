@@ -1,0 +1,1 @@
+taskset -c 0-23 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental-ds41-20261005/build-cpu/bin/llama-perplexity -m /mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf -f /mnt/raid0/llm/data/wiki.test.raw -c 512 -b 512 --chunks 32 -t 24 -fa on --device none -ngl 0 
