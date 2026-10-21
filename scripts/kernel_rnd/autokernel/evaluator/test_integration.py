@@ -612,7 +612,9 @@ class EndToEndScenario(unittest.TestCase):
                 ops_exercised=("MUL_MAT", "MUL_MAT_ID"), ops_failed=(),
                 cases_by_op=(("MUL_MAT", 4231, 4231), ("MUL_MAT_ID", 1188, 1188)),
                 shapes_ref="data/ak/akc-0001/shapes.json",
-                receipt_ref="data/ak/akc-0001/tbo.json", produced_by="evaluator"),
+                receipt_ref="data/ak/akc-0001/tbo.json", produced_by="evaluator",
+                exit_code=0, cases_ran=5419, cases_not_supported=0, backends_skipped=0,
+                backends_expected=1, backends_seen=1, overall_summary=True),
             reference=CO.ReferenceEvidence(
                 comparisons=(
                     CO.ReferenceComparison(

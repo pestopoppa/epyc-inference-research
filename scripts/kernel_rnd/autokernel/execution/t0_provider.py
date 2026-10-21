@@ -1866,6 +1866,8 @@ class BackendOpsRun:
     backends_total: Optional[int]
     overall: Optional[str]
     failing_tests: tuple
+    #: `N` from the tool's own `Testing N devices` line; None when absent.
+    devices_expected: Optional[int] = None
 
     @property
     def cases(self) -> tuple:
@@ -1947,6 +1949,23 @@ class BackendOpsRun:
             total, passed = totals.get(case.op, (0, 0))
             totals[case.op] = (total + 1, passed + (1 if case.passed else 0))
         return tuple((op, total, passed) for op, (total, passed) in totals.items())
+
+    def unsummarised_backends(self) -> tuple:
+        """Non-skipped backends that never printed `N/N tests passed`.
+
+        `reconcile()` deliberately skips these (it can only cross-check a backend
+        that reported), so a run killed between two cases parses cleanly and
+        reconciles cleanly. The completeness question is asked here instead, and
+        `check_backend_op_units` fails closed on a non-empty answer.
+        """
+        return tuple(b.name for b in self.backends
+                     if not b.skipped and b.reported_total is None)
+
+    def not_supported_count(self) -> int:
+        return sum(1 for c in self.cases if c.status == "not_supported")
+
+    def ran_count(self) -> int:
+        return sum(1 for c in self.cases if c.status != "not_supported")
 
     def reconcile(self) -> None:
         """Cross-check this parse against the tool's OWN per-backend summary.
@@ -2041,6 +2060,7 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
     failing: list = []
     in_failing = False
     saw_frame = False
+    devices_expected: Optional[int] = None
 
     def flush() -> None:
         nonlocal name, skipped, skip_reason, cases, reported, status
@@ -2073,8 +2093,10 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
                 failing.append(line.strip())
                 continue
             in_failing = False
-        if _TESTING_RE.match(line):
+        testing = _TESTING_RE.match(line)
+        if testing:
             saw_frame = True
+            devices_expected = int(testing.group(1))
             continue
         init = _BACKEND_INIT_RE.match(line)
         if init:
@@ -2145,7 +2167,8 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
             "'no findings'.")
     return BackendOpsRun(
         backends=tuple(backends), backends_passed=backends_passed,
-        backends_total=backends_total, overall=overall, failing_tests=tuple(failing))
+        backends_total=backends_total, overall=overall, failing_tests=tuple(failing),
+        devices_expected=devices_expected)
 
 
 _CSV_ROW_RE = re.compile(r'"((?:[^"]|"")*)"')
@@ -3085,6 +3108,18 @@ class ExecutedT0EvidenceProvider:
             stateful_probe=plan.stateful_probe,
             stateful_ops=run.stateful_ops(),
             stateful_case_count=len(stateful_cases),
+            timed_out=capture.timed_out,
+            exit_code=capture.exit_code,
+            signalled=capture.signalled,
+            signal=(-capture.exit_code
+                    if capture.exit_code is not None and capture.exit_code < 0 else None),
+            cases_ran=run.ran_count(),
+            cases_not_supported=run.not_supported_count(),
+            backends_skipped=len(run.skipped_backends),
+            backends_expected=run.devices_expected,
+            backends_seen=len(run.backends),
+            backends_unsummarised=run.unsummarised_backends(),
+            overall_summary=(run.backends_total is not None and run.overall is not None),
         )
 
     # -- boundary shapes ---------------------------------------------------

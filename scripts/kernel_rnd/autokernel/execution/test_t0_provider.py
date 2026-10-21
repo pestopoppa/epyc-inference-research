@@ -105,11 +105,12 @@ class FakeClaim:
         return f"cpu region 0-95, held={self._held}"
 
 
-def capture(argv, stdout="", stderr="", exit_code=0, env=(), orphans=()):
+def capture(argv, stdout="", stderr="", exit_code=0, env=(), orphans=(),
+            timed_out=False, signalled=False):
     return t0.CompletedProcess(
         argv=tuple(argv), env=tuple(env), cwd=WORKTREE, exit_code=exit_code,
-        stdout=stdout, stderr=stderr, duration_s=0.5, timed_out=False, signalled=False,
-        orphans=tuple(orphans))
+        stdout=stdout, stderr=stderr, duration_s=0.5, timed_out=timed_out,
+        signalled=signalled, orphans=tuple(orphans))
 
 
 def candidate_build(**overrides):
@@ -1200,7 +1201,8 @@ class ProcessDisciplineAudit(unittest.TestCase):
 # J. Collection — the provider driven entirely from recorded output
 # =============================================================================
 
-def _console_capture(provider_plan, text, *, ops=None, params_filter=None):
+def _console_capture(provider_plan, text, *, ops=None, params_filter=None,
+                     exit_code=0, timed_out=False, signalled=False):
     """Build the recorded capture for the argv the provider will actually emit."""
     inv = t0.build_backend_ops_invocation(
         binary=provider_plan.candidate.test_backend_ops,
@@ -1213,7 +1215,8 @@ def _console_capture(provider_plan, text, *, ops=None, params_filter=None):
         value_transform_probe=provider_plan.op_suite.value_transform_probe,
         stateful_probe=provider_plan.op_suite.stateful_probe,
         params_filter=params_filter)
-    return capture(inv.argv, stdout=text, exit_code=0)
+    return capture(inv.argv, stdout=text, exit_code=exit_code, timed_out=timed_out,
+                   signalled=signalled)
 
 
 def _help_capture(provider_plan, text, *, exit_code=0):
@@ -1504,6 +1507,117 @@ class OpSuiteCollection(unittest.TestCase):
         provider = t0.ExecutedT0EvidenceProvider(plan=plan, runner=runner, claim=FakeClaim())
         evidence = provider.collect_op_suite(t0._Collected())
         self.assertEqual(evidence.ops_exercised, ())
+
+
+_COMPLETE_SUITE = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                   "  MUL_MAT(type_a=q8_0,type_b=f32): OK\n"
+                   "  MUL_MAT_ID(type_a=q8_0,type_b=f32): OK\n"
+                   "  2/2 tests passed\n  Backend CPU: OK\n"
+                   "1/1 backends passed\nOK\n")
+# killed between two cases: the case grammar is closed at every line
+_TRUNCATED_SUITE = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                    "  MUL_MAT(type_a=q8_0,type_b=f32): OK\n"
+                    "  MUL_MAT_ID(type_a=q8_0,type_b=f32): OK\n")
+
+
+class AnIncompleteOpSuiteRunCannotPass(unittest.TestCase):
+    """AKX-ALL-17: a truncated test-backend-ops run parsed cleanly and PASSED."""
+
+    def _gate(self, text, **cap):
+        plan = execution_plan(op_suite=op_suite_plan(ops=("MUL_MAT", "MUL_MAT_ID")))
+        runner = t0.RecordedProcessRunner([_console_capture(plan, text, **cap)])
+        provider = t0.ExecutedT0EvidenceProvider(plan=plan, runner=runner, claim=FakeClaim())
+        evidence = provider.collect_op_suite(t0._Collected())
+        surface = correctness.ChangeSurface(
+            derived_touches_memory=False, derived_touches_threading=False,
+            derived_touches_dispatch=False, derived_touches_persistent_state=False,
+            derived_ops=(), derived_files=(), declared_touches_memory=False,
+            declared_touches_threading=False, declared_ops=(),
+            touches_shared_core_header=False, derivation_ref="ref://derivation")
+        gate = correctness.check_backend_op_units(
+            evaluation_request(), evidence, surface, t0_policy())
+        return evidence, gate
+
+    def test_a_complete_run_passes(self):
+        evidence, gate = self._gate(_COMPLETE_SUITE)
+        self.assertEqual(gate.check.outcome, schemas.PASS, gate.check.reasons)
+        self.assertEqual((evidence.exit_code, evidence.cases_ran, evidence.cases_not_supported,
+                          evidence.backends_skipped, evidence.backends_expected,
+                          evidence.backends_seen, evidence.overall_summary),
+                         (0, 2, 0, 0, 1, 1, True))
+
+    def test_a_run_truncated_between_cases_fails(self):
+        # Exit 0 and no timeout flag: the captured text alone looks complete-and-clean.
+        evidence, gate = self._gate(_TRUNCATED_SUITE)
+        self.assertEqual(evidence.cases_for("MUL_MAT"), (1, 1))
+        self.assertEqual(evidence.cases_for("MUL_MAT_ID"), (1, 1))
+        self.assertEqual(evidence.backends_unsummarised, ("CPU",))
+        self.assertEqual(gate.check.outcome, schemas.FAIL)
+        self.assertTrue(any("backends passed" in r for r in gate.check.reasons))
+
+    def test_a_timed_out_run_fails_even_with_a_complete_looking_log(self):
+        evidence, gate = self._gate(_COMPLETE_SUITE, timed_out=True, signalled=True,
+                                    exit_code=-15)
+        self.assertTrue(evidence.timed_out)
+        self.assertEqual(gate.check.outcome, schemas.FAIL)
+        self.assertTrue(any("TIMED OUT" in r for r in gate.check.reasons))
+
+    def test_a_signalled_run_fails_and_records_the_signal(self):
+        evidence, gate = self._gate(_COMPLETE_SUITE, signalled=True, exit_code=-9)
+        self.assertEqual(evidence.signal, 9)
+        self.assertEqual(gate.check.outcome, schemas.FAIL)
+        self.assertTrue(any("SIGNALLED" in r for r in gate.check.reasons))
+
+    def test_a_nonzero_exit_with_all_ok_cases_fails(self):
+        evidence, gate = self._gate(_COMPLETE_SUITE, exit_code=3)
+        self.assertEqual(evidence.exit_code, 3)
+        self.assertEqual(gate.check.outcome, schemas.FAIL)
+        self.assertTrue(any("exited 3" in r for r in gate.check.reasons))
+
+    def test_a_summary_less_run_fails(self):
+        text = _COMPLETE_SUITE.replace("1/1 backends passed\nOK\n", "")
+        evidence, gate = self._gate(text)
+        self.assertFalse(evidence.overall_summary)
+        self.assertEqual(gate.check.outcome, schemas.FAIL)
+
+    def test_an_expected_backend_absent_from_the_run_fails(self):
+        text = _COMPLETE_SUITE.replace("Testing 1 devices", "Testing 2 devices")
+        evidence, gate = self._gate(text)
+        self.assertEqual((evidence.backends_expected, evidence.backends_seen), (2, 1))
+        self.assertEqual(gate.check.outcome, schemas.FAIL)
+        self.assertTrue(any("expected but" in r for r in gate.check.reasons))
+
+    def test_skipped_and_unsupported_are_counted_structurally(self):
+        text = ("Testing 2 devices\n\nBackend 1/2: CPU\n"
+                "  MUL_MAT(type_a=q8_0,type_b=f32): OK\n"
+                "  MUL_MAT_ID(type_a=q8_0,type_b=f32): OK\n"
+                "  MUL_MAT(type_a=f32,type_b=f16): not supported [CPU]\n"
+                "  2/2 tests passed\n  Backend CPU: OK\n"
+                "\nBackend 2/2: ROCm0\n  Skipping\n"
+                "2/2 backends passed\nOK\n")
+        evidence, gate = self._gate(text)
+        self.assertEqual((evidence.cases_ran, evidence.cases_not_supported,
+                          evidence.backends_skipped), (2, 1, 1))
+        self.assertEqual(gate.check.outcome, schemas.PASS, gate.check.reasons)
+
+    def test_recorded_passing_captures_still_pass_their_own_gate(self):
+        plan = execution_plan(op_suite=op_suite_plan(ops=("MUL_MAT",)))
+        runner = t0.RecordedProcessRunner([
+            _console_capture(plan, recorded("recorded_t0_backend_ops_mandatory_ops.txt"))])
+        provider = t0.ExecutedT0EvidenceProvider(plan=plan, runner=runner, claim=FakeClaim())
+        evidence = provider.collect_op_suite(t0._Collected())
+        self.assertEqual(evidence.cases_ran, 178)
+        self.assertTrue(evidence.overall_summary)
+        self.assertEqual(evidence.backends_unsummarised, ())
+        self.assertEqual(correctness._op_suite_incomplete_reasons(evidence), ())
+
+    def test_evidence_without_termination_record_cannot_pass(self):
+        """The sentinel defaults are fail-closed: omitting the fields is not a pass."""
+        legacy = correctness.OpSuiteEvidence(
+            suite_id="s", suite_source_sha256=SHA_A, suite_seed=1,
+            ops_exercised=("MUL_MAT",), ops_failed=(), cases_by_op=(("MUL_MAT", 1, 1),),
+            shapes_ref="s", receipt_ref="r", produced_by="evaluator")
+        self.assertTrue(correctness._op_suite_incomplete_reasons(legacy))
 
 
 class LinkageCollection(unittest.TestCase):

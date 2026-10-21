@@ -1318,9 +1318,38 @@ class OpSuiteEvidence:
     stateful_probe: bool = False
     stateful_ops: tuple = ()
     stateful_case_count: int = 0
+    # --- run-completeness evidence (AKX-ALL-17). Every default below is the
+    # "NOT RECORDED" sentinel, so an evidence object that omits them cannot pass
+    # `check_backend_op_units`: a killed `test-backend-ops` prints no summary and
+    # parses cleanly, and only the process's own termination can tell it apart.
+    timed_out: bool = False
+    exit_code: Optional[int] = None
+    signalled: bool = False
+    signal: Optional[int] = None
+    cases_ran: Optional[int] = None            # supported, compared cases
+    cases_not_supported: Optional[int] = None  # 'not supported' lines
+    backends_skipped: Optional[int] = None     # backends the tool itself skipped
+    backends_expected: Optional[int] = None    # `Testing N devices`
+    backends_seen: Optional[int] = None        # `Backend i/n:` frames parsed
+    backends_unsummarised: tuple = ()          # non-skipped, no `N/N tests passed`
+    overall_summary: bool = False              # `N/N backends passed` + final verdict
 
     def __post_init__(self) -> None:
         _req_str(self.suite_id, "op_suite.suite_id")
+        _req_bool(self.timed_out, "op_suite.timed_out")
+        _req_bool(self.signalled, "op_suite.signalled")
+        _req_bool(self.overall_summary, "op_suite.overall_summary")
+        for name in ("signal", "cases_ran", "cases_not_supported",
+                     "backends_skipped", "backends_expected", "backends_seen"):
+            value = getattr(self, name)
+            if value is not None:
+                _req_int(value, f"op_suite.{name}")
+        # exit_code is signed: Popen reports death-by-signal as -N.
+        if self.exit_code is not None and (
+                isinstance(self.exit_code, bool) or not isinstance(self.exit_code, int)):
+            raise TypeError("op_suite.exit_code must be an int or None")
+        for item in _req_tuple(self.backends_unsummarised, "op_suite.backends_unsummarised"):
+            _req_str(item, "op_suite.backends_unsummarised[]")
         _req_sha256(self.suite_source_sha256, "op_suite.suite_source_sha256")
         _req_int(self.suite_seed, "op_suite.suite_seed")
         for name in ("ops_exercised", "ops_failed"):
@@ -2803,6 +2832,52 @@ def check_ubsan(request: api.EvaluationRequest,
     return _gate(GID_UBSAN, _verdict(reasons), evidence_ref=evidence.log_ref, notes=notes)
 
 
+def _op_suite_incomplete_reasons(evidence: OpSuiteEvidence) -> tuple:
+    """Why this op-suite run is not a COMPLETE run of `test-backend-ops`.
+
+    A run killed between two cases parses cleanly: the case grammar is closed at
+    every line, `BackendOpsRun.reconcile()` skips a backend that printed no
+    summary, and the counts of what did run are all-passing. Only the process's
+    own termination and the tool's summary lines distinguish it from a finished
+    run, so absence of either is a FAIL, never a pass on a smaller denominator.
+    """
+    out = []
+    if evidence.timed_out:
+        out.append("the test-backend-ops run TIMED OUT; its output is a prefix of the run, "
+                   "and a prefix that happens to be all-OK is not a pass")
+    if evidence.signalled:
+        out.append(f"the test-backend-ops run was SIGNALLED (signal={evidence.signal}); "
+                   "it did not finish")
+    if evidence.exit_code is None:
+        if not (evidence.timed_out or evidence.signalled):
+            out.append("no exit status was recorded for the test-backend-ops run; a run "
+                       "whose termination is unknown is not known to have finished")
+    elif evidence.exit_code != 0:
+        out.append(f"test-backend-ops exited {evidence.exit_code} (signal={evidence.signal}); "
+                   "only exit 0 is a finished, all-passing run")
+    if not evidence.overall_summary:
+        out.append("no `N/N backends passed` summary and final verdict: the tool never "
+                   "reached its end (a killed run prints none)")
+    if evidence.backends_unsummarised:
+        out.append(f"backend(s) {list(evidence.backends_unsummarised)} printed cases but no "
+                   "`N/N tests passed` summary, so the parser's counts were never "
+                   "reconciled against the tool's own")
+    if evidence.backends_expected is None:
+        out.append("no `Testing N devices` line: the number of backends the run was "
+                   "meant to visit is unknown")
+    elif evidence.backends_seen is None or evidence.backends_seen != evidence.backends_expected:
+        out.append(f"{evidence.backends_expected} backend(s) expected but "
+                   f"{evidence.backends_seen} appear in the run; an expected backend that is "
+                   "absent from the reconcile is not a passing backend")
+    if evidence.cases_ran is None or evidence.cases_not_supported is None \
+            or evidence.backends_skipped is None:
+        out.append("ran/not_supported/skipped counts were not recorded")
+    elif evidence.cases_ran != sum(row[1] for row in evidence.cases_by_op):
+        out.append(f"cases_ran={evidence.cases_ran} disagrees with cases_by_op total "
+                   f"{sum(row[1] for row in evidence.cases_by_op)}")
+    return tuple(out)
+
+
 def check_backend_op_units(request: api.EvaluationRequest,
                            evidence: Optional[OpSuiteEvidence],
                            surface: ChangeSurface,
@@ -2823,7 +2898,7 @@ def check_backend_op_units(request: api.EvaluationRequest,
 
     required = tuple(dict.fromkeys(tuple(policy.required_backend_ops) + surface.derived_ops))
     exercised = set(evidence.ops_exercised)
-    reasons = []
+    reasons = list(_op_suite_incomplete_reasons(evidence))
 
     if evidence.suite_source_sha256 != request.artifact.source_sha256:
         reasons.append(

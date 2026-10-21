@@ -245,7 +245,10 @@ def op_suite(**overrides) -> C.OpSuiteEvidence:
         ops_exercised=("MUL_MAT", "MUL_MAT_ID"), ops_failed=(),
         cases_by_op=(("MUL_MAT", 4231, 4231), ("MUL_MAT_ID", 1188, 1188)),
         shapes_ref="data/ak/akc-0001/shapes.json",
-        receipt_ref="data/ak/akc-0001/tbo.json", produced_by="evaluator")
+        receipt_ref="data/ak/akc-0001/tbo.json", produced_by="evaluator",
+        # a COMPLETE run: exit 0, every frame summarised, tool's own verdict seen
+        exit_code=0, cases_ran=5419, cases_not_supported=0, backends_skipped=0,
+        backends_expected=1, backends_seen=1, overall_summary=True)
     kwargs.update(overrides)
     return C.OpSuiteEvidence(**kwargs)
 
@@ -465,6 +468,25 @@ class TestCleanCandidatePasses(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestBackendOpUnits(unittest.TestCase):
+
+    def test_incomplete_runs_fail_closed(self):
+        for label, overrides in (
+                ("timed_out", dict(timed_out=True, signalled=True, exit_code=-15)),
+                ("signalled", dict(signalled=True, exit_code=-9, signal=9)),
+                ("nonzero_exit", dict(exit_code=2)),
+                ("exit_unrecorded", dict(exit_code=None)),
+                ("no_summary", dict(overall_summary=False)),
+                ("unsummarised_backend", dict(backends_unsummarised=("CPU",))),
+                ("backend_absent", dict(backends_expected=2)),
+                ("counts_unrecorded", dict(cases_ran=None)),
+                ("counts_disagree", dict(cases_ran=1))):
+            with self.subTest(label):
+                report = run(ev=evidence(op_suite=op_suite(**overrides)))
+                self.assertEqual(report.outcome(C.GID_OP_UNITS), S.FAIL)
+
+    def test_complete_run_still_passes(self):
+        report = run(ev=evidence(op_suite=op_suite()))
+        self.assertEqual(report.outcome(C.GID_OP_UNITS), S.PASS)
 
     def test_stateful_probe_passes_only_after_all_four_targets_ran(self):
         report = run(ev=evidence(op_suite=op_suite(
