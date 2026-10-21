@@ -1,0 +1,3 @@
+What is the capital of France, and what is it famous for?
+Write a Python function that returns the nth Fibonacci number iteratively.
+Summarize in two sentences why the sky appears blue during the day.
