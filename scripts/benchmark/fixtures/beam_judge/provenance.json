@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "repository": "https://github.com/rohithzr/mempalace",
+      "commit": "475d3fbd241f03757e2eb7a7ed430040677ccf87",
+      "path": "benchmarks/beam_100k_bench.py",
+      "git_blob": "379569d719421e4b5e532abb0b9a8ae09a2ae1ae",
+      "source_sha256": "9a1b75a6696d8b4ebb44e03311411da5545f7617a73c1bb074bc223f82e6788b",
+      "symbol": "BEAM_JUDGE_PROMPT",
+      "source_fixture": "upstream-mempalace.py",
+      "fixture": "mempalace-475d3fbd24.txt",
+      "prompt_sha256": "a3007fe25ed5821d1c1282a5ae9356ee61a0d38a87aec95e4f3c85345ef5cefd"
+    },
+    {
+      "repository": "https://github.com/mohammadtavakoli78/BEAM",
+      "commit": "b2da22eac88bb0874c64665f13457eb99835774a",
+      "path": "src/prompts.py",
+      "git_blob": "4c9fb1528da7bf40ae01e7d0b5720d8b3bc0708e",
+      "source_sha256": "81fe51ab2bcd7e8ad218b3a9a969a340c38d31f90ac2d93fa78a3bb890ba157b",
+      "symbol": "unified_llm_judge_base_prompt",
+      "source_fixture": "upstream-beam.source.json",
+      "fixture": "beam-b2da22ea.prompt.json",
+      "prompt_sha256": "593373c642a288a7b590577d8a8fc92c3f9a2b70e2f64ad6e59a040a6c56b7f5",
+      "source_storage": "utf8-json-string-v1",
+      "prompt_storage": "utf8-json-string-v1"
+    }
+  ],
+  "wrapper": "beam_scoring.build_nugget_judge_prompt; prompt version beam-mempalace-475d3fbd24/v2",
+  "semantic_delta_groups": [
+    "QUESTION input",
+    "anchored responsiveness heading/body",
+    "shorter reason placeholder"
+  ],
+  "presentation_deltas": [
+    "leading/trailing prompt newlines",
+    "trailing line whitespace",
+    "smart quotes converted to ASCII quotes"
+  ],
+  "parse_boundary": "Upstream judge_rubric coerces JSON errors to zero; local NuggetVerdictError remains unjudged/out-of-coverage. This attests prompt bytes, not upstream parser behavior.",
+  "response_substitution": "Upstream answer[:12000]; local str(response)[:12000]. No upstream threshold coercion or JSON fallback transplanted.",
+  "efficacy_claim": false,
+  "fixture_storage_note": "BEAM originals stored in readable strict UTF-8 JSON-string containers; decoding recovers exact original bytes, SHA256, Git blob, AST literal and prompt attestation. MemPalace originals remain raw."
+}

@@ -418,6 +418,8 @@ def _judged_payload() -> dict:
         "model_role": "ingest_long_context",
         "split": "100K",
         "judge_model": "stub-judge",
+        "judge_prompt_version": beam_scoring.JUDGE_PROMPT_VERSION,
+        "question_in_judge_prompt": True,
         "records": _records(lambda a, q, k: (0.0, 0.5, 1.0)[(q + k) % 3]),
     }
 

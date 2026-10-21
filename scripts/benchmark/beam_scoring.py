@@ -65,15 +65,15 @@ FOLD_VERSION = 1
 FOLD_NAME = "beam_macro"
 BINARISATION_THRESHOLD = 0.5
 
-#: The judge prompt is BEAM's unified nugget prompt with the probing QUESTION
-#: added to the inputs. BEAM's own ten ``evaluate_*`` functions accept
+#: Exact MemPalace prompt transcription at 475d3fbd241f03757e2eb7a7ed430040677ccf87.
+#: Separate upstream byte attestations: fixtures/beam_judge/provenance.json.
+#: The wrapper preserves question, rubric, and response[:12000] substitutions. BEAM's own ten ``evaluate_*`` functions accept
 #: ``probing_question`` and discard it, so its RESPONSIVENESS REQUIREMENT can
 #: never fire (CME-3); intake-1337's harness carries the same repair.
-JUDGE_PROMPT_VERSION = "beam-unified-b2da22ea+question/v1"
+JUDGE_PROMPT_VERSION = "beam-mempalace-475d3fbd24/v2"
 QUESTION_IN_JUDGE_PROMPT = True
 
-_JUDGE_PROMPT_TEMPLATE = """
-You are an expert evaluator tasked with judging whether the LLM's response demonstrates compliance with the specified RUBRIC CRITERION.
+_JUDGE_PROMPT_TEMPLATE = """You are an expert evaluator tasked with judging whether the LLM's response demonstrates compliance with the specified RUBRIC CRITERION.
 
 ## EVALUATION INPUTS
 - QUESTION (what the user asked): <question>
@@ -87,8 +87,8 @@ The rubric defines a specific requirement, constraint, or expected behavior that
 - **Positive requirements** (things the response SHOULD include/do)
 - **Negative constraints** (things the response SHOULD NOT include/do, often indicated by "no", "not", "avoid", "absent")
 
-## RESPONSIVENESS REQUIREMENT
-A compliant response must be **on-topic** relative to the QUESTION and attempt to answer it.
+## RESPONSIVENESS REQUIREMENT (anchored to the QUESTION)
+A compliant response must be **on-topic with respect to the QUESTION** and attempt to answer it.
 - If the response does not address the QUESTION, score **0.0** and stop.
 - For negative constraints, both must hold: (a) the response is responsive to the QUESTION, and (b) the prohibited element is absent.
 
@@ -138,11 +138,10 @@ Return your evaluation in JSON format with two fields:
 
 {
    "score": [your score: 1.0, 0.5, or 0.0],
-   "reason": "[detailed explanation of whether the rubric criterion was satisfied and why this justified the assigned score]"
+   "reason": "[detailed explanation]"
 }
 
-NOTE: ONLY output the json object, without any explanation before or after that
-"""
+NOTE: ONLY output the json object, without any explanation before or after that"""
 
 
 class BEAMFoldError(ValueError):
@@ -165,7 +164,7 @@ def build_nugget_judge_prompt(question: str, rubric_item: str, response: str) ->
     return (_JUDGE_PROMPT_TEMPLATE
             .replace("<question>", str(question))
             .replace("<rubric_item>", str(rubric_item))
-            .replace("<llm_response>", str(response)))
+            .replace("<llm_response>", str(response)[:12000]))
 
 
 def coerce_nugget_verdict(value: Any) -> float:

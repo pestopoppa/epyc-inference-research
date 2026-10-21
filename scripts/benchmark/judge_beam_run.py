@@ -91,7 +91,11 @@ def _load_partial(path: Path) -> dict[str, dict]:
     for line in path.read_text().splitlines():
         if line.strip():
             row = json.loads(line)
+            # Fail before any judge call or append: a resumed v2 run cannot
+            # relabel untagged/v1 verdicts. Preserve the historical partial.
             if "nugget_verdicts" in row:
+                if row.get("judge_prompt_version") != JUDGE_PROMPT_VERSION:
+                    raise BEAMFoldError("partial judged row has missing or incompatible judge_prompt_version")
                 done[row["question_id"]] = row
     return done
 
@@ -128,6 +132,7 @@ def judge_run(
             try:
                 outcome = judge_question(prompt, row["response"],
                                          judge_for(prompt["scoring_config"]))
+                outcome["judge_prompt_version"] = JUDGE_PROMPT_VERSION
             except JudgeUnavailable as exc:
                 outcome = {"question_id": question_id, "reason": "judge_unavailable",
                            "detail": str(exc)[:240]}
@@ -173,6 +178,8 @@ def finish_reason_summary(payload: Mapping[str, Any]) -> dict:
 
 def build_judged_payload(payload: Mapping[str, Any], judged: Mapping[str, Any], *,
                          split: str, judge_model: str) -> dict:
+    if any(row.get("judge_prompt_version") != JUDGE_PROMPT_VERSION for row in judged["records"]):
+        raise BEAMFoldError("cannot label judged rows with missing or incompatible judge_prompt_version")
     return {
         "schema": JUDGED_SCHEMA,
         "run_id": payload.get("run_id"),
@@ -216,8 +223,10 @@ def main(argv: list[str] | None = None) -> int:
                          f"{adapter.accounting_summary()['degraded_sources']}")
     overrides = {"judge_url": args.judge_url, "judge_role": args.judge_role,
                  "timeout": args.timeout}
-    args.out_json.parent.mkdir(parents=True, exist_ok=True)
     partial = args.out_json.with_name(args.out_json.name + ".partial.jsonl")
+    # Validate resume provenance before creating directories or opening writers.
+    _load_partial(partial)
+    args.out_json.parent.mkdir(parents=True, exist_ok=True)
     judged = judge_run(payload, prompt_index,
                        judge_for=lambda cfg: served_judge(cfg, overrides),
                        partial_path=partial)

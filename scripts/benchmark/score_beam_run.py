@@ -43,8 +43,6 @@ from typing import Any, Mapping
 import belief_capture
 from beam_scoring import (
     FOLD_VERSION,
-    JUDGE_PROMPT_VERSION,
-    QUESTION_IN_JUDGE_PROMPT,
     BEAMFoldError,
     fold_beam,
 )
@@ -98,9 +96,10 @@ def score_judged_payload(payload: Mapping[str, Any],
         "model_role": payload.get("model_role"),
         "split": payload.get("split"),
         "judge_model": payload.get("judge_model"),
-        "judge_prompt_version": payload.get("judge_prompt_version") or JUDGE_PROMPT_VERSION,
-        "question_in_judge_prompt": payload.get("question_in_judge_prompt",
-                                                QUESTION_IN_JUDGE_PROMPT),
+        # Prompt identity belongs to the original judge event, never the scorer's
+        # current default. Missing historic provenance stays unknown on replay.
+        "judge_prompt_version": payload.get("judge_prompt_version"),
+        "question_in_judge_prompt": payload.get("question_in_judge_prompt"),
         "checked_against_dataset": prompt_index is not None,
         # M-12 B2: the arm each judged row was produced under, as the harness recorded it.
         "context_mode_by_row": dict(payload.get("context_mode_by_row") or {"unrecorded": 0}),
