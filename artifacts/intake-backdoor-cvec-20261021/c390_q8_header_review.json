@@ -1,0 +1,248 @@
+{
+ "gguf_version": 3,
+ "n_tensors": 866,
+ "n_kv": 39,
+ "kv_scalar": {
+  "general.sampling.top_k": 20,
+  "general.sampling.top_p": 0.949999988079071,
+  "general.sampling.temp": 1.0,
+  "qwen35.block_count": 65,
+  "qwen35.context_length": 262144,
+  "qwen35.embedding_length": 5120,
+  "qwen35.feed_forward_length": 17408,
+  "qwen35.attention.head_count": 24,
+  "qwen35.attention.head_count_kv": 4,
+  "qwen35.rope.freq_base": 10000000.0,
+  "qwen35.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+  "qwen35.attention.key_length": 256,
+  "qwen35.attention.value_length": 256,
+  "qwen35.nextn_predict_layers": 1,
+  "qwen35.ssm.conv_kernel": 4,
+  "qwen35.ssm.state_size": 128,
+  "qwen35.ssm.group_count": 16,
+  "qwen35.ssm.time_step_rank": 48,
+  "qwen35.ssm.inner_size": 6144,
+  "qwen35.full_attention_interval": 4,
+  "qwen35.rope.dimension_count": 64,
+  "tokenizer.ggml.eos_token_id": 248046,
+  "tokenizer.ggml.padding_token_id": 248044,
+  "tokenizer.ggml.bos_token_id": 248044,
+  "general.quantization_version": 2,
+  "general.file_type": 7
+ },
+ "arrays": {
+  "qwen35.rope.dimension_sections": {
+   "elem_type": 5,
+   "len": 4,
+   "sha256": "99254d8ed16a56c0706c94ac7466c57d61f3932e9548aa5be359f0b4382a8554"
+  },
+  "tokenizer.ggml.tokens": {
+   "elem_type": 8,
+   "len": 248320,
+   "sha256": "6d8afc30d32560a9bf5c707343ae4c419eff86da69b0fbed7fd2519b73abee1f"
+  },
+  "tokenizer.ggml.token_type": {
+   "elem_type": 5,
+   "len": 248320,
+   "sha256": "d54439ef48197cc1a23022aa95794bfd0c5094988f43ed1eac6e5facc0a406d4"
+  },
+  "tokenizer.ggml.merges": {
+   "elem_type": 8,
+   "len": 247587,
+   "sha256": "b645cd089105aa7f632cb4c39659a11dc34b7b0700d80f1f318c22134ea016f0"
+  }
+ },
+ "strings": {
+  "general.architecture": {
+   "len": 6,
+   "sha256": "6c1f3f50de961f2194d38019e275796dc75edc412c6486def2ee75281d1ac218",
+   "text": "qwen35"
+  },
+  "general.type": {
+   "len": 5,
+   "sha256": "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4",
+   "text": "model"
+  },
+  "general.name": {
+   "len": 43,
+   "sha256": "f743842122e37203700cb9ac1f01d8a1cb478937fe53586b4787685da94e6587",
+   "text": "Merkyor/Qwen3.8-27B-Coder390-EfficientThink"
+  },
+  "general.version": {
+   "len": 2,
+   "sha256": "3bfc269594ef649228e9a74bab00f042efc91d5acc6fbee31a382e80d42388fe",
+   "text": "v1"
+  },
+  "general.basename": {
+   "len": 35,
+   "sha256": "5a9098bfb64e8c7be8cc22ce3ddaee2c46593c830381c689375caf0d4f508de0",
+   "text": "Qwen3.8-27B-Coder390-EfficientThink"
+  },
+  "general.size_label": {
+   "len": 3,
+   "sha256": "f328a7abde482324cfec2896f31a88410c61e879ed9a44b29c37466354aa91d0",
+   "text": "27B"
+  },
+  "tokenizer.ggml.model": {
+   "len": 4,
+   "sha256": "238f51b7c7c924fa3fe77ce7d0b214a05408df5b1ec84f9e614462017c42b005",
+   "text": "gpt2"
+  },
+  "tokenizer.ggml.pre": {
+   "len": 6,
+   "sha256": "6c1f3f50de961f2194d38019e275796dc75edc412c6486def2ee75281d1ac218",
+   "text": "qwen35"
+  },
+  "tokenizer.chat_template": {
+   "len": 8952,
+   "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  }
+ },
+ "type_hist": {
+  "Q8_0": 410,
+  "F32": 360,
+  "BF16": 96
+ },
+ "blk_max": 64,
+ "blk_max_tensors": [
+  [
+   "blk.64.attn_k.weight",
+   [
+    5120,
+    1024
+   ],
+   "Q8_0"
+  ],
+  [
+   "blk.64.attn_k_norm.weight",
+   [
+    256
+   ],
+   "F32"
+  ],
+  [
+   "blk.64.attn_norm.weight",
+   [
+    5120
+   ],
+   "F32"
+  ],
+  [
+   "blk.64.attn_output.weight",
+   [
+    6144,
+    5120
+   ],
+   "Q8_0"
+  ],
+  [
+   "blk.64.attn_q.weight",
+   [
+    5120,
+    12288
+   ],
+   "Q8_0"
+  ],
+  [
+   "blk.64.attn_q_norm.weight",
+   [
+    256
+   ],
+   "F32"
+  ],
+  [
+   "blk.64.attn_v.weight",
+   [
+    5120,
+    1024
+   ],
+   "Q8_0"
+  ],
+  [
+   "blk.64.ffn_down.weight",
+   [
+    17408,
+    5120
+   ],
+   "Q8_0"
+  ],
+  [
+   "blk.64.ffn_gate.weight",
+   [
+    5120,
+    17408
+   ],
+   "Q8_0"
+  ],
+  [
+   "blk.64.ffn_up.weight",
+   [
+    5120,
+    17408
+   ],
+   "Q8_0"
+  ],
+  [
+   "blk.64.nextn.eh_proj.weight",
+   [
+    10240,
+    5120
+   ],
+   "Q8_0"
+  ],
+  [
+   "blk.64.nextn.enorm.weight",
+   [
+    5120
+   ],
+   "F32"
+  ],
+  [
+   "blk.64.nextn.hnorm.weight",
+   [
+    5120
+   ],
+   "F32"
+  ],
+  [
+   "blk.64.nextn.shared_head_norm.weight",
+   [
+    5120
+   ],
+   "F32"
+  ],
+  [
+   "blk.64.post_attention_norm.weight",
+   [
+    5120
+   ],
+   "F32"
+  ]
+ ],
+ "non_blk": [
+  [
+   "output.weight",
+   [
+    5120,
+    248320
+   ],
+   "Q8_0"
+  ],
+  [
+   "output_norm.weight",
+   [
+    5120
+   ],
+   "F32"
+  ],
+  [
+   "token_embd.weight",
+   [
+    5120,
+    248320
+   ],
+   "Q8_0"
+  ]
+ ],
+ "header_end_offset": 10994938
+}
