@@ -1,0 +1,290 @@
+[
+ {
+  "n_max": 2,
+  "prompt": 0,
+  "draft_n": 131,
+  "draft_n_accepted": 60,
+  "predicted_n": 128,
+  "predicted_per_second": 8.292551364743401,
+  "text": " Johannes Gutenberg invented the movable-type printing press. This invention would have a huge impact on the world, and on the history of publishing.\n\nThe history of book publishing is long and complex, but here is a brief overview of the major milestones. Prior to the printing press, books were cop"
+ },
+ {
+  "n_max": 2,
+  "prompt": 1,
+  "draft_n": 86,
+  "draft_n_accepted": 77,
+  "predicted_n": 121,
+  "predicted_per_second": 11.947407708743922,
+  "text": "    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\n# Example usage\narr = [3, 6, 8, 10, 1, 2, 1]\n"
+ },
+ {
+  "n_max": 2,
+  "prompt": 2,
+  "draft_n": 64,
+  "draft_n_accepted": 42,
+  "predicted_n": 75,
+  "predicted_per_second": 10.354420778533711,
+  "text": " the light-dependent reactions and the Calvin cycle. The light-dependent reactions occur in the thylakoid membranes and produce ATP and NADPH using light energy. The Calvin cycle uses these products to fix carbon dioxide into sugars. There are three main types of photosynthesis: C3, C4, and CAM, whi"
+ },
+ {
+  "n_max": 2,
+  "prompt": 3,
+  "draft_n": 154,
+  "draft_n_accepted": 49,
+  "predicted_n": 128,
+  "predicted_per_second": 7.079634270518357,
+  "text": " 13, 14, 15, 16, 17, 18, 19, 20\n\n(End)\n\nMATHEMATICA\n\nTable[Function[t, Prime[t] Product[Prime[k], {k, t}]]@ Floor[n/GoldenRatio^2], {n, 0, 10}] (* Michael De Vlieger, Oct 17 2017 *)\n\nPROG\n\n(Python)\n\nfrom sympy import prime, primerange\n\ndef aupton(terms):\n\nalst, pset = [], primerange(1, prime(terms)+"
+ },
+ {
+  "n_max": 2,
+  "prompt": 4,
+  "draft_n": 30,
+  "draft_n_accepted": 20,
+  "predicted_n": 36,
+  "predicted_per_second": 10.225311907517733,
+  "text": " We know that the average speed is equal to the total distance divided by the total time. So, 120 km / 1.5 hours = 80 km/h."
+ },
+ {
+  "n_max": 2,
+  "prompt": 5,
+  "draft_n": 90,
+  "draft_n_accepted": 82,
+  "predicted_n": 128,
+  "predicted_per_second": 11.971582082918733,
+  "text": "| Germany | Berlin | 83 |\n| Italy | Rome | 60 |\n| Spain | Madrid | 47 |\n| Portugal | Lisbon | 10 |\n| United Kingdom | London | 67 |\n| Ireland | Dublin | 5 |\n| Netherlands | Amsterdam | 17 |\n| Belgium | Brussels | 11 |\n| Luxembourg | Luxembourg | 0.6 |\n| Switzerland | Bern | 8.6 |\n| Austria | Vienna "
+ },
+ {
+  "n_max": 2,
+  "prompt": 6,
+  "draft_n": 133,
+  "draft_n_accepted": 60,
+  "predicted_n": 128,
+  "predicted_per_second": 8.237115140905185,
+  "text": " ended with the coup of 18 Brumaire in November 1799 and the formation of the French Consulate. Many of its ideas are considered fundamental principles of liberal democracy, while its values and institutions remain central today. Its causes are generally agreed to be a combination of social, politic"
+ },
+ {
+  "n_max": 2,
+  "prompt": 7,
+  "draft_n": 52,
+  "draft_n_accepted": 40,
+  "predicted_n": 67,
+  "predicted_per_second": 11.042928808875086,
+  "text": "    e_x = np.exp(x - np.max(x))  # Subtract max for numerical stability\n    return e_x / e_x.sum(axis=0)\n\ndef relu(x):\n    return np.maximum(0, x)\n\ndef sigmoid(x):\n    return 1 / (1 + np.exp(-x))\n"
+ },
+ {
+  "n_max": 2,
+  "prompt": 8,
+  "draft_n": 115,
+  "draft_n_accepted": 69,
+  "predicted_n": 128,
+  "predicted_per_second": 9.66716553268801,
+  "text": " Frontend Developer. I have been working as a frontend developer for the past 5 years, and I am confident that I have the skills and experience that you are looking for.\n\nIn my current role at XYZ Company, I am responsible for developing and maintaining the frontend of our web application. I have ex"
+ },
+ {
+  "n_max": 2,
+  "prompt": 9,
+  "draft_n": 101,
+  "draft_n_accepted": 76,
+  "predicted_n": 128,
+  "predicted_per_second": 10.781883672572388,
+  "text": " has no positive divisors other than 1 and itself. The first few prime numbers are 2, 3, 5, 7, 11, 13, 17, 19, 23, and 29.\n\n\u76f8\u5173\u95ee\u9898\n\nWhat are the prime numbers from 1 to 30?\n\nWhat are the prime numbers 1 to 30? The prime numbers from 1 to 30 are 2, 3, 5, 7, 11, 13, 17, 19, 23, and 29.\n\nWhy is 2 a prime"
+ },
+ {
+  "n_max": 2,
+  "prompt": 10,
+  "draft_n": 50,
+  "draft_n_accepted": 30,
+  "predicted_n": 56,
+  "predicted_per_second": 9.819897813441932,
+  "text": " mixing flour, water, yeast, salt, and a little olive oil, then let it rise. Roll out the dough, spread it with tomato sauce, top with fresh mozzarella cheese and basil leaves, then bake until the crust is golden and the cheese is melted."
+ },
+ {
+  "n_max": 2,
+  "prompt": 11,
+  "draft_n": 16,
+  "draft_n_accepted": 11,
+  "predicted_n": 20,
+  "predicted_per_second": 10.95024591514764,
+  "text": "GROUP BY customer_id\nHAVING COUNT(*) > 2\nORDER BY orders DESC;\n"
+ },
+ {
+  "n_max": 2,
+  "prompt": 12,
+  "draft_n": 126,
+  "draft_n_accepted": 63,
+  "predicted_n": 128,
+  "predicted_per_second": 8.609754663695584,
+  "text": " there lived a young girl named Elara. She was known for her boundless curiosity and her love for adventure. Every day, she would wander into the forest, exploring its depths and discovering its secrets. One crisp autumn morning, Elara found a hidden path she had never seen before. It was lined with"
+ },
+ {
+  "n_max": 2,
+  "prompt": 13,
+  "draft_n": 112,
+  "draft_n_accepted": 71,
+  "predicted_n": 128,
+  "predicted_per_second": 9.693626864432812,
+  "text": ":\n\n1. Connection: TCP is connection-oriented, meaning it establishes a connection before transmitting data, while UDP is connectionless, meaning it doesn't establish a connection before sending data.\n\n2. Reliability: TCP is reliable, meaning it guarantees delivery of data packets in the correct orde"
+ },
+ {
+  "n_max": 2,
+  "prompt": 14,
+  "draft_n": 158,
+  "draft_n_accepted": 47,
+  "predicted_n": 128,
+  "predicted_per_second": 6.9890080921247355,
+  "text": " Friday\n\nKey Stage 5, Key Stage 4\n\n\nCareers & Employability\n\nCurriculum Planning\n\nExtra-Curricular\n\nMaths\n\nFree\n\n### Sorry, this date is now full\n\nCourse Code SM0020\n\nThis course is for teachers of A level Maths.\n\nYou will explore:\n- practicalities of teaching A level Maths\n- how to help students ma"
+ },
+ {
+  "n_max": 2,
+  "prompt": 15,
+  "draft_n": 90,
+  "draft_n_accepted": 81,
+  "predicted_n": 127,
+  "predicted_per_second": 12.162384884702984,
+  "text": "    int n, a, b;\n    scanf(\"%d %d %d\", &n, &a, &b);\n    int total = 0;\n    for (int i = 1; i <= n; i++) {\n        int digit_sum = 0;\n        int x = i;\n        while (x > 0) {\n            digit_sum += x % 10;\n            x /= 10;\n        }\n        if (digit_sum >= a && digit_sum <= b) {\n            "
+ },
+ {
+  "n_max": 3,
+  "prompt": 0,
+  "draft_n": 184,
+  "draft_n_accepted": 64,
+  "predicted_n": 128,
+  "predicted_per_second": 7.882666994454236,
+  "text": " Johannes Gutenberg invented the movable-type printing press. This invention would have a huge impact on the world, and on the history of publishing.\n\nThe history of book publishing is long and complex, but here is a brief overview of the major milestones. Prior to the printing press, books were cop"
+ },
+ {
+  "n_max": 3,
+  "prompt": 1,
+  "draft_n": 99,
+  "draft_n_accepted": 87,
+  "predicted_n": 121,
+  "predicted_per_second": 13.902694238734997,
+  "text": "    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\n# Example usage\narr = [3, 6, 8, 10, 1, 2, 1]\n"
+ },
+ {
+  "n_max": 3,
+  "prompt": 2,
+  "draft_n": 84,
+  "draft_n_accepted": 46,
+  "predicted_n": 75,
+  "predicted_per_second": 10.487719509717293,
+  "text": " the light-dependent reactions and the Calvin cycle. The light-dependent reactions occur in the thylakoid membranes and produce ATP and NADPH using light energy. The Calvin cycle uses these products to fix carbon dioxide into sugars. There are three main types of photosynthesis: C3, C4, and CAM, whi"
+ },
+ {
+  "n_max": 3,
+  "prompt": 3,
+  "draft_n": 222,
+  "draft_n_accepted": 53,
+  "predicted_n": 128,
+  "predicted_per_second": 6.703520668106387,
+  "text": " 13, 14, 15, 16, 17, 18, 19, 20\n\n(End)\n\nMATHEMATICA\n\nTable[Function[t, Prime[t] Product[Prime[k], {k, t}]]@ Floor[n/GoldenRatio^2], {n, 0, 10}] (* Michael De Vlieger, Oct 17 2017 *)\n\nPROG\n\n(Python)\n\nfrom sympy import prime, primerange\n\ndef aupton(terms):\n\nalst, pset = [], primerange(1, prime(terms)+"
+ },
+ {
+  "n_max": 3,
+  "prompt": 4,
+  "draft_n": 36,
+  "draft_n_accepted": 23,
+  "predicted_n": 36,
+  "predicted_per_second": 11.754810329604881,
+  "text": " We know that the average speed is equal to the total distance divided by the total time. So, 120 km / 1.5 hours = 80 km/h."
+ },
+ {
+  "n_max": 3,
+  "prompt": 5,
+  "draft_n": 105,
+  "draft_n_accepted": 91,
+  "predicted_n": 128,
+  "predicted_per_second": 13.477226593137164,
+  "text": "| Germany | Berlin | 83 |\n| Italy | Rome | 60 |\n| Spain | Madrid | 47 |\n| Portugal | Lisbon | 10 |\n| United Kingdom | London | 67 |\n| Ireland | Dublin | 5 |\n| Netherlands | Amsterdam | 17 |\n| Belgium | Brussels | 11 |\n| Luxembourg | Luxembourg | 0.6 |\n| Switzerland | Bern | 8.6 |\n| Austria | Vienna "
+ },
+ {
+  "n_max": 3,
+  "prompt": 6,
+  "draft_n": 183,
+  "draft_n_accepted": 65,
+  "predicted_n": 128,
+  "predicted_per_second": 8.014909233970668,
+  "text": " ended with the coup of 18 Brumaire in November 1799 and the formation of the French Consulate. Many of its ideas are considered fundamental principles of liberal democracy, while its values and institutions remain central today. Its causes are generally agreed to be a combination of social, politic"
+ },
+ {
+  "n_max": 3,
+  "prompt": 7,
+  "draft_n": 66,
+  "draft_n_accepted": 44,
+  "predicted_n": 67,
+  "predicted_per_second": 11.706191369671565,
+  "text": "    e_x = np.exp(x - np.max(x))  # Subtract max for numerical stability\n    return e_x / e_x.sum(axis=0)\n\ndef relu(x):\n    return np.maximum(0, x)\n\ndef sigmoid(x):\n    return 1 / (1 + np.exp(-x))\n"
+ },
+ {
+  "n_max": 3,
+  "prompt": 8,
+  "draft_n": 150,
+  "draft_n_accepted": 76,
+  "predicted_n": 128,
+  "predicted_per_second": 9.926776836827909,
+  "text": " Frontend Developer. I have been working as a frontend developer for the past 5 years, and I am confident that I have the skills and experience that you are looking for.\n\nIn my current role at XYZ Company, I am responsible for developing and maintaining the frontend of our web application. I have ex"
+ },
+ {
+  "n_max": 3,
+  "prompt": 9,
+  "draft_n": 123,
+  "draft_n_accepted": 85,
+  "predicted_n": 128,
+  "predicted_per_second": 12.120654295645105,
+  "text": " has no positive divisors other than 1 and itself. The first few prime numbers are 2, 3, 5, 7, 11, 13, 17, 19, 23, and 29.\n\n\u76f8\u5173\u95ee\u9898\n\nWhat are the prime numbers from 1 to 30?\n\nWhat are the prime numbers 1 to 30? The prime numbers from 1 to 30 are 2, 3, 5, 7, 11, 13, 17, 19, 23, and 29.\n\nWhy is 2 a prime"
+ },
+ {
+  "n_max": 3,
+  "prompt": 10,
+  "draft_n": 66,
+  "draft_n_accepted": 33,
+  "predicted_n": 56,
+  "predicted_per_second": 9.998705524731172,
+  "text": " mixing flour, water, yeast, salt, and a little olive oil, then let it rise. Roll out the dough, spread it with tomato sauce, top with fresh mozzarella cheese and basil leaves, then bake until the crust is golden and the cheese is melted."
+ },
+ {
+  "n_max": 3,
+  "prompt": 11,
+  "draft_n": 21,
+  "draft_n_accepted": 12,
+  "predicted_n": 20,
+  "predicted_per_second": 11.457529516028224,
+  "text": "GROUP BY customer_id\nHAVING COUNT(*) > 2\nORDER BY orders DESC;\n"
+ },
+ {
+  "n_max": 3,
+  "prompt": 12,
+  "draft_n": 188,
+  "draft_n_accepted": 63,
+  "predicted_n": 128,
+  "predicted_per_second": 7.882305842950106,
+  "text": " there lived a young girl named Elara. She was known for her boundless curiosity and her love for adventure. Every day, she would wander into the forest, exploring its depths and discovering its secrets. One crisp autumn morning, Elara found a hidden path she had never seen before. It was lined with"
+ },
+ {
+  "n_max": 3,
+  "prompt": 13,
+  "draft_n": 143,
+  "draft_n_accepted": 79,
+  "predicted_n": 128,
+  "predicted_per_second": 10.27258546289514,
+  "text": ":\n\n1. Connection: TCP is connection-oriented, meaning it establishes a connection before transmitting data, while UDP is connectionless, meaning it doesn't establish a connection before sending data.\n\n2. Reliability: TCP is reliable, meaning it guarantees delivery of data packets in the correct orde"
+ },
+ {
+  "n_max": 3,
+  "prompt": 14,
+  "draft_n": 235,
+  "draft_n_accepted": 48,
+  "predicted_n": 128,
+  "predicted_per_second": 6.4545132049002865,
+  "text": " Friday\n\nKey Stage 5, Key Stage 4\n\n\nCareers & Employability\n\nCurriculum Planning\n\nExtra-Curricular\n\nMaths\n\nFree\n\n### Sorry, this date is now full\n\nCourse Code SM0020\n\nThis course is for teachers of A level Maths.\n\nYou will explore:\n- practicalities of teaching A level Maths\n- how to help students ma"
+ },
+ {
+  "n_max": 3,
+  "prompt": 15,
+  "draft_n": 108,
+  "draft_n_accepted": 90,
+  "predicted_n": 127,
+  "predicted_per_second": 13.849723736179993,
+  "text": "    int n, a, b;\n    scanf(\"%d %d %d\", &n, &a, &b);\n    int total = 0;\n    for (int i = 1; i <= n; i++) {\n        int digit_sum = 0;\n        int x = i;\n        while (x > 0) {\n            digit_sum += x % 10;\n            x /= 10;\n        }\n        if (digit_sum >= a && digit_sum <= b) {\n            "
+ }
+]

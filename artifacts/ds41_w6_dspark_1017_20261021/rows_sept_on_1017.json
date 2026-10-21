@@ -1,0 +1,110 @@
+[
+ {
+  "n_max": 2,
+  "prompt": 0,
+  "draft_n": 123,
+  "draft_n_accepted": 64,
+  "predicted_n": 128,
+  "predicted_per_second": 8.374086128784285,
+  "text": " Johannes Gutenberg invented the movable-type printing press. This invention would have a huge impact on the world, and on the history of publishing.\n\nThe history of book publishing is long and complex, but here is a brief overview of the major milestones. Prior to the printing press, books were cop"
+ },
+ {
+  "n_max": 2,
+  "prompt": 1,
+  "draft_n": 84,
+  "draft_n_accepted": 78,
+  "predicted_n": 121,
+  "predicted_per_second": 11.4659479823106,
+  "text": "    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\n# Example usage\narr = [3, 6, 8, 10, 1, 2, 1]\n"
+ },
+ {
+  "n_max": 2,
+  "prompt": 2,
+  "draft_n": 64,
+  "draft_n_accepted": 42,
+  "predicted_n": 75,
+  "predicted_per_second": 10.111483827894995,
+  "text": " the light-dependent reactions and the Calvin cycle. The light-dependent reactions occur in the thylakoid membranes and produce ATP and NADPH using light energy. The Calvin cycle uses these products to fix carbon dioxide into sugars. There are three main types of photosynthesis: C3, C4, and CAM, whi"
+ },
+ {
+  "n_max": 2,
+  "prompt": 3,
+  "draft_n": 142,
+  "draft_n_accepted": 55,
+  "predicted_n": 128,
+  "predicted_per_second": 7.54686633473819,
+  "text": " 13, 14, 15, 16, 17, 18, 19, 20\n\n(End)\n\nMATHEMATICA\n\nTable[Function[t, Prime[t] Product[Prime[k], {k, t}]]@ Floor[n/GoldenRatio^2], {n, 0, 10}] (* Michael De Vlieger, Oct 17 2017 *)\n\nPROG\n\n(Python)\n\nfrom sympy import prime, primerange\n\ndef aupton(terms):\n\nalst, pset = [], primerange(1, prime(terms)+"
+ },
+ {
+  "n_max": 2,
+  "prompt": 4,
+  "draft_n": 30,
+  "draft_n_accepted": 20,
+  "predicted_n": 36,
+  "predicted_per_second": 10.217592139265781,
+  "text": " We know that the average speed is equal to the total distance divided by the total time. So, 120 km / 1.5 hours = 80 km/h."
+ },
+ {
+  "n_max": 2,
+  "prompt": 5,
+  "draft_n": 88,
+  "draft_n_accepted": 83,
+  "predicted_n": 128,
+  "predicted_per_second": 12.139957779503085,
+  "text": "| Germany | Berlin | 83 |\n| Italy | Rome | 60 |\n| Spain | Madrid | 47 |\n| Portugal | Lisbon | 10 |\n| United Kingdom | London | 67 |\n| Ireland | Dublin | 5 |\n| Netherlands | Amsterdam | 17 |\n| Belgium | Brussels | 11 |\n| Luxembourg | Luxembourg | 0.6 |\n| Switzerland | Bern | 8.6 |\n| Austria | Vienna "
+ },
+ {
+  "n_max": 3,
+  "prompt": 0,
+  "draft_n": 175,
+  "draft_n_accepted": 67,
+  "predicted_n": 128,
+  "predicted_per_second": 8.04987501311249,
+  "text": " Johannes Gutenberg invented the movable-type printing press. This invention would have a huge impact on the world, and on the history of publishing.\n\nThe history of book publishing is long and complex, but here is a brief overview of the major milestones. Prior to the printing press, books were cop"
+ },
+ {
+  "n_max": 3,
+  "prompt": 1,
+  "draft_n": 102,
+  "draft_n_accepted": 86,
+  "predicted_n": 121,
+  "predicted_per_second": 13.25951836169336,
+  "text": "    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\n# Example usage\narr = [3, 6, 8, 10, 1, 2, 1]\n"
+ },
+ {
+  "n_max": 3,
+  "prompt": 2,
+  "draft_n": 81,
+  "draft_n_accepted": 47,
+  "predicted_n": 75,
+  "predicted_per_second": 10.759892286304952,
+  "text": " the light-dependent reactions and the Calvin cycle. The light-dependent reactions occur in the thylakoid membranes and produce ATP and NADPH using light energy. The Calvin cycle uses these products to fix carbon dioxide into sugars. There are three main types of photosynthesis: C3, C4, and CAM, whi"
+ },
+ {
+  "n_max": 3,
+  "prompt": 3,
+  "draft_n": 206,
+  "draft_n_accepted": 58,
+  "predicted_n": 128,
+  "predicted_per_second": 5.769217681011571,
+  "text": " 13, 14, 15, 16, 17, 18, 19, 20\n\n(End)\n\nMATHEMATICA\n\nTable[Function[t, Prime[t] Product[Prime[k], {k, t}]]@ Floor[n/GoldenRatio^2], {n, 0, 10}] (* Michael De Vlieger, Oct 17 2017 *)\n\nPROG\n\n(Python)\n\nfrom sympy import prime, primerange\n\ndef aupton(terms):\n\nalst, pset = [], primerange(1, prime(terms)+"
+ },
+ {
+  "n_max": 3,
+  "prompt": 4,
+  "draft_n": 42,
+  "draft_n_accepted": 21,
+  "predicted_n": 36,
+  "predicted_per_second": 8.224723198083092,
+  "text": " We know that the average speed is equal to the total distance divided by the total time. So, 120 km / 1.5 hours = 80 km/h."
+ },
+ {
+  "n_max": 3,
+  "prompt": 5,
+  "draft_n": 107,
+  "draft_n_accepted": 91,
+  "predicted_n": 128,
+  "predicted_per_second": 11.191588541946729,
+  "text": "| Germany | Berlin | 83 |\n| Italy | Rome | 60 |\n| Spain | Madrid | 47 |\n| Portugal | Lisbon | 10 |\n| United Kingdom | London | 67 |\n| Ireland | Dublin | 5 |\n| Netherlands | Amsterdam | 17 |\n| Belgium | Brussels | 11 |\n| Luxembourg | Luxembourg | 0.6 |\n| Switzerland | Bern | 8.6 |\n| Austria | Vienna "
+ }
+]
