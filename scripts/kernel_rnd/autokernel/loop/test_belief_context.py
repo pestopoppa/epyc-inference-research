@@ -809,8 +809,12 @@ def _v2_answer():
     return belief_ready_answer(evidence={
         "status": "presented", "reasons": [], "claim_ids": ["clm_t1", "clm_h1"],
         "contested_claim_ids": [], "withdrawn_claim_ids": [], "runs": [],
-        "tiers": {"target": 1, "sibling": 0, "host": 1},
-        "nonempty_target": True, "tried_index": ["akm-a", "akm-b"],
+        "tiers": {"target": 1, "sibling": 0, "host": "1"},
+        "tiers_shown": {"target": 1, "sibling": 0, "host": 1}, "banner": None,
+        "tried_index_count": "2", "not_evidence_claim_ids": ["clm_h1"],
+        "refuted_claim_ids": ["clm_r1"],
+        "nonempty_target": True, "tried_index": [{"mechanism_id": "akm-a", "outcome": "null"},
+                                                 {"mechanism_id": "akm-b", "outcome": "kept"}],
         "claims": [{"claim_id": "clm_t1", "tier": "target", "status": "Judged",
                     "outcome": "regressed", "mechanism_id": "akm-a", "value": -8.22,
                     "unit": "%", "effect_rel": -0.0822},
@@ -833,9 +837,11 @@ def test_v2_answer_keys_are_accepted_recorded_and_host_ids_are_not_reliance(tmp_
     assert V2_SECTION in prompt
     [receipt] = _receipts(tmp_path)
     assert receipt["section_bytes"] == len(V2_SECTION.encode())
-    assert receipt["evidence_v2"] == {"tiers": {"target": 1, "sibling": 0, "host": 1},
-                                      "nonempty_target": True, "tried_index_count": 2,
-                                      "banner": None, "host_claim_ids": ["clm_h1"]}
+    assert receipt["evidence_v2"] == {
+        "tiers": {"target": 1, "sibling": 0, "host": 1},
+        "tiers_shown": {"target": 1, "sibling": 0, "host": 1},
+        "nonempty_target": True, "tried_index_count": 2, "banner": None,
+        "host_claim_ids": ["clm_h1"], "refuted_claim_ids": ["clm_r1"]}
     assert receipt["reliance"]["accepted"] == ["clm_t1"]
     assert receipt["reliance"]["rejected"] == [{"claim_id": "clm_h1", "reason": "host_tier"}]
     assert hyp.relies_on_claims == ("clm_t1",)
@@ -850,9 +856,10 @@ def test_an_older_answer_without_v2_keys_still_works(tmp_path):
             "section": "S", "section_sha256": "x", "section_bytes": 1})
         hyp = _planner(tmp_path, Child(answer)).propose({"current_regime": GPU_27B_REGIME})
     [receipt] = _receipts(tmp_path)
-    assert receipt["evidence_v2"] == {"tiers": None, "nonempty_target": None,
-                                      "tried_index_count": None, "banner": None,
-                                      "host_claim_ids": []}
+    assert receipt["evidence_v2"] == {"tiers": None, "tiers_shown": None,
+                                      "nonempty_target": None, "tried_index_count": None,
+                                      "banner": None, "host_claim_ids": [],
+                                      "refuted_claim_ids": []}
     assert hyp.relies_on_claims == ("clm_c1",)
 
 

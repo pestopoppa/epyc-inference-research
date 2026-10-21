@@ -445,9 +445,13 @@ def check_seeds(items: Iterable[Mapping[str, Any]], config: BeliefConfig | None 
 def host_claim_ids(evidence: Mapping[str, Any]) -> list[str]:
     """Ids the reader labelled `tier: host` (device/backend-only background, DESIGN §7.1). An older
     answer has no `tier` on its claims, so it yields none: nothing is refused that was not labelled."""
-    rows = evidence.get("claims") if isinstance(evidence, Mapping) else None
-    return [str(row["claim_id"]) for row in rows or ()
-            if isinstance(row, Mapping) and row.get("tier") == "host" and row.get("claim_id")]
+    if not isinstance(evidence, Mapping):
+        return []
+    ids = [str(row["claim_id"]) for row in evidence.get("claims") or ()
+           if isinstance(row, Mapping) and row.get("tier") == "host" and row.get("claim_id")]
+    for key in ("host_claim_ids", "not_evidence_claim_ids"):  # lane E lists (evidence level)
+        ids += [str(i) for i in evidence.get(key) or () if isinstance(i, str)]
+    return sorted(set(ids))
 
 
 def reliable_claim_ids(evidence: Mapping[str, Any]) -> list[str]:
@@ -478,17 +482,37 @@ def reliance(declared: Any, presented: Iterable[str],
             "accepted": accepted, "rejected": rejected}
 
 
+def _count(value: Any) -> int | None:
+    """Counts may arrive as ints or decimal strings; None when neither."""
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _tier_counts(value: Any) -> dict[str, int | None] | None:
+    return ({str(k): _count(v) for k, v in value.items()} if isinstance(value, Mapping)
+            else None)
+
+
 def _v2_fields(evidence: Mapping[str, Any]) -> dict[str, Any]:
-    """The DESIGN §7.4 answer keys, tolerant of an older answer that has none of them."""
-    tiers = evidence.get("tiers")
+    """The lane E answer keys, all under `evidence` (`banner` is mirrored there; the top-level
+    copy is not needed). Tolerant of an older answer that has none of them."""
     index = evidence.get("tried_index")
-    return {"tiers": dict(tiers) if isinstance(tiers, Mapping) else None,
+    declared = _count(evidence.get("tried_index_count"))
+    banner = evidence.get("banner")
+    return {"tiers": _tier_counts(evidence.get("tiers")),
+            "tiers_shown": _tier_counts(evidence.get("tiers_shown")),
             "nonempty_target": (evidence["nonempty_target"]
                                 if isinstance(evidence.get("nonempty_target"), bool) else None),
-            "tried_index_count": (len(index) if isinstance(index, (list, tuple, Mapping))
-                                  else None),
-            "banner": bool(evidence.get("banner")) if "banner" in evidence else None,
-            "host_claim_ids": host_claim_ids(evidence)}
+            "tried_index_count": (declared if declared is not None else
+                                  len(index) if isinstance(index, (list, tuple)) else None),
+            "banner": banner[:300] if isinstance(banner, str) and banner else None,
+            "host_claim_ids": host_claim_ids(evidence),
+            "refuted_claim_ids": [str(i) for i in evidence.get("refuted_claim_ids") or ()
+                                  if isinstance(i, str)]}
 
 
 def metrics_summary(belief: ReadyAnswer) -> str:
