@@ -15,7 +15,8 @@ from .test_existing_gpu_serving_run import _inputs as gpu_inputs
 
 @pytest.mark.parametrize("backend", ["cpu", "gpu"])
 @pytest.mark.parametrize("case", ["absent", "reuse", "new_request", "override",
-                                  "mismatch", "malformed", "dry_run", "failed", "stop", "stop_matched"])
+                                  "mismatch", "malformed", "dry_run", "failed", "stop", "stop_matched",
+                                  "require_absent", "require_reuse", "require_override"])
 def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
     fixture = fixtures.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
@@ -29,7 +30,7 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                                         frozen_requests=requests)
         retained_path = None
         retained_bytes = None
-        if case in {"reuse", "new_request", "override", "mismatch", "malformed"}:
+        if case in {"reuse", "new_request", "override", "mismatch", "malformed", "require_reuse"}:
             original_requests = (("different-original-request", requests[0][1]),) \
                 if case == "new_request" else requests
             retained_path = serving.write_floor(fixture.store, launch.template, {
@@ -87,15 +88,18 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
             # hands off to source research. No actor/build is needed for this test.
             reading = serving.load_floor(fixture.store, launch.template,
                                           frozen_requests=requests)
-            assert reading.floor_pct == (7.801 if case == "reuse" else 0.0)
+            assert reading.floor_pct == (7.801 if case in {"reuse", "require_reuse"} else 0.0)
             assert reading.request_digest == serving.request_digest(launch.template, requests)
             pool_calls.append(reading)
             return pool.PoolResult()
 
         def invoke(argv):
             argv += options + ["--serving-pairs", "3", "--out", str(fixture.root / "result")]
-            if case == "override":
+            if case in {"override", "require_override"}:
                 argv += [f"--{backend}-calibrate-serving", "4"]
+            if case.startswith("require_"):
+                # DS41-1017: refuse an auto-calibration; an explicit count is honoured
+                argv += ["--require-serving-floor"]
             if case == "dry_run":
                 argv += ["--dry-run"]
             if case == "stop_matched":
@@ -151,27 +155,29 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                 return result
 
         with mock.patch.object(run, "main", invoke):
-            if case in {"mismatch", "malformed", "failed"}:
+            if case in {"mismatch", "malformed", "failed", "require_absent"}:
                 error = {"mismatch": serving.ServingFloorMismatch,
                          "malformed": json.JSONDecodeError,
-                         "failed": serving.ServerDied}[case]
+                         "failed": serving.ServerDied,
+                         "require_absent": SystemExit}[case]
                 with pytest.raises(error):
                     fixture._run_one_keep()
             else:
                 rc, builds, planners, _, log = fixture._run_one_keep()
                 assert rc == 0, log
                 assert not builds and not planners
-        expected = 4 if case == "override" else 3 if case in {"absent", "new_request"} \
+        expected = 4 if case in {"override", "require_override"} else 3 if case in {"absent", "new_request"} \
             else 1 if case in {"failed", "stop_matched"} else 0
         assert len(launches) == expected
-        assert len(pool_calls) == int(case in {"absent", "reuse", "new_request", "override"})
-        if case in {"mismatch", "malformed", "dry_run"}:
+        assert len(pool_calls) == int(case in {"absent", "reuse", "new_request", "override",
+                                               "require_reuse", "require_override"})
+        if case in {"mismatch", "malformed", "dry_run", "require_absent"}:
             assert not held
         else:
             assert held.count("open") == held.count("close") == (1 if backend == "cpu" else 2)
         if retained_path is not None and case != "override":
             assert retained_path.read_bytes() == retained_bytes
-        if case in {"dry_run", "failed", "stop", "stop_matched"}:
+        if case in {"dry_run", "failed", "stop", "stop_matched", "require_absent"}:
             assert not floor_path.exists()
         if case == "new_request":
             assert retained_path != floor_path and floor_path.exists()

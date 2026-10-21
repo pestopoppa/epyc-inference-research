@@ -1987,6 +1987,12 @@ def main(argv: list[str] | None = None) -> int:
                         action="store_false", default=True,
                         help="DS41-C69 escape hatch: never carry a lineage serving floor across "
                              "a source-only anchor change; recalibrate (24 pairs) as before")
+    parser.add_argument("--require-serving-floor", action="store_true",
+                        help="refuse to start when no source serving floor exists for this "
+                             "launch (exact, champion-of-record or carried forward) instead of "
+                             "auto-calibrating one; an explicit --cpu-calibrate-serving N is "
+                             "still honoured. For a campaign whose floor is measured in a "
+                             "scheduled window (DS41-1017, 2026-10-21).")
     parser.add_argument("--cpu-serving-launch", type=Path,
                         help="selected target's canonical resolved CPU launch JSON")
     parser.add_argument("--gpu-serving-launch", type=Path,
@@ -3266,6 +3272,13 @@ def main(argv: list[str] | None = None) -> int:
             if _gate_floor(heldout_reading)[0] is None:
                 parser.error("held-out serving floor absent for these exact request bytes and "
                              "anchor execution; run explicit --cpu-calibrate-heldout first")
+        if floor is None and getattr(args, "require_serving_floor", False) \
+                and not calibration_samples:
+            parser.error("--require-serving-floor: no source serving floor for "
+                         f"{serving_recipe.name} (recipe_hash {serving_recipe.recipe_hash[:12]}, "
+                         f"provenance {serving_floor_provenance}) under {floor_store}; record "
+                         "one with an explicit --cpu-calibrate-serving 24 in a CPU timing "
+                         "window first (see the campaign README)")
         if floor is None:
             # Every selected workload needs its OWN request-bound source floor,
             # including a first full-target visit and a reduced common screen.
