@@ -16,6 +16,9 @@ Normalized archive schema (JSONL, one object per node; see adapt_* for real sour
   call_cost (int >= 1, default 1).
 h = mean of rung fracs over the fixed ladder length LADDER_LEN (absent rungs count 0).
 
+AK-RX-1.1: `adapt_experiments_db_chains` (CLI `--experiments-db ... --repair-chains`) builds the parent links
+from the per-patch-round rows the loop already persists; no loop, run.py flag or row-schema change is involved.
+
 Replay limitation (stated in every report): an outcome can only come from a record that exists. A refinement
 selected on a node with no recorded child costs one call, yields NO outcome, kills that node, and is counted
 as an unobserved selection; coverage = observed / (observed + unobserved). Fixed-sweep repairs beyond the end
@@ -151,6 +154,99 @@ def adapt_experiments_db(db_paths):
                           "repair_attempts": max((pr or 1) - 1, 0), "kept": st == "kept", "call_cost": 1})
         con.close()
     return nodes, skipped
+
+
+# ---------------------------------------------------------------- adapter v2 (AK-RX-1.1: repair chains)
+#: Statuses whose row IS one authoring round's own attempt (one author call set, one patch). Each patch round that
+#: ends before the final outcome is persisted as its own row by `loop.iterate -> dispose -> record_abandoned`
+#: (patch_rejected = critic:patch refusal, gate_refused = pre-build gate refusal), and the round that reaches a
+#: measurement ends the iteration with its outcome row. Summary rows of an exhausted attempt
+#: (patch_rounds_exhausted, scope_blocked, hypothesis_retired) re-state the last disposed round and are EXCLUDED
+#: so no round is counted twice; instrument outcomes (measurement_invalid, bench_failed, no_op_build) say nothing
+#: about the repair and are excluded too. Every excluded status is counted in the report.
+ATTEMPT_STATUSES = frozenset({"patch_rejected", "gate_refused", "authoring_failed", "kept", "keep_candidate",
+                              "measured_null", "regression", "interaction_regression"})
+
+
+def op_test_counts(gates):
+    """(passed, total) summed over 'N/M tests passed' details of correctness gates; (None, None) if none parse."""
+    ok = tot = 0
+    seen = False
+    for g in gates or []:
+        if g.get("gate") == "correctness":
+            m = _PASS.search(g.get("detail") or "")
+            if m:
+                ok += int(m.group(1)); tot += int(m.group(2)); seen = True
+    return (ok, tot) if seen else (None, None)
+
+
+def author_cost(payload, basis):
+    """(calls, decoded_tokens|None) spent authoring this round. basis 'unit' -> 1; 'author_calls' -> sum of panel members' `calls`
+    (floor 1: a round with no panel record still cost one authoring call)."""
+    if basis == "unit":
+        return 1, None
+    calls = tokens = 0
+    for panel in payload.get("author_panels") or []:
+        for m in (panel or {}).get("members") or []:
+            calls += int(m.get("calls") or 0)
+            tokens += int(m.get("decoded_tokens") or 0)
+    return max(1, calls), (tokens or None)
+
+
+def adapt_experiments_db_chains(db_paths, cost_basis="author_calls"):
+    """Repair-chain adapter. Unlike `adapt_experiments_db` (one root per gated row) this links the per-patch-round
+    rows the loop already persists. Chain key within one store: (branch_id, mechanism_id, hypothesis_round), rows
+    in recorded_at order; a row with patch_round r>=1 is the child of the immediately preceding row of the same
+    key iff that row's patch_round == r-1 (otherwise it starts a new chain: a restart, a resume, or a missing
+    round -- never guessed across a gap). Node fields: proposal_id, parent_id, rungs (ordered compile, op_test,
+    nmse), repair_attempts (= patch_round-1), kept (status=='kept'), call_cost (see `author_cost`), plus
+    non-replay extras (status, patch_round, hypothesis_round, op_test_passed/total, author_decoded_tokens).
+    Returns (nodes, stats). Read-only: stores are opened mode=ro."""
+    nodes = []
+    stats = {"stores": 0, "rows_total": 0, "rows_included": 0, "excluded_status_counts": {}, "chains": 0,
+             "chain_length_counts": {}, "cost_basis": cost_basis}
+    for db in db_paths:
+        db = Path(db)
+        stats["stores"] += 1
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        rows = con.execute("select attempt_id,recorded_at,status,payload from experiments "
+                           "order by recorded_at,attempt_id").fetchall()
+        con.close()
+        prefix = f"{db.parent.parent.name}/{db.parent.name}"
+        last = {}      # chain key -> (node_id, patch_round)
+        chain_len = {}  # node_id of chain root -> length
+        root_of = {}
+        for aid, _at, st, p in rows:
+            stats["rows_total"] += 1
+            try:
+                j = json.loads(p)
+            except (TypeError, ValueError):
+                j = {}
+            r = j.get("patch_round")
+            if st not in ATTEMPT_STATUSES or not isinstance(r, int) or r < 1:
+                stats["excluded_status_counts"][st] = stats["excluded_status_counts"].get(st, 0) + 1
+                continue
+            nid = f"{prefix}:{aid}"
+            key = (j.get("branch_id"), j.get("mechanism_id"), j.get("hypothesis_round") or 0)
+            prev = last.get(key)
+            parent = prev[0] if prev is not None and prev[1] == r - 1 else None
+            gates = j.get("gates") if isinstance(j.get("gates"), list) else []
+            ok, tot = op_test_counts(gates)
+            cost, toks = author_cost(j, cost_basis)
+            node = {"proposal_id": nid, "parent_id": parent, "rungs": rungs_from_gates(gates),
+                    "repair_attempts": r - 1, "kept": st == "kept", "call_cost": cost,
+                    "status": st, "patch_round": r, "hypothesis_round": key[2],
+                    "op_test_passed": ok, "op_test_total": tot, "author_decoded_tokens": toks}
+            nodes.append(node)
+            last[key] = (nid, r)
+            root = nid if parent is None else root_of[parent]
+            root_of[nid] = root
+            chain_len[root] = chain_len.get(root, 0) + 1
+            stats["rows_included"] += 1
+        stats["chains"] += len(chain_len)
+        for n in chain_len.values():
+            stats["chain_length_counts"][str(n)] = stats["chain_length_counts"].get(str(n), 0) + 1
+    return nodes, stats
 
 
 # ---------------------------------------------------------------- arms
@@ -349,6 +445,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--jsonl", help="normalized archive JSONL")
     ap.add_argument("--experiments-db", action="append", default=[], help="real adapter input (repeatable)")
+    ap.add_argument("--repair-chains", action="store_true",
+                    help="with --experiments-db: link per-patch-round rows into repair chains (AK-RX-1.1)")
+    ap.add_argument("--repair-cost", choices=("author_calls", "unit"), default="author_calls",
+                    help="call_cost per node under --repair-chains (default: panel members' calls, floor 1)")
+    ap.add_argument("--dump-archive", help="also write the normalized archive JSONL here (chains mode)")
     ap.add_argument("--fixture", action="store_true")
     ap.add_argument("--budget", type=int, default=0, help="calls (default: half the archive cost)")
     ap.add_argument("--reps", type=int, default=200)
@@ -360,6 +461,11 @@ def main(argv=None):
         nodes, src = synthetic_fixture(), "synthetic_fixture"
     elif a.jsonl:
         nodes, src = [json.loads(l) for l in Path(a.jsonl).read_text().splitlines() if l.strip()], a.jsonl
+    elif a.experiments_db and a.repair_chains:
+        nodes, stats = adapt_experiments_db_chains(a.experiments_db, a.repair_cost)
+        src, extra = "experiments.db(repair_chains):" + ",".join(a.experiments_db), {"repair_chain_stats": stats}
+        if a.dump_archive:
+            Path(a.dump_archive).write_text("".join(json.dumps(n, sort_keys=True) + "\n" for n in nodes))
     elif a.experiments_db:
         nodes, skipped = adapt_experiments_db(a.experiments_db)
         src, extra = "experiments.db:" + ",".join(a.experiments_db), {"rows_skipped_no_gates": skipped}

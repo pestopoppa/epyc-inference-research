@@ -61,3 +61,77 @@ def test_db_adapter_and_cli(tmp_path):
     assert rx.main(["--fixture", "--reps", "5", "--budget", "10", "--out", str(out)]) == 0
     rep = json.loads(out.read_text())
     assert set(rep["arms"]) >= {"fixed", "iid", "rex_C5", "rex_C50", "split_R0", "split_R3"}
+
+
+def _store(tmp_path, name, rows):
+    db = tmp_path / "camp" / name / "experiments.db"
+    db.parent.mkdir(parents=True)
+    con = sqlite3.connect(db)
+    con.execute("create table experiments(attempt_id,recorded_at,campaign_id,status,payload)")
+    for i, (st, pr, hr, mech, extra) in enumerate(rows):
+        payload = {"patch_round": pr, "hypothesis_round": hr, "mechanism_id": mech, "branch_id": "detached:lane0"}
+        payload.update(extra)
+        con.execute("insert into experiments values(?,?,?,?,?)",
+                    (f"a{i}", f"2026-10-01T00:00:{i:02d}Z", "ak-loop", st, json.dumps(payload)))
+    con.commit(); con.close()
+    return str(db)
+
+
+def test_chain_adapter_links_patch_rounds_and_excludes_summaries(tmp_path):
+    g_ok = [{"gate": "compile", "passed": True}, {"gate": "correctness", "passed": True, "detail": "9/10 tests passed"},
+            {"gate": "reference_comparison", "passed": True}]
+    panel = [{"members": [{"calls": 2, "decoded_tokens": 100}, {"calls": 1, "decoded_tokens": 50}]}]
+    db = _store(tmp_path, "store", [
+        ("abstained", 0, 0, "m1", {}),                                   # not an attempt
+        ("patch_rejected", 1, 1, "m1", {"author_panels": panel}),        # chain 1 root
+        ("gate_refused", 2, 1, "m1", {"gates": [{"gate": "op_scope", "passed": False}]}),
+        ("patch_rounds_exhausted", 2, 1, "m1", {}),                      # summary: excluded
+        ("measured_null", 1, 1, "m2", {"gates": g_ok}),                  # chain 2, lone root
+        ("patch_rejected", 1, 1, "m3", {}),                              # chain 3 root
+        ("kept", 2, 1, "m3", {"gates": g_ok}),
+        ("kept", 2, 2, "m3", {"gates": g_ok}),                           # different hypothesis_round: no parent
+        ("measurement_invalid", 1, 1, "m4", {}),                         # instrument outcome: excluded
+    ])
+    nodes, st = rx.adapt_experiments_db_chains([db])
+    by = {n["proposal_id"].split(":")[-1]: n for n in nodes}
+    assert set(by) == {"a1", "a2", "a4", "a5", "a6", "a7"}
+    pre = "camp/store:"
+    assert by["a1"]["parent_id"] is None and by["a2"]["parent_id"] == pre + "a1"
+    assert by["a4"]["parent_id"] is None and by["a6"]["parent_id"] == pre + "a5"
+    assert by["a7"]["parent_id"] is None  # round 2 with no round 1 of its own hypothesis_round
+    assert by["a1"]["call_cost"] == 3 and by["a1"]["author_decoded_tokens"] == 150 and by["a2"]["call_cost"] == 1
+    assert by["a2"]["repair_attempts"] == 1 and by["a6"]["kept"] and not by["a5"]["kept"]
+    assert by["a4"]["op_test_passed"] == 9 and by["a4"]["op_test_total"] == 10
+    assert [r["name"] for r in by["a4"]["rungs"]] == ["compile", "op_test", "nmse_reference_comparison"]
+    assert st["rows_total"] == 9 and st["rows_included"] == 6
+    assert st["excluded_status_counts"] == {"abstained": 1, "patch_rounds_exhausted": 1, "measurement_invalid": 1}
+    assert st["chains"] == 4 and st["chain_length_counts"] == {"2": 2, "1": 2}
+    # unit cost basis ignores panels
+    assert {n["call_cost"] for n in rx.adapt_experiments_db_chains([db], "unit")[0]} == {1}
+
+
+def test_chain_archive_has_repair_tree_and_replays_end_to_end(tmp_path):
+    rows = []
+    for k in range(6):
+        rows.append(("patch_rejected", 1, k + 1, f"m{k}", {}))
+        rows.append(("kept" if k % 2 == 0 else "measured_null", 2, k + 1, f"m{k}",
+                     {"gates": [{"gate": "compile", "passed": True}]}))
+    db = _store(tmp_path, "s", rows)
+    nodes, _ = rx.adapt_experiments_db_chains([db])
+    a = rx.Archive(nodes)  # no ValueError: every parent_id resolves inside the archive
+    assert a.has_tree() and len(a.roots) == 6
+    out, dump = tmp_path / "r.json", tmp_path / "arch.jsonl"
+    assert rx.main(["--experiments-db", db, "--repair-chains", "--reps", "5", "--budget", "8",
+                    "--dump-archive", str(dump), "--out", str(out)]) == 0
+    rep = json.loads(out.read_text())
+    assert rep["archive"]["has_repair_tree"] and rep["repair_chain_stats"]["chains"] == 6
+    assert rep["arms"]["rex_C10"]["coverage"] is not None
+    assert len(dump.read_text().splitlines()) == 12
+    assert rx.load_jsonl(dump).has_tree()
+
+
+def test_chain_adapter_opens_store_read_only(tmp_path):
+    db = _store(tmp_path, "ro", [("patch_rejected", 1, 1, "m", {})])
+    before = open(db, "rb").read()
+    rx.adapt_experiments_db_chains([db])
+    assert open(db, "rb").read() == before
