@@ -53,6 +53,8 @@ import urllib.request
 from pathlib import Path
 
 sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import kpf18_arms as ARMS  # noqa: E402  KPF-18.1/.2/.3 arms: pure helpers + step builders (they take this module as `gate`)
 
 HERE = Path(__file__).resolve().parent
 SCHEMA = "epyc.kpf.run.v1"
@@ -1746,6 +1748,7 @@ def item7(ctx: Ctx) -> list[Step]:
 
 
 ITEMS = {1: item1, 2: item2, 3: item3, 4: item4, 5: item5, 6: item6, 7: item7}
+ARMS.register(ITEMS, sys.modules[__name__])  # 181/182/183 = KPF-18.1/.2/.3; never part of `all`
 
 
 # ---------------------------------------------------------------- argv file
@@ -1821,7 +1824,7 @@ def preflight(args, ps: PromptSet, gate_argv: list[str], items: list[int]) -> tu
     if port_listening(args.port):
         probs.append(f"--port {args.port} is already listening")
     bins = []
-    if any(i in (1, 2, 3, 5, 6, 7) for i in items):
+    if any(i in (1, 2, 3, 5, 6, 7) + ARMS.ARM_ITEMS for i in items):
         bins.append(("--fork-bin", args.fork_bin, b"--slot-fork-min-tokens"))
     if 6 in items:
         bins.append(("--champion-bin", args.champion_bin, None))
@@ -1902,6 +1905,8 @@ def build_ctx(args, items: list[int]) -> tuple[Ctx, list[str], list[str]]:
             "argv_file_header": comments, "shape_drift": drift, "shape_drift_allowed": bool(args.allow_shape_drift)}
     ctx = Ctx(args, ps, gate_argv, prefix, meta)
     probs, notes = preflight(args, ps, gate_argv, items)
+    a_probs, a_notes = ARMS.preflight_arms(ctx, items, sys.modules[__name__])
+    probs, notes = probs + a_probs, notes + a_notes
     probs = hard + ([] if args.allow_shape_drift else [f"shape drift: {d}" for d in drift]) + probs
     if args.allow_shape_drift and drift:
         notes.append(f"shape drift ALLOWED and recorded: {drift}")
@@ -1954,7 +1959,7 @@ def print_plan(ctx: Ctx, items: list[int], steps_by_item: dict[int, list[Step]],
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["item1", "item2", "item3", "item4", "item5", "item6", "item7", "all",
-                                    "build-prompt-set", "make-argv-file"])
+                                    "build-prompt-set", "make-argv-file", *ARMS.ARM_CMDS])
     ap.add_argument("--fork-bin")
     ap.add_argument("--champion-bin", default=str(CHAMPION_BIN))
     ap.add_argument("--fork-bin-prefill-budget")
@@ -1988,6 +1993,7 @@ def main() -> int:
     ap.add_argument("--no-device-claim", default=None, metavar="REASON",
                     help="skip taking the mi210_0 device claim (reason is recorded); default: take it")
     ap.add_argument("--cpu", action="store_true", help="CPU adaptation: reduced spec, GPU-only checks skipped")
+    ARMS.add_arguments(ap)
     args = ap.parse_args()
     if args.cpu:
         set_cpu_spec()
@@ -1998,7 +2004,10 @@ def main() -> int:
     if not args.argv_file or not args.out:
         ap.error("--argv-file and --out are required")
     args.window_id = args.window_id or f"kpf18-{utc_tag()}"
-    items = list(range(1, 8)) if args.cmd == "all" else ([] if args.cmd == "build-prompt-set" else [int(args.cmd[4:])])
+    if args.cmd in ARMS.ARM_CMDS:
+        items = list(ARMS.ARM_CMDS[args.cmd])
+    else:
+        items = list(range(1, 8)) if args.cmd == "all" else ([] if args.cmd == "build-prompt-set" else [int(args.cmd[4:])])
     if args.cmd == "build-prompt-set":
         args.build_prompt_set = True
     if args.budget_min is None:
@@ -2048,7 +2057,11 @@ def main() -> int:
             claim = claim_cm.__enter__()
             stack.append(claim_cm)
             write_json(Path(args.out) / "claim" / "device-claim-receipt.json", claim.receipt().to_dict())
+        # KPF-18.1/.2/.3: the decision rules are written HERE, before any server starts, and every arm record carries
+        # the sha256 of this block (`predeclared_rules_sha256`)
         write_json(Path(args.out) / "run_meta.json", {"args": vars(args), "items": items, "estimate_s": total,
+                                                       "predeclared_rules": ARMS.rules_for(items),
+                                                       "predeclared_rules_sha256": ARMS.rules_sha256(items),
                                                        "started": now_iso(), "notes": notes,
                                                        "device_claim": args.no_device_claim or "mi210_0 held",
                                                        "region_lock": {"KPF18_NO_REGION_LOCK":
