@@ -2736,12 +2736,13 @@ class TestFrozenTreesAreUntouched(_ChainCase):
         after = fingerprint_frozen()
         self.assertEqual(before, after)
 
-    def test_llama_cpp_is_still_on_the_v9_freeze_commit(self):
+    def test_llama_cpp_is_still_on_the_v10_freeze_commit(self):
         fp = fingerprint_frozen()["/mnt/raid0/llm/llama.cpp"]
         if fp is None:
             self.skipTest("the frozen llama.cpp clone is not present on this host")
-        self.assertEqual(fp["branch"], "production-consolidated-v9")
-        self.assertEqual(fp["head"], "0db32c06e3e550065b78311a6031ef3dd2c4f27c")
+        # canonical: scripts/session/verify_llama_cpp.sh (EXPECTED_BRANCH/COMMIT)
+        self.assertEqual(fp["branch"].rsplit("/", 1)[-1], "production-consolidated-v10")
+        self.assertEqual(fp["head"], "ffc1bac82eeca6f9099e1ccd9ba49703c460a115")
 
 
 # =============================================================================
