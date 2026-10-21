@@ -151,6 +151,19 @@ class ContextBundle(unittest.TestCase):
         self.assertIn("STALE EPOCH", text)
         self.assertIn("NUMBER is not", text)
 
+    def test_the_belief_section_follows_already_tried_and_precedes_later_blocks(self):
+        section = "## Belief-kernel evidence (Vidya ledger, read-only)\n- clm_t1 [Judged] ..."
+        text = actors.render_context(
+            {"prior_experiments": [{"mechanism_id": "akm-old", "status": "measured_null"}],
+             "inbox": ["operator note"]}, belief_section=section)
+        self.assertEqual(text.count(section), 1)
+        self.assertLess(text.index("## Already tried"), text.index(section))
+        self.assertLess(text.index(section), text.index("## Operator suggestions"))
+        self.assertNotIn("Belief-kernel", actors.render_context({"inbox": ["x"]}))
+
+    def test_the_hypothesis_task_template_lists_relies_on_claims(self):
+        self.assertIn('"relies_on_claims"', actors._HYPOTHESIS_TASK)
+
     def test_a_refusal_reason_from_memory_is_carried(self):
         text = actors.render_context({"prior_experiments": [
             {"mechanism_id": "akm-old", "status": "authoring_refused",

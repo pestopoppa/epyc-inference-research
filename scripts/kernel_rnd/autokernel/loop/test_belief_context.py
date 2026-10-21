@@ -797,3 +797,80 @@ def test_the_loop_store_is_ingested_by_the_reader_before_planning(tmp_path):
     bc.prepare({"current_regime": GPU_27B_REGIME}, config, runner=runner)
     argv = seen[0]
     assert argv[argv.index("--source-root") + 1] == str(tmp_path / "store")
+
+
+# ------------------------------------------- Phase 1 P1-G: DESIGN §7.4/§7.5 consumer changes
+
+V2_SECTION = (f"{bc.SECTION_HEADER}\n### Target\n- clm_t1 [Judged] DS41 REGRESSED -8.22% (floor 3.41%)\n"
+              "### Host\n- clm_h1 [Witnessed] host ceiling, not about this model")
+
+
+def _v2_answer():
+    return belief_ready_answer(evidence={
+        "status": "presented", "reasons": [], "claim_ids": ["clm_t1", "clm_h1"],
+        "contested_claim_ids": [], "withdrawn_claim_ids": [], "runs": [],
+        "tiers": {"target": 1, "sibling": 0, "host": 1},
+        "nonempty_target": True, "tried_index": ["akm-a", "akm-b"],
+        "claims": [{"claim_id": "clm_t1", "tier": "target", "status": "Judged",
+                    "outcome": "regressed", "mechanism_id": "akm-a", "value": -8.22,
+                    "unit": "%", "effect_rel": -0.0822},
+                   {"claim_id": "clm_h1", "tier": "host"}],
+        "section": V2_SECTION, "section_sha256": hashlib.sha256(V2_SECTION.encode()).hexdigest(),
+        "section_bytes": len(V2_SECTION.encode())})
+
+
+def test_hypothesis_template_asks_for_relies_on_claims():
+    assert '"relies_on_claims"' in actors._HYPOTHESIS_TASK
+    assert actors.HYPOTHESIS_SCHEMA["properties"]["relies_on_claims"]["type"] == "array"
+    assert "relies_on_claims" not in actors.HYPOTHESIS_SCHEMA["required"]
+
+
+def test_v2_answer_keys_are_accepted_recorded_and_host_ids_are_not_reliance(tmp_path):
+    reply = json.dumps({**HYPOTHESIS, "relies_on_claims": ["clm_t1", "clm_h1"]})
+    with mock.patch.object(actors, "_run_agent", return_value=reply) as run:
+        hyp = _planner(tmp_path, Child(_v2_answer())).propose({"current_regime": DS41_CPU_REGIME})
+    prompt, env = run.call_args.args[0], run.call_args.kwargs["env"]
+    assert V2_SECTION in prompt
+    [receipt] = _receipts(tmp_path)
+    assert receipt["section_bytes"] == len(V2_SECTION.encode())
+    assert receipt["evidence_v2"] == {"tiers": {"target": 1, "sibling": 0, "host": 1},
+                                      "nonempty_target": True, "tried_index_count": 2,
+                                      "banner": None, "host_claim_ids": ["clm_h1"]}
+    assert receipt["reliance"]["accepted"] == ["clm_t1"]
+    assert receipt["reliance"]["rejected"] == [{"claim_id": "clm_h1", "reason": "host_tier"}]
+    assert hyp.relies_on_claims == ("clm_t1",)
+    assert json.loads(env[bc.ENV_KEY])["v2"]["host_claim_ids"] == ["clm_h1"]
+
+
+def test_an_older_answer_without_v2_keys_still_works(tmp_path):
+    with mock.patch.object(actors, "_run_agent",
+                           return_value=json.dumps({**HYPOTHESIS, "relies_on_claims": ["clm_c1"]})):
+        answer = belief_ready_answer(evidence={
+            "status": "presented", "reasons": [], "claim_ids": ["clm_c1"], "runs": [],
+            "section": "S", "section_sha256": "x", "section_bytes": 1})
+        hyp = _planner(tmp_path, Child(answer)).propose({"current_regime": GPU_27B_REGIME})
+    [receipt] = _receipts(tmp_path)
+    assert receipt["evidence_v2"] == {"tiers": None, "nonempty_target": None,
+                                      "tried_index_count": None, "banner": None,
+                                      "host_claim_ids": []}
+    assert hyp.relies_on_claims == ("clm_c1",)
+
+
+def test_reliable_claim_ids_drops_host_tier():
+    ev = _v2_answer()["evidence"]
+    assert bc.reliable_claim_ids(ev) == ["clm_t1"]
+    assert bc.reliance(["clm_h1"], ev["claim_ids"], ["clm_h1"])["accepted"] == []
+
+
+def test_belief_section_sits_directly_after_already_tried_not_at_the_tail(tmp_path):
+    context = {"current_regime": DS41_CPU_REGIME,
+               "prior_experiments": [{"mechanism_id": "akm-old", "status": "measured_null"}],
+               "inbox": ["operator note"]}
+    with mock.patch.object(actors, "_run_agent",
+                           return_value='{"abstain": "none"}') as run:
+        _planner(tmp_path, Child(_v2_answer())).propose(context)
+    prompt = run.call_args.args[0]
+    assert prompt.count(V2_SECTION) == 1
+    tried, belief, inbox = (prompt.index("## Already tried"), prompt.index(V2_SECTION),
+                            prompt.index("## Operator suggestions"))
+    assert tried < belief < inbox

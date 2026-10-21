@@ -73,6 +73,16 @@ ABSTAIN_IDENTITY_EXTENSION = (
     '"target_surface": "<path>", "target_symbol": "<function>"} -- all four identity '
     'fields are optional; include only what you actually found, omit the rest.')
 
+#: P1-G (belief redesign, 2026-10): `relies_on_claims` was added to the JSON reply template,
+#: plus one explanatory paragraph before `Rules:`. Both fall in the template suffix; the
+#: frozen fixtures predate them, so the reconciliation strips exactly these two pieces from
+#: the live suffix (an in-memory delta, never a rewrite of recorded bytes).
+RELIES_ON_TEMPLATE_DELTA = (
+    (',\n  "relies_on_claims": ["<belief-section claim id your mechanism depends on>"]', ""),
+    ('"relies_on_claims" lists the claim ids (clm_...) from the belief-kernel evidence section '
+     'that your mechanism depends on; [] if none. Only target- and sibling-scoped claims count; '
+     'host-ceiling lines are background and are not accepted as reliance.\n\n', ""))
+
 
 def _recorded_prompt() -> str:
     """Byte-for-byte what run 8 sent (less seven redactions)."""
@@ -107,6 +117,9 @@ def _real_context_text(prompt: str | None = None, *, legacy_suffix: bool = False
     the OLD ending, not today's."""
     marker = "\x00CONTEXT\x00"
     prefix, suffix = actors._HYPOTHESIS_TASK.format(context=marker, **CPU_FORMAT).split(marker)
+    for piece, replacement in RELIES_ON_TEMPLATE_DELTA:
+        assert suffix.count(piece) == 1, piece
+        suffix = suffix.replace(piece, replacement)
     if legacy_suffix:
         assert suffix.endswith(ABSTAIN_IDENTITY_EXTENSION)
         suffix = suffix[:-len(ABSTAIN_IDENTITY_EXTENSION)]

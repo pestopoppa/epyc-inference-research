@@ -442,21 +442,53 @@ def check_seeds(items: Iterable[Mapping[str, Any]], config: BeliefConfig | None 
 # ------------------------------------------------------------------------------ receipt
 
 
-def reliance(declared: Any, presented: Iterable[str]) -> dict[str, Any]:
+def host_claim_ids(evidence: Mapping[str, Any]) -> list[str]:
+    """Ids the reader labelled `tier: host` (device/backend-only background, DESIGN §7.1). An older
+    answer has no `tier` on its claims, so it yields none: nothing is refused that was not labelled."""
+    rows = evidence.get("claims") if isinstance(evidence, Mapping) else None
+    return [str(row["claim_id"]) for row in rows or ()
+            if isinstance(row, Mapping) and row.get("tier") == "host" and row.get("claim_id")]
+
+
+def reliable_claim_ids(evidence: Mapping[str, Any]) -> list[str]:
+    """The ids a hypothesis may declare reliance on: presented, minus host-tier background
+    (DESIGN §7.4: target- and sibling-tier ids only)."""
+    host = set(host_claim_ids(evidence))
+    return [str(i) for i in evidence.get("claim_ids") or () if str(i) not in host]
+
+
+def reliance(declared: Any, presented: Iterable[str],
+             refused_host: Iterable[str] = ()) -> dict[str, Any]:
     """Shown is not relied on: only an explicit reply declaration counts, and only for ids that
-    were presented as USABLE. Anything else is recorded as rejected, never raised."""
+    were presented as USABLE. Anything else is recorded as rejected, never raised. A host-tier id
+    (`refused_host`) was presented but is background only: rejected as `host_tier`."""
     items = declared if isinstance(declared, list) else ([] if declared is None else [declared])
     presented = set(presented)
+    host = set(refused_host)
     accepted, rejected = [], []
     for item in items:
-        if isinstance(item, str) and item in presented:
+        if isinstance(item, str) and item in presented and item not in host:
             if item not in accepted:
                 accepted.append(item)
         else:
             rejected.append({"claim_id": item if isinstance(item, str) else repr(item)[:80],
-                             "reason": "not_presented"})
+                             "reason": ("host_tier" if isinstance(item, str) and item in host
+                                        else "not_presented")})
     return {"declared": [i if isinstance(i, str) else repr(i)[:80] for i in items],
             "accepted": accepted, "rejected": rejected}
+
+
+def _v2_fields(evidence: Mapping[str, Any]) -> dict[str, Any]:
+    """The DESIGN §7.4 answer keys, tolerant of an older answer that has none of them."""
+    tiers = evidence.get("tiers")
+    index = evidence.get("tried_index")
+    return {"tiers": dict(tiers) if isinstance(tiers, Mapping) else None,
+            "nonempty_target": (evidence["nonempty_target"]
+                                if isinstance(evidence.get("nonempty_target"), bool) else None),
+            "tried_index_count": (len(index) if isinstance(index, (list, tuple, Mapping))
+                                  else None),
+            "banner": bool(evidence.get("banner")) if "banner" in evidence else None,
+            "host_claim_ids": host_claim_ids(evidence)}
 
 
 def metrics_summary(belief: ReadyAnswer) -> str:
@@ -469,7 +501,8 @@ def metrics_summary(belief: ReadyAnswer) -> str:
                        "withdrawn_claim_ids": list(evidence.get("withdrawn_claim_ids") or []),
                        "runs": [{"source_kind": r.get("source_kind"), "run": r.get("run"),
                                  "status": r.get("status")} for r in evidence.get("runs") or []],
-                       "reasons": list(evidence.get("reasons") or [])}, sort_keys=True)
+                       "reasons": list(evidence.get("reasons") or []),
+                       "v2": _v2_fields(evidence)}, sort_keys=True)
 
 
 def _module_sha256() -> str:
@@ -520,6 +553,8 @@ def seal_receipt(belief: ReadyAnswer | None, *, prompt: str | None, workspace: s
         "omitted_count": int(evidence.get("omitted_count") or 0),
         "section_sha256": evidence.get("section_sha256") or "",
         "section_bytes": int(evidence.get("section_bytes") or 0),
+        # DESIGN §7.4 keys (None on an older answer): what the section held, by tier.
+        "evidence_v2": _v2_fields(evidence),
         "outcome": dict(outcome),
         "reliance": dict(relied or reliance(None, ())),
     }

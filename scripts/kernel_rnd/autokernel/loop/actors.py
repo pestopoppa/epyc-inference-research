@@ -2500,7 +2500,8 @@ def _render_long_context(section: Mapping[str, Any], *, limit: int = 12) -> list
     return lines
 
 
-def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
+def render_context(context: Mapping[str, Any], *, limit: int = 12,
+                   belief_section: str = "") -> str:
     """The bundle, as the actor sees it. Everything here was previously discarded."""
     lines: list[str] = []
     cpu = _cpu_target(context)
@@ -2934,6 +2935,11 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     else:
         lines.append("(nothing yet)")
 
+    # The belief-kernel section sits directly after the in-store memory it extends
+    # (DESIGN §7.5); it used to be appended to the prompt tail by `propose()`.
+    if belief_section:
+        lines.append("\n" + belief_section)
+
     shared = context.get("shared_prior_experiments")
     if shared:
         lines.append("\n## Shared historical mechanisms — transfer NOT established")
@@ -3136,7 +3142,12 @@ Propose exactly one hypothesis. Reply with ONE json object and nothing else:
   "statement": "<what changes, mechanically, and why it should be faster>",
   "falsifier": "<the measurement that would prove this wrong>",
   "target_surface": "<{target_path}>",
-  "target_symbol": "<the function you will change>"}}
+  "target_symbol": "<the function you will change>",
+  "relies_on_claims": ["<belief-section claim id your mechanism depends on>"]}}
+
+"relies_on_claims" lists the claim ids (clm_...) from the belief-kernel evidence section \
+that your mechanism depends on; [] if none. Only target- and sibling-scoped claims count; \
+host-ceiling lines are background and are not accepted as reliance.
 
 Rules: {profile_rule}; name a MECHANISM, not a wish; \
 state a falsifier that could actually fail. The loop itself owns source inspection, \
@@ -3483,8 +3494,10 @@ class AgentPlanner:
                         ) -> dict[str, Any] | None:
         """Seal and append the planner-evidence receipt (v2); returns it."""
         try:
-            presented = belief.evidence.get("claim_ids") or () if belief is not None else ()
-            relied = belief_context.reliance(declared, presented)
+            evidence = belief.evidence if belief is not None else {}
+            presented = evidence.get("claim_ids") or ()
+            relied = belief_context.reliance(declared, presented,
+                                             belief_context.host_claim_ids(evidence))
             receipt = belief_context.seal_receipt(
                 belief, prompt=prompt, workspace=self.workspace,
                 seat_arm=(env or {}).get(SEAT_ENV_ARM), outcome=outcome, relied=relied,
@@ -3592,7 +3605,7 @@ class AgentPlanner:
             return prompt
         return _lane_block(role, Path(self.workspace), context) + "\n\n" + prompt
 
-    def _context_block(self, role: str, context: Mapping[str, Any]):
+    def _context_block(self, role: str, context: Mapping[str, Any], belief_section: str = ""):
         """The context text for one call, and the variable-mode bundle behind it.
 
         Inline (the default, and every non-opencode backend): `render_context`
@@ -3600,8 +3613,13 @@ class AgentPlanner:
         text is its index. A bundle that cannot be written degrades to inline and
         the call is recorded under the unsuffixed arm -- an A/B must never count an
         inline prompt as a variable-mode call."""
-        text = render_context(context)
         mode = self.seat.context_mode if self.seat is not None else "inline"
+        # The belief section rides inside the rendered context (right after `## Already
+        # tried`) only when the context is inline; a bundle keeps it out of the bundle and
+        # the caller appends it to the prompt tail, as before.
+        bundled = ((mode == "orchestrator-variable" and self.backend.kind == "orchestrator")
+                   or (mode == "variable" and self.backend.kind == "opencode"))
+        text = render_context(context, belief_section="" if bundled else belief_section)
         if mode == "orchestrator-variable":
             # INF-78 OAB-7: the ORCHESTRATOR's REPL holds the bundle as `context`; only
             # the orchestrator kind can carry it (every other kind stays inline).
@@ -3650,7 +3668,7 @@ class AgentPlanner:
         # `BeliefContextRefused` (the loop then runs degraded mode, never a blind plan).
         belief = self._belief_ready(context)
         cpu = _cpu_target(context)
-        context_text, bundle = self._context_block("planner", context)
+        context_text, bundle = self._context_block("planner", context, belief.section)
         prompt = _HYPOTHESIS_TASK.format(
             context=context_text,
             platform=("the CPUs in the selected original serving launch" if cpu else
@@ -3676,7 +3694,9 @@ class AgentPlanner:
                            "or establish a causal explanation for a sampled hotspot.")
         # Belief-kernel section (ROOT-rendered): present only when claims apply to this
         # exact target; bounded and neutral. Its absence still carries a verified ledger state.
-        if belief.section:
+        # It is already inside `context_text` (after `## Already tried`) unless the context
+        # went out as a bundle, or a bundle failed and the call degraded to inline text.
+        if belief.section and belief.section not in prompt:
             prompt += "\n\n" + belief.section
         prompt = self._concise(prompt)
         if self._answer_protocol_on():
