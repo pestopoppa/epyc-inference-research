@@ -236,17 +236,27 @@ class TestAgg(unittest.TestCase):
         nl3 = {x["id"]: (1 if x["id"].startswith("131000") else 2) for x in r}
         self.assertFalse(agg_scoring.info_amount_control(r, nl3)["available"])
 
-    def test_noninferiority_verdicts(self):
+    def test_net_paired_mcnemar(self):
         ids = [f"i{k}" for k in range(40)]
-        cl = {i: k // 4 for k, i in enumerate(ids)}
-        base = {i: 1.0 for i in ids}
-        self.assertEqual(agg_scoring.noninferiority(base, dict(base), cl)["verdict"], "PASS")
-        bad = {i: 0.0 for i in ids}
-        self.assertEqual(agg_scoring.noninferiority(base, bad, cl)["verdict"], "FAIL")
-        few = ids[:20]
-        a0 = {i: 1.0 for i in few}
-        a1 = {i: (0.0 if k == 0 else 1.0) for k, i in enumerate(few)}  # diff -0.05: above the margin, CI too wide
-        self.assertEqual(agg_scoring.noninferiority(a0, a1, {i: i for i in few})["verdict"], "INCONCLUSIVE")
+        same = {i: 1.0 for i in ids}
+        r = agg_scoring.net_paired_mcnemar(same, dict(same))
+        self.assertEqual((r["verdict"], r["n_discordant"]), ("NOT-FAIL", 0))
+        # 5 items lost, 0 gained: p = 0.5**5 = 0.03125 <= 0.05 -> FAIL even though the drop is only 12.5%
+        a1 = {i: (0.0 if k < 5 else 1.0) for k, i in enumerate(ids)}
+        r = agg_scoring.net_paired_mcnemar(same, a1)
+        self.assertEqual((r["verdict"], r["b_a0right_a1wrong"], r["c_a0wrong_a1right"]), ("FAIL", 5, 0))
+        self.assertAlmostEqual(r["p_one_sided"], 0.03125)
+        self.assertAlmostEqual(r["mean_score_diff_a1_minus_a0"], -0.125)
+        # 4 lost, 0 gained: p = 0.0625 > 0.05 -> NOT-FAIL (point estimate still reported)
+        a1 = {i: (0.0 if k < 4 else 1.0) for k, i in enumerate(ids)}
+        self.assertEqual(agg_scoring.net_paired_mcnemar(same, a1)["verdict"], "NOT-FAIL")
+        # losses offset by gains: 6 lost / 5 gained is not significant
+        a0 = {i: (1.0 if k < 6 else 0.0) for k, i in enumerate(ids)}
+        a1 = {i: (0.0 if k < 6 else (1.0 if k < 11 else 0.0)) for k, i in enumerate(ids)}
+        r = agg_scoring.net_paired_mcnemar(a0, a1)
+        self.assertEqual((r["b_a0right_a1wrong"], r["c_a0wrong_a1right"], r["verdict"]), (6, 5, "NOT-FAIL"))
+        # partial credit is not "right"
+        self.assertEqual(agg_scoring.net_paired_mcnemar({"x": 0.75}, {"x": 1.0})["c_a0wrong_a1right"], 1)
 
     def test_exact_match(self):
         self.assertTrue(agg_scoring.exact_match(" Hello  World. ", "hello world"))

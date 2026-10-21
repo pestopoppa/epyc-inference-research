@@ -3,7 +3,7 @@
 * Oolong records are the OOL-1 adapter's (``oolong_adapter.make_record``): ``score``, ``attempted``,
   ``no_answer``, ``failure_class``, ``context_window_id``, ``usage``. This module bins them by REAL prompt
   tokens and adds the attempted / no-answer rates and the HoloBench-style constant-info control.
-* ``noninferiority`` implements the pre-declared margin rule in ``arms.MARGINS``.
+* ``net_paired_mcnemar`` implements the ratified "Net, paired" rule in ``arms.MARGINS`` (no absolute slack).
 * ``exact_match`` is the LongBioBench grader.
 """
 
@@ -18,7 +18,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from scripts.benchmark.yarn_gate import retokenize
 from scripts.benchmark.yarn_gate.arms import MARGINS
 
-MARGIN = MARGINS["in_native_noninferiority"]
+ALPHA = MARGINS["alpha"]
 
 
 def record_real_n(rec: Mapping[str, Any]) -> int | None:
@@ -100,23 +100,29 @@ def info_amount_control(records: Iterable[Mapping[str, Any]], num_labels_by_id: 
     return res
 
 
-def noninferiority(a0: Mapping[Any, float], a1: Mapping[Any, float], cluster_of: Mapping[Any, Any],
-                   margin: float = MARGIN, n_boot: int = 2000, seed: int = 0) -> dict:
-    """Paired (same item ids) A1 - A0 with a context-clustered bootstrap. See ``arms.MARGINS.verdict_rule``."""
+def _binom_sf(b: int, n: int) -> float:
+    """P(X >= b) for X ~ Binomial(n, 0.5), exact."""
+    if n == 0:
+        return 1.0
+    return sum(math.comb(n, k) for k in range(b, n + 1)) / 2 ** n
+
+
+def net_paired_mcnemar(a0: Mapping[Any, float], a1: Mapping[Any, float], alpha: float = ALPHA,
+                       right_at: float = 1.0) -> dict:
+    """Net, paired: A1 FAILS iff the one-sided exact McNemar p (b = A0 right/A1 wrong discordants) <= alpha.
+
+    Pairs are the item ids present in both arms. Also returns the point estimate (mean paired score
+    difference, b, c). No absolute slack: a tiny but significant net loss FAILS; a large nonsignificant one
+    does not, so the verdict string is always accompanied by the point estimate and the power note."""
     ids = sorted(set(a0) & set(a1), key=str)
-    if not ids:
-        return {"verdict": "INCONCLUSIVE", "reason": "no paired items", "n": 0}
-    by: dict[Any, list[float]] = defaultdict(list)
-    for i in ids:
-        by[cluster_of.get(i, i)].append(a1[i] - a0[i])
-    g = list(by.values())
-    point = sum(map(sum, g)) / len(ids)
-    rng = random.Random(seed)
-    b = sorted(_boot_mean(g, rng) for _ in range(n_boot))
-    lo, hi = b[int(0.025 * (n_boot - 1))], b[int(math.ceil(0.975 * (n_boot - 1)))]
-    verdict = "PASS" if lo >= -margin else ("FAIL" if point < -margin else "INCONCLUSIVE")
-    return {"verdict": verdict, "n": len(ids), "n_clusters": len(g), "diff": point, "lo95": lo, "hi95": hi,
-            "margin": margin}
+    b = sum(1 for i in ids if a0[i] >= right_at and a1[i] < right_at)
+    c = sum(1 for i in ids if a0[i] < right_at and a1[i] >= right_at)
+    p = _binom_sf(b, b + c)
+    n = len(ids)
+    diff = sum(a1[i] - a0[i] for i in ids) / n if n else None
+    return {"verdict": "FAIL" if (b + c) > 0 and p <= alpha else "NOT-FAIL", "n_pairs": n, "b_a0right_a1wrong": b,
+            "c_a0wrong_a1right": c, "n_discordant": b + c, "p_one_sided": p, "alpha": alpha,
+            "mean_score_diff_a1_minus_a0": diff, "rule": "Net, paired (one-sided exact McNemar), no absolute slack"}
 
 
 _WS = re.compile(r"\s+")

@@ -15,9 +15,13 @@ NOMINAL_LENGTHS_BEYOND = (409600, 512000)  # 400K, 500K
 
 #: Pre-declared before any run (2026-10-21, YARN-AGG-1). Operator may amend ONLY before the first run.
 MARGINS = {
-    "in_native_noninferiority": 0.10,  # A1 must not fall below A0 by more than this (absolute score, 0..1)
-    "verdict_rule": "paired context-clustered bootstrap of (A1 - A0): PASS iff the 95% lower bound >= -margin; "
-                    "FAIL iff the point estimate < -margin; otherwise INCONCLUSIVE (never reported as PASS)",
+    # Operator-ratified "Net, paired" form (2026-10-21). No absolute slack.
+    "in_native_rule": "Net, paired: inside the native window A1 FAILS iff a one-sided exact McNemar test on the "
+                      "paired discordant items (A0 right / A1 wrong = b, versus A0 wrong / A1 right = c) is "
+                      "significant at alpha = 0.05, i.e. P(X >= b | n = b + c, p = 0.5) <= 0.05; otherwise NOT-FAIL. "
+                      "The point estimate (mean paired score difference, b, c) is always reported beside the verdict.",
+    "alpha": 0.05,
+    "right_threshold": "an item is RIGHT iff its score >= 1.0 (fully correct); partial-credit scores count as wrong",
     "needle_cells_keep": "A1 >= A0 - 1 correct of 10 (E1 rule, unchanged)",
     "bins": "REAL prompt_n, step 32768; zone from retokenize.label_zone only",
 }
