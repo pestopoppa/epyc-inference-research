@@ -32,18 +32,18 @@ Who runs what:
 
 | Item | Value |
 |---|---|
-| Binary | `/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/llama-server` (autokernel champion `ef81196d5`, HIP build: `GGML_HIP=ON`, `GGML_HIP_GRAPHS=ON`) |
-| Source | `/mnt/raid0/llm/tmp/fold-ef81196d5-src` |
+| Binary | `/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server` (autokernel champion fold `dd3d9721c`, build 10345, kernel-STORE build with SHA256SUMS + LINKAGE.txt; was the tmp build `ef81196d5` until 2026-10-21; HIP build: `GGML_HIP=ON`, `GGML_HIP_GRAPHS=ON`) |
+| Source | `/mnt/raid0/llm/worktrees/slotdraft-30574-20261020` (commit dd3d9721c; see the build's PROVENANCE.md) |
 | Device | `--device ROCm0 -ngl 99` (the MI210 is `/sys/class/drm/card2`, 64 GiB) |
-| Loader env | `LD_LIBRARY_PATH=/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin`, `HSA_OVERRIDE_GFX_VERSION` unset (from `Recipe.server_env`) |
+| Loader env | `LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin`, `HSA_OVERRIDE_GFX_VERSION` unset (from `Recipe.server_env`) |
 
 Before trusting any number, prove the binary loads its own ggml. The HIP backend
 is dlopen'ed, so `ldd` alone proves nothing.
 
 ```bash
-LD_LIBRARY_PATH=/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin \
-  scripts/utils/verify_ggml_linkage.sh /mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/llama-server \
-  /mnt/raid0/llm/tmp/build-fold-ef81196d5
+LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin \
+  scripts/utils/verify_ggml_linkage.sh /mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server \
+  /mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c
 ```
 
 GPU residency is proved separately: the smoke test samples MI210 VRAM
@@ -89,15 +89,15 @@ Reader launch lines as printed by the helper (`--port 8199`):
 
 ```bash
 # 35B-A3B-MTP, np=4
-env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin \
-  taskset -c 184-191 /mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/llama-server \
+env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin \
+  taskset -c 184-191 /mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server \
   -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf -np 4 -c 786432 -t 8 -tb 8 -b 2048 -ub 2048 \
   -ctk f16 -ctv f16 --device ROCm0 -ngl 99 -fa on --host 127.0.0.1 --port 8199 --metrics --slots \
   --spec-type draft-mtp --spec-draft-n-max 4 --no-kv-unified --ctx-checkpoints 8 --cache-ram 16384
 
 # 27B + DFlash2, np=1
-env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin \
-  taskset -c 184-191 /mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/llama-server \
+env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin \
+  taskset -c 184-191 /mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server \
   -m /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf -np 1 -c 196608 -t 8 -tb 8 -b 2048 -ub 2048 \
   -ctk f16 -ctv f16 --device ROCm0 -ngl 99 -fa on --host 127.0.0.1 --port 8199 --metrics --slots \
   -md /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf -ngld 99 --spec-type draft-dflash \
@@ -291,8 +291,8 @@ The non-ORIG `gemma-4-26B-A4B-it-Q4_K_M*.gguf` files are **not** the judge.
 - everything else canonical.
 
 ```bash
-env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin \
-  taskset -c 184-191 /mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/llama-server \
+env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin \
+  taskset -c 184-191 /mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server \
   -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q8_0.gguf -np 4 -c 32768 -t 8 -tb 8 -b 2048 -ub 2048 \
   -ctk f16 -ctv f16 --device ROCm0 -ngl 99 -fa on --host 127.0.0.1 --port 8199 --metrics --slots \
   --no-kv-unified --reasoning off
