@@ -6,13 +6,15 @@
 # is owned by the pid you name (a foreign server answers /models too) and is not a production port.
 #
 # CME-5 SIZING (decided 2026-10-21, queue-builders-3; see handoffs/active/conversational-memory-eval-instrument.md):
-#   * 3 runs execute CONCURRENTLY, each an append-only history -> the server needs 3 slots, one per run.
-#   * per-run cap --system.max-context-tokens 120000 (default) -> >= 131072 positions per slot:
-#       llama-server -np 3 -c 393216 --metrics  (prompt cache ON, the default; NO --kv-unified, NO ctx-shift)
-#     The smoke's real history is far shorter than the cap (5 hands); the cap is sized so the truncation path
-#     never fires and a later full schedule reuses the same server recipe.
-#   * acceptance: all 3 runs x 5 hands complete, and cache_hit_report.py hit_ratio_reusable >= 0.95 (its
-#     docstring defines why the gate is over prefix-reusable tokens, not raw cached/input).
+#   * 3 runs execute CONCURRENTLY, each an append-only history -> the server needs >= 3 slots, one per run.
+#   * per-run cap --system.max-context-tokens 120000 (default) -> >= 131072 positions per slot.
+#   * NO new recipe: use the existing eval recipe qwen3.6-35b-a3b-q8-gpu-mtp-longctx196k-np4 (4 slots x 196608 per slot,
+#     --ctx-checkpoints, --cache-ram, prompt cache on, --no-kv-unified, taskset 184-191, MI210), launched from
+#       python scripts/benchmark/m12_launch_argv.py artifacts/serving-recipes/eval/qwen3.6-35b-a3b-q8-gpu-mtp-longctx196k-np4.json --port <PRIVATE>
+#     on a PRIVATE port (not 8199: that is the operator's replay server). The smoke's real history is far shorter than the cap
+#     (5 hands); the cap is chosen so the truncation path never fires and a later full schedule reuses the same server recipe.
+#   * acceptance: all 3 runs x 5 hands complete, and cache_hit_report.py hit_ratio_reusable >= 0.95 (its docstring defines
+#     why the gate is over prefix-reusable tokens, not raw cached/input).
 #
 #   WINDOW_CONFIRMED=1 CLBENCH_EPYC_BASE_URL=http://127.0.0.1:PORT/v1 CLBENCH_SERVER_PID=<pid of that llama-server> \
 #     EPYC_MODEL=<served model id> scripts/benchmark/run_clbench_epyc_local.sh
