@@ -1,0 +1,6 @@
+{"task":"DS41-B3.1.1","date":"2026-10-21","verdict":"BIT-IDENTICAL",
+ "fix":{"commit":"6b8291de5dfdd798c09f76c3ad1801098ebd1c59","libllama":"libllama.so.0.0.10349","mtime":"2026-10-21T14:56:13Z"},
+ "base":{"commit":"9154bb28f","libllama":"libllama.so.0.0.10346","mtime":"2026-10-21T14:56:40Z"},
+ "config":{"threads":24,"cpuset":"48-71","mmap":true,"n_ctx":8192,"n_predict":64,"rows_per_prompt":65,"topk":10},
+ "prompts":{"p00":{"logits_identical":true,"tokens_identical":true,"steps_identical":true},"p01":{"logits_identical":true,"tokens_identical":true,"steps_identical":true},"p02":{"logits_identical":true,"tokens_identical":true,"steps_identical":true},"p03":{"logits_identical":true,"tokens_identical":true,"steps_identical":true}},
+ "first_divergence":null,"nan":0}
