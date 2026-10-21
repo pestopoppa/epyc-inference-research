@@ -48,7 +48,7 @@ PATH_AGGREGATE_LIMITATION = (
     "that hits one weight path, prefill included -- their bandwidth is "
     "NOT a roofline reading. The ROOFLINE GAP table below is the "
     "per-node replacement for that framing.")
-CONTROL_SHA256 = "e2fb5be1fe090be9e4c47171b510f0769b6841ca24ab5b5721ba710e9c4b5d8a"
+CONTROL_SHA256 = "a51bcb9fe5e66aaf0d47777bf38995448f1a92ea43bf5f38be757cfcc68bbb44"  # P1-G: control + relies_on_claims template delta
 NODE_PROFILE_SECTION_CHARS = 3878 + len(PATH_AGGREGATE_LIMITATION) + 1
 RUN8_RECORDED_SHA256 = "72c8677850d955b2598bd9d7254460b0fdead5c0ee2f150c80e897ae0ce47b99"
 CPU_FORMAT = dict(
@@ -84,6 +84,15 @@ RELIES_ON_TEMPLATE_DELTA = (
      'host-ceiling lines are background and are not accepted as reliance.\n\n', ""))
 
 
+def _with_relies_delta(prompt: str) -> str:
+    """Apply the P1-G template delta (forward) to a prompt made under the old template."""
+    old_tail = '"<the function you will change>"}\n\nRules:'
+    assert prompt.count(old_tail) == 1
+    return prompt.replace(
+        old_tail, '"<the function you will change>"' + RELIES_ON_TEMPLATE_DELTA[0][0]
+        + '}\n\n' + RELIES_ON_TEMPLATE_DELTA[1][0] + 'Rules:', 1)
+
+
 def _recorded_prompt() -> str:
     """Byte-for-byte what run 8 sent (less seven redactions)."""
     return FIXTURE.read_text(encoding="utf-8")
@@ -94,7 +103,9 @@ def _real_prompt() -> str:
     historical = CONTROL_FIXTURE.read_text(encoding="utf-8")
     marker = "\n\n### Host phases, share of decode"
     assert historical.count(marker) == 1
-    return historical.replace(marker, "\n" + PATH_AGGREGATE_LIMITATION + marker, 1)
+    prompt = historical.replace(marker, "\n" + PATH_AGGREGATE_LIMITATION + marker, 1)
+    # P1-G: the live template also carries `relies_on_claims`; the frozen control predates it.
+    return _with_relies_delta(prompt)
 
 
 def _run8_node_profile() -> dict:
@@ -117,10 +128,10 @@ def _real_context_text(prompt: str | None = None, *, legacy_suffix: bool = False
     the OLD ending, not today's."""
     marker = "\x00CONTEXT\x00"
     prefix, suffix = actors._HYPOTHESIS_TASK.format(context=marker, **CPU_FORMAT).split(marker)
-    for piece, replacement in RELIES_ON_TEMPLATE_DELTA:
-        assert suffix.count(piece) == 1, piece
-        suffix = suffix.replace(piece, replacement)
     if legacy_suffix:
+        for piece, replacement in RELIES_ON_TEMPLATE_DELTA:
+            assert suffix.count(piece) == 1, piece
+            suffix = suffix.replace(piece, replacement)
         assert suffix.endswith(ABSTAIN_IDENTITY_EXTENSION)
         suffix = suffix[:-len(ABSTAIN_IDENTITY_EXTENSION)]
     prompt = _real_prompt() if prompt is None else prompt
@@ -161,9 +172,11 @@ class NodeProfileIsExactlyOneInsertedSection(unittest.TestCase):
         self.assertEqual(hashlib.sha256(control.encode()).hexdigest(), CONTROL_SHA256)
         self.assertEqual(len(block), NODE_PROFILE_SECTION_CHARS)
         self.assertEqual(len(control) - len(recorded),
-                         NODE_PROFILE_SECTION_CHARS + len(ABSTAIN_IDENTITY_EXTENSION))
+                         NODE_PROFILE_SECTION_CHARS + len(ABSTAIN_IDENTITY_EXTENSION)
+                         + sum(len(piece) for piece, _ in RELIES_ON_TEMPLATE_DELTA))
         at = recorded.index("\n\n## Already tried\n") + 2
-        self.assertEqual(control, recorded[:at] + block + recorded[at:] + ABSTAIN_IDENTITY_EXTENSION)
+        self.assertEqual(control, _with_relies_delta(
+            recorded[:at] + block + recorded[at:] + ABSTAIN_IDENTITY_EXTENSION))
         self.assertTrue(block.startswith(actors.NODE_PROFILE_HEADER + "\n"))
 
     def test_render_context_inserts_exactly_that_section_and_nothing_else(self):
@@ -280,7 +293,8 @@ class InlineModeIsByteIdentical(unittest.TestCase):
         TODAY's template, is run 8's bytes plus exactly that one appended clause."""
         seen = self._captured(
             None, context_text=_real_context_text(_recorded_prompt(), legacy_suffix=True))
-        self.assertEqual(seen["prompt"], _recorded_prompt() + ABSTAIN_IDENTITY_EXTENSION)
+        self.assertEqual(seen["prompt"],
+                         _with_relies_delta(_recorded_prompt() + ABSTAIN_IDENTITY_EXTENSION))
 
     def test_variable_mode_is_inline_for_non_opencode_backends(self):
         seen = self._captured(actors.ActorSeat(context_mode="variable"),
