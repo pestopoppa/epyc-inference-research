@@ -109,7 +109,8 @@ def paired_record(a: Arm, b: Arm, *, pairs: int, base_seed: int, metric: str = "
     effect = _effect(a_med, b_med)
     if floor_pct is not None and floor_unit is None:
         raise ValueError("a supplied floor must state its unit")
-    decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
+    # a zero effect is never decisive, even against a zero floor (constant toy endpoints give floor 0)
+    decisive = None if floor_pct is None else (abs(effect) > 0 and abs(effect) * 100.0 >= floor_pct)
     ident = hashlib.sha256(json.dumps([a.name, b.name, metric, base_seed],
                                       sort_keys=True).encode()).hexdigest()
     return {"schema": SCHEMA, "recipe": name, "recipe_hash": ident, "recipe_env": {},
