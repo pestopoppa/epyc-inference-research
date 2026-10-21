@@ -116,7 +116,7 @@ class TestLocalJudge(unittest.TestCase):
 
 class TestKit(unittest.TestCase):
     def rows(self):
-        return [{"task": t, "question": f"q{i}", "answer": f"a{i}", "output": f"a{i}" if i % 2 else "zzz"}
+        return [{"task": t, "question": f"q{i}{t}", "answer": f"a{i}", "output": f"a{i}" if i % 2 else "zzz"}
                 for i in range(30) for t in ("longqa", "summ")][:60]
 
     def test_select_is_deterministic_stratified_deduped(self):
@@ -243,9 +243,9 @@ class TestAgg(unittest.TestCase):
         self.assertEqual(agg_scoring.noninferiority(base, dict(base), cl)["verdict"], "PASS")
         bad = {i: 0.0 for i in ids}
         self.assertEqual(agg_scoring.noninferiority(base, bad, cl)["verdict"], "FAIL")
-        few = ids[:4]
+        few = ids[:20]
         a0 = {i: 1.0 for i in few}
-        a1 = {i: (0.0 if k == 0 else 1.0) for k, i in enumerate(few)}
+        a1 = {i: (0.0 if k == 0 else 1.0) for k, i in enumerate(few)}  # diff -0.05: above the margin, CI too wide
         self.assertEqual(agg_scoring.noninferiority(a0, a1, {i: i for i in few})["verdict"], "INCONCLUSIVE")
 
     def test_exact_match(self):
