@@ -12,7 +12,19 @@ sys.path.insert(0, str(HERE))
 import fake_clbench_src  # noqa: E402
 from stub_server import StubServer  # noqa: E402
 
-fake_clbench_src.install()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _fake_src():
+    """Install the CL-Bench shims for this module only; never leak a fake `src` package."""
+    saved = {k: v for k, v in sys.modules.items() if k == "src" or k.startswith("src.")}
+    for k in saved:
+        del sys.modules[k]
+    fake_clbench_src.install()
+    yield
+    for k in [k for k in sys.modules if k == "src" or k.startswith("src.")]:
+        del sys.modules[k]
+    sys.modules.update(saved)
 
 
 def _load():

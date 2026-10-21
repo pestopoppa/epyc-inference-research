@@ -513,7 +513,20 @@ _BEAM_DIFFICULTY_TIER = {"easy": 1, "clear": 1, "medium": 2, "hard": 3}
 BEAM_CONTEXT_FULL = "full"      # BEAM's Vanilla column: the whole history (memory-off)
 BEAM_CONTEXT_RAG = "rag"        # naive-memory control: pair_chunk x BM25
 BEAM_CONTEXT_TRACE = "trace"    # arm under test: pair_chunk through the trace store
-BEAM_CONTEXT_MODES = (BEAM_CONTEXT_FULL, BEAM_CONTEXT_RAG, BEAM_CONTEXT_TRACE)
+# HS-PROF-1: profile-only arm. The prompt carries a frozen user-profile snapshot per
+# conversation (no transcript, no retrieval), built offline from the conversation by the
+# deriver; two snapshot files give the two arms (current ``PREF [category]`` format vs the
+# admission schema). Snapshots: {conversation_id: profile_text}.
+BEAM_CONTEXT_PROFILE = "profile"
+BEAM_CONTEXT_MODES = (BEAM_CONTEXT_FULL, BEAM_CONTEXT_RAG, BEAM_CONTEXT_TRACE,
+                      BEAM_CONTEXT_PROFILE)
+BEAM_PROFILE_SNAPSHOTS_ENV = "BEAM_PROFILE_SNAPSHOTS"
+BEAM_PROFILE_ARM_ENV = "BEAM_PROFILE_ARM"
+BEAM_ABILITIES_ENV = "BEAM_ABILITIES"  # comma list; unset = all abilities (unchanged)
+BEAM_PROFILE_HEADER = (
+    "The following is what is known about the user from earlier conversations "
+    "(a stored profile; the conversations themselves are not available).\n\n")
+BEAM_NO_PROFILE = "(empty profile)"
 BEAM_CONTEXT_MODE_ENV = "BEAM_CONTEXT_MODE"
 BEAM_RETRIEVAL_TOP_K_ENV = "BEAM_RETRIEVAL_TOP_K"
 #: ~10 x the median pair chunk (~2.9K chars) ~= 6K Qwen tokens: the same order as the
@@ -532,6 +545,8 @@ def beam_context_kind_of_prompt(prompt: str) -> str:
         return "full"
     if prompt.startswith(BEAM_RETRIEVED_HEADER):
         return "retrieved"
+    if prompt.startswith(BEAM_PROFILE_HEADER):
+        return "profile"
     return "unknown"
 
 
@@ -657,7 +672,9 @@ class BEAMAdapter(BaseAdapter):
 
     def __init__(self, data_dir: Path | str | None = None, split: str = "100K",
                  context_mode: str | None = None, retriever=None,
-                 retrieval_top_k: int | None = None):
+                 retrieval_top_k: int | None = None,
+                 profile_snapshots: dict | None = None, profile_arm: str | None = None,
+                 abilities: tuple | list | None = None):
         super().__init__()
         if split not in BEAM_SPLITS:
             raise ValueError(f"BEAM split must be one of {BEAM_SPLITS}, got {split!r}")
@@ -678,6 +695,23 @@ class BEAMAdapter(BaseAdapter):
         if top_k < 1:
             raise ValueError("retrieval_top_k must be >= 1")
         self.context_mode = mode
+        self._profile_snapshots: dict[str, str] | None = None
+        self.profile_arm = profile_arm or os.environ.get(BEAM_PROFILE_ARM_ENV) or None
+        if mode == BEAM_CONTEXT_PROFILE:
+            snaps = profile_snapshots
+            if snaps is None:
+                path = os.environ.get(BEAM_PROFILE_SNAPSHOTS_ENV)
+                if not path:
+                    raise ValueError(
+                        f"context_mode='profile' needs profile_snapshots or ${BEAM_PROFILE_SNAPSHOTS_ENV}")
+                snaps = json.loads(Path(path).read_text(encoding="utf-8"))
+            if not isinstance(snaps, dict) or not self.profile_arm:
+                raise ValueError("profile mode needs a {conversation_id: text} mapping and a profile_arm label")
+            self._profile_snapshots = {str(k): str(v) for k, v in snaps.items()}
+        ab = abilities
+        if ab is None and os.environ.get(BEAM_ABILITIES_ENV):
+            ab = [a.strip() for a in os.environ[BEAM_ABILITIES_ENV].split(",") if a.strip()]
+        self._abilities = tuple(ab) if ab else None
         self._retriever = retriever
         self._retrieval_top_k = top_k
 
@@ -774,7 +808,13 @@ class BEAMAdapter(BaseAdapter):
             }
             probing = _beam_parse_probing_questions(conv.get("probing_questions"),
                                                     conversation_id)
+            if self._abilities:
+                bad = sorted(set(self._abilities) - set(BEAM_ABILITIES))
+                if bad:
+                    raise ValueError(f"unknown BEAM abilities {bad}")
             for ability in BEAM_ABILITIES:
+                if self._abilities and ability not in self._abilities:
+                    continue
                 for q_index, question in enumerate(probing[ability]):
                     entries.append({
                         "conversation_id": conversation_id,
@@ -782,8 +822,15 @@ class BEAMAdapter(BaseAdapter):
                         "question_index": q_index,
                         "question": question,
                     })
+        if self.context_mode == BEAM_CONTEXT_PROFILE:
+            missing = sorted({e["conversation_id"] for e in entries} - set(self._profile_snapshots))
+            if missing:
+                raise BEAMLoadError(
+                    f"profile arm {self.profile_arm!r} has no snapshot for conversations {missing}; "
+                    "refusing to run an arm with silently dropped or empty-profile questions")
         self._dataset = entries
-        if entries and self.context_mode != BEAM_CONTEXT_FULL and self._retriever is None:
+        if entries and self.context_mode not in (BEAM_CONTEXT_FULL, BEAM_CONTEXT_PROFILE) \
+                and self._retriever is None:
             if self.context_mode == BEAM_CONTEXT_RAG:
                 self._retriever = BM25PairChunkRetriever(self._chunks)
             else:
@@ -796,7 +843,7 @@ class BEAMAdapter(BaseAdapter):
         return "\n\n".join(render_message(msg) for msg in messages)
 
     def retriever_name(self) -> str | None:
-        if self.context_mode == BEAM_CONTEXT_FULL:
+        if self.context_mode in (BEAM_CONTEXT_FULL, BEAM_CONTEXT_PROFILE):
             return None
         return getattr(self._retriever, "name", None) or "injected"
 
@@ -809,6 +856,10 @@ class BEAMAdapter(BaseAdapter):
         }
         if self.context_mode == BEAM_CONTEXT_FULL:
             record["ingest_filter"] = "full_history_prompt_no_retriever_lookup"
+        elif self.context_mode == BEAM_CONTEXT_PROFILE:
+            record.update({"profile_arm": self.profile_arm,
+                           "ingest_filter": "profile_snapshot_only_no_transcript_no_retriever_lookup",
+                           "abilities": list(self._abilities) if self._abilities else "all"})
         else:
             record.update({"chunking": CHUNKING, "retrieval_top_k": self._retrieval_top_k,
                            "retriever": self.retriever_name(),
@@ -858,6 +909,13 @@ class BEAMAdapter(BaseAdapter):
         retrieved_chunks = None
         if self.context_mode == BEAM_CONTEXT_FULL:
             prompt = BEAM_FULL_HEADER + f"{transcript}\n\n---\n\nUser: {question_text}"
+        elif self.context_mode == BEAM_CONTEXT_PROFILE:
+            if conversation_id not in self._profile_snapshots:
+                raise RuntimeError(
+                    f"profile arm {self.profile_arm!r} has no snapshot for conversation "
+                    f"{conversation_id!r}; refusing to emit a silently empty-profile prompt")
+            body = self._profile_snapshots[conversation_id].strip() or BEAM_NO_PROFILE
+            prompt = BEAM_PROFILE_HEADER + f"{body}\n\n---\n\nUser: {question_text}"
         else:
             if self._retriever is None:
                 raise RuntimeError(
@@ -911,6 +969,8 @@ class BEAMAdapter(BaseAdapter):
                 "context_mode": self.context_mode,
                 "retrieved_chunks": retrieved_chunks,
                 "prompt_chars": len(prompt),
+                **({"profile_arm": self.profile_arm}
+                   if self.context_mode == BEAM_CONTEXT_PROFILE else {}),
             },
             "provenance": self.provenance(conversation_id),
         }
