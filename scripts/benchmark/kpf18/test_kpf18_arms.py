@@ -5,6 +5,7 @@ are driven with a spec-only prompt set (token ids are never read at plan time).
 """
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import sys
 from pathlib import Path
@@ -288,3 +289,306 @@ def test_gate_registers_the_arm_items_and_all_stays_1_to_7():
         assert it in GATE.ITEMS
     assert {1, 2, 3, 4, 5, 6, 7} <= set(GATE.ITEMS)
     assert set(A.ARM_CMDS) == {"kpf181", "kpf182", "kpf183", "kpf18arms"}
+
+
+# ================================================================ a simulated server (plumbing tests)
+class FakeClient:
+    """Just enough of kpf18_gate.Client for the arms: /slots with checkpoints + prefix_hash ladder + fork block, /metrics
+    fork counters, erase, and /completion with the fork behaviour of the KPF-11 rule (the predictor itself decides: these
+    tests exercise the arm plumbing and record building, not the server). Generated tokens and logprobs are a pure
+    function of the prompt, so a fork and a cold run of the same prompt are bit-identical."""
+
+    def __init__(self, n_min=1024, ub=2048, enabled=True, hole=None):
+        self.n_min, self.ub, self.enabled = n_min, ub, enabled
+        self.slots_state = {i: {"tokens": [], "ckpts": [], "last_fork": 0} for i in range(4)}
+        self.n_forks = self.n_fork_tokens = 0
+        self.log = []
+        self.hole = hole or (lambda ids, p: p)     # lets a test make the "server" deviate from the rule
+
+    def slots(self):
+        out = []
+        for i, st in self.slots_state.items():
+            toks_ = st["tokens"]
+            marks = [c["n_tokens"] for c in st["ckpts"]] + [len(toks_)]
+            lad = A.prefix_hashes(toks_, marks)
+            out.append({"id": i, "is_processing": False, "n_prompt_tokens": len(toks_), "prefix_hash": lad[len(toks_)],
+                        "checkpoints": [{"n_tokens": c["n_tokens"], "pos_min": 0, "pos_max": c["n_tokens"] - 1,
+                                         "pinned": c["pinned"], "prefix_hash": lad[c["n_tokens"]]} for c in st["ckpts"]],
+                        "fork": {"n_fork_tokens": st["last_fork"]}})
+        return out
+
+    def metrics(self):
+        return {"llamacpp:slot_forks_total": float(self.n_forks), "llamacpp:slot_fork_tokens_total": float(self.n_fork_tokens),
+                "llamacpp:kv_cells_used": 0.0}
+
+    def erase(self, slot):
+        self.slots_state[slot] = {"tokens": [], "ckpts": [], "last_fork": 0}
+
+    def complete(self, body, timeout=0):
+        ids, slot, n = body["prompt"], body["id_slot"], body["n_predict"]
+        cache = body.get("cache_prompt", True)
+        p, src = 0, None
+        if self.enabled and cache and body.get("slot_fork", True):
+            pr = A.predict_fork(self.slots(), ids, slot, self.n_min, mode="checkpoint")
+            p, src = self.hole(ids, pr["p"]), pr["src"]
+        seed = sum(ids[::97]) + len(ids)
+        gen = [(seed + 31 * i) % 997 for i in range(n)]
+        probs = [{"id": t, "token": "x", "logprob": -0.1 * (i % 5),
+                  "top_logprobs": [{"id": t, "logprob": -0.1 * (i % 5)}, {"id": t + 1, "logprob": -3.0}]}
+                 for i, t in enumerate(gen)] if body.get("n_probs") else []
+        ck = []
+        for pos in body.get("checkpoint_at", []):
+            pos = len(ids) if pos == -1 else pos
+            if 0 < pos <= len(ids):
+                ck.append({"n_tokens": pos, "pinned": True})
+        if len(ids) > self.ub + 8:
+            ck += [{"n_tokens": len(ids) - 4 - self.ub, "pinned": False}, {"n_tokens": len(ids) - 4, "pinned": False}]
+        self.slots_state[slot] = {"tokens": list(ids) + gen, "ckpts": ck, "last_fork": p}
+        t = {"prompt_n": len(ids) - p, "cache_n": p, "predicted_n": n, "predicted_ms": 1.0, "prompt_ms": 5.0,
+             "prompt_per_second": 100.0, "predicted_per_second": 30.0}
+        if p:
+            t.update(n_fork_tokens=p, fork_src_kind="checkpoint", fork_src_slot=src)
+            self.n_forks += 1
+            self.n_fork_tokens += p
+        return {"http": 200, "wall_s": 0.01, "t_send": 0.0, "cache_prompt": cache, "tokens": gen, "probs": probs,
+                "timings": t, "timings_keys": sorted(t)}
+
+
+@pytest.fixture()
+def cpu_spec():
+    names = ("TRUNKS", "SUFFIXES", "SRC_TAIL_LONG", "SPEED_GROUP", "CPU_MODE")
+    saved = {k: getattr(GATE, k) for k in names}
+    spec = dict(GATE.SPEC)
+    GATE.set_cpu_spec()
+    yield
+    for k, v in saved.items():
+        setattr(GATE, k, v)
+    GATE.SPEC.clear()
+    GATE.SPEC.update(spec)
+
+
+def mk_args(tmp_path, **over):
+    ap = argparse.ArgumentParser()
+    A.add_arguments(ap)
+    ns = ap.parse_args([])
+    base = dict(out=str(tmp_path), card="/nonexistent", fork_bin="/x/bin/llama-server", fork_min=1024, n_predict=32,
+                n_probs=5, port=18999, budget_min=1e9, window_id="w", gpu_window_id=None, trigger_tokens=32)
+    base.update(over)
+    for k, v in base.items():
+        setattr(ns, k, v)
+    return ns
+
+
+def filled_prompt_set():
+    ps = GATE.PromptSet.from_spec()
+    for g, grp in ps.groups.items():
+        grp["trunk"] = toks(grp["T"], base=100 + g)
+        grp["suffixes"] = [[60000 + 10 * g + i] + toks(L - 1, base=7 + i) for i, L in enumerate(grp["suffix_lens"])]
+        grp["src_tail"] = [61000 + g] + toks(GATE.SRC_TAIL - 1, base=3)
+        grp["src_tail_long"] = [62000 + g] + toks(GATE.SRC_TAIL_LONG - 1, base=5)
+        grp["filler"] = toks(grp["T"], base=11)
+    ps.spec_only = False
+    ps.decoders = [toks(64), toks(64, base=2)]
+    return ps
+
+
+class FakeSrv(SimpleNamespace):
+    pass
+
+
+def mk_env(tmp_path, cpu_spec, *, cfg="mtp", fork_min=1024, argv=None, **argover):
+    args = mk_args(tmp_path, fork_min=fork_min, **argover)
+    gate_argv = argv or CPU_ARGV
+    ctx = GATE.Ctx(args, filled_prompt_set(), gate_argv, ["taskset", "-c", "0"], {})
+    ctx.client = FakeClient(n_min=fork_min, ub=A.ub_from_argv(gate_argv), enabled=bool(fork_min))
+    srv = FakeSrv(fork_min=fork_min, argv=["/x/llama-server"] + gate_argv, readback={
+        "slot_fork_from_launch_log": "cross-slot prefix fork enabled: mode = checkpoint, min tokens = 1024, cache_idle_slots = 0"
+        if fork_min else None}, binary="/x/llama-server")
+    return ctx, A.Env(ctx, GATE, srv, cfg)
+
+
+# ---------------------------------------------------------------- KPF-18.1: evaluators
+def _cell(role, got, *, expected=None, pred=None, **kw):
+    return A.make_cell(arm="a", cell_id=kw.pop("cid", "c"), role=role, slot=1, n_task=1000, lcp_client=500,
+                       timings={"n_fork_tokens": got} if got is not None else None, n_fork_slot=got,
+                       pred={"p": pred if pred is not None else 0, "kind": "checkpoint"}, ckpts_before=[],
+                       expected=expected, error=None if got is not None else "HTTP 500", **kw)
+
+
+def test_eval_181_A_counts_and_never_drops_an_error():
+    cells = [_cell("source", 0), _cell("sibling", 8000, expected=8000), _cell("sibling", 8000, expected=8000),
+             _cell("sibling", None, expected=8000)]
+    r = A.eval_181_A(cells)
+    assert (r["n"], r["n_equal_expected"], r["n_error"]) == (3, 2, 1) and r["predeclared_rule_satisfied"] is False
+    assert A.eval_181_A([_cell("sibling", 8000, expected=8000)])["predeclared_rule_satisfied"] is True
+    tail = A.eval_181_A([_cell("sibling", 0), _cell("sibling", 0)])
+    assert tail["predeclared_rule_satisfied"] is None and tail["n_fork_zero"] == 2 and tail["n_fork_max"] == 0
+
+
+def test_eval_181_B_requires_prediction_floor_and_hits():
+    good_vs = {"top1": True, "maxabs_union": 0.0, "kld": 0.0}
+    floors = [{"maxabs_union": 0.0, "kld": 0.0, "prefix": 256}]
+    ok = _cell("child", 5996, pred=5996, must_hit=True, cid="B1")
+    ok["vs_fresh"] = good_vs
+    r = A.eval_181_B([ok], floors)
+    assert r["predeclared_rule_satisfied"] is True and r["n_within_floor"] == 1
+    zero = _cell("child", 0, pred=5996, must_hit=True, cid="B2")
+    zero["vs_fresh"] = good_vs
+    r = A.eval_181_B([ok, zero], floors)
+    assert r["predeclared_rule_satisfied"] is False
+    assert r["n_zero_while_checkpoint_usable"] == 1 and r["n_must_hit_got_zero"] == 1
+    bad = _cell("child", 5996, pred=5996, must_hit=True, cid="B4")
+    bad["vs_fresh"] = {"top1": True, "maxabs_union": 0.2, "kld": 0.0}
+    assert A.eval_181_B([bad], floors)["n_outside_floor"] == 1
+    nov = _cell("child", 5996, pred=5996, cid="B5")                         # no cold control recorded: unmeasured, not passed
+    assert A.eval_181_B([nov], floors)["predeclared_rule_satisfied"] is False
+    off = A.eval_181_B([_cell("child", 0), _cell("child", 12)], [], fork_on=False)
+    assert off["n_equal_expected"] == 1 and off["predeclared_rule_satisfied"] is False
+
+
+def test_eval_181_C_all_lengths_must_fork_and_stay_within_the_floor():
+    floors = [{"maxabs_union": 0.01, "kld": 0.001, "prefix": 100}, {"maxabs_union": 0.02, "kld": 0.002, "prefix": 256}]
+    def child(L, got, m, top1=True):
+        c = _cell("child", got, expected=L, cid=f"L{L}")
+        c["vs_fresh"] = {"top1": top1, "maxabs_union": m, "kld": 0.0005, "prefix": 90}
+        return c
+    ok = [child(7168, 7168, 0.015), child(7200, 7200, 0.02)]
+    r = A.eval_181_C(ok, floors)
+    assert r["predeclared_rule_satisfied"] is True and r["greedy_prefix_vs_fresh_median"] == 90
+    bad = ok + [child(7232, 7168, 0.0)]
+    r = A.eval_181_C(bad, floors)
+    assert r["n_not_forked_at_L"] == 1 and r["predeclared_rule_satisfied"] is False
+    assert A.eval_181_C(ok + [child(7232, 7232, 0.5)], floors)["n_outside_floor"] == 1
+    assert A.eval_181_C(ok + [child(7232, 7232, 0.0, top1=False)], floors)["predeclared_rule_satisfied"] is False
+
+
+def test_eval_181_D_measures_the_drop_at_the_holdout_and_does_not_subtract_it():
+    cells = [_cell("child", 8000, pred=8000, cid="j0"), _cell("child", 0, pred=0, cid="j-1")]
+    h = _cell("child", 4096, pred=8000, cid="h", holdout=True, lcp_target=9000)
+    r = A.eval_181_D(cells + [h])
+    assert r["n_cells"] == 2 and r["predeclared_rule_satisfied"] is True
+    assert r["holdout_drop"]["drop"] == 3904 and r["holdout_drop"]["kind"] == "partial"
+    r2 = A.eval_181_D([_cell("child", 0, pred=8000, cid="x")])
+    assert r2["predeclared_rule_satisfied"] is False and r2["n_zero_while_checkpoint_usable"] == 1
+    h0 = _cell("child", 0, pred=8000, cid="h", holdout=True)
+    assert A.eval_181_D(cells + [h0])["holdout_drop"]["kind"] == "full"
+
+
+# ---------------------------------------------------------------- KPF-18.1: arms against the simulated server
+def test_arm_A_fork_on_and_fork_off(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_181_A(env, [0], 3, with_ckpt=True, expect="T", tag="")
+    rr = R.extra["rule_result"]
+    assert rr["n_equal_expected"] == 3 and rr["predeclared_rule_satisfied"] is True
+    assert all(c["n_fork_tokens"] == 4096 for c in R.extra["cells"] if c["role"] == "sibling")
+    assert all(c["n_fork_tokens_slot"] == c["n_fork_tokens"] for c in R.extra["cells"] if c["role"] == "sibling")
+    assert R.extra["counters_delta"]["slot_forks_total"] == 3
+    assert all(v["ok"] == v["n"] for v in {k: {"ok": sum(1 for c in cs if c["ok"]), "n": len(cs)} for k, cs in R.checks.items()}.values())
+    Rt = A.run_181_A(env, [0], 3, with_ckpt=False, expect=None, tag="")
+    assert Rt.extra["rule_result"]["n_fork_max"] < 4096          # no junction: nothing reaches the trunk length
+    ctx0, env0 = mk_env(tmp_path / "off", cpu_spec, fork_min=0)
+    (tmp_path / "off").mkdir(exist_ok=True)
+    R0 = A.run_181_A(env0, [0], 3, with_ckpt=True, expect="zero", tag="_forkoff")
+    assert R0.extra["rule_result"]["predeclared_rule_satisfied"] is True and R0.extra["counters_delta"]["slot_forks_total"] == 0
+
+
+def test_arm_A_detects_a_server_that_forks_short(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    ctx.client.hole = lambda ids, p: max(0, p - 3)               # the "server" loses 3 tokens
+    R = A.run_181_A(env, [0], 3, with_ckpt=True, expect="T", tag="")
+    assert R.extra["rule_result"]["predeclared_rule_satisfied"] is False
+    assert R.extra["rule_result"]["n_not_equal_expected"] == 3
+
+
+def test_arm_B_four_cases(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_181_B(env, 0, "")
+    ch = {c["cell"]: c for c in R.extra["cells"] if c["role"] == "child"}
+    assert set(ch) == {"B1_resend_no_ckpt", "B2_resend_ckpt_end", "B3_child_eq_trunk_junction", "B4_child_eq_trunk_trunk_source"}
+    assert ch["B1_resend_no_ckpt"]["n_fork_tokens"] == ch["B1_resend_no_ckpt"]["n_task"] - 4
+    b3 = ch["B3_child_eq_trunk_junction"]    # the junction at T is not usable (p < n_task); the n-4-ub checkpoint inside the trunk is
+    assert b3["n_fork_tokens"] == b3["predicted_p"] == 4352 - 4 - 2048
+    assert ch["B4_child_eq_trunk_trunk_source"]["n_fork_tokens"] == 4096 - 4
+    assert R.extra["rule_result"]["predeclared_rule_satisfied"] is True
+    assert len(R.eq["control_floor"]) == 2                       # P0 and trunk each controlled once, B2/B4 reuse
+
+
+def test_arm_C_sweep_covers_sixteen_lengths_with_drafter_on_and_off(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    lengths = A.sweep_lengths(4096, 2048, 16)
+    R = A.run_181_C(env, 0, lengths, True)
+    rr = R.extra["rule_result"]
+    assert rr["n_lengths"] == 16 and rr["n_forked_at_L"] == 16 and rr["predeclared_rule_satisfied"] is True
+    Roff = A.run_181_C(env, 0, lengths, False)
+    assert Roff.dflash2 is False and Roff.extra["drafter_requested"] is False
+    assert all(c["dflash_requested"] is False for c in Roff.extra["cells"])
+    assert Roff.extra["rule_result"]["n_lengths"] == 16
+
+
+def test_arm_D_nine_cells_plus_holdout_match_the_prediction(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_181_D(env, 0, 2048, True)
+    rr = R.extra["rule_result"]
+    assert rr["n_cells"] == 9 and rr["predeclared_rule_satisfied"] is True
+    assert rr["holdout_drop"]["drop"] == 0 and rr["holdout_drop"]["kind"] == "none"
+    cells = {c["cell"]: c for c in R.extra["cells"] if c["role"] == "child" and not c.get("holdout")}
+    assert cells["junction-1"]["n_fork_tokens"] == 0 and cells["junction+0"]["n_fork_tokens"] == 4096
+    assert cells["n_minus_4+0"]["n_fork_tokens"] == 8192 - 4 and cells["n_minus_4-1"]["n_fork_tokens"] == 8192 - 4 - 2048
+    assert R.extra["source_checkpoint_set"] == [4096, 8192 - 4 - 2048, 8192 - 4]
+
+
+def test_arm_D_flags_a_drafter_that_disables_the_fork(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    ctx.client.hole = lambda ids, p: 0                           # a configuration that kills every fork
+    R = A.run_181_D(env, 0, 2048, True)
+    rr = R.extra["rule_result"]
+    assert rr["predeclared_rule_satisfied"] is False and rr["n_zero_while_checkpoint_usable"] > 0
+    assert rr["holdout_drop"]["kind"] == "full"
+
+
+# ---------------------------------------------------------------- KPF-18.1: plan, dry-run estimates, preflight
+def mk_plan_ctx(tmp_path, **over):
+    args = mk_args(tmp_path, **over)
+    ps = GATE.PromptSet.from_spec()
+    return GATE.Ctx(args, ps, GPU_ARGV, ["numactl"], {}), args
+
+
+def test_plan_181_gpu_shape_has_all_arms_and_a_fork_off_baseline(tmp_path):
+    ctx, _ = mk_plan_ctx(tmp_path)
+    steps = A.BUILDERS[181](ctx, GATE)
+    descs = [s.desc for s in steps]
+    assert sum("linkage + launch" in d for d in descs) == 3      # fork on (dflash2), fork-off baseline, nodraft D
+    assert any("181 A [checkpoint_at=[T]]" in d for d in descs) and any("fork-OFF baseline" in d for d in descs)
+    assert any(d.startswith("181 C") and "drafter off" in d for d in descs) and any(d.startswith("181 C") and "drafter on" in d for d in descs)
+    assert any("181 D [nodraft]" in d for d in descs) and any("181 D [dflash2]" in d for d in descs)
+    total = sum(s.est_s for s in steps)
+    assert 600 < total < 4 * 3600                                # booking list: GPU ~1 h; an estimate, not a measurement
+    assert all(s.est_s >= 0 for s in steps)
+
+
+def test_plan_181_arm_selection_and_cpu_shape(tmp_path, cpu_spec):
+    args = mk_args(tmp_path, kpf181_arms="D", kpf_configs="as-given")
+    ctx = GATE.Ctx(args, GATE.PromptSet.from_spec(), CPU_ARGV, ["taskset"], {})
+    steps = A.BUILDERS[181](ctx, GATE)
+    assert sum("linkage + launch" in s.desc for s in steps) == 1 and any(s.desc.startswith("181 D [mtp]") for s in steps)
+
+
+def test_preflight_181(tmp_path):
+    ctx, args = mk_plan_ctx(tmp_path)
+    probs, notes = A.PREFLIGHTS[181](ctx, GATE)
+    assert probs == [] and any("181 C lengths 7168..7648 stride 32" in n for n in notes)
+    args.kpf181_lengths = 8
+    assert any(">= 16" in p for p in A.PREFLIGHTS[181](ctx, GATE)[0])
+    args.kpf181_lengths = 16
+    args.kpf181_groups = "9"
+    assert any("group 9" in p for p in A.PREFLIGHTS[181](ctx, GATE)[0])
+    args.kpf181_groups = None
+    args.fork_min = 0
+    assert any("--fork-min >= 1" in p for p in A.PREFLIGHTS[181](ctx, GATE)[0])
+
+
+def test_rules_181_are_predeclared_and_hashed():
+    assert set(A.RULES[181]) == {"common", "A", "B", "C", "D"}
+    sha = A.rules_sha256([181])
+    assert sha and sha == A.rules_sha256([181])
+    assert A.rules_for([181])["181"]["task"] == "KPF-18.1"
