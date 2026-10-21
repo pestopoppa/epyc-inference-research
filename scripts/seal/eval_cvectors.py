@@ -25,6 +25,7 @@ Requires a running llama-server instance.
 import argparse
 import json
 import re
+import struct
 import sys
 import time
 import urllib.error
@@ -410,6 +411,90 @@ def print_summary_table(all_results: dict, baseline_key: str = "baseline") -> di
 
 
 # ---------------------------------------------------------------------------
+# Control-vector hook preflight (RC-CVEC-HOOKS, intake-2201#record)
+# ---------------------------------------------------------------------------
+
+# Architectures whose graph builder never calls build_cvec(), so a loaded
+# control vector is a SILENT NO-OP (the server loads it without error and the
+# logits are unchanged).  Derived from, at production-consolidated-v10 (ffc1bac82):
+#   git -C /mnt/raid0/llm/llama.cpp grep -n build_cvec ffc1bac82 -- src/models/
+# qwen4exp.cpp (Qwen3.8-Flash-Next) has no build_cvec call (only a comment at
+# L391); qwen35.cpp:198 and qwen35moe.cpp:221 DO call it.  Other files without
+# a textual build_cvec (granite-moe, mamba2, minicpm, ...) delegate to a sibling
+# graph builder that has one, so they are NOT listed; re-resolve this set against
+# the grep whenever the production kernel version changes.
+NO_CVEC_HOOK_ARCHS = frozenset({"qwen4exp"})
+
+
+class ControlVectorNoHookError(RuntimeError):
+    """The target architecture ignores control vectors."""
+
+
+def check_cvec_hook(arch: str | None, cvector: str | None) -> None:
+    """Refuse to evaluate a control vector on an arch that ignores it.
+
+    No-op when no vector is loaded.  Raises ControlVectorNoHookError when
+    ``arch`` is in NO_CVEC_HOOK_ARCHS.  An unknown arch (None) only warns:
+    the caller could not prove hook coverage.
+    """
+    if cvector is None:
+        return
+    if arch is None:
+        print(
+            "WARNING: model architecture not given (--arch / --model-gguf); "
+            "control-vector hook coverage is UNVERIFIED.",
+            file=sys.stderr,
+        )
+        return
+    if arch.strip().lower() in NO_CVEC_HOOK_ARCHS:
+        raise ControlVectorNoHookError(
+            f"architecture '{arch}' has no build_cvec() call in the production "
+            f"kernel (ffc1bac82): a control vector is silently ignored, so any "
+            f"measured effect would be noise. Refusing to run. Known no-hook "
+            f"set: {sorted(NO_CVEC_HOOK_ARCHS)}."
+        )
+
+
+def read_gguf_arch(path: str) -> str:
+    """Read general.architecture from a GGUF header (metadata only, no tensors)."""
+    sizes = {0: "<B", 1: "<b", 2: "<H", 3: "<h", 4: "<I", 5: "<i", 6: "<f",
+             7: "<?", 10: "<Q", 11: "<q", 12: "<d"}
+
+    def rd(f, fmt):
+        n = struct.calcsize(fmt)
+        return struct.unpack(fmt, f.read(n))[0]
+
+    def rstr(f):
+        return f.read(rd(f, "<Q")).decode("utf-8", "replace")
+
+    def skip(f, t):
+        if t in sizes:
+            f.read(struct.calcsize(sizes[t]))
+        elif t == 8:
+            rstr(f)
+        elif t == 9:
+            et = rd(f, "<I")
+            for _ in range(rd(f, "<Q")):
+                skip(f, et)
+        else:
+            raise ValueError(f"unknown GGUF value type {t}")
+
+    with open(path, "rb") as f:
+        if f.read(4) != b"GGUF":
+            raise ValueError(f"{path}: not a GGUF file")
+        rd(f, "<I")  # version
+        rd(f, "<Q")  # tensor count
+        n_kv = rd(f, "<Q")
+        for _ in range(n_kv):
+            key = rstr(f)
+            t = rd(f, "<I")
+            if key == "general.architecture" and t == 8:
+                return rstr(f)
+            skip(f, t)
+    raise ValueError(f"{path}: general.architecture not found")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -458,7 +543,30 @@ def main() -> None:
         action="store_true",
         help="Interactive mode: run baseline + all scaling factors, prompting for server restart between each",
     )
+    parser.add_argument(
+        "--arch",
+        type=str,
+        default=None,
+        help="Model architecture (general.architecture); used to refuse "
+        "control vectors on archs without a build_cvec hook",
+    )
+    parser.add_argument(
+        "--model-gguf",
+        type=str,
+        default=None,
+        help="GGUF path; architecture is read from its header (metadata only)",
+    )
     args = parser.parse_args()
+
+    arch = args.arch
+    if arch is None and args.model_gguf:
+        arch = read_gguf_arch(args.model_gguf)
+    if not args.baseline_only:
+        try:
+            check_cvec_hook(arch, args.cvector)
+        except ControlVectorNoHookError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(2)
 
     problems = EVAL_PROBLEMS[: args.n_problems]
     scaling_factors = [float(s.strip()) for s in args.scaling.split(",")]

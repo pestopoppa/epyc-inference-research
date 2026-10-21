@@ -17,6 +17,10 @@ Usage:
 
 import subprocess, os, time, requests, json, sys
 
+# RC-CVEC-HOOKS: refuse control vectors on archs without a build_cvec hook.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "seal"))
+from eval_cvectors import ControlVectorNoHookError, check_cvec_hook, read_gguf_arch
+
 ENV = os.environ.copy()
 ENV["LD_LIBRARY_PATH"] = "/mnt/raid0/llm/llama.cpp/build/bin:/usr/lib/llvm-20/lib"
 SERVER = "/mnt/raid0/llm/llama.cpp/build/bin/llama-server"
@@ -90,6 +94,11 @@ def test_role(role):
 
     if not os.path.exists(cvec):
         return {"name": name, "status": "SKIPPED", "reason": f"cvector not found: {cvec}"}
+
+    try:
+        check_cvec_hook(read_gguf_arch(model), cvec)
+    except ControlVectorNoHookError as e:
+        return {"name": name, "status": "REFUSED", "reason": str(e)}
 
     print(f"\n{'='*60}")
     print(f"Testing role: {name}")
