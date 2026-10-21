@@ -6,6 +6,13 @@ Slot: **2026-10-22T22:00Z -> 2026-10-23T00:30Z (hard)**, q0+q1 (`--cpu-list 0-47
 
 Live copy: `/mnt/raid0/llm/tmp/ds41-w5ab-w62-20261021/`. The scripts here are the committed record.
 
+**Window change (coordinator, 2026-10-21 20:5xZ): `driver2.sh` supersedes `driver.sh`.** The CS-47 quiet latency run
+(90 min, full host) now goes first, right after the AK floor. `driver2.sh` (PID 1645930, armed 20:53:15Z) starts at the
+later of a fresh `/mnt/raid0/llm/tmp/compute-flags/grants/cs47-latency.ended` and 2026-10-22T23:30Z. If that flag
+never appears it falls back to 23:35Z, and the region-lock claim still blocks while 0-47 is held. **Hard stop
+2026-10-23T02:00Z**, exported to `inner.sh`. `driver.sh` (PID 1360538) was stopped on purpose while still in its wait loop,
+and its false end flag was removed. Everything below otherwise holds.
+
 - `driver.sh`: waits (shell sleep) for now >= 22:00Z AND the fresh flag, then takes ONE
   `region-lock run --cpu-list 0-47 --role build --tag ds41-w62-slot` claim. The acquire is bounded so
   it can never start later than 00:15Z, and it never starts within 20 min of HARD. It always writes
