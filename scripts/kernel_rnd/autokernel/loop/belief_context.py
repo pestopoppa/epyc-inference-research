@@ -34,7 +34,7 @@ MANDATORY, NOT ADVISORY (operator rules 2026-10-21). There is no "off" mode for 
      (belief-recheck.jsonl). A result is never reversed automatically.
 
 Config is argv-only (`run.py --belief-*`); the env var `EPYC_ROOT_REPO` only names a default
-ROOT path, it never switches belief context off.
+ROOT path, it never switches belief context off. ROOT resolves via `resolve_root_repo`.
 """
 
 from __future__ import annotations
@@ -54,6 +54,9 @@ from typing import Any, Callable, Iterable, Iterator, Mapping
 
 ROOT_REPO_ENV = "EPYC_ROOT_REPO"
 DEFAULT_ROOT = Path("/workspace")
+#: The hub-maintained view of ROOT origin/main, used when /workspace (a shared, possibly
+#: diverged clone nobody here may move) does not contain the reader.
+FALLBACK_ROOT = Path("/mnt/raid0/llm/views/epyc-root-main")
 READER_RELPATH = Path("scripts") / "vidya" / "loop_beliefs.py"
 CONSUMER = "autokernel.planner"
 #: The only planning mode. `--actor-belief-context` accepts nothing else.
@@ -95,8 +98,28 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def resolve_root_repo(explicit: str | Path | None = None, *,
+                      env: Mapping[str, str] | None = None) -> Path:
+    """The ROOT checkout the belief reader (and the serving-receipt adapter) is read from.
+
+    1. `--belief-root-repo` (`explicit`), verbatim; 2. env `EPYC_ROOT_REPO`, verbatim;
+    3. `/workspace`, IF it contains scripts/vidya/loop_beliefs.py; 4. else `FALLBACK_ROOT`
+    (the hub's view of origin/main), if it has the reader; 5. else `/workspace`, so a missing
+    reader stays what it is today: reader-missing, refused, critical alarm."""
+    if explicit:
+        return Path(explicit)
+    environ = os.environ if env is None else env
+    named = environ.get(ROOT_REPO_ENV)
+    if named:
+        return Path(named)
+    for candidate in (DEFAULT_ROOT, FALLBACK_ROOT):
+        if (candidate / READER_RELPATH).is_file():
+            return candidate
+    return DEFAULT_ROOT
+
+
 def root_repo(root: str | Path | None = None) -> Path:
-    return Path(root or os.environ.get(ROOT_REPO_ENV) or DEFAULT_ROOT)
+    return resolve_root_repo(root)
 
 
 def state_digest(state: Mapping[str, Any]) -> str:

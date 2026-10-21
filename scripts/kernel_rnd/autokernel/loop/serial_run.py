@@ -18,7 +18,7 @@ import threading
 import time
 import uuid
 
-from . import campaign_cli, champion, legacy_targets, status, worker_lifecycle
+from . import belief_context, campaign_cli, champion, legacy_targets, status, worker_lifecycle
 
 CONTINUATION_SCHEMA = "epyc.autokernel.loop_continuation.v1"
 CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
@@ -565,7 +565,7 @@ def read_last_outcome_reference(row):
             raw = _read(path, limit=16384)
             if hashlib.sha256(raw).hexdigest() != reference["sha256"]:
                 raise SerialRefused("last outcome serving receipt bytes differ")
-            root = Path(option(argv, "--belief-root-repo") or os.environ.get("EPYC_ROOT_REPO", "/workspace"))
+            root = belief_context.resolve_root_repo(option(argv, "--belief-root-repo"))
             expected = (root / "scripts/vidya/adapters/autokernel_legacy_serving.py").resolve()
             python_path = str(root / "scripts/vidya")
             if python_path not in sys.path:

@@ -582,6 +582,64 @@ def test_hypothesis_schema_accepts_optional_reliance_only():
     assert "relies_on_claims" not in actors.HYPOTHESIS_SCHEMA["required"]
 
 
+# ------------------------------------------------------------- ROOT resolution
+
+
+def _roots(tmp_path, monkeypatch, *, workspace_has, view_has, env=None):
+    workspace, view = tmp_path / "workspace", tmp_path / "view"
+    for root, has in ((workspace, workspace_has), (view, view_has)):
+        (root / "scripts" / "vidya").mkdir(parents=True)
+        if has:
+            (root / bc.READER_RELPATH).write_text("# reader\n")
+    monkeypatch.setattr(bc, "DEFAULT_ROOT", workspace)
+    monkeypatch.setattr(bc, "FALLBACK_ROOT", view)
+    monkeypatch.delenv(bc.ROOT_REPO_ENV, raising=False)
+    if env is not None:
+        monkeypatch.setenv(bc.ROOT_REPO_ENV, str(env))
+    return workspace, view
+
+
+def test_root_prefers_workspace_when_it_has_the_reader(tmp_path, monkeypatch):
+    workspace, _ = _roots(tmp_path, monkeypatch, workspace_has=True, view_has=True)
+    assert bc.resolve_root_repo() == workspace == bc.root_repo()
+    assert bc.BeliefConfig().reader() == workspace / bc.READER_RELPATH
+
+
+def test_root_falls_back_to_the_hub_view_when_workspace_lacks_the_reader(tmp_path, monkeypatch):
+    _, view = _roots(tmp_path, monkeypatch, workspace_has=False, view_has=True)
+    assert bc.resolve_root_repo() == view
+    assert bc.BeliefConfig().reader().is_file()
+
+
+def test_explicit_root_wins_over_env_and_both_are_verbatim(tmp_path, monkeypatch):
+    elsewhere = tmp_path / "elsewhere"          # no reader there: still taken verbatim
+    _roots(tmp_path, monkeypatch, workspace_has=True, view_has=True, env=tmp_path / "env-root")
+    assert bc.resolve_root_repo(elsewhere) == elsewhere
+    assert bc.resolve_root_repo() == tmp_path / "env-root"
+    assert bc.BeliefConfig(root=elsewhere).reader() == elsewhere / bc.READER_RELPATH
+
+
+def test_neither_root_has_the_reader_stays_missing_refused_and_alarmed(tmp_path, monkeypatch):
+    workspace, _ = _roots(tmp_path, monkeypatch, workspace_has=False, view_has=False)
+    assert bc.resolve_root_repo() == workspace          # today's behaviour, unchanged
+    config = bc.BeliefConfig()
+    assert not config.reader().is_file()
+
+    def runner(argv, **kw):
+        raise FileNotFoundError(argv[1])
+    with pytest.raises(bc.BeliefContextRefused) as refused:
+        bc.prepare({"current_regime": GPU_27B_REGIME}, config, runner=runner)
+    assert refused.value.reason == "reader_crash"
+    assert refused.value.alarm["fallback"]["error"].startswith("reader and alarm channel missing")
+
+
+def test_serial_run_resolves_the_same_root(tmp_path, monkeypatch):
+    from . import serial_run
+    assert serial_run.belief_context.resolve_root_repo is bc.resolve_root_repo
+    _, view = _roots(tmp_path, monkeypatch, workspace_has=False, view_has=True)
+    assert serial_run.belief_context.resolve_root_repo(None) == view
+
+
 # -------------------------------------------- integration: the REAL ROOT child process
 
 ROOT = bc.root_repo()

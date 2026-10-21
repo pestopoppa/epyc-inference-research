@@ -50,10 +50,13 @@ resource grant. Existing child owners still acquire their original claims.
 `--common-args` optionally names one bounded JSON argv list for shared actor model/
 effort, workers, pair counts, `--belief-root-repo` or explicit recall-ranking options.
 It is not required and cannot override target, model, launch or ownership paths.
-The planner's belief reader is mandatory and runs ROOT's `scripts/vidya/loop_beliefs.py`:
-`--belief-root-repo` (default `EPYC_ROOT_REPO`, else `/workspace`) must name a ROOT checkout
-that contains it (verify `<root>/scripts/vidya/loop_beliefs.py` exists; the retired
-`worktrees/mains/autokernel-unified-20260908` does not, and would refuse every plan).
+The planner's belief reader is mandatory and runs ROOT's `scripts/vidya/loop_beliefs.py`. ROOT
+resolves (`belief_context.resolve_root_repo`, used by `run.py` and `serial_run.py`) as:
+`--belief-root-repo` verbatim; else env `EPYC_ROOT_REPO` verbatim; else `/workspace` if it
+contains the reader; else the hub's view `/mnt/raid0/llm/views/epyc-root-main`; if neither has it,
+the reader is missing, planning is refused and the critical alarm fires. A plain launch needs no
+flag. An explicit root is taken as given, so check it has `scripts/vidya/loop_beliefs.py` (the
+retired `worktrees/mains/autokernel-unified-20260908` does not).
 
 Only ready targets with explicit owned inputs execute. Unowned/non-ready targets
 are reported by alias and reason; this is partial coverage, not completion of the

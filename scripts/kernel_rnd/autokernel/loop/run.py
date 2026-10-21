@@ -1952,7 +1952,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--belief-root-repo", type=Path,
                         help="ROOT owning serving-observation reader AND the shared belief "
                              "reader scripts/vidya/loop_beliefs.py the planner calls before "
-                             "every proposal (default EPYC_ROOT_REPO or /workspace)")
+                             "every proposal (default: EPYC_ROOT_REPO; else /workspace if it has "
+                             "the reader; else /mnt/raid0/llm/views/epyc-root-main)")
     parser.add_argument("--belief-ledger", type=Path, default=None,
                         help="belief reader: the Vidya ledger (default: ROOT's canonical "
                              "ledger, loop_beliefs.resolve_ledger)")
@@ -3465,7 +3466,8 @@ def main(argv: list[str] | None = None) -> int:
     if source_authoring:
         source_validation_reference = dict(resumed["source_validation"])
     runtime_env_keys = _runtime_env_keys(direct_launch, cpu_launch)
-    feedback = serving_beliefs.PlannerFeedback(args.store, args.belief_root_repo)
+    feedback = serving_beliefs.PlannerFeedback(
+        args.store, belief_context.resolve_root_repo(args.belief_root_repo))
     shared_history = archive.SharedHistory(args.shared_history_root, current_store=args.store,
                                            batch_directory=args.out)
     feedback_anchor = [direct_launch]

@@ -3407,8 +3407,9 @@ class AgentPlanner:
     #: (`belief_context.prepare`, a child process) and records a receipt; a refusal raises
     #: `belief_context.BeliefContextRefused` before any prompt is built or backend called.
     belief_context: str = "required"
-    #: ROOT owning the shared reader (default EPYC_ROOT_REPO or /workspace); folded into
-    #: `belief` when that names no root.
+    #: ROOT owning the shared reader (see `belief_context.resolve_root_repo`: env, else
+    #: /workspace if it has the reader, else the hub view); folded into `belief` when that
+    #: names no root.
     belief_root: Path | None = None
     #: The reader's argv-derived config (ledger, known-good snapshot, timeouts, escalation).
     belief: belief_context.BeliefConfig | None = None
