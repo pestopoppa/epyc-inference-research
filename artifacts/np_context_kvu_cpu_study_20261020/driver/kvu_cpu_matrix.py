@@ -41,15 +41,33 @@ W_TOTAL_GB, W_ACTIVE1_GB = 37.8, 3.3   # Q8_0 file; ~3B active params x 1.0625 B
 N_PREDICT_DEFAULT = 256
 DEPTH_SUFFIX_TOK = 256          # tier-0 depth mode: fresh suffix per wave (<=256 tokens)
 TOK_MARGIN = 64                 # prompt = L - n_predict - TOK_MARGIN, so a split slot of exactly L tokens holds it
+# KVU-12.4 slot-fit budget (proposed-by-workspace-f8 2026-10-21; origin: W2 2026-10-21, the 4th stream's ~65.5k-token request exceeded the
+# 65,536 split slot -> HTTP 400 in every split decode wave).  Depth-mode document tokens are budgeted from the slot, not from L-n_predict:
+#   doc = slot - SLOT_MARGIN_TOK - n_predict - DEPTH_SUFFIX_RESERVE_TOK - TEMPLATE_OVERHEAD_TOK
+SLOT_MARGIN_TOK = 256           # explicit planning margin kept free in every slot
+DEPTH_SUFFIX_RESERVE_TOK = 384  # header + <=256-token suffix + ratio slack (W2 measured suffix turns of 261-310 tokens incl. header)
+TEMPLATE_OVERHEAD_TOK = 64      # BOS / template / tokenizer-boundary slack (the cells use raw prompts, so this is conservative)
+GUARD_HEADROOM_TOK = 32         # HARD refusal: planned request tokens + n_predict must be <= slot - this
 LS = {"8k": 8192, "32k": 32768, "64k": 65536, "128k": 131072, "t8short": 1024}   # t8short: 8 clients vs np4, anchor for stack_topology.yaml:140-150 (T=8 full 124.56 tok/s)
 FORK_BIN_DEFAULT = "/mnt/raid0/llm/llama.cpp-experimental/build-cpu/bin/llama-server"   # placeholder; pass --fork-binary
 BANK_NAMES = ["8k", "32k", "64k", "128k"]
 BANK_DOCS = 8
+def depth_doc_tok(L, npredict):
+    """Tokens of the per-stream depth-mode document so that wave 0 AND every suffix turn fit a slot of L tokens."""
+    return L - SLOT_MARGIN_TOK - npredict - DEPTH_SUFFIX_RESERVE_TOK - TEMPLATE_OVERHEAD_TOK
+
+class CellRefused(Exception):
+    """Raised BEFORE any request is sent when a planned request would not fit the per-stream slot (never a silent HTTP 400)."""
+
+def slot_limit(la, L):
+    """Tokens one stream may occupy: min(L, per-slot ctx in split mode).  Unified arms are held to the same L so both arms carry equal streams."""
+    return L if la["unified"] else min(L, la["c"] // la["np"])
+
 def bank_tok(name):                       # tokens in the bank doc for context class `name` (leaves 512 for suffix + 256 gen)
     return LS[name] - 512
 
 # ----------------------------------------------------------------------------------------------- argv
-def prod_argv(np_, c, unified, mtp, port, threads, binary=None, extra=()):
+def prod_argv(np_, c, unified, mtp, port, threads, binary=None, extra=(), no_cis=True):
     a = [str(binary or BIN), "-m", MODEL, "--host", "127.0.0.1", "--port", str(port), "-np", str(np_), "-c", str(c),
          "-t", str(threads), "-ub", "2048", "--flash-attn", "on", "--jinja", "-ctk", "q8_0", "-ctv", "q8_0",
          "--mlock", "--no-mmap", "--cache-ram", "32768", "--chat-template-file", TEMPLATE]
@@ -57,10 +75,77 @@ def prod_argv(np_, c, unified, mtp, port, threads, binary=None, extra=()):
         a += ["--spec-type", "draft-mtp", "--spec-draft-n-max", "4"]
     a += ["--reasoning", "off", "--device", "none", "--device-draft", "none"]
     a += ["--kv-unified" if unified else "--no-kv-unified"]
-    if unified:      # proposed production pairing (as :8083): unified KV purges idle slots at every new task unless disabled
+    # KVU-12.4: BOTH arms carry --no-cache-idle-slots (W2 ran it on unified only, a confound); the only argv difference between the arms
+    # is the KV mode under test (--kv-unified/--no-kv-unified and the -c that geometry implies).  no_cis=False only for verify_against_launcher.
+    if no_cis and "--no-cache-idle-slots" not in extra:
         a += ["--no-cache-idle-slots"]
     a += list(extra)
     return a
+
+def norm_argv(argv):
+    """argv with ONLY the KV-mode-under-test tokens removed (-c geometry, --kv-unified/--no-kv-unified) plus run-local noise (port, slot-save-path)."""
+    out, i = [], 0
+    while i < len(argv):
+        x = argv[i]
+        if x in ("-c", "--port", "--slot-save-path"):
+            i += 2; continue
+        if x in ("--kv-unified", "--no-kv-unified"):
+            i += 1; continue
+        out.append(x); i += 1
+    return out
+
+def aba_guard(a, ls):
+    """KVU-12.4 argv-diff guard: both arms of an A/B must be identical except the KV mode under test.  Refuses (exit 4) a mismatched ABA, in-process
+    (launches that share np + cell set) and across driver invocations via --aba-ledger/--aba-key (the window launcher runs one launch per invocation)."""
+    def argv_of(la):
+        return prod_argv(la["np"], la["c"], la["unified"], la["mtp"], a.port, a.threads, la.get("bin") or a.binary, la.get("extra", ()))
+    cand = [la for la in ls if la["kind"] in ("matrix", "mtp_off") and any(pm == "depth" for _, pm in la["cells"])]
+    bad = []
+    for la in cand:
+        if "--no-cache-idle-slots" not in argv_of(la):
+            bad.append(f"{la['id']}: --no-cache-idle-slots missing")
+    groups = {}
+    for la in cand:
+        groups.setdefault((la["np"], la["mtp"], tuple(sorted({l for l, _ in la["cells"]}))), []).append(la)
+    for key, g in groups.items():
+        base = norm_argv(argv_of(g[0]))
+        for la in g[1:]:
+            n2 = norm_argv(argv_of(la))
+            if n2 != base:
+                bad.append(f"{g[0]['id']} vs {la['id']}: argv differs beyond KV mode: {[x for x in n2 if x not in base]} / {[x for x in base if x not in n2]}")
+    if a.aba_key and a.aba_ledger:
+        led = Path(a.aba_ledger)
+        prior = [json.loads(x) for x in led.read_text().splitlines() if x.strip()] if led.exists() else []
+        for la in cand:
+            n = norm_argv(argv_of(la)); n[0] = os.path.realpath(n[0])
+            for pr in prior:
+                if pr["key"] == a.aba_key and pr["norm_argv"] != n:
+                    bad.append(f"ledger {a.aba_ledger} key {a.aba_key}: {la['id']} differs from {pr['launch']}: "
+                               f"+{[x for x in n if x not in pr['norm_argv']]} -{[x for x in pr['norm_argv'] if x not in n]}")
+        if not bad and not a.dry_run:
+            with open(led, "a") as f:
+                for la in cand:
+                    n = norm_argv(argv_of(la)); n[0] = os.path.realpath(n[0])
+                    f.write(json.dumps(dict(key=a.aba_key, launch=la["id"], norm_argv=n, ts=time.strftime("%FT%TZ", time.gmtime()))) + "\n")
+    if bad:
+        print("ABA_ARGV_GUARD REFUSED:\n  " + "\n  ".join(bad), flush=True)
+        sys.exit(4)
+    print(f"ABA_ARGV_GUARD ok: {len(cand)} depth launches, groups={len(groups)}, ledger={'yes' if a.aba_key else 'no'}", flush=True)
+
+def static_fit_check(a, ls):
+    """Arithmetic refusal before anything launches: planned worst-case request (doc budget + suffix reserve + template) + n_predict must fit slot - guard."""
+    bad = []
+    for la in ls:
+        for (l, pm) in la["cells"]:
+            if pm == "depth" and l in LS:
+                lim = slot_limit(la, LS[l])
+                worst = depth_doc_tok(LS[l], a.npredict) + DEPTH_SUFFIX_RESERVE_TOK + TEMPLATE_OVERHEAD_TOK + a.npredict
+                if worst > lim - GUARD_HEADROOM_TOK:
+                    bad.append(f"{la['id']} {l}: planned {worst} > slot {lim} - guard {GUARD_HEADROOM_TOK}")
+                elif a.dry_run:
+                    print(f"   SLOT_FIT {la['id']} {l} depth: doc {depth_doc_tok(LS[l], a.npredict)} + suffix<= {DEPTH_SUFFIX_RESERVE_TOK} + tmpl {TEMPLATE_OVERHEAD_TOK} + npredict {a.npredict} = {worst} <= slot {lim} (headroom {lim - worst})")
+    if bad:
+        print("SLOT_FIT_STATIC REFUSED:\n  " + "\n  ".join(bad), flush=True); sys.exit(5)
 
 def verify_against_launcher():
     """Re-derive the production frontdoor argv/env from the launcher (read-only) and diff against prod_argv()."""
@@ -72,7 +157,7 @@ def verify_against_launcher():
             "print(json.dumps({'cmd':cmd,'env':env,'prefix':S._numa_prefix('frontdoor',0)}))\n")
     out = subprocess.run([sys.executable, "-c", code], cwd=ORCH, capture_output=True, text=True, timeout=180)
     live = json.loads(out.stdout.strip().splitlines()[-1])
-    want = prod_argv(4, 262144, False, True, 8070, 96)[:-1]          # launcher emits no kv flag for frontdoor today
+    want = prod_argv(4, 262144, False, True, 8070, 96, no_cis=False)[:-1]          # launcher emits no kv flag for frontdoor today
     got = [x for x in live["cmd"]]
     got[0] = os.path.realpath(got[0]); want[0] = os.path.realpath(want[0])
     # bench substitutions: drop --slot-save-path <dir>
@@ -252,6 +337,13 @@ def make_doc(corpus, port, ntok, ratio):
         if abs(n - ntok) <= max(8, ntok // 400):
             break
         nch = int(nch * ntok / max(n, 1))
+    for _ in range(8):        # KVU-12.4: a document must never exceed its token budget (W2 docs overshot by up to ~380 tokens)
+        if n <= ntok:
+            break
+        t = t[:max(1, len(t) - int((n - ntok) * len(t) / max(n, 1) * 1.05) - 1)]
+        n = n_tokens(port, t)
+    if n > ntok:
+        raise CellRefused(f"make_doc could not fit {n} tokens into budget {ntok}")
     return t, n, len(t) / max(n, 1)
 
 # ----------------------------------------------------------------------------------------------- one request
@@ -510,7 +602,13 @@ def run_launch(a, la, outroot, corpus, summary):
                 off = len(open(ldir / "server.log", "rb").read()); continue
             if la["kind"] == "poolfull":
                 run_poolfull(a, la, ldir, corpus, Lname, srv, summary, say, facts); continue
-            ratio = run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio, off)
+            try:
+                ratio = run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio, off)
+            except CellRefused as e:       # fail loud: the cell sent nothing; the REFUSED_OVERSIZE row is already in summary.jsonl
+                say(f"CELL_REFUSED {la['id']} {Lname} {pmode}: {e}")
+                if not getattr(e, "logged", False):    # make_doc refusals do not go through guard(); record them here too
+                    summary(dict(launch=la["id"], cell=f"{Lname}_{pmode}", result="REFUSED_OVERSIZE", reason=str(e)))
+                a.refused = True
             off = len(open(ldir / "server.log", "rb").read())
     finally:
         dead = srv.stop(); say(f"STOP dead={dead} pid={srv.proc.pid}")
@@ -527,17 +625,33 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
     L, np_ = LS[Lname], la["np"]
     nclients = 8 if Lname == "t8short" else np_
     ntok = L - a.npredict - TOK_MARGIN
+    limit = slot_limit(la, L)
     cdir = ldir / f"{Lname}_{pmode}"; cdir.mkdir(exist_ok=True)
     cl = open(cdir / "cell.log", "w"); cell_header(cl, a, la, Lname, pmode, srv, facts)
+    cl.write(f"SLOT_BUDGET limit={limit} L={L} npredict={a.npredict} slot_margin={SLOT_MARGIN_TOK} suffix_reserve={DEPTH_SUFFIX_RESERVE_TOK} "
+             f"template_overhead={TEMPLATE_OVERHEAD_TOK} guard_headroom={GUARD_HEADROOM_TOK} depth_doc_tok={depth_doc_tok(L, a.npredict)}\n")
+    req_tok = {}          # (wave, stream) -> planned request tokens (document + suffix as tokenized); checked BEFORE any request is sent
+    def guard(w, s_, n_req):
+        req_tok[(w, s_)] = n_req
+        if n_req + a.npredict > limit - GUARD_HEADROOM_TOK:
+            msg = (f"REFUSED {la['id']} {Lname} {pmode}: wave {w} stream {s_} plans {n_req} prompt tokens + n_predict {a.npredict} = "
+                   f"{n_req + a.npredict} > slot limit {limit} - guard {GUARD_HEADROOM_TOK}")
+            cl.write(msg + "\n"); cl.close(); say(msg)
+            summary(dict(launch=la["id"], cell=f"{Lname}_{pmode}", result="REFUSED_OVERSIZE", np=np_, L=L, slot_limit=limit,
+                         planned_request_tokens=n_req, wave=w, stream=s_, n_predict=a.npredict, c=la["c"], unified=la["unified"]))
+            e = CellRefused(msg); e.logged = True
+            raise e
     loadavg = [round(x, 2) for x in os.getloadavg()]
     waves = []
     t_cell = time.time()
     shared_doc = None
+    depth_pre = {}        # depth mode: (w, s) -> full prompt text, ALL waves built and token-counted before wave 0 is sent
     for w in range(a.waves):
         prompts = []
         if pmode in ("shared", "shared_fork"):
             if shared_doc is None:
                 shared_doc, n, ratio = make_doc(corpus, a.port, ntok - 40, ratio)
+                guard(0, -1, n + 40)
                 warm = one_request(a.port, shared_doc + "\n\n[warm]\n", 1, "warm")
                 cl.write(f"SHARED_WARM prompt_n={warm['prompt_n']} cache_n={warm['cache_n']} err={warm['error']}\n")
             for s in range(nclients):
@@ -546,19 +660,33 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
         elif pmode == "depth":
             # prefill-once: wave 0 = distinct L-token doc per stream; waves >=1 = SAME doc + fresh short suffix (<=256 tok)
             if w == 0:
-                depth_docs = []
+                # KVU-12.4: build + token-count EVERY wave's prompt for EVERY stream before the first request is sent; refuse (CellRefused) if any
+                # would not fit the slot.  Document budget comes from the slot (depth_doc_tok), documents never exceed it (make_doc), suffixes are trimmed to the reserve.
+                depth_docs, depth_n = [], []
                 for s in range(nclients):
-                    d, n, ratio = make_doc(corpus, a.port, ntok - DEPTH_SUFFIX_TOK - 40, ratio)
-                    depth_docs.append(d)
+                    d, n, ratio = make_doc(corpus, a.port, depth_doc_tok(L, a.npredict), ratio)
+                    depth_docs.append(d); depth_n.append(n)
+                    depth_pre[(0, s)] = d + f"\n\n[stream {s} wave 0] Summarize the document above in detail.\n"
+                    guard(0, s, n + n_tokens(a.port, f"\n\n[stream {s} wave 0] Summarize the document above in detail.\n") + 8)
+                    for w2 in range(1, a.waves):
+                        hdr = f"\n\n[stream {s} wave {w2}] Continue with these notes:\n"
+                        sfx = corpus.take(int(DEPTH_SUFFIX_TOK * 0.8 * ratio))      # ~0.8*suffix tokens, fresh text per stream per wave
+                        sn = n_tokens(a.port, hdr + sfx)
+                        for _ in range(8):                                          # trim the suffix into its reserve
+                            if sn <= DEPTH_SUFFIX_RESERVE_TOK - 8:
+                                break
+                            sfx = sfx[:max(1, len(sfx) - int((sn - (DEPTH_SUFFIX_RESERVE_TOK - 8)) * len(sfx) / max(sn, 1) * 1.1) - 1)]
+                            sn = n_tokens(a.port, hdr + sfx)
+                        depth_pre[(w2, s)] = d + hdr + sfx
+                        guard(w2, s, n + sn + 8)
+                cl.write(f"SLOT_FIT_OK max_planned_request_tokens={max(req_tok.values())} max_plus_npredict={max(req_tok.values()) + a.npredict} "
+                         f"slot_limit={limit} min_headroom_tok={limit - max(req_tok.values()) - a.npredict} doc_tokens={depth_n}\n")
             for s in range(nclients):
-                if w == 0:
-                    prompts.append(depth_docs[s] + f"\n\n[stream {s} wave 0] Summarize the document above in detail.\n")
-                else:
-                    sfx = corpus.take(int(DEPTH_SUFFIX_TOK * 0.8 * ratio))      # ~0.8*suffix tokens, fresh text per stream per wave
-                    prompts.append(depth_docs[s] + f"\n\n[stream {s} wave {w}] Continue with these notes:\n" + sfx)
+                prompts.append(depth_pre[(w, s)])
         else:
             for s in range(nclients):
                 d, n, ratio = make_doc(corpus, a.port, ntok - 40, ratio)
+                guard(w, s, n + 40)
                 prompts.append(d + f"\n\n[stream {s} wave {w} nonce {hashlib.sha1(f'{la['id']}{Lname}{w}{s}'.encode()).hexdigest()[:8]}] "
                                "Summarize the document above in detail.\n")
         bar = threading.Barrier(nclients)
@@ -594,7 +722,9 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                depth_waves_note=("wave 0 = prefill/TTFT (n=np streams); waves>=1 = decode at depth, NOT independent prefills" if pmode == "depth" else None),
                ttft_s_decode_waves_med=med("ttft_s", DW) if pmode == "depth" else None, prompt_n_decode_waves_med=med("prompt_n", DW) if pmode == "depth" else None, cache_n_by_wave=[w["n_prompt_tokens_cache"] for w in waves],
                rss_gib_max=max((w["rss_gib"] or 0) for w in waves), stderr_hits=errs, cell_wall_s=round(time.time() - t_cell, 1),
-               physics=physics(np_, L, la["mtp"]), host_bw_gbs=HOST_BW_GBS, n_ctx_slot=facts.get("n_ctx_slot"), kv_unified=facts.get("kv_unified"))
+               physics=physics(np_, L, la["mtp"]), host_bw_gbs=HOST_BW_GBS, n_ctx_slot=facts.get("n_ctx_slot"), kv_unified=facts.get("kv_unified"),
+               slot_limit=limit, max_planned_request_tokens=(max(req_tok.values()) if req_tok else None),
+               min_headroom_tok=(limit - max(req_tok.values()) - a.npredict if req_tok else None))
     with open(cdir / "waves_capture.jsonl", "w") as wf:
         for w in waves:
             wf.write(json.dumps(finalize_row(dict(row, pmode=pmode, L=L, cell=row["cell"], decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"],
@@ -939,6 +1069,8 @@ def main():
     p.add_argument("--extra-argv", default="", help="extra server argv for ALL arms (space separated)")
     p.add_argument("--fork-binary", default="", help="cross-slot prefix-fork build; enables the shared_fork prompt-mode arm")
     p.add_argument("--fork-min-tokens", type=int, default=1024, help="value for --slot-fork-min-tokens in the shared_fork arm (0 = off)")
+    p.add_argument("--aba-key", default="", help="KVU-12.4: A/B pairing key; with --aba-ledger, refuse a launch whose argv differs (beyond KV mode) from an earlier launch with the same key")
+    p.add_argument("--aba-ledger", default="", help="JSONL of normalized argv per key (shared across driver invocations)")
     p.add_argument("--only", default="", help="comma list of launch ids (substring match)")
     p.add_argument("--cpu-list", default="0-95")
     p.add_argument("--threads", type=int, default=96)
@@ -961,6 +1093,7 @@ def main():
                 la["extra"] = tuple(la.get("extra", ())) + ("--slot-save-path", bank_sub(a.bank_dir, la["unified"], la["np"]))
     if a.only:
         keys = a.only.split(","); ls = [l for l in ls if any(k in l["id"] for k in keys)]
+    aba_guard(a, ls); static_fit_check(a, ls)
     if a.dry_run:
         tot, ncell = 0.0, 0
         for la in ls:
@@ -1015,9 +1148,12 @@ def main():
         build_bank(a, out, corpus); print("DONE", flush=True); return
     if a.gates:
         run_gates(a, out, corpus); print("DONE", flush=True); return
+    a.refused = False
     for la in ls:
         run_launch(a, la, out, corpus, summary)
     print("DONE", flush=True)
+    if a.refused:
+        sys.exit(3)          # a REFUSED_OVERSIZE cell is a failed cell, never a quiet pass
 
 if __name__ == "__main__":
     main()

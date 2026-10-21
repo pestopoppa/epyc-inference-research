@@ -331,3 +331,28 @@ and decode tok/s (NOT yet captured: the first gate run predates the `decode_tps`
 (single step here, so this only checks timing noise; the real additive-vs-one-shot ratio comes from the full bank build), `n_saved` 7,680 per file; `--from-bank` cells for split np2
 and unified np2 restored 2 docs (15,360 resident tokens recorded per wave), `prompt_n` = 200 (the suffix) for every stream and wave, TTFT ~4-5 s, 0 errors.
 The first attempt (unified bank restored into a split launch) failed with `n_stream mismatch`, which is how the layout rule above was found.
+
+## 10. KVU-12.4 / KVU-12.5 redo — like-for-like repairs and the PREDECLARED unified-vs-split rule
+
+**PROPOSED by workspace-f8 2026-10-21 — pending owner/operator ratification. It is written BEFORE the redo window and must not be edited after the first cell starts; any change after that voids the verdict, not the data.**
+
+Why: the W2 ABA (2026-10-21, `w2_20261021/READOUT.md`) was undecidable for three reasons — the split arm lost its 4th stream (request 65,565-65,614 tokens > the 65,536 slot, HTTP 400 in all 6 decode waves), the arms differed in `--no-cache-idle-slots`, and the noise floor was n=2 launches with no start/middle/end anchor.
+
+**Driver repairs (`driver/kvu_cpu_matrix.py`).**
+1. *Slot-fit budget.* Depth-mode document tokens = `slot - SLOT_MARGIN_TOK(256) - n_predict(256) - DEPTH_SUFFIX_RESERVE_TOK(384) - TEMPLATE_OVERHEAD_TOK(64)` = 64,576 at L64k (W2 targeted 64,920 and overshot by up to ~380). `make_doc` can no longer exceed its target. Every wave's prompt for every stream is built and token-counted before wave 0 is sent; if `prompt_tokens + n_predict > slot - GUARD_HEADROOM_TOK(32)` the driver raises `CellRefused`, writes a `REFUSED_OVERSIZE` row, sends nothing for that cell and exits 3. A static arithmetic check refuses at start (and prints in `--dry-run`: `SLOT_FIT ... headroom 256`). Unified arms are held to the same L as split, so both arms carry equal streams. Each cell row records `slot_limit`, `max_planned_request_tokens`, `min_headroom_tok`.
+2. *Equal argv.* `--no-cache-idle-slots` is on BOTH arms (the production-pairing argv used by `--verify-against-launcher` is unchanged). `aba_guard` refuses (exit 4) a launch whose argv, after removing only `-c`, `--kv-unified/--no-kv-unified`, `--port`, `--slot-save-path`, differs from its partner — in-process, and across driver invocations through `--aba-key` + `--aba-ledger`.
+3. *Anchor at start, middle and end* (`--kv-modes none --anchor`: split np4, 8 clients, ~690-token prompts = the `t8short` cell comparable to `stack_topology.yaml:140-150`; the PLAN control-2 "32k independent" anchor is NOT used because it needs live 32k prefills per anchor). Order: anchor-start, A (split depth), B (unified depth), anchor-mid, A' (split depth), anchor-end. Floor, with its unit: percent of the anchor-cell median, unit = anchor launch (n = 3 launches; each launch = median over its waves; per-stream n = 8 clients x 3 decode waves = 24 within each launch). The A-vs-A' spread at the actual cell is carried alongside.
+4. `driver/kvu12_verdict.py` computes the rule below from `summary.jsonl` rows; it starts nothing.
+
+**Predeclared rule (metrics: decode tok/s higher = better; TTFT s lower = better; all on np4 L64k depth, 3 decode waves, equal streams, same window, same binary sha).**
+- `floor_m` = max(anchor spread %, A-vs-A' spread %) for metric m in {decode sum, per-stream decode median, wave-0 TTFT median}.
+- `thr_m` = max(2 x floor_m, 3%).
+- `gap_m` = (unified - mean(split A, split A')) / mean(split) x 100.
+- **UNIFIED_BETTER**: `gap > +thr` on decode sum AND on per-stream decode, AND TTFT gap <= `+thr_ttft` (TTFT not worse than the floor).
+  Decides: unified np4 L64k is a real CPU decode gain at equal streams; open the frontdoor `--kv-unified` production-pairing proposal (still needs its own stack-change gates and an np8 relative claim from KVU-12.5; nothing changes in production from this verdict alone).
+- **SPLIT_BETTER**: `gap < -thr` on decode sum AND per-stream decode. Decides: keep split slots; unified is not adopted for CPU throughput; its remaining case is capacity (pool sharing, np8 / L128k) only.
+- **NO_DIFFERENCE**: |gap| <= `thr` on decode sum or per-stream decode. Decides: no throughput claim either way; production stays as is; any unified adoption must rest on capacity grounds (KVU-12.5), not speed.
+- **MIXED**: both decode gaps beyond `thr` but in conflict with TTFT (unified decode better and TTFT worse than the floor) or sum and per-stream disagree in sign. Decides: no change; goes to the operator as a trade-off package.
+- **INVALID**: any cell not `OK`, any `REFUSED_OVERSIZE`/errored request, unequal streams, `min_headroom_tok < 0`, binary sha differs between cells, ledger refusal, or fewer than 3 anchors. Decides nothing; rerun.
+
+Not claimed: np8 (KVU-12.5) gets its own relative claim only from a same-window split np8 L64k partner; a comparison against the 2026-10-21 W2 unified np8 cell crosses windows and is bounded by the drift floor (unit above).
