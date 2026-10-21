@@ -19,9 +19,11 @@ models in each lane's resolved launch record, not a drafter or a sibling model):
     `n_shared_experts=1`; `ffn_{gate,up}_exps [5120, 2304, 384]` and `ffn_down_exps
     [2304, 5120, 384]` (MXFP4); `ffn_*_shexp` at (5120, 2304) (Q8_0). Dims are identical
     to the retired Sept `DeepSeek-V4.1-Flash-Q4.gguf`, whose experts were Q4_K.
-    ★ MXFP4 is NOT a witness type, so the DS41 routed (bundle-tier) corpus is EMPTY and
-    `load_manifest` refuses it -> the routed gate reads `oracle_unavailable` for DS41,
-    never a vacuous pass. Covering MXFP4 experts is DS41-W8.
+    ★ MXFP4 is a LANE-SERVED type (`LANE_SERVED_TYPES`, 2026-10-21 DS41-1017 AK
+    oracle): it enters the corpus of a lane whose GGUF serves it (DS41) -- the
+    candidate corpus (4 shapes x 5 widths) and the routed bundle tier (2 x 4) -- and
+    no other lane's, so Q38FN's calibrated manifests are unchanged. ggml
+    `block_mxfp4`: QK_MXFP4 = 32 elements, 17 bytes (E8M0 scale + 16 nibble bytes).
   * Q38FN: `/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/
     Qwen3.8-Flash-Next-UD-IQ4_XS-0000{1,2,3}-of-00003.gguf` ("qwen4exp"):
     `expert_count=512`, `expert_used_count=10`, `embedding_length=2560`,
@@ -94,12 +96,20 @@ WITNESS_TYPES: tuple[str, ...] = (
     "Q2_K", "Q3_K", "Q4_K", "Q5_K", "Q6_K", "IQ4_XS",
     "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ3_XXS", "IQ3_S")
 
+#: Served quant types outside WITNESS_TYPES (2026-10-21, DS41-1017 MXFP4 experts; the
+#: CPU path is the `mxfp4` repack / an iqk whitelist admission). Covered ONLY for a
+#: lane whose LANE_PROFILES row serves the type, so adding one never invalidates
+#: another lane's calibrated manifest. The iqk whitelist grammar (`gates`) accepts them.
+LANE_SERVED_TYPES: tuple[str, ...] = ("MXFP4",)
+#: Every type the module can spell: witness order, then lane-served types.
+ALL_TYPES: tuple[str, ...] = WITNESS_TYPES + LANE_SERVED_TYPES
+
 #: `ggml_type_name()` spellings, which test-backend-ops prints in `vars()`.
 GGML_TYPE_NAMES: dict[str, str] = {
     "Q4_0": "q4_0", "Q4_1": "q4_1", "Q5_0": "q5_0", "Q5_1": "q5_1", "Q8_0": "q8_0",
     "IQ4_NL": "iq4_nl", "Q2_K": "q2_K", "Q3_K": "q3_K", "Q4_K": "q4_K", "Q5_K": "q5_K",
     "Q6_K": "q6_K", "IQ4_XS": "iq4_xs", "IQ2_XXS": "iq2_xxs", "IQ2_XS": "iq2_xs",
-    "IQ2_S": "iq2_s", "IQ3_XXS": "iq3_xxs", "IQ3_S": "iq3_s"}
+    "IQ2_S": "iq2_s", "IQ3_XXS": "iq3_xxs", "IQ3_S": "iq3_s", "MXFP4": "mxfp4"}
 
 CASE_SET_ID = "served_shape_lowbit_v1"
 #: Round-12 (bundle tier): 128-expert MUL_MAT_ID cases with deterministic, dispersed,
@@ -197,7 +207,7 @@ class MoeProfile:
 
     @property
     def expert_types(self) -> tuple[str, ...]:
-        return tuple(t for t in WITNESS_TYPES
+        return tuple(t for t in ALL_TYPES
                      if t in set(self.gate_up_types) | set(self.down_types))
 
 
@@ -297,7 +307,8 @@ def routed_shapes(lane: str) -> tuple[ServedShape, ...]:
 BLOCK_SIZE: dict[str, int] = {
     "Q4_0": 32, "Q4_1": 32, "Q5_0": 32, "Q5_1": 32, "Q8_0": 32, "IQ4_NL": 32,
     "Q2_K": 256, "Q3_K": 256, "Q4_K": 256, "Q5_K": 256, "Q6_K": 256, "IQ4_XS": 256,
-    "IQ2_XXS": 256, "IQ2_XS": 256, "IQ2_S": 256, "IQ3_XXS": 256, "IQ3_S": 256}
+    "IQ2_XXS": 256, "IQ2_XS": 256, "IQ2_S": 256, "IQ3_XXS": 256, "IQ3_S": 256,
+    "MXFP4": 32}
 
 
 def type_fits(shape: ServedShape, type_a: str) -> bool:
@@ -315,10 +326,18 @@ def routed_types(lane: str, shape: "ServedShape | None" = None) -> tuple[str, ..
     profile = LANE_PROFILES[lane]
     if shape is None:
         wanted = set(profile.gate_up_types) | set(profile.down_types) | set(profile.extra_types)
-        return tuple(t for t in WITNESS_TYPES if t in wanted)
+        return tuple(t for t in ALL_TYPES if t in wanted)
     direct = profile.down_types if _direction(shape) == "down" else profile.gate_up_types
     wanted = set(direct) | set(profile.extra_types)
-    return tuple(t for t in WITNESS_TYPES if t in wanted and type_fits(shape, t))
+    return tuple(t for t in ALL_TYPES if t in wanted and type_fits(shape, t))
+
+
+def lane_types(lane: str) -> tuple[str, ...]:
+    """The candidate corpus' types for `lane`: every witness type, plus each
+    LANE_SERVED_TYPES entry the lane's own GGUF serves (DS41-1017: MXFP4)."""
+    profile = LANE_PROFILES[lane]
+    served = set(profile.gate_up_types) | set(profile.down_types) | set(profile.extra_types)
+    return WITNESS_TYPES + tuple(t for t in LANE_SERVED_TYPES if t in served)
 
 
 def lane_for_model(model) -> "str | None":
@@ -482,7 +501,7 @@ def corpus(routed: bool = False, lane: "str | None" = None):
         return SERVED_SHAPES, WITNESS_TYPES, SERVED_WIDTHS
     if lane not in LANE_PROFILES:
         raise ValueError(f"unknown lane {lane!r}")
-    return lane_served_shapes(lane), WITNESS_TYPES, SERVED_WIDTHS
+    return lane_served_shapes(lane), lane_types(lane), SERVED_WIDTHS
 
 
 def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
@@ -1154,7 +1173,8 @@ def load_manifest(path: Path, *, routed: bool = False,
 
 __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "SERVED_SHAPE_NMSE_CAP", "SERVED_SHAPE_NMSE_FLOOR", "SERVED_SHAPES",
-           "SERVED_WIDTHS", "WITNESS_TYPES", "GGML_TYPE_NAMES", "ServedShape", "ServedShapeCase",
+           "SERVED_WIDTHS", "WITNESS_TYPES", "LANE_SERVED_TYPES", "ALL_TYPES", "lane_types",
+           "GGML_TYPE_NAMES", "ServedShape", "ServedShapeCase",
            "backend_ops_patch_block", "binary_has_case_set", "case_set", "case_set_regex",
            "load_manifest", "tightened_nmse_bound", "write_manifest",
            "CALIBRATION_CASE_SET_ID", "CALIBRATION_MARKER", "PATCH_BEGIN", "PATCH_END",

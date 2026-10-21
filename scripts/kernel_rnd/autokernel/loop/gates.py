@@ -695,7 +695,9 @@ CPU_SOURCE_ROUTES = (
                         "a whitelist change must carry a matching static_assert (positive or "
                         "negative) proving the new admission/refusal, as every existing case does"),
         # Re-review 2026-10-06: the served-shape oracle covers exactly
-        # served_shape_cases.WITNESS_TYPES; a whitelist edit naming any OTHER type could
+        # served_shape_cases.ALL_TYPES (WITNESS_TYPES + LANE_SERVED_TYPES; MXFP4 since
+        # 2026-10-21, covered by the DS41-1017 lane corpus, the only lane serving it);
+        # a whitelist edit naming any OTHER type could
         # route it into iqk with no served-shape evidence, so it is refused outright.
         # Round-3 review: a NAME check cannot stop `return true;` / `default: return true;`.
         # Every added line must be one of the closed grammar below -- a `case` label of
@@ -707,7 +709,7 @@ CPU_SOURCE_ROUTES = (
         # Round-5 resolution B: fully anchored, one statement per line, no greedy
         # `.*` (round 4 showed `static_assert(.*);` swallowing
         # `static_assert(true); if (...) return true; static_assert(true);`).
-        forbidden_added=(r"^\+(?!(?:\s*case\s+GGML_TYPE_(?:Q4_0|Q4_1|Q5_0|Q5_1|Q8_0|IQ4_NL|Q2_K|Q3_K|Q4_K|Q5_K|Q6_K|IQ4_XS|IQ2_XXS|IQ2_XS|IQ2_S|IQ3_XXS|IQ3_S)\s*:\s*(?://(?:.*[^\\\s])?\s*)?"
+        forbidden_added=(r"^\+(?!(?:\s*case\s+GGML_TYPE_(?:Q4_0|Q4_1|Q5_0|Q5_1|Q8_0|IQ4_NL|Q2_K|Q3_K|Q4_K|Q5_K|Q6_K|IQ4_XS|IQ2_XXS|IQ2_XS|IQ2_S|IQ3_XXS|IQ3_S|MXFP4)\s*:\s*(?://(?:.*[^\\\s])?\s*)?"
                          r"|\s*static_assert\([^;]*\);\s*(?://(?:.*[^\\\s])?\s*)?"
                          r"|\s*return\s+false\s*;\s*(?://(?:.*[^\\\s])?\s*)?"
                          r"|\s*(?://(?:.*[^\\\s])?\s*)?)$)"),

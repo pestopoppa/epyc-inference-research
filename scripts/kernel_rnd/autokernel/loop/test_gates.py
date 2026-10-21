@@ -2612,9 +2612,9 @@ class ThePplContractReReviewFixesHold(unittest.TestCase):
         from autokernel.loop import served_shape_cases as ssc
         route = next(r for r in gates.CPU_SOURCE_ROUTES if r.route == "iqk_type_whitelist")
         rx = re.compile(route.forbidden_added)
-        for t in ssc.WITNESS_TYPES:
+        for t in ssc.ALL_TYPES:   # WITNESS_TYPES + lane-served MXFP4 (DS41-1017)
             self.assertIsNone(rx.search(f"+        case GGML_TYPE_{t}:"), t)
-        for t in ("IQ1_S", "IQ1_M", "MXFP4", "TQ2_0", "Q8_K", "IQ4_XS_R8"):
+        for t in ("IQ1_S", "IQ1_M", "NVFP4", "TQ2_0", "Q8_K", "IQ4_XS_R8"):
             self.assertIsNotNone(rx.search(f"+        case GGML_TYPE_{t}:"), t)
         # round-3 review: unrestricted forms are refused, not just foreign names
         for line in ("    return true;", "        default: return true;",
