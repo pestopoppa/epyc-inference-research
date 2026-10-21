@@ -725,3 +725,17 @@ def test_missing_reader_and_channel_is_recorded_not_raised(tmp_path):
                          runner=lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("x")))
     assert out["invoked"] is False
     assert out["fallback"]["invoked"] is False and "missing" in out["fallback"]["error"]
+
+
+def test_the_loop_store_is_ingested_by_the_reader_before_planning(tmp_path):
+    seen = []
+
+    def runner(argv, **kw):
+        seen.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(belief_ready_answer()),
+                                           stderr="")
+
+    config = bc.BeliefConfig(root=tmp_path, source_roots=(tmp_path / "store",))
+    bc.prepare({"current_regime": GPU_27B_REGIME}, config, runner=runner)
+    argv = seen[0]
+    assert argv[argv.index("--source-root") + 1] == str(tmp_path / "store")

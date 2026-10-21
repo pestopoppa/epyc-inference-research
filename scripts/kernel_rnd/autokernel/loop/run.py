@@ -655,7 +655,8 @@ def _belief_config(args) -> belief_context.BeliefConfig:
     return belief_context.BeliefConfig(root=args.belief_root_repo, ledger=args.belief_ledger,
                                        known_good=args.belief_known_good,
                                        escalate_after_s=args.belief_escalate_after_s,
-                                       reader_timeout_s=args.belief_reader_timeout_s)
+                                       reader_timeout_s=args.belief_reader_timeout_s,
+                                       source_roots=(args.store,))
 
 
 def _actor_knobs(args) -> dict[str, bool]:

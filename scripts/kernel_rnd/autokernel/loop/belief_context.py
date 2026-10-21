@@ -145,6 +145,9 @@ class BeliefConfig:
     alarm_state: Path | None = None
     alarm_config: Path | None = None
     index: Path | None = None
+    #: The loop's own stores: their new serving A/B receipts are ingested by the reader before
+    #: each plan (VB-LOOP-SCOPE producer-time ingest), so this loop's latest outcomes are beliefs.
+    source_roots: tuple[Path, ...] = ()
     consumer: str = CONSUMER
     python: str = sys.executable
 
@@ -342,6 +345,8 @@ def prepare(context: Mapping[str, Any], config: BeliefConfig | None = None, *,
         args += ["--ledger", str(config.ledger)]
     if config.index is not None:
         args += ["--index", str(config.index)]
+    for source in config.source_roots:
+        args += ["--source-root", str(source)]
     started = time.monotonic()
 
     def consumer_failure(reason: str, detail: str, answer=None) -> BeliefContextRefused:
