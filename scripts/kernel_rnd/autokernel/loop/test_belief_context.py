@@ -1,275 +1,549 @@
-"""The AutoKernel planner's belief-kernel reader, receipt and reliance -- no provider call.
+"""The AutoKernel planner's MANDATORY belief context -- no provider call, no real alarm.
 
-Fixture ledgers are written through ROOT's real write path (`ClaimTuple` -> `to_frames` ->
-`Ledger`), and read through ROOT's real `fold` + `gate`, loaded from EPYC_ROOT_REPO (default
-/workspace). So the grade a test sees is the one `claim_tuple.grade()` assigned.
+The planner runs ROOT's shared reader (`scripts/vidya/loop_beliefs.py`) as a child process.
+Every test but one mocks that child with canned answers (`runner=`); the one integration test
+runs the REAL child against a tmp copy of ROOT's `scripts/vidya` (EPYC_ROOT_REPO, the root dev
+worktree) with a fixture ledger written through ROOT's `ClaimTuple -> to_frames -> Ledger`, a
+tiny fake `sync.py` that reports fresh, and tmp --known-good/--alarm-state/--alarm-config.
+Neither the canonical ledger nor the shared root worktree is written.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+from pathlib import Path
+import re
+import shutil
 import subprocess
 import sys
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from autokernel.loop import actors, belief_context as bc
+from autokernel.conftest import belief_ready_answer
+from autokernel.loop import actors, belief_context as bc, bench, gates, loop, pipeline, resume
 from autokernel.loop.loop import Abstain, Hypothesis, Outcome
 
-ROOT = bc.root_repo()
-VIDYA = ROOT / "scripts" / "vidya"
-pytestmark = pytest.mark.skipif(not (VIDYA / "gate.py").is_file(),
-                                reason=f"ROOT reader modules absent under {VIDYA}")
-
-KVQ = "kv-quant-27b-v10-measurement"
-AS_OF = "2026-09-24T12:00:00+00:00"
-WRITTEN = "2026-09-24T10:00:00+00:00"
-SHA = "a" * 64
 GPU_27B_REGIME = {"model": {"path": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf"},
                   "quant": "Q8_0", "backend": "gpu", "measurement_surface": "pp512"}
 DS41_CPU_REGIME = {"model": {"path": "/mnt/raid0/llm/models/DeepSeek-V4.1-Flash-Q4.gguf"},
                    "quant": "Q4_K", "backend": "cpu", "measurement_surface": "pp512"}
-GPU_27B = bc.target_from_context({"current_regime": GPU_27B_REGIME})
-DS41_CPU = bc.target_from_context({"current_regime": DS41_CPU_REGIME})
-ARMS = ("A_f16_kv", "B_q8_0_kv", "C_q4_0_kv")
-DEPTHS = ("d2k", "d32k")
-METRICS = ("gpu_decode_tps", "gpu_prefill_tps")
 HYPOTHESIS = {"mechanism_id": "akm-x", "statement": "s", "falsifier": "f",
               "target_surface": "ggml/src/ggml-cuda/fattn.cu", "target_symbol": "k"}
+LAST_KNOWN_GOOD = {"path": "/test/kg.json", "as_of": "2026-10-20T00:00:00Z",
+                   "ledger_state": {"frame_count": 2}, "ledger_state_digest": "sha256:" + "1" * 64}
+KNOWN_GOOD = {"ledger_state": {"frame_count": 2}, "ledger_state_digest": "sha256:" + "1" * 64,
+              "withdrawn": ["clm_dead"], "contested": ["clm_disputed"]}
+OPERATOR = {"kind": "operator", "author": "daniele", "at": "2026-10-21T00:00:00Z"}
 
 
-def _root_modules():
-    sys.path.insert(0, str(VIDYA))
-    try:
-        import claim_tuple
-        import frames
-        import ledger
-    finally:
-        sys.path.remove(str(VIDYA))
-    return claim_tuple, frames, ledger
+# ------------------------------------------------------------------------ harness
 
 
-def _kvq(run, arm, depth, metric, *, date="2026-09-24", protocol="P-GPU-1"):
-    claim_tuple, _, _ = _root_modules()
-    ident = f"kvq-{run}-{arm}-{depth}-{metric}"
-    return claim_tuple.ClaimTuple(
-        measurement_id=ident, metric=metric, value=100.0, date=date,
-        category="BASELINE" if arm == "A_f16_kv" else "CANDIDATE",
-        claim=f"{arm} {metric} at {depth}: 100.0 tokens/s (fixture). K buffer 10 MiB; V buffer 10 MiB.",
-        protocol_id=protocol, reps=5, reps_basis="scored", unit="tokens/s",
-        attestation_sha256=SHA,
-        attestation_locator=f"kvq:{run}:{arm}:{depth}:{metric}|data/run/summary.json#sha256={SHA}",
-        attestation_present=True, attestation_verified=True, source_kind=KVQ)
+class Child:
+    """A canned `loop_beliefs.py` child: records every argv, answers per subcommand."""
+
+    def __init__(self, prepare=None, *, prepare_rc=0, known_good=None):
+        self.prepare, self.prepare_rc = prepare, prepare_rc
+        #: None = no known-good snapshot (check-seeds admits nothing).
+        self.known_good = known_good
+        self.calls: list[list[str]] = []
+
+    def commands(self) -> list[str]:
+        return [argv[2] for argv in self.calls]
+
+    def argv(self, command: str) -> list[str]:
+        return next(argv for argv in self.calls if argv[2] == command)
+
+    def __call__(self, argv, **kw):
+        self.calls.append(list(argv))
+        command = argv[2]
+        if command == "prepare":
+            if isinstance(self.prepare, BaseException):
+                raise self.prepare
+            body, rc = self.prepare, self.prepare_rc
+        elif command == "check-seeds":
+            body, rc = self._check(json.loads(argv[argv.index("--items-json") + 1])), 0
+        else:
+            body, rc = {"key": "belief-ledger-not-current.autokernel.planner",
+                        "raised": "test-double"}, 0
+        stdout = body if isinstance(body, str) else json.dumps(body)
+        return subprocess.CompletedProcess(argv, rc, stdout=stdout, stderr="")
+
+    def _check(self, items):
+        """Root's `check_seeds` rule, over the canned snapshot."""
+        kg = self.known_good
+        rows = []
+        for item in items:
+            reasons, flagged = [], []
+            if kg is None:
+                reasons.append("no_known_good_state")
+            if not item.get("seeded_against"):
+                reasons.append("no_seeded_against_state")
+            for premise in item.get("premises") or []:
+                for status in ("withdrawn", "contested"):
+                    if premise in (kg or {}).get(status, ()):
+                        flagged.append({"claim_id": premise, "status": status})
+                        break
+            if flagged:
+                reasons.append("premise_flagged")
+            rows.append({**item, "admissible": not reasons, "reasons": reasons,
+                         "flagged_premises": flagged})
+        return {"schema": bc.SEED_CHECK_SCHEMA,
+                "checked_against": (kg or {}).get("ledger_state"),
+                "checked_against_digest": (kg or {}).get("ledger_state_digest"),
+                "items": rows, "admissible_ids": [r["id"] for r in rows if r["admissible"]],
+                "flagged_ids": [r["id"] for r in rows if r["flagged_premises"]]}
 
 
-def _run(run="run-20260924T100000Z", **kw):
-    return [_kvq(run, a, d, m, **kw) for a in ARMS for d in DEPTHS for m in METRICS]
+def _refused(reason="chain_broken", detail="frame 7: hash mismatch"):
+    return {"schema": bc.ANSWER_SCHEMA, "consumer": bc.CONSUMER, "status": "refused",
+            "reason": reason, "detail": detail, "ledger_state": None, "evidence": None,
+            "alarm": {"key": "belief-ledger-not-current.autokernel.planner",
+                      "raised": "raised"}, "last_known_good": LAST_KNOWN_GOOD}
 
 
-def _ledger(tmp_path, tuples):
-    claim_tuple, _, ledger = _root_modules()
-    path = tmp_path / "ledger.jsonl"
-    led = ledger.Ledger(path)
-    for tup in tuples:
-        for frame in claim_tuple.to_frames(tup, as_of=WRITTEN, adapter_id="fixture/v1"):
-            led.append(frame)
-    return path
+def _config(tmp_path, **kw):
+    return bc.BeliefConfig(root=tmp_path / "root", known_good=tmp_path / "kg.json",
+                           alarm_state=tmp_path / "alarm-state.json",
+                           alarm_config=tmp_path / "alarm.yaml", **kw)
 
 
-def _retract(path, tup, at="2026-09-24T11:00:00+00:00"):
-    claim_tuple, frames, ledger = _root_modules()
-    evidence = next(f for f in claim_tuple.to_frames(tup, as_of=WRITTEN, adapter_id="fixture/v1")
-                    if f["frame_type"].endswith("evidence_supports_claim/v1"))
-    ledger.Ledger(path).append(frames.make_frame(
-        frame_type="epyc.vidya/frame/retraction/v1",
-        assertion={"retracts": evidence["frame_id"], "reason": "fixture"},
-        provenance={"method": "fixture/v1"}, actor="fixture/v1",
-        authority_scope="measurement", created_at=at))
+def _planner(tmp_path, child, **kw):
+    workspace = tmp_path / "workers" / "lane0"
+    workspace.mkdir(parents=True, exist_ok=True)
+    return actors.AgentPlanner(workspace=workspace, belief=_config(tmp_path),
+                               belief_runner=child, **kw)
 
 
-def _read(target, ledger, **kw):
-    return bc.read(target, root=ROOT, ledger_path=ledger, as_of=AS_OF, **kw)
+def _log_dir(tmp_path) -> Path:
+    return tmp_path / "workers" / actors.ACTOR_REPLY_DIR
 
 
-# ------------------------------------------------------------------------ matching
+def _rows(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
 
-def test_27b_gpu_target_is_presented_the_complete_run(tmp_path):
-    ev = _read(GPU_27B, _ledger(tmp_path, _run()))
-    assert ev["status"] == "presented" and ev["error"] is None
-    assert len(ev["claim_ids"]) == 12 and ev["reasons"] == []
-    assert {c["grade"] for c in ev["claims"]} == {"Witnessed/Attested"}
-    assert ev["runs"] == [{"source_kind": KVQ, "run": "run-20260924T100000Z",
-                           "status": "presented", "reason": "",
-                           "claim_ids": sorted(ev["claim_ids"])}]
-    assert ev["section"].startswith(bc.SECTION_HEADER) and ev["frontier"] == 36
+def _receipts(tmp_path) -> list[dict]:
+    return _rows(_log_dir(tmp_path) / bc.RECEIPT_LOG)
 
 
-def test_ds41_cpu_target_gets_nothing_and_never_opens_the_ledger(tmp_path):
-    with mock.patch.object(bc, "load_root", side_effect=AssertionError("opened ROOT")):
-        ev = _read(DS41_CPU, _ledger(tmp_path, _run()))
-    assert (ev["status"], ev["reasons"], ev["section"], ev["claim_ids"]) == (
-        "omitted", ["inapplicable_target"], "", [])
+# ------------------------------------------------- (i) ready -> planner called, receipt
 
 
-@pytest.mark.parametrize("change", [
-    {"model_path": "/mnt/raid0/llm/models/mtp-Qwen3.8-27B-Q8_0.gguf"},
-    {"model_path": "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf"},
-    {"model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf"},
-    {"quant": "Q4_K"}, {"backend": "cpu", "device": "epyc-9655"}, {"device": "gfx942"},
+def test_stale_ledger_ingested_then_ready_calls_planner_and_receipt_names_the_state(tmp_path):
+    section = (f"{bc.SECTION_HEADER}\n### Contested\n- clm_c3 [abstain] kvq:...\n"
+               "### Usable\n- clm_c1 [Witnessed/Attested] kvq:...\n- clm_c2 [...] kvq:...")
+    answer = belief_ready_answer(sync_action="ingested", evidence={
+        "status": "presented", "reasons": [], "claim_ids": ["clm_c1", "clm_c2"],
+        "contested_claim_ids": ["clm_c3"], "withdrawn_claim_ids": [],
+        "runs": [{"source_kind": "kvq", "run": "r1", "status": "presented"}],
+        "section": section, "section_sha256": hashlib.sha256(section.encode()).hexdigest(),
+        "section_bytes": len(section)})
+    child = Child(answer)
+    reply = json.dumps({**HYPOTHESIS, "relies_on_claims": ["clm_c1", "clm_c3"]})
+    with mock.patch.object(actors, "_run_agent", return_value=reply) as run:
+        hyp = _planner(tmp_path, child).propose({"current_regime": GPU_27B_REGIME})
+    prompt, env = run.call_args.args[0], run.call_args.kwargs["env"]
+    assert section in prompt and child.commands() == ["prepare"]
+    argv = child.argv("prepare")
+    assert argv[1] == str(tmp_path / "root" / "scripts" / "vidya" / "loop_beliefs.py")
+    assert argv[argv.index("--consumer") + 1] == "autokernel.planner"
+    assert json.loads(argv[argv.index("--target-json") + 1])["model_path"].endswith(
+        "Qwen3.8-27B-Q8_0.gguf")
+    assert argv[argv.index("--known-good") + 1] == str(tmp_path / "kg.json")
+    assert argv[argv.index("--alarm-state") + 1] == str(tmp_path / "alarm-state.json")
+    assert json.loads(env[bc.ENV_KEY])["ledger_state_digest"] == answer["ledger_state_digest"]
+    [receipt] = _receipts(tmp_path)
+    assert receipt["schema"] == bc.RECEIPT_SCHEMA and receipt["status"] == "ready"
+    assert receipt["ledger_state"]["freshness"]["sync_action"] == "ingested"
+    assert receipt["ledger_state_digest"] == answer["ledger_state_digest"]
+    assert receipt["claim_ids"] == ["clm_c1", "clm_c2"]
+    assert receipt["contested_claim_ids"] == ["clm_c3"]
+    assert receipt["outcome"] == {"kind": "hypothesis", "mechanism_id": "akm-x"}
+    # Contested is not evidence: only a presented USABLE id is accepted as reliance.
+    assert receipt["reliance"]["accepted"] == ["clm_c1"]
+    assert receipt["reliance"]["rejected"] == [{"claim_id": "clm_c3", "reason": "not_presented"}]
+    assert receipt["call"]["prompt_sha256"] == hashlib.sha256(prompt.encode()).hexdigest()
+    assert isinstance(hyp, Hypothesis) and hyp.relies_on_claims == ("clm_c1",)
+    assert hyp.belief_receipt_id == receipt["receipt_id"]
+    row = Outcome(status="keep", hypothesis=hyp).to_attempt()
+    assert row["relies_on_claims"] == ["clm_c1"] and "belief_mode" not in row
+
+
+def test_an_inapplicable_target_is_still_a_plan_with_verified_ledger_state(tmp_path):
+    with mock.patch.object(actors, "_run_agent",
+                           return_value='{"abstain": "no feasible hypothesis"}') as run:
+        out = _planner(tmp_path, Child(belief_ready_answer())).propose(
+            {"current_regime": DS41_CPU_REGIME})
+    assert isinstance(out, Abstain) and bc.SECTION_HEADER not in run.call_args.args[0]
+    [receipt] = _receipts(tmp_path)
+    assert receipt["status"] == "ready" and receipt["ledger_state"]["fresh"] is True
+    assert receipt["evidence_reasons"] == ["inapplicable_target"] and receipt["claim_ids"] == []
+    assert receipt["outcome"] == {"kind": "abstain", "abstain_reason": "no feasible hypothesis"}
+
+
+def test_a_failed_call_still_leaves_an_error_receipt(tmp_path):
+    with mock.patch.object(actors, "_run_agent", return_value='{"mechanism_id": "akm-x"}'), \
+         mock.patch.object(actors, "_parse_reply", return_value={"mechanism_id": "akm-x"}):
+        with pytest.raises(actors.ProviderTransient):
+            _planner(tmp_path, Child(belief_ready_answer())).propose(
+                {"current_regime": GPU_27B_REGIME})
+    assert _receipts(tmp_path)[0]["outcome"]["kind"] == "error"
+
+
+# ---------------------------------------------- (ii) refused -> NO planner call, ever
+
+
+def test_refused_chain_broken_never_calls_the_planner_and_leaves_a_refusal_receipt(tmp_path):
+    child = Child(_refused(), prepare_rc=3)
+    planner = _planner(tmp_path, child)
+    with mock.patch.object(actors, "_run_agent", side_effect=AssertionError("planner called")) \
+            as run, mock.patch.object(actors.AgentPlanner, "_context_block",
+                                      side_effect=AssertionError("prompt built")):
+        with pytest.raises(bc.BeliefContextRefused) as caught:
+            planner.propose({"current_regime": GPU_27B_REGIME})
+    assert run.call_count == 0
+    refused = caught.value
+    assert (refused.reason, refused.last_known_good) == ("chain_broken", LAST_KNOWN_GOOD)
+    assert isinstance(refused.degraded, bc.DegradedWork)
+    # The child decided the refusal and raised the alarm itself: no consumer-side alarm.
+    assert child.commands() == ["prepare"]
+    [receipt] = _receipts(tmp_path)
+    assert receipt["status"] == "refused" and receipt["ledger_state"] is None
+    assert receipt["outcome"]["kind"] == "refused"
+    assert receipt["outcome"]["reason"] == "chain_broken"
+    assert receipt["refusal"]["last_known_good"] == LAST_KNOWN_GOOD
+    assert receipt["call"]["prompt_sha256"] is None
+    assert refused.receipt_id == receipt["receipt_id"]
+    assert refused.summary()["last_known_good_digest"] == LAST_KNOWN_GOOD["ledger_state_digest"]
+
+
+@pytest.mark.parametrize("failure,reason", [
+    (subprocess.TimeoutExpired(["loop_beliefs"], 30), "reader_timeout"),
+    (FileNotFoundError("no interpreter"), "reader_crash"),
+    ("Traceback (most recent call last):\n  boom", "reader_crash"),
+    ("", "reader_crash"),
 ])
-def test_another_model_quant_backend_or_device_yields_nothing(tmp_path, change):
-    ev = _read({**GPU_27B, **change}, _ledger(tmp_path, _run()))
-    assert ev["section"] == "" and ev["reasons"] == ["inapplicable_target"]
+def test_timeout_crash_or_garbage_refuses_and_raises_the_alarm(tmp_path, failure, reason):
+    child = Child(failure, prepare_rc=1)
+    with mock.patch.object(actors, "_run_agent", side_effect=AssertionError("planner called")) \
+            as run:
+        with pytest.raises(bc.BeliefContextRefused) as caught:
+            _planner(tmp_path, child).propose({"current_regime": GPU_27B_REGIME})
+    assert run.call_count == 0 and caught.value.reason == reason
+    assert child.commands() == ["prepare", "alarm"]
+    alarm = child.argv("alarm")
+    assert alarm[alarm.index("--reason") + 1] == reason
+    assert alarm[alarm.index("--alarm-state") + 1] == str(tmp_path / "alarm-state.json")
+    assert alarm[alarm.index("--alarm-config") + 1] == str(tmp_path / "alarm.yaml")
+    assert alarm[alarm.index("--escalate-after-s") + 1] == "3600.0"
+    assert caught.value.alarm["invoked"] is True
+    assert _receipts(tmp_path)[0]["status"] == "refused"
 
 
-@pytest.mark.parametrize("missing", ["model_path", "quant", "backend", "device"])
-def test_incomplete_target_is_not_a_wildcard(tmp_path, missing):
-    ev = _read({k: v for k, v in GPU_27B.items() if k != missing}, _ledger(tmp_path, _run()))
-    assert ev["section"] == "" and "target incomplete" in ev["error"]
+def test_the_reader_deadlines_are_argv_configured():
+    seen = {}
+
+    def runner(argv, **kw):
+        seen.setdefault(argv[2], kw["timeout"])
+        if argv[2] == "prepare":
+            raise subprocess.TimeoutExpired(argv, kw["timeout"])
+        return subprocess.CompletedProcess(argv, 0, stdout="{}", stderr="")
+
+    config = bc.BeliefConfig(reader_timeout_s=7.5, alarm_timeout_s=2.0, escalate_after_s=60)
+    with pytest.raises(bc.BeliefContextRefused):
+        bc.prepare({"current_regime": GPU_27B_REGIME}, config, runner=runner)
+    assert seen == {"prepare": 7.5, "alarm": 2.0}
 
 
-def test_declared_context_depth_keeps_equal_depth_only(tmp_path):
-    ev = _read({**GPU_27B, "context_tokens": 32768}, _ledger(tmp_path, _run()))
-    assert len(ev["claim_ids"]) == 6 and all(":d32k:" in c["locator"] for c in ev["claims"])
+# ------------------------------------------- (v) construction: no unvalidated plan
 
 
-# ----------------------------------------------------------- decision-readiness
+@pytest.mark.parametrize("forge", [
+    lambda a: {k: v for k, v in a.items() if k != "ledger_state"},
+    lambda a: {**a, "ledger_state": {**a["ledger_state"], "fresh": False}},
+    lambda a: {**a, "ledger_state": {**a["ledger_state"], "head_hash": ""}},
+    lambda a: {**a, "ledger_state": {**a["ledger_state"], "frame_count": "3"}},
+    lambda a: {**a, "evidence": None},
+    lambda a: {**a, "schema": "epyc.vidya.something_else.v1"},
+])
+def test_a_forged_ready_answer_is_refused_before_any_planner_call(tmp_path, forge):
+    child = Child(forge(belief_ready_answer()))
+    with mock.patch.object(actors, "_run_agent", side_effect=AssertionError("planner called")) \
+            as run:
+        with pytest.raises(bc.BeliefContextRefused) as caught:
+            _planner(tmp_path, child).propose({"current_regime": GPU_27B_REGIME})
+    assert run.call_count == 0 and caught.value.reason == "invalid_answer"
+    assert child.commands() == ["prepare", "alarm"]
 
 
-def test_an_incomplete_run_is_never_presented(tmp_path):
-    ev = _read(GPU_27B, _ledger(tmp_path, _run()[:11]))
-    assert ev["status"] == "omitted" and ev["section"] == ""
-    assert ev["reasons"] == ["incomplete_run"]
-    assert ev["runs"][0]["status"] == "omitted" and "11 of 12" in ev["omitted"][0]["detail"]
+def test_a_ready_answer_with_a_failing_exit_code_is_not_ready(tmp_path):
+    with pytest.raises(bc.BeliefContextRefused) as caught:
+        bc.prepare({"current_regime": GPU_27B_REGIME}, _config(tmp_path),
+                   runner=Child(belief_ready_answer(), prepare_rc=3))
+    assert caught.value.reason == "invalid_answer"
 
 
-def test_a_retracted_row_makes_its_run_incomplete_and_the_older_complete_run_stands(tmp_path):
-    old = _run("run-20260923T100000Z", date="2026-09-23")
-    new = _run("run-20260924T100000Z")
-    ledger = _ledger(tmp_path, old + new)
-    _retract(ledger, new[3])
-    ev = _read(GPU_27B, ledger)
-    assert ev["status"] == "presented"
-    assert {c["run"] for c in ev["claims"]} == {"run-20260923T100000Z"}
-    assert "gate_refused:abstain" in ev["reasons"] or any(
-        r.startswith("gate_refused:") for r in ev["reasons"])
-    assert "incomplete_run" in ev["reasons"]
-    assert f"clm_{new[3].measurement_id}" not in ev["claim_ids"]
+def test_the_backend_call_itself_refuses_anything_but_a_sealed_ready_answer(tmp_path):
+    planner = _planner(tmp_path, Child(belief_ready_answer()))
+    with mock.patch.object(actors, "_run_agent", side_effect=AssertionError("planner called")):
+        for forged in (None, belief_ready_answer(), {"answer": belief_ready_answer()}):
+            with pytest.raises(bc.BeliefContextRefused) as caught:
+                planner._proposal_from_agent("p", planner.backend, None, {}, belief=forged)
+            assert caught.value.reason == "unvalidated_answer"
+    with pytest.raises(TypeError):
+        bc.ReadyAnswer(belief_ready_answer(), elapsed_s=0.0, target={})
+    ready = bc.prepare({"current_regime": GPU_27B_REGIME}, _config(tmp_path),
+                       runner=Child(belief_ready_answer()))
+    ready.answer["ledger_state"] = None          # tampered after validation
+    with pytest.raises(bc.BeliefContextRefused) as caught:
+        bc.require_ready(ready)
+    assert caught.value.reason == "invalid_answer"
 
 
-def test_every_run_retracted_means_nothing_presented(tmp_path):
-    run = _run()
-    ledger = _ledger(tmp_path, run)
-    _retract(ledger, run[0])
-    ev = _read(GPU_27B, ledger)
-    assert ev["status"] == "omitted" and ev["section"] == "" and ev["claim_ids"] == []
+def test_there_is_no_off_mode(tmp_path):
+    assert actors.BELIEF_CONTEXT_MODES == ("required",)
+    for mode in ("off", "on", ""):
+        with pytest.raises(ValueError, match="no planning without belief context"):
+            actors.AgentPlanner(workspace=tmp_path, belief_context=mode)
+    assert actors.AgentPlanner(workspace=tmp_path).belief_context == "required"
 
 
-def test_an_older_complete_run_is_superseded(tmp_path):
-    ev = _read(GPU_27B, _ledger(tmp_path, _run("run-20260923T100000Z", date="2026-09-23")
-                                + _run("run-20260924T100000Z")))
-    assert {c["run"] for c in ev["claims"]} == {"run-20260924T100000Z"}
-    assert "superseded_run" in ev["reasons"]
+def test_run_argv_has_no_off_and_builds_the_reader_config(tmp_path):
+    from autokernel.loop import run
+    assert run._belief_seconds("2.5") == 2.5
+    with pytest.raises(Exception):
+        run._belief_seconds("0")
+    args = mock.Mock(belief_root_repo=tmp_path, belief_ledger=tmp_path / "l.jsonl",
+                     belief_known_good=tmp_path / "kg.json", belief_escalate_after_s=60.0,
+                     belief_reader_timeout_s=45.0)
+    config = run._belief_config(args)
+    assert (config.root, config.ledger, config.known_good, config.escalate_after_s,
+            config.reader_timeout_s) == (tmp_path, tmp_path / "l.jsonl", tmp_path / "kg.json",
+                                         60.0, 45.0)
 
 
-def test_observations_are_shown_with_their_grade(tmp_path):
-    ev = _read(GPU_27B, _ledger(tmp_path, _run(protocol="")))
-    assert {c["grade"] for c in ev["claims"]} == {"Judged/Located"}
-    assert "protocol none" in ev["section"] and "grade notes: no protocol citation" in ev["section"]
+# --------------------------------------------- (iii) degraded mode in the formation loop
 
 
-def test_no_ingested_claims_is_omitted_not_unavailable(tmp_path):
-    claim_tuple, _, _ = _root_modules()
-    other = claim_tuple.ClaimTuple(
-        measurement_id="tale-fixture-1", metric="tale_suite_accuracy", value=0.5,
-        date="2026-09-24", category="BASELINE", protocol_id="P-X", reps=5,
-        claim="Qwen3.8-27B-Q8_0 on gfx90a scored 0.5 (fixture, source with no declared scope).",
-        attestation_locator="tale-budget:run:math", source_kind="tale-budget-measurement")
-    ev = _read(GPU_27B, _ledger(tmp_path, [other]))
-    assert (ev["status"], ev["reasons"], ev["section"]) == ("omitted", ["no_ingested_claims"], "")
+class _RefusingPlanner:
+    """`AgentPlanner.propose` when the ledger cannot be made current."""
+
+    def __init__(self, degraded):
+        self.degraded, self.proposals, self.authored = degraded, 0, []
+
+    def propose(self, context):
+        self.proposals += 1
+        refused = bc.BeliefContextRefused("chain_broken", "frame 7",
+                                          last_known_good=LAST_KNOWN_GOOD)
+        refused.degraded = self.degraded
+        raise refused
+
+    def author(self, hypothesis, context):
+        self.authored.append(hypothesis.mechanism_id)
+        return ("ggml/src/ggml-cuda/fattn.cu",)
 
 
-# ---------------------------------------------------------------------- rendering
+class _Critic:
+    """Degraded-mode work is still REVIEWED (only new hypothesis generation is refused)."""
+
+    def __init__(self):
+        self.reviewed, self.patches = [], []
+
+    def review_hypothesis(self, hypothesis, context):
+        self.reviewed.append(hypothesis.mechanism_id)
+        return loop.Review(True)
+
+    def review_patch(self, hypothesis, paths, context):
+        self.patches.append(hypothesis.mechanism_id)
+        return loop.Review(True)
 
 
-def test_a_complete_run_is_shown_whole_or_not_at_all(tmp_path):
-    ledger = _ledger(tmp_path, _run())
-    whole = _read(GPU_27B, ledger)
-    assert len(whole["claim_ids"]) == 12 and len(whole["section"].encode()) <= bc.DEFAULT_MAX_BYTES
-    for kw in ({"max_claims": 5}, {"max_bytes": 1500}):
-        cut = _read(GPU_27B, ledger, **kw)
-        assert (cut["status"], cut["section"], cut["claim_ids"]) == ("omitted", "", [])
-        assert cut["reasons"] == ["bounded"] and cut["omitted_count"] == 12
+def _null(hypothesis, paths):
+    return bench.Comparison(surface="tg128", anchor_samples=[100.0], candidate_samples=[100.0],
+                            effect=0.0, estimator="median_over_median", pairs=5,
+                            noise_floor_pct=1.0, residency={"invocations": 10, "resident": 10})
 
 
-def test_claims_without_run_semantics_are_bounded_per_claim(tmp_path, monkeypatch):
-    import dataclasses
-    scope = bc.SOURCE_SCOPES[KVQ]
-    monkeypatch.setitem(bc.SOURCE_SCOPES, KVQ, dataclasses.replace(scope, expected_keys=frozenset()))
-    few = _read(GPU_27B, _ledger(tmp_path, _run()), max_claims=5)
-    assert len(few["claim_ids"]) == 5 and "Shown 5 of 12" in few["section"]
-    assert few["reasons"] == ["bounded"]
-    small = _read(GPU_27B, tmp_path / "ledger.jsonl", max_bytes=1500)
-    assert len(small["section"].encode()) <= 1500 and 0 < len(small["claim_ids"]) < 12
+def _iterate(planner, **kw):
+    critic = _Critic()
+    outcome = loop.iterate(planner=planner, critic=critic, context={}, measure=_null,
+                           gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
+                           commit=lambda h, p, c: None, **kw)
+    return outcome, critic
 
 
-def test_rendering_is_neutral(tmp_path):
-    section = _read(GPU_27B, _ledger(tmp_path, _run()))["section"].lower()
-    for steering in ("you should", "consider", "recommend", "prefer", "try ", "must ",
-                     "do not", "don't", "use this", "attack", "focus", "authorize"):
-        assert steering not in section, steering
+def _seed(seed_id, premises, seeded_against="sha256:" + "1" * 64):
+    return {"id": seed_id, **HYPOTHESIS, "mechanism_id": f"akm-{seed_id}",
+            "premises": premises, "seeded_against": seeded_against}
 
 
-# ----------------------------------------------------------------------- failure
+def _degraded(tmp_path, child, seeds=None):
+    path = None
+    if seeds is not None:
+        path = tmp_path / "preseeded.jsonl"
+        path.write_text("".join(json.dumps(row) + "\n" for row in seeds) + "not json\n")
+    return bc.DegradedWork(log_dir=_log_dir(tmp_path), config=_config(tmp_path),
+                           preseeded=path, runner=child)
 
 
-def test_reader_failures_are_unavailable_and_never_raise(tmp_path):
-    assert _read(GPU_27B, tmp_path / "absent.jsonl")["reasons"] == ["ledger_missing"]
-    ledger = _ledger(tmp_path, _run())
-    lines = ledger.read_text().splitlines()
-    tampered = json.loads(lines[1])
-    tampered["frame"]["assertion"]["display_text"] = "tampered"
-    lines[1] = json.dumps(tampered)
-    ledger.write_text("\n".join(lines) + "\n")
-    ev = _read(GPU_27B, ledger)
-    assert ev["status"] == "unavailable" and ev["reasons"] == ["ledger_integrity"]
-    ev = bc.read(GPU_27B, root=tmp_path / "no-root", ledger_path=ledger, as_of=AS_OF)
-    assert (ev["status"], ev["reasons"]) == ("unavailable", ["root_missing"])
+def _point(mechanism, relies=(), checkpoint_id=None):
+    return resume.ResumePoint(
+        checkpoint_id=checkpoint_id or (mechanism[-1] * 64 + "#0"), stage="critic1",
+        hypothesis=Hypothesis(**{**HYPOTHESIS, "mechanism_id": mechanism},
+                              relies_on_claims=tuple(relies)),
+        checkpoint={}, provenance=(), prior_patch_rejections=(), patch_rounds=1)
 
 
-def test_planner_evidence_timeout_and_garbage_are_unavailable():
-    context = {"current_regime": GPU_27B_REGIME}
+def test_degraded_mode_runs_an_already_planned_resume_point_reviewed_never_planned(tmp_path):
+    point = _point("akm-resumed", relies=("clm_old",))
+    queue = [point]
+    planner = _RefusingPlanner(_degraded(tmp_path, Child(known_good=KNOWN_GOOD)))
+    outcome, critic = _iterate(planner, next_resume=lambda: queue.pop() if queue else None)
+    assert planner.proposals == 1                      # asked once, refused, never again
+    assert critic.reviewed == ["akm-resumed"] and critic.patches == ["akm-resumed"]
+    assert outcome.status == "measured_null" and outcome.hypothesis.mechanism_id == "akm-resumed"
+    assert outcome.resumed_from == point.checkpoint_id
+    row = outcome.to_attempt()
+    assert row["belief_mode"] == "degraded"
+    assert row["belief_refusal"]["reason"] == "chain_broken"
+    assert row["belief_refusal"]["last_known_good_digest"] == LAST_KNOWN_GOOD["ledger_state_digest"]
+    [logged] = _rows(_log_dir(tmp_path) / bc.DEGRADED_LOG)
+    assert (logged["event"], logged["kind"], logged["id"], logged["premises"]) == (
+        "run", "resume", point.checkpoint_id, ["clm_old"])
+    # Planned under no v2 receipt: recorded, not blocking (it was already planned).
+    assert logged["reasons"] == ["no_seeded_against_state"]
 
-    def slow(argv, **kw):
-        assert kw["timeout"] == bc.READER_TIMEOUT_S
+
+def test_degraded_mode_skips_a_resume_point_whose_premise_is_flagged_before_it_runs(tmp_path):
+    flagged, clean = _point("akm-flagged", relies=("clm_dead",)), _point("akm-clean")
+    queue = [clean, flagged]                           # pop(): flagged first
+    disposed = []
+    planner = _RefusingPlanner(_degraded(tmp_path, Child(known_good=KNOWN_GOOD)))
+    outcome, critic = _iterate(planner, next_resume=lambda: queue.pop() if queue else None,
+                               record_abandoned=disposed.append)
+    assert critic.reviewed == ["akm-clean"] and outcome.hypothesis.mechanism_id == "akm-clean"
+    [skip] = disposed
+    assert (skip.status, skip.refusal_gate) == (loop.RESUME_REJECTED,
+                                                 "resume:belief_premise_flagged")
+    assert "clm_dead (withdrawn)" in skip.reasons[0] and skip.belief_mode == "degraded"
+    log = _rows(_log_dir(tmp_path) / bc.DEGRADED_LOG)
+    assert [(r["event"], r["id"]) for r in log] == [("skipped", flagged.checkpoint_id),
+                                                    ("run", clean.checkpoint_id)]
+    assert log[0]["flagged_premises"] == [{"claim_id": "clm_dead", "status": "withdrawn"}]
+
+
+def test_degraded_mode_runs_an_admissible_seed_and_skips_the_rest_with_reasons(tmp_path):
+    child = Child(known_good=KNOWN_GOOD)
+    seeds = [_seed("flagged", ["clm_dead"]), _seed("blind", ["clm_ok"], seeded_against=None),
+             _seed("good", ["clm_ok"]), _seed("operator", [], seeded_against=OPERATOR)]
+    planner = _RefusingPlanner(_degraded(tmp_path, child, seeds))
+    outcome, critic = _iterate(planner)
+    assert planner.proposals == 1 and critic.reviewed == ["akm-good"]    # still reviewed
+    assert outcome.status == "measured_null" and outcome.hypothesis.preseed_id == "good"
+    row = outcome.to_attempt()
+    assert (row["belief_mode"], row["preseed_id"], row["belief_premises"], row["seeded_against"]) \
+        == ("degraded", "good", ["clm_ok"], "sha256:" + "1" * 64)
+    log = _rows(_log_dir(tmp_path) / bc.DEGRADED_LOG)
+    skipped = {r["id"]: r for r in log if r["event"] == "skipped"}
+    assert skipped["flagged"]["reasons"] == ["premise_flagged"]
+    assert skipped["flagged"]["flagged_premises"] == [{"claim_id": "clm_dead",
+                                                       "status": "withdrawn"}]
+    assert skipped["blind"]["reasons"] == ["no_seeded_against_state"]
+    assert skipped[None]["reasons"] == ["invalid_seed_row"]
+    assert [r["id"] for r in log if r["event"] == "run"] == ["good"]
+    # The queue never re-runs a taken seed; an operator-provenance seed is admissible.
+    outcome, _ = _iterate(_RefusingPlanner(_degraded(tmp_path, child, seeds)))
+    assert outcome.hypothesis.preseed_id == "operator"
+    assert outcome.to_attempt()["seeded_against"] == OPERATOR
+    outcome, _ = _iterate(_RefusingPlanner(_degraded(tmp_path, child, seeds)))
+    assert outcome.status == loop.BELIEF_REFUSED and outcome.hypothesis is None
+    assert outcome.to_attempt()["belief_mode"] == "refused"
+    # A checkpoint of a seeded hypothesis round-trips its marks (Hypothesis(**to_dict())).
+    assert Hypothesis(**{k: v for k, v in row.items() if k in Hypothesis.__dataclass_fields__}) \
+        .belief_mode == "degraded"
+
+
+def test_without_a_known_good_snapshot_no_seed_runs(tmp_path):
+    planner = _RefusingPlanner(_degraded(tmp_path, Child(known_good=None), [_seed("good", [])]))
+    outcome, critic = _iterate(planner)
+    assert outcome.status == loop.BELIEF_REFUSED and critic.reviewed == []
+    [skip] = [r for r in _rows(_log_dir(tmp_path) / bc.DEGRADED_LOG) if r["id"] == "good"]
+    assert "no_known_good_state" in skip["reasons"]
+
+
+def test_a_failed_seed_check_runs_nothing(tmp_path):
+    def broken(argv, **kw):
         raise subprocess.TimeoutExpired(argv, kw["timeout"])
 
-    ev = bc.planner_evidence(context, runner=slow)
-    assert (ev["status"], ev["reasons"], ev["section"]) == ("unavailable", ["reader_timeout"], "")
-    ev = bc.planner_evidence(context, runner=lambda argv, **kw: subprocess.CompletedProcess(
-        argv, 1, stdout="Traceback", stderr=""))
-    assert (ev["status"], ev["reasons"]) == ("unavailable", ["reader_error"])
+    outcome, _ = _iterate(_RefusingPlanner(_degraded(tmp_path, broken, [_seed("good", [])])))
+    assert outcome.status == loop.BELIEF_REFUSED
+    skip = _rows(_log_dir(tmp_path) / bc.DEGRADED_LOG)[-1]
+    assert skip["reasons"] == ["check_seeds_failed"] and "TimeoutExpired" in skip["check_error"]
 
 
-def test_planner_evidence_child_process_round_trip(tmp_path):
-    """The real child: a ROOT-shaped dir whose scripts/vidya IS ROOT and whose ledger is a fixture."""
-    fake_root = tmp_path / "root"
-    (fake_root / "scripts").mkdir(parents=True)
-    (fake_root / "scripts" / "vidya").symlink_to(VIDYA)
-    (fake_root / ".vidya").mkdir()
-    _ledger(tmp_path, _run()).rename(fake_root / ".vidya" / "ledger.jsonl")
-    ev = bc.planner_evidence({"current_regime": GPU_27B_REGIME}, root=fake_root)
-    assert ev["status"] == "presented" and len(ev["claim_ids"]) == 12 and ev["elapsed_s"] < 10
-    with mock.patch.object(bc.subprocess, "run", side_effect=AssertionError("spawned")):
-        ev = bc.planner_evidence({"current_regime": DS41_CPU_REGIME}, root=fake_root)
-    assert (ev["status"], ev["reasons"]) == ("omitted", ["inapplicable_target"])
+def test_the_pool_backs_off_on_belief_refused_instead_of_spinning(tmp_path, monkeypatch):
+    waits = []
+    monkeypatch.setattr(pipeline, "_belief_wait", lambda s, stop: waits.append(s))
+    planner = _RefusingPlanner(None)
+    worker = pipeline.Worker("lane0", tmp_path / "lane0", tmp_path / "b0")
+    outcomes = pipeline.run_pool(
+        workers=[worker], make_planner=lambda w: planner, make_critic=lambda w: _Critic(),
+        build_context=dict, make_gate=lambda w: (lambda h, p: (True, [])),
+        make_measure=lambda w: _null, commit=lambda w, h, p, c: None,
+        champion_head=lambda: "c0", reset_to_champion=lambda w: "c0",
+        record=lambda o: None, iterations=4)
+    assert [o.status for o in outcomes] == [loop.BELIEF_REFUSED] * 4
+    assert waits == [30.0, 60.0, 120.0, 240.0] and planner.proposals == 4
+    assert pipeline.belief_backoff_s(20) == pipeline.BELIEF_BACKOFF_MAX_S
 
 
-def test_every_declared_scope_names_its_basis():
-    for scope in bc.SOURCE_SCOPES.values():
-        assert scope.basis.strip() and scope.limits.strip() and scope.backend in ("cpu", "gpu")
+def test_the_backoff_wait_honours_a_stop():
+    import time
+    started = time.monotonic()
+    pipeline._belief_wait(120.0, lambda: True)
+    assert time.monotonic() - started < 1.0
+
+
+def test_belief_refused_is_a_classified_serial_outcome():
+    from autokernel.loop import serial_scheduling
+    assert serial_scheduling._iteration_class(loop.BELIEF_REFUSED) == "failed"
+
+
+# -------------------------------------------------------- (iv) recovery re-check
+
+
+def test_recovery_recheck_flags_a_degraded_result_whose_premise_is_now_withdrawn(tmp_path):
+    degraded = _degraded(tmp_path, Child(known_good=KNOWN_GOOD),
+                         [_seed("good", ["clm_ok"]), _seed("plain", ["clm_x"])])
+    assert degraded.next_seed({"reason": "chain_broken"})["id"] == "good"
+    assert degraded.next_seed({"reason": "chain_broken"})["id"] == "plain"
+    # The ledger recovers, and the fresh snapshot now withdraws clm_ok.
+    fresh = Child(belief_ready_answer(), known_good={
+        **KNOWN_GOOD, "withdrawn": ["clm_ok"], "ledger_state_digest": "sha256:" + "2" * 64})
+    with mock.patch.object(actors, "_run_agent", return_value=json.dumps(HYPOTHESIS)):
+        hyp = _planner(tmp_path, fresh).propose({"current_regime": GPU_27B_REGIME})
+    assert isinstance(hyp, Hypothesis)                    # recovery plans normally
+    flags = {row["id"]: row for row in _rows(_log_dir(tmp_path) / bc.RECHECK_LOG)}
+    assert flags["good"]["review_flag"] is True
+    assert flags["good"]["flagged_premises"] == [{"claim_id": "clm_ok", "status": "withdrawn"}]
+    assert flags["good"]["rechecked_against_digest"] == "sha256:" + "2" * 64
+    assert flags["plain"]["review_flag"] is False
+    # Re-checked once: the next ready spawns no check-seeds; nothing was reversed.
+    before = len(fresh.calls)
+    with mock.patch.object(actors, "_run_agent", return_value=json.dumps(HYPOTHESIS)):
+        _planner(tmp_path, fresh).propose({"current_regime": GPU_27B_REGIME})
+    assert [argv[2] for argv in fresh.calls[before:]] == ["prepare"]
+    assert [r["id"] for r in _rows(_log_dir(tmp_path) / bc.DEGRADED_LOG)
+            if r["event"] == "run"] == ["good", "plain"]
+
+
+def test_a_recheck_without_a_fresh_snapshot_waits_for_the_next_ready(tmp_path):
+    _degraded(tmp_path, Child(known_good=KNOWN_GOOD), [_seed("good", [])]).next_seed({})
+    blind = bc.DegradedWork(log_dir=_log_dir(tmp_path), config=_config(tmp_path),
+                            runner=Child(known_good=None))
+    assert blind.recheck() == [] and not (_log_dir(tmp_path) / bc.RECHECK_LOG).exists()
 
 
 # ------------------------------------------------------------------------ reliance
@@ -283,126 +557,140 @@ def test_shown_is_not_relied_on_and_only_presented_ids_count():
     assert bc.reliance(["a"], [])["accepted"] == []
 
 
-# ----------------------------------------------------------- planner integration
-
-
-def _presented(tmp_path):
-    ev = _read(GPU_27B, _ledger(tmp_path, _run()))
-    return {**ev, "target": GPU_27B, "elapsed_s": 0.1}
-
-
-def _receipts(workspace: Path) -> list[dict]:
-    path = workspace.parent / actors.ACTOR_REPLY_DIR / bc.RECEIPT_LOG
-    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
-
-
-def test_on_presents_section_records_receipt_and_keeps_validated_reliance(tmp_path):
-    workspace = tmp_path / "lane"
-    workspace.mkdir()
-    evidence = _presented(tmp_path)
-    relied = evidence["claim_ids"][0]
-    reply = json.dumps({**HYPOTHESIS, "relies_on_claims": [relied, "clm_not_shown"]})
-    with mock.patch.object(bc, "planner_evidence", return_value=evidence), \
-         mock.patch.object(actors, "_run_agent", return_value=reply) as run:
-        hyp = actors.AgentPlanner(workspace=workspace, belief_context="on").propose(
-            {"current_regime": GPU_27B_REGIME})
-    prompt, env = run.call_args.args[0], run.call_args.kwargs["env"]
-    assert bc.SECTION_HEADER in prompt and relied in prompt
-    assert json.loads(env[bc.ENV_KEY])["claim_ids"] == evidence["claim_ids"]
-    assert isinstance(hyp, Hypothesis) and hyp.relies_on_claims == (relied,)
-    [receipt] = _receipts(workspace)
-    assert receipt["schema"] == bc.RECEIPT_SCHEMA and receipt["evidence_status"] == "presented"
-    assert receipt["claim_ids"] == evidence["claim_ids"] and receipt["frontier"] == 36
-    assert receipt["run"][0]["run"] == "run-20260924T100000Z"
-    assert receipt["outcome"] == {"kind": "hypothesis", "mechanism_id": "akm-x"}
-    assert receipt["reliance"]["accepted"] == [relied]
-    assert receipt["reliance"]["rejected"] == [{"claim_id": "clm_not_shown", "reason": "not_presented"}]
-    assert hyp.belief_receipt_id == receipt["receipt_id"]
-    import hashlib
-    assert receipt["call"]["prompt_sha256"] == hashlib.sha256(prompt.encode()).hexdigest()
-    row = Outcome(status="keep", hypothesis=hyp).to_attempt()
-    assert row["relies_on_claims"] == [relied] and row["belief_receipt_id"] == receipt["receipt_id"]
-
-
-def test_exposure_without_declaration_records_no_reliance(tmp_path):
-    workspace = tmp_path / "lane"
-    workspace.mkdir()
-    with mock.patch.object(bc, "planner_evidence", return_value=_presented(tmp_path)), \
-         mock.patch.object(actors, "_run_agent", return_value=json.dumps(HYPOTHESIS)):
-        hyp = actors.AgentPlanner(workspace=workspace, belief_context="on").propose(
-            {"current_regime": GPU_27B_REGIME})
-    assert hyp.relies_on_claims == ()
-    assert "relies_on_claims" not in hyp.to_dict()
-    assert _receipts(workspace)[0]["reliance"] == {"declared": [], "accepted": [], "rejected": []}
-
-
-def test_ds41_cpu_planner_gets_no_section_and_an_inapplicable_receipt(tmp_path):
-    workspace = tmp_path / "lane"
-    workspace.mkdir()
-    with mock.patch.object(bc.subprocess, "run", side_effect=AssertionError("spawned")), \
-         mock.patch.object(actors, "_run_agent",
-                           return_value='{"abstain": "no feasible hypothesis"}') as run:
-        out = actors.AgentPlanner(workspace=workspace, belief_context="on").propose(
-            {"current_regime": DS41_CPU_REGIME})
-    assert isinstance(out, Abstain)
-    assert "Belief-kernel" not in run.call_args.args[0]
-    [receipt] = _receipts(workspace)
-    assert (receipt["evidence_status"], receipt["evidence_reasons"], receipt["claim_ids"]) == (
-        "omitted", ["inapplicable_target"], [])
-    assert receipt["outcome"] == {"kind": "abstain", "abstain_reason": "no feasible hypothesis"}
-
-
-def test_reader_failure_never_fails_or_changes_the_planner_call(tmp_path):
-    workspace = tmp_path / "lane"
-    workspace.mkdir()
-    with mock.patch.object(bc, "planner_evidence", side_effect=RuntimeError("boom")), \
-         mock.patch.object(actors, "_run_agent", return_value=json.dumps(HYPOTHESIS)) as run:
-        hyp = actors.AgentPlanner(workspace=workspace, belief_context="on").propose(
-            {"current_regime": GPU_27B_REGIME})
-    assert isinstance(hyp, Hypothesis) and "Belief-kernel" not in run.call_args.args[0]
-    assert _receipts(workspace)[0]["evidence_status"] == "unavailable"
-
-
-def test_off_is_the_historical_prompt_with_no_receipt(tmp_path):
-    workspace = tmp_path / "lane"
-    workspace.mkdir()
-    with mock.patch.object(bc, "planner_evidence", side_effect=AssertionError("read")), \
-         mock.patch.object(actors, "_run_agent", return_value=json.dumps(HYPOTHESIS)) as run:
-        hyp = actors.AgentPlanner(workspace=workspace).propose({"current_regime": GPU_27B_REGIME})
-    assert "Belief-kernel" not in run.call_args.args[0]
-    assert run.call_args.kwargs["env"] is None or bc.ENV_KEY not in run.call_args.kwargs["env"]
-    assert _receipts(workspace) == [] and hyp.belief_receipt_id == ""
-
-
-def test_a_failed_call_still_leaves_an_error_receipt(tmp_path):
-    workspace = tmp_path / "lane"
-    workspace.mkdir()
-    with mock.patch.object(bc, "planner_evidence", return_value=_presented(tmp_path)), \
-         mock.patch.object(actors, "_run_agent", return_value='{"mechanism_id": "akm-x"}'), \
-         mock.patch.object(actors, "_parse_reply", return_value={"mechanism_id": "akm-x"}):
-        with pytest.raises(actors.ProviderTransient):
-            actors.AgentPlanner(workspace=workspace, belief_context="on").propose(
-                {"current_regime": GPU_27B_REGIME})
-    assert _receipts(workspace)[0]["outcome"]["kind"] == "error"
-
-
 def test_metrics_row_carries_the_presented_half(tmp_path):
+    ready = bc.prepare({"current_regime": GPU_27B_REGIME}, _config(tmp_path), runner=Child(
+        belief_ready_answer(evidence={"status": "presented", "claim_ids": ["c1"],
+                                      "frontier": 36})))
     workspace = tmp_path / "lane"
     workspace.mkdir()
-    summary = bc.metrics_summary({"status": "presented", "frontier": 36, "claim_ids": ["c1"],
-                                  "runs": [{"source_kind": KVQ, "run": "r", "status": "presented"}],
-                                  "reasons": []})
     actors._record_metrics(workspace, actors.PLANNER_DEFAULT, role="planner", returncode=0,
                            wall_s=1.0, timed_out=False, before_ids=set(), collect_metrics=False,
                            schema=None, final_text=None, salvaged=False,
-                           env={bc.ENV_KEY: summary})
+                           env={bc.ENV_KEY: bc.metrics_summary(ready)})
     row = json.loads((workspace.parent / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG)
                      .read_text().splitlines()[-1])
     assert row["belief_context"]["claim_ids"] == ["c1"] and row["belief_context"]["frontier"] == 36
+    assert row["belief_context"]["ledger_state_digest"] == ready.ledger_state_digest
 
 
 def test_hypothesis_schema_accepts_optional_reliance_only():
-    assert actors._schema_valid({**HYPOTHESIS, "relies_on_claims": ["c"]}, actors.HYPOTHESIS_SCHEMA)
+    assert actors._schema_valid({**HYPOTHESIS, "relies_on_claims": ["c"]},
+                                actors.HYPOTHESIS_SCHEMA)
     assert actors._schema_valid(HYPOTHESIS, actors.HYPOTHESIS_SCHEMA)
-    assert not actors._schema_valid({**HYPOTHESIS, "relies_on_claims": "c"}, actors.HYPOTHESIS_SCHEMA)
+    assert not actors._schema_valid({**HYPOTHESIS, "relies_on_claims": "c"},
+                                    actors.HYPOTHESIS_SCHEMA)
     assert "relies_on_claims" not in actors.HYPOTHESIS_SCHEMA["required"]
+
+
+# -------------------------------------------- integration: the REAL ROOT child process
+
+ROOT = bc.root_repo()
+VIDYA = ROOT / "scripts" / "vidya"
+KVQ = "kv-quant-27b-v10-measurement"
+WRITTEN = "2026-09-24T10:00:00+00:00"
+SHA = "a" * 64
+FAKE_SYNC = '''"""Test double: the plumbing sync module, reporting a fresh ledger."""
+def status(ledger_path, index_path):
+    return {"fresh": True, "index_max_id": "intake-1", "synced_max_id": "intake-1",
+            "last_sync": "2026-10-21T00:00:00Z", "lag_entries": 0}
+
+
+def sync(ledger_path, index_path):
+    return {"action": "noop", "frames_emitted": 0, "seconds": 0.0}
+'''
+
+
+def _root_modules():
+    sys.path.insert(0, str(VIDYA))
+    try:
+        import claim_tuple
+        import frames
+        import ledger
+    finally:
+        sys.path.remove(str(VIDYA))
+    return claim_tuple, frames, ledger
+
+
+def _kvq_run(run="run-20260924T100000Z"):
+    claim_tuple, _, _ = _root_modules()
+    out = []
+    for arm in ("A_f16_kv", "B_q8_0_kv", "C_q4_0_kv"):
+        for depth in ("d2k", "d32k"):
+            for metric in ("gpu_decode_tps", "gpu_prefill_tps"):
+                out.append(claim_tuple.ClaimTuple(
+                    measurement_id=f"kvq-{run}-{arm}-{depth}-{metric}", metric=metric,
+                    value=100.0, date="2026-09-24",
+                    category="BASELINE" if arm == "A_f16_kv" else "CANDIDATE",
+                    claim=f"{arm} {metric} at {depth}: 100.0 tokens/s (fixture).",
+                    protocol_id="P-GPU-1", reps=5, reps_basis="scored", unit="tokens/s",
+                    attestation_sha256=SHA,
+                    attestation_locator=(f"kvq:{run}:{arm}:{depth}:{metric}|data/run/"
+                                         f"summary.json#sha256={SHA}"),
+                    attestation_present=True, attestation_verified=True, source_kind=KVQ))
+    return out
+
+
+@pytest.mark.skipif(not (VIDYA / "loop_beliefs.py").is_file(),
+                    reason=f"ROOT shared reader absent under {VIDYA}")
+def test_integration_real_root_child_ready_then_recheck_after_a_retraction(tmp_path):
+    claim_tuple, frames, ledger_mod = _root_modules()
+    fake_root = tmp_path / "root"
+    vidya = fake_root / "scripts" / "vidya"
+    vidya.mkdir(parents=True)
+    for source in VIDYA.glob("*.py"):
+        shutil.copyfile(source, vidya / source.name)
+    (vidya / "sync.py").write_text(FAKE_SYNC)         # never the real plumbing sync
+    ledger_path = tmp_path / "ledger.jsonl"
+    led = ledger_mod.Ledger(ledger_path)
+    tuples = _kvq_run()
+    for tup in tuples:
+        for frame in claim_tuple.to_frames(tup, as_of=WRITTEN, adapter_id="fixture/v1"):
+            led.append(frame)
+    config = bc.BeliefConfig(root=fake_root, ledger=ledger_path, known_good=tmp_path / "kg.json",
+                             alarm_state=tmp_path / "alarm-state.json",
+                             alarm_config=tmp_path / "alarm.yaml", reader_timeout_s=60.0)
+    workspace = tmp_path / "workers" / "lane0"
+    workspace.mkdir(parents=True)
+    planner = actors.AgentPlanner(workspace=workspace, belief=config,
+                                  belief_runner=subprocess.run)
+    seen = {}
+
+    def reply(prompt, **kw):
+        seen["prompt"] = prompt
+        relied = re.findall(r"^- (clm_\S+) \[", prompt, flags=re.MULTILINE)[0]
+        return json.dumps({**HYPOTHESIS, "relies_on_claims": [relied]})
+
+    with mock.patch.object(actors, "_run_agent", side_effect=reply):
+        hyp = planner.propose({"current_regime": GPU_27B_REGIME})
+    assert bc.SECTION_HEADER in seen["prompt"]
+    [receipt] = _receipts(tmp_path)
+    assert receipt["status"] == "ready" and len(receipt["claim_ids"]) == 12
+    assert receipt["ledger_state"]["frame_count"] == len(ledger_path.read_text().splitlines())
+    assert receipt["ledger_state"]["freshness"]["sync_action"] == "already-fresh"
+    assert hyp.relies_on_claims and hyp.relies_on_claims[0] in receipt["claim_ids"]
+    assert (tmp_path / "kg.json").is_file()
+
+    # Degraded-mode work relying on a claim (admitted by the REAL check-seeds against the
+    # snapshot just written), then that claim's support is retracted.
+    target_claim = f"clm_{tuples[3].measurement_id}"
+    work = bc.DegradedWork(log_dir=_log_dir(tmp_path), config=config, runner=subprocess.run)
+    verdict = work.admit_resume(
+        checkpoint_id="b" * 64 + "#0",
+        hypothesis={**HYPOTHESIS, "relies_on_claims": [target_claim],
+                    "belief_receipt_id": receipt["receipt_id"]},
+        refusal={"reason": "chain_broken"})
+    assert verdict["admissible"] is True and verdict["reasons"] == []
+    assert verdict["seeded_against"] == receipt["ledger_state_digest"]
+    evidence = next(f for f in claim_tuple.to_frames(tuples[3], as_of=WRITTEN,
+                                                     adapter_id="fixture/v1")
+                    if f["frame_type"].endswith("evidence_supports_claim/v1"))
+    led.append(frames.make_frame(
+        frame_type="epyc.vidya/frame/retraction/v1",
+        assertion={"retracts": evidence["frame_id"], "reason": "fixture"},
+        provenance={"method": "fixture/v1"}, actor="fixture/v1",
+        authority_scope="measurement", created_at="2026-09-24T11:00:00+00:00"))
+    with mock.patch.object(actors, "_run_agent", side_effect=reply):
+        planner.propose({"current_regime": GPU_27B_REGIME})
+    [flag] = _rows(_log_dir(tmp_path) / bc.RECHECK_LOG)
+    assert flag["review_flag"] is True
+    assert flag["flagged_premises"] == [{"claim_id": target_claim, "status": "withdrawn"}]

@@ -87,6 +87,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import actor_opencode_config
+from . import belief_context
 from . import actor_passthrough
 from . import cross_target, kernel_coverage
 from . import longctx
@@ -640,6 +641,21 @@ def _rebind_build_dso(original: Path, binary_dir: Path) -> Path:
     if candidate.parent != binary_dir.resolve() or soname(candidate) != name:
         raise ValueError(f"candidate DSO escapes build or changes SONAME: {candidate}")
     return candidate
+
+
+def _belief_seconds(text: str) -> float:
+    value = float(text)
+    if not value > 0:
+        raise argparse.ArgumentTypeError("must be a positive number of seconds")
+    return value
+
+
+def _belief_config(args) -> belief_context.BeliefConfig:
+    """The planner's belief-reader config, from argv only (no env-only gate)."""
+    return belief_context.BeliefConfig(root=args.belief_root_repo, ledger=args.belief_ledger,
+                                       known_good=args.belief_known_good,
+                                       escalate_after_s=args.belief_escalate_after_s,
+                                       reader_timeout_s=args.belief_reader_timeout_s)
 
 
 def _actor_knobs(args) -> dict[str, bool]:
@@ -1933,7 +1949,33 @@ def main(argv: list[str] | None = None) -> int:
                         "lock is held). Preflight with "
                         "`accumulate.would_refuse_anchor` before taking a CPU region lock")
     parser.add_argument("--belief-root-repo", type=Path,
-                        help="ROOT owning serving-observation reader (default EPYC_ROOT_REPO or /workspace)")
+                        help="ROOT owning serving-observation reader AND the shared belief "
+                             "reader scripts/vidya/loop_beliefs.py the planner calls before "
+                             "every proposal (default EPYC_ROOT_REPO or /workspace)")
+    parser.add_argument("--belief-ledger", type=Path, default=None,
+                        help="belief reader: the Vidya ledger (default: ROOT's canonical "
+                             "ledger, loop_beliefs.resolve_ledger)")
+    parser.add_argument("--belief-known-good", type=Path, default=None,
+                        help="belief reader: the known-good snapshot each ready answer writes "
+                             "and degraded mode's check-seeds reads (default "
+                             "<state>/loop-known-good/autokernel.planner.json)")
+    parser.add_argument("--belief-escalate-after-s", type=_belief_seconds,
+                        default=belief_context.DEFAULT_ESCALATE_AFTER_S,
+                        help="belief reader: a refusal alarm active this long is escalated to "
+                             "the critical operator alarm (default: %(default)s)")
+    parser.add_argument("--belief-reader-timeout-s", type=_belief_seconds,
+                        default=belief_context.DEFAULT_READER_TIMEOUT_S,
+                        help="belief reader: the child's deadline (prepare may run the "
+                             "incremental ingest); a timeout refuses planning and raises the "
+                             "alarm (default: %(default)s)")
+    parser.add_argument("--preseeded-hypotheses", type=Path, default=None,
+                        help="degraded mode only: JSONL of not-yet-tested hypotheses (the five "
+                             "Hypothesis fields + premises [claim ids] + seeded_against "
+                             "[ledger_state or its digest], optional id) planned earlier "
+                             "against a known-good ledger or seeded by the operator. While "
+                             "belief context is refused a lane runs one only when check-seeds "
+                             "admits it against the last known-good snapshot; never used "
+                             "while belief context is ready")
     parser.add_argument("--iterations", type=int, default=10,
                         help="0 means run CONTINUOUSLY until stopped: drop a STOP "
                              "file in the store, or send SIGTERM/SIGINT. On a stop, "
@@ -2205,17 +2247,21 @@ def main(argv: list[str] | None = None) -> int:
                              "deny it. Off = the historical seat byte for byte "
                              "(default: %(default)s)")
     parser.add_argument("--actor-belief-context", choices=actors.BELIEF_CONTEXT_MODES,
-                        default="on",
-                        help="planner only: read the Vidya claims (ROOT ledger, via "
-                             "--belief-root-repo) whose declared applicability scope EQUALS the "
-                             "planner target (model file, quant, backend, device) and add them "
-                             "as a bounded, neutral section -- only when some apply; any other "
-                             "target gets no section and never opens the ledger. The reader is "
-                             "killed at 10 s and any failure adds nothing. Every proposal call "
-                             "writes a receipt (workers/actor-replies/belief-receipts.jsonl: "
-                             "presented/omitted/unavailable claim ids, run, frontier, and the "
-                             "planner's explicit relies_on_claims). 'off' is the historical "
-                             "prompt with no receipt (default: %(default)s)")
+                        default="required",
+                        help="planner only, and MANDATORY (there is no 'off'): before every "
+                             "proposal the planner runs ROOT's shared belief reader "
+                             "(--belief-root-repo scripts/vidya/loop_beliefs.py prepare, a "
+                             "child killed at --belief-reader-timeout-s), which makes the "
+                             "ledger current (incremental ingest when stale) and returns the "
+                             "claims whose declared applicability scope EQUALS the planner "
+                             "target; they are added as a bounded, neutral section. A refused "
+                             "/ timed-out / invalid answer means NO planner call: the lane runs "
+                             "already-planned resume checkpoints and admissible "
+                             "--preseeded-hypotheses only, else ends the draw "
+                             "'belief_refused' and backs off. Every call (and refusal) writes "
+                             "a receipt (workers/actor-replies/belief-receipts.jsonl, v2: "
+                             "ledger_state + digest, presented/contested/withdrawn ids, "
+                             "outcome, relies_on_claims) (default: %(default)s)")
     parser.add_argument("--actor-context-limit", type=int,
                         default=actor_opencode_config.DEFAULT_CONTEXT_LIMIT,
                         help="opencode planner/author/critic (OAB-23): `limit.context` on the "
@@ -6456,6 +6502,8 @@ def main(argv: list[str] | None = None) -> int:
                                            should_stop=should_stop,
                                            belief_context=args.actor_belief_context,
                                            belief_root=args.belief_root_repo,
+                                           belief=_belief_config(args),
+                                           belief_preseeded=args.preseeded_hypotheses,
                                            sandbox_scratch=sandbox_for(worker),
                                            seat=lane_seat(worker, actors.ActorSeat(
                                                bounded=args.actor_seat == "bounded",

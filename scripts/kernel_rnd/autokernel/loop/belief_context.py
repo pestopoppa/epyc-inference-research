@@ -1,119 +1,124 @@
 #!/usr/bin/env python3
-"""Read-only Vidya belief context for the AutoKernel planner, and its receipt.
+"""MANDATORY Vidya belief context for the AutoKernel planner: the consumer half.
 
-WHAT IT ANSWERS. "Which ingested, graded claims apply to THIS planner target?" -- for any source,
-not one hypothesis family. The planner names its target (model file, quant, backend, device,
-optionally context depth); this module returns the claims whose declared applicability scope
-equals it, rendered as a bounded, neutral evidence block, plus a receipt of what was presented,
-omitted or unavailable and why. Nothing applicable -> no block at all.
+ONE SUBSTRATE (operator decision 2026-10-21). Agent loops lean on ONE belief reader,
+ROOT's `scripts/vidya/loop_beliefs.py`, run here as a CHILD PROCESS (killed at this side's
+deadline, never imported). It decides whether the canonical ledger is current (and runs the
+incremental ingest when it is stale), verifies the hash chain, and selects + renders the claims
+whose declared applicability scope equals the planner's target. Nothing here reads the ledger,
+folds, gates or grades. This module keeps only the AutoKernel-specific half:
 
-A READ-ONLY CONSUMER OF ROOT. Everything that decides warrant is ROOT's, loaded by file from
-`EPYC_ROOT_REPO` (default /workspace), the way `actors._seat_capture` loads VB-AK-SEAT:
+  * the target (`target_from_context`, from the `current_regime` block `run.py` builds);
+  * the child-process calls (`prepare`, `check_seeds`, `raise_alarm`) and the consumer-side
+    validation of a `ready` answer (`validate_ready`, a mirror of `loop_beliefs.validate_ready`);
+  * the per-call receipt (`seal_receipt` / `write_receipt`, workers/actor-replies/
+    belief-receipts.jsonl) and the explicit-reliance check (`reliance`);
+  * degraded mode (`DegradedWork`): what may run while the ledger cannot be made current.
 
-  * `ledger.Ledger.verify()/read_all()` -- an integrity failure presents nothing;
-  * `fold.fold()` -- retraction, supersession, corrections, aliases;
-  * `gate.evaluate()` under the declared `POLICY` -- the use-policy gate `cli.py query` applies,
-    WITHOUT writing a `query_served` frame. Anything the gate does not ALLOW (conflicted,
-    review-required, dirty, retracted, below floor) is omitted with the gate's reason;
-  * the grade shown is the folded `Belief.pro`: what `claim_tuple.grade()` assigned at the write
-    boundary, as it survives the fold. No grading rule lives here.
+MANDATORY, NOT ADVISORY (operator rules 2026-10-21). There is no "off" mode for planning:
 
-THE SCOPE GAP. `claim_tuple.to_frames()` persists metric, text, locator, source kind and grade --
-not `ClaimTuple.extra`, where adapters keep model/backend/device. So no ledger frame carries a
-structured applicability scope, and inventing one on read would claim warrant the write never
-captured. Matching is therefore conservative: a source is eligible only when its PRODUCER
-CONTRACT pins the whole scope for every row it can emit, declared once in `SOURCE_SCOPES` with the
-`basis` that pins it. An undeclared source never matches. (Proposal to close the gap in the shared
-projection API: /mnt/raid0/llm/tmp/vidya-planner-receipt-proposal-20260925.md section 4.)
+  1. `AgentPlanner.propose` calls `prepare` before it builds a prompt or touches any actor
+     backend, and only a `ReadyAnswer` (constructible only from a validated `ready` answer)
+     lets the backend call proceed (`require_ready`).
+  2. A `refused` answer, a child timeout, a crash, garbage on stdout or a `ready` that fails
+     validation raises `BeliefContextRefused` (reason + last known-good snapshot). The child
+     already raised the operator alarm for a refusal it decided; for a consumer-side failure
+     (timeout / crash / garbage / invalid) this side raises it with the `alarm` subcommand
+     (short timeout, best effort). The planner model is never called.
+  3. The loop then generates NO new hypothesis. It may run ALREADY-PLANNED work (queued resume
+     checkpoints) and PRESEEDED, not-yet-tested hypotheses (`--preseeded-hypotheses`), each
+     checked with `check-seeds` against the LAST KNOWN-GOOD snapshot first; a seed with no
+     `seeded_against`, a flagged premise, or no known-good snapshot is skipped with its reason
+     recorded. Every such work item is logged (belief-degraded.jsonl) and, on the next `ready`,
+     re-checked against the fresh snapshot: a premise flagged since then gets a REVIEW FLAG
+     (belief-recheck.jsonl). A result is never reversed automatically.
 
-MATCHING (exact, never nearest): GGUF basename byte-equal; quant equal after upper-casing;
-backend equal; device equal; context depth equal only when BOTH sides declare one. The
-measurement surface is rendered, not matched: no source declares it in the planner's vocabulary.
-
-DECISION-READINESS. Per source, only the NEWEST COMPLETE run is presented: a run is complete when
-its gate-ALLOWed claims cover exactly the source's declared key set. Incomplete, superseded,
-gate-refused and target-mismatched evidence is omitted and named in the receipt.
-
-Stdlib only and no relative imports: the planner runs this file as a child process
-(`python3 belief_context.py --target-json ...`) so a slow ledger can be killed at the deadline.
+Config is argv-only (`run.py --belief-*`); the env var `EPYC_ROOT_REPO` only names a default
+ROOT path, it never switches belief context off.
 """
 
 from __future__ import annotations
 
-import argparse
+import contextlib
+import fcntl
 import hashlib
-import importlib
 import json
 import os
-import re
 import subprocess
 import sys
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from pathlib import Path, PurePath
-from typing import Any, Callable, Iterable, Mapping
+from pathlib import Path
+from typing import Any, Callable, Iterable, Iterator, Mapping
 
 ROOT_REPO_ENV = "EPYC_ROOT_REPO"
 DEFAULT_ROOT = Path("/workspace")
-READER_TIMEOUT_S = 10.0
-RECEIPT_SCHEMA = "epyc.vidya.planner_evidence_receipt.v1"
+READER_RELPATH = Path("scripts") / "vidya" / "loop_beliefs.py"
+CONSUMER = "autokernel.planner"
+#: The only planning mode. `--actor-belief-context` accepts nothing else.
+MODES = ("required",)
+ANSWER_SCHEMA = "epyc.vidya.loop_beliefs.v1"
+LEDGER_STATE_SCHEMA = "epyc.vidya.ledger_state.v1"
+SEED_CHECK_SCHEMA = "epyc.vidya.seed_check.v1"
+DEFAULT_READER_TIMEOUT_S = 30.0       # prepare may run an incremental ingest
+DEFAULT_ALARM_TIMEOUT_S = 10.0
+DEFAULT_ESCALATE_AFTER_S = 3600.0
+RECEIPT_SCHEMA = "epyc.vidya.planner_evidence_receipt.v2"
 RECEIPT_LOG = "belief-receipts.jsonl"
+DEGRADED_SCHEMA = "epyc.autokernel.belief_degraded.v1"
+DEGRADED_LOG = "belief-degraded.jsonl"
+RECHECK_SCHEMA = "epyc.autokernel.belief_recheck.v1"
+RECHECK_LOG = "belief-recheck.jsonl"
+LOCK_NAME = ".belief-degraded.lock"
 #: Env key carrying the presented-evidence summary to the metrics row (the
 #: `AK_ACTOR_SEAT_ARM` precedent: a second channel into `_record_metrics`, harmless to the child).
 ENV_KEY = "AK_ACTOR_BELIEF_CONTEXT"
+#: ROOT renders the section under this header (`loop_beliefs.SECTION_HEADER`).
 SECTION_HEADER = "## Belief-kernel evidence (Vidya ledger, read-only)"
 RELIANCE_FIELD = "relies_on_claims"
-DEFAULT_MAX_CLAIMS = 12
-DEFAULT_MAX_BYTES = 10000
-CLAIM_TEXT_CAP = 440
-REASON_CAP = 200
-OMITTED_CAP = 24
-#: The declared use policy. Floor `Judged/Located`: the lowest grade at which a claim names where
-#: it came from; an observation is shown AS an observation (its grade printed beside it).
-POLICY = {"use": "planner-context", "floor": "Judged/Located", "standard": "DV"}
-#: The only GPU on this host is the MI210 (the planner prompt already names gfx90a); the CPU
-#: target is the EPYC 9655 host. A target is matched on these literal device names.
+#: The only GPU on this host is the MI210; the CPU target is the EPYC 9655 host.
 DEVICE_BY_BACKEND = {"gpu": "gfx90a", "cpu": "epyc-9655"}
-_VIDYA_MODULES = ("canonical", "lattice", "frames", "ledger", "fold", "gate")
+SEED_HYPOTHESIS_FIELDS = ("mechanism_id", "statement", "falsifier", "target_surface",
+                          "target_symbol")
+#: The child-process seam. Tests replace it (`autokernel/conftest.py` installs a canned
+#: `ready` runner for every unit test) -- a fake answer is still validated, never bypassed.
+RUNNER: Callable[..., Any] = subprocess.run
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def root_repo(root: str | Path | None = None) -> Path:
+    return Path(root or os.environ.get(ROOT_REPO_ENV) or DEFAULT_ROOT)
+
+
+def state_digest(state: Mapping[str, Any]) -> str:
+    """Mirror of `loop_beliefs.state_digest`: the short identity of a ledger state."""
+    body = {k: state.get(k) for k in ("ledger_path", "frame_count", "head_seq", "head_hash")}
+    return "sha256:" + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+
+
+def _seeded_label(value: Any) -> Any:
+    """A `seeded_against` value as a row carries it. A full ledger_state object is reduced to
+    its digest (the row stays small); a digest string, or an operator / Fable-architect
+    provenance object `{"kind", "author", "at"}` (loop_beliefs.check_seeds), is kept verbatim."""
+    if isinstance(value, Mapping) and (value.get("schema") == LEDGER_STATE_SCHEMA
+                                       or "head_hash" in value):
+        return value.get("ledger_state_digest") or state_digest(value)
+    if isinstance(value, Mapping):
+        return dict(value)
+    return value
 
 
 # ------------------------------------------------------------------------------ target
 
 
-@dataclass(frozen=True)
-class PlannerTarget:
-    model_file: str
-    quant: str
-    backend: str
-    device: str
-    surface: str = ""
-    context_tokens: int | None = None
-
-    @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any]) -> "PlannerTarget":
-        """`model_file`, or `model_path` reduced to its basename. An incomplete target raises:
-        it is not a wildcard."""
-        model = str(raw.get("model_file") or "").strip()
-        if not model and raw.get("model_path"):
-            model = PurePath(str(raw["model_path"])).name
-        values = {"model_file": model, "quant": str(raw.get("quant") or "").strip(),
-                  "backend": str(raw.get("backend") or "").strip().lower(),
-                  "device": str(raw.get("device") or "").strip().lower()}
-        missing = sorted(key for key, value in values.items() if not value)
-        if missing:
-            raise ValueError(f"target incomplete: missing {missing}")
-        if values["backend"] not in DEVICE_BY_BACKEND:
-            raise ValueError(f"backend must be cpu or gpu (got {values['backend']!r})")
-        depth = raw.get("context_tokens")
-        if depth is not None and (not isinstance(depth, int) or isinstance(depth, bool)
-                                  or depth < 1):
-            raise ValueError("context_tokens must be a positive integer when given")
-        return cls(surface=str(raw.get("surface") or ""), context_tokens=depth, **values)
-
-
 def target_from_context(context: Mapping[str, Any]) -> dict[str, Any]:
-    """The planner's target, from the `current_regime` block `run.py` already builds."""
+    """The planner's target, from the `current_regime` block `run.py` already builds. An
+    incomplete target is not a refusal: ROOT answers `ready` with empty evidence
+    (`inapplicable_target`), and the plan still names the verified ledger state."""
     regime = context.get("current_regime") or {}
     model = regime.get("model") or {}
     backend = str(regime.get("backend") or "").lower()
@@ -123,438 +128,258 @@ def target_from_context(context: Mapping[str, Any]) -> dict[str, Any]:
             "surface": regime.get("measurement_surface") or ""}
 
 
-# ------------------------------------------------------------------------------ scopes
+# ------------------------------------------------------------------------------ config
 
 
 @dataclass(frozen=True)
-class SourceScope:
-    """A source whose producer contract pins its whole applicability scope."""
+class BeliefConfig:
+    """Everything the child-process calls need; built from argv by `run.py`."""
 
-    source_kind: str
-    model_file: str
-    quant: str
-    backend: str
-    device: str
-    #: What pins this scope for EVERY row the source can emit. Required.
-    basis: str
-    #: Neutral statement of what the evidence is and is not; never advice.
-    limits: str
-    #: Locator shape the ADAPTER enforces; named groups `run`, `depth` and the key groups.
-    locator_re: re.Pattern[str] | None = None
-    key_groups: tuple[str, ...] = ()
-    #: The complete per-run key set (tuples over `key_groups`); empty = no run semantics.
-    expected_keys: frozenset[tuple[str, ...]] = frozenset()
-    depth_tokens: Mapping[str, int] = field(default_factory=dict)
+    root: Path | None = None
+    ledger: Path | None = None
+    known_good: Path | None = None
+    escalate_after_s: float = DEFAULT_ESCALATE_AFTER_S
+    reader_timeout_s: float = DEFAULT_READER_TIMEOUT_S
+    alarm_timeout_s: float = DEFAULT_ALARM_TIMEOUT_S
+    #: Test isolation (and an operator override): the alarm channel's state/config files.
+    alarm_state: Path | None = None
+    alarm_config: Path | None = None
+    index: Path | None = None
+    consumer: str = CONSUMER
+    python: str = sys.executable
 
-    def applies_to(self, target: PlannerTarget) -> bool:
-        return (target.model_file == self.model_file
-                and target.quant.upper() == self.quant.upper()
-                and target.backend == self.backend and target.device == self.device)
+    def reader(self) -> Path:
+        return root_repo(self.root) / READER_RELPATH
 
-    def parse(self, locator: str) -> tuple[str | None, tuple[str, ...] | None, int | None]:
-        """(run, key, context_tokens) from the locator; Nones when the shape does not match."""
-        if self.locator_re is None:
-            return None, None, None
-        match = self.locator_re.match(locator)
-        if match is None:
-            return None, None, None
-        groups = match.groupdict()
-        key = tuple(groups.get(name) or "" for name in self.key_groups) or None
-        return groups.get("run"), key, self.depth_tokens.get(groups.get("depth") or "")
+    def _alarm_args(self) -> list[str]:
+        out = ["--escalate-after-s", str(float(self.escalate_after_s))]
+        if self.alarm_state is not None:
+            out += ["--alarm-state", str(self.alarm_state)]
+        if self.alarm_config is not None:
+            out += ["--alarm-config", str(self.alarm_config)]
+        return out
+
+    def _known_good_args(self) -> list[str]:
+        return [] if self.known_good is None else ["--known-good", str(self.known_good)]
 
 
-_KVQ_ARMS = ("A_f16_kv", "B_q8_0_kv", "C_q4_0_kv")
-_KVQ_DEPTHS = ("d2k", "d32k")
-_KVQ_METRICS = ("gpu_decode_tps", "gpu_prefill_tps")
-
-SOURCE_SCOPES: dict[str, SourceScope] = {scope.source_kind: scope for scope in (
-    SourceScope(
-        source_kind="kv-quant-27b-v10-measurement",
-        model_file="Qwen3.8-27B-Q8_0.gguf", quant="Q8_0", backend="gpu", device="gfx90a",
-        basis=("producer scripts/benchmark/kv_quant_27b_v10_sweep.py refuses any model other "
-               "than /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf at its pinned byte length "
-               "(model_identity_valid) and runs on MI210 device mi210_0; ROOT adapter "
-               "kv_quant_27b_v10.py pins the producer bytes by sha256 and calls validate_row()"),
-        limits=("llama-bench instrument, bursty duty cycle (not a serving rate); "
-                "production-consolidated-v10 kernel; -fa on in every arm; K and V cache types "
-                "equal per arm (f16, q8_0, q4_0), mixed K/V not measured; prefill depth is part "
-                "of each claim's key"),
-        locator_re=re.compile(r"^kvq:(?P<run>[^:|]+):(?P<arm>[^:|]+):(?P<depth>[^:|]+):"
-                              r"(?P<metric>[^:|]+)(?:\||$)"),
-        key_groups=("arm", "depth", "metric"),
-        expected_keys=frozenset((a, d, m) for a in _KVQ_ARMS for d in _KVQ_DEPTHS
-                                for m in _KVQ_METRICS),
-        depth_tokens={"d2k": 2048, "d32k": 32768}),
-)}
+# ------------------------------------------------------------------------------ answers
 
 
-def applicable_scopes(target: PlannerTarget) -> dict[str, SourceScope]:
-    return {kind: scope for kind, scope in SOURCE_SCOPES.items() if scope.applies_to(target)}
+class BeliefContextRefused(RuntimeError):
+    """No validated `ready` answer: the planner must not be called.
+
+    Deliberately NOT an `ActorTransient`: the loop handles it as "no planning possible"
+    (degraded mode), never as a provider failure to retry."""
+
+    def __init__(self, reason: str, detail: str = "", *,
+                 last_known_good: Mapping[str, Any] | None = None,
+                 answer: Mapping[str, Any] | None = None,
+                 alarm: Mapping[str, Any] | None = None,
+                 target: Mapping[str, Any] | None = None, elapsed_s: float | None = None):
+        super().__init__(f"belief context refused ({reason})"
+                         + (f": {detail}" if detail else ""))
+        self.reason = str(reason)
+        self.detail = str(detail)[:500]
+        self.last_known_good = dict(last_known_good) if isinstance(last_known_good,
+                                                                    Mapping) else None
+        self.answer = dict(answer) if isinstance(answer, Mapping) else None
+        self.alarm = dict(alarm) if isinstance(alarm, Mapping) else None
+        self.target = dict(target) if isinstance(target, Mapping) else None
+        self.elapsed_s = elapsed_s
+        #: Set by the planner that raised it: the refusal receipt, and what may still run.
+        self.receipt_id = ""
+        self.degraded: DegradedWork | None = None
+
+    def summary(self) -> dict[str, Any]:
+        """What a degraded-mode experiments row carries."""
+        kg = self.last_known_good or {}
+        return {"reason": self.reason, "detail": self.detail[:300],
+                "last_known_good_digest": kg.get("ledger_state_digest"),
+                "last_known_good_as_of": kg.get("as_of"),
+                "receipt_id": self.receipt_id}
 
 
-# ------------------------------------------------------------------------------ ROOT API
+def validate_ready(answer: Any) -> dict[str, Any]:
+    """Mirror of `loop_beliefs.validate_ready` (the contract's consumer-side check). Raises
+    ValueError for anything but a `ready` answer naming a verified, current ledger state."""
+    if not isinstance(answer, Mapping) or answer.get("schema") != ANSWER_SCHEMA:
+        raise ValueError("not a loop_beliefs answer")
+    if answer.get("status") != "ready":
+        raise ValueError(f"belief context refused: {answer.get('reason')}")
+    state = answer.get("ledger_state")
+    if (not isinstance(state, Mapping) or state.get("schema") != LEDGER_STATE_SCHEMA
+            or not state.get("fresh") or not isinstance(state.get("frame_count"), int)
+            or isinstance(state.get("frame_count"), bool)
+            or not state.get("head_hash") or not isinstance(answer.get("evidence"), Mapping)):
+        raise ValueError("belief context lacks a verified ledger state")
+    return dict(answer)
 
 
-def root_repo(root: str | Path | None = None) -> Path:
-    return Path(root or os.environ.get(ROOT_REPO_ENV) or DEFAULT_ROOT)
+_SEAL = object()
 
 
-def load_root(root: str | Path | None = None) -> dict[str, Any]:
-    """ROOT's ledger/fold/gate/lattice, loaded from `<root>/scripts/vidya` and refused unless
-    every module actually came from there (a same-named module from elsewhere is not ROOT)."""
-    vidya = (root_repo(root) / "scripts" / "vidya").resolve()
-    for name in _VIDYA_MODULES:
-        if not (vidya / f"{name}.py").is_file():
-            raise FileNotFoundError(f"ROOT reader module missing: {vidya / name}.py")
-    sys.path.insert(0, str(vidya))
+class ReadyAnswer:
+    """A `ready` answer that passed `validate_ready`. Only `prepare` makes one; the planner's
+    backend call (`AgentPlanner._proposal_from_agent`) refuses anything else."""
+
+    __slots__ = ("answer", "elapsed_s", "target")
+
+    def __init__(self, answer: Mapping[str, Any], *, elapsed_s: float,
+                 target: Mapping[str, Any], _seal: object = None):
+        if _seal is not _SEAL:
+            raise TypeError("ReadyAnswer is made only by belief_context.prepare")
+        self.answer = validate_ready(answer)
+        self.elapsed_s = elapsed_s
+        self.target = dict(target)
+
+    @property
+    def evidence(self) -> dict[str, Any]:
+        return dict(self.answer.get("evidence") or {})
+
+    @property
+    def ledger_state(self) -> dict[str, Any]:
+        return dict(self.answer["ledger_state"])
+
+    @property
+    def ledger_state_digest(self) -> str:
+        return str(self.answer.get("ledger_state_digest") or state_digest(self.ledger_state))
+
+    @property
+    def section(self) -> str:
+        return str(self.evidence.get("section") or "")
+
+
+def require_ready(belief: Any) -> ReadyAnswer:
+    """The construction guard every planner backend call passes through."""
+    if not isinstance(belief, ReadyAnswer):
+        raise BeliefContextRefused("unvalidated_answer",
+                                   f"planner call without a validated ready answer "
+                                   f"({type(belief).__name__})")
     try:
-        # LITERAL names, not a loop over `_VIDYA_MODULES`: the campaign-boundary walk
-        # (test_campaign_footprint) follows literal `import_module("x")` and fails
-        # closed on a computed name. These are ROOT's modules, outside this package,
-        # so the literal form is both walkable and exactly what the loop did.
-        modules = {
-            "canonical": importlib.import_module("canonical"),
-            "lattice": importlib.import_module("lattice"),
-            "frames": importlib.import_module("frames"),
-            "ledger": importlib.import_module("ledger"),
-            "fold": importlib.import_module("fold"),
-            "gate": importlib.import_module("gate"),
-        }
-        if tuple(modules) != _VIDYA_MODULES:
-            raise ImportError("ROOT reader module list drifted from _VIDYA_MODULES")
-    finally:
-        try:
-            sys.path.remove(str(vidya))
-        except ValueError:
-            pass
-    for name, module in modules.items():
-        if Path(module.__file__).resolve() != vidya / f"{name}.py":
-            raise ImportError(f"module {name!r} resolves to {module.__file__}, not ROOT {vidya}")
-    gate = modules["gate"]
-    policy = gate.UsePolicy(use=POLICY["use"], floor=modules["lattice"].parse_grade(POLICY["floor"]),
-                            standard=POLICY["standard"])
-    return {"Ledger": modules["ledger"].Ledger, "fold": modules["fold"].fold,
-            "evaluate": gate.evaluate, "allow": gate.Outcome.ALLOW, "policy": policy,
-            "vidya": vidya}
-
-
-# ------------------------------------------------------------------------------ reading
-
-
-def _ts(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
-def _cap(text: str, limit: int) -> str:
-    text = " ".join(str(text).split())
-    if len(text) <= limit:
-        return text
-    head = (limit * 2) // 3
-    return f"{text[:head]} ... {text[-(limit - head - 5):]}"
-
-
-def _omit(source_kind: str, reason: str, *, run: str | None = None,
-          claim_id: str | None = None, detail: str = "") -> dict[str, Any]:
-    return {"source_kind": source_kind, "run": run, "claim_id": claim_id, "reason": reason,
-            "detail": _cap(detail, REASON_CAP) if detail else ""}
-
-
-def _empty(status: str, reasons: Iterable[str], *, as_of: str, frontier: int | None = None,
-           omitted: list[dict] | None = None, error: str | None = None) -> dict[str, Any]:
-    omitted = omitted or []
-    return {"status": status, "reasons": sorted(set(reasons)), "frontier": frontier,
-            "as_of": as_of, "claim_ids": [], "claims": [], "runs": [],
-            "omitted": omitted[:OMITTED_CAP], "omitted_count": len(omitted),
-            "section": "", "section_sha256": "", "section_bytes": 0, "error": error}
-
-
-def evaluate_frames(frames: list[Mapping[str, Any]], target: PlannerTarget, api: Mapping[str, Any],
-                    *, as_of: str, max_claims: int = DEFAULT_MAX_CLAIMS,
-                    max_bytes: int = DEFAULT_MAX_BYTES) -> dict[str, Any]:
-    """The evidence half of a receipt, from ledger frames already verified."""
-    eligible = applicable_scopes(target)
-    if not eligible:
-        return _empty("omitted", ["inapplicable_target"], as_of=as_of)
-    cutoff = _ts(as_of)
-    visible = [f for f in frames if not (f.get("pubinfo") or {}).get("created_at")
-               or _ts(f["pubinfo"]["created_at"]) <= cutoff]
-    result = api["fold"](visible, as_of=as_of)
-    sources: dict[str, Mapping[str, Any]] = {}
-    claims: dict[str, Mapping[str, Any]] = {}
-    support: dict[str, Mapping[str, Any]] = {}
-    reasons: dict[str, tuple[str, ...]] = {}
-    for frame in visible:
-        kind, assertion = str(frame.get("frame_type", "")), frame.get("assertion") or {}
-        if kind.endswith("source_observed/v1") and assertion.get("source_kind") in eligible:
-            sources[str(assertion.get("source_id", ""))] = assertion
-        elif kind.endswith("claim_proposed/v1"):
-            claims[str(assertion.get("claim_id", ""))] = assertion
-        elif kind.endswith("evidence_supports_claim/v1"):
-            cid = str(assertion.get("claim_id", ""))
-            support[cid] = assertion
-            reasons[cid] = tuple(str(r) for r in
-                                 (frame.get("provenance") or {}).get("grade_reasons") or ())
-
-    omitted: list[dict[str, Any]] = []
-    runs: dict[tuple[str, str | None], list[dict[str, Any]]] = {}
-    seen: set[str] = set()
-    for raw_id, claim in claims.items():
-        source = sources.get(str(claim.get("source_id", "")))
-        if source is None:
-            continue
-        scope = eligible[str(source["source_kind"])]
-        claim_id = result.alias_map.get(raw_id, raw_id)
-        if claim_id in seen:
-            continue
-        seen.add(claim_id)
-        locator = str(source.get("locator", ""))
-        run, key, depth = scope.parse(locator)
-        if scope.expected_keys and (run is None or key not in scope.expected_keys):
-            omitted.append(_omit(scope.source_kind, "incomplete_run", run=run, claim_id=claim_id,
-                                 detail=f"locator {locator.split('|', 1)[0]!r} outside the "
-                                        "declared run key set"))
-            continue
-        verdict = api["evaluate"](claim_id, result, api["policy"])
-        if verdict.outcome != api["allow"]:
-            omitted.append(_omit(scope.source_kind, f"gate_refused:{verdict.outcome}", run=run,
-                                 claim_id=claim_id,
-                                 detail=(verdict.reasons or [""])[0]))
-            continue
-        row = support.get(raw_id, {})
-        runs.setdefault((scope.source_kind, run), []).append({
-            "claim_id": claim_id, "source_kind": scope.source_kind, "run": run, "key": key,
-            "context_tokens": depth, "grade": str(result.beliefs[claim_id].pro),
-            "locator": locator.split("|", 1)[0], "revision": str(source.get("revision_observed", "")),
-            "protocol_id": str(row.get("protocol_id") or ""),
-            "reps": row.get("reps") if isinstance(row.get("reps"), int) else None,
-            "text": str(claim.get("display_text", "")), "grade_reasons": reasons.get(raw_id, ())})
-
-    if not runs and not omitted:
-        return _empty("omitted", ["no_ingested_claims"], as_of=as_of, frontier=result.frontier)
-
-    run_rows: list[dict[str, Any]] = []
-    candidates: list[dict[str, Any]] = []
-    for kind, scope in sorted(eligible.items()):
-        groups = {run: rows for (source_kind, run), rows in runs.items() if source_kind == kind}
-        refused_runs = {o["run"] for o in omitted if o["source_kind"] == kind and o["run"]}
-        if not scope.expected_keys:
-            for rows in groups.values():
-                candidates.extend(rows)
-            continue
-        complete, incomplete = [], []
-        for run in set(groups) | refused_runs:
-            rows = groups.get(run, [])
-            keys = [row["key"] for row in rows]
-            if len(keys) == len(set(keys)) and set(keys) == scope.expected_keys:
-                complete.append((max(row["revision"] for row in rows), run, rows))
-            else:
-                incomplete.append((run, len(set(keys))))
-        for run, have in sorted(incomplete, key=lambda item: str(item[0])):
-            detail = (f"{have} of {len(scope.expected_keys)} declared keys pass the gate")
-            omitted.append(_omit(kind, "incomplete_run", run=run, detail=detail))
-            run_rows.append({"source_kind": kind, "run": run, "status": "omitted",
-                             "reason": "incomplete_run", "claim_ids": []})
-        complete.sort(key=lambda item: (item[0], str(item[1])), reverse=True)
-        for index, (_, run, rows) in enumerate(complete):
-            if index == 0:
-                candidates.extend(rows)
-                continue
-            omitted.append(_omit(kind, "superseded_run", run=run,
-                                 detail=f"newer complete run {complete[0][1]}"))
-            run_rows.append({"source_kind": kind, "run": run, "status": "omitted",
-                             "reason": "superseded_run",
-                             "claim_ids": sorted(row["claim_id"] for row in rows)})
-
-    if target.context_tokens is not None:
-        kept = []
-        for row in candidates:
-            if row["context_tokens"] is not None and row["context_tokens"] != target.context_tokens:
-                omitted.append(_omit(row["source_kind"], "inapplicable_target", run=row["run"],
-                                     claim_id=row["claim_id"],
-                                     detail=f"context {row['context_tokens']} != target "
-                                            f"{target.context_tokens}"))
-            else:
-                kept.append(row)
-        candidates = kept
-    candidates.sort(key=lambda row: (row["source_kind"], row["locator"]))
-    section, shown = render(target, candidates, frontier=result.frontier, as_of=as_of,
-                            max_claims=max_claims, max_bytes=max_bytes)
-    shown_ids = {row["claim_id"] for row in shown}
-    for row in candidates:
-        if row["claim_id"] not in shown_ids:
-            omitted.append(_omit(row["source_kind"], "bounded", run=row["run"],
-                                 claim_id=row["claim_id"],
-                                 detail=f"cap {max_claims} claims / {max_bytes} bytes"))
-    presented_runs: dict[tuple[str, str | None], list[str]] = {}
-    for row in shown:
-        presented_runs.setdefault((row["source_kind"], row["run"]), []).append(row["claim_id"])
-    run_rows = [{"source_kind": kind, "run": run, "status": "presented", "reason": "",
-                 "claim_ids": sorted(ids)} for (kind, run), ids in sorted(
-                     presented_runs.items(), key=lambda item: (item[0][0], str(item[0][1])))] + run_rows
-    codes = {o["reason"] for o in omitted}
-    status = "presented" if shown else "omitted"
-    out = {"status": status, "reasons": sorted(codes), "frontier": result.frontier,
-           "as_of": as_of, "claim_ids": [row["claim_id"] for row in shown],
-           "claims": [{k: row[k] for k in ("claim_id", "source_kind", "run", "grade", "locator")}
-                      for row in shown],
-           "runs": run_rows, "omitted": omitted[:OMITTED_CAP], "omitted_count": len(omitted),
-           "section": section,
-           "section_sha256": hashlib.sha256(section.encode()).hexdigest() if section else "",
-           "section_bytes": len(section.encode()), "error": None}
-    return out
-
-
-def render(target: PlannerTarget, rows: list[dict[str, Any]], *, frontier: int | None,
-           as_of: str, max_claims: int = DEFAULT_MAX_CLAIMS,
-           max_bytes: int = DEFAULT_MAX_BYTES) -> tuple[str, list[dict[str, Any]]]:
-    """Bounded, neutral block and the rows it carries; ("", []) when nothing fits."""
-    if not rows or max_claims < 1:
-        return "", []
-    depth = f", context {target.context_tokens} tokens" if target.context_tokens else ""
-    head = [SECTION_HEADER,
-            f"Target: model {target.model_file}, quant {target.quant}, backend {target.backend}, "
-            f"device {target.device}{depth}.",
-            "Ingested claims whose declared applicability scope equals this target. Grade is the "
-            f"folded claim_tuple.grade() Q/T at ledger frontier {frontier}, as of {as_of}."]
-    tail = [f"Optional reply field {RELIANCE_FIELD}: a list of the claim ids above that the "
-            "hypothesis depends on; omit it when it depends on none."]
-    body: list[str] = []
-    shown: list[dict[str, Any]] = []
-    described: set[tuple[str, str | None]] = set()
-
-    def size(lines: list[str]) -> int:
-        return len("\n".join(head + lines + tail).encode("utf-8")) + 100   # + the count line
-
-    def lines_for(row: dict[str, Any], first: bool) -> list[str]:
-        lines: list[str] = []
-        if first:
-            scope = SOURCE_SCOPES[row["source_kind"]]
-            run = f", run {row['run']}" if row["run"] else ""
-            lines.append(f"Source {scope.source_kind}{run}: scope {scope.model_file} / "
-                         f"{scope.quant} / {scope.backend} / {scope.device}. Limits: "
-                         f"{scope.limits}.")
-        facts = [f"protocol {row['protocol_id'] or 'none'}",
-                 f"n={row['reps']}" if row["reps"] is not None else "n unrecorded"]
-        if row["context_tokens"] is not None:
-            facts.insert(0, f"context {row['context_tokens']}")
-        if row["revision"]:
-            facts.append(row["revision"])
-        lines.append(f"- {row['claim_id']} [{row['grade']}] {row['locator']} "
-                     f"({'; '.join(facts)}): {_cap(row['text'], CLAIM_TEXT_CAP)}")
-        if row["grade_reasons"]:
-            lines.append(f"  grade notes: {_cap(row['grade_reasons'][0], REASON_CAP)}")
-        return lines
-
-    # Packing unit: a whole run for a source with a declared run key set (a complete run is
-    # shown whole or not at all -- a truncated matrix would read as an incomplete one), else
-    # one claim. A unit that does not fit is skipped; a later, smaller unit may still fit.
-    units: list[list[dict[str, Any]]] = []
-    for row in rows:
-        if (SOURCE_SCOPES[row["source_kind"]].expected_keys and units
-                and (units[-1][0]["source_kind"], units[-1][0]["run"])
-                == (row["source_kind"], row["run"])):
-            units[-1].append(row)
-        else:
-            units.append([row])
-    for unit in units:
-        if len(shown) + len(unit) > max_claims:
-            continue
-        lines: list[str] = []
-        for index, row in enumerate(unit):
-            lines.extend(lines_for(row, index == 0 and (row["source_kind"], row["run"])
-                                   not in described))
-        if size(body + lines) > max_bytes:
-            continue
-        body.extend(lines)
-        described.update((row["source_kind"], row["run"]) for row in unit)
-        shown.extend(unit)
-    if not shown:
-        return "", []
-    count = (f"Shown {len(shown)} of {len(rows)} decision-ready claim(s); bounded at "
-             f"{max_claims} claims / {max_bytes} bytes.")
-    return "\n".join(head + body + [count] + tail), shown
-
-
-def read(target: PlannerTarget | Mapping[str, Any], *, root: str | Path | None = None,
-         ledger_path: str | Path | None = None, as_of: str | None = None,
-         max_claims: int = DEFAULT_MAX_CLAIMS, max_bytes: int = DEFAULT_MAX_BYTES,
-         api: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    """The evidence dict for one target. Never raises."""
-    as_of = as_of or datetime.now(timezone.utc).isoformat()
-    try:
-        if not isinstance(target, PlannerTarget):
-            target = PlannerTarget.from_mapping(target)
+        validate_ready(belief.answer)
     except ValueError as exc:
-        return _empty("omitted", ["inapplicable_target"], as_of=as_of, error=str(exc))
-    if not applicable_scopes(target):
-        return _empty("omitted", ["inapplicable_target"], as_of=as_of)
-    try:
-        api = api or load_root(root)
-    except Exception as exc:  # noqa: BLE001
-        return _empty("unavailable", ["root_missing"], as_of=as_of,
-                      error=f"{type(exc).__name__}: {exc}"[:300])
-    path = Path(ledger_path) if ledger_path else root_repo(root) / ".vidya" / "ledger.jsonl"
-    if not path.is_file():
-        return _empty("unavailable", ["ledger_missing"], as_of=as_of, error=str(path))
-    try:
-        ledger = api["Ledger"](path)
-        errors = ledger.verify()
-        if errors:
-            return _empty("unavailable", ["ledger_integrity"], as_of=as_of,
-                          error=str(errors[0])[:300])
-        frames = [record.frame for record in ledger.read_all()]
-        return evaluate_frames(frames, target, api, as_of=as_of, max_claims=max_claims,
-                               max_bytes=max_bytes)
-    except Exception as exc:  # noqa: BLE001 -- a planner context is never a reason to fail
-        return _empty("unavailable", ["reader_error"], as_of=as_of,
-                      error=f"{type(exc).__name__}: {exc}"[:300])
+        raise BeliefContextRefused("invalid_answer", str(exc)) from exc
+    return belief
 
 
-# ------------------------------------------------------------------------------ planner side
+# ------------------------------------------------------------------------------ child calls
 
 
-def planner_evidence(context: Mapping[str, Any], *, root: str | Path | None = None,
-                     timeout_s: float = READER_TIMEOUT_S,
-                     runner: Callable[..., Any] = subprocess.run) -> dict[str, Any]:
-    """What `AgentPlanner.propose` calls. Never raises and never exceeds `timeout_s`.
-
-    A target no declared scope applies to is answered here without a child process (the DS41
-    CPU target never opens the ledger). Otherwise the reader runs as a child so a slow ledger
-    is killed at the deadline; any failure is `unavailable` with a reason, never an exception."""
-    started = time.monotonic()
-    raw = target_from_context(context)
-    as_of = datetime.now(timezone.utc).isoformat()
-    try:
-        target = PlannerTarget.from_mapping(raw)
-    except ValueError as exc:
-        evidence = _empty("omitted", ["inapplicable_target"], as_of=as_of, error=str(exc))
-    else:
-        if not applicable_scopes(target):
-            evidence = _empty("omitted", ["inapplicable_target"], as_of=as_of)
-        else:
-            argv = [sys.executable, str(Path(__file__).resolve()), "--target-json",
-                    json.dumps(asdict(target), sort_keys=True), "--root", str(root_repo(root)),
-                    "--as-of", as_of]
-            try:
-                done = runner(argv, capture_output=True, text=True, timeout=timeout_s,
+def _child(config: BeliefConfig, args: list[str], *, timeout_s: float,
+           runner: Callable[..., Any] | None) -> Any:
+    argv = [config.python, str(config.reader()), *args]
+    return (runner or RUNNER)(argv, capture_output=True, text=True, timeout=timeout_s,
                               check=False)
-                evidence = json.loads(done.stdout)
-                if not isinstance(evidence, dict) or "status" not in evidence:
-                    raise ValueError("reader printed no evidence object")
-            except subprocess.TimeoutExpired:
-                evidence = _empty("unavailable", ["reader_timeout"], as_of=as_of,
-                                  error=f"reader exceeded {timeout_s}s")
-            except Exception as exc:  # noqa: BLE001
-                evidence = _empty("unavailable", ["reader_error"], as_of=as_of,
-                                  error=f"{type(exc).__name__}: {exc}"[:300])
-    evidence["target"] = raw
-    evidence["elapsed_s"] = round(time.monotonic() - started, 3)
-    return evidence
+
+
+def _json_object(stdout: Any) -> dict[str, Any]:
+    text = stdout.strip() if isinstance(stdout, str) else ""
+    body = json.loads(text) if text else None
+    if not isinstance(body, dict):
+        raise ValueError("child printed no JSON object")
+    return body
+
+
+def raise_alarm(config: BeliefConfig, reason: str, detail: str, *,
+                runner: Callable[..., Any] | None = None) -> dict[str, Any]:
+    """`loop_beliefs.py alarm` for a CONSUMER-side failure (timeout / crash / garbage).
+    Best effort under its own short timeout; never raises."""
+    try:
+        done = _child(config, ["alarm", "--consumer", config.consumer, "--reason", reason,
+                               "--detail", str(detail)[:500], *config._alarm_args()],
+                      timeout_s=config.alarm_timeout_s, runner=runner)
+        try:
+            return {"invoked": True, **_json_object(done.stdout)}
+        except ValueError:
+            return {"invoked": True, "returncode": getattr(done, "returncode", None)}
+    except Exception as exc:  # noqa: BLE001 -- the refusal stands even if the alarm fails
+        return {"invoked": False, "error": f"{type(exc).__name__}: {exc}"[:300]}
+
+
+def prepare(context: Mapping[str, Any], config: BeliefConfig | None = None, *,
+            runner: Callable[..., Any] | None = None) -> ReadyAnswer:
+    """The call before every planning step: a validated `ReadyAnswer`, or
+    `BeliefContextRefused`. Never returns without a verified ledger state."""
+    config = config or BeliefConfig()
+    target = target_from_context(context)
+    args = ["prepare", "--consumer", config.consumer,
+            "--target-json", json.dumps(target, sort_keys=True),
+            *config._alarm_args(), *config._known_good_args()]
+    if config.ledger is not None:
+        args += ["--ledger", str(config.ledger)]
+    if config.index is not None:
+        args += ["--index", str(config.index)]
+    started = time.monotonic()
+
+    def consumer_failure(reason: str, detail: str, answer=None) -> BeliefContextRefused:
+        alarm = raise_alarm(config, reason, detail, runner=runner)
+        last = (answer or {}).get("last_known_good") if isinstance(answer, Mapping) else None
+        return BeliefContextRefused(reason, detail, last_known_good=last, answer=answer,
+                                    alarm=alarm, target=target,
+                                    elapsed_s=round(time.monotonic() - started, 3))
+
+    try:
+        done = _child(config, args, timeout_s=config.reader_timeout_s, runner=runner)
+    except subprocess.TimeoutExpired:
+        raise consumer_failure("reader_timeout",
+                               f"loop_beliefs prepare exceeded {config.reader_timeout_s}s") \
+            from None
+    except Exception as exc:  # noqa: BLE001 -- e.g. the reader or interpreter is missing
+        raise consumer_failure("reader_crash", f"{type(exc).__name__}: {exc}"[:300]) from exc
+    try:
+        answer = _json_object(done.stdout)
+    except ValueError as exc:
+        stderr = str(getattr(done, "stderr", "") or "").strip()[-300:]
+        raise consumer_failure("reader_crash",
+                               f"rc={getattr(done, 'returncode', None)}: {exc}"
+                               + (f"; stderr: {stderr}" if stderr else "")) from None
+    if answer.get("schema") == ANSWER_SCHEMA and answer.get("status") == "refused":
+        # The child decided it, and already raised (or escalated) the operator alarm.
+        raise BeliefContextRefused(str(answer.get("reason") or "refused"),
+                                   str(answer.get("detail") or ""),
+                                   last_known_good=answer.get("last_known_good"),
+                                   answer=answer, alarm=answer.get("alarm"), target=target,
+                                   elapsed_s=round(time.monotonic() - started, 3))
+    try:
+        if getattr(done, "returncode", 0) != 0:
+            raise ValueError(f"ready answer with exit code {done.returncode}")
+        return ReadyAnswer(answer, elapsed_s=round(time.monotonic() - started, 3),
+                           target=target, _seal=_SEAL)
+    except ValueError as exc:
+        raise consumer_failure("invalid_answer", str(exc), answer) from None
+
+
+def check_seeds(items: Iterable[Mapping[str, Any]], config: BeliefConfig | None = None, *,
+                runner: Callable[..., Any] | None = None) -> dict[str, Any]:
+    """`loop_beliefs.py check-seeds` against the known-good snapshot. Never raises: a failed
+    call answers every item NOT admissible (`check_seeds_failed`) and carries `error`."""
+    config = config or BeliefConfig()
+    items = [{"id": str(i.get("id", "")), "premises": [str(p) for p in i.get("premises") or ()],
+              "seeded_against": _seeded_label(i.get("seeded_against"))} for i in items]
+    try:
+        done = _child(config, ["check-seeds", "--consumer", config.consumer,
+                               "--items-json", json.dumps(items, sort_keys=True),
+                               *config._known_good_args()],
+                      timeout_s=config.reader_timeout_s, runner=runner)
+        body = _json_object(done.stdout)
+        if body.get("schema") != SEED_CHECK_SCHEMA or not isinstance(body.get("items"), list):
+            raise ValueError(f"not a seed check: {str(body)[:200]}")
+        return body
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"[:300]
+        return {"schema": SEED_CHECK_SCHEMA, "error": error, "checked_against": None,
+                "checked_against_digest": None, "admissible_ids": [], "flagged_ids": [],
+                "items": [{**item, "admissible": False, "reasons": ["check_seeds_failed"],
+                           "flagged_premises": []} for item in items]}
+
+
+# ------------------------------------------------------------------------------ receipt
 
 
 def reliance(declared: Any, presented: Iterable[str]) -> dict[str, Any]:
     """Shown is not relied on: only an explicit reply declaration counts, and only for ids that
-    were presented. Anything else is recorded as rejected, never raised."""
+    were presented as USABLE. Anything else is recorded as rejected, never raised."""
     items = declared if isinstance(declared, list) else ([] if declared is None else [declared])
     presented = set(presented)
     accepted, rejected = [], []
@@ -569,10 +394,14 @@ def reliance(declared: Any, presented: Iterable[str]) -> dict[str, Any]:
             "accepted": accepted, "rejected": rejected}
 
 
-def metrics_summary(evidence: Mapping[str, Any]) -> str:
+def metrics_summary(belief: ReadyAnswer) -> str:
     """The presented half, as the env value `_record_metrics` folds into the metrics row."""
+    evidence = belief.evidence
     return json.dumps({"status": evidence.get("status"), "frontier": evidence.get("frontier"),
+                       "ledger_state_digest": belief.ledger_state_digest,
                        "claim_ids": list(evidence.get("claim_ids") or []),
+                       "contested_claim_ids": list(evidence.get("contested_claim_ids") or []),
+                       "withdrawn_claim_ids": list(evidence.get("withdrawn_claim_ids") or []),
                        "runs": [{"source_kind": r.get("source_kind"), "run": r.get("run"),
                                  "status": r.get("status")} for r in evidence.get("runs") or []],
                        "reasons": list(evidence.get("reasons") or [])}, sort_keys=True)
@@ -585,24 +414,41 @@ def _module_sha256() -> str:
         return ""
 
 
-def seal_receipt(evidence: Mapping[str, Any] | None, *, knob: str, prompt: str,
-                 workspace: str | Path, seat_arm: str | None, outcome: Mapping[str, Any],
-                 relied: Mapping[str, Any] | None = None, root: str | Path | None = None,
-                 consumer: str = "autokernel.planner") -> dict[str, Any]:
-    evidence = dict(evidence or _empty("omitted", ["knob_off"],
-                                       as_of=datetime.now(timezone.utc).isoformat()))
+def seal_receipt(belief: ReadyAnswer | None, *, prompt: str | None, workspace: str | Path,
+                 seat_arm: str | None, outcome: Mapping[str, Any],
+                 relied: Mapping[str, Any] | None = None,
+                 refusal: BeliefContextRefused | None = None,
+                 config: BeliefConfig | None = None) -> dict[str, Any]:
+    """One planner call's receipt: the ledger state it was made against (or the refusal that
+    stopped it), what was presented/contested/withdrawn, the outcome and the reliance."""
+    config = config or BeliefConfig()
+    answer = belief.answer if belief is not None else dict((refusal.answer if refusal else None)
+                                                           or {})
+    evidence = belief.evidence if belief is not None else {}
+    state = belief.ledger_state if belief is not None else None
     body = {
-        "schema": RECEIPT_SCHEMA, "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "consumer": consumer,
-        "call": {"prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+        "schema": RECEIPT_SCHEMA, "ts": _now(), "consumer": config.consumer, "mode": "required",
+        "call": {"prompt_sha256": (hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+                                   if prompt is not None else None),
                  "workspace": str(workspace), "seat_arm": seat_arm},
-        "knob": knob, "target": evidence.get("target"),
+        "status": "ready" if belief is not None else "refused",
+        "target": (belief.target if belief is not None
+                   else (refusal.target if refusal is not None else None)),
         "reader": {"module": "scripts/kernel_rnd/autokernel/loop/belief_context.py",
-                   "module_sha256": _module_sha256(), "root_repo": str(root_repo(root)),
-                   "policy": dict(POLICY), "elapsed_s": evidence.get("elapsed_s"),
-                   "error": evidence.get("error")},
-        "run": list(evidence.get("runs") or []), "frontier": evidence.get("frontier"),
-        "as_of": evidence.get("as_of"), "claim_ids": list(evidence.get("claim_ids") or []),
+                   "module_sha256": _module_sha256(), "root_reader": str(config.reader()),
+                   "consumer": config.consumer, "policy": answer.get("policy"),
+                   "elapsed_s": (belief.elapsed_s if belief is not None
+                                 else (refusal.elapsed_s if refusal is not None else None))},
+        "ledger_state": state,
+        "ledger_state_digest": belief.ledger_state_digest if belief is not None else None,
+        "refusal": (None if refusal is None else
+                    {"reason": refusal.reason, "detail": refusal.detail[:300],
+                     "last_known_good": refusal.last_known_good, "alarm": refusal.alarm}),
+        "frontier": evidence.get("frontier"), "as_of": evidence.get("as_of"),
+        "run": list(evidence.get("runs") or []),
+        "claim_ids": list(evidence.get("claim_ids") or []),
+        "contested_claim_ids": list(evidence.get("contested_claim_ids") or []),
+        "withdrawn_claim_ids": list(evidence.get("withdrawn_claim_ids") or []),
         "evidence_status": evidence.get("status"),
         "evidence_reasons": list(evidence.get("reasons") or []),
         "omitted": list(evidence.get("omitted") or []),
@@ -616,40 +462,228 @@ def seal_receipt(evidence: Mapping[str, Any] | None, *, knob: str, prompt: str,
     return {**body, "receipt_id": "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()}
 
 
+def _append(path: Path, row: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+
+
 def write_receipt(log_dir: str | Path, receipt: Mapping[str, Any]) -> None:
     """Append one receipt line. Evidence, never a reason to fail the planner call."""
     try:
-        target = Path(log_dir)
-        target.mkdir(parents=True, exist_ok=True)
-        with open(target / RECEIPT_LOG, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(receipt, sort_keys=True, default=str) + "\n")
+        _append(Path(log_dir) / RECEIPT_LOG, receipt)
     except OSError:
         pass
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--target-json", required=True)
-    parser.add_argument("--root", default=None)
-    parser.add_argument("--ledger", default=None)
-    parser.add_argument("--as-of", default=None)
-    parser.add_argument("--max-claims", type=int, default=DEFAULT_MAX_CLAIMS)
-    parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
-    args = parser.parse_args(argv)
+# ------------------------------------------------------------------------------ degraded mode
+
+
+def load_preseeded(path: str | Path | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """`--preseeded-hypotheses` JSONL: one hypothesis per line (the five Hypothesis fields)
+    plus `premises` (claim ids) and `seeded_against` (a ledger_state object or its digest),
+    optionally `id` (default: mechanism_id). Returns (rows, errors); a bad row is an error
+    the caller records, never a crash."""
+    if path is None:
+        return [], []
     try:
-        raw = json.loads(args.target_json)
-        if not isinstance(raw, dict):
-            raise ValueError("target must be a JSON object")
-    except ValueError as exc:
-        evidence = _empty("omitted", ["inapplicable_target"],
-                          as_of=args.as_of or datetime.now(timezone.utc).isoformat(),
-                          error=f"bad target: {exc}")
-    else:
-        evidence = read(raw, root=args.root, ledger_path=args.ledger, as_of=args.as_of,
-                        max_claims=args.max_claims, max_bytes=args.max_bytes)
-    print(json.dumps(evidence, sort_keys=True, default=str))
-    return 0
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return [], [{"line": None, "error": f"{type(exc).__name__}: {exc}"[:300]}]
+    rows, errors, seen = [], [], set()
+    for number, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        try:
+            raw = json.loads(line)
+            if not isinstance(raw, dict):
+                raise ValueError("not an object")
+            missing = [k for k in SEED_HYPOTHESIS_FIELDS
+                       if not isinstance(raw.get(k), str) or not raw[k].strip()]
+            if missing:
+                raise ValueError(f"missing hypothesis fields {missing}")
+            premises = raw.get("premises", [])
+            if not isinstance(premises, list) or not all(isinstance(p, str) for p in premises):
+                raise ValueError("premises must be a list of claim ids")
+            seed_id = str(raw.get("id") or raw["mechanism_id"])
+            if seed_id in seen:
+                raise ValueError(f"duplicate seed id {seed_id!r}")
+        except ValueError as exc:
+            errors.append({"line": number, "error": str(exc)[:300]})
+            continue
+        seen.add(seed_id)
+        rows.append({"id": seed_id, **{k: raw[k] for k in SEED_HYPOTHESIS_FIELDS},
+                     "premises": list(premises), "seeded_against": raw.get("seeded_against")})
+    return rows, errors
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def _read_rows(path: Path) -> list[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            out.append(row)
+    return out
+
+
+@dataclass(frozen=True)
+class DegradedWork:
+    """What may run while belief context is refused, and the recovery re-check.
+
+    One per planner (lane); every lane's instance shares `log_dir` (workers/actor-replies),
+    and every read-modify-append runs under one flock there, so two lanes never take the same
+    seed and a work item is re-checked once."""
+
+    log_dir: Path
+    config: BeliefConfig
+    preseeded: Path | None = None
+    runner: Callable[..., Any] | None = None
+
+    @contextlib.contextmanager
+    def _locked(self) -> Iterator[None]:
+        Path(self.log_dir).mkdir(parents=True, exist_ok=True)
+        with open(Path(self.log_dir) / LOCK_NAME, "a+") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+
+    def _log(self, row: Mapping[str, Any]) -> None:
+        _append(Path(self.log_dir) / DEGRADED_LOG,
+                {"schema": DEGRADED_SCHEMA, "ts": _now(), **row})
+
+    def next_seed(self, refusal: Mapping[str, Any]) -> dict[str, Any] | None:
+        """The next preseeded, not-yet-taken hypothesis that `check-seeds` admits against the
+        LAST KNOWN-GOOD snapshot, claimed (logged `event: run`) before it is returned. Every
+        candidate refused here is logged `event: skipped` with its reasons. None = nothing
+        admissible."""
+        if self.preseeded is None:
+            return None
+        rows, errors = load_preseeded(self.preseeded)
+        with self._locked():
+            for error in errors:
+                self._log({"event": "skipped", "kind": "preseeded", "id": None,
+                           "reasons": ["invalid_seed_row"], "detail": error,
+                           "refusal": dict(refusal)})
+            taken = {row.get("id") for row in _read_rows(Path(self.log_dir) / DEGRADED_LOG)
+                     if row.get("event") == "run" and row.get("kind") == "preseeded"}
+            candidates = [row for row in rows if row["id"] not in taken]
+            if not candidates:
+                return None
+            check = check_seeds(candidates, self.config, runner=self.runner)
+            verdicts = {str(item.get("id")): item for item in check.get("items") or []}
+            chosen = None
+            for row in candidates:
+                verdict = verdicts.get(row["id"]) or {"admissible": False,
+                                                      "reasons": ["check_seeds_missing_item"]}
+                if verdict.get("admissible") is True and chosen is None:
+                    chosen = row
+                elif verdict.get("admissible") is not True:
+                    self._log({"event": "skipped", "kind": "preseeded", "id": row["id"],
+                               "mechanism_id": row["mechanism_id"],
+                               "reasons": list(verdict.get("reasons") or []),
+                               "flagged_premises": list(verdict.get("flagged_premises") or []),
+                               "checked_against_digest": check.get("checked_against_digest"),
+                               "check_error": check.get("error"), "refusal": dict(refusal)})
+            if chosen is None:
+                return None
+            self._log({"event": "run", "kind": "preseeded", "id": chosen["id"],
+                       "mechanism_id": chosen["mechanism_id"], "premises": chosen["premises"],
+                       "seeded_against": _seeded_label(chosen["seeded_against"]),
+                       "checked_against_digest": check.get("checked_against_digest"),
+                       "refusal": dict(refusal)})
+        return {**chosen, "seeded_against": _seeded_label(chosen["seeded_against"])}
+
+    def _receipt_state(self, receipt_id: Any) -> str | None:
+        """The ledger_state digest a planner receipt (v2) recorded, for a resume point whose
+        hypothesis names the receipt it was planned under."""
+        if not receipt_id:
+            return None
+        for row in _read_rows(Path(self.log_dir) / RECEIPT_LOG):
+            if row.get("receipt_id") == receipt_id:
+                return row.get("ledger_state_digest")
+        return None
+
+    def admit_resume(self, *, checkpoint_id: str, hypothesis: Mapping[str, Any],
+                     refusal: Mapping[str, Any]) -> dict[str, Any]:
+        """An already-planned checkpoint drawn in degraded mode, checked with `check-seeds`
+        against the LAST KNOWN-GOOD snapshot BEFORE it runs. Skipped (``admissible: False``)
+        only when a premise -- its declared `relies_on_claims` / `belief_premises` -- is
+        flagged there: it was planned, so a missing `seeded_against` (pre-v2 receipts) or a
+        failed check is recorded but does not block it, and the recovery re-check covers it.
+        Logged `run` or `skipped` either way. Never raises."""
+        premises = [str(p) for p in list(hypothesis.get("relies_on_claims") or [])
+                    + list(hypothesis.get("belief_premises") or [])]
+        try:
+            seeded = (_seeded_label(hypothesis.get("seeded_against"))
+                      or self._receipt_state(hypothesis.get("belief_receipt_id")))
+            check = check_seeds([{"id": str(checkpoint_id), "premises": premises,
+                                  "seeded_against": seeded}], self.config, runner=self.runner)
+            verdict = next(iter(check.get("items") or []), {})
+            flagged = list(verdict.get("flagged_premises") or [])
+            row = {"kind": "resume", "id": str(checkpoint_id),
+                   "mechanism_id": hypothesis.get("mechanism_id"), "premises": premises,
+                   "seeded_against": seeded, "reasons": list(verdict.get("reasons") or []),
+                   "flagged_premises": flagged,
+                   "checked_against_digest": check.get("checked_against_digest"),
+                   "check_error": check.get("error"), "refusal": dict(refusal)}
+            with self._locked():
+                self._log({"event": "skipped" if flagged else "run", **row})
+            return {"admissible": not flagged, **row}
+        except Exception as exc:  # noqa: BLE001 -- evidence; the planned work still runs
+            print(f"belief degraded: resume check not logged ({exc})", file=sys.stderr)
+            return {"admissible": True, "id": str(checkpoint_id), "reasons": ["log_failed"],
+                    "flagged_premises": []}
+
+    def recheck(self) -> list[dict[str, Any]]:
+        """After a `ready`: every degraded-mode work item not yet re-checked is checked
+        against the FRESH snapshot `prepare` just wrote; a premise flagged since then gets a
+        review flag. Never reverses a result; never raises. Returns the rows appended."""
+        try:
+            with self._locked():
+                done = {row.get("id") for row in _read_rows(Path(self.log_dir) / RECHECK_LOG)}
+                pending: dict[str, dict[str, Any]] = {}
+                for row in _read_rows(Path(self.log_dir) / DEGRADED_LOG):
+                    if row.get("event") == "run" and row.get("id") not in done:
+                        pending.setdefault(str(row.get("id")), row)
+                if not pending:
+                    return []
+                check = check_seeds(
+                    [{"id": key, "premises": row.get("premises") or [],
+                      "seeded_against": row.get("seeded_against")}
+                     for key, row in pending.items()], self.config, runner=self.runner)
+                if check.get("error") or not check.get("checked_against"):
+                    return []          # no fresh snapshot to judge against: retry next ready
+                appended = []
+                for item in check.get("items") or []:
+                    row = pending.get(str(item.get("id")))
+                    if row is None:
+                        continue
+                    flagged = list(item.get("flagged_premises") or [])
+                    out = {"schema": RECHECK_SCHEMA, "ts": _now(), "id": row.get("id"),
+                           "kind": row.get("kind"), "mechanism_id": row.get("mechanism_id"),
+                           "premises": row.get("premises") or [],
+                           "seeded_against": row.get("seeded_against"),
+                           "rechecked_against_digest": check.get("checked_against_digest"),
+                           "flagged_premises": flagged, "review_flag": bool(flagged),
+                           "note": ("review only: a premise of this degraded-mode result is "
+                                    "now flagged; the result is NOT reversed") if flagged
+                           else "premises still unflagged"}
+                    _append(Path(self.log_dir) / RECHECK_LOG, out)
+                    appended.append(out)
+                return appended
+        except Exception as exc:  # noqa: BLE001 -- a re-check never blocks planning
+            print(f"belief recheck: skipped ({type(exc).__name__}: {exc})", file=sys.stderr)
+            return []
+
+
+def with_root(config: BeliefConfig, root: str | Path | None) -> BeliefConfig:
+    return config if root is None or config.root is not None else replace(config, root=Path(root))

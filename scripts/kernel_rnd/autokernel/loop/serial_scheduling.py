@@ -27,7 +27,10 @@ INVALID_OUTCOMES = frozenset({
     "no_op_build",
 })
 FAILED_OUTCOMES = frozenset({"bench_failed", "lane_error", "planner_transient",
-                             "authoring_harness_failure"})
+                             "authoring_harness_failure",
+                             # Belief context refused and nothing admissible to run
+                             # (`loop.BELIEF_REFUSED`): no science turn, fence stays armed.
+                             "belief_refused"})
 INTERVAL_SCHEMA = "epyc.autokernel.direct_held_intervals.v1"
 INTERVAL_SCHEMA_V2 = "epyc.autokernel.direct_held_intervals.v2"
 REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"

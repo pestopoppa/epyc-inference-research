@@ -53,9 +53,10 @@ from . import actor_metrics, belief_context, history_fields, integrity, procguar
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
                    Review)
 
-#: `--actor-belief-context`: `on` adds the belief-kernel section to the planner prompt only
-#: when ingested claims apply to the exact target (never otherwise), and records a receipt.
-BELIEF_CONTEXT_MODES = ("off", "on")
+#: `--actor-belief-context`: the ONLY mode is `required` (operator 2026-10-21: there is no
+#: "off" for planning). Every proposal first obtains a validated `ready` answer from ROOT's
+#: shared reader (`belief_context.prepare`); a refusal never reaches the planner model.
+BELIEF_CONTEXT_MODES = belief_context.MODES
 BELIEF_ENV = belief_context.ENV_KEY
 
 #: DS41-C80 (2026-09-30): prefer the codex build the operator's own sessions run. The
@@ -1364,7 +1365,7 @@ def _seat_provenance(env: Mapping[str, str] | None) -> dict[str, Any]:
             out["serving"] = {"error": f"{type(exc).__name__}: {exc}"[:200]}
     if env.get(BELIEF_ENV):
         # Which Vidya claims the planner prompt presented (and why none, when none): the
-        # presented half of `belief_context`'s receipt. Only with --actor-belief-context on.
+        # presented half of `belief_context`'s receipt (every planner call carries it).
         try:
             out["belief_context"] = json.loads(env[BELIEF_ENV])
         except ValueError as exc:
@@ -3401,12 +3402,20 @@ class AgentPlanner:
     #: The loop's stop predicate (STOP file or SIGTERM/SIGINT). When set, an in-flight
     #: actor is TERM'd on stop and never retried (DS41-C22).
     should_stop: Callable[[], bool] | None = None
-    #: `off` (the library default: the historical prompt, byte for byte, and no receipt) or
-    #: `on` (run.py's default): read the Vidya claims whose declared scope equals the
-    #: planner's exact target, add them only when some apply, and record a receipt per call.
-    belief_context: str = "off"
-    #: ROOT owning the ledger and the reader modules (default EPYC_ROOT_REPO or /workspace).
+    #: `required` -- the only mode (no "off" for planning, operator 2026-10-21): every
+    #: proposal first obtains a validated `ready` answer from ROOT's shared belief reader
+    #: (`belief_context.prepare`, a child process) and records a receipt; a refusal raises
+    #: `belief_context.BeliefContextRefused` before any prompt is built or backend called.
+    belief_context: str = "required"
+    #: ROOT owning the shared reader (default EPYC_ROOT_REPO or /workspace); folded into
+    #: `belief` when that names no root.
     belief_root: Path | None = None
+    #: The reader's argv-derived config (ledger, known-good snapshot, timeouts, escalation).
+    belief: belief_context.BeliefConfig | None = None
+    #: `--preseeded-hypotheses`: what degraded mode may run (`belief_context.DegradedWork`).
+    belief_preseeded: Path | None = None
+    #: The child-process seam (tests inject canned answers; they are still validated).
+    belief_runner: Callable[..., Any] | None = None
     #: `ak-check`: returns (the scratch dir the loop allocated for this lane's current
     #: iteration, or None; a reason to degrade `--op-test` to the compile check, or
     #: None). Without it the author sandbox stays off whatever the seat says.
@@ -3419,37 +3428,67 @@ class AgentPlanner:
     def _stop_kw(self) -> dict[str, Any]:
         return {} if self.should_stop is None else {"should_stop": self.should_stop}
 
-    def _belief_evidence(self, context: Mapping[str, Any]) -> dict[str, Any] | None:
-        """None when off. Never raises and never exceeds the reader's 10 s deadline: a
-        failure is an `unavailable` receipt and no prompt section (logged only)."""
-        if self.belief_context != "on":
-            return None
-        try:
-            evidence = belief_context.planner_evidence(context, root=self.belief_root)
-        except Exception as exc:  # noqa: BLE001 -- belief context never fails a planner call
-            evidence = {"status": "unavailable", "reasons": ["reader_error"],
-                        "error": f"{type(exc).__name__}: {exc}"[:300], "claim_ids": [],
-                        "section": ""}
-        if evidence.get("status") == "unavailable":
-            import sys
-            print(f"actor belief context: unavailable ({', '.join(evidence.get('reasons') or [])}"
-                  f"{': ' + str(evidence['error']) if evidence.get('error') else ''}); "
-                  "the planner prompt carries no belief section", file=sys.stderr)
-        return evidence
+    def __post_init__(self) -> None:
+        if self.belief_context not in BELIEF_CONTEXT_MODES:
+            raise ValueError(f"belief_context must be one of {BELIEF_CONTEXT_MODES} "
+                             f"(got {self.belief_context!r}): there is no planning without "
+                             "belief context")
 
-    def _belief_receipt(self, evidence: Mapping[str, Any] | None, prompt: str,
-                        env: Mapping[str, str] | None, outcome: Mapping[str, Any],
-                        declared: Any = None) -> dict[str, Any] | None:
-        """Seal and append the planner-evidence receipt; returns it (None when off)."""
-        if evidence is None:
-            return None
+    def _belief_config(self) -> belief_context.BeliefConfig:
+        return belief_context.with_root(self.belief or belief_context.BeliefConfig(),
+                                        self.belief_root)
+
+    def _belief_log_dir(self) -> Path:
+        return Path(self.workspace).parent / ACTOR_REPLY_DIR
+
+    def belief_degraded(self) -> belief_context.DegradedWork:
+        """What this lane may run while belief context is refused."""
+        return belief_context.DegradedWork(log_dir=self._belief_log_dir(),
+                                           config=self._belief_config(),
+                                           preseeded=(Path(self.belief_preseeded)
+                                                      if self.belief_preseeded else None),
+                                           runner=self.belief_runner)
+
+    def _belief_ready(self, context: Mapping[str, Any]) -> belief_context.ReadyAnswer:
+        """A validated `ready` answer, or `BeliefContextRefused` (refusal receipt written,
+        degraded-mode work attached). On every ready, degraded-mode results not yet
+        re-checked are re-checked against the fresh snapshot (review flags only)."""
         try:
-            relied = belief_context.reliance(declared, evidence.get("claim_ids") or ())
+            ready = belief_context.prepare(context, self._belief_config(),
+                                           runner=self.belief_runner)
+        except belief_context.BeliefContextRefused as refused:
+            receipt = self._belief_receipt(None, None, None, {
+                "kind": "refused", "reason": refused.reason,
+                "detail": refused.detail[:300]}, refusal=refused)
+            refused.receipt_id = receipt["receipt_id"] if receipt else ""
+            refused.degraded = self.belief_degraded()
+            import sys
+            print(f"actor belief context: REFUSED ({refused.reason}"
+                  f"{': ' + refused.detail[:200] if refused.detail else ''}); no planner call, "
+                  "degraded mode", file=sys.stderr)
+            raise
+        flagged = [row for row in self.belief_degraded().recheck() if row.get("review_flag")]
+        if flagged:
+            import sys
+            print(f"actor belief context: {len(flagged)} degraded-mode result(s) flagged for "
+                  f"review ({', '.join(str(r.get('id')) for r in flagged[:5])}); see "
+                  f"{self._belief_log_dir() / belief_context.RECHECK_LOG}", file=sys.stderr)
+        return ready
+
+    def _belief_receipt(self, belief: belief_context.ReadyAnswer | None, prompt: str | None,
+                        env: Mapping[str, str] | None, outcome: Mapping[str, Any],
+                        declared: Any = None,
+                        refusal: belief_context.BeliefContextRefused | None = None
+                        ) -> dict[str, Any] | None:
+        """Seal and append the planner-evidence receipt (v2); returns it."""
+        try:
+            presented = belief.evidence.get("claim_ids") or () if belief is not None else ()
+            relied = belief_context.reliance(declared, presented)
             receipt = belief_context.seal_receipt(
-                evidence, knob=self.belief_context, prompt=prompt, workspace=self.workspace,
+                belief, prompt=prompt, workspace=self.workspace,
                 seat_arm=(env or {}).get(SEAT_ENV_ARM), outcome=outcome, relied=relied,
-                root=self.belief_root)
-            belief_context.write_receipt(Path(self.workspace).parent / ACTOR_REPLY_DIR, receipt)
+                refusal=refusal, config=self._belief_config())
+            belief_context.write_receipt(self._belief_log_dir(), receipt)
             return receipt
         except Exception as exc:  # noqa: BLE001 -- evidence, never a reason to fail the call
             import sys
@@ -3606,6 +3645,9 @@ class AgentPlanner:
 
     @_in_call_scope("planner")
     def propose(self, context: Mapping[str, Any]) -> Hypothesis | Abstain:
+        # FIRST, before any prompt, bundle or backend: a validated `ready` answer, or
+        # `BeliefContextRefused` (the loop then runs degraded mode, never a blind plan).
+        belief = self._belief_ready(context)
         cpu = _cpu_target(context)
         context_text, bundle = self._context_block("planner", context)
         prompt = _HYPOTHESIS_TASK.format(
@@ -3631,31 +3673,30 @@ class AgentPlanner:
                 prompt += ("\nRuntime treatments here are observation-only diagnostics. "
                            "Their A/B result cannot select a recipe, keep a candidate, "
                            "or establish a causal explanation for a sampled hotspot.")
-        # Belief-kernel section: present only when ingested claims apply to this exact
-        # target (never for another model/backend), bounded and neutral; `off` adds nothing.
-        evidence = self._belief_evidence(context)
-        if evidence is not None and evidence.get("section"):
-            prompt += "\n\n" + evidence["section"]
+        # Belief-kernel section (ROOT-rendered): present only when claims apply to this
+        # exact target; bounded and neutral. Its absence still carries a verified ledger state.
+        if belief.section:
+            prompt += "\n\n" + belief.section
         prompt = self._concise(prompt)
         if self._answer_protocol_on():
             prompt = prompt + "\n\n" + ANSWER_JSON_FIRST_RULE
         prompt = self._guarded("planner", prompt, context)
         backend, env = self._seated("planner", context)
         env = self._sealed(prompt, bundle, env)
-        if evidence is not None:
-            env = {**(env or {}), BELIEF_ENV: belief_context.metrics_summary(evidence)}
+        env = {**(env or {}), BELIEF_ENV: belief_context.metrics_summary(belief)}
         try:
-            result, declared = self._proposal_from_agent(prompt, backend, env, context)
+            result, declared = self._proposal_from_agent(prompt, backend, env, context,
+                                                         belief=belief)
         except BaseException as exc:
-            self._belief_receipt(evidence, prompt, env, {
+            self._belief_receipt(belief, prompt, env, {
                 "kind": "error", "detail": f"{type(exc).__name__}: {exc}"[:300]})
             raise
         if isinstance(result, Abstain):
-            self._belief_receipt(evidence, prompt, env,
+            self._belief_receipt(belief, prompt, env,
                                  {"kind": "abstain", "abstain_reason": result.reason[:500]},
                                  declared)
             return result
-        receipt = self._belief_receipt(evidence, prompt, env,
+        receipt = self._belief_receipt(belief, prompt, env,
                                        {"kind": "hypothesis", "mechanism_id": result.mechanism_id},
                                        declared)
         if receipt is not None:
@@ -3665,12 +3706,16 @@ class AgentPlanner:
         return result
 
     def _proposal_from_agent(self, prompt: str, backend: Backend, env: dict[str, str] | None,
-                             context: Mapping[str, Any]) -> tuple[Hypothesis | Abstain, Any]:
+                             context: Mapping[str, Any], *,
+                             belief: belief_context.ReadyAnswer | None = None
+                             ) -> tuple[Hypothesis | Abstain, Any]:
         """One planner call and its parsed reply, plus the reply's raw `relies_on_claims`
         declaration (validated against the presented claims by the caller). A call ended
         by its wall budget gets one salvage turn when the seat allows it
         (`_salvage_proposal`); under the F2 answer protocol the call runs
         `_answer_protocol` instead."""
+        # By construction: no planner backend call without a validated `ready` answer.
+        belief_context.require_ready(belief)
         if self._answer_protocol_on() and backend.kind == "opencode":
             return self._answer_protocol(prompt, backend, env, context)
         try:

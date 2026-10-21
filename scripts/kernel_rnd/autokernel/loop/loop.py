@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from . import bench, gates, history_fields, integrity, runtime_identity
+from . import belief_context, bench, gates, history_fields, integrity, runtime_identity
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
@@ -102,6 +102,12 @@ HARNESS_FAILURE_CLASSES = frozenset({"output_capped_empty", "budget_exhausted",
 HARNESS_OUTCOMES = frozenset({"transient", "error", "stopped"})
 #: Most patch rejections an author checkpoint carries forward (newest kept).
 MAX_CARRIED_PATCH_REJECTIONS = 8
+#: The iteration found NO planning possible: belief context was refused
+#: (`belief_context.BeliefContextRefused`: the ledger cannot be made current, or the reader
+#: failed) and nothing already planned (a queued resume checkpoint) or preseeded and
+#: admissible was left to run. Not a provider transient and never a blind plan:
+#: `pipeline.run_pool` backs the lane off before its next draw (no hot spin).
+BELIEF_REFUSED = "belief_refused"
 #: How critic pass 2 tags a SCOPE rejection: the reason begins `SCOPE: ...` or
 #: `SCOPE[<rule or route>]: ...`. Structured critics may set `Review.scope_rule`.
 _SCOPE_TAG = re.compile(r"^\s*\**\s*SCOPE\s*(?:\[(?P<rule>[^\]]{1,400})\])?\s*\**\s*[:\-—]\s*",
@@ -450,9 +456,19 @@ class Hypothesis:
     #: calibration's continuation) are governed by the arm ledger, so the DS41-C97
     #: runtime-treatment identity guard exempts it; planner proposals never set it.
     declared_runtime_arm: str = ""
+    #: Degraded mode (`belief_context.DegradedWork`): "degraded" when this hypothesis was NOT
+    #: planned against a verified ledger in this call but run from `--preseeded-hypotheses`
+    #: while belief context was refused; with the seed's id, the ledger state it was seeded
+    #: against (a digest) and its declared premises (claim ids). Empty for every planner
+    #: proposal and every historical row (absent from `to_dict`).
+    belief_mode: str = ""
+    seeded_against: Any = None
+    belief_premises: tuple[str, ...] = ()
+    preseed_id: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "relies_on_claims", tuple(self.relies_on_claims or ()))
+        object.__setattr__(self, "belief_premises", tuple(self.belief_premises or ()))
         if self.runtime_pair is not None:
             from .unified_planner import RuntimeArmPair
             body = (self.runtime_pair.to_dict() if isinstance(self.runtime_pair, RuntimeArmPair)
@@ -471,6 +487,11 @@ class Hypothesis:
             row["belief_receipt_id"] = self.belief_receipt_id
         if self.planner_report_source:
             row["planner_report_source"] = self.planner_report_source
+        if self.belief_mode:
+            row["belief_mode"] = self.belief_mode
+            row["seeded_against"] = self.seeded_against
+            row["belief_premises"] = list(self.belief_premises)
+            row["preseed_id"] = self.preseed_id
         return row
 
 
@@ -586,6 +607,12 @@ class Outcome:
     # `iterate` turn that produced this outcome. None for an outcome built outside
     # `iterate` (its row then carries none of the AK-HR-3 keys, i.e. historical shape).
     history_fields: dict | None = None
+    # Belief context (`belief_context`): "degraded" for a row produced after the planner's
+    # belief context was refused in this iteration (already-planned or preseeded work only),
+    # "refused" for a BELIEF_REFUSED row; `belief_refusal` names the refusal and the last
+    # known-good ledger state. None (absent) for every ordinary and historical row.
+    belief_mode: str | None = None
+    belief_refusal: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -640,6 +667,9 @@ class Outcome:
         for key in ("spawn_parent", "branch_id", "width", "depth"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
+        if self.belief_mode is not None:
+            row["belief_mode"] = self.belief_mode
+            row["belief_refusal"] = dict(self.belief_refusal or {})
         if self.history_fields is not None:
             # Additive and nullable: a value that is unknown is null, never invented.
             row.update(self.history_fields)
@@ -906,6 +936,15 @@ def _panel_recorder(progress: dict[str, Any]):
     return record
 
 
+def _mark_belief(outcome: "Outcome", progress: Mapping[str, Any]) -> None:
+    """Every row produced after this iteration's belief context was refused says so."""
+    refusal = progress.get("belief_refused")
+    if refusal is None or outcome.belief_mode is not None:
+        return
+    outcome.belief_mode = "refused" if outcome.status == BELIEF_REFUSED else "degraded"
+    outcome.belief_refusal = dict(refusal)
+
+
 def _pending_checkpoints(progress: Mapping[str, Any]) -> list[dict]:
     pending: list[dict] = []
     for key in ("inflight", "critic2", "build"):
@@ -1162,6 +1201,7 @@ def iterate(*, planner: Planner, critic: Critic,
         if outcome.status in RESUMABLE_STATUSES and not outcome.resume_checkpoints:
             outcome.resume_checkpoints = _pending_checkpoints(progress)
         _mark_report_source(outcome, progress)
+        _mark_belief(outcome, progress)
         return outcome
 
     try:
@@ -1464,6 +1504,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         if progress.get("author_panel") is not None:
             candidate.author_panels = [dict(progress["author_panel"])]
         _mark_report_source(candidate, progress)
+        _mark_belief(candidate, progress)
         record_error = None
         if record_abandoned is not None:
             try:
@@ -1532,6 +1573,20 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         if point is None or point.checkpoint_id in tried:
             return
         tried.add(point.checkpoint_id)
+        degraded = progress.get("belief_degraded")
+        if (progress.get("belief_refused") is not None and degraded is not None
+                and getattr(point, "stale", None) is None):
+            # Degraded mode: an already-planned checkpoint is checked BEFORE it runs; a
+            # premise the last known-good snapshot flags is refused as a re-validation
+            # failure (disposed `resume_rejected`, gate resume:belief_premise_flagged).
+            verdict = degraded.admit_resume(checkpoint_id=point.checkpoint_id,
+                                            hypothesis=point.hypothesis.to_dict(),
+                                            refusal=progress["belief_refused"])
+            if not verdict.get("admissible", True):
+                point.stale = ("belief_premise_flagged", "premise(s) flagged by the last "
+                               "known-good belief snapshot: " + ", ".join(
+                                   f"{f.get('claim_id')} ({f.get('status')})"
+                                   for f in verdict.get("flagged_premises") or []))
         # Rebound so lineage, carried budgets and the final outcome name THIS point.
         resume = progress["resume"] = point
         schedule.insert(index + 1, point)
@@ -1590,10 +1645,42 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 draw_next_resume(hypothesis_index)
                 continue
         else:
-            on_step("proposing a hypothesis")
-            hypothesis, halted = actor_call(planner.propose, working)
+            hypothesis, halted = None, None
+            if progress.get("belief_refused") is None:
+                on_step("proposing a hypothesis")
+                try:
+                    hypothesis, halted = actor_call(planner.propose, working)
+                except belief_context.BeliefContextRefused as refused:
+                    # NO new hypothesis this iteration: degraded mode below, never blind.
+                    progress["belief_refused"] = refused.summary()
+                    progress["belief_degraded"] = refused.degraded
+                    on_step(f"belief context refused ({refused.reason}): degraded mode")
             if halted is not None:
                 return halted
+            if progress.get("belief_refused") is not None:
+                # Degraded mode: (a) already-planned work -- the next queued resume
+                # checkpoint runs as the next round; (b) else the next PRESEEDED,
+                # not-yet-tested hypothesis `check-seeds` admits against the last
+                # known-good snapshot; (c) else this iteration ends BELIEF_REFUSED.
+                degraded = progress.get("belief_degraded")
+                before = len(schedule)
+                draw_next_resume(hypothesis_index)
+                if len(schedule) > before:
+                    on_step(f"degraded mode: already-planned "
+                            f"{schedule[hypothesis_index + 1].label}")
+                    continue
+                seed = (degraded.next_seed(progress["belief_refused"])
+                        if degraded is not None else None)
+                if seed is None:
+                    return Outcome(BELIEF_REFUSED, None, [
+                        f"belief context refused ({progress['belief_refused']['reason']}): "
+                        "no planning possible -- no already-planned or admissible preseeded "
+                        "work; see workers/actor-replies/belief-degraded.jsonl"])
+                hypothesis = Hypothesis(
+                    **{key: seed[key] for key in belief_context.SEED_HYPOTHESIS_FIELDS},
+                    belief_mode="degraded", seeded_against=seed["seeded_against"],
+                    belief_premises=tuple(seed["premises"]), preseed_id=seed["id"])
+                on_step(f"degraded mode: preseeded hypothesis {seed['id']}")
             if isinstance(hypothesis, Abstain):
                 identity = {"mechanism_id": hypothesis.mechanism_id,
                            "mechanism_family": hypothesis.mechanism_family,

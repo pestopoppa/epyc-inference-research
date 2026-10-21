@@ -64,6 +64,10 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
         # Target/workload/resource identities are never overridden by common argv.
         valued = {"--workers", "--planner-model", "--planner-effort", "--critic-model",
                   "--critic-effort", "--pairs", "--serving-pairs", "--belief-root-repo",
+                  # The mandatory belief reader's paths, deadlines and degraded-mode seed
+                  # list (belief_context.py): reader configuration, never an identity.
+                  "--belief-ledger", "--belief-known-good", "--belief-escalate-after-s",
+                  "--belief-reader-timeout-s", "--preseeded-hypotheses",
                   "--shared-history-root", "--node-profile-level", "--actor-timeout-s",
                   # CPU windows (cpu_window.py): a claim-yield policy, not an identity.
                   "--cpu-held-intervals-v2", "--cpu-window-yield", "--cpu-window-wait-bound-s",

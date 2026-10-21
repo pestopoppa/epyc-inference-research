@@ -47,6 +47,7 @@ from dataclasses import dataclass, field
 import traceback
 from pathlib import Path
 import threading
+import time
 from typing import Any, Callable, Sequence
 
 from . import loop as loop_mod
@@ -80,6 +81,32 @@ DEFAULT_WORKERS = 7
 #: One-off faults reset the count. Refusals, nulls, supersessions, transients and
 #: mid-formation stops are NOT errors and never trip it -- they are the loop working.
 MAX_CONSECUTIVE_ERRORS = 3
+
+#: A lane whose draw ended `loop.BELIEF_REFUSED` (belief context refused and nothing
+#: already-planned or preseeded was admissible) waits before its next draw: base * 2**(n-1)
+#: seconds for its n-th consecutive refusal, capped. Bounded (a stop is honoured within
+#: BELIEF_BACKOFF_POLL_S), per lane and OUTSIDE the serialized tail, so another lane's queued
+#: build/measurement tail still runs while this one waits. Not an error: it never arms the
+#: MAX_CONSECUTIVE_ERRORS breaker.
+BELIEF_BACKOFF_BASE_S = 30.0
+BELIEF_BACKOFF_MAX_S = 600.0
+BELIEF_BACKOFF_POLL_S = 1.0
+
+
+def belief_backoff_s(streak: int) -> float:
+    return min(BELIEF_BACKOFF_MAX_S, BELIEF_BACKOFF_BASE_S * (2 ** max(0, int(streak) - 1)))
+
+
+def _belief_wait(seconds: float, should_stop: Callable[[], bool] | None) -> None:
+    """Sleep `seconds`, returning early once a stop is asked."""
+    deadline = time.monotonic() + max(0.0, float(seconds))
+    while True:
+        if should_stop is not None and should_stop():
+            return
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return
+        time.sleep(min(BELIEF_BACKOFF_POLL_S, left))
 
 
 class Superseded(loop_mod.TailRefused):
@@ -268,6 +295,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
         depth = 0
         base: str | None = None
         iteration_scope: scratch.Scope | None = None
+        belief_refusals = 0
 
         def close_iteration(outcome: loop_mod.Outcome | None) -> None:
             nonlocal iteration_scope
@@ -446,6 +474,17 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 outcome.candidate_diff_sha256 = reservation.candidate_diff_sha256
             close_iteration(outcome)
             keep_lane(outcome)
+            if outcome.status == loop_mod.BELIEF_REFUSED:
+                # No planning possible: back off (bounded, stop-aware) instead of
+                # re-asking the reader in a hot loop; other lanes' tails keep running.
+                belief_refusals += 1
+                wait = belief_backoff_s(belief_refusals)
+                if on_step is not None:
+                    on_step(worker.name, f"belief context refused: no planning possible; "
+                                         f"next draw in {wait:.0f}s")
+                _belief_wait(wait, should_stop)
+            else:
+                belief_refusals = 0
         close_iteration(None)
 
     threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)

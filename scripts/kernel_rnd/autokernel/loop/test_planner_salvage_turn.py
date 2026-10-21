@@ -154,7 +154,10 @@ class SalvageDecision(_Base):
         self.assertEqual(len(calls), 1)
         self.assertEqual(result.planner_report_source, "")
         self.assertNotIn("planner_report_source", result.to_dict())
-        self.assertEqual(result.to_dict(), HYPOTHESIS)
+        # Belief context is mandatory: every proposal names its planner-evidence receipt.
+        row = result.to_dict()
+        self.assertTrue(row.pop("belief_receipt_id").startswith("sha256:"))
+        self.assertEqual(row, HYPOTHESIS)
         self.assertEqual(self._salvage_rows(), [])
 
     def test_junk_from_the_salvage_turn_ends_budget_exhausted_and_is_recorded(self):
