@@ -406,6 +406,8 @@ def test_argv_problems():
     assert m.argv_problems(["-np", "4", "--kv-unified", "--spec-type", "draft-dflash", "-md", "/m/x-DFlash2-Q8_0.gguf"],
                            "dflash2") == []
     assert any("-np" in p for p in m.argv_problems(["--kv-unified", "--spec-type", "draft-mtp"], "plain-mtp"))
+    # the GPU argv carries its own -t (host threads); only the CPU device forbids it
+    assert m.argv_problems(base + ["-t", "8"], "plain-mtp", device="gpu") == []
 
 
 def test_shipped_argv_file_is_valid():

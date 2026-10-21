@@ -83,8 +83,8 @@ PROD_ENV = {"HIP_PATH": "/opt/rocm", "ROCM_PATH": "/opt/rocm", "OMP_PROC_BIND": 
 LDP_TAIL = ["/opt/rocm/lib", "/usr/lib/llvm-20/lib", "/opt/AMD/aocc-compiler-5.0.0/lib"]
 DROP_ENV_PREFIX = ("LLAMA_ARG_", "LLAMA_KPF_", "KPF_", "GGML_", "ROCBLAS_", "HIPBLASLT_", "AMD_LOG", "HIP_TRACE")
 DROP_ENV_KEYS = ("LD_PRELOAD", "LLAMA_SERVER_SLOTS_DEBUG", "LD_LIBRARY_PATH")
-FORBIDDEN_IN_ARGV = ["--port", "--slot-fork-min-tokens", "--metrics", "--slot-fork-dft-full", "--slot-save-path",
-                     "-t", "--threads", "-tb", "--threads-batch"]
+FORBIDDEN_IN_ARGV = ["--port", "--slot-fork-min-tokens", "--metrics", "--slot-fork-dft-full", "--slot-save-path"]
+FORBIDDEN_IN_ARGV_CPU = ["-t", "--threads", "-tb", "--threads-batch"]  # the driver sets them from --cpu-list on CPU
 
 # Server launch configs. `mutate` is the LLAMA_KPF_MUTATE value (test-only hook on the P1 branch); `extra` are argv.
 CONFIGS = {
@@ -1307,11 +1307,11 @@ def load_argv_file(path: Path) -> tuple[list[str], list[str]]:
     return shlex.split(body), comments
 
 
-def argv_problems(argv: list[str], drafter: str) -> list[str]:
+def argv_problems(argv: list[str], drafter: str, device: str = "cpu") -> list[str]:
     p = []
     if argv and argv[0].endswith("llama-server"):
         p.append("argv file must not contain the binary")
-    for f in FORBIDDEN_IN_ARGV:
+    for f in FORBIDDEN_IN_ARGV + (FORBIDDEN_IN_ARGV_CPU if device == "cpu" else []):
         if f in argv:
             p.append(f"argv file must not contain {f} (the driver sets it)")
     st = flag_val(argv, ("--spec-type",))
@@ -1337,7 +1337,7 @@ def preflight(args, ps: PromptSet | None, gate_argv: list[str]) -> tuple[list[st
         probs.append(f"--port {args.port} is already listening")
     if args.device == "gpu" and port_listening(8083):
         probs.append("production :8083 is listening (its owner must stop it first)")
-    probs += argv_problems(gate_argv, args.drafter)
+    probs += argv_problems(gate_argv, args.drafter, args.device)
     b = Path(args.fork_bin)
     if not b.exists():
         probs.append(f"--fork-bin {b} does not exist")
