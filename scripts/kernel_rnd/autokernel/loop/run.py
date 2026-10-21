@@ -91,6 +91,7 @@ from . import belief_context
 from . import actor_passthrough
 from . import cross_target, kernel_coverage
 from . import longctx
+from . import floor_registry
 from . import epoch_aliases
 from . import scratch
 from . import procguard
@@ -1176,6 +1177,8 @@ def _load_heldout_floor(store: Path, recipe, launch, *, tip_build: Path,
 #: the strength of a fresh anchor-guard A/A on the current anchor. Never "verified".
 FLOOR_CARRY_PROVENANCE = "carried_forward"
 FLOOR_CARRY_SCHEMA = "epyc.autokernel.serving_floor_carry.v1"
+#: `serving_floor_provenance` of a floor admitted from the execution-equivalence registry.
+FLOOR_REGISTERED_PROVENANCE = "registered"
 
 
 def _floor_calibrated_at(row) -> float | None:
@@ -1574,6 +1577,15 @@ def _select_source_floor(store: Path, recipe, launch, *, frozen_requests, instru
             instrument=instrument, pairs=pairs, dynamic=dynamic)
         if cor_reading.floor_pct is not None:
             reading = cor_reading
+    if reading.floor_pct is None and matched and _FLOOR_REGISTRY is not None:
+        # Execution-equivalence registry (off unless --floor-registry): a floor calibrated on a
+        # byte-equivalent build (same source tree minus tests/docs, CMake recipe, compiler) within
+        # this champion/numerics era. Tried BEFORE the lineage carry-forward, which only rescues
+        # a floor of this exact recipe lineage on the strength of fresh A/A evidence.
+        registered = _registry_floor_reading(recipe, launch, frozen_requests=frozen_requests,
+                                             pairs=pairs)
+        if registered is not None:
+            reading = registered
     carry = None
     if reading.floor_pct is None and matched and carry_forward:
         # DS41-C69 (operator 2026-09-28: "let's be more clever about this. Wasting sooo
@@ -1613,6 +1625,81 @@ def _gate_floor(reading) -> tuple[float | None, str | None]:
     return pct, (None if pct is None else reading.unit)
 
 
+#: Execution-equivalence floor registry (inference-backlog audit 2026-10-21, change E). OFF unless
+#: `--floor-registry DIR` is given; set once by `main`. A module global because the floor is
+#: selected/written at three call sites deep in the keep path; every use is `if _FLOOR_REGISTRY`.
+_FLOOR_REGISTRY = None
+
+
+class _FloorRegistryContext:
+    def __init__(self, root, *, numerics_epoch, require_grade, co_tenancy, source_repo, branch):
+        self.registry = floor_registry.FloorRegistry(root)
+        self.numerics_epoch, self.require_grade = numerics_epoch, require_grade
+        self.co_tenancy, self.source_repo, self.branch = co_tenancy, Path(source_repo), branch
+
+
+def _registry_floor_reading(recipe, launch, *, frozen_requests, pairs):
+    """A registered floor for this anchor's execution EQUIVALENCE, or None (never raises).
+
+    Admitted only when the registry's era rules hold (current champion tree, same numerics epoch,
+    grade >= `--floor-require-grade`) AND the floor still validates against THIS launch's matched
+    frame (workload, request bytes, model, drafter, environment, topology) -- the same check
+    `serving.compare` repeats. The baseline execution digest is deliberately NOT compared: that is
+    exactly what a byte-equivalent tree changes."""
+    ctx = _FLOOR_REGISTRY
+    try:
+        equivalence = floor_registry.equivalence_for_build(launch.build_dir, source_repo=ctx.source_repo)
+        champion_now = floor_registry.champion_state(ctx.source_repo, ctx.branch)
+        result = ctx.registry.lookup_detail(
+            equivalence_key=equivalence["equivalence_key"], recipe_hash=recipe.recipe_hash,
+            request_digest=serving.request_digest(recipe, frozen_requests),
+            model_sha=launch.model.sha256, numerics_epoch=ctx.numerics_epoch,
+            require_grade=ctx.require_grade, pairs=pairs, champion=champion_now,
+            frame_digest=floor_registry.digest(serving._matched_frame(recipe, launch, frozen_requests)))
+        if not result:
+            print(f"serving   floor registry: {result.status} ({'; '.join(result.reasons)})")
+            return None
+        serving._validate_matched_floor(result.floor, recipe, frozen_requests, pairs, resolved=launch)
+        reading = serving.FloorReading(result.floor["floor_pct"], FLOOR_REGISTERED_PROVENANCE,
+                                       Path(result.entry["_path"]), result.floor)
+        if reading.gate_floor(effect_unit=serving.COMPARE_EFFECT_UNIT) is None:
+            return None
+    except (floor_registry.FloorRegistryError, serving.ServingFloorMismatch, serving.RecipeError,
+            OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        print(f"serving   floor registry unavailable for {launch.build_dir}: {type(exc).__name__}: {exc}")
+        return None
+    grade = result.entry["grade"]
+    print(f"serving   floor REGISTERED for this execution-equivalence class "
+          f"(anchor {result.entry['era']['champion_commit'][:12]}, {grade['claim_class']}/"
+          f"{grade['threads']}t/{grade['co_tenancy']}, {result.floor['floor_pct']}% n={result.floor['n']}): "
+          f"no A/A needed [floor registry]")
+    return reading
+
+
+def _registry_register(recipe, anchor, row, *, frozen_requests, pairs):
+    """File a freshly calibrated matched floor in the registry. A failure here is LOUD but never
+    discards the calibration that was just paid for."""
+    ctx = _FLOOR_REGISTRY
+    try:
+        equivalence = floor_registry.equivalence_for_build(anchor.build_dir, source_repo=ctx.source_repo)
+        argv = list(getattr(anchor, "argv", ()) or ())
+        threads = int(argv[argv.index("-t") + 1]) if "-t" in argv else None
+        if threads is None:
+            raise floor_registry.FloorRegistryError("anchor launch states no -t thread count")
+        quiet = ctx.co_tenancy == "quiet"
+        path = ctx.registry.register(
+            row, equivalence=equivalence, numerics_epoch=ctx.numerics_epoch,
+            grade={"threads": threads, "co_tenancy": ctx.co_tenancy,
+                   "claim_class": "decision" if quiet else "indicative"},
+            registered_by=f"autokernel.loop.run pid {os.getpid()}",
+            validator=lambda floor: serving._validate_matched_floor(
+                floor, recipe, frozen_requests, pairs, resolved=anchor))
+        print(f"serving   floor registered: {path}")
+    except Exception as exc:  # noqa: BLE001 -- never lose the measured floor to a registry fault
+        print(f"WARNING   floor registry write FAILED ({type(exc).__name__}: {exc}); the "
+              f"identity-keyed floor on disk is unaffected")
+
+
 def _write_new_source_floor(floor_store: Path, recipe, anchor, row, *, frozen_requests,
                             instrument: str, pairs: int) -> Path:
     """Write one immutable identity-keyed floor; an existing floor is reused."""
@@ -1631,12 +1718,15 @@ def _write_new_source_floor(floor_store: Path, recipe, anchor, row, *, frozen_re
     if instrument == serving.MATCHED_INSTRUMENT and target.exists():
         raise serving.ServingFloorMismatch(
             "refusing to overwrite an existing anchor-identity floor")
-    return serving.write_floor(
+    written = serving.write_floor(
         floor_store, recipe, row, frozen_requests=frozen_requests,
         # `serving.calibrate_floor` relaunches the server for every sample, so the
         # dispersion it just measured is a between-PROCESS one. Stated, not defaulted.
         unit=serving.CALIBRATION_UNIT,
         instrument=instrument, pairs=pairs)
+    if _FLOOR_REGISTRY is not None and instrument == serving.MATCHED_INSTRUMENT:
+        _registry_register(recipe, anchor, row, frozen_requests=frozen_requests, pairs=pairs)
+    return written
 
 
 def attempt_with_codegen(outcome: loop.Outcome, summaries: dict[str, dict]) -> dict:
@@ -2032,6 +2122,23 @@ def main(argv: list[str] | None = None) -> int:
                         action="store_false", default=True,
                         help="DS41-C69 escape hatch: never carry a lineage serving floor across "
                              "a source-only anchor change; recalibrate (24 pairs) as before")
+    parser.add_argument("--floor-registry", type=Path, metavar="DIR",
+                        help="OFF by default. Execution-equivalence floor registry "
+                             "(loop.floor_registry): consult it for a floor calibrated on a "
+                             "byte-equivalent build before calibrating, and register every matched "
+                             "floor this run calibrates. Requires --serving-instrument "
+                             "matched_process_v2. A store build (kernels/builds/<name>: VERSION.txt "
+                             "+ SHA256SUMS, no provenance.json) is then accepted as --anchor-build "
+                             "when its commit descends from the champion head.")
+    parser.add_argument("--floor-numerics-epoch", default="default",
+                        help="numerics label of the registry era; a floor is never reused across "
+                             "a different label (e.g. bump it when the W5.1a numerics default flips)")
+    parser.add_argument("--floor-require-grade", choices=floor_registry.GRADES, default="decision",
+                        help="lowest grade a REGISTERED floor may have to be used as the bar")
+    parser.add_argument("--floor-co-tenancy", choices=floor_registry.CO_TENANCY, default="co-tenant",
+                        help="host state of THIS run's calibrations when it registers them; "
+                             "default co-tenant (=> indicative only). Declare `quiet` only when "
+                             "the host is quiet for the whole A/A.")
     parser.add_argument("--require-serving-floor", action="store_true",
                         help="refuse to start when no source serving floor exists for this "
                              "launch (exact, champion-of-record or carried forward) instead of "
@@ -2532,6 +2639,15 @@ def main(argv: list[str] | None = None) -> int:
                              "events as `status` broadcasts; 'off' (or empty) disables the bus "
                              "(the window file and its events.jsonl remain) (default: %(default)s)")
     args = parser.parse_args(argv)
+    global _FLOOR_REGISTRY
+    _FLOOR_REGISTRY = None
+    if args.floor_registry is not None:
+        if args.serving_instrument != serving.MATCHED_INSTRUMENT:
+            parser.error("--floor-registry requires --serving-instrument matched_process_v2")
+        _FLOOR_REGISTRY = _FloorRegistryContext(
+            args.floor_registry, numerics_epoch=args.floor_numerics_epoch,
+            require_grade=args.floor_require_grade, co_tenancy=args.floor_co_tenancy,
+            source_repo=args.worktree, branch=args.champion_branch)
     if args.cpu_window_wait_bound_s <= 0:
         parser.error("--cpu-window-wait-bound-s must be > 0")
     if args.hypothesis_author_attempts < 1:
@@ -3037,11 +3153,24 @@ def main(argv: list[str] | None = None) -> int:
         champion.verify_anchor(args.anchor_build, args.worktree, verified_head,
                                experimental_identity=experimental)
     else:
+        # --floor-registry: a kernel-STORE build carries no provenance.json (the store is
+        # immutable); its attestation is VERSION.txt's commit being an ancestor-or-equal of the
+        # champion head, checked right below, still before any claim.
+        store_anchor = (_FLOOR_REGISTRY is not None
+                        and floor_registry.is_store_build(args.anchor_build))
         verified_head = champion.verify_startup(
             worktree=args.worktree, branch=args.champion_branch,
             anchor_build=args.anchor_build,
-            allow_unverified_anchor=args.allow_unverified_anchor,
+            allow_unverified_anchor=args.allow_unverified_anchor or store_anchor,
             experimental_identity=experimental and not source_authoring)
+        if store_anchor:
+            try:
+                attested = floor_registry.store_build_commit_is_descendant(
+                    args.anchor_build, args.worktree, verified_head)
+            except floor_registry.FloorRegistryError as refusal:
+                parser.error(f"REFUSED store anchor: {refusal}")
+            print(f"anchor    store build {args.anchor_build} attested: commit {attested[:12]} "
+                  f"descends from champion head {verified_head[:12]}")
     if direct_launch is not None and not args.dry_run:
         # Startup has now proved the selected anchor slot. Derive its executable
         # and DSO identity once before any live floor lookup, including continuation.
