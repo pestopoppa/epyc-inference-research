@@ -1,0 +1,16 @@
+{
+  "schema": "kpf64.arms.v1",
+  "role": "frontdoor",
+  "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "model_note": "orchestration/model_registry.yaml roles.frontdoor: qwen35moe hybrid (gated delta-net + attention), Q8_0, CPU, server_mode.frontdoor slots=4 cache_ram=32768. Replay serves it WITHOUT speculative/MTP flags (prefix-cache study, not decode speed).",
+  "common_args": ["--host", "127.0.0.1", "--metrics", "--slots", "-lv", "4", "--no-mmap"],
+  "slots": 4,
+  "ctx_total": 262144,
+  "threads_default": 48,
+  "arms": {
+    "A": {"label": "ckpt-off cache-ram=0",       "ctx_checkpoints": 0,  "cache_ram_mib": 0},
+    "B": {"label": "ckpt-on  cache-ram=0",       "ctx_checkpoints": 32, "cache_ram_mib": 0},
+    "C": {"label": "ckpt-on  cache-ram=2048",    "ctx_checkpoints": 32, "cache_ram_mib": 2048},
+    "D": {"label": "ckpt-on  cache-ram=32768",   "ctx_checkpoints": 32, "cache_ram_mib": 32768}
+  }
+}
