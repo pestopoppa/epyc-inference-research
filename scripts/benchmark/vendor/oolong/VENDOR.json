@@ -1,0 +1,11 @@
+{
+  "upstream_repo": "https://github.com/abertsch72/oolong",
+  "upstream_path": "src/eval/eval_helpers.py",
+  "upstream_sha": "0bb7eabe839218fee7fe8d007f41cfc2fd3ae24c",
+  "vendored_file": "eval_helpers.py",
+  "vendored_sha256": "247583a3b653b91c39fb88a102460802f1493175b23d05a7217aead0d685c64c",
+  "modified": false,
+  "license": "MIT",
+  "pinned_lineage_checkout": "/mnt/raid0/llm/tmp/dive-dpfw2-oolong-lineage/repo",
+  "note": "UNMODIFIED. Do not edit; oolong_adapter.py refuses to import it if the sha256 differs. Heavy module-level imports (litellm, datasets, jsonlines, tiktoken, transformers) are stubbed in sys.modules by the adapter only when absent; the scorers use only ast/re/datetime/dateutil."
+}
