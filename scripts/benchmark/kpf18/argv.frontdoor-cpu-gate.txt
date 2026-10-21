@@ -1,0 +1,32 @@
+# KPF-18 CPU subset argv: production frontdoor (:8070) argv as rendered by
+#   epyc-orchestrator scripts/server/orchestrator_stack.py build_server_command(registry.get_role('frontdoor'), ...)
+#   on 2026-10-20 (no launch):
+#   llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port <p> -np 4 -c 262144 -t 96
+#   -ub 2048 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --mlock --no-mmap --cache-ram 32768
+#   --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp
+#   --spec-draft-n-max 4 --reasoning off --slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor --device none --device-draft none
+# Changes for the one-quarter CPU gate: -t 96 -> -t 24 -tb 24 (q3 = cores 72-95); -c 262144 -> -c 98304 (4 x 16k trunks
+# + suffixes fit); --mlock dropped (shared host); --kv-unified added (gate shape); --no-cache-idle-slots added (the GPU
+# gate's shape: a trunk-first source must stay resident while fresh controls run on other slots; item 5 toggles it);
+# --port / --slot-save-path / --metrics / --slot-fork-min-tokens are set by the runner.
+-m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+--host 127.0.0.1
+-np 4
+-c 98304
+-t 24
+-tb 24
+-ub 2048
+--flash-attn on
+--jinja
+-ctk q8_0
+-ctv q8_0
+--no-mmap
+--cache-ram 32768
+--chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja
+--spec-type draft-mtp
+--spec-draft-n-max 4
+--reasoning off
+--device none
+--device-draft none
+--kv-unified
+--no-cache-idle-slots
