@@ -2852,6 +2852,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
 
     lines.append("\n## Already tried")
     if prior:
+        supersessions = abstention_supersessions(list(prior))
         newest = list(prior)[:limit]
         newest_ids = {id(row) for row in newest}
         for row in newest:
@@ -2862,6 +2863,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
             mechanism_claim = claim_contract.mechanism_status(row)
             lines.append(f"- `{row.get('mechanism_id')}` → {row.get('status')} "
                          f"{measured}{stale} [mechanism claim: {mechanism_claim}]"
+                         + _supersession_note(row, supersessions)
                          + (f"\n    refused: {row['refusal_reason']}"
                             if row.get("refusal_reason") else ""))
 
@@ -2887,11 +2889,17 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
             pinned_kept.append(row)
 
         pinned_abstained = []
+        superseded_pinned: list = []
         seen_families: set[str] = set()
         for row in prior:
             if id(row) in newest_ids or not row.get("same_epoch"):
                 continue
             if row.get("status") not in ("abstained", "measured_null"):
+                continue
+            if row.get("attempt_id") in supersessions:
+                # A superseded abstention must not hold the family slot (and so hide the
+                # route behind the old record); it is listed below with its link.
+                superseded_pinned.append(row)
                 continue
             family = (_mechanism_family(row) or str(row.get("mechanism_id") or "")
                       or "(unlabeled)")
@@ -2900,7 +2908,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
             seen_families.add(family)
             pinned_abstained.append(row)
 
-        pinned = pinned_kept + pinned_abstained
+        pinned = pinned_kept + pinned_abstained + superseded_pinned
         omit_cap = max(limit * 4, 40)
         omitted = max(0, len(pinned) - omit_cap)
         if omitted:
@@ -2918,7 +2926,8 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                     if row.get("target_surface") or row.get("target_symbol") else "—"
                 reason = (row.get("refusal_reason") or row.get("statement") or "")[:160]
                 lines.append(f"- {row.get('status')} `{row.get('mechanism_id')}` "
-                             f"({target}) {measured}" + (f" — {reason}" if reason else ""))
+                             f"({target}) {measured}" + (f" — {reason}" if reason else "")
+                             + _supersession_note(row, supersessions))
             if omitted:
                 lines.append(f"- … {omitted} more omitted")
     else:
@@ -3003,6 +3012,52 @@ def _slim_shared_history(shared: Any) -> Any:
     rows = [{k: _clip(v) for k, v in row.items() if k not in SHARED_ROW_ID_FIELDS}
             if isinstance(row, Mapping) else row for row in shared["rows"]]
     return {**shared, "rows": rows}
+
+
+#: AKX-CHK-2: statuses of a route that was DECLINED or FAILED without a scientific verdict.
+#: A later measured finding on the same mechanism supersedes the record (the original row is
+#: kept; the planner is shown the link) instead of the old record suppressing the route.
+_SUPERSEDABLE_STATUSES = frozenset({
+    "abstained", "bench_failed", "lane_error", "authoring_failed", "authoring_harness_failure",
+    "patch_rounds_exhausted", "scope_blocked", "refused_at_formation"})
+_SUPERSEDING_STATUSES = frozenset({"kept", "keep_candidate", "regression", "measured_null"})
+
+
+def abstention_supersessions(rows: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+    """`{attempt_id: newer row}` for abstained/failed rows a later finding supersedes.
+
+    Explicit link first: a row carrying `superseded_by` (an attempt_id present in `rows`)
+    is superseded by that row. Otherwise derived: a same-epoch row with a measured status
+    (`_SUPERSEDING_STATUSES`) on the SAME non-empty `mechanism_id` and a later `recorded_at`.
+    Pure and read-only: no row is mutated or dropped, so the original record stays."""
+    by_id = {r.get("attempt_id"): r for r in rows if r.get("attempt_id")}
+    out: dict[str, Mapping[str, Any]] = {}
+    for row in rows:
+        aid = row.get("attempt_id")
+        if not aid or row.get("status") not in _SUPERSEDABLE_STATUSES:
+            continue
+        explicit = by_id.get(row.get("superseded_by"))
+        if explicit is not None and explicit is not row:
+            out[aid] = explicit
+            continue
+        mech = row.get("mechanism_id")
+        if not mech:
+            continue
+        later = [r for r in rows
+                 if r.get("mechanism_id") == mech and r.get("status") in _SUPERSEDING_STATUSES
+                 and r.get("same_epoch", True) and row.get("same_epoch", True)
+                 and str(r.get("recorded_at") or "") > str(row.get("recorded_at") or "")]
+        if later:
+            out[aid] = min(later, key=lambda r: str(r.get("recorded_at") or ""))
+    return out
+
+
+def _supersession_note(row: Mapping[str, Any], sup: Mapping[str, Mapping[str, Any]]) -> str:
+    newer = sup.get(row.get("attempt_id"))
+    if newer is None:
+        return ""
+    return (f" [SUPERSEDED by {str(newer.get('attempt_id'))[:12]}: {newer.get('status')} "
+            f"{newer.get('recorded_at') or ''} — the route is open; the original record is kept]")
 
 
 def _mechanism_family(row: Mapping[str, Any]) -> str | None:
