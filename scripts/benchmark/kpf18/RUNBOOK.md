@@ -193,3 +193,73 @@ Stop and report, without re-running blindly, if any of these appear:
 - `failed_to_find_memory_slot > 0` in item 5;
 - `pool_invariant` fails;
 - `off_equals_champion` is below n.
+
+## 6. KPF-18.1 / 18.2 / 18.3 arms (`kpf181`, `kpf182`, `kpf183`, `kpf18arms`)
+
+Code: `kpf18_arms.py` (rules, predictor, step builders), wired into `kpf18_gate.py`; tests `test_kpf18_arms.py` (server-free).
+The arms are NOT part of `all` (items 1..7 are unchanged). Same safety shell as items 1-7: `mi210_0` device claim, own-PID
+launch, `/proc` read-back, port 8000-8999 refusal, 18083 default port, hard `--budget-min`, SIGTERM -> `ps -p` verified dead.
+Records are `epyc.kpf.run.v1`, one per server launch x arm, with the per-sibling raw cells under `cells`. **The predeclared
+decision rules are written into `<out>/run_meta.json` (`predeclared_rules`, `predeclared_rules_sha256`) before the first server
+starts; every arm record repeats its rule text and the sha256.** Results are counts under `rule_result`
+(`predeclared_rule_satisfied` True/False, or None where the arm cannot decide), never a pass word.
+
+### What each arm measures
+
+| Arm | Measures | Resource class |
+|---|---|---|
+| 18.1 A | trunk + private tail with `checkpoint_at=[T]` vs tail only; siblings' `n_fork_tokens` == T (fork-off baseline: 0) | GPU correctness (counts) |
+| 18.1 B | identical resend and child == trunk, with / without `checkpoint_at [-1]`; n_fork > 0 through the n-4 / n-4-ub checkpoints; cold-equal logits | GPU correctness |
+| 18.1 C | 16 trunk lengths across one `-ub` period, drafter on and off; fork == fresh within the fresh-vs-fresh floor at every length | GPU correctness (~20 min per drafter setting) |
+| 18.1 D | hit count at c-1/c/c+1 for c in {junction, N-4-ub, N-4} vs the KPF-11 prediction, per drafter launch; held-out length for the drafter drop | GPU correctness |
+| 18.2 | drafter parity across columns, per-component attribution, anti-vacuity counters, cache_prompt=false cold control, dense-vs-junction policy | GPU correctness |
+| 18.3.1 | forced chunk-end split cost: `checkpoint_at=[T]` vs none, cold prefill, alternating A B / B A, vs the without-arm's spread | **timing, INDICATIVE** (may share the GPU) |
+| 18.3.2 | pinned end checkpoint: prompt end or generation end; turn-2 resend of prompt+reply and the coverage gap | correctness (CPU or GPU) |
+| 18.3.3 | request lane (raw /completion vs chat) and checkpoint classification; chat turn-2 fork | correctness (CPU or GPU) |
+| 18.3.4 | >= 50k prompt: mean abs dlogprob fork vs cold against the cold-vs-cold floor | GPU correctness (single ~13 min window by the model) |
+
+The rules are RULES[181|182|183] in `kpf18_arms.py` (read them there; they are the text that goes into run_meta).
+
+### Launch
+
+```bash
+cd /mnt/raid0/llm/worktrees/research-kpf18-arms/scripts/benchmark/kpf18      # or the landed path
+export KPF18_GPU_WINDOW_ID=<coordinated window id>
+F=/mnt/raid0/llm/kernels/builds/gpu-20261020-a1f0c8cf9/bin/llama-server
+O=/mnt/raid0/llm/tmp/kpf-p1-20261004/kpf18/runs/arms-$(date -u +%Y%m%dT%H%M%SZ)
+PS="--prompt-set /path/to/prompt_set.jsonl"       # the same set every window (prompt_set_sha256 is in every record)
+COMMON="--fork-bin $F --argv-file argv.8083-gate.txt --out $O --fork-min 1024 $PS"
+
+./run_kpf18.sh kpf181 $COMMON --dry-run     # plan + per-step estimate + PREFLIGHT block (exit 0 even with problems: read it)
+./run_kpf18.sh kpf181 $COMMON               # arms A,B,C,D: 3 launches (fork on, fork-off baseline, no-drafter D)
+./run_kpf18.sh kpf182 $COMMON               # parts 1-5 (--kpf182-parts to subset); 2 launches
+./run_kpf18.sh kpf183 $COMMON               # GPU default parts 1,4 (cost, >=50k); 1 launch
+./run_kpf18.sh kpf18arms $COMMON            # all three, in order
+```
+
+Useful selectors: `--kpf181-arms A,B` / `--kpf181-groups 0` / `--kpf181-lengths 16`; `--kpf182-parts 1,4`, `--kpf182-groups 0,2`,
+`--kpf182-dense-u 1024`; `--kpf183-parts 1,2,3,4`, `--kpf183-groups 0,3`, `--kpf183-reps 5`. Drafter columns: `--kpf-configs as-given,nodraft`
+(default) plus `--kpf-config-argv NAME=ARGVFILE` for an extra launch (e.g. `dflash2=...` when the launched shape is MTP).
+
+**CPU subset (frontdoor quarter).** Same commands with `--cpu` (reduced spec, GPU checks skipped), launched under the region lock of the
+quarter, e.g. `region-lock run --cpu-list <quarter> --role kpf18 -- nice -n 19 python3 -B kpf18_gate.py kpf181 --cpu --argv-file
+argv.frontdoor-cpu-gate.txt --launch-prefix "taskset -c <quarter>" --port 18580 --allow-shape-drift --budget-min <min> ...`. Always pass
+`--budget-min` on CPU: the dry-run estimates use the GPU rate model and under-estimate CPU time (booking-list CPU figures: 18.1 ~3 Q-h,
+18.2 ~1.5 Q-h, 18.3 parts 2,3 ~1 Q-h). `--cpu` defaults 18.3 to parts 2,3; part 4 needs a >= 50k trunk and is refused on the CPU spec.
+
+### Dry-run estimates (GPU spec, rate model of section 3; to be confirmed by the `--dry-run` above)
+
+| Command | Launches | Model estimate |
+|---|---|---|
+| `kpf181` (A,B,C,D, 1 group, 3 siblings) | 3 | ~53 min (C is ~38 of them: 16 lengths x 3 prefill-sized runs x drafter on/off) |
+| `kpf182` (parts 1-5, groups 0,2) | 2 | ~18 min (cold controls on the 24k trunk dominate) |
+| `kpf183` (GPU default parts 1,4) | 1 | ~28 min (part 1 ~12, part 4 ~13) |
+
+### To enable (not done here)
+
+- **drafter_kv_hit is not exposed by the fork build.** 18.2 reads `tgt_kv_hit`, `recurrent_ckpt_pos`, `drafter_kv_hit` from
+  `/slots[dst].fork` if present; today only `n_fork_tokens`, `src_slot`, `src_kind`, `src_busy` are there. Until a build adds the three fields
+  (and a log line at `slot fork:`), the 18.2 drafter clause is NOT EVALUATED and `predeclared_rule_satisfied` is None, never True. The
+  two other components are derived client-side from the KPF-11 rule.
+- The predictor models neither `src_pos_max == lcp - 1` for the "end" kind nor LoRA / WAIT_OTHER / kv_altered sources; a prediction
+  mismatch on an "end" case (18.3.2 turn 2) is a recorded observation, not a runner defect.
