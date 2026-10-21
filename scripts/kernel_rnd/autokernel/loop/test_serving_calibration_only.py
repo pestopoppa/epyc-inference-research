@@ -51,3 +51,16 @@ def test_serial_roster_admits_the_floor_window_switches():
     block = ROSTER[start:ROSTER.index("}", start)]
     assert '"--require-serving-floor"' in block
     assert '"--serving-calibration-only"' in block
+
+
+def test_calibration_only_also_calibrates_an_opted_in_longctx_surface():
+    """DS41-W8a: the long-context surface's own slot + floor (longctx.Surface) are
+    calibrated in the same calibration-only window, before the 0-outcome exit, through
+    the run's measurement window and stop-aware calibrator."""
+    end = RUN.index("            if args.heldout_calibration_only or args.serving_calibration_only:")
+    start = RUN.rindex("            if (args.serving_calibration_only and longctx_surface is not None", 0, end)
+    seg = RUN[start:end]
+    assert "and not should_stop()" in seg
+    assert "longctx_surface.launch_for(direct_launch), anchor_build[0]" in seg
+    assert "with cpu_measurement_window():\n                    long_launch = longctx_surface.ensure_slot(long_arm)" in seg
+    assert "calibrate=measured_serving_calibrate" in seg

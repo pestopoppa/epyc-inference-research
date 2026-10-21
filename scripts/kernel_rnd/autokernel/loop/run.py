@@ -7406,6 +7406,22 @@ def main(argv: list[str] | None = None) -> int:
                         args.out, validation_row)
 
             publish("running", hotspot_rows=hotspot_rows)
+            if (args.serving_calibration_only and longctx_surface is not None
+                    and not should_stop()):
+                # DS41-W8a (2026-10-21): an opted-in long-context surface owns a SEPARATE
+                # slot and 24-pair matched floor under <store>/longctx/<target> (longctx.py
+                # Surface.ensure_slot/ensure_floor), keyed by its derived recipe, never by
+                # the decode floor above. Without this they calibrate lazily inside the
+                # first keep's A/B of a search window. Both are idempotent: an existing
+                # slot+identity receipt and an existing floor are reopened, not re-measured.
+                publish("running", step="CPU long-context surface: slot + matched floor calibration")
+                long_arm = _cpu_arm(longctx_surface.launch_for(direct_launch), anchor_build[0])
+                with cpu_measurement_window():
+                    long_launch = longctx_surface.ensure_slot(long_arm)
+                long_reading = longctx_surface.ensure_floor(
+                    long_arm, long_launch, pairs=args.serving_pairs,
+                    calibrate=measured_serving_calibrate)
+                print(f"longctx   floor {long_reading.floor_pct}% at {long_reading.path}")
             if args.heldout_calibration_only or args.serving_calibration_only:
                 pooled = pool.PoolResult(outcomes=[], wall_seconds=time.time() - started)
                 outcomes = []
