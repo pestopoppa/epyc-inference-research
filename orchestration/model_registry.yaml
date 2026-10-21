@@ -13332,6 +13332,16 @@ deprecated_models:
       measurement provenance and stay.
     deleted: 2026-10-20
 
+  - model: DeepSeek-V4.1-Flash-Q4.gguf
+    path_was: /mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf
+    size_gb: 483.0
+    reason: >-
+      Superseded by DS41-1017 MXFP4 9-shard trunk (research ada2bf38a); W5 correctness passed 2026-10-21.
+      Operator approved at DS41-W2 on 2026-10-20 and reconfirmed 2026-10-21 after W5 passed. 518,596,067,328 B
+      (size_gb is GiB). Moved to trash and purged 2026-10-21T19:00:05Z; assert_not_mapped.sh PASS at 18:59Z
+      (10 processes unreadable by this user).
+    deleted: 2026-10-21
+
 
 
 optimized_params:
