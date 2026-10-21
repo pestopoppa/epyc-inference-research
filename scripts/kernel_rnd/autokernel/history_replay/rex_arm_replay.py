@@ -230,7 +230,9 @@ def run_rex(a, budget, rng, C):
 
 def run_iid(a, budget, rng):
     tr = Trace(budget)
-    ids = sorted(a.nodes)
+    # Each call is an independent fresh proposal (a root drawn with replacement); repairs of
+    # earlier draws are never reused, so refinement gets no credit it did not earn.
+    ids = sorted(a.roots)
     while ids:
         n = a.nodes[ids[rng.randrange(len(ids))]]
         if not tr.pay(n["cost"]):

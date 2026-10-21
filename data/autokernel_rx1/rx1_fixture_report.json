@@ -1,0 +1,267 @@
+{
+ "archive": {
+  "has_repair_tree": true,
+  "kept": 20,
+  "nodes": 80,
+  "roots": 40,
+  "total_cost": 80
+ },
+ "arms": {
+  "fixed": {
+   "auc_frontier": {
+    "hi95": 0.975,
+    "lo95": 0.725,
+    "mean": 0.9224999999999988
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 8000,
+   "unobserved_selections": 0
+  },
+  "iid": {
+   "auc_frontier": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "auc_minus_fixed": {
+    "hi95": -0.725,
+    "lo95": -0.975,
+    "mean": -0.9224999999999988
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": -1.0,
+    "lo95": -1.0,
+    "mean": -1.0
+   },
+   "observed_calls": 8000,
+   "unobserved_selections": 0
+  },
+  "rex_C10": {
+   "auc_frontier": {
+    "hi95": 0.975,
+    "lo95": 0.599375,
+    "mean": 0.8884999999999991
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.25,
+    "lo95": -0.3506250000000001,
+    "mean": -0.03400000000000002
+   },
+   "coverage": 0.804125,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 6433,
+   "unobserved_selections": 1567
+  },
+  "rex_C20": {
+   "auc_frontier": {
+    "hi95": 0.975,
+    "lo95": 0.598125,
+    "mean": 0.8909999999999982
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.20125000000000023,
+    "lo95": -0.375625,
+    "mean": -0.03150000000000004
+   },
+   "coverage": 0.806625,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 6453,
+   "unobserved_selections": 1547
+  },
+  "rex_C5": {
+   "auc_frontier": {
+    "hi95": 0.975,
+    "lo95": 0.6712500000000001,
+    "mean": 0.9003749999999987
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.19999999999999996,
+    "lo95": -0.3024999999999999,
+    "mean": -0.02212500000000002
+   },
+   "coverage": 0.80925,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 6474,
+   "unobserved_selections": 1526
+  },
+  "rex_C50": {
+   "auc_frontier": {
+    "hi95": 0.975,
+    "lo95": 0.675,
+    "mean": 0.8984999999999991
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.19999999999999996,
+    "lo95": -0.29999999999999993,
+    "mean": -0.024000000000000018
+   },
+   "coverage": 0.808375,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 6467,
+   "unobserved_selections": 1533
+  },
+  "split_R0": {
+   "auc_frontier": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "auc_minus_fixed": {
+    "hi95": -0.725,
+    "lo95": -0.975,
+    "mean": -0.9224999999999988
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": -1.0,
+    "lo95": -1.0,
+    "mean": -1.0
+   },
+   "observed_calls": 8000,
+   "unobserved_selections": 0
+  },
+  "split_R1": {
+   "auc_frontier": {
+    "hi95": 0.975,
+    "lo95": 0.725,
+    "mean": 0.916999999999999
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.20000000000000007,
+    "lo95": -0.25,
+    "mean": -0.0055000000000000005
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 8000,
+   "unobserved_selections": 0
+  },
+  "split_R2": {
+   "auc_frontier": {
+    "hi95": 0.975,
+    "lo95": 0.725,
+    "mean": 0.918499999999999
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.1512500000000003,
+    "lo95": -0.25,
+    "mean": -0.004
+   },
+   "coverage": 0.8019246190858059,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 8000,
+   "unobserved_selections": 1976
+  },
+  "split_R3": {
+   "auc_frontier": {
+    "hi95": 0.975,
+    "lo95": 0.72375,
+    "mean": 0.9202499999999988
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.15000000000000002,
+    "lo95": -0.19999999999999996,
+    "mean": -0.0022500000000000024
+   },
+   "coverage": 0.6693440428380187,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 8000,
+   "unobserved_selections": 3952
+  }
+ },
+ "budget_calls": 40,
+ "limitations": "Replay uses only recorded outcomes. Refinements/repairs the archive never ran are unobserved: a refine of a node with no recorded child costs one call and yields no outcome (REx arms); sweep repairs past a recorded chain end are uncharged and counted unobserved. Bootstrap resamples whole proposal trees with replacement; intervals are 2.5/97.5 percentiles over replicates. Success = cleared the keep gate; AUC-frontier = mean over calls 1..budget of P(best-so-far success).",
+ "reps": 200,
+ "schema": "epyc.autokernel.rex_arm_replay.v1",
+ "seed": "rx1",
+ "source": "synthetic_fixture"
+}

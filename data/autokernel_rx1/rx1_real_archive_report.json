@@ -1,0 +1,268 @@
+{
+ "archive": {
+  "has_repair_tree": false,
+  "kept": 38,
+  "nodes": 175,
+  "roots": 175,
+  "total_cost": 175
+ },
+ "arms": {
+  "fixed": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8390804597701149,
+    "mean": 0.958908045977011
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 17400,
+   "unobserved_selections": 0
+  },
+  "iid": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8272988505747126,
+    "mean": 0.965
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.13793103448275856,
+    "lo95": -0.1270114942528735,
+    "mean": 0.006091954022988514
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 17400,
+   "unobserved_selections": 0
+  },
+  "rex_C10": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.6781609195402298,
+    "mean": 0.9190229885057479
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.12672413793103451,
+    "lo95": -0.2646551724137931,
+    "mean": -0.03988505747126438
+   },
+   "coverage": 0.5660919540229885,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 9850,
+   "unobserved_selections": 7550
+  },
+  "rex_C20": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.7235632183908046,
+    "mean": 0.9271264367816099
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.13850574712643696,
+    "lo95": -0.25287356321839083,
+    "mean": -0.031781609195402315
+   },
+   "coverage": 0.5654597701149425,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 9839,
+   "unobserved_selections": 7561
+  },
+  "rex_C5": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.7000000000000001,
+    "mean": 0.9252298850574718
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.11551724137931056,
+    "lo95": -0.2540229885057471,
+    "mean": -0.03367816091954022
+   },
+   "coverage": 0.5679310344827586,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 9882,
+   "unobserved_selections": 7518
+  },
+  "rex_C50": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.6781609195402298,
+    "mean": 0.9208045977011509
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.08074712643678168,
+    "lo95": -0.253448275862069,
+    "mean": -0.03810344827586208
+   },
+   "coverage": 0.5660344827586207,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 9849,
+   "unobserved_selections": 7551
+  },
+  "split_R0": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8390804597701149,
+    "mean": 0.9605172413793105
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.13793103448275867,
+    "lo95": -0.14971264367816095,
+    "mean": 0.0016091954022988597
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 17400,
+   "unobserved_selections": 0
+  },
+  "split_R1": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8272988505747126,
+    "mean": 0.9604022988505747
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.12672413793103451,
+    "lo95": -0.1270114942528736,
+    "mean": 0.0014942528735632289
+   },
+   "coverage": 0.561489560811901,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 17400,
+   "unobserved_selections": 13589
+  },
+  "split_R2": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8390804597701149,
+    "mean": 0.9592528735632182
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.12672413793103462,
+    "lo95": -0.12672413793103454,
+    "mean": 0.0003448275862069022
+   },
+   "coverage": 0.3902570313551339,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 17400,
+   "unobserved_selections": 27186
+  },
+  "split_R3": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8387931034482758,
+    "mean": 0.9637356321839077
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.13850574712643696,
+    "lo95": -0.13793103448275856,
+    "mean": 0.004827586206896563
+   },
+   "coverage": 0.29933938893476464,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 17400,
+   "unobserved_selections": 40728
+  }
+ },
+ "budget_calls": 87,
+ "limitations": "Replay uses only recorded outcomes. Refinements/repairs the archive never ran are unobserved: a refine of a node with no recorded child costs one call and yields no outcome (REx arms); sweep repairs past a recorded chain end are uncharged and counted unobserved. Bootstrap resamples whole proposal trees with replacement; intervals are 2.5/97.5 percentiles over replicates. Success = cleared the keep gate; AUC-frontier = mean over calls 1..budget of P(best-so-far success).",
+ "reps": 200,
+ "rows_skipped_no_gates": 1004,
+ "schema": "epyc.autokernel.rex_arm_replay.v1",
+ "seed": "rx1",
+ "source": "experiments.db:/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/store/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-b0ba1d427/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store-b0ba1d427/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store/experiments.db"
+}
