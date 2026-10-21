@@ -161,6 +161,82 @@ def w5a_kernel(f):
             "max_nmse_repack_vs_plain": max(r["nmse_repack_vs_plain"] for r in rows), "rows": rows}
 
 
+BIN = "/mnt/raid0/llm/llama.cpp-experimental-ds41-20261005/build-cpu/bin"
+TGT = "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-1017-MXFP4-experts-00001-of-00009.gguf"
+DRAFT = {"A": "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-1017-DSpark.gguf",
+         "B": "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf"}
+ENV = {"LD_LIBRARY_PATH": BIN, "OMP_PROC_BIND": "spread", "OMP_PLACES": "cores", "OMP_WAIT_POLICY": "active",
+       "OMP_DYNAMIC": "false", "GGML_IQK": "1"}
+REGION = {"role": "build", "cpu_list": "0-47", "quarter": "q0+q1", "tag": "ds41-w62-slot"}
+
+
+def capture_rows(wt, an):
+    """Write side (VB-DS41-1017-WIRE): one producer row per gate number, via the research producer
+    ds41_1017_capture.py imported FROM THE WORKTREE (so scored artifacts resolve inside it). Only numbers
+    measured inside the slot's build-role claim are captured; nothing is re-derived from prose."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ds41_1017_capture", os.path.join(wt, "scripts/benchmark/ds41_1017_capture.py"))
+    C = importlib.util.module_from_spec(spec); spec.loader.exec_module(C)
+    d5 = os.path.join(wt, D5); d62 = os.path.join(wt, A6, "w6.2")
+    out = []
+    k = an["w5a_kernel"]
+    if k["status"] == "ok" and k["all_repacked"]:
+        argv = ["taskset", "-c", "0-47", f"{W}/w5a/kernel/mxfp4_repack_nmse", "48", "w5a_kernel.jsonl", "<4 cases, see run_w5a_kernel.sh>"]
+        for metric, key in (("mxfp4_cpu_repack_mul_mat_id_nmse_vs_f32ref_max", "max_nmse_repack_vs_f32ref"),
+                            ("mxfp4_cpu_repack_vs_generic_mul_mat_id_nmse_max", "max_nmse_repack_vs_plain")):
+            out.append(C.capture(d5, gate="nmse", arm="1017", metric=metric, value=k[key], unit="nmse",
+                                 metric_direction="lower_better", reps=k["n"], reps_basis="4 tensors x 9 widths, 8 real experts, n_used 6",
+                                 scored=os.path.join(d5, "w5a", "w5a_kernel.jsonl"), recipe={"argv": argv, "env": ENV},
+                                 region=REGION, binary=f"{BIN}/llama-server",
+                                 claim="CPU_REPACK mxfp4_8x8_q8_0 MUL_MAT_ID vs f32-dequant reference, cap 5e-4 (DS41-W5a)",
+                                 extra={"all_pass": k["all_pass"], "cap": 5e-4, "harness": "data/ds41-1017-w5-20261021/w5a/mxfp4_repack_nmse.cpp"}))
+    wf = os.path.join(d5, "w5a", "weight_fidelity_slot.json")
+    if os.path.exists(wf):
+        rows = json.load(open(wf))["rows"]
+        for gtype in ("MXFP4", "Q8_0", "F16"):
+            rs = [r for r in rows if r["gguf_type"] == gtype]
+            if rs:
+                out.append(C.capture(d5, gate="nmse", arm="1017", metric=f"weight_nmse_vs_hf_source_max_{gtype.lower()}",
+                                     value=max(r["nmse"] for r in rs), unit="nmse", metric_direction="lower_better",
+                                     reps=len(rs), reps_basis="tensors compared", scored=wf,
+                                     recipe={"argv": ["python", "-I", "weight_fidelity.py", "index.json", "gguf_tensors.json"], "env": {"OMP_NUM_THREADS": "1"}},
+                                     region=REGION, binary=f"{BIN}/llama-server",
+                                     claim=f"GGUF {gtype} dequant vs HF 1017 source tensors (rev 1bae0e10), max over checked tensors",
+                                     extra={"tensors": [r["tensor"] for r in rs]}))
+    b = an["w5b"]
+    if b["status"] == "ok":
+        raw = [r for r in b["rows"] if r["kind"] == "raw"]
+        out.append(C.capture(d5, gate="coherence", arm="1017", metric="w5b_raw_probe_first_token_eos_count",
+                             value=sum(r["first_is_eos"] for r in raw), unit="count", metric_direction="lower_better",
+                             reps=len(raw), reps_basis="raw-completion probes", scored=os.path.join(d5, "w5b", "run", "w5b.rows.jsonl"),
+                             recipe={"argv": json.load(open(os.path.join(d5, "w5b", "run", "w5b.recipe.json")))["argv"], "env": ENV},
+                             region=REGION, binary=f"{BIN}/llama-server",
+                             claim="DS41-W5b first-token EOS probe set (greedy, n_probs=10), target-only 1017 server",
+                             extra={"per_probe": {r["id"]: [r["first_is_eos"], r["p_eos_first"]] for r in b["rows"]}}))
+    scored62 = os.path.join(d62, "analysis.json")
+    dig = {}
+    if any(blk.get("n_pairs") for blk in an["w62"]["blocks"].values()):
+        for arm, path in DRAFT.items():
+            dig[arm] = {"sha256": C.sha256_file(path), "path": path, "bytes": os.path.getsize(path)}
+    for n, blk in an["w62"]["blocks"].items():
+        if not blk.get("n_pairs"):
+            continue
+        for arm, key, label in (("A", "alpha_A_1017", "1017_drafter"), ("B", "alpha_B_sept", "sept_drafter")):
+            argv = ["taskset", "-c", "0-47", f"{BIN}/llama-server", "--no-webui", "-t", "48", "-tb", "48", "-np", "1", "-c", "4096",
+                    "-m", TGT, "-fa", "on", "-md", DRAFT[arm], "--spec-type", "draft-dspark", "--spec-draft-n-max", "3"]
+            out.append(C.capture(d62, gate="alpha", arm="1017", metric=f"dspark_alpha_block{n}_{label}_temp0.7",
+                                 value=blk[key], unit="fraction", metric_direction="higher_better", reps=blk["n_pairs"],
+                                 reps_basis=f"complete pairs {blk['pairs']} x 16 prompts (pooled accepted/drafted)",
+                                 scored=scored62, recipe={"argv": argv, "env": ENV}, region=REGION, binary=f"{BIN}/llama-server",
+                                 drafter=dig[arm],
+                                 claim=f"DSpark alpha at block {n}, 1017 target, temperature 0.7 top_p 1.0 top_k 0 (DS41-W6.2)",
+                                 extra={"pair_config": an["w62"]["pair_config"], "diff_A_minus_B_pooled": blk["diff_A_minus_B_pooled"],
+                                        "ci95_paired_t_over_pairs": blk["ci95_paired_t_over_pairs"],
+                                        "ci95_pair_x_prompt_bootstrap": blk["ci95_pair_x_prompt_bootstrap"],
+                                        "other_drafter_sha256": dig["B" if arm == "A" else "A"]["sha256"]}))
+    return [r["measurement_id"] for r in out]
+
+
 def fmt(x, nd=4):
     return "n/a" if x is None else (f"{x:+.{nd}f}" if isinstance(x, float) else str(x))
 
@@ -216,6 +292,7 @@ def main():
     ap.add_argument("--commit", action="store_true")
     ap.add_argument("--push", action="store_true")
     ap.add_argument("--worktree", default=None, help="reuse an existing worktree instead of creating one")
+    ap.add_argument("--skip-capture", action="store_true", help="do not write belief_measurements rows")
     a = ap.parse_args()
     ended = open(ENDF).read().strip() if os.path.exists(ENDF) else "ABSENT (slot not finished?)"
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -240,6 +317,7 @@ def main():
                      (f"{W}/w5a/kernel/w5a_kernel.jsonl", os.path.join(o5a, "w5a_kernel.jsonl")),
                      (f"{W}/w5a/kernel/provenance.txt", os.path.join(o5a, "kernel_provenance.txt")),
                      (f"{W}/w5a/kernel/run.log", os.path.join(o5a, "kernel_run.log")),
+                     (f"{W}/w5a/kernel/weight_fidelity_slot.json", os.path.join(o5a, "weight_fidelity_slot.json")),
                      (f"{W}/w5b/run/w5b.rows.jsonl", os.path.join(o5b, "w5b.rows.jsonl")),
                      (f"{W}/w5b/run/w5b.recipe.json", os.path.join(o5b, "w5b.recipe.json")),
                      (f"{W}/w5b/run/w5b.server.log", os.path.join(o5b, "w5b.server.log"))):
@@ -255,10 +333,17 @@ def main():
     md = summary_md(an)
     open(os.path.join(o62, "SUMMARY.md"), "w").write(md)
     print(md)
+    if not a.skip_capture:
+        ids = capture_rows(wt, an)
+        print(f"belief rows captured: {len(ids)} (ingest: python3 /workspace/scripts/vidya/cli.py ingest ds41-1017-validation "
+              f"--path <research>/{D5} and --path <research>/{A6}/w6.2, after the push)")
     if not a.commit:
         print(f"worktree: {wt} (not committed; rerun with --worktree {wt} --commit [--push])")
         return
-    sh("git", "add", "--", os.path.join(A6, "w6.2"), os.path.join(D5, "w5a"), os.path.join(D5, "w5b"), cwd=wt)
+    paths = [os.path.join(A6, "w6.2"), os.path.join(D5, "w5a"), os.path.join(D5, "w5b")]
+    if os.path.exists(os.path.join(wt, D5, "belief_measurements.jsonl")):
+        paths.append(os.path.join(D5, "belief_measurements.jsonl"))
+    sh("git", "add", "--", *paths, cwd=wt)
     b2 = an["w62"]["blocks"].get("2", {})
     msg = f"{W}/commit-msg-{ts}.txt"
     open(msg, "w").write(

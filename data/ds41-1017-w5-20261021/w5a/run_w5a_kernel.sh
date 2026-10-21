@@ -26,4 +26,11 @@ CASES=(
 g++ -O3 -march=native -fopenmp -std=c++17 -I"$T/ggml/include" "$W/mxfp4_repack_nmse.cpp" \
     -L"$BIN" -lggml -lggml-base -lggml-cpu -Wl,-rpath,"$BIN" -o "$OUT/mxfp4_repack_nmse" 2> "$OUT/build.log"
 export LD_LIBRARY_PATH=$BIN GGML_IQK=1 OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active OMP_DYNAMIC=false
-"$OUT/mxfp4_repack_nmse" "$NT" "$OUT/w5a_kernel.jsonl" "${CASES[@]}" 2> "$OUT/run.log"
+hrc=0
+"$OUT/mxfp4_repack_nmse" "$NT" "$OUT/w5a_kernel.jsonl" "${CASES[@]}" 2> "$OUT/run.log" || hrc=$?
+# Re-run the weight-fidelity comparison inside the claim so its belief row carries an honest region
+# (the 2026-10-21 run held no claim: the host was fully claimed by kvu12-redo). ~50 MB HTTP range reads.
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 timeout 600 /mnt/raid0/llm/epyc-inference-research/.venv/bin/python -I \
+  "$W/weight_fidelity.py" "$W/index.json" "$W/gguf_tensors.json" "$OUT/weight_fidelity_slot.json" > "$OUT/weight_fidelity_slot.log" 2>&1 \
+  || echo "weight_fidelity slot rerun failed rc=$? (non-fatal; the 2026-10-21 result stands)" >> "$OUT/run.log"
+exit "$hrc"
