@@ -495,6 +495,14 @@ runtime_defaults:
   numa_policy: interleave=all
   # Base path for models - override with ORCHESTRATOR_PATHS_MODEL_BASE env var
   model_base_path: /mnt/raid0/llm/models
+  # SEC-ART-1/2/3/4 strict switches (epyc-orchestrator src/registry/artifact_integrity.py,
+  # handoffs/active/model-artifact-integrity.md in epyc-root). false = a missing pin or a missing
+  # fingerprint-ledger entry WARNS; true = the registry validator errors at `start` and the launcher
+  # REFUSES. A pin that is present and WRONG is refused in both modes. Env vars
+  # REGISTRY_ARTIFACT_PINS_STRICT / REGISTRY_TEMPLATE_PINS_STRICT (1/0) override these. Flip via stack-change.
+  artifact_integrity:
+    pins_strict: false
+    template_pins_strict: false
   binaries:
     # Binary path - override with ORCHESTRATOR_PATHS_LLAMA_CPP_BIN env var
     base_dir: /mnt/raid0/llm/llama.cpp/build/bin
@@ -982,6 +990,12 @@ server_mode:
       provenance: epyc_built_terse_v1
       served_template_bytes: 25808
       served_template_sha256_12: 1443ea9ab4bb
+      served_template_sha256: 1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551
+      upstream_template_sha256: e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259
+      template_diff: data/template_reviews/frontdoor.diff
+      upstream_ref: Qwen/Qwen3.6-35B-A3B
+      upstream_revision: 995ad96eacd98c81ed38be0c5b274b04031597b0
+      template_diff_reviewed: generated 2026-10-21 by the SEC-ART-5 lane (diff upstream -> served); human review sign-off pending
       base: froggeric v22.3 minus inline-tag scan plus Sharp terseness
       evidence: 'CT-1b A/B artifacts: /workspace/artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/.
         E-7: frontdoor''s calibration stamps are voided by the template axis and must re-measure.'
@@ -1233,6 +1247,13 @@ server_mode:
   worker_vision:
     url: http://localhost:8086
     port: 8086
+    chat_template:
+      served_template_sha256: 3636d0f0bd6bef02654cdffdc447b79cb2cef8ab02cc75267345946291a489e4
+      upstream_template_sha256: 3636d0f0bd6bef02654cdffdc447b79cb2cef8ab02cc75267345946291a489e4
+      template_diff: data/template_reviews/worker_vision.diff
+      upstream_ref: Qwen/Qwen3-VL-30B-A3B-Instruct
+      upstream_revision: 9c4b90e1e4ba969fd3b5378b57d966d725f1b86c
+      template_diff_reviewed: generated 2026-10-21 by the SEC-ART-5 lane (diff upstream -> served); human review sign-off pending
     # 2026-08-02: was 1. Single GPU_HOST_LANE instance, so there is no per-shape
     # split — the flat scalar IS the declaration and `slots_by_shape` is absent.
     slots: 1
@@ -1744,6 +1765,12 @@ server_mode:
       provenance: epyc_built_terse_v1
       served_template_bytes: 25808
       served_template_sha256_12: 1443ea9ab4bb
+      served_template_sha256: 1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551
+      upstream_template_sha256: c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041
+      template_diff: data/template_reviews/architect_critic.diff
+      upstream_ref: Qwen/Qwen3.8-27B
+      upstream_revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+      template_diff_reviewed: generated 2026-10-21 by the SEC-ART-5 lane (diff upstream -> served); human review sign-off pending
       base: froggeric v22.3 minus inline-tag scan plus Sharp terseness
       evidence: 'CT-1b A/B artifacts: /workspace/artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/
         (measured on Qwen3.6-35B-A3B; UNMEASURED on this role''s Qwen3.8-27B). E-7: this role''s
@@ -1949,6 +1976,13 @@ server_mode:
     chat_template_kwargs:
       enable_thinking: false
     model_role: qwen38_flash_next_ud_iq4xs_local
+    chat_template:
+      served_template_sha256: 12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce
+      upstream_template_sha256: c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041
+      template_diff: data/template_reviews/architect_general.diff
+      upstream_ref: Qwen/Qwen3.8-Flash-Next
+      upstream_revision: de4b8e4d43b917e7706784d8bb445c9af86a3540
+      template_diff_reviewed: generated 2026-10-21 by the SEC-ART-5 lane (diff upstream -> served); human review sign-off pending
     # ⚠ NO `shared_with`. An earlier draft merged ingest_long_context onto this process.
     # OPERATOR RULING C2 WITHDREW IT: this role's single full instance on 0-95 holds ALL FOUR
     # CPU region locks while it runs, and ingest_long_context is ROUTINE traffic (Stage 1 of
@@ -2783,6 +2817,9 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+      hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
+      sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
       quant: Q8_0
       size_gb: 37
       architecture: qwen35moe  # MoE variant, arch=qwen35moe in GGUF metadata
@@ -2989,6 +3026,9 @@ roles:
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.8-27B-GGUF
+      hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
+      sha256: a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348
       quant: Q8_0
       size_gb: 27.05   # 29,047,086,048 B = 27.05 GiB — same size as the Qwen3.6 it replaces
       architecture: qwen35   # dense hybrid SSM, NOT the qwen35moe MoE
@@ -3141,6 +3181,9 @@ roles:
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.8-27B-GGUF
+      hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
+      sha256: a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348
       quant: Q8_0
       size_gb: 27.05
       architecture: qwen35          # DENSE, 65 blocks x 4 kv-heads, but `full_attention_interval
@@ -3254,6 +3297,12 @@ roles:
       name: Qwen3.8-Flash-Next-UD-IQ4_XS
       huggingface_id: unsloth/Qwen3.8-Flash-Next-GGUF
       path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      hf_repo: unsloth/Qwen3.8-Flash-Next-GGUF
+      hf_revision: 766911a6b7369840a91dbcd95f9f997acaab6cd6
+      sha256: 5ce89370720f8bf90890f439361282104c1aa1482d4013bb9a50923e758e71a4
+      shard_sha256:
+        Qwen3.8-Flash-Next-UD-IQ4_XS-00002-of-00003.gguf: 577a38a2392b40ca2193cea502e1d92f60b8cd370675d308e0ec21885d9daaa7
+        Qwen3.8-Flash-Next-UD-IQ4_XS-00003-of-00003.gguf: d4634e6d84f0ebb0940be15c90d3790bf6464e3dea3a1cddc567dc0e83ad8833
       quant: UD-IQ4_XS
       size_gb: 87.25       # 93,682,584,224 B over 3 shards, verified on disk
       split_count: 3
@@ -3395,6 +3444,9 @@ roles:
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.8-27B-GGUF
+      hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
+      sha256: a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348
       quant: Q8_0
       size_gb: 27.05              # 29,047,086,048 B = 27.05 GiB — same size as the Qwen3.6 it replaces
       architecture: qwen35        # dense hybrid SSM (gated Delta Net + attention); all params active
@@ -6374,6 +6426,9 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+      hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
+      sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
       quant: Q8_0
       size_gb: 35.2          # 37,801,097,504 B verified on disk
       architecture: qwen35moe
@@ -6487,6 +6542,9 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+      hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
+      sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
       quant: Q8_0
       size_gb: 35.2
       architecture: qwen35moe
@@ -6542,6 +6600,9 @@ roles:
     model:
       name: Qwen3-VL-30B-A3B-Instruct
       path: /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
+      hf_repo: lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF
+      hf_revision: 02ee4a8e98a6f436e6aa255d413c320cc547b0b9
+      sha256: 7bd52989f39ddca3dde36edb902fef72c5fde81e9211ca0f5ceca0119bd16d9c
       mmproj_path: /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf
       quant: Q4_K_M
       size_gb: 17.3              # 18,556,687,200 B weights + 1,083,499,584 B mmproj (both verified on disk)
@@ -6640,6 +6701,9 @@ roles:
     model:
       name: Qwen3-VL-30B-A3B-Instruct
       path: /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
+      hf_repo: lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF
+      hf_revision: 02ee4a8e98a6f436e6aa255d413c320cc547b0b9
+      sha256: 7bd52989f39ddca3dde36edb902fef72c5fde81e9211ca0f5ceca0119bd16d9c
       mmproj_path: /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf
       quant: Q4_K_M
       size_gb: 17.3
@@ -6740,6 +6804,9 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+      hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
+      sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
       quant: Q8_0
       size_gb: 37
       architecture: qwen35moe
@@ -6814,6 +6881,9 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+      hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
+      sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
       quant: Q8_0
       size_gb: 35.2
       architecture: qwen35moe
@@ -8850,6 +8920,12 @@ roles:
     model:
       name: Qwen3.8-Flash-Next-UD-IQ4_XS
       path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      hf_repo: unsloth/Qwen3.8-Flash-Next-GGUF
+      hf_revision: 766911a6b7369840a91dbcd95f9f997acaab6cd6
+      sha256: 5ce89370720f8bf90890f439361282104c1aa1482d4013bb9a50923e758e71a4
+      shard_sha256:
+        Qwen3.8-Flash-Next-UD-IQ4_XS-00002-of-00003.gguf: 577a38a2392b40ca2193cea502e1d92f60b8cd370675d308e0ec21885d9daaa7
+        Qwen3.8-Flash-Next-UD-IQ4_XS-00003-of-00003.gguf: d4634e6d84f0ebb0940be15c90d3790bf6464e3dea3a1cddc567dc0e83ad8833
       quant: UD-IQ4_XS
       size_gb: 87.25
       split_count: 3
@@ -11560,6 +11636,9 @@ roles:
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.8-27B-GGUF
+      hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
+      sha256: a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348
       quant: Q8_0
       size_gb: 27.05
       architecture: qwen35
@@ -11703,6 +11782,9 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+      hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
+      sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
       quant: Q8_0
       size_gb: 35.2
       architecture: qwen35moe

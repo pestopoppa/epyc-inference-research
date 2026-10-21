@@ -18,6 +18,14 @@ the four drift classes the operator called out:
 or routing_hints (what routing actually targets). server_mode alone is a launch *spec*
 catalogue, so a spec for a not-currently-deployed role is not itself an error.
 
+SEC-ART-5 (2026-10-21, handoffs/active/model-artifact-integrity.md in epyc-root) adds a fifth class:
+
+  5. every deployable GGUF-serving server_mode role carries chat_template.{upstream_template_sha256,
+     served_template_sha256, template_diff}: both digests 64 lowercase hex, `template_diff` an existing
+     non-empty file (repo-relative; the reviewed upstream -> served diff), and served_template_sha256_12
+     (when present) the prefix of the 64-hex pin                                                  (ERROR)
+     Produce them with epyc-orchestrator `scripts/validate/template_provenance.py` (new-model Step 1.5).
+
 Exit code: 1 if any ERROR, else 0 (WARNINGs do not fail — they are hygiene the operator
 reviews). Designed to run standalone or in CI:
 
@@ -75,6 +83,43 @@ def _deployable_roles(data: dict) -> set[str]:
             if esc:
                 refs.add(esc)
     return refs
+
+
+_SHA64 = re.compile(r"^[0-9a-f]{64}$")
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+TEMPLATE_FIELDS = ("upstream_template_sha256", "served_template_sha256", "template_diff")
+
+
+def check_template_provenance(data: dict, deployable: set[str], repo_root: Path = _REPO_ROOT) -> list[tuple[str, str]]:
+    """SEC-ART-5 over the deployable, non-alias GGUF-serving `server_mode` roles. Returns ERROR tuples."""
+    errors: list[tuple[str, str]] = []
+    for role, cfg in sorted((data.get("server_mode") or {}).items()):
+        if role not in deployable or not isinstance(cfg, dict) or cfg.get("alias_of"):
+            continue
+        model = cfg.get("model")
+        mpath = model.get("path") if isinstance(model, dict) else model
+        if not (isinstance(mpath, str) and mpath.endswith(".gguf")):
+            continue
+        block = cfg.get("chat_template") if isinstance(cfg.get("chat_template"), dict) else {}
+        missing = [f for f in TEMPLATE_FIELDS if not block.get(f)]
+        if missing:
+            errors.append(("MISSING_TEMPLATE_PROVENANCE",
+                           f"deployable role '{role}': chat_template lacks {', '.join(missing)} "
+                           f"(run epyc-orchestrator scripts/validate/template_provenance.py)"))
+            continue
+        for f in ("upstream_template_sha256", "served_template_sha256"):
+            if not (isinstance(block[f], str) and _SHA64.match(block[f])):
+                errors.append(("BAD_TEMPLATE_PIN", f"role '{role}': chat_template.{f}={block[f]!r} is not 64 lowercase hex"))
+        short = block.get("served_template_sha256_12")
+        if short is not None and isinstance(block["served_template_sha256"], str) \
+                and str(short) != block["served_template_sha256"][:12]:
+            errors.append(("TEMPLATE_PIN_PREFIX_MISMATCH",
+                           f"role '{role}': served_template_sha256_12 {short!r} != prefix of served_template_sha256"))
+        diff = Path(str(block["template_diff"]))
+        diff = diff if diff.is_absolute() else repo_root / diff
+        if not diff.is_file() or diff.stat().st_size == 0:
+            errors.append(("TEMPLATE_DIFF_MISSING", f"role '{role}': template_diff {block['template_diff']} is not a non-empty file"))
+    return errors
 
 
 def validate(registry_path: str) -> tuple[list, list]:
@@ -187,6 +232,9 @@ def validate(registry_path: str) -> tuple[list, list]:
         floor_errors, floor_warnings = fr.validate_section(data, Path(registry_path).resolve().parent.parent)
         errors.extend(("SERVING_FLOOR", m) for m in floor_errors)
         warnings.extend(("SERVING_FLOOR", m) for m in floor_warnings)
+
+    # --- Check 6 (SEC-ART-5, docstring class 5): template provenance for deployable GGUF-serving roles ---
+    errors += check_template_provenance(data, deployable)
 
     return errors, warnings
 
