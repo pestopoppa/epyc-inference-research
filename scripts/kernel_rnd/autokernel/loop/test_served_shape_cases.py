@@ -13,7 +13,7 @@ from . import gates
 from . import served_shape_cases as ssc
 
 ANCHOR_NMSE = {(shape.name, t, n): 1e-5 for shape in ssc.SERVED_SHAPES
-               for t in ssc.WITNESS_TYPES for n in ssc.SERVED_WIDTHS}
+               for t in ssc.ALL_TYPES for n in ssc.SERVED_WIDTHS}
 
 
 def _recipe():
@@ -195,7 +195,7 @@ def test_vars_and_cpp_agree_with_the_real_test_backend_ops_constructors():
     dense = next(c for c in cases if c.shape.op == "MUL_MAT")
     expert = next(c for c in cases if c.shape.op == "MUL_MAT_ID")
     name = ssc.GGML_TYPE_NAMES
-    assert set(name) == set(ssc.WITNESS_TYPES)
+    assert set(name) == set(ssc.ALL_TYPES)
     assert dense.vars() == (f"type_a={name[dense.type_a]},type_b=f32,m={dense.shape.m},"
                             f"n={dense.n},k={dense.shape.k},bs=[1,1],nr=[1,1],"
                             f"per=[0,1,2,3],k_v=0,o=1,max_nmse={dense.max_nmse:g}")
@@ -579,7 +579,8 @@ def test_every_generated_case_respects_the_block_size(lane):
         assert shape.k % ssc.BLOCK_SIZE[type_a] == 0, (shape.name, type_a)
     down = [t for s, t, _ in ssc.canonical_triples() if s.name == "q38fn_expert_down"]
     assert down and set(down) <= {"Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0", "IQ4_NL"}
-    assert set(ssc.BLOCK_SIZE) == set(ssc.WITNESS_TYPES)
+    assert set(ssc.BLOCK_SIZE) == set(ssc.ALL_TYPES)
+    assert ssc.BLOCK_SIZE["MXFP4"] == 32   # ggml QK_MXFP4 (block_mxfp4: 17 bytes)
 
 
 def test_routed_types_follow_the_served_direction():
@@ -595,10 +596,11 @@ def test_the_candidate_corpus_is_lane_partitioned():
     for lane in ssc.LANE_PROFILES:
         names = {shape.name for shape in ssc.lane_served_shapes(lane)}
         assert names and all(name.startswith(lane + "_") for name in names)
-    assert len(ssc.canonical_triples(lane="ds41")) == 340
+    # DS41-1017: MXFP4 is a lane-served type: +4 shapes x 5 widths in the candidate
+    # corpus (340 -> 360) and 2 routed shapes x 4 widths (+8); Q38FN unchanged.
+    assert len(ssc.canonical_triples(lane="ds41")) == 360
     assert len(ssc.canonical_triples(lane="q38fn")) == 230
-    # DS41-1017: MXFP4 experts -> no routed triples (340 + 0; Sept Q4_K was 340 + 8)
-    assert len(ssc.calibration_triples("ds41")) == 340
+    assert len(ssc.calibration_triples("ds41")) == 368
     assert len(ssc.calibration_triples("q38fn")) == 250
 
 
@@ -722,19 +724,44 @@ def test_input_hashes_compare_by_case_key_regardless_of_order():
         ssc.parse_input_hashes(calib + f"\n{ssc.INPUT_HASH_MARKER}\tk1\tdddd")
 
 
-def test_ds41_1017_mxfp4_experts_leave_the_routed_corpus_empty_and_refused(tmp_path):
-    """DS41-W7: the 1017 trunk's experts are MXFP4, not a witness type. The routed
-    corpus is therefore empty and its manifest is REFUSED (oracle_unavailable), never
-    a vacuous 0/0 pass. Covering MXFP4 is DS41-W8."""
+def test_ds41_1017_mxfp4_experts_are_covered_lane_scoped(tmp_path):
+    """DS41-1017 AK oracle (2026-10-21): the 1017 trunk's experts are MXFP4. MXFP4 is a
+    LANE-SERVED type: DS41's candidate and routed corpora cover it, Q38FN's do not (its
+    calibrated manifests stay valid), and the DS41 routed manifest round-trips."""
     prof = ssc.LANE_PROFILES["ds41"]
     assert "1017-MXFP4-experts-00001-of-00009" in prof.model
     assert prof.gate_up_types == ("MXFP4",) and prof.down_types == ("MXFP4",)
-    assert ssc.routed_types("ds41") == ()
-    assert ssc.canonical_triples(routed=True, lane="ds41") == ()
+    assert prof.expert_types == ("MXFP4",)
+    assert "MXFP4" not in ssc.WITNESS_TYPES and "MXFP4" in ssc.ALL_TYPES
+    assert ssc.lane_types("ds41") == ssc.WITNESS_TYPES + ("MXFP4",)
+    assert ssc.lane_types("q38fn") == ssc.WITNESS_TYPES
+    assert ssc.routed_types("ds41") == ("MXFP4",)
+    for shape in ssc.routed_shapes("ds41"):
+        assert ssc.routed_types("ds41", shape) == ("MXFP4",)
+    routed = ssc.canonical_triples(routed=True, lane="ds41")
+    assert len(routed) == 8 and {t for _s, t, _n in routed} == {"MXFP4"}
+    assert {(s.op, s.k, s.m, s.n_mats, s.n_used) for s, _t, _n in routed} == {
+        ("MUL_MAT_ID", 5120, 2304, 384, 6), ("MUL_MAT_ID", 2304, 5120, 384, 6)}
+    cand = [t for t in ssc.canonical_triples(lane="ds41") if t[1] == "MXFP4"]
+    assert len(cand) == 20
+    assert not [t for t in ssc.canonical_triples(lane="q38fn") if t[1] == "MXFP4"]
+    anchor = {(s.name, t, n): 1e-6 for s, t, n in routed}
+    cases = ssc.case_set(anchor, routed=True, lane="ds41")
+    assert "GGML_TYPE_MXFP4" in cases[0].cpp() and "type_a=mxfp4," in cases[0].vars()
     path = tmp_path / "routed.json"
-    ssc.write_manifest(path, (), routed=True, lane="ds41")
+    ssc.write_manifest(path, cases, routed=True, lane="ds41")
+    assert len(ssc.load_manifest(path, routed=True, lane="ds41")) == 8
+    # an MXFP4 row in a Q38FN manifest is still refused (not in its corpus)
+    q_anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.canonical_triples(lane="q38fn")}
+    q_cases = ssc.case_set(q_anchor, lane="q38fn")
+    qpath = tmp_path / "q.json"
+    ssc.write_manifest(qpath, q_cases, lane="q38fn")
+    import json
+    body = json.loads(qpath.read_text())
+    body["cases"][0]["type_a"] = "MXFP4"
+    qpath.write_text(json.dumps(body))
     with pytest.raises(ssc.ManifestRefused):
-        ssc.load_manifest(path, routed=True, lane="ds41")
+        ssc.load_manifest(qpath, lane="q38fn")
 
 
 def test_served_types_keep_non_witness_types():
