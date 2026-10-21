@@ -1,0 +1,112 @@
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.001.542 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.670 I srv          init: The UI is disabled
+0.00.001.675 I srv          init: Use --ui/--no-ui (or deprecated --webui/--no-webui) to enable/disable
+0.00.001.750 W srv  llama_server: -----------------
+0.00.001.755 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.759 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.763 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.766 W srv  llama_server: -----------------
+0.00.003.484 I srv    load_model: loading model '/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-1017-MXFP4-experts-00001-of-00009.gguf'
+0.00.225.249 W load: control-looking token: 128802 '<｜fim▁end｜>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.229.933 W load: control-looking token: 128800 '<｜fim▁hole｜>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.231.336 W load: control-looking token: 128801 '<｜fim▁begin｜>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.262.564 W model has unused tensor blk.0.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.262.635 W model has unused tensor blk.1.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.262.699 W model has unused tensor blk.2.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.262.747 W model has unused tensor blk.3.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.262.794 W model has unused tensor blk.4.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.262.843 W model has unused tensor blk.5.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.262.889 W model has unused tensor blk.6.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.262.937 W model has unused tensor blk.7.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.262.996 W model has unused tensor blk.8.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.042 W model has unused tensor blk.9.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.090 W model has unused tensor blk.10.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.138 W model has unused tensor blk.11.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.188 W model has unused tensor blk.12.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.236 W model has unused tensor blk.13.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.306 W model has unused tensor blk.14.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.355 W model has unused tensor blk.15.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.403 W model has unused tensor blk.16.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.451 W model has unused tensor blk.17.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.499 W model has unused tensor blk.18.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.549 W model has unused tensor blk.19.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.610 W model has unused tensor blk.20.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.657 W model has unused tensor blk.21.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.704 W model has unused tensor blk.22.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.752 W model has unused tensor blk.23.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.803 W model has unused tensor blk.24.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.850 W model has unused tensor blk.25.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.898 W model has unused tensor blk.26.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.263.958 W model has unused tensor blk.27.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.011 W model has unused tensor blk.28.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.060 W model has unused tensor blk.29.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.110 W model has unused tensor blk.30.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.161 W model has unused tensor blk.31.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.216 W model has unused tensor blk.32.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.265 W model has unused tensor blk.33.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.316 W model has unused tensor blk.34.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.369 W model has unused tensor blk.35.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.424 W model has unused tensor blk.36.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.477 W model has unused tensor blk.37.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.534 W model has unused tensor blk.38.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+0.00.264.589 W model has unused tensor blk.39.exp_probs_b_vl.bias (size = 1536 bytes) -- ignoring
+1.53.901.450 W operator(): DSV4 value-level rollback refused: need 1 snapshot planes, have 0. Every rejection will fall back to a full state-checkpoint restore. Raise n_rs_seq (it is sized from the speculative n_max: --spec-n-max <= n_rs_seq).
+1.53.903.363 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+1.53.904.967 I srv  llama_server: model loaded
+1.53.904.992 I srv  llama_server: listening on http://127.0.0.1:18625
+1.55.025.060 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+1.55.025.118 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+1.55.636.772 I srv  prefill_budg: prefill-budget: iter 1: decode_rows = 0 (slots 0), prompt = 36 (slots 1), budget = 0, t_iter = 610.9 ms, kv_pos = 36, ms/tok = 0.000
+1.55.747.825 I srv  prefill_budg: prefill-budget: iter 2: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 110.4 ms, kv_pos = 40, ms/tok = 0.000
+2.01.744.571 I slot print_timing: id  0 | task 0 | n_decoded =    100, tg =  16.68 t/s, tg_3s =  16.68 t/s
+2.04.774.154 I slot print_timing: id  0 | task 0 | n_decoded =    150, tg =  16.62 t/s, tg_3s =  16.50 t/s
+2.07.824.988 I slot print_timing: id  0 | task 0 | n_decoded =    199, tg =  16.48 t/s, tg_3s =  16.06 t/s
+2.10.858.742 I slot print_timing: id  0 | task 0 | n_decoded =    247, tg =  16.35 t/s, tg_3s =  15.82 t/s
+2.11.418.210 I slot print_timing: id  0 | task 0 | prompt eval time =     722.66 ms /    40 tokens (   18.07 ms per token,    55.35 tokens per second)
+2.11.418.254 I slot print_timing: id  0 | task 0 |        eval time =   15670.40 ms /   256 tokens (   61.21 ms per token,    16.34 tokens per second)
+2.11.418.260 I slot print_timing: id  0 | task 0 |       total time =   16393.06 ms /   296 tokens
+2.11.418.270 I slot print_timing: id  0 | task 0 |    graphs reused =        254
+2.11.418.687 I slot      release: id  0 | task 0 | stop processing: n_tokens = 295, truncated = 0
+2.11.419.828 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.136
+2.11.421.187 I slot launch_slot_: id  0 | task 258 | processing task, is_child = 0
+2.11.891.164 I srv  prefill_budg: prefill-budget: iter 3: decode_rows = 0 (slots 0), prompt = 36 (slots 1), budget = 0, t_iter = 469.2 ms, kv_pos = 36, ms/tok = 0.000
+2.12.002.414 I srv  prefill_budg: prefill-budget: iter 4: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 111.0 ms, kv_pos = 40, ms/tok = 0.000
+2.17.986.673 I slot print_timing: id  0 | task 258 | n_decoded =    100, tg =  16.71 t/s, tg_3s =  16.71 t/s
+2.21.016.371 I slot print_timing: id  0 | task 258 | n_decoded =    149, tg =  16.53 t/s, tg_3s =  16.17 t/s
+2.24.053.422 I slot print_timing: id  0 | task 258 | n_decoded =    199, tg =  16.51 t/s, tg_3s =  16.46 t/s
+2.27.082.330 I slot print_timing: id  0 | task 258 | n_decoded =    247, tg =  16.38 t/s, tg_3s =  15.85 t/s
+2.27.641.710 I slot print_timing: id  0 | task 258 | prompt eval time =     581.19 ms /    40 tokens (   14.53 ms per token,    68.82 tokens per second)
+2.27.641.755 I slot print_timing: id  0 | task 258 |        eval time =   15639.31 ms /   256 tokens (   61.09 ms per token,    16.37 tokens per second)
+2.27.641.760 I slot print_timing: id  0 | task 258 |       total time =   16220.50 ms /   296 tokens
+2.27.641.766 I slot print_timing: id  0 | task 258 |    graphs reused =        507
+2.27.642.219 I slot      release: id  0 | task 258 | stop processing: n_tokens = 295, truncated = 0
+2.27.643.463 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.136
+2.27.643.526 I slot launch_slot_: id  0 | task 516 | processing task, is_child = 0
+2.28.114.957 I srv  prefill_budg: prefill-budget: iter 5: decode_rows = 0 (slots 0), prompt = 36 (slots 1), budget = 0, t_iter = 470.7 ms, kv_pos = 36, ms/tok = 0.000
+2.28.225.215 I srv  prefill_budg: prefill-budget: iter 6: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 110.0 ms, kv_pos = 40, ms/tok = 0.000
+2.34.202.848 I slot print_timing: id  0 | task 516 | n_decoded =    100, tg =  16.73 t/s, tg_3s =  16.73 t/s
+2.37.241.873 I slot print_timing: id  0 | task 516 | n_decoded =    149, tg =  16.52 t/s, tg_3s =  16.12 t/s
+2.40.292.102 I slot print_timing: id  0 | task 516 | n_decoded =    199, tg =  16.49 t/s, tg_3s =  16.39 t/s
+2.43.324.170 I slot print_timing: id  0 | task 516 | n_decoded =    247, tg =  16.36 t/s, tg_3s =  15.83 t/s
+2.43.895.269 I slot print_timing: id  0 | task 516 | prompt eval time =     581.66 ms /    40 tokens (   14.54 ms per token,    68.77 tokens per second)
+2.43.895.315 I slot print_timing: id  0 | task 516 |        eval time =   15670.06 ms /   256 tokens (   61.21 ms per token,    16.34 tokens per second)
+2.43.895.321 I slot print_timing: id  0 | task 516 |       total time =   16251.72 ms /   296 tokens
+2.43.895.328 I slot print_timing: id  0 | task 516 |    graphs reused =        760
+2.43.895.740 I slot      release: id  0 | task 516 | stop processing: n_tokens = 295, truncated = 0
+2.43.897.021 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.136
+2.43.897.085 I slot launch_slot_: id  0 | task 774 | processing task, is_child = 0
+2.44.362.695 I srv  prefill_budg: prefill-budget: iter 7: decode_rows = 0 (slots 0), prompt = 36 (slots 1), budget = 0, t_iter = 464.8 ms, kv_pos = 36, ms/tok = 0.000
+2.44.473.157 I srv  prefill_budg: prefill-budget: iter 8: decode_rows = 0 (slots 0), prompt = 4 (slots 1), budget = 0, t_iter = 110.2 ms, kv_pos = 40, ms/tok = 0.000
+2.50.473.975 I slot print_timing: id  0 | task 774 | n_decoded =    100, tg =  16.66 t/s, tg_3s =  16.66 t/s
+2.53.514.045 I slot print_timing: id  0 | task 774 | n_decoded =    149, tg =  16.48 t/s, tg_3s =  16.12 t/s
+2.56.557.596 I slot print_timing: id  0 | task 774 | n_decoded =    198, tg =  16.38 t/s, tg_3s =  16.10 t/s
+2.59.593.655 I slot print_timing: id  0 | task 774 | n_decoded =    247, tg =  16.34 t/s, tg_3s =  16.14 t/s
+3.00.162.470 I slot print_timing: id  0 | task 774 | prompt eval time =     576.04 ms /    40 tokens (   14.40 ms per token,    69.44 tokens per second)
+3.00.162.516 I slot print_timing: id  0 | task 774 |        eval time =   15689.32 ms /   256 tokens (   61.29 ms per token,    16.32 tokens per second)
+3.00.162.522 I slot print_timing: id  0 | task 774 |       total time =   16265.36 ms /   296 tokens
+3.00.162.529 I slot print_timing: id  0 | task 774 |    graphs reused =       1013
+3.00.162.956 I slot      release: id  0 | task 774 | stop processing: n_tokens = 295, truncated = 0
+3.00.164.647 I srv    operator(): operator(): cleaning up before exit...

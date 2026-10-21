@@ -1,0 +1,44 @@
+{
+ "arm": "1017",
+ "segment": "A1",
+ "gpu_job": "none (GPU idle)",
+ "load_s": 138,
+ "rows": [
+  {
+   "i": 0,
+   "warmup": true,
+   "predicted_n": 256,
+   "predicted_per_second": 12.628222083465248,
+   "prompt_n": 40,
+   "prompt_per_second": 47.88761733962736,
+   "content_head": "# Write a detailed, well-organized technical explanation of how a modern CPU executes instructions out of order, covering register renaming, the reorder buffer, reservation stations, branch prediction"
+  },
+  {
+   "i": 1,
+   "warmup": false,
+   "predicted_n": 256,
+   "predicted_per_second": 12.87553173179825,
+   "prompt_n": 40,
+   "prompt_per_second": 53.004493455932725,
+   "content_head": "# Write a detailed, well-organized technical explanation of how a modern CPU executes instructions out of order, covering register renaming, the reorder buffer, reservation stations, branch prediction"
+  },
+  {
+   "i": 2,
+   "warmup": false,
+   "predicted_n": 256,
+   "predicted_per_second": 12.876547857878121,
+   "prompt_n": 40,
+   "prompt_per_second": 52.10429717164849,
+   "content_head": "# Write a detailed, well-organized technical explanation of how a modern CPU executes instructions out of order, covering register renaming, the reorder buffer, reservation stations, branch prediction"
+  },
+  {
+   "i": 3,
+   "warmup": false,
+   "predicted_n": 256,
+   "predicted_per_second": 12.85462185920413,
+   "prompt_n": 40,
+   "prompt_per_second": 51.74744658693248,
+   "content_head": "# Write a detailed, well-organized technical explanation of how a modern CPU executes instructions out of order, covering register renaming, the reorder buffer, reservation stations, branch prediction"
+  }
+ ]
+}

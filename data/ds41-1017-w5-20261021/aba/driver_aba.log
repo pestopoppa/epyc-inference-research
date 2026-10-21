@@ -1,0 +1,17 @@
+16:40:13 start A1-served-1017 SEG=A1 GPUJOB=none (GPU idle)
+16:42:47 end A1-served-1017 rc=0
+16:42:47 start A1-served-sept SEG=A1 GPUJOB=none (GPU idle)
+16:46:44 end A1-served-sept rc=0
+16:56:04 start B-served-1017 SEG=B GPUJOB=G1 = llama-server Qwen3.8-27B-Q8_0 + DFlash2 drafter, -np 4, 48.65 GiB VRAM peak, host 184-191 (SMT siblings of 88-95, NUMA3), bursty 60-80k prefills + 256-tok decodes; paired beside workspace-f8 G1 per operator ruling 2026-10-21
+16:59:49 end B-served-1017 rc=0
+16:59:49 start B-served-sept SEG=B GPUJOB=G1 = llama-server Qwen3.8-27B-Q8_0 + DFlash2 drafter, -np 4, 48.65 GiB VRAM peak, host 184-191 (SMT siblings of 88-95, NUMA3), bursty 60-80k prefills + 256-tok decodes; paired beside workspace-f8 G1 per operator ruling 2026-10-21
+17:02:39 end B-served-sept rc=0
+17:02:39 start B-bench-1017 SEG=B GPUJOB=G1 = llama-server Qwen3.8-27B-Q8_0 + DFlash2 drafter, -np 4, 48.65 GiB VRAM peak, host 184-191 (SMT siblings of 88-95, NUMA3), bursty 60-80k prefills + 256-tok decodes; paired beside workspace-f8 G1 per operator ruling 2026-10-21
+17:05:30 end B-bench-1017 rc=0
+17:05:30 start B-bench-sept SEG=B GPUJOB=G1 = llama-server Qwen3.8-27B-Q8_0 + DFlash2 drafter, -np 4, 48.65 GiB VRAM peak, host 184-191 (SMT siblings of 88-95, NUMA3), bursty 60-80k prefills + 256-tok decodes; paired beside workspace-f8 G1 per operator ruling 2026-10-21
+17:08:53 end B-bench-sept rc=0
+17:08:53 start B-served-1017b SEG=B2 GPUJOB=G1 = llama-server Qwen3.8-27B-Q8_0 + DFlash2 drafter, -np 4, 48.65 GiB VRAM peak, host 184-191 (SMT siblings of 88-95, NUMA3), bursty 60-80k prefills + 256-tok decodes; paired beside workspace-f8 G1 per operator ruling 2026-10-21
+17:12:16 end B-served-1017b rc=0
+18:55:17 start A2-served-1017 SEG=A2 GPUJOB=none (GPU idle)
+18:58:05 end A2-served-1017 rc=0
+ALLDONE

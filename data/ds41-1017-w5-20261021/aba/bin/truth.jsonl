@@ -1,0 +1,5 @@
+{"id": "s12", "expected": ["Paris"], "grader": "needle", "case_sensitive": false}
+{"id": "q40", "expected": ["5:45"], "grader": "needle", "case_sensitive": false}
+{"id": "p90", "expected": ["scatter"], "grader": "needle", "case_sensitive": false}
+{"id": "p220", "expected": ["(1, 6)", "(8, 12)", "(15, 18)"], "grader": "needle", "case_sensitive": false}
+{"id": "long2k", "expected": ["actor"], "grader": "needle", "case_sensitive": false}

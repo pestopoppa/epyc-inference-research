@@ -1,0 +1,44 @@
+{
+ "arm": "1017",
+ "segment": "B2",
+ "gpu_job": "G1 = llama-server Qwen3.8-27B-Q8_0 + DFlash2 drafter, -np 4, 48.65 GiB VRAM peak, host 184-191 (SMT siblings of 88-95, NUMA3), bursty 60-80k prefills + 256-tok decodes; paired beside workspace-f8 G1 per operator ruling 2026-10-21",
+ "load_s": 180,
+ "rows": [
+  {
+   "i": 0,
+   "warmup": true,
+   "predicted_n": 256,
+   "predicted_per_second": 16.336530485944138,
+   "prompt_n": 40,
+   "prompt_per_second": 55.35137049993359,
+   "content_head": "# Write a detailed, well-organized technical explanation of how a modern CPU executes instructions out of order, covering register renaming, the reorder buffer, reservation stations, branch prediction"
+  },
+  {
+   "i": 1,
+   "warmup": false,
+   "predicted_n": 256,
+   "predicted_per_second": 16.36900651384153,
+   "prompt_n": 40,
+   "prompt_per_second": 68.82466400659341,
+   "content_head": "# Write a detailed, well-organized technical explanation of how a modern CPU executes instructions out of order, covering register renaming, the reorder buffer, reservation stations, branch prediction"
+  },
+  {
+   "i": 2,
+   "warmup": false,
+   "predicted_n": 256,
+   "predicted_per_second": 16.336883904040462,
+   "prompt_n": 40,
+   "prompt_per_second": 68.76893294685192,
+   "content_head": "# Write a detailed, well-organized technical explanation of how a modern CPU executes instructions out of order, covering register renaming, the reorder buffer, reservation stations, branch prediction"
+  },
+  {
+   "i": 3,
+   "warmup": false,
+   "predicted_n": 256,
+   "predicted_per_second": 16.31682792706684,
+   "prompt_n": 40,
+   "prompt_per_second": 69.43950170213577,
+   "content_head": "# Write a detailed, well-organized technical explanation of how a modern CPU executes instructions out of order, covering register renaming, the reorder buffer, reservation stations, branch prediction"
+  }
+ ]
+}

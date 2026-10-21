@@ -31,6 +31,39 @@ Notes:
 - The ppl gap mixes a finetune change with the quant change (Q4_K experts vs native MXFP4). It is not a quantization-only delta.
   It is also measured without the 1017 reference's FP8 attention-output round trip (DS41-W5.1a).
 
-## Timing
+## Timing (ABA, 2026-10-21)
 
-See the section below (filled after the ABA segments).
+All numbers are INDICATIVE (operator ruling 2026-10-21), not baselines. Served decode from `aba/served-*.json`:
+non-warmup rows, 256-token decodes, 40-token prompt, `-t 48` (full host), `--no-mmap`, port build
+`llama.cpp-experimental-ds41-20261005/build-cpu`. Raw results, recipes, rocm-smi samples, server logs (all under
+1 MB), the driver log and the harness `bin/` are in `aba/`.
+
+| seg | arm | GPU job | n | decode t/s | prompt t/s |
+|---|---|---|---|---|---|
+| A1 16:40 | 1017 | none | 3 | 12.87±0.01 | 52.3 |
+| A1 | Sept Q4 | none | 3 | 9.97±0.00 | 54.3 |
+| B 16:56 | 1017 | f8 G1 (27B Q8 -np4, 48.65 GiB, host 184-191) | 3 | 15.01±0.04 | 62.8 |
+| B | Sept Q4 | G1 | 3 | 13.89±0.01 | 65.4 |
+| B2 17:09 | 1017 | G1 | 3 | 16.34±0.03 | 69.0 |
+| A2 18:55 | 1017 | none | 2 | 15.99±0.01 | 69.6 |
+
+llama-bench (segment B, beside G1, `-t 48 -fa 1 -mmp 0 -r 2`):
+- 1017: pp512 87.94±0.10, tg128 16.67±0.08
+- Sept Q4: pp512 125.39±1.50, tg128 17.57±0.13
+
+Provenance of the raw llama-bench JSON: `bench-B-1017.json` (3606 B, sha256
+`99581ba41faec4c4cad3e79e2bc5fcdc62d2b9061b274861f5468868af72397b`) and `bench-B-sept-q4.json` (4332 B, sha256
+`114f51bc07097eb81d94c13bfeb572ce185560ccf9e7a81c2e9b739f24b78004`) are NOT in git. `pii_precommit` false-positives on
+llama-bench's `model_n_params` field (a 12-digit param count). The hook fix is pending operator review.
+The originals stay at `/mnt/raid0/llm/tmp/ds41-w5-20261021/runs-aba/`; their `.argv` and `.err` files are kept here.
+
+Interpretation (all INDICATIVE):
+- (a) Large upward drift: 1017 went 12.87 (A1) -> 15.01 -> 16.34 -> 15.99 (A2, GPU idle). A1 is a cold-state outlier,
+  probably the first loads after the 15:57Z earlyoom event and other sessions' DS41 servers exiting. So A1-vs-B is NOT a
+  GPU effect.
+- (b) GPU impact, from the nearest pair B2 (GPU on) vs A2 (GPU off): +2.2%, within drift. No measurable penalty from the
+  G1 GPU job on full-host CPU decode.
+- (c) 1017 vs Sept under identical conditions (segment B): served decode +8.1% for 1017; llama-bench tg128 -5.1% for 1017;
+  pp512 -29.9% for 1017 (the MXFP4 `mxfp4_8x8_q8_0` repack prefill is slower than iqk Q4_K).
+- (d) Each 1017 server holds ~276 GiB private RAM (repack) plus ~463 GiB mapped. Two concurrent servers caused the
+  15:57Z earlyoom kills.

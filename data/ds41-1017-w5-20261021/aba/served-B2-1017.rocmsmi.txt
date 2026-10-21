@@ -1,0 +1,49 @@
+2026-10-21T17:10:48Z
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GFX Activity: 4293556943
+GPU[0]		: GPU Memory Allocated (VRAM%): 75
+GPU[0]		: GPU Memory Read/Write Activity (%): 21
+GPU[0]		: Memory Activity: 1295338831
+GPU[0]		: Avg. Memory Bandwidth: 0
+2026-10-21T17:10:59Z
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GFX Activity: 4294546216
+GPU[0]		: GPU Memory Allocated (VRAM%): 75
+GPU[0]		: GPU Memory Read/Write Activity (%): 16
+GPU[0]		: Memory Activity: 1295526338
+GPU[0]		: Avg. Memory Bandwidth: 0
+2026-10-21T17:11:09Z
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GFX Activity: 575546
+GPU[0]		: GPU Memory Allocated (VRAM%): 75
+GPU[0]		: GPU Memory Read/Write Activity (%): 5
+GPU[0]		: Memory Activity: 1295716375
+GPU[0]		: Avg. Memory Bandwidth: 0
+2026-10-21T17:11:19Z
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GFX Activity: 1661167
+GPU[0]		: GPU Memory Allocated (VRAM%): 75
+GPU[0]		: GPU Memory Read/Write Activity (%): 25
+GPU[0]		: Memory Activity: 1295921871
+GPU[0]		: Avg. Memory Bandwidth: 0
+2026-10-21T17:11:31Z
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GFX Activity: 2643376
+GPU[0]		: GPU Memory Allocated (VRAM%): 75
+GPU[0]		: GPU Memory Read/Write Activity (%): 24
+GPU[0]		: Memory Activity: 1296135414
+GPU[0]		: Avg. Memory Bandwidth: 0
+2026-10-21T17:11:41Z
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GFX Activity: 3594405
+GPU[0]		: GPU Memory Allocated (VRAM%): 75
+GPU[0]		: GPU Memory Read/Write Activity (%): 15
+GPU[0]		: Memory Activity: 1296401247
+GPU[0]		: Avg. Memory Bandwidth: 0
+2026-10-21T17:11:52Z
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GFX Activity: 4640406
+GPU[0]		: GPU Memory Allocated (VRAM%): 75
+GPU[0]		: GPU Memory Read/Write Activity (%): 24
+GPU[0]		: Memory Activity: 1296671227
+GPU[0]		: Avg. Memory Bandwidth: 0
