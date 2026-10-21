@@ -1,0 +1,34 @@
+2026-10-20T18:33:18Z overnight.sh start pid 1435005
+2026-10-20T18:33:18Z [W1] waiting for /mnt/raid0/llm/tmp/gpu-queue-20261020/GPU_RELEASED (skip at 2026-10-20T23:00:00Z)
+2026-10-20T18:55:19Z [W1] GPU_RELEASED present: {"released_utc":"2026-10-20T18:55:05Z","reason":"queue complete: DF2-18, DF2-17 (+post-hoc rank diag), AKX-ALL-26 HIP half, AKX-ALL-28 (all run; no ticks per operator rule)","tasks_done":["DF2-18","DF2-17","AKX-ALL-26-HIP","AKX-ALL-28"]} 
+[gate] gpu-quiet free         PASS
+  gpu-quiet free
+[gate] port 8083              PASS
+  :8083 not listening
+[gate] kfd vram               PASS
+  KFD: no process holds VRAM
+2026-10-20T18:55:19Z [W1] taking gpu-quiet exclusive; backstop 18761s (2026-10-21T00:08:00Z)
+[region-lock] acquiring gpu-quiet exclusive as role='kpf18-gpu-w1' (timeout_s=1200.0) …
+[region-lock] held gpu-quiet exclusive + regions [] after 0.0s wait; running: /mnt/raid0/llm/tmp/overnight-20261020/overnight.sh inner-w1
+2026-10-20T18:55:19Z [W1] inner start; gpu-quiet exclusive held; KPF stop 2026-10-21T00:05:00Z
+[gate] port 8083              PASS
+  :8083 not listening
+[gate] kfd vram               PASS
+  KFD: no process holds VRAM
+2026-10-20T19:31:01Z [W1] ended rc=4: rc=4; kpf17a-rocm0 rc=0 counts=' 2978/2978 tests passed' FAILlines=0
+0 peak_kfd_vram_gib=3.32; build-prompt-set rc=4
+2026-10-20T19:31:01Z [W2] start at max(2026-10-21T00:30:00Z, W1_ENDED+2min) = 2026-10-21T00:30:00Z
+[gate] cpu q0..q3 free        PASS
+  q0..q3 all free
+[region-lock] acquiring gpu-quiet shared + regions ['q0', 'q1', 'q2', 'q3'] as role='kvu12-tier0' (timeout_s=900.0) …
+[region-lock] held gpu-quiet shared + regions ['q0', 'q1', 'q2', 'q3'] after 0.0s wait; running: /mnt/raid0/llm/tmp/overnight-20261020/overnight.sh inner-w2
+2026-10-21T00:30:06Z [W2] inner start; q0-q3 + gpu-quiet shared held; hard stop 2026-10-21T06:30:00Z
+2026-10-21T00:30:06Z [W2] s1a_split_np4_L64k_depth_anchor: est 1440s x1000/1000 -> need 1740s, remaining 21594s
+2026-10-21T01:13:11Z [W2] calibration: first cell ran 2585s vs est 1440s -> factor 1795/1000
+2026-10-21T01:13:11Z [W2] s1b_unified_np4_L64k_depth: est 1440s x1795/1000 -> need 2884s, remaining 19009s
+2026-10-21T01:57:11Z [W2] s1c_split_np4_L64k_depth_ABA2: est 1440s x1795/1000 -> need 2884s, remaining 16369s
+2026-10-21T02:38:18Z [W2] s1d_unified_np8_L32k_L64k_depth: est 3960s x1795/1000 -> need 7408s, remaining 13902s
+2026-10-21T04:44:57Z [W2] s4_unified_np8_pool1M_L128k_depth_live: est 5760s x1795/1000 -> need 10639s, remaining 6303s
+2026-10-21T04:44:57Z [W2] inner end: s1a_split_np4_L64k_depth_anchor rc=0 act=2585s est=1440s; s1b_unified_np4_L64k_depth rc=0 act=2640s est=1440s; s1c_split_np4_L64k_depth_ABA2 rc=0 act=2467s est=1440s; s1d_unified_np8_L32k_L64k_depth rc=0 act=7599s est=3960s; S2 bank SKIP (full est 6840s, remaining 6303s); s4_unified_np8_pool1M_L128k_depth_live SKIP(need 10639s > 6303s)
+2026-10-21T04:44:58Z [W2] ended rc=0: rc=0; s1a_split_np4_L64k_depth_anchor rc=0 act=2585s est=1440s; s1b_unified_np4_L64k_depth rc=0 act=2640s est=1440s; s1c_split_np4_L64k_depth_ABA2 rc=0 act=2467s est=1440s; s1d_unified_np8_L32k_L64k_depth rc=0 act=7599s est=3960s; S2 bank SKIP (full est 6840s, remaining 6303s); s4_unified_np8_pool1M_L128k_depth_live SKIP(need 10639s > 6303s)
+2026-10-21T04:44:58Z overnight.sh done
