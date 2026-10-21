@@ -298,9 +298,10 @@ class FakeClient:
     tests exercise the arm plumbing and record building, not the server). Generated tokens and logprobs are a pure
     function of the prompt, so a fork and a cold run of the same prompt are bit-identical."""
 
-    def __init__(self, n_min=1024, ub=2048, enabled=True, hole=None):
+    def __init__(self, n_min=1024, ub=2048, enabled=True, hole=None, expose=False, drafter_hit=None, ignore_cache_flag=False):
         self.n_min, self.ub, self.enabled = n_min, ub, enabled
-        self.slots_state = {i: {"tokens": [], "ckpts": [], "last_fork": 0} for i in range(4)}
+        self.expose, self.drafter_hit, self.ignore_cache_flag = expose, drafter_hit, ignore_cache_flag
+        self.slots_state = {i: {"tokens": [], "ckpts": [], "last_fork": 0, "comps": {}} for i in range(4)}
         self.n_forks = self.n_fork_tokens = 0
         self.log = []
         self.hole = hole or (lambda ids, p: p)     # lets a test make the "server" deviate from the rule
@@ -314,7 +315,7 @@ class FakeClient:
             out.append({"id": i, "is_processing": False, "n_prompt_tokens": len(toks_), "prefix_hash": lad[len(toks_)],
                         "checkpoints": [{"n_tokens": c["n_tokens"], "pos_min": 0, "pos_max": c["n_tokens"] - 1,
                                          "pinned": c["pinned"], "prefix_hash": lad[c["n_tokens"]]} for c in st["ckpts"]],
-                        "fork": {"n_fork_tokens": st["last_fork"]}})
+                        "fork": {"n_fork_tokens": st["last_fork"], **st.get("comps", {})}})
         return out
 
     def metrics(self):
@@ -322,11 +323,11 @@ class FakeClient:
                 "llamacpp:kv_cells_used": 0.0}
 
     def erase(self, slot):
-        self.slots_state[slot] = {"tokens": [], "ckpts": [], "last_fork": 0}
+        self.slots_state[slot] = {"tokens": [], "ckpts": [], "last_fork": 0, "comps": {}}
 
     def complete(self, body, timeout=0):
         ids, slot, n = body["prompt"], body["id_slot"], body["n_predict"]
-        cache = body.get("cache_prompt", True)
+        cache = True if self.ignore_cache_flag else body.get("cache_prompt", True)
         p, src = 0, None
         if self.enabled and cache and body.get("slot_fork", True):
             pr = A.predict_fork(self.slots(), ids, slot, self.n_min, mode="checkpoint")
@@ -343,7 +344,11 @@ class FakeClient:
                 ck.append({"n_tokens": pos, "pinned": True})
         if len(ids) > self.ub + 8:
             ck += [{"n_tokens": len(ids) - 4 - self.ub, "pinned": False}, {"n_tokens": len(ids) - 4, "pinned": False}]
-        self.slots_state[slot] = {"tokens": list(ids) + gen, "ckpts": ck, "last_fork": p}
+        comps = {}
+        if self.expose and p:
+            comps = {"tgt_kv_hit": p, "recurrent_ckpt_pos": p,
+                     "drafter_kv_hit": self.drafter_hit(ids, p) if self.drafter_hit else p}
+        self.slots_state[slot] = {"tokens": list(ids) + gen, "ckpts": ck, "last_fork": p, "comps": comps}
         t = {"prompt_n": len(ids) - p, "cache_n": p, "predicted_n": n, "predicted_ms": 1.0, "prompt_ms": 5.0,
              "prompt_per_second": 100.0, "predicted_per_second": 30.0}
         if p:
@@ -592,3 +597,152 @@ def test_rules_181_are_predeclared_and_hashed():
     sha = A.rules_sha256([181])
     assert sha and sha == A.rules_sha256([181])
     assert A.rules_for([181])["181"]["task"] == "KPF-18.1"
+
+
+# ================================================================ KPF-18.2
+def test_eval_182_attr_is_tri_state_about_the_drafter_clause():
+    def child(n_fork, comps, **kw):
+        c = _cell("child", n_fork, pred=n_fork, cid=kw.pop("cid", "s"), **kw)
+        c["components"], c["checkpoint_set_before"] = comps, [4096]
+        return c
+    full = {"tgt_kv_hit": 4096, "recurrent_ckpt_pos": 4096, "drafter_kv_hit": 4096}
+    nodr = {"tgt_kv_hit": 4096, "recurrent_ckpt_pos": 4096, "drafter_kv_hit": None}
+    assert A.eval_182_attr([child(4096, full)], drafter_on=True)["predeclared_rule_satisfied"] is True
+    r = A.eval_182_attr([child(4096, nodr)], drafter_on=True)
+    assert r["predeclared_rule_satisfied"] is None and r["n_drafter_not_measured"] == 1 and not r["drafter_clause_evaluated"]
+    assert A.eval_182_attr([child(4096, nodr)], drafter_on=False)["predeclared_rule_satisfied"] is True
+    low = {**full, "drafter_kv_hit": 2048}                       # drafter below n_fork: the minimum is 2048, n_fork 4096
+    r = A.eval_182_attr([child(4096, low)], drafter_on=True)
+    assert r["predeclared_rule_satisfied"] is False and r["n_drafter_below_nfork"] == 1 and r["n_nfork_equals_min"] == 0
+    zero = {**full, "recurrent_ckpt_pos": 0}
+    assert A.eval_182_attr([child(4096, zero)], drafter_on=False)["n_zero_component_with_fork"] == 1
+    # an error is a failed sibling, not a missing one; and a run that never forked is vacuous
+    assert A.eval_182_attr([child(None, full)], drafter_on=False)["predeclared_rule_satisfied"] is False
+    v = A.eval_182_attr([child(0, {"tgt_kv_hit": 0, "recurrent_ckpt_pos": None, "drafter_kv_hit": None})], drafter_on=False)
+    assert v["vacuous"] is True and v["predeclared_rule_satisfied"] is False
+
+
+def test_eval_182_parity_lists_every_defect():
+    vec = {"mtp:drafter_on": [("g0.s0", 4096), ("g0.s1", 4096)], "mtp:request_off": [("g0.s0", 4096), ("g0.s1", 4096)],
+           "nodraft:launch": [("g0.s0", 4096), ("g0.s1", 0)]}
+    r = A.eval_182_parity(vec)
+    assert r["n_defects_total"] == 1 and r["predeclared_rule_satisfied"] is False
+    assert r["comparisons"]["nodraft:launch"]["defects"] == [{"sibling": "g0.s1", "mtp:drafter_on": 4096, "nodraft:launch": 0}]
+    assert r["comparisons"]["mtp:request_off"]["n_defects"] == 0
+    vec["nodraft:launch"] = [("g0.s0", 4096), ("g0.s1", 4096)]
+    assert A.eval_182_parity(vec)["predeclared_rule_satisfied"] is True
+    assert A.eval_182_parity({"only": [("a", 1)]})["predeclared_rule_satisfied"] is False   # nothing to compare against
+    never = {"a": [("x", 0)], "b": [("x", 0)]}                                               # nobody forked: vacuous, not a pass
+    assert A.eval_182_parity(never)["predeclared_rule_satisfied"] is False
+    assert A.eval_182_parity({})["predeclared_rule_satisfied"] is None
+
+
+def test_eval_182_cold_and_policy():
+    def cold(role, nf, cache_n=0):
+        c = _cell(role, nf, cid=role)
+        c["cache_n"] = cache_n
+        return c
+    ch = _cell("child", 4096, pred=4096, cid="c")
+    ch["vs_fresh"] = {"top1": True, "maxabs_union": 0.0, "kld": 0.0}
+    fl = [{"maxabs_union": 0.0, "kld": 0.0, "prefix": 16}]
+    assert A.eval_182_cold([ch, cold("fresh_A", 0), cold("fresh_B", 0)], fl)["predeclared_rule_satisfied"] is True
+    r = A.eval_182_cold([ch, cold("fresh_A", 0), cold("fresh_B", 100)], fl)
+    assert r["predeclared_rule_satisfied"] is False and r["n_cold_with_fork_or_cache"] == 1
+    assert A.eval_182_cold([ch], fl)["predeclared_rule_satisfied"] is None            # no cold run at all: not a pass
+    j = _cell("child", 4348, pred=4348, cid="j", policy="junction_only")
+    d = _cell("child", 4096, pred=4096, cid="d", policy="dense")
+    p = A.eval_182_policy([j, d])
+    assert p["dense_minus_junction_only"] == -252 and p["predeclared_rule_satisfied"] is True
+    d2 = _cell("child", 3000, pred=4096, cid="d", policy="dense")
+    assert A.eval_182_policy([j, d2])["predeclared_rule_satisfied"] is False
+
+
+def test_protocol_drafter_clause_abstains_when_the_server_does_not_expose_it(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    shared: dict = {}
+    R = A.run_182_protocol(env, [0], 3, "drafter_on", True, True, shared)
+    rr = R.extra["rule_result"]
+    assert rr["n_siblings"] == 3 and rr["n_nfork_equals_min"] == 3 and rr["n_drafter_not_measured"] == 3
+    assert rr["predeclared_rule_satisfied"] is None and rr["vacuous"] is False
+    assert R.extra["cold_control"]["predeclared_rule_satisfied"] is True and R.extra["cold_control"]["n_cold_runs"] == 6
+    assert shared["vec"]["mtp:drafter_on"] == [("g0.s0", 4096), ("g0.s1", 4096), ("g0.s2", 4096)]
+    ob = [o for o in R.kpf_obs if o["role"] == "child"][-1]
+    assert ob["hit_components"]["tgt_kv_hit"] == 4096 and ob["hit_components"]["recurrent_ckpt_pos"] == 4096
+
+
+def test_protocol_with_exposed_drafter_component(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    ctx.client.expose = True
+    R = A.run_182_protocol(env, [0], 2, "drafter_on", True, False, {})
+    assert R.extra["rule_result"]["predeclared_rule_satisfied"] is True
+    assert R.extra["rule_result"]["n_drafter_not_measured"] == 0
+    ctx.client.drafter_hit = lambda ids, p: p - 512                # the drafter only holds a shorter prefix
+    R2 = A.run_182_protocol(env, [0], 2, "drafter_on", True, False, {})
+    r2 = R2.extra["rule_result"]
+    assert r2["predeclared_rule_satisfied"] is False and r2["n_drafter_below_nfork"] == 2 and r2["n_nfork_equals_min"] == 0
+
+
+def test_parity_across_columns_and_launches(tmp_path, cpu_spec):
+    shared: dict = {}
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    A.run_182_protocol(env, [0], 3, "drafter_on", True, False, shared)
+    A.run_182_protocol(env, [0], 3, "request_off", False, False, shared)
+    nod_argv = A.strip_speculative(CPU_ARGV)
+    ctx2, env2 = mk_env(tmp_path / "b", cpu_spec, cfg="nodraft", argv=nod_argv)
+    A.run_182_protocol(env2, [0], 3, "launch", True, False, shared)
+    assert list(shared["vec"]) == ["mtp:drafter_on", "mtp:request_off", "nodraft:launch"]
+    R = A.run_182_parity_summary(env2, shared)
+    assert R.extra["rule_result"]["predeclared_rule_satisfied"] is True and R.extra["rule_result"]["n_defects_total"] == 0
+    # a nodraft launch whose forks differ is a counted defect
+    ctx3, env3 = mk_env(tmp_path / "c", cpu_spec, cfg="dflash2")
+    ctx3.client.hole = lambda ids, p: max(0, p - 1)
+    shared2 = {"vec": dict(shared["vec"])}
+    A.run_182_protocol(env3, [0], 3, "launch", True, False, shared2)
+    r = A.run_182_parity_summary(env3, shared2).extra["rule_result"]
+    assert r["predeclared_rule_satisfied"] is False and r["n_defects_total"] == 3
+
+
+def test_cold_probe_passes_and_aborts_when_cache_prompt_false_is_not_honoured(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_182_cold_probe(env, 0)
+    assert R.extra["rule_result"]["cold_control_expressible"] is True
+    ctx2, env2 = mk_env(tmp_path / "x", cpu_spec)
+    ctx2.client.ignore_cache_flag = True
+    with pytest.raises(GATE.Abort):
+        A.run_182_cold_probe(env2, 0)
+    assert any(r.extra.get("rule_result", {}).get("cold_control_expressible") is False for r in ctx2.open_runs)
+
+
+def test_policy_control_records_both_policies(tmp_path, cpu_spec):
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_182_policy(env, 0, 1024)
+    rr = R.extra["rule_result"]
+    assert rr["n_fork_junction_only"] == rr["n_fork_dense"] == 4352 - 4 and rr["predeclared_rule_satisfied"] is True
+    src = {c["policy"]: c for c in R.extra["cells"] if c["role"] == "source"}
+    assert src["dense"]["checkpoint_at_requested"] == [1024, 2048, 3072, 4096] and src["junction_only"]["checkpoint_at_requested"] == [4096]
+
+
+def test_plan_and_preflight_182(tmp_path):
+    ctx, args = mk_plan_ctx(tmp_path)
+    steps = A.BUILDERS[182](ctx, GATE)
+    descs = [s.desc for s in steps]
+    assert sum("linkage + launch" in d for d in descs) == 2             # the dflash2 launch and the nodraft launch
+    assert any("cold-control probe" in d for d in descs) and any("request_off" in d for d in descs)
+    assert any("policy control" in d for d in descs) and any("parity summary" in d for d in descs)
+    assert sum(1 for d in descs if d.startswith("182 protocol")) == 3   # dflash2/drafter_on, dflash2/request_off, nodraft/launch
+    assert descs[-1].startswith("[") and "SIGTERM" in descs[-1]         # always ends with a verified-dead stop
+    assert 300 < sum(s.est_s for s in steps) < 4 * 3600
+    probs, notes = A.PREFLIGHTS[182](ctx, GATE)
+    assert probs == [] and any("drafter_kv_hit" in n for n in notes)
+    args.kpf182_parts = "1,9"
+    assert any("subset of 1,2,3,4,5" in p for p in A.PREFLIGHTS[182](ctx, GATE)[0])
+    args.kpf182_parts = "5"
+    args.kpf182_dense_u = 100000
+    assert any("dense-u" in p for p in A.PREFLIGHTS[182](ctx, GATE)[0])
+    args.kpf182_dense_u = 1024
+    args.kpf182_sibs = 9
+    assert any("--kpf182-sibs" in p for p in A.PREFLIGHTS[182](ctx, GATE)[0])
+
+
+def test_rules_182_cover_all_five_parts():
+    assert set(A.RULES[182]) == {"common", "parity", "attribution", "vacuity", "cold", "policy"}

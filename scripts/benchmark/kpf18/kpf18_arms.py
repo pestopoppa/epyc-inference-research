@@ -1073,3 +1073,328 @@ def preflight_181(ctx, gate) -> tuple[list[str], list[str]]:
 
 BUILDERS[181] = build_181
 PREFLIGHTS[181] = preflight_181
+
+
+# ================================================================ KPF-18.2  drafter parity, attribution, anti-vacuity
+RULES[182] = {
+    "common": ("Same controls as 18.1: manifest = prompt-set sha256 + binary sha256 + argv from the launch log; baseline = "
+               "the fork-off arm on the same binary and champion tip e33229348; per-sibling raw n_fork_tokens, "
+               "logits and errors retained; held-out lengths or prompts not used to set the rule; every sibling counted "
+               "including failures, aborts and abstentions; counts, not a pass word. Protocol cell: slot 0 prefills "
+               "trunk+tail with checkpoint_at=[T]; each sibling = trunk + its own suffix on slot 1, fork on, 16 tokens."),
+    "parity": ("(1) The SAME prompts are run in every drafter column: drafter on (the launched shape: MTP on the CPU "
+               "frontdoor, DFlash2 on the :8083 shape), the same server with speculative.n_max 0 on every request, a launch "
+               "with no drafter, and any --kpf-config-argv configuration (e.g. a DFlash2 launch). SATISFIED iff every "
+               "sibling's n_fork_tokens is identical in every column (the drafter state travels in the checkpoint); "
+               "every difference is counted as a defect and listed."),
+    "attribution": ("(2) For every sibling log tgt_kv_hit (client-derived: lcp with the source capped at n_task-1, or the "
+                    "server's value), recurrent_ckpt_pos (the checkpoint the KPF-11 rule picks, or the server's) and "
+                    "drafter_kv_hit (ONLY if the server exposes it in /slots[dst].fork; else NOT MEASURED), and the minimum "
+                    "of the measured ones. SATISFIED iff n_fork_tokens == that minimum for every sibling, no sibling with a "
+                    "drafter on has drafter_kv_hit < n_fork_tokens, and no component is zero while n_fork_tokens > 0. If the "
+                    "server does not expose drafter_kv_hit the drafter clause is NOT EVALUATED and the tri-state result is "
+                    "None (never True) unless another clause already failed."),
+    "vacuity": ("(3) Per arm: the checkpoint set that existed (/slots), hit tokens, tokens lost to a missing checkpoint "
+                "(max(0, min(lcp, n_task-1) - n_fork_tokens)), and the server's own fork counters (slot_forks_total, "
+                "slot_fork_tokens_total) over the arm's window. An arm is VACUOUS (cannot be satisfied) if no sibling forked or "
+                "no checkpoint ever existed; n_fork_tokens is read from the request's slot timings AND /slots, and the "
+                "counters must equal the per-request sums."),
+    "cold": ("(4) cache_prompt=false in the same process is the cold control: first a probe (a fork-eligible child with "
+             "cache_prompt false must report n_fork_tokens 0 and cache_n 0, and the same child with cache_prompt true must "
+             "fork: otherwise the arm aborts, the control is not expressible); then for each sibling two cold runs (A, B) "
+             "on slots 2 and 3. SATISFIED iff every cold run has n_fork_tokens 0 and cache_n 0 and every sibling is within "
+             "the cold-vs-cold floor (top-1 equal, max-abs prob and coarse KL <= max(floor, 1e-4))."),
+    "policy": ("(5) Identical resend (trunk+suffix0, sent to slot 1) under the launched drafter: source pinned with "
+               "checkpoint_at=[T] only vs source pinned with dense checkpoints every U tokens (<= 8). n_fork_tokens per "
+               "policy and per component recorded. SATISFIED iff each policy's n_fork_tokens equals the KPF-11 prediction "
+               "for its own checkpoint set; the difference dense - junction-only is reported as a count."),
+}
+
+PARITY_COLUMNS = ("drafter_on", "request_off")
+
+
+def eval_182_attr(cells: list[dict], *, drafter_on: bool) -> dict:
+    ch = _sib(cells, "child")
+    rows, n_eq, n_below, n_abst, n_zero, lost = [], 0, 0, 0, 0, 0
+    for c in ch:
+        comp = c.get("components") or {}
+        vals = {k: comp.get(k) for k in SERVER_FORK_FIELDS if comp.get(k) is not None}
+        hmin = min(vals.values()) if vals else None
+        ok = _ok(c) and hmin is not None and c["n_fork_tokens"] == hmin
+        n_eq += 1 if ok else 0
+        d = comp.get("drafter_kv_hit")
+        if drafter_on and d is None:
+            n_abst += 1
+        if drafter_on and d is not None and _ok(c) and d < c["n_fork_tokens"]:
+            n_below += 1
+        if _ok(c) and c["n_fork_tokens"] > 0 and any(v == 0 for v in vals.values()):
+            n_zero += 1
+        lost += int(c.get("tokens_lost_to_missing_checkpoint") or 0)
+        rows.append({"cell": c["cell"], "n_fork_tokens": c.get("n_fork_tokens"), "min": hmin, **{k: comp.get(k) for k in SERVER_FORK_FIELDS},
+                     "checkpoint_set_before": c.get("checkpoint_set_before")})
+    n_forked = sum(1 for c in ch if _ok(c) and c["n_fork_tokens"] > 0)
+    n_ckpt = sum(1 for c in ch if c.get("checkpoint_set_before"))
+    vacuous = (n_forked == 0) or (n_ckpt == 0)
+    n_err = sum(1 for c in ch if not _ok(c))
+    failed = bool(n_err or n_eq != len(ch) or n_below or n_zero or vacuous or not ch)
+    evaluated = (not drafter_on) or n_abst == 0
+    sat = False if failed else (True if evaluated else None)
+    return {"n_siblings": len(ch), "n_error": n_err, "n_nfork_equals_min": n_eq, "n_drafter_below_nfork": n_below,
+            "n_drafter_not_measured": n_abst, "drafter_clause_evaluated": evaluated, "n_zero_component_with_fork": n_zero,
+            "n_forked": n_forked, "n_with_checkpoint_set": n_ckpt, "vacuous": vacuous,
+            "tokens_lost_to_missing_checkpoint": lost, "siblings": rows, "predeclared_rule_satisfied": sat}
+
+
+def eval_182_cold(cells: list[dict], floors: list[dict]) -> dict:
+    cold = [c for c in cells if c.get("role") in ("fresh_A", "fresh_B")]
+    bad = [c["cell"] for c in cold if not _ok(c) or c["n_fork_tokens"] != 0 or (c.get("cache_n") or 0) != 0]
+    fs = floor_stats(floors)
+    ch = [c for c in _sib(cells, "child") if c.get("vs_fresh") is not None]
+    w = [within_floor(c["vs_fresh"], fs["max_maxabs"], fs["max_kld"]) for c in ch]
+    n_in = sum(1 for x in w if x["within"])
+    return {"n_cold_runs": len(cold), "n_cold_with_fork_or_cache": len(bad), "cold_with_fork_or_cache": bad,
+            "n_siblings_compared": len(ch), "n_within_floor": n_in, "n_outside_floor": sum(1 for x in w if x["within"] is False),
+            "floor": fs, "predeclared_rule_satisfied": (not bad and len(ch) > 0 and n_in == len(ch)) if cold else None}
+
+
+def eval_182_parity(vectors: dict[str, list], ref: str | None = None) -> dict:
+    """vectors: column -> [(sibling key, n_fork_tokens)]. Every column must report the same n_fork_tokens per sibling."""
+    cols = list(vectors)
+    ref = ref or (cols[0] if cols else None)
+    if ref is None:
+        return {"columns": [], "predeclared_rule_satisfied": None}
+    rv = dict(vectors[ref])
+    out = {"reference": ref, "columns": cols, "n_reference_siblings": len(rv),
+           "n_reference_with_fork": sum(1 for v in rv.values() if v), "comparisons": {}}
+    defects = 0
+    for c in cols:
+        if c == ref:
+            continue
+        ov = dict(vectors[c])
+        keys = sorted(set(rv) | set(ov))
+        mism = [{"sibling": k, ref: rv.get(k), c: ov.get(k)} for k in keys if rv.get(k) != ov.get(k)]
+        defects += len(mism)
+        out["comparisons"][c] = {"n_compared": len(keys), "n_equal": len(keys) - len(mism), "n_defects": len(mism),
+                                 "defects": mism}
+    out["n_defects_total"] = defects
+    out["predeclared_rule_satisfied"] = (len(cols) > 1 and defects == 0 and out["n_reference_with_fork"] > 0
+                                         and all(v is not None for v in rv.values())) if cols else None
+    return out
+
+
+def eval_182_policy(cells: list[dict]) -> dict:
+    ch = _sib(cells, "child")
+    by = {}
+    for c in ch:
+        by[c.get("policy")] = c
+    pred = tally_prediction(ch)
+    j, d = by.get("junction_only"), by.get("dense")
+    delta = (d["n_fork_tokens"] - j["n_fork_tokens"]) if j and d and _ok(j) and _ok(d) else None
+    return {**pred, "n_fork_junction_only": j.get("n_fork_tokens") if j else None,
+            "n_fork_dense": d.get("n_fork_tokens") if d else None, "dense_minus_junction_only": delta,
+            "components": {k: (v.get("components") or {}) for k, v in by.items()},
+            "predeclared_rule_satisfied": (pred["n_error"] == 0 and pred["n_not_equal_predicted"] == 0 and len(by) == 2)}
+
+
+def _drafter_on(env: Env, dflash: bool) -> bool:
+    return bool(dflash and config_name(list(getattr(env.srv, "argv", None) or [])) != "nodraft")
+
+
+def run_182_cold_probe(env: Env, g: int):
+    """Is cache_prompt=false expressible? A fork-eligible child with it must not fork; the same child without must."""
+    gate, ctx = env.gate, env.ctx
+    arm = "cold_control_probe"
+    R = open_run(env, 182, arm, rule=RULES[182]["cold"], arm_key="cold_probe")
+    grp = gate.G(ctx, g)
+    T, trunk = grp["T"], grp["trunk"]
+    P = trunk + grp["suffixes"][0]
+    env.erase_all()
+    env.send(R, "source", trunk + grp["src_tail"], 0, n_predict=0, arm=arm, cell_id="src", fork=False, ckpt=[T])
+    _, pos = env.send(R, "child", P, 1, n_predict=1, arm=arm, cell_id="positive_control_cache_prompt_true", fork=True, expected=T)
+    _, neg = env.send(R, "cold", P, 2, n_predict=1, arm=arm, cell_id="cold_cache_prompt_false", fork=True, cache=False,
+                      expected=0)
+    ok_pos = pos["n_fork_tokens"] == T
+    ok_neg = neg["n_fork_tokens"] == 0 and (neg.get("cache_n") or 0) == 0
+    R.check("cold_control_expressible", ok_pos and ok_neg, {"positive_n_fork": pos["n_fork_tokens"], "expected_positive": T,
+                                                             "cold_n_fork": neg["n_fork_tokens"], "cold_cache_n": neg.get("cache_n")})
+    env.erase_all()
+    close_counts(env, R)
+    R.extra["rule_result"] = {"cold_control_expressible": ok_pos and ok_neg, "positive_n_fork": pos["n_fork_tokens"],
+                              "cold_n_fork": neg["n_fork_tokens"], "cold_cache_n": neg.get("cache_n"),
+                              "predeclared_rule_satisfied": ok_pos and ok_neg}
+    if not (ok_pos and ok_neg):
+        raise gate.Abort("cache_prompt=false is not an expressible cold control on this server "
+                         f"(positive fork {pos['n_fork_tokens']} vs {T}, cold n_fork {neg['n_fork_tokens']}, cache_n {neg.get('cache_n')})")
+    return R
+
+
+def run_182_protocol(env: Env, groups: list[int], n_sib: int, column: str, dflash: bool, cold: bool, shared: dict):
+    gate, ctx, a = env.gate, env.ctx, env.ctx.args
+    arm = f"parity_{env.cfg_name}_{column}"
+    drafter_on = _drafter_on(env, dflash)
+    R = open_run(env, 182, arm, dflash2=dflash, rule=RULES[182]["parity"] + " || " + RULES[182]["attribution"],
+                 arm_key="protocol", column=column, drafter_requested=dflash, drafter_on=drafter_on, cold_control=cold)
+    n = 16
+    vec = []
+    for g in groups:
+        grp = gate.G(ctx, g)
+        T, trunk = grp["T"], grp["trunk"]
+        ctx.check_boundary()
+        env.erase_all()
+        env.send(R, "source", trunk + grp["src_tail"], 0, n_predict=0, arm=arm, cell_id=f"g{g}.src", fork=False, ckpt=[T],
+                 dflash=dflash, group=g)
+        for i in range(n_sib):
+            ctx.check_boundary()
+            env.erase(1)
+            P = trunk + grp["suffixes"][i]
+            r, cell = env.send(R, "child", P, 1, n_predict=n, arm=arm, cell_id=f"g{g}.s{i}", fork=True, dflash=dflash,
+                               n_probs=a.n_probs if cold else 0, group=g, suffix=i)
+            vec.append((f"g{g}.s{i}", cell["n_fork_tokens"]))
+            if cold:
+                _, vs = _fresh_pair(env, R, P, r, n=n, arm=arm, cell_id=f"g{g}.s{i}", key=f"g{g}.s{i}", n_probs=a.n_probs,
+                                    dflash=dflash)
+                cell["vs_fresh"] = vs
+                env.erase(2, 3)
+    shared.setdefault("vec", {})[f"{env.cfg_name}:{column}"] = vec
+    close_counts(env, R)
+    R.extra["rule_result"] = eval_182_attr(R.extra["cells"], drafter_on=drafter_on)
+    if cold:
+        R.extra["cold_control"] = eval_182_cold(R.extra["cells"], R.eq.get("control_floor", []))
+    R.extra["siblings_vector"] = vec
+    return R
+
+
+def run_182_policy(env: Env, g: int, dense_u: int):
+    gate, ctx, a = env.gate, env.ctx, env.ctx.args
+    arm = f"policy_control_{env.cfg_name}"
+    R = open_run(env, 182, arm, rule=RULES[182]["policy"], arm_key="policy", dense_u=dense_u)
+    grp = gate.G(ctx, g)
+    T, trunk = grp["T"], grp["trunk"]
+    P = trunk + grp["suffixes"][0]
+    for policy, ck in (("junction_only", [T]), ("dense", dense_positions(len(P), dense_u))):
+        ctx.check_boundary()
+        env.erase_all()
+        env.send(R, "source", P, 0, n_predict=0, arm=arm, cell_id=f"{policy}.src", fork=False, ckpt=ck, policy=policy,
+                 checkpoint_at_requested=ck)
+        env.send(R, "child", P, 1, n_predict=16, arm=arm, cell_id=policy, fork=True, policy=policy)
+    env.erase_all()
+    close_counts(env, R)
+    R.extra["rule_result"] = eval_182_policy(R.extra["cells"])
+    return R
+
+
+def run_182_parity_summary(env: Env, shared: dict):
+    R = open_run(env, 182, "parity_summary", rule=RULES[182]["parity"], arm_key="parity")
+    R.extra["vectors"] = shared.get("vec", {})
+    R.extra["note"] = ("compares the per-sibling n_fork_tokens recorded by the protocol runs of every drafter column; the "
+                       "columns come from different launches (see each protocol record for its binary/argv)")
+    R.extra["rule_result"] = eval_182_parity(shared.get("vec", {}))
+    return R
+
+
+def _est_protocol(gate, T: int, S: int, n_sib: int, cold: bool, n: int = 16) -> float:
+    e = gate.pf_s(T + gate.SRC_TAIL, 0)
+    for _ in range(n_sib):
+        e += gate.pf_s(S, T) + gate.dec_s(n, T, True) + 3 * gate.REQ_OVERHEAD_S
+        if cold:
+            e += 2 * (gate.pf_s(T + S, 2 * T) + gate.dec_s(n, 2 * T, True)) + 2 * gate.REQ_OVERHEAD_S
+    return e
+
+
+def build_182(ctx, gate) -> list:
+    a = ctx.args
+    Step, Srv = gate.Step, server_cls(gate)
+    parts = {x.strip() for x in a.kpf182_parts.split(",") if x.strip()}
+    cfgs = get_configs(ctx, gate)
+    groups = groups_arg(a.kpf182_groups, [0, 2])
+    n_sib = a.kpf182_sibs
+    shared: dict = {}
+    blocks: list[tuple] = []        # (srv, body steps)
+
+    def S_(g):
+        return gate.G(ctx, g)
+
+    def launch(name, argv):
+        srv = Srv(ctx, f"kpf182-{name}-{gate.utc_tag()}", Path(a.fork_bin), a.fork_min, argv)
+        return srv, Env(ctx, gate, srv, name)
+
+    def proto_steps(env, column, dflash, cold):
+        est = sum(_est_protocol(gate, S_(g)["T"], S_(g)["suffix_lens"][0], n_sib, cold) for g in groups)
+        return [Step(f"182 protocol [{env.cfg_name} / {column}] groups {groups}: source + {n_sib} siblings per group, "
+                     f"16 tok{', cold A+B per sibling' if cold else ''} (rules parity/attribution/vacuity"
+                     f"{'/cold' if cold else ''})", est,
+                     lambda e=env, c=column, d=dflash, k=cold: run_182_protocol(e, groups, n_sib, c, d, k, shared))]
+
+    prim_name, prim_argv = cfgs[0]
+    has_drafter = config_name(prim_argv) != "nodraft"
+    srv, env = launch(prim_name, prim_argv)
+    body: list = []
+    if "4" in parts:
+        g = groups[0]
+        T = S_(g)["T"]
+        body.append(Step(f"182 cold-control probe g{g}: cache_prompt=false child must not fork, cache_prompt=true child "
+                         f"must (rule cold)", gate.pf_s(T + gate.SRC_TAIL, 0) + 4 * gate.REQ_OVERHEAD_S + 2 * gate.pf_s(512, T),
+                         lambda: run_182_cold_probe(env, g)))
+    if parts & {"1", "2", "3", "4"}:
+        body += proto_steps(env, "drafter_on", True, "4" in parts)
+    if "1" in parts and has_drafter:
+        body += proto_steps(env, "request_off", False, False)
+    if "5" in parts:
+        g = groups[0]
+        T, S0 = S_(g)["T"], S_(g)["suffix_lens"][0]
+        body.append(Step(f"182 policy control [{prim_name}] g{g}: identical resend, checkpoint_at=[T] only vs dense every "
+                         f"{a.kpf182_dense_u} (rule policy)", 2 * (gate.pf_s(T + S0, 0) + gate.pf_s(1, T + S0)
+                         + gate.dec_s(16, T, True) + 4 * gate.REQ_OVERHEAD_S), lambda: run_182_policy(env, g, a.kpf182_dense_u)))
+    blocks.append((srv, env, body))
+    if "1" in parts:
+        for name, argv in cfgs[1:]:
+            srv_c, env_c = launch(name, argv)
+            blocks.append((srv_c, env_c, proto_steps(env_c, "launch", True, False)))
+    last_env = blocks[-1][1]
+    if "1" in parts:
+        blocks[-1][2].append(Step("182 parity summary: every column's n_fork_tokens per sibling, identical or counted as defects",
+                                  0, lambda: run_182_parity_summary(last_env, shared)))
+    steps: list = []
+    for srv_b, _, body_b in blocks:
+        steps += gate.start_steps(ctx, srv_b) + body_b + [gate.stop_step(srv_b)]
+    return steps
+
+
+def preflight_182(ctx, gate) -> tuple[list[str], list[str]]:
+    a = ctx.args
+    probs: list[str] = []
+    notes: list[str] = []
+    try:
+        cfgs = get_configs(ctx, gate)
+    except (ValueError, OSError) as exc:
+        return [f"KPF-18.2 drafter configurations: {exc}"], notes
+    parts = {x.strip() for x in a.kpf182_parts.split(",") if x.strip()}
+    if not parts or not parts <= {"1", "2", "3", "4", "5"}:
+        probs.append(f"--kpf182-parts {a.kpf182_parts!r}: use a subset of 1,2,3,4,5")
+    if a.fork_min < 1:
+        probs.append("KPF-18.2 needs --fork-min >= 1")
+    groups = groups_arg(a.kpf182_groups, [0, 2])
+    for g in groups:
+        if g not in ctx.ps.groups:
+            probs.append(f"KPF-18.2 trunk group {g} not in the prompt set")
+    if not 1 <= a.kpf182_sibs <= len(GATE_SUFFIXES(gate)):
+        probs.append(f"--kpf182-sibs {a.kpf182_sibs} outside 1..{len(GATE_SUFFIXES(gate))}")
+    if "5" in parts and not dense_positions(1 << 30, max(1, a.kpf182_dense_u)):
+        probs.append("--kpf182-dense-u yields no dense positions")
+    if not probs and "5" in parts:
+        n0 = ctx.ps.groups[groups[0]]["T"] + ctx.ps.groups[groups[0]]["suffix_lens"][0]
+        if not dense_positions(n0, a.kpf182_dense_u):
+            probs.append(f"--kpf182-dense-u {a.kpf182_dense_u} >= the policy prompt length {n0}")
+    names = [n for n, _ in cfgs]
+    notes.append(f"182 drafter columns: {names[0]} on/off + launches {names[1:]}; request-level off only if the launch has a drafter")
+    notes.append("182 attribution: the server does not report drafter_kv_hit today (see RUNBOOK 'to enable'): the drafter "
+                 "clause abstains, its result is None, never True")
+    return probs, notes
+
+
+def GATE_SUFFIXES(gate) -> list[int]:
+    return list(gate.SUFFIXES)
+
+
+BUILDERS[182] = build_182
+PREFLIGHTS[182] = preflight_182
