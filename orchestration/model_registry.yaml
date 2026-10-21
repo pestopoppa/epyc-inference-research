@@ -533,8 +533,8 @@ runtime_defaults:
   agent_file_compression_operating_point: none
 
   corpus_retrieval:
-    enabled: true        # A/B validated: +8.7pp/32B, +15.6pp/480B. Per-role via lookup flag.
-    index_path: /mnt/raid0/llm/cache/corpus/v3_sharded  # Sharded SQLite v3 (in-progress build, falls back gracefully). mvp_index kept as backup.
+    enabled: false       # RETIRED 2026-07-04 (CPL-4/5, handoffs/completed/corpus-augmented-prompt-lookup-revalidation.md): index deleted; clean-window A/B showed no proven benefit. Flag-off ratified 2026-10-21.
+    index_path: /mnt/raid0/llm/cache/corpus/v3_sharded  # DELETED 2026-07-04 (CPL-4/5); path kept for provenance only, nothing reads it while enabled is false.
     max_snippets: 3
     max_chars: 3000
     min_score: 0.0
@@ -1039,7 +1039,7 @@ server_mode:
       spec_type: draft-mtp
       draft_max: 4
       lookup: false
-      corpus_retrieval: true
+      corpus_retrieval: false
     throughput: 40.22  # category=OPTIMUM t/s, full instance canonical placement, draft-mtp, short ctx.
                        # Long ctx 22.59. Was 24.3 (a May-4 figure equal to its own baseline) until 2026-07-31.
                        # q_scorer.registry_baseline_tps_by_role reads THIS FIRST, ahead of roles.*.performance,
@@ -1063,7 +1063,7 @@ server_mode:
       draft_max: 32   # sweep-verified 2026-03-21 (was 24)
       p_split: 0.05   # tree beneficial on Q4KM (+2.7%), sweep-verified 2026-03-21
       lookup: true  # Prompt n-gram lookup as fallback (--lookup flag, commit 8e35dbc01)
-      corpus_retrieval: true  # A/B: +8.7pp acceptance, +6% speed
+      corpus_retrieval: false  # A/B: +8.7pp acceptance, +6% speed
     throughput: 10.8   # t/s at 48t NUMA deployment (sweep 2026-03-21). 192t ref: 12.2. Old 39.44 was inflated.
 
   coder_escalation:
@@ -1114,7 +1114,7 @@ server_mode:
       type: none  # alias: no own draft; inherits the :8083 host's draft-mtp recipe
       inherits_spec_from: architect_critic   # ARCHSWAP-20260927: :8083 host renamed
       lookup: false
-      corpus_retrieval: true
+      corpus_retrieval: false
     throughput: 47.79  # category=OPTIMUM t/s, MI210 ROCm0, Qwen3.6-27B dense Q8, draft-mtp, short
                        # ctx. Long ctx 36.71. THE REPOINT THE 2026-07-31 NOTE REQUIRED — landed
                        # WITH the model change, not after it. Source: published stack measurement
@@ -1203,7 +1203,7 @@ server_mode:
                                   # does not conclude the role serves without speculation
       draft_max: 4
       lookup: false
-      corpus_retrieval: true
+      corpus_retrieval: false
       # numa_instances/numa_ports DELETED 2026-09-22. They were retained as explicit
       # singletons on the theory that dispatch paths fail OPEN on an unknown port, but
       # the registry validator refuses them outright: this role launches nothing of its
@@ -2100,7 +2100,7 @@ server_mode:
       draft_max: 24   # sweep-verified 2026-03-21 (was 48; dm=24 beats dm=48)
       p_split: 0      # linear only — tree is HARMFUL (-19%), sweep-verified 2026-03-21 (was 0.05)
       lookup: true  # A/B best result: +15.6pp acceptance, +17% speed with corpus
-      corpus_retrieval: true  # A/B BEST: +15.6pp acceptance (74.9→90.5%), +17% speed (8.3→9.7 t/s)
+      corpus_retrieval: false  # A/B BEST: +15.6pp acceptance (74.9→90.5%), +17% speed (8.3→9.7 t/s)
     throughput: 7.0    # t/s at 96t NUMA deployment (sweep 2026-03-21). 192t ref: 7.1. Old 9.00 was different config.
 
   # ── 2026-09-22 LINEUP CHANGE (operator-directed) ───────────────────────────────
@@ -2809,7 +2809,7 @@ roles:
       draft_max: 4
       draft_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
       lookup: false
-      corpus_retrieval: true
+      corpus_retrieval: false
     performance:
       # NOTE: baseline_tps == optimized_tps here because both rows were filled
       # with the same May-4 figure. Neither is a measured spec-off BASELINE.
@@ -3012,7 +3012,7 @@ roles:
       type: none  # "no own draft", NOT "no speculation". CANONICAL: top-level speculative_decoding_policy.
       inherits_spec_from: architect_critic   # ARCHSWAP-20260927: :8083 host renamed
       lookup: false
-      corpus_retrieval: true
+      corpus_retrieval: false
     performance:
       # 2026-07-31 MODEL SWAP 35B -> 27B. Every row here was a Qwen3.6-35B-A3B measurement
       # inherited by virtue of sharing frontdoor's GGUF (quality_pct 93, coder 29/30, agentic
