@@ -281,10 +281,39 @@ def _json_object(stdout: Any) -> dict[str, Any]:
     return body
 
 
+def _fallback_alarm(config: BeliefConfig, reason: str, detail: str, *,
+                    runner: Callable[..., Any] | None = None) -> dict[str, Any]:
+    channel = root_repo(config.root) / "scripts" / "coordination" / "alarm_channel.py"
+    out: dict[str, Any] = {"invoked": False, "fallback": True, "channel": str(channel)}
+    if not channel.is_file():
+        out["error"] = f"reader and alarm channel missing under {root_repo(config.root)}"
+        print(f"BELIEF LEDGER ALARM UNDELIVERABLE ({reason}): {out['error']}", file=sys.stderr)
+        return out
+    argv = [config.python, str(channel)]
+    if config.alarm_state is not None:
+        argv += ["--state", str(config.alarm_state)]
+    if config.alarm_config is not None:
+        argv += ["--config", str(config.alarm_config)]
+    argv += ["raise", "--severity", "critical", "--key",
+             f"belief-ledger-not-current-escalated.{config.consumer}", "--message",
+             f"{config.consumer}: belief reader missing ({reason}); no new hypotheses are "
+             "being generated", "--evidence",
+             json.dumps({"reason": reason, "detail": str(detail)[:300]})]
+    try:
+        done = (runner or RUNNER)(argv, capture_output=True, text=True,
+                                  timeout=config.alarm_timeout_s, check=False)
+        out.update(invoked=True, returncode=getattr(done, "returncode", None))
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = f"{type(exc).__name__}: {exc}"[:300]
+    return out
+
+
 def raise_alarm(config: BeliefConfig, reason: str, detail: str, *,
                 runner: Callable[..., Any] | None = None) -> dict[str, Any]:
     """`loop_beliefs.py alarm` for a CONSUMER-side failure (timeout / crash / garbage).
-    Best effort under its own short timeout; never raises."""
+    Best effort under its own short timeout; never raises. When the subcommand cannot run
+    because the reader itself is missing, a CRITICAL alarm goes straight through ROOT's alarm
+    channel instead."""
     try:
         done = _child(config, ["alarm", "--consumer", config.consumer, "--reason", reason,
                                "--detail", str(detail)[:500], *config._alarm_args()],
@@ -292,9 +321,12 @@ def raise_alarm(config: BeliefConfig, reason: str, detail: str, *,
         try:
             return {"invoked": True, **_json_object(done.stdout)}
         except ValueError:
-            return {"invoked": True, "returncode": getattr(done, "returncode", None)}
+            result = {"invoked": True, "returncode": getattr(done, "returncode", None)}
     except Exception as exc:  # noqa: BLE001 -- the refusal stands even if the alarm fails
-        return {"invoked": False, "error": f"{type(exc).__name__}: {exc}"[:300]}
+        result = {"invoked": False, "error": f"{type(exc).__name__}: {exc}"[:300]}
+    if not config.reader().is_file():
+        result["fallback"] = _fallback_alarm(config, reason, detail, runner=runner)
+    return result
 
 
 def prepare(context: Mapping[str, Any], config: BeliefConfig | None = None, *,

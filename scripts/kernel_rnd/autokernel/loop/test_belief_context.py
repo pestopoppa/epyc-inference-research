@@ -694,3 +694,34 @@ def test_integration_real_root_child_ready_then_recheck_after_a_retraction(tmp_p
     [flag] = _rows(_log_dir(tmp_path) / bc.RECHECK_LOG)
     assert flag["review_flag"] is True
     assert flag["flagged_premises"] == [{"claim_id": target_claim, "status": "withdrawn"}]
+
+
+def test_missing_reader_alarm_falls_back_to_the_root_alarm_channel(tmp_path):
+    channel = tmp_path / "root" / "scripts" / "coordination" / "alarm_channel.py"
+    channel.parent.mkdir(parents=True)
+    channel.write_text("# stand-in; the runner below never executes it\n")
+    calls = []
+
+    def runner(argv, **kw):
+        calls.append(argv)
+        if argv[1].endswith("loop_beliefs.py"):        # the missing reader: python exits 2
+            return subprocess.CompletedProcess(argv, 2, stdout="", stderr="No such file")
+        return subprocess.CompletedProcess(argv, 0, stdout="{}", stderr="")
+
+    config = bc.BeliefConfig(root=tmp_path / "root", alarm_state=tmp_path / "s.json",
+                             alarm_config=tmp_path / "c.yaml")
+    out = bc.raise_alarm(config, "reader_crash", "loop_beliefs.py missing", runner=runner)
+    fb = out["fallback"]
+    assert fb["fallback"] is True and fb["invoked"] is True and len(calls) == 2
+    argv = calls[1]
+    assert argv[1] == str(channel) and "raise" in argv
+    assert argv[argv.index("--severity") + 1] == "critical"
+    assert argv[argv.index("--key") + 1] == f"belief-ledger-not-current-escalated.{config.consumer}"
+    assert argv[argv.index("--state") + 1] == str(tmp_path / "s.json")
+
+
+def test_missing_reader_and_channel_is_recorded_not_raised(tmp_path):
+    out = bc.raise_alarm(bc.BeliefConfig(root=tmp_path / "nowhere"), "reader_crash", "x",
+                         runner=lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("x")))
+    assert out["invoked"] is False
+    assert out["fallback"]["invoked"] is False and "missing" in out["fallback"]["error"]
