@@ -857,6 +857,9 @@ class Driver:
                     if b >= blocks_plan:
                         break
                 block_start = time.time()
+            if os.path.exists(os.path.join(self.a.run_dir, "STOP")):  # FILLERS rule 2: honoured between items
+                self.tl("stop_file", block=b, run=r["run"])
+                break
             need = (sum(self.rep_seconds) / len(self.rep_seconds) if self.rep_seconds else self.a.est_rep_s)
             if time.time() + need * len(r["reps"]) + self.a.est_switch_s > self.deadline:
                 self.tl("deadline_stop", block=b, run=r["run"])
