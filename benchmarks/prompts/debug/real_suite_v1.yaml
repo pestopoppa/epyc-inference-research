@@ -1,5 +1,5 @@
 suite: real_suite_v1
-version: '1.0'
+version: '1.1'
 generated_at: '2026-06-27T15:36:42+00:00'
 description: Scoreable F1 W3 real-task eval slice selected from observed workflow
   rows whose prompts and expected answers are backed by the existing question pool.
@@ -234,13 +234,13 @@ questions:
 
     Write a Python function to solve this problem. Include proper type hints and handle
     edge cases.'
-  expected: 'def '
-  scoring_method: substring
+  expected: ''
+  scoring_method: code_execution
   scoring_config:
     language: python
     timeout: 30
-    case_sensitive: true
-    substring: 'def '
+    not_scorable_reason: no validated executable oracle for the source problem; the
+      former substring 'def ' oracle passed any python answer (EV-19, 2026-10-21)
   source_suite: livecodebench
   source_question_id: leetcode_all-divisions-with-the-highest-score-of-a-binary-array
   real_task_id: chat-140e0c9a
@@ -248,46 +248,77 @@ questions:
   real_task_outcome: success
 - id: real_suite_v1_0007
   tier: 2
-  prompt: '# Difference Between Ones and Zeros in Row and Column
-
-
-    You are given a **0-indexed** `m x n` binary matrix `grid`. A **0-indexed** `m
-    x n` difference matrix `diff` is created with the following procedure: * Let the
-    number of ones in the `ith` row be `onesRowi`. * Let the number of ones in the
-    `jth` column be `onesColj`. * Let the number of zeros in the `ith` row be `zerosRowi`.
-    * Let the number of zeros in the `jth` column be `zerosColj`. * `diff[i][j] =
-    onesRowi + onesColj - zerosRowi - zerosColj` Return _the difference matrix_ `diff`.
-    **Example 1:** **Input:** grid = \[\[0,1,1\],\[1,0,1\],\[0,0,1\]\] **Output:**
-    \[\[0,0,4\],\[0,0,4\],\[-2,-2,2\]\] **Explanation:** - diff\[0\]\[0\] = `onesRow0
-    + onesCol0 - zerosRow0 - zerosCol0` = 2 + 1 - 1 - 2 = 0 - diff\[0\]\[1\] = `onesRow0
-    + onesCol1 - zerosRow0 - zerosCol1` = 2 + 1 - 1 - 2 = 0 - diff\[0\]\[2\] = `onesRow0
-    + onesCol2 - zerosRow0 - zerosCol2` = 2 + 3 - 1 - 0 = 4 - diff\[1\]\[0\] = `onesRow1
-    + onesCol0 - zerosRow1 - zerosCol0` = 2 + 1 - 1 - 2 = 0 - diff\[1\]\[1\] = `onesRow1
-    + onesCol1 - zerosRow1 - zerosCol1` = 2 + 1 - 1 - 2 = 0 - diff\[1\]\[2\] = `onesRow1
-    + onesCol2 - zerosRow1 - zerosCol2` = 2 + 3 - 1 - 0 = 4 - diff\[2\]\[0\] = `onesRow2
-    + onesCol0 - zerosRow2 - zerosCol0` = 1 + 1 - 2 - 2 = -2 - diff\[2\]\[1\] = `onesRow2
-    + onesCol1 - zerosRow2 - zerosCol1` = 1 + 1 - 2 - 2 = -2 - diff\[2\]\[2\] = `onesRow2
-    + onesCol2 - zerosRow2 - zerosCol2` = 1 + 3 - 2 - 0 = 2 **Example 2:** **Input:**
-    grid = \[\[1,1,1\],\[1,1,1\]\] **Output:** \[\[5,5,5\],\[5,5,5\]\] **Explanation:**
-    - diff\[0\]\[0\] = onesRow0 + onesCol0 - zerosRow0 - zerosCol0 = 3 + 2 - 0 - 0
-    = 5 - diff\[0\]\[1\] = onesRow0 + onesCol1 - zerosRow0 - zerosCol1 = 3 + 2 - 0
-    - 0 = 5 - diff\[0\]\[2\] = onesRow0 + onesCol2 - zerosRow0 - zerosCol2 = 3 + 2
-    - 0 - 0 = 5 - diff\[1\]\[0\] = onesRow1 + onesCol0 - zerosRow1 - zerosCol0 = 3
-    + 2 - 0 - 0 = 5 - diff\[1\]\[1\] = onesRow1 + onesCol1 - zerosRow1 - zerosCol1
-    = 3 + 2 - 0 - 0 = 5 - diff\[1\]\[2\] = onesRow1 + onesCol2 - zerosRow1 - zerosCol2
-    = 3 + 2 - 0 - 0 = 5 **Constraints:** * `m == grid.length` * `n == grid[i].length`
-    * `1 <= m, n <= 105` * `1 <= m * n <= 105` * `grid[i][j]` is either `0` or `1`.
-
-
-    Write a Python function to solve this problem. Include proper type hints and handle
-    edge cases.'
-  expected: 'def '
-  scoring_method: substring
+  prompt: "# Difference Between Ones and Zeros in Row and Column\n\nYou are given\
+    \ a **0-indexed** `m x n` binary matrix `grid`.\n\nA **0-indexed** `m x n` difference\
+    \ matrix `diff` is created with the following procedure:\n\n*   Let the number\
+    \ of ones in the `ith` row be `onesRowi`.\n*   Let the number of ones in the `jth`\
+    \ column be `onesColj`.\n*   Let the number of zeros in the `ith` row be `zerosRowi`.\n\
+    *   Let the number of zeros in the `jth` column be `zerosColj`.\n*   `diff[i][j]\
+    \ = onesRowi + onesColj - zerosRowi - zerosColj`\n\nReturn _the difference matrix_\
+    \ `diff`.\n\n**Example 1:**\n\n**Input:** grid = [[0,1,1],[1,0,1],[0,0,1]]\n**Output:**\
+    \ [[0,0,4],[0,0,4],[-2,-2,2]]\n**Explanation:**\n- diff[0][0] = `onesRow0 + onesCol0\
+    \ - zerosRow0 - zerosCol0` = 2 + 1 - 1 - 2 = 0 \n- diff[0][1] = `onesRow0 + onesCol1\
+    \ - zerosRow0 - zerosCol1` = 2 + 1 - 1 - 2 = 0 \n- diff[0][2] = `onesRow0 + onesCol2\
+    \ - zerosRow0 - zerosCol2` = 2 + 3 - 1 - 0 = 4 \n- diff[1][0] = `onesRow1 + onesCol0\
+    \ - zerosRow1 - zerosCol0` = 2 + 1 - 1 - 2 = 0 \n- diff[1][1] = `onesRow1 + onesCol1\
+    \ - zerosRow1 - zerosCol1` = 2 + 1 - 1 - 2 = 0 \n- diff[1][2] = `onesRow1 + onesCol2\
+    \ - zerosRow1 - zerosCol2` = 2 + 3 - 1 - 0 = 4 \n- diff[2][0] = `onesRow2 + onesCol0\
+    \ - zerosRow2 - zerosCol0` = 1 + 1 - 2 - 2 = -2\n- diff[2][1] = `onesRow2 + onesCol1\
+    \ - zerosRow2 - zerosCol1` = 1 + 1 - 2 - 2 = -2\n- diff[2][2] = `onesRow2 + onesCol2\
+    \ - zerosRow2 - zerosCol2` = 1 + 3 - 2 - 0 = 2\n\n**Example 2:**\n\n**Input:**\
+    \ grid = [[1,1,1],[1,1,1]]\n**Output:** [[5,5,5],[5,5,5]]\n**Explanation:**\n\
+    - diff[0][0] = onesRow0 + onesCol0 - zerosRow0 - zerosCol0 = 3 + 2 - 0 - 0 = 5\n\
+    - diff[0][1] = onesRow0 + onesCol1 - zerosRow0 - zerosCol1 = 3 + 2 - 0 - 0 = 5\n\
+    - diff[0][2] = onesRow0 + onesCol2 - zerosRow0 - zerosCol2 = 3 + 2 - 0 - 0 = 5\n\
+    - diff[1][0] = onesRow1 + onesCol0 - zerosRow1 - zerosCol0 = 3 + 2 - 0 - 0 = 5\n\
+    - diff[1][1] = onesRow1 + onesCol1 - zerosRow1 - zerosCol1 = 3 + 2 - 0 - 0 = 5\n\
+    - diff[1][2] = onesRow1 + onesCol2 - zerosRow1 - zerosCol2 = 3 + 2 - 0 - 0 = 5\n\
+    \n**Constraints:**\n\n*   `m == grid.length`\n*   `n == grid[i].length`\n*   `1\
+    \ <= m, n <= 105`\n*   `1 <= m * n <= 105`\n*   `grid[i][j]` is either `0` or\
+    \ `1`.\n\nYour solution MUST define this exact function at module level (parameter\
+    \ names are yours to choose; arguments are passed positionally):\n```python\n\
+    def create_difference_matrix(grid):\n    ...\n```"
+  expected: create_difference_matrix
+  scoring_method: code_execution
   scoring_config:
+    entry_point: create_difference_matrix
+    entry_point_cases:
+    - args:
+      - - - 0
+          - 1
+          - 1
+        - - 1
+          - 0
+          - 1
+        - - 0
+          - 0
+          - 1
+      expected:
+      - - 0
+        - 0
+        - 4
+      - - 0
+        - 0
+        - 4
+      - - -2
+        - -2
+        - 2
+    - args:
+      - - - 1
+          - 1
+          - 1
+        - - 1
+          - 1
+          - 1
+      expected:
+      - - 5
+        - 5
+        - 5
+      - - 5
+        - 5
+        - 5
     language: python
-    timeout: 30
-    case_sensitive: true
-    substring: 'def '
+    timeout: 15
   source_suite: livecodebench
   source_question_id: leetcode_difference-between-ones-and-zeros-in-row-and-column
   real_task_id: chat-1759c287
@@ -1245,13 +1276,13 @@ questions:
 
     Write a Python function to solve this problem. Include proper type hints and handle
     edge cases.'
-  expected: 'def '
-  scoring_method: substring
+  expected: ''
+  scoring_method: code_execution
   scoring_config:
     language: python
     timeout: 30
-    case_sensitive: true
-    substring: 'def '
+    not_scorable_reason: no validated executable oracle for the source problem; the
+      former substring 'def ' oracle passed any python answer (EV-19, 2026-10-21)
   source_suite: livecodebench
   source_question_id: leetcode_intervals-between-identical-elements
   real_task_id: chat-2d6ccca0
@@ -1750,7 +1781,7 @@ questions:
   expected: '256'
   scoring_method: exact_match
   scoring_config:
-    extract_pattern: '(\d+)'
+    extract_pattern: (\d+)
   source_suite: long_context
   source_question_id: needle_039
   real_task_id: chat-50b23b5f
@@ -1959,3 +1990,5 @@ questions:
   real_task_id: chat-4541e9e2
   real_task_class: planning_architecture_review
   real_task_outcome: success
+corpus_revision_note: '1.1: 3 vacuous code-substring rows repaired (EV-19): real_suite_v1_0006=marked_not_scorable,
+  real_suite_v1_0007=rederived_executable_oracle, real_suite_v1_0034=marked_not_scorable'

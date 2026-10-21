@@ -1,0 +1,21 @@
+{
+  "schema": "corpus-revisions/1",
+  "note": "question_pool*.jsonl is generated and gitignored; this ledger is the tracked record of which pool revision a result was scored on. A pool carries its label in the header field corpus_version.",
+  "revisions": [
+    {
+      "corpus_version": "corpus-ev19-20261021",
+      "date": "2026-10-21",
+      "agent": "corpus-fix-ev19",
+      "built_from": "question_pool.jsonl (header generated_at 2026-07-27, file mtime 2026-08-04) via question_pool.py --refresh-suites mmlu_pro livecodebench real_suite_v1",
+      "pool_file": "/mnt/raid0/llm/tmp/corpus-fix-ev19/question_pool.corpus-ev19-20261021.jsonl",
+      "pool_sha256": "f8b536632b0d95feee339333f46247125def384b6d36d65b39711155825d7f0a",
+      "live_swap": "NOT done by this lane: swapping the live pool is an instrument-era change for the eval-tower owner",
+      "changes": {
+        "mmlu_pro": "12,032 rows re-derived by the PRB-T4 adapter: scoring_config now carries choices + choice_labels A-J. Live pool had scoring_config={} on all rows, so the 2,053 rows with gold I/J (17.1%) were unscoreable.",
+        "livecodebench": "2,360 -> 704 rows. 704 carry an executable code_execution oracle (livecodebench_oracle_manifest.json); 1,656 had no validated oracle and are EXCLUDED (header refreshed_suites.livecodebench.dropped_by_adapter=1656, reason no_validated_oracle). The live pool's 2,349 rows scored substring 'def '.",
+        "real_suite_v1": "YAML 1.0 -> 1.1. real_suite_v1_0007 re-derived to an executable oracle; real_suite_v1_0006 and _0034 have no validated oracle and are marked not scorable (code_execution, no test oracle, scoring_config.not_scorable_reason).",
+        "tulving_episodic": "NO CORPUS CHANGE. The 182/456 rows with gold [] are the benchmark's genuine no-matching-event controls; the correct answer is 'None' (the prompt says so) and it scores true. The self-check scored the literal string '[]' and reported a false defect; fixed in the self-check (SELF_CHECK_VERSION 2)."
+      }
+    }
+  ]
+}

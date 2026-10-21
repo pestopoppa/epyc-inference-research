@@ -143,31 +143,11 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
         _yaml = None
 
     if _yaml:
-        debug_dir = PROJECT_ROOT / "benchmarks" / "prompts" / "debug"
         for suite_name in sorted(YAML_ONLY_SUITES):
-            yaml_path = debug_dir / f"{suite_name}.yaml"
-            if not yaml_path.exists():
+            if not (PROJECT_ROOT / "benchmarks" / "prompts" / "debug" / f"{suite_name}.yaml").exists():
                 continue
             try:
-                with open(yaml_path) as f:
-                    data = _yaml.safe_load(f)
-                questions = data.get("questions", [])
-                default_scoring_method = data.get("scoring_method", "exact_match")
-                default_scoring_config = data.get("scoring_config", {})
-                converted = []
-                for q in questions:
-                    converted.append({
-                        "id": q["id"],
-                        "suite": suite_name,
-                        "prompt": q["prompt"].strip(),
-                        "context": "",
-                        "expected": q.get("expected", ""),
-                        "image_path": q.get("image_path", ""),
-                        "tier": q.get("tier", 1),
-                        "scoring_method": q.get("scoring_method", default_scoring_method),
-                        "scoring_config": q.get("scoring_config", default_scoring_config),
-                        "dataset_source": "yaml",
-                    })
+                converted = _yaml_suite_rows(suite_name)
                 stats[suite_name] = len(converted)
                 all_questions.extend(converted)
                 logger.info(f"  [{suite_name}] Extracted {len(converted)} questions (YAML)")
@@ -215,12 +195,43 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
     return stats
 
 
+def _yaml_suite_rows(suite_name: str) -> list[dict]:
+    """Pool rows for one YAML-maintained suite (``benchmarks/prompts/debug/<suite>.yaml``).
+
+    Shared by ``build_pool`` and ``refresh_suites`` so a YAML suite is converted
+    identically on both paths.
+    """
+    import yaml as _yaml
+
+    yaml_path = PROJECT_ROOT / "benchmarks" / "prompts" / "debug" / f"{suite_name}.yaml"
+    with open(yaml_path) as f:
+        data = _yaml.safe_load(f)
+    default_scoring_method = data.get("scoring_method", "exact_match")
+    default_scoring_config = data.get("scoring_config", {})
+    return [
+        {
+            "id": q["id"],
+            "suite": suite_name,
+            "prompt": q["prompt"].strip(),
+            "context": "",
+            "expected": q.get("expected", ""),
+            "image_path": q.get("image_path", ""),
+            "tier": q.get("tier", 1),
+            "scoring_method": q.get("scoring_method", default_scoring_method),
+            "scoring_config": q.get("scoring_config", default_scoring_config),
+            "dataset_source": "yaml",
+        }
+        for q in data.get("questions", [])
+    ]
+
+
 def refresh_suites(
     suites: list[str],
     source_path: Path | None = None,
     output_path: Path | None = None,
     *,
     allow_live_overwrite: bool = False,
+    corpus_version: str | None = None,
 ) -> dict[str, dict[str, int]]:
     """Re-extract only ``suites`` from their adapters; copy every other row verbatim.
 
@@ -236,7 +247,7 @@ def refresh_suites(
     the tower's input is an instrument-era change for its owner, not a side
     effect of a harness fix. Written atomically.
     """
-    from dataset_adapters import get_adapter
+    from dataset_adapters import YAML_ONLY_SUITES, get_adapter
 
     source_path = source_path or POOL_FILE
     output_path = output_path or POOL_FILE
@@ -248,17 +259,23 @@ def refresh_suites(
     fresh: list[dict] = []
     report: dict[str, dict[str, int]] = {}
     for suite in sorted(targets):
-        adapter = get_adapter(suite)
-        if adapter is None:
-            raise PoolBuildInvariantError(f"no adapter for suite {suite!r}")
-        rows = adapter.extract_all()
+        if suite in YAML_ONLY_SUITES:
+            # EV-19 corpus fix: YAML-maintained suites (real_suite_v1) refresh from the
+            # tracked YAML, the same conversion build_pool uses.
+            rows = _yaml_suite_rows(suite)
+            dropped = 0
+        else:
+            adapter = get_adapter(suite)
+            if adapter is None:
+                raise PoolBuildInvariantError(f"no adapter for suite {suite!r}")
+            rows = adapter.extract_all()
+            dropped = int(getattr(adapter, "dropped_rows", 0))
+            for q in rows:
+                q.setdefault("suite", suite)
+                q.setdefault("dataset_source", "hf_adapter")
         if not rows:
             raise PoolBuildInvariantError(f"adapter {suite!r} produced zero rows; refusing")
-        for q in rows:
-            q.setdefault("suite", suite)
-            q.setdefault("dataset_source", "hf_adapter")
-        report[suite] = {"added": len(rows), "removed": 0,
-                         "dropped_by_adapter": int(getattr(adapter, "dropped_rows", 0))}
+        report[suite] = {"added": len(rows), "removed": 0, "dropped_by_adapter": dropped}
         fresh.extend(rows)
 
     header: dict[str, Any] | None = None
@@ -284,6 +301,10 @@ def refresh_suites(
         header["suites"][suite] = report[suite]["added"]
     header["total_questions"] = kept + len(fresh)
     header.setdefault("refreshed_suites", {})
+    if corpus_version:
+        # Corpus revision label (see benchmarks/prompts/corpus_revisions.json): past results
+        # stay attributable to the pool revision they were scored on.
+        header["corpus_version"] = corpus_version
     now = datetime.now(timezone.utc).isoformat()
     for suite in sorted(targets):
         header["refreshed_suites"][suite] = {"refreshed_at": now, **report[suite]}
@@ -597,6 +618,10 @@ def main():
         help=f"Pool to copy non-refreshed suites from (default: {POOL_FILE})",
     )
     parser.add_argument(
+        "--corpus-version", type=str, default=None,
+        help="Label stamped into the refreshed pool header (e.g. corpus-ev19-20261021)",
+    )
+    parser.add_argument(
         "--allow-live-overwrite", action="store_true",
         help="Permit --refresh-suites to replace the live pool (instrument-era change)",
     )
@@ -608,6 +633,7 @@ def main():
             source_path=Path(args.source) if args.source else None,
             output_path=Path(args.output) if args.output else None,
             allow_live_overwrite=args.allow_live_overwrite,
+            corpus_version=args.corpus_version,
         )
         print(json.dumps(report, indent=2))
         return
