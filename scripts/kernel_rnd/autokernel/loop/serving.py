@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
-from . import (headline_admissibility, hip_launch_proof, kernel_coverage,
+from . import (headline_admissibility, hip_launch_proof, kernel_coverage, loadgen_selfcheck,
                lifecycle_observation, procguard, residency, status)
 from . import native_server_response as server_response
 from .serving_server_owner import (ServerOwnershipRefused, ServerPortOwner,
@@ -1111,6 +1111,10 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 if backend == "gpu":
                     hip_maps = hip_launch_proof.mapped_ggml(srv.pid, Path(build_dir) / "bin")
 
+                sched_log = (loadgen_selfcheck.SchedulingLog()
+                             if loadgen_selfcheck.enabled() else None)
+                round_release = [0.0]
+
                 def one(i: int, phase: str) -> tuple:
                     # Ownership checks bracket the original request timers.
                     port_owner.require_listener()
@@ -1134,6 +1138,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                               "terminal": False, "error": None}
                     response_bytes = None
                     started_monotonic = time.monotonic()
+                    if sched_log is not None:   # AKR-SG-1; off by default, no effect then
+                        sched_log.record(round_release[0], started_monotonic)
                     ended_monotonic = started_monotonic
                     result = (0, 0.0, False)
                     try:
@@ -1211,7 +1217,10 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 observe("phase", "measurement")
                 if cpu_profile_capture is not None:
                     cpu_profile_capture.begin_round("measurement")
+                if sched_log is not None:
+                    sched_log.rows.clear()      # judge the measured round only
                 with cf.ThreadPoolExecutor(recipe.np) as ex:
+                    round_release[0] = time.monotonic()
                     rows = list(ex.map(lambda i: one(i, "measurement"), range(recipe.np)))
                 if cpu_profile_capture is not None:
                     cpu_profile_capture.end_round("measurement")
@@ -1227,6 +1236,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         tuple(row[4] for row in warmup_rows + rows), process_pid=srv.pid,
                         request_started_monotonic_s=request_started_monotonic,
                         request_ended_monotonic_s=request_ended_monotonic)
+                if sched_log is not None:
+                    sched_log.require_valid(requested_n=recipe.np)
                 toks = [row[0] for row in rows]
                 if any(row[3]["error"] for row in warmup_rows + rows):
                     raise ServerDied("one or more serving slots failed; see collected observation")
