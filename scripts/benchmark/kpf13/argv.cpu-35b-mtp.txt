@@ -1,0 +1,25 @@
+# KPF-13.1 CPU argv, plain-KV MTP drafter (Qwen3.6-35B-A3B-MTP-Q8_0). Derived from the KPF-18 CPU subset argv
+# (/mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/argv.frontdoor-cpu-gate.txt, itself the production frontdoor
+# argv from orchestrator_stack.py build_server_command): same model, same MTP drafter, -ub 2048, q8_0 KV, --kv-unified,
+# --no-cache-idle-slots. Changes: -c 98304 -> -c 32768 (4 slots x 8k are enough for trunk 2048 + suffix + 64 tokens).
+# The driver sets: --port, --metrics, --slot-save-path, --slot-fork-min-tokens, -t/-tb (= the claimed cpu-list size),
+# and per-config --slot-fork-dft-full. Nothing here may carry those flags (the driver refuses).
+-m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+--host 127.0.0.1
+-np 4
+-c 32768
+-ub 2048
+--flash-attn on
+--jinja
+-ctk q8_0
+-ctv q8_0
+--no-mmap
+--cache-ram 32768
+--chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja
+--spec-type draft-mtp
+--spec-draft-n-max 4
+--reasoning off
+--device none
+--device-draft none
+--kv-unified
+--no-cache-idle-slots
