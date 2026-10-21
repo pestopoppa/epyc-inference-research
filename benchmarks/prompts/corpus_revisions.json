@@ -3,13 +3,26 @@
   "note": "question_pool*.jsonl is generated and gitignored; this ledger is the tracked record of which pool revision a result was scored on. A pool carries its label in the header field corpus_version.",
   "revisions": [
     {
+      "corpus_version": "corpus-ev19b-20261021",
+      "date": "2026-10-21",
+      "agent": "ev19-era",
+      "built_from": "corpus-ev19-20261021 pool (sha f8b53663...) via question_pool.py --refresh-rows thinking --expect-changed 22",
+      "pool_file": "/mnt/raid0/llm/tmp/corpus-fix-ev19b/question_pool.corpus-ev19b-20261021.jsonl",
+      "pool_sha256": "73a2ed5aa87c38e554c818aff4b8c6dd865621c6134b4abacebfa9070a818f8b",
+      "supersedes": "corpus-ev19-20261021 (pool_sha256 f8b536632b0d95feee339333f46247125def384b6d36d65b39711155825d7f0a), live for ~1h before this revision; same era E20",
+      "live_swap": "Operator-directed 2026-10-21 (coordinator ruling: fix inside the same era). Live pool installed by atomic rename; backups of both prior pools kept beside it.",
+      "changes": {
+        "thinking": "22 ARC rows with numeric source labels 1-4 (ids listed in the pool header refreshed_rows.thinking.ids) re-derived by ThinkingAdapter._arc_prompt: prompt relabelled A-D, gold mapped by source position (2 -> B), scoring_config carries choices + choice_labels. They were unscoreable (scorer refused: gold with 0 configured choices; excluded, never scored wrong). The other 11,192 thinking rows and all other suites are byte-identical to corpus-ev19-20261021. Full-pool SELF_CHECK_VERSION 2: 0 wrong, 0 scorer_error, no flagged suite."
+      }
+    },
+    {
       "corpus_version": "corpus-ev19-20261021",
       "date": "2026-10-21",
       "agent": "corpus-fix-ev19",
       "built_from": "question_pool.jsonl (header generated_at 2026-07-27, file mtime 2026-08-04) via question_pool.py --refresh-suites mmlu_pro livecodebench real_suite_v1",
       "pool_file": "/mnt/raid0/llm/tmp/corpus-fix-ev19/question_pool.corpus-ev19-20261021.jsonl",
       "pool_sha256": "f8b536632b0d95feee339333f46247125def384b6d36d65b39711155825d7f0a",
-      "live_swap": "NOT done by this lane: swapping the live pool is an instrument-era change for the eval-tower owner",
+      "live_swap": "Superseded within the hour by corpus-ev19b-20261021; this pool (sha f8b53663...) was live 2026-10-21T15:19:42Z to the ev19b swap.",
       "changes": {
         "mmlu_pro": "12,032 rows re-derived by the PRB-T4 adapter: scoring_config now carries choices + choice_labels A-J. Live pool had scoring_config={} on all rows, so the 2,053 rows with gold I/J (17.1%) were unscoreable.",
         "livecodebench": "2,360 -> 704 rows. 704 carry an executable code_execution oracle (livecodebench_oracle_manifest.json); 1,656 had no validated oracle and are EXCLUDED (header refreshed_suites.livecodebench.dropped_by_adapter=1656, reason no_validated_oracle). The live pool's 2,349 rows scored substring 'def '.",

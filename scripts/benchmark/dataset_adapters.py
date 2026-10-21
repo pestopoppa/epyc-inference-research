@@ -744,6 +744,20 @@ class ThinkingAdapter(BaseAdapter):
         labels = choices_data["label"]
         texts = choices_data["text"]
 
+        # EV-19b (2026-10-21): 22 ARC rows carry numeric source labels (1-4). The prompt
+        # asked for "the letter" while listing 1)..4), and gold "2" with an empty config
+        # was unresolvable (the scorer refuses it). Relabel those rows A.. in the prompt
+        # and gold by source position (answerKey -> index in `label`, a deterministic
+        # mapping, never imputed) and declare the choices. Letter-labelled rows are
+        # byte-identical to before.
+        scoring_config: dict = {}
+        if not all(str(lb) in self.CHOICE_LABELS for lb in labels):
+            if str(answer_key) not in [str(lb) for lb in labels]:
+                raise ValueError(f"arc_{qid}: answerKey {answer_key!r} not in labels {labels!r}")
+            answer_key = self.CHOICE_LABELS[[str(lb) for lb in labels].index(str(answer_key))]
+            labels = list(self.CHOICE_LABELS[: len(texts)])
+            scoring_config = {"choices": list(texts), "choice_labels": "".join(labels)}
+
         prompt_lines = [question, ""]
         for label, text in zip(labels, texts):
             prompt_lines.append(f"{label}) {text}")
@@ -760,7 +774,7 @@ class ThinkingAdapter(BaseAdapter):
             "image_path": "",
             "tier": 2,
             "scoring_method": "multiple_choice",
-            "scoring_config": {},
+            "scoring_config": scoring_config,
         }
 
     def _hellaswag_prompt(self, idx: int) -> dict:

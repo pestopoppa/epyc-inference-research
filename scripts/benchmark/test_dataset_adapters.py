@@ -63,3 +63,41 @@ def test_math_adapter_records_math500_degradation_without_dropping_gsm8k(monkeyp
     assert adapter.degraded_sources == [{"source": "math500", "error": "offline"}]
     assert [row["id"] for row in rows] == ["gsm8k_00000"]
     assert adapter.accounting_summary()["source_counts"]["math500"] == 0
+
+
+# ── EV-19b: numeric-label ARC rows ─────────────────────────────────────────
+def _arc_adapter(row: dict):
+    import dataset_adapters as da
+
+    cls = next(c for c in vars(da).values() if isinstance(c, type) and getattr(c, "suite_name", "") == "thinking")
+    a = cls.__new__(cls)
+    a._arc = [row]
+    return a
+
+
+def test_arc_numeric_labels_are_relabelled_with_choices() -> None:
+    q = _arc_adapter({
+        "id": "NY_1", "question": "Q?", "answerKey": "2",
+        "choices": {"label": ["1", "2", "3", "4"], "text": ["a", "b", "c", "d"]},
+    })._arc_prompt(0)
+    assert q["expected"] == "B"
+    assert "A) a" in q["prompt"] and "B) b" in q["prompt"] and "1) a" not in q["prompt"]
+    assert q["scoring_config"] == {"choices": ["a", "b", "c", "d"], "choice_labels": "ABCD"}
+
+
+def test_arc_letter_labels_are_unchanged() -> None:
+    q = _arc_adapter({
+        "id": "X_1", "question": "Q?", "answerKey": "C",
+        "choices": {"label": ["A", "B", "C", "D"], "text": ["a", "b", "c", "d"]},
+    })._arc_prompt(0)
+    assert q["expected"] == "C" and q["scoring_config"] == {} and "C) c" in q["prompt"]
+
+
+def test_arc_numeric_key_not_in_labels_raises_never_imputes() -> None:
+    import pytest
+
+    with pytest.raises(ValueError):
+        _arc_adapter({
+            "id": "NY_2", "question": "Q?", "answerKey": "7",
+            "choices": {"label": ["1", "2", "3", "4"], "text": ["a", "b", "c", "d"]},
+        })._arc_prompt(0)

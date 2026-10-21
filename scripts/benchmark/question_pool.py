@@ -225,6 +225,95 @@ def _yaml_suite_rows(suite_name: str) -> list[dict]:
     ]
 
 
+def refresh_rows(
+    suite: str,
+    source_path: Path,
+    output_path: Path,
+    *,
+    expect_changed: int,
+    corpus_version: str | None = None,
+) -> dict[str, Any]:
+    """Re-derive ``suite`` from its adapter and replace, IN PLACE (order kept), only the
+    rows whose adapter output differs from the pool's row with the same id.
+
+    EV-19b: 22 numeric-label ARC rows; the other ~11,192 ``thinking`` rows stay
+    byte-identical. ``expect_changed`` is a hard guard: any other count aborts before
+    writing. A pool row whose id the adapter no longer produces is never imputed -- it is
+    dropped with ``scoring_config.not_scorable_reason`` semantics reported as excluded.
+    Never writes the live pool path.
+    """
+    from dataset_adapters import get_adapter
+
+    if output_path.resolve() == POOL_FILE.resolve():
+        raise PoolBuildInvariantError("refresh_rows never writes the live pool; swap is a separate step")
+    adapter = get_adapter(suite)
+    if adapter is None:
+        raise PoolBuildInvariantError(f"no adapter for suite {suite!r}")
+    fresh: dict[str, dict] = {}
+    ambiguous: set[str] = set()
+    for q in adapter.extract_all():
+        q.setdefault("suite", suite)
+        if q.get("dataset_source") is None:
+            q["dataset_source"] = "hf_adapter"
+        if q["id"] in fresh:
+            ambiguous.add(q["id"])  # non-unique id (e.g. hellaswag ind): never matched by id
+        fresh[q["id"]] = q
+    changed: list[str] = []
+    missing: list[str] = []
+    plan: list[str] = []
+    header = None
+    with open(source_path, encoding="utf-8") as src:
+        for line in src:
+            if not line.strip():
+                continue
+            if header is None and _HEADER_KEY in line[:64]:
+                header = json.loads(line)
+                plan.append(line)
+                continue
+            if f'"suite": "{suite}"' not in line:
+                plan.append(line)
+                continue
+            old = json.loads(line)
+            if old.get("suite") != suite:
+                plan.append(line)
+                continue
+            if old["id"] in ambiguous:
+                plan.append(line)
+                continue
+            new = fresh.get(old["id"])
+            if new is None:
+                missing.append(old["id"])
+                continue
+            if new != old:
+                changed.append(old["id"])
+                plan.append(json.dumps(new, ensure_ascii=False) + "\n")
+            else:
+                plan.append(line)
+    if header is None:
+        raise PoolBuildInvariantError(f"{source_path} has no pool header")
+    if len(changed) != expect_changed or missing:
+        raise PoolBuildInvariantError(
+            f"refresh_rows({suite}): changed={len(changed)} (expected {expect_changed}), "
+            f"adapter-missing={len(missing)}; refusing to write"
+        )
+    header = dict(header)
+    if corpus_version:
+        header["corpus_version"] = corpus_version
+    header.setdefault("refreshed_rows", {})[suite] = {
+        "refreshed_at": datetime.now(timezone.utc).isoformat(),
+        "rows_rederived": len(changed),
+        "ids": changed,
+    }
+    plan[0] = json.dumps(header) + "\n"
+    tmp_path = output_path.with_name(output_path.name + ".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as out:
+        out.writelines(plan)
+        out.flush()
+        os.fsync(out.fileno())
+    os.replace(tmp_path, output_path)
+    return {"suite": suite, "changed": len(changed), "ids": changed}
+
+
 def refresh_suites(
     suites: list[str],
     source_path: Path | None = None,
@@ -614,6 +703,12 @@ def main():
              "unless --allow-live-overwrite)",
     )
     parser.add_argument(
+        "--refresh-rows", type=str, default=None, metavar="SUITE",
+        help="Re-derive one suite and replace only the rows that differ (needs --source, "
+             "--output, --expect-changed)",
+    )
+    parser.add_argument("--expect-changed", type=int, default=None)
+    parser.add_argument(
         "--source", type=str, default=None,
         help=f"Pool to copy non-refreshed suites from (default: {POOL_FILE})",
     )
@@ -626,6 +721,15 @@ def main():
         help="Permit --refresh-suites to replace the live pool (instrument-era change)",
     )
     args = parser.parse_args()
+
+    if args.refresh_rows:
+        if not (args.source and args.output and args.expect_changed is not None):
+            parser.error("--refresh-rows needs --source, --output and --expect-changed")
+        print(json.dumps(refresh_rows(
+            args.refresh_rows, Path(args.source), Path(args.output),
+            expect_changed=args.expect_changed, corpus_version=args.corpus_version,
+        ), indent=2))
+        return
 
     if args.refresh_suites:
         report = refresh_suites(
