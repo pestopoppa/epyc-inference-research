@@ -200,7 +200,10 @@ def parse_nugget_verdict(text: str) -> float:
         try:
             obj = json.loads(match.group(0))
         except json.JSONDecodeError as exc:
-            raise NuggetVerdictError(f"judge output JSON does not parse: {exc}") from None
+            recovered = _recover_score_field(body)
+            if recovered is None:
+                raise NuggetVerdictError(f"judge output JSON does not parse: {exc}") from None
+            obj = {"score": recovered, "_recovered": "score_field_only"}
     if not isinstance(obj, dict) or "score" not in obj:
         raise NuggetVerdictError("judge output has no 'score' field")
     raw = obj["score"]
@@ -213,6 +216,29 @@ def parse_nugget_verdict(text: str) -> float:
         return coerce_nugget_verdict(raw)
     except BEAMFoldError as exc:
         raise NuggetVerdictError(str(exc)) from None
+
+
+_SCORE_FIELD_RE = re.compile(r'"score"\s*:\s*"?(-?\d+(?:\.\d+)?)"?')
+
+
+def _recover_score_field(body: str) -> float | None:
+    """Last-resort recovery when the judge's JSON is malformed *outside* the score.
+
+    Returns the score only when the payload names exactly one distinct score value;
+    returns ``None`` (caller raises) on no match or on ambiguity. It reads nothing but
+    ``score`` — the fold consumes no other field — so a malformed justification string,
+    which is what breaks these payloads in practice, cannot take the verdict with it.
+
+    This never manufactures a verdict: a payload with no ``score`` still raises, and a
+    value outside {0, 0.5, 1} is rejected downstream by ``coerce_nugget_verdict``.
+    """
+    found = {m.group(1) for m in _SCORE_FIELD_RE.finditer(body)}
+    if len(found) != 1:
+        return None
+    try:
+        return float(found.pop())
+    except ValueError:
+        return None
 
 
 def judge_question(prompt_dict: Mapping[str, Any], response: str,
