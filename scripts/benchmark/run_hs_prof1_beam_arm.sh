@@ -64,6 +64,10 @@ if [[ "$PHASE" == "reader" ]]; then
   : "${READER_URL:?}" "${READER_MODEL:?}" "${READER_PORT:?}" "${READER_PID:?pid of the private reader server}"
   prove_port "$READER_PORT" "$READER_PID"
   cd "$here"
+  # a derived.json that is empty/unparsable is NOT reusable (2026-10-22: a 20/20-empty file was kept and re-fed): validate before skipping derive
+  if [[ -s "$OUT_DIR/derived.json" ]] && ! "$PY" -c 'import json,sys,hs_prof1_profile_arms as h; h.check_derived(json.load(open(sys.argv[1])))' "$OUT_DIR/derived.json"; then
+    echo "stale/empty derived.json: moving aside and re-deriving" >&2; mv "$OUT_DIR/derived.json" "$OUT_DIR/derived.bad.$(date -u +%s).json"
+  fi
   [[ -s "$OUT_DIR/derived.json" ]] || "$PY" hs_prof1_profile_arms.py derive --base-url "$READER_URL" --model "$READER_MODEL" --out "$OUT_DIR/derived.json"
   "$PY" hs_prof1_profile_arms.py build --derived "$OUT_DIR/derived.json" --out-dir "$OUT_DIR"
   for arm in "${ARMS[@]}"; do
@@ -96,7 +100,7 @@ elif [[ "$PHASE" == "preflight" ]]; then
   "$PY" - "$here" "${EPYC_ROOT:-}" <<'PYEOF' || { echo "BLOCKED: preflight failed under PY=$PY (see above); no server started" >&2; exit 5; }
 import os, sys
 here = os.path.realpath(sys.argv[1]); epyc_root = sys.argv[2]
-sys.path.insert(0, here)
+sys.path.insert(0, here); sys.path.insert(1, os.path.dirname(here))  # scripts/ for lib.executor
 try:
     import pyarrow
 except ImportError as e:
@@ -112,6 +116,29 @@ if n <= 0 or not ad._transcripts:
     sys.exit("preflight: BEAM extract_all returned nothing")
 if epyc_root:
     import belief_capture; belief_capture.preflight("hs_prof1_profile_arms")
+# thinking flag: the deriver request body AND the BEAM answering payload (via the real ServerManager chat path, HTTP mocked) must carry
+# chat_template_kwargs.enable_thinking == False, and the BEAM suite must pin enable_thinking False. No network, no server.
+body = h.build_derive_request("m", "p")
+if body.get("chat_template_kwargs") != {"enable_thinking": False}:
+    sys.exit(f"preflight: deriver request lacks enable_thinking=false: {body}")
+if L.BEAMAdapter.inference_params.get("enable_thinking") is not False:
+    sys.exit("preflight: BEAM inference_params does not pin enable_thinking=False")
+import json as _json
+from unittest import mock
+from lib.executor import ServerManager
+sm = ServerManager.__new__(ServerManager); sm.port = 1; sm.mmproj_path = None; sm.use_chat_api = False
+class _R:  # canned chat reply
+    status_code = 200; text = ""
+    def json(self): return {"choices": [{"message": {"content": "x"}, "finish_reason": "stop"}], "usage": {}, "timings": {}}
+sess = mock.Mock(); sess.post.return_value = _R()
+sm._get_http_session = lambda: sess
+sm.run_inference(prompt="q", max_tokens=8, temperature=0.0, timeout=5, enable_thinking=L.BEAMAdapter.inference_params["enable_thinking"])
+url = sess.post.call_args.args[0]; sent = sess.post.call_args.kwargs["json"]
+if not url.endswith("/v1/chat/completions") or sent.get("chat_template_kwargs") != {"enable_thinking": False}:
+    sys.exit(f"preflight: BEAM answer request not chat+enable_thinking=false: {url} {sent}")
+import run_benchmark as _rb
+if _rb.canonical_preflight_skip_reason(type("A", (), {"skip_preflight": False, "existing_server_port": 18977})()) is None:
+    sys.exit("preflight: run_benchmark would run the CPU canonical preflight with --existing-server-port")
 print(f"preflight ok: py={sys.executable} pyarrow={pyarrow.__version__} questions={n} conversations={len(ad._transcripts)} tree={here}")
 PYEOF
   EPYC_ORCH_ROOT="$EPYC_ORCH_ROOT" "$PY" -c 'import sys; sys.argv=["run_benchmark.py","--help"]; sys.path.insert(0,"."); import run_benchmark' >/dev/null 2>&1 \

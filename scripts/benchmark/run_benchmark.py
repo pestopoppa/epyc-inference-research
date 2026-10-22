@@ -444,6 +444,54 @@ class _ServerState:
             self.server = None
 
 
+
+def canonical_preflight_skip_reason(args) -> Optional[str]:
+    """Why the canonical CPU preflight (scripts/preflight_canonical.py: a llama-bench tripwire
+    under taskset 0-95) does not apply, or None if it must run.
+
+    --skip-preflight is the operator opt-out. --existing-server-port attaches to a resident server
+    we do not own (typically a GPU server inside a GPU-only grant): the CPU tripwire measures the
+    wrong thing there and would launch an unclaimed llama-bench across the whole host (calendar
+    violation, INC 2026-10-22 s5-hsprof1-beam). Dry-run/list modes never reach the gate.
+    """
+    if getattr(args, "skip_preflight", False):
+        return "--skip-preflight given"
+    if getattr(args, "existing_server_port", None) is not None:
+        return (f"--existing-server-port {args.existing_server_port}: attached to a resident server; a CPU "
+                "llama-bench tripwire on the whole host does not describe it and would run unclaimed CPU work")
+    return None
+
+
+def run_canonical_preflight_gate(args, is_dry_or_list: bool, runner=None) -> None:
+    """The canonical-recipe preflight gate; the ONLY place run_benchmark spawns preflight_canonical.py
+    (and so the only path to a llama-bench tripwire). ``runner`` defaults to subprocess.run (tests mock it)."""
+    runner = runner or subprocess.run
+    _skip_reason = canonical_preflight_skip_reason(args)
+    if _skip_reason and not args.skip_preflight and not is_dry_or_list:
+        print(f"[run_benchmark] canonical CPU preflight SKIPPED: {_skip_reason}", flush=True)
+    if _skip_reason is None and not is_dry_or_list:
+        preflight_path = Path(__file__).resolve().parent.parent / "preflight_canonical.py"
+        if preflight_path.exists():
+            print(f"\n[run_benchmark] Running canonical preflight: {preflight_path}\n")
+            rc = runner([sys.executable, str(preflight_path)]).returncode
+            if rc != 0:
+                print(
+                    "\n[run_benchmark] Preflight FAILED — refusing to proceed. "
+                    "Address the fix above (typically: reboot for freq throttle, or "
+                    "rebuild for libomp / launcher drift), then re-run. To bypass "
+                    "the gate (NOT recommended), pass --skip-preflight.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print()  # blank line between preflight and benchmark output
+        else:
+            print(
+                f"[run_benchmark] WARNING: preflight script not found at {preflight_path}; "
+                "proceeding without canonical-recipe gate.",
+                file=sys.stderr,
+            )
+
+
 class _AttachedServerManager(ServerManager):
     """ServerManager facade for a resident llama-server we do not own."""
 
@@ -1856,27 +1904,7 @@ Examples:
         or args.list_models
         or args.list_suites
     )
-    if not args.skip_preflight and not _is_dry_or_list:
-        preflight_path = Path(__file__).resolve().parent.parent / "preflight_canonical.py"
-        if preflight_path.exists():
-            print(f"\n[run_benchmark] Running canonical preflight: {preflight_path}\n")
-            rc = subprocess.run([sys.executable, str(preflight_path)]).returncode
-            if rc != 0:
-                print(
-                    "\n[run_benchmark] Preflight FAILED — refusing to proceed. "
-                    "Address the fix above (typically: reboot for freq throttle, or "
-                    "rebuild for libomp / launcher drift), then re-run. To bypass "
-                    "the gate (NOT recommended), pass --skip-preflight.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            print()  # blank line between preflight and benchmark output
-        else:
-            print(
-                f"[run_benchmark] WARNING: preflight script not found at {preflight_path}; "
-                "proceeding without canonical-recipe gate.",
-                file=sys.stderr,
-            )
+    run_canonical_preflight_gate(args, _is_dry_or_list)
 
     # Initialize components
     registry = load_registry()

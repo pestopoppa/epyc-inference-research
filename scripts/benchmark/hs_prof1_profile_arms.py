@@ -58,6 +58,32 @@ def build_snapshots(derived: dict[str, str]) -> dict[str, dict[str, str]]:
     return out
 
 
+def build_derive_request(model: str, prompt: str, max_tokens: int = 1024) -> dict:
+    """The deriver request body. ALWAYS chat-completions with ``chat_template_kwargs.enable_thinking=false``:
+    Qwen3.6+ otherwise spends the whole max_tokens budget in reasoning and returns empty ``content``
+    (2026-10-22: 20/20 conversations derived empty, n_decoded ~900-1000 each). The flag only takes effect on the
+    chat-template path, so this is also why the call must stay on /v1/chat/completions."""
+    return {"model": model, "temperature": 0.0, "max_tokens": max_tokens, "stream": False,
+            "chat_template_kwargs": {"enable_thinking": False},
+            "messages": [{"role": "user", "content": prompt}]}
+
+
+def check_derived(derived: dict[str, str]) -> None:
+    """Fail LOUDLY (SystemExit) on an empty derivation: never build arms from empty snapshots.
+    All-empty raw replies, or no PREF line parsed from ANY conversation, is a broken reader (thinking on,
+    wrong endpoint, truncation), not a finding. A few individual empties are legitimate and only reported."""
+    if not derived:
+        raise SystemExit("DERIVATION EMPTY: no conversations derived")
+    empty = [c for c, raw in derived.items() if not (raw or "").strip()]
+    if len(empty) == len(derived):
+        raise SystemExit(f"DERIVATION EMPTY: {len(empty)}/{len(derived)} replies have no content "
+                         "(reasoning-only replies? check enable_thinking and n_decoded vs max_tokens)")
+    _, _, extract, _ = _orch()
+    parsed = sum(1 for raw in derived.values() if extract(raw))
+    if parsed == 0:
+        raise SystemExit(f"DERIVATION EMPTY: {len(derived)} replies but 0 contain a parsable PREF [category] line")
+
+
 def derive(base_url: str, model: str, data_dir: Path | None, split: str, timeout: float = 1800.0) -> dict[str, str]:
     if os.environ.get("WINDOW_CONFIRMED") != "1":
         raise SystemExit("refusing: derive calls a model; set WINDOW_CONFIRMED=1 in a granted inference window")
@@ -69,12 +95,12 @@ def derive(base_url: str, model: str, data_dir: Path | None, split: str, timeout
     ad.extract_all()
     out = {}
     for cid, transcript in ad._transcripts.items():
-        body = json.dumps({"model": model, "temperature": 0.0, "max_tokens": 1024, "stream": False,
-                           "messages": [{"role": "user", "content": prompt_t.format(transcript=transcript[:8000])}]}).encode()
+        body = json.dumps(build_derive_request(model, prompt_t.format(transcript=transcript[:8000]))).encode()
         req = urllib.request.Request(base_url.rstrip("/") + "/chat/completions", data=body,
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - operator-set local URL
-            out[cid] = json.loads(r.read())["choices"][0]["message"]["content"] or ""
+            out[cid] = json.loads(r.read())["choices"][0]["message"].get("content") or ""
+    check_derived(out)
     return out
 
 
@@ -181,7 +207,11 @@ def main(argv=None) -> int:
     if a.cmd == "derive":
         a.out.write_text(json.dumps(derive(a.base_url, a.model, a.data_dir, a.split), indent=1))
         return 0
-    snaps = build_snapshots(json.loads(a.derived.read_text()))
+    derived = json.loads(a.derived.read_text())
+    check_derived(derived)
+    snaps = build_snapshots(derived)
+    if all(not v for m in snaps.values() for v in m.values()):
+        raise SystemExit("SNAPSHOTS EMPTY: every conversation's frozen snapshot is empty in every arm; refusing to build arms")
     a.out_dir.mkdir(parents=True, exist_ok=True)
     for arm, m in snaps.items():
         (a.out_dir / f"snapshots_{arm}.json").write_text(json.dumps(m, indent=1))
