@@ -25,6 +25,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRIVER="$HERE/kpf13_restore_ab.py"
 REGION_LOCK="${KPF13_REGION_LOCK:-/mnt/raid0/llm/epyc-orchestrator/scripts/region-lock}"
+# Inside region-lock the child's PATH starts with the orchestrator .venv (Python 3.11): name the interpreter explicitly.
+PY="${KPF13_PYTHON:-/usr/bin/python3}"
 
 [ -n "${KPF13_WINDOW_ID:-}" ] || { echo "REFUSING: KPF13_WINDOW_ID is not set (name the grant / window id)" >&2; exit 64; }
 [ -n "${KPF13_CPU_LIST:-}" ] || { echo "REFUSING: KPF13_CPU_LIST is not set (the cpu list this run claims)" >&2; exit 64; }
@@ -37,8 +39,8 @@ done
 args=(run "${args[@]}" --cpu-list "$KPF13_CPU_LIST" --window-id "$KPF13_WINDOW_ID")
 
 if [ "$dry" = 1 ]; then
-    exec python3 -B "$DRIVER" "${args[@]}"
+    exec "$PY" -B "$DRIVER" "${args[@]}"
 fi
 [ -x "$REGION_LOCK" ] || { echo "REFUSING: $REGION_LOCK not found" >&2; exit 64; }
 exec "$REGION_LOCK" run --cpu-list "$KPF13_CPU_LIST" --role build --timeout-s "${KPF13_LOCK_TIMEOUT_S:-3600}" --tag "kpf13:$KPF13_WINDOW_ID" -- \
-    env KPF13_REGION="$KPF13_CPU_LIST" python3 -B "$DRIVER" "${args[@]}"
+    env KPF13_REGION="$KPF13_CPU_LIST" "$PY" -B "$DRIVER" "${args[@]}"
