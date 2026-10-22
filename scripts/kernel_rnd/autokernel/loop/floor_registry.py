@@ -500,6 +500,14 @@ class FloorRegistry:
             return {"granted": False, "claim": held,
                     "age_s": round(_now() - held.get("claimed_ts", _now()))}
 
+    def claim_holder(self, condition: str) -> dict | None:
+        """Read-only: the live claim for `condition`, or None (never creates or steals)."""
+        path = self.root / "claims" / f"{condition}.json"
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
     def release_claim(self, condition: str) -> bool:
         path = self.root / "claims" / f"{condition}.json"
         if path.exists():
