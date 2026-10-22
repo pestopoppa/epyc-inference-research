@@ -395,7 +395,8 @@ def mk_args(tmp_path, **over):
     A.add_arguments(ap)
     ns = ap.parse_args([])
     base = dict(out=str(tmp_path), card="/nonexistent", fork_bin="/x/bin/llama-server", fork_min=1024, n_predict=32,
-                n_probs=5, port=18999, budget_min=1e9, window_id="w", gpu_window_id=None, trigger_tokens=32)
+                n_probs=5, port=18999, budget_min=1e9, window_id="w", gpu_window_id=None, trigger_tokens=32,
+                item2_groups=None, item2_aa_repeats=1, item3_groups=None)
     base.update(over)
     for k, v in base.items():
         setattr(ns, k, v)
@@ -888,8 +889,8 @@ def test_plan_183_cpu_defaults_are_end_checkpoint_and_lane_and_part_4_is_refused
 
 def test_rules_183_and_the_three_commands_wire_to_three_items():
     assert set(A.RULES[183]) == {"common", "cost", "end", "lane", "long"}
-    assert A.ARM_CMDS["kpf18arms"] == [181, 182, 183] and set(A.BUILDERS) == {181, 182, 183}
-    assert set(A.PREFLIGHTS) == {181, 182, 183}
+    assert A.ARM_CMDS["kpf18arms"] == [181, 182, 183] and A.ARM_CMDS["kpf18s1"] == [184]
+    assert set(A.BUILDERS) == {181, 182, 183, 184} and set(A.PREFLIGHTS) == {181, 182, 183, 184}
     assert A.rules_for([181, 182, 183]).keys() == {"181", "182", "183"}
 
 
@@ -1026,3 +1027,46 @@ def test_item2_plan_estimate_grows_with_aa_repeats_and_ends_with_the_judgement_s
     for steps in (legacy, with_aa):
         assert "judge item 2" in steps[-2].desc and steps[-1].desc.endswith("then finalize its records")
     assert "NOT owed" in A.ITEM2_RULE and "UNJUDGEABLE" in A.ITEM2_RULE
+
+
+# ================================================================ KPF-18-S1 (one GPU sweep from one load)
+def test_sweep_lengths_s1_are_offsets_around_the_ubatch_boundaries():
+    L = A.sweep_lengths_s1(8000, 512)
+    assert L == [7168, 7169, 7168 + 255, 7168 + 256, 7168 + 511, 7168 + 512] and max(L) <= 8000
+    assert A.sweep_lengths_s1(600, 512) == []
+
+
+def test_c_lengths_s1_cuts_arm_C_to_six_lengths_drafter_on_only(tmp_path):
+    ctx, args = mk_plan_ctx(tmp_path, kpf181_arms="C", kpf181_c_lengths="s1")
+    steps = A.BUILDERS[181](ctx, GATE)
+    c = [s.desc for s in steps if s.desc.startswith("181 C")]
+    assert len(c) == 1 and "drafter on (S1 cut): 6 trunk lengths" in c[0]
+    probs, notes = A.PREFLIGHTS[181](ctx, GATE)
+    assert probs == [] and any("181 C S1 cut" in n for n in notes)
+    args.kpf181_c_lengths = "bogus"
+    assert any("only 's1'" in p for p in A.PREFLIGHTS[181](ctx, GATE)[0])
+
+
+def test_s1_composite_is_one_load_plus_the_aa_control(tmp_path):
+    ctx, args = mk_plan_ctx(tmp_path)
+    steps = A.BUILDERS[184](ctx, GATE)
+    descs = [s.desc for s in steps]
+    arm_launches = [d for d in descs if "linkage + launch" in d and "kpf18s1" in d]
+    assert len(arm_launches) == 1                                   # ONE load for all the arm work
+    assert not any("fork-OFF baseline" in d or "[nodraft]" in d for d in descs)
+    for tag in ("181 A [checkpoint_at", "181 B", "181 C g0 drafter on (S1 cut)", "181 D [dflash2]", "182 cold-control",
+                "182 protocol [dflash2 / drafter_on]", "182 protocol [dflash2 / request_off]", "182 policy",
+                "182 parity summary", "183.1", "183.4"):
+        assert any(tag in d for d in descs), tag
+    assert not any("drafter off" in d for d in descs)
+    first_arm = next(i for i, d in enumerate(descs) if "kpf18s1" in d)
+    assert first_arm > 0                                            # the item-2 A/A launches come first
+    args.s1_skip_aa = True
+    assert "kpf18s1" in A.BUILDERS[184](ctx, GATE)[0].desc
+    probs, notes = A.PREFLIGHTS[184](ctx, GATE)
+    assert probs == [] and any(n.startswith("S1:") for n in notes)
+
+
+def test_s1_rules_predeclare_all_three_arm_families():
+    r = A.rules_for([184])
+    assert set(r) == {"181", "182", "183", "184"} and r["184"]["task"] == "KPF-18-S1"

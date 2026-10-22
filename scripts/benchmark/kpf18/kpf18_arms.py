@@ -26,9 +26,9 @@ import json
 import statistics
 from typing import Callable
 
-ARM_ITEMS = (181, 182, 183)
-ARM_CMDS = {"kpf181": [181], "kpf182": [182], "kpf183": [183], "kpf18arms": [181, 182, 183]}
-TASK_OF = {181: "KPF-18.1", 182: "KPF-18.2", 183: "KPF-18.3"}
+ARM_ITEMS = (181, 182, 183, 184)
+ARM_CMDS = {"kpf181": [181], "kpf182": [182], "kpf183": [183], "kpf18arms": [181, 182, 183], "kpf18s1": [184]}
+TASK_OF = {181: "KPF-18.1", 182: "KPF-18.2", 183: "KPF-18.3", 184: "KPF-18-S1"}
 
 BUILDERS: dict[int, Callable] = {}      # item -> fn(ctx, gate) -> list[Step]   (filled by the arm sections below)
 PREFLIGHTS: dict[int, Callable] = {}    # item -> fn(ctx, gate) -> (problems, notes)
@@ -307,7 +307,10 @@ def median_or_none(xs: list[float]):
 
 def rules_for(items: list[int]) -> dict:
     out = {}
-    for it in items:
+    expanded: list[int] = []
+    for it in items:                     # the S1 composite runs the 18.1/.2/.3 arms: their rules are predeclared with it
+        expanded += [181, 182, 183, 184] if it == 184 else [it]
+    for it in expanded:
         if it in RULES:
             out[str(it)] = {"task": TASK_OF[it], **RULES[it]}
     return out
@@ -413,6 +416,17 @@ def sweep_lengths(t_avail: int, ub: int, n: int) -> list[int]:
     return [l0 + k * stride for k in range(n)]
 
 
+def sweep_lengths_s1(t_avail: int, ub: int) -> list[int]:
+    """KPF-18-S1 row C: six lengths around the ubatch boundaries, L0 + {0, 1, ub/2-1, ub/2, ub-1, ub}, L0 the largest
+    multiple of ub with L0 + ub <= t_avail ([] if the trunk is too short)."""
+    if ub < 4 or t_avail < 2 * ub:
+        return []
+    l0 = ((t_avail - ub) // ub) * ub
+    if l0 <= 0:
+        return []
+    return [l0 + o for o in (0, 1, ub // 2 - 1, ub // 2, ub - 1, ub)]
+
+
 def d_positions(junction: int, n_src: int, ub: int) -> dict[str, int]:
     """The checkpoint positions in force on a source of n_src tokens whose request pinned `junction`: the junction and
     the two near-end ones the server makes ({4 + n_ubatch, 4} tokens before the prompt end)."""
@@ -515,6 +529,9 @@ def add_arguments(ap) -> None:
     g.add_argument("--kpf181-groups", default=None, help="trunk groups for arms A/B/D (default 0)")
     g.add_argument("--kpf181-sibs", type=int, default=3)
     g.add_argument("--kpf181-lengths", type=int, default=16, help="arm C: lengths across one -ub period (>= 16)")
+    g.add_argument("--kpf181-c-lengths", default=None, metavar="s1",
+                   help="arm C preset: 's1' = the audit-approved KPF-18-S1 cut (6 lengths L0+{0,1,ub/2-1,ub/2,ub-1,ub}, "
+                        "drafter on only); default: --kpf181-lengths lengths x drafter on/off")
     g.add_argument("--kpf181-c-group", default=None, help="arm C trunk group (default 0)")
     g.add_argument("--kpf182-parts", default="1,2,3,4,5")
     g.add_argument("--kpf182-groups", default=None, help="trunk groups for the parity/attribution protocol (default 0,2)")
@@ -527,6 +544,8 @@ def add_arguments(ap) -> None:
     g.add_argument("--kpf183-reply", type=int, default=64, help="part 2 turn-1 reply length")
     g.add_argument("--kpf183-long-group", default=None, help="part 4 trunk group (default: the first with T >= 50000)")
     g.add_argument("--kpf183-chat-probe-tokens", type=int, default=1500)
+    g.add_argument("--s1-skip-aa", action="store_true", help="kpf18s1: do not prepend the KPF-18.0e item-2 A/A control launches")
+    g.add_argument("--s1-with-item3", action="store_true", help="kpf18s1: append item 3 (default groups 5,6,7) on its own launch")
 
 
 def groups_arg(spec: str | None, default: list[int]) -> list[int]:
@@ -984,8 +1003,64 @@ def _ub_of(env_argv: list[str]) -> int:
     return ub_from_argv(env_argv)
 
 
+def _c_plan181(ctx, T: int, ub: int, has_drafter: bool) -> tuple[list[int], list[bool], str]:
+    """(lengths, drafter settings, label) of arm C for this run."""
+    a = ctx.args
+    if a.kpf181_c_lengths:
+        if a.kpf181_c_lengths != "s1":
+            raise ValueError(f"--kpf181-c-lengths {a.kpf181_c_lengths!r}: only 's1' is defined")
+        return sweep_lengths_s1(T, ub), [True], "S1 cut"
+    return sweep_lengths(T, ub, a.kpf181_lengths), ([True, False] if has_drafter else [True]), "full sweep"
+
+
 def _c_group181(ctx) -> int:
     return int(ctx.args.kpf181_c_group) if ctx.args.kpf181_c_group is not None else 0
+
+
+def body_181(ctx, gate, env, prim_name, prim_argv, arms, groups, n_sib) -> list:
+    """Arms A, B, C, D on the one fork-on launch (the steps between its start and its stop)."""
+    a = ctx.args
+    Step = gate.Step
+    steps: list = []
+
+    def S_(g):
+        return gate.G(ctx, g)
+
+    has_drafter = config_name(prim_argv) != "nodraft"
+    if "A" in arms:
+        for with_ckpt in (True, False):
+            est = sum(_est_trunk_fan(gate, S_(g)["T"], gate.SRC_TAIL, S_(g)["suffix_lens"][0], n_sib) for g in groups)
+            steps.append(Step(f"181 A [{'checkpoint_at=[T]' if with_ckpt else 'tail only, no checkpoint_at'}] groups {groups}: "
+                              f"source slot 0 trunk+tail, {n_sib} siblings on slot 1, fork on (rule A)", est,
+                              lambda w=with_ckpt: run_181_A(env, groups, n_sib, with_ckpt=w, expect="T" if w else None, tag="")))
+    if "B" in arms:
+        g = groups[0]
+        T, S0 = S_(g)["T"], S_(g)["suffix_lens"][0]
+        est = 4 * (gate.pf_s(T + S0, 0) + gate.pf_s(S0, T) + gate.dec_s(a.n_predict, T, True)) + \
+            2 * (2 * gate.pf_s(T + S0, 2 * T) + 2 * gate.dec_s(a.n_predict, 2 * T, True)) + 12 * gate.REQ_OVERHEAD_S
+        steps.append(Step(f"181 B g{g}: identical resend (no ckpt / ckpt [-1]) and child==trunk (junction source / trunk "
+                          f"source), cold A+B controls (rule B)", est, lambda: run_181_B(env, g, "")))
+    if "C" in arms:
+        gc = _c_group181(ctx)
+        ub = _ub_of(prim_argv)
+        lengths, drafter_settings, c_label = _c_plan181(ctx, S_(gc)["T"], ub, has_drafter)
+        for dflash in drafter_settings:
+            est = sum(gate.pf_s(L + gate.SRC_TAIL, 0) + gate.pf_s(S_(gc)["suffix_lens"][0], L)
+                      + 2 * gate.pf_s(L + S_(gc)["suffix_lens"][0], 2 * L)
+                      + 3 * gate.dec_s(a.n_predict, L, dflash) + 8 * gate.REQ_OVERHEAD_S for L in lengths)
+            steps.append(Step(f"181 C g{gc} drafter {'on' if dflash else 'off'} ({c_label}): {len(lengths)} trunk lengths "
+                              f"{lengths[0] if lengths else '-'}..{lengths[-1] if lengths else '-'} (stride "
+                              f"{(lengths[1] - lengths[0]) if len(lengths) > 1 else '-'}, ub {ub}), source+child+2 cold "
+                              f"runs each (rule C)", est, lambda d=dflash, L=lengths: run_181_C(env, gc, L, d)))
+    if "D" in arms:
+        g = groups[0]
+        T = S_(g)["T"]
+        est = gate.pf_s(T + gate.SRC_TAIL_LONG, 0) + 10 * (gate.pf_s(256, T) + 2 * gate.REQ_OVERHEAD_S) + \
+            gate.pf_s(T + 1000, 2 * T) + gate.dec_s(16, T, True) * 2
+        steps.append(Step(f"181 D [{prim_name}] g{g}: source T={T}+long tail, 9 cells c-1/c/c+1 over "
+                          f"{{junction, N-4-ub, N-4}} + 1 held-out length (rule D)", est,
+                          lambda: run_181_D(env, g, _ub_of(prim_argv), has_drafter)))
+    return steps
 
 
 def build_181(ctx, gate) -> list:
@@ -1008,40 +1083,7 @@ def build_181(ctx, gate) -> list:
     # -- server 1: fork on, the launched drafter shape: A, B, C, D
     srv, env = servers("on", a.fork_min, prim_name, prim_argv)
     steps += gate.start_steps(ctx, srv)
-    has_drafter = config_name(prim_argv) != "nodraft"
-    if "A" in arms:
-        for with_ckpt in (True, False):
-            est = sum(_est_trunk_fan(gate, S_(g)["T"], gate.SRC_TAIL, S_(g)["suffix_lens"][0], n_sib) for g in groups)
-            steps.append(Step(f"181 A [{'checkpoint_at=[T]' if with_ckpt else 'tail only, no checkpoint_at'}] groups {groups}: "
-                              f"source slot 0 trunk+tail, {n_sib} siblings on slot 1, fork on (rule A)", est,
-                              lambda w=with_ckpt: run_181_A(env, groups, n_sib, with_ckpt=w, expect="T" if w else None, tag="")))
-    if "B" in arms:
-        g = groups[0]
-        T, S0 = S_(g)["T"], S_(g)["suffix_lens"][0]
-        est = 4 * (gate.pf_s(T + S0, 0) + gate.pf_s(S0, T) + gate.dec_s(a.n_predict, T, True)) + \
-            2 * (2 * gate.pf_s(T + S0, 2 * T) + 2 * gate.dec_s(a.n_predict, 2 * T, True)) + 12 * gate.REQ_OVERHEAD_S
-        steps.append(Step(f"181 B g{g}: identical resend (no ckpt / ckpt [-1]) and child==trunk (junction source / trunk "
-                          f"source), cold A+B controls (rule B)", est, lambda: run_181_B(env, g, "")))
-    if "C" in arms:
-        gc = _c_group181(ctx)
-        ub = _ub_of(prim_argv)
-        lengths = sweep_lengths(S_(gc)["T"], ub, a.kpf181_lengths)
-        for dflash in ([True, False] if has_drafter else [True]):
-            est = sum(gate.pf_s(L + gate.SRC_TAIL, 0) + gate.pf_s(S_(gc)["suffix_lens"][0], L)
-                      + 2 * gate.pf_s(L + S_(gc)["suffix_lens"][0], 2 * L)
-                      + 3 * gate.dec_s(a.n_predict, L, dflash) + 8 * gate.REQ_OVERHEAD_S for L in lengths)
-            steps.append(Step(f"181 C g{gc} drafter {'on' if dflash else 'off'}: {len(lengths)} trunk lengths "
-                              f"{lengths[0] if lengths else '-'}..{lengths[-1] if lengths else '-'} (stride "
-                              f"{(lengths[1] - lengths[0]) if len(lengths) > 1 else '-'}, ub {ub}), source+child+2 cold "
-                              f"runs each (rule C)", est, lambda d=dflash, L=lengths: run_181_C(env, gc, L, d)))
-    if "D" in arms:
-        g = groups[0]
-        T = S_(g)["T"]
-        est = gate.pf_s(T + gate.SRC_TAIL_LONG, 0) + 10 * (gate.pf_s(256, T) + 2 * gate.REQ_OVERHEAD_S) + \
-            gate.pf_s(T + 1000, 2 * T) + gate.dec_s(16, T, True) * 2
-        steps.append(Step(f"181 D [{prim_name}] g{g}: source T={T}+long tail, 9 cells c-1/c/c+1 over "
-                          f"{{junction, N-4-ub, N-4}} + 1 held-out length (rule D)", est,
-                          lambda: run_181_D(env, g, _ub_of(prim_argv), has_drafter)))
+    steps += body_181(ctx, gate, env, prim_name, prim_argv, arms, groups, n_sib)
     steps.append(gate.stop_step(srv))
 
     # -- server 2: the fork-off baseline on the same binary and argv: A and B must see zero forks
@@ -1101,15 +1143,19 @@ def preflight_181(ctx, gate) -> tuple[list[str], list[str]]:
     ub = ub_from_argv(prim)
     if "C" in arms:
         T = ctx.ps.groups[_c_group181(ctx)]["T"]
-        if a.kpf181_lengths < 16:
+        s1 = bool(a.kpf181_c_lengths)
+        if a.kpf181_c_lengths and a.kpf181_c_lengths != "s1":
+            probs.append(f"--kpf181-c-lengths {a.kpf181_c_lengths!r}: only 's1' is defined")
+        if not s1 and a.kpf181_lengths < 16:
             probs.append("--kpf181-lengths must be >= 16 (KPF-18.1 arm C)")
-        L = sweep_lengths(T, ub, max(1, a.kpf181_lengths))
+        L = sweep_lengths_s1(T, ub) if s1 else sweep_lengths(T, ub, max(1, a.kpf181_lengths))
         if not L:
             probs.append(f"arm C: trunk {T} cannot hold {a.kpf181_lengths} lengths across one -ub {ub} period")
         elif L[0] < a.fork_min:
             probs.append(f"arm C: shortest length {L[0]} < --fork-min {a.fork_min}")
         else:
-            notes.append(f"181 C lengths {L[0]}..{L[-1]} stride {L[1] - L[0]} (ub {ub}) on group {_c_group181(ctx)}")
+            notes.append(f"181 C lengths {L[0]}..{L[-1]} stride {L[1] - L[0]} (ub {ub}) on group {_c_group181(ctx)}" if not s1 else
+                         f"181 C S1 cut: lengths {L} (L0 + 0, 1, ub/2-1, ub/2, ub-1, ub; ub {ub}), drafter on only, group {_c_group181(ctx)}")
     if "D" in arms:
         g = groups_arg(a.kpf181_groups, [0])[0]
         T = ctx.ps.groups[g]["T"]
@@ -1352,34 +1398,24 @@ def _est_protocol(gate, T: int, S: int, n_sib: int, cold: bool, n: int = 16) -> 
     return e
 
 
-def build_182(ctx, gate) -> list:
+def _proto_steps(ctx, gate, env, column, dflash, cold, groups, n_sib, shared) -> list:
+    est = sum(_est_protocol(gate, gate.G(ctx, g)["T"], gate.G(ctx, g)["suffix_lens"][0], n_sib, cold) for g in groups)
+    return [gate.Step(f"182 protocol [{env.cfg_name} / {column}] groups {groups}: source + {n_sib} siblings per group, "
+                      f"16 tok{', cold A+B per sibling' if cold else ''} (rules parity/attribution/vacuity"
+                      f"{'/cold' if cold else ''})", est,
+                      lambda e=env, c=column, d=dflash, k=cold: run_182_protocol(e, groups, n_sib, c, d, k, shared))]
+
+
+def body_182(ctx, gate, env, prim_name, prim_argv, parts, groups, n_sib, shared) -> list:
+    """Cold probe, protocol (drafter on / request-level off) and policy control on the one primary launch."""
     a = ctx.args
-    Step, Srv = gate.Step, server_cls(gate)
-    parts = {x.strip() for x in a.kpf182_parts.split(",") if x.strip()}
-    cfgs = get_configs(ctx, gate)
-    groups = groups_arg(a.kpf182_groups, [0, 2])
-    n_sib = a.kpf182_sibs
-    shared: dict = {}
-    blocks: list[tuple] = []        # (srv, body steps)
+    Step = gate.Step
+    body: list = []
 
     def S_(g):
         return gate.G(ctx, g)
 
-    def launch(name, argv):
-        srv = Srv(ctx, f"kpf182-{name}-{gate.utc_tag()}", Path(a.fork_bin), a.fork_min, argv)
-        return srv, Env(ctx, gate, srv, name)
-
-    def proto_steps(env, column, dflash, cold):
-        est = sum(_est_protocol(gate, S_(g)["T"], S_(g)["suffix_lens"][0], n_sib, cold) for g in groups)
-        return [Step(f"182 protocol [{env.cfg_name} / {column}] groups {groups}: source + {n_sib} siblings per group, "
-                     f"16 tok{', cold A+B per sibling' if cold else ''} (rules parity/attribution/vacuity"
-                     f"{'/cold' if cold else ''})", est,
-                     lambda e=env, c=column, d=dflash, k=cold: run_182_protocol(e, groups, n_sib, c, d, k, shared))]
-
-    prim_name, prim_argv = cfgs[0]
     has_drafter = config_name(prim_argv) != "nodraft"
-    srv, env = launch(prim_name, prim_argv)
-    body: list = []
     if "4" in parts:
         g = groups[0]
         T = S_(g)["T"]
@@ -1387,24 +1423,43 @@ def build_182(ctx, gate) -> list:
                          f"must (rule cold)", gate.pf_s(T + gate.SRC_TAIL, 0) + 4 * gate.REQ_OVERHEAD_S + 2 * gate.pf_s(512, T),
                          lambda: run_182_cold_probe(env, g)))
     if parts & {"1", "2", "3", "4"}:
-        body += proto_steps(env, "drafter_on", True, "4" in parts)
+        body += _proto_steps(ctx, gate, env, "drafter_on", True, "4" in parts, groups, n_sib, shared)
     if "1" in parts and has_drafter:
-        body += proto_steps(env, "request_off", False, False)
+        body += _proto_steps(ctx, gate, env, "request_off", False, False, groups, n_sib, shared)
     if "5" in parts:
         g = groups[0]
         T, S0 = S_(g)["T"], S_(g)["suffix_lens"][0]
         body.append(Step(f"182 policy control [{prim_name}] g{g}: identical resend, checkpoint_at=[T] only vs dense every "
                          f"{a.kpf182_dense_u} (rule policy)", 2 * (gate.pf_s(T + S0, 0) + gate.pf_s(1, T + S0)
                          + gate.dec_s(16, T, True) + 4 * gate.REQ_OVERHEAD_S), lambda: run_182_policy(env, g, a.kpf182_dense_u)))
-    blocks.append((srv, env, body))
+    return body
+
+
+def build_182(ctx, gate) -> list:
+    a = ctx.args
+    Srv = server_cls(gate)
+    parts = {x.strip() for x in a.kpf182_parts.split(",") if x.strip()}
+    cfgs = get_configs(ctx, gate)
+    groups = groups_arg(a.kpf182_groups, [0, 2])
+    n_sib = a.kpf182_sibs
+    shared: dict = {}
+    blocks: list[tuple] = []        # (srv, env, body steps)
+
+    def launch(name, argv):
+        srv = Srv(ctx, f"kpf182-{name}-{gate.utc_tag()}", Path(a.fork_bin), a.fork_min, argv)
+        return srv, Env(ctx, gate, srv, name)
+
+    prim_name, prim_argv = cfgs[0]
+    srv, env = launch(prim_name, prim_argv)
+    blocks.append((srv, env, body_182(ctx, gate, env, prim_name, prim_argv, parts, groups, n_sib, shared)))
     if "1" in parts:
         for name, argv in cfgs[1:]:
             srv_c, env_c = launch(name, argv)
-            blocks.append((srv_c, env_c, proto_steps(env_c, "launch", True, False)))
+            blocks.append((srv_c, env_c, _proto_steps(ctx, gate, env_c, "launch", True, False, groups, n_sib, shared)))
     last_env = blocks[-1][1]
     if "1" in parts:
-        blocks[-1][2].append(Step("182 parity summary: every column's n_fork_tokens per sibling, identical or counted as defects",
-                                  0, lambda: run_182_parity_summary(last_env, shared)))
+        blocks[-1][2].append(gate.Step("182 parity summary: every column's n_fork_tokens per sibling, identical or counted as defects",
+                                       0, lambda: run_182_parity_summary(last_env, shared)))
     steps: list = []
     for srv_b, _, body_b in blocks:
         steps += gate.start_steps(ctx, srv_b) + body_b + [gate.stop_step(srv_b)]
@@ -1698,15 +1753,11 @@ def _parts183(ctx, gate) -> list[str]:
     return ["2", "3"] if gate.CPU_MODE else ["1", "4"]
 
 
-def build_183(ctx, gate) -> list:
+def body_183(ctx, gate, env, parts) -> list:
+    """The selected KPF-18.3 parts on the one primary launch."""
     a = ctx.args
-    Step, Srv = gate.Step, server_cls(gate)
-    parts = _parts183(ctx, gate)
-    cfgs = get_configs(ctx, gate)
-    name, argv = cfgs[0]
-    srv = Srv(ctx, f"kpf183-{name}-{gate.utc_tag()}", Path(a.fork_bin), a.fork_min, argv)
-    env = Env(ctx, gate, srv, name)
-    steps = gate.start_steps(ctx, srv)
+    Step = gate.Step
+    steps: list = []
 
     def S_(g):
         return gate.G(ctx, g)
@@ -1740,8 +1791,15 @@ def build_183(ctx, gate) -> list:
                 2 * (gate.pf_s(T + S0, 2 * T) + gate.dec_s(a.n_predict, 2 * T, True)) + 6 * gate.REQ_OVERHEAD_S
             steps.append(Step(f"183.4 warm-vs-cold dlogprob on a {T + S0}-token prompt (g{g}): fork child vs 2 cold runs, "
                               f"{a.n_predict} tok at T=0 (rule long)", est, lambda: run_183_long(env, g)))
-    steps.append(gate.stop_step(srv))
     return steps
+
+
+def build_183(ctx, gate) -> list:
+    a = ctx.args
+    name, argv = get_configs(ctx, gate)[0]
+    srv = server_cls(gate)(ctx, f"kpf183-{name}-{gate.utc_tag()}", Path(a.fork_bin), a.fork_min, argv)
+    env = Env(ctx, gate, srv, name)
+    return gate.start_steps(ctx, srv) + body_183(ctx, gate, env, _parts183(ctx, gate)) + [gate.stop_step(srv)]
 
 
 def preflight_183(ctx, gate) -> tuple[list[str], list[str]]:
@@ -1788,3 +1846,61 @@ def preflight_183(ctx, gate) -> tuple[list[str], list[str]]:
 
 BUILDERS[183] = build_183
 PREFLIGHTS[183] = preflight_183
+
+
+# ================================================================ KPF-18-S1  one GPU sweep from one load
+RULES[184] = {
+    "order": ("KPF-18-S1 (handoff KPF-18-S1, backlog audit S1): (1) A/A control = the KPF-18.0e item-2 launches "
+              "(skip with --s1-skip-aa); then ONE fork-on launch of the :8083 shape runs (2) 18.1 arms A, B, D and row C CUT to "
+              "six lengths L0 + {0, 1, ub/2-1, ub/2, ub-1, ub} x drafter on only, (3) 18.2 parts 1, 3, 4, 5 (parity = drafter on vs "
+              "request-level off; clause 2 abstains until the build exposes drafter_kv_hit), (4) 18.3 parts 1 and 4; optionally "
+              "(5) item 3 groups 5-7 on its own launch (--s1-with-item3). NOT in this runner: item 4 (needs the prefill-budget trial "
+              "binary), KPF-19.1a, HSF-4/5. Dropped by the single load: the fork-off baseline launch of A/B, the no-drafter D "
+              "launch and the no-drafter parity column (run `kpf181 --kpf181-arms A,B,D` / `kpf182 --kpf182-parts 1` for them). "
+              "The per-arm decision rules are those of RULES[181], RULES[182], RULES[183]."),
+}
+
+
+def _apply_s1(ctx) -> None:
+    a = ctx.args
+    a.kpf181_arms, a.kpf181_c_lengths = "A,B,C,D", "s1"
+    a.kpf182_parts, a.kpf183_parts = "1,3,4,5", "1,4"
+
+
+def build_s1(ctx, gate) -> list:
+    _apply_s1(ctx)
+    a = ctx.args
+    steps: list = []
+    if not a.s1_skip_aa:
+        steps += gate.ITEMS[2](ctx)
+    name, argv = get_configs(ctx, gate)[0]
+    srv = server_cls(gate)(ctx, f"kpf18s1-{name}-{gate.utc_tag()}", Path(a.fork_bin), a.fork_min, argv)
+    env = Env(ctx, gate, srv, name)
+    shared: dict = {}
+    body = body_181(ctx, gate, env, name, argv, ["A", "B", "C", "D"], groups_arg(a.kpf181_groups, [0]), a.kpf181_sibs)
+    body += body_182(ctx, gate, env, name, argv, {"1", "3", "4", "5"}, groups_arg(a.kpf182_groups, [0, 2]), a.kpf182_sibs, shared)
+    body.append(gate.Step("182 parity summary: drafter-on vs request-off columns of the one load", 0,
+                          lambda: run_182_parity_summary(env, shared)))
+    body += body_183(ctx, gate, env, ["1", "4"])
+    steps += gate.start_steps(ctx, srv) + body + [gate.stop_step(srv)]
+    if a.s1_with_item3:
+        a.item3_groups = a.item3_groups or "5,6,7"
+        steps += gate.ITEMS[3](ctx)
+    return steps
+
+
+def preflight_s1(ctx, gate) -> tuple[list[str], list[str]]:
+    _apply_s1(ctx)
+    probs: list[str] = []
+    notes = ["S1: one fork-on load for 18.1 A,B,C(cut),D + 18.2 parts 1,3,4,5 + 18.3 parts 1,4"
+             + ("" if ctx.args.s1_skip_aa else "; A/A control launches first (item 2)")
+             + "; fork-off baseline / no-drafter launches are NOT included"]
+    for it in (181, 182, 183):
+        p, n = PREFLIGHTS[it](ctx, gate)
+        probs += p
+        notes += [x for x in n if "fork-off baseline launch added" not in x]
+    return probs, notes
+
+
+BUILDERS[184] = build_s1
+PREFLIGHTS[184] = preflight_s1
