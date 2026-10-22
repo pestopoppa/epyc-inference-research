@@ -34,7 +34,17 @@ MAX_SERIAL_CHILD_LOG_BYTES_PER_STREAM = 1024 * 1024
 _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving-launch",
                    "--frozen-prompts", "--heldout-frozen-prompts", "--serving-recipe", "--runtime-recipe-reference",
                    "--runtime-recovery-reference")
-_CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-build",
+#: AKX-AUTO-6 (operator 2026-10-21, f8): a champion-advance re-anchor. `--new-anchor-epoch COMMIT`
+#: is bound to ONE anchor commit and is meaningful only for the FIRST child of a lineage (it archives
+#: the old bundle and starts the new epoch); `_batch_argv` therefore drops it from every continuation
+#: child, whose anchor has legitimately moved on. The floor-registry flags (run.py `--floor-registry`)
+#: select WHERE a floor may be reused from, never an identity. Neither belongs in the input binding:
+#: adding or removing them must carry the lineage, exactly like the other opt-in policy flags. All
+#: absent by default => every binding and every child argv is byte-identical to before.
+ANCHOR_EPOCH_FLAGS = frozenset({"--new-anchor-epoch"})
+FLOOR_REGISTRY_FLAGS = frozenset({"--floor-registry", "--floor-numerics-epoch",
+                                  "--floor-require-grade", "--floor-co-tenancy"})
+_CHANGING_FLAGS = frozenset({*ANCHOR_EPOCH_FLAGS, *FLOOR_REGISTRY_FLAGS, "--out", "--iterations", "--resume-run", "--anchor-build",
                             "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",
                             "--scheduler-selection", "--dry-run", "--cpu-screen-scope",
                             "--cpu-confirm-from", "--source-anchor-continuation",
@@ -1927,7 +1937,8 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
         prior_body, sha = load_resume(Path(prior["path"]), original)
         if sha != prior["sha256"]:
             raise SerialRefused("retained child result changed")
-        child_argv = _without(child_argv, {"--cpu-calibrate-serving", "--gpu-calibrate-serving"})
+        child_argv = _without(child_argv, {"--cpu-calibrate-serving", "--gpu-calibrate-serving",
+                                           *ANCHOR_EPOCH_FLAGS})
         child_argv += ["--resume-run", prior["path"]]
         runtime_reference = prior_body.get("runtime_recipe_reference")
         if runtime_reference is not None:

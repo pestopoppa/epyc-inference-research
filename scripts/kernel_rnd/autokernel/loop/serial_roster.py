@@ -102,7 +102,11 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   # P-AK-SEARCH-1-A4): a search policy over the SAME launch. Each arm is a
                   # single-field delta the child builds from the target's own launch; the
                   # launch, request and campaign documents are not overridden.
-                  *sr.RUNTIME_PROTOCOL_FLAGS}
+                  *sr.RUNTIME_PROTOCOL_FLAGS,
+                  # AKX-AUTO-6: a champion-advance re-anchor (first child only; serial_run drops it
+                  # from continuations) and the opt-in floor registry (serial_run.ANCHOR_EPOCH_FLAGS,
+                  # serial_run.FLOOR_REGISTRY_FLAGS). Both are lineage policy, never an identity.
+                  *sr.ANCHOR_EPOCH_FLAGS, *sr.FLOOR_REGISTRY_FLAGS}
         # Bare switches: instruments and rankers, never identities.
         switches = {"--rank-prior-experiments", "--no-rank-prior-experiments", "--node-profile",
                     "--require-serving-floor", "--serving-calibration-only",
