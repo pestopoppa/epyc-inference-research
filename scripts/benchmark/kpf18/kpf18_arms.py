@@ -1636,7 +1636,7 @@ def run_183_lane(env: Env, g: int, probe_tokens: int):
         n_prompt = int((res.get("usage") or {}).get("prompt_tokens") or 0)
         s0 = slot_by_id(ctx.client.slots(), 0)
         ns = [c["n_tokens"] for c in checkpoint_set(s0)]
-        chat.update(n_prompt=n_prompt, **classify_lane_checkpoints(ns, n_prompt, ub),
+        chat.update(**classify_lane_checkpoints(ns, n_prompt, ub),
                     pinned=[c["n_tokens"] for c in checkpoint_set(s0) if c["pinned"]])
         reply = (((res.get("choices") or [{}])[0]).get("message") or {}).get("content") or ""
         m2 = m1 + [{"role": "assistant", "content": reply}, {"role": "user", "content": "And one more short sentence."}]
