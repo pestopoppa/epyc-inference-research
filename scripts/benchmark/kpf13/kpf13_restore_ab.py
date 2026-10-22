@@ -307,13 +307,20 @@ def read_proc_env(pid: int) -> dict[str, str]:
 
 
 def read_cpus_allowed(pid: int) -> list[int] | None:
+    """Union of Cpus_allowed_list over ALL threads of `pid`. The main thread alone is not enough: OMP_PROC_BIND=spread
+    re-pins it to one place (job kpf13 2026-10-22: [24, 120] for a 48-cpu claim)."""
+    cpus: set[int] = set()
     try:
-        for ln in Path(f"/proc/{pid}/status").read_text().splitlines():
-            if ln.startswith("Cpus_allowed_list:"):
-                return parse_cpu_list(ln.split(":", 1)[1].strip())
-    except (OSError, ValueError):
+        for t in Path(f"/proc/{pid}/task").iterdir():
+            try:
+                for ln in (t / "status").read_text().splitlines():
+                    if ln.startswith("Cpus_allowed_list:"):
+                        cpus.update(parse_cpu_list(ln.split(":", 1)[1].strip()))
+            except (OSError, ValueError):
+                continue
+    except OSError:
         return None
-    return None
+    return sorted(cpus) or None
 
 
 def bytes_contain_any_lib(binary: Path, needle: bytes) -> bool:
@@ -937,8 +944,8 @@ class Server:
             probs.append(f"LLAMA_KPF_MUTATE in /proc env is {rb['env_LLAMA_KPF_MUTATE']!r}, config wants {self.cfg['mutate']!r}")
         if self.ctx.args.cpu_list:
             want = parse_cpu_list(self.ctx.args.cpu_list)
-            if allowed is None or sorted(allowed) != want:
-                probs.append(f"Cpus_allowed_list {allowed} != claimed {want}")
+            if allowed is None or not set(allowed) <= set(want):
+                probs.append(f"threads allowed on cpus {allowed} outside the claimed {want}")
         rb["problems"] = probs
         if probs:
             raise Abort(f"launch read-back failed for {self.label}: " + "; ".join(probs))
