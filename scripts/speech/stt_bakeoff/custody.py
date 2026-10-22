@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from scripts.speech.stt_bakeoff import scorer
+from scripts.speech.stt_bakeoff.private_custody import is_private_custody_path
 
 DEFAULT_SEAL_ROOT = "/mnt/raid0/llm/data/stt-cs4-sealed"
 SEALED_STRATUM_LABELS = ("private", "confirmation")
@@ -256,8 +257,10 @@ def update_sha256sums(directory: PathLike, entries: Mapping[str, str]) -> Path:
 
 def write_stratum_sha256sums(directory: PathLike) -> Path:
     """SHA256SUMS over every regular file under a stratum directory (excluding the sums
-    file itself). Refuses a directory inside a git tree."""
-    d = refuse_git_tree(directory)
+    file itself). Refuses a directory inside a git tree, except the verified private
+    corpus repo clone (DP-A (b)); sealed per-utterance output still never goes there."""
+    d = (Path(os.path.abspath(Path(directory).expanduser())) if is_private_custody_path(directory)
+         else refuse_git_tree(directory))
     entries = {}
     for p in sorted(d.rglob("*")):
         if p.is_file() and p.name != SUMS_FILE and not p.name.endswith(".tmp"):

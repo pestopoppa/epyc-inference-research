@@ -143,3 +143,69 @@ def test_cli_exit_codes(tmp_path, capsys):
     assert mv.main([str(p)]) == 2
     assert "missing_label" in capsys.readouterr().err
     assert mv.main([str(tmp_path / "nope.json")]) == 2
+
+
+# ---- DP-A (b): private corpus repo clone is the one allowed git tree ----
+
+def _private_clone(tmp_path, monkeypatch, url="https://github.com/pestopoppa/epyc-stt-corpus-private.git"):
+    root = tmp_path / "stt-corpus-private"
+    (root / ".git").mkdir(parents=True)
+    (root / ".git" / "config").write_text(f'[remote "origin"]\n\turl = {url}\n')
+    monkeypatch.setenv("STT_PRIVATE_CORPUS_ROOT", str(root))
+    return root
+
+
+def test_private_repo_clone_path_allowed(tmp_path, monkeypatch):
+    root = _private_clone(tmp_path, monkeypatch)
+    m = good(tmp_path, "private")
+    (root / "s1" / "audio").mkdir(parents=True)
+    (root / "s1" / "ref").mkdir(parents=True)
+    m["audio_root"], m["reference_root"] = str(root / "s1" / "audio"), str(root / "s1" / "ref")
+    mv.validate_manifest(m)
+
+
+def test_public_tree_still_refused_when_private_clone_configured(tmp_path, monkeypatch):
+    _private_clone(tmp_path, monkeypatch)
+    m = good(tmp_path, "private")
+    pub = tmp_path / "public-repo"
+    (pub / ".git").mkdir(parents=True)
+    (pub / "a").mkdir()
+    m["audio_root"] = str(pub / "a")
+    assert reason(m) == "private_path_in_git_tree"
+
+
+def test_one_public_path_among_private_ones_refused(tmp_path, monkeypatch):
+    root = _private_clone(tmp_path, monkeypatch)
+    m = good(tmp_path, "private")
+    (root / "a").mkdir()
+    pub = tmp_path / "pub"
+    (pub / ".git").mkdir(parents=True)
+    m["audio_root"], m["reference_root"] = str(root / "a"), str(pub)
+    assert reason(m) == "private_path_in_git_tree"
+
+
+def test_clone_with_wrong_remote_not_trusted(tmp_path, monkeypatch):
+    root = _private_clone(tmp_path, monkeypatch, url="https://github.com/pestopoppa/epyc-inference-research.git")
+    m = good(tmp_path, "private")
+    (root / "a").mkdir()
+    m["audio_root"] = str(root / "a")
+    assert reason(m) == "private_path_in_git_tree"
+
+
+def test_nested_foreign_tree_inside_clone_refused(tmp_path, monkeypatch):
+    root = _private_clone(tmp_path, monkeypatch)
+    m = good(tmp_path, "private")
+    (root / "sub" / ".git").mkdir(parents=True)
+    m["audio_root"] = str(root / "sub")
+    assert reason(m) == "private_path_in_git_tree"
+
+
+def test_symlink_from_outside_into_public_tree_refused(tmp_path, monkeypatch):
+    root = _private_clone(tmp_path, monkeypatch)
+    pub = tmp_path / "pub"
+    (pub / ".git").mkdir(parents=True)
+    (pub / "a").mkdir()
+    (root / "link").symlink_to(pub / "a")
+    m = good(tmp_path, "private")
+    m["audio_root"] = str(root / "link")
+    assert reason(m) == "private_path_in_git_tree"

@@ -1,0 +1,10 @@
+{
+  "decision": "DP-A (b), operator 2026-10-22",
+  "repo_url": "https://github.com/pestopoppa/epyc-stt-corpus-private",
+  "visibility": "PRIVATE, never mirrored to a public repo",
+  "local_clone": "/mnt/raid0/llm/data/stt-corpus-private",
+  "remote_name_fragment": "epyc-stt-corpus-private",
+  "custody_for": ["private", "confirmation"],
+  "public_repos_keep": "hash manifests only (utterance_id, pcm_sha256, reference_text_sha256, labels)",
+  "rater_policy": "DP-C, operator 2026-10-22: single labelled rater now; labels allow adding a second corrector later"
+}

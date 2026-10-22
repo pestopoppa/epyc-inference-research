@@ -23,9 +23,24 @@ Reason (arXiv:2608.19936, unreplicated preprint): best-WER open models reproduce
 
 ### Where private data lives (DP-A)
 
-DP-A default (a): private strata live on disk under `/mnt/raid0/llm/data/` with `SHA256SUMS`; only the manifest
-(`utterance_id`, `pcm_sha256`, `reference_text_sha256`) is committed. The validator refuses a private set whose `audio_root`, `reference_root`, or any per-utterance path lies inside any git work tree (it walks parents for a `.git` file or directory), and refuses manifests carrying raw reference text or audio bytes.
-DP-A recommendation (b): a separate private corpus repo; the layout migrates losslessly (the manifest is unchanged, the roots move).
+**DECIDED 2026-10-22 (operator): DP-A (b).** Private and confirmation strata live in the PRIVATE repo
+`https://github.com/pestopoppa/epyc-stt-corpus-private`, cloned at `/mnt/raid0/llm/data/stt-corpus-private`
+(config: `private_custody.json`, helper: `scripts/speech/stt_bakeoff/private_custody.py`). That repo is never mirrored
+publicly. This repository and epyc-root keep hash manifests only (`utterance_id`, `pcm_sha256`, `reference_text_sha256`,
+labels); audio, references and transcripts are never committed here.
+
+The validator still refuses a private set whose `audio_root`, `reference_root`, or any per-utterance path lies inside any
+git work tree (walks parents for a `.git` file or directory), with ONE explicit exception: a path inside the verified
+private-repo clone (nearest git tree is the clone root and its `.git/config` names the private remote). Public trees, nested
+foreign trees, wrong-remote clones and symlinks into public trees stay refused. Sealed per-utterance scoring output
+(`custody.seal_scoring_run`) still goes outside every git tree, the private clone included. Manifests carrying raw reference
+text or audio bytes are refused. The earlier default (a) (on-disk under `/mnt/raid0/llm/data/` with `SHA256SUMS`) is superseded.
+
+### Rater policy (DP-C)
+
+**DECIDED 2026-10-22 (operator): single labelled rater for now.** Manifests carry `reference_protocol_label` and `rater_count`;
+the labels allow a second corrector to be added later without invalidating existing references (a higher `reference_version`
+plus an `edit_log` entry).
 
 ## (b) Registry
 

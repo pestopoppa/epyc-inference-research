@@ -3,6 +3,13 @@
 # Internal evaluation only. Audio is fetched by pinned revision and NEVER committed to a public repo
 # (epyc-root and epyc-inference-research are public); clip ids and sha256 only.
 # Not legal advice.
+# DP-A (b), operator 2026-10-22: private/confirmation strata are held in a PRIVATE repo; details in private_custody.json.
+private_custody:
+  repo_url: https://github.com/pestopoppa/epyc-stt-corpus-private
+  local_clone: /mnt/raid0/llm/data/stt-corpus-private
+  config: data/stt-cs4/private_custody.json
+  public_repos_keep: hash-manifests-only
+  rater_policy: single-labelled-rater   # DP-C, operator 2026-10-22; second corrector may be added later via reference_version + edit_log
 datasets:
   - id: earnings22-cleaned-aa
     hf_repo: ArtificialAnalysis/Earnings22-Cleaned-AA

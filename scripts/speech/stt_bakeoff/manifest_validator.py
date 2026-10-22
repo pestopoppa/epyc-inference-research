@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
+from scripts.speech.stt_bakeoff.private_custody import is_private_custody_path
+
 LABELS = ("public-anchor", "private")
 TRACKS = ("verbatim", "cleaned")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -122,7 +124,8 @@ def validate_manifest(manifest: Mapping[str, Any], prior: Optional[Mapping[str, 
         for p in paths:
             if p:
                 hit = _in_git_tree(p)
-                if hit is not None:
+                # DP-A (b): the verified private-repo clone is the one git tree a private path may live in
+                if hit is not None and not is_private_custody_path(p):
                     raise ManifestRefused("private_path_in_git_tree", f"{p} is inside git tree {hit}")
 
     if manifest.get("confirmation"):

@@ -224,3 +224,20 @@ def test_stratum_sha256sums(tmp_path):
     h_audio = hashlib.sha256(b"\x00\x01").hexdigest()
     h_refs = hashlib.sha256(b"{}\n").hexdigest()
     assert sums == [f"{h_audio}  audio/a.pcm", f"{h_refs}  refs.jsonl"]
+
+
+def test_stratum_sha256sums_allowed_in_private_clone_only(tmp_path, monkeypatch):
+    root = tmp_path / "priv"
+    (root / ".git").mkdir(parents=True)
+    (root / ".git" / "config").write_text('[remote "origin"]\n\turl = https://github.com/pestopoppa/epyc-stt-corpus-private.git\n')
+    monkeypatch.setenv("STT_PRIVATE_CORPUS_ROOT", str(root))
+    (root / "s1").mkdir()
+    (root / "s1" / "u1.wav").write_bytes(b"x")
+    assert C.write_stratum_sha256sums(root / "s1").exists()
+    pub = tmp_path / "pub"
+    (pub / ".git").mkdir(parents=True)
+    with pytest.raises(C.SealPathInGitTree):
+        C.write_stratum_sha256sums(pub)
+    # sealed per-utterance output never goes in the private clone either
+    with pytest.raises(C.SealPathInGitTree):
+        C.refuse_git_tree(root / "s1")
