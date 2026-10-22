@@ -1053,8 +1053,8 @@ def body_181(ctx, gate, env, prim_name, prim_argv, arms, groups, n_sib) -> list:
                       + 2 * gate.pf_s(L + S_(gc)["suffix_lens"][0], 2 * L)
                       + 3 * gate.dec_s(a.n_predict, L, dflash) + 8 * gate.REQ_OVERHEAD_S for L in lengths)
             steps.append(Step(f"181 C g{gc} drafter {'on' if dflash else 'off'} ({c_label}): {len(lengths)} trunk lengths "
-                              f"{lengths[0] if lengths else '-'}..{lengths[-1] if lengths else '-'} (stride "
-                              f"{(lengths[1] - lengths[0]) if len(lengths) > 1 else '-'}, ub {ub}), source+child+2 cold "
+                              f"{lengths[0] if lengths else '-'}..{lengths[-1] if lengths else '-'} "
+                              f"({'offsets 0,1,ub/2-1,ub/2,ub-1,ub' if a.kpf181_c_lengths else 'stride ' + str((lengths[1] - lengths[0]) if len(lengths) > 1 else '-')}, ub {ub}), source+child+2 cold "
                               f"runs each (rule C)", est, lambda d=dflash, L=lengths: run_181_C(env, gc, L, d)))
     if "D" in arms:
         g = groups[0]
@@ -2020,6 +2020,9 @@ def build_s1(ctx, gate) -> list:
     a = ctx.args
     steps: list = []
     if not a.s1_skip_aa:
+        # the A/A control over all 8 trunks x 4 suffixes is ~2.2 h by the rate model: S1 defaults to three trunk sizes
+        # (8k, 32k, 60k); --item2-groups overrides
+        a.item2_groups = a.item2_groups or ",".join(str(g) for g in (0, 3, 5) if g in ctx.ps.groups)
         steps += gate.ITEMS[2](ctx)
     name, argv = get_configs(ctx, gate)[0]
     srv = server_cls(gate)(ctx, f"kpf18s1-{name}-{gate.utc_tag()}", Path(a.fork_bin), a.fork_min, argv)

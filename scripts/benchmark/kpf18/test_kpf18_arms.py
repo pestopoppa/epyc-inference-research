@@ -288,7 +288,7 @@ def test_gate_registers_the_arm_items_and_all_stays_1_to_7():
     for it in A.BUILDERS:
         assert it in GATE.ITEMS
     assert {1, 2, 3, 4, 5, 6, 7} <= set(GATE.ITEMS)
-    assert set(A.ARM_CMDS) == {"kpf181", "kpf182", "kpf183", "kpf18arms"}
+    assert set(A.ARM_CMDS) == {"kpf181", "kpf182", "kpf183", "kpf18arms", "kpf18s1"}
 
 
 # ================================================================ a simulated server (plumbing tests)
@@ -1065,13 +1065,15 @@ def test_s1_composite_is_one_load_plus_the_aa_control(tmp_path):
     assert any("184 item-3 localisation g3" in d and "tokens 150..170" in d for d in descs)
     assert any(d.startswith("[item3-fork_on") and "linkage + launch" in d for d in descs)
     assert any(d.startswith("item3 g3 ") for d in descs) and not any(d.startswith("item3 g5") for d in descs)
-    assert args.item3_groups == "3"
+    assert args.item3_groups == "3" and args.item2_groups == "0,3,5"      # A/A control trimmed to three trunk sizes
+    assert not any(d.startswith("item2 g1.") or d.startswith("item2 g7.") for d in descs)
     args.s1_skip_aa = True
     assert "kpf18s1" in A.BUILDERS[184](ctx, GATE)[0].desc
     args.s1_no_item3 = True
     d2 = [s.desc for s in A.BUILDERS[184](ctx, GATE)]
     assert not any("localisation" in d or d.startswith("item3") or "[item3" in d for d in d2)
     args.s1_no_item3 = False
+    args.n_predict = 256                                            # the fixture's 32 would never reach token 170
     probs, notes = A.PREFLIGHTS[184](ctx, GATE)
     assert probs == [] and any(n.startswith("S1:") for n in notes)
 
