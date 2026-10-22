@@ -13,7 +13,7 @@ import pytest
 
 from autokernel.loop import champion_reanchor as cr
 from autokernel.loop import floor_registry as fr
-from autokernel.loop.test_floor_registry import BRANCH, QUIET, build, commit, floor, git
+from autokernel.loop.test_floor_registry import BRANCH, MASTER_TEXT, QUIET, ROLE, build, commit, floor, git, master_in, register
 
 PREFLIGHT = {"refuses": True, "reason": "ancestry", "kind": "ancestry",
              "needs_new_anchor_epoch": True, "blocking": False}
@@ -84,8 +84,9 @@ def test_plan_calibrates_once_then_second_launcher_is_claimed_then_reuse(world):
     advance(world)
     store_build_for_champion(world)
     seed_floor(world, None)
-    reg = world["tmp"] / "registry"
-    kw = dict(registry_root=reg, branch=BRANCH, builds_root=world["builds"], numerics_epoch="n1")
+    master = master_in(world["tmp"])
+    kw = dict(master=master, role=ROLE, claims_root=world["tmp"] / "claims", branch=BRANCH,
+              builds_root=world["builds"], numerics_epoch="n1")
     p1 = cr.plan(world["store"], world["repo"], **kw)
     assert p1["actionable"] and p1["floor"]["would"] == "calibrate"
     assert p1["run_argv_additions"][:2] == ["--anchor-build", p1["anchor_build"]]
@@ -101,7 +102,7 @@ def test_plan_calibrates_once_then_second_launcher_is_claimed_then_reuse(world):
         cr.apply(world["store"], world["repo"], owner="other", execute=True, relaunch_cmd=["true"], **kw)
     # once a decision floor is registered the next advance-check reuses it: no A/A
     eq = fr.equivalence_for_build(p1["anchor_build"], source_repo=world["repo"])
-    fr.FloorRegistry(reg).register(floor(), equivalence=eq, grade=QUIET, numerics_epoch="n1")
+    register(world["tmp"], master, eq)  # the owning session commits the registry entry
     p2 = cr.plan(world["store"], world["repo"], **kw)
     assert p2["floor"]["would"] == "reuse"
     again = cr.apply(world["store"], world["repo"], owner="other", execute=True, relaunch_cmd=["true"], **kw)
@@ -112,8 +113,9 @@ def test_failed_relaunch_releases_the_claim(world):
     advance(world)
     store_build_for_champion(world)
     seed_floor(world, None)
-    reg = world["tmp"] / "registry"
-    kw = dict(registry_root=reg, branch=BRANCH, builds_root=world["builds"], numerics_epoch="n1")
+    master = master_in(world["tmp"])
+    kw = dict(master=master, role=ROLE, claims_root=world["tmp"] / "claims", branch=BRANCH,
+              builds_root=world["builds"], numerics_epoch="n1")
     out = cr.apply(world["store"], world["repo"], owner="f8", execute=True, relaunch_cmd=["false"], **kw)
     assert out["relaunch_rc"] != 0 and out["claim_released"] is True
     assert cr.plan(world["store"], world["repo"], **kw)["floor"]["would"] == "calibrate"
@@ -129,22 +131,24 @@ def test_live_campaign_is_never_touched(world):
          "accumulator": {"champion_of_record": world["old"]}}))
     with pytest.raises(cr.ReanchorRefused):
         cr.apply(world["store"], world["repo"], owner="f8", execute=True, relaunch_cmd=["true"],
-                 registry_root=world["tmp"] / "registry", branch=BRANCH, builds_root=world["builds"])
+                 master=master_in(world["tmp"]), role=ROLE, claims_root=world["tmp"] / "claims",
+                 branch=BRANCH, builds_root=world["builds"])
 
 
 def test_dry_run_changes_nothing(world):
     advance(world)
     store_build_for_champion(world)
     seed_floor(world, None)
-    reg = world["tmp"] / "registry"
-    out = cr.apply(world["store"], world["repo"], owner="f8", relaunch_cmd=["false"], registry_root=reg,
+    claims = world["tmp"] / "claims"
+    out = cr.apply(world["store"], world["repo"], owner="f8", relaunch_cmd=["false"],
+                   master=master_in(world["tmp"]), role=ROLE, claims_root=claims,
                    branch=BRANCH, builds_root=world["builds"])
-    assert out["executed"] is False and not (reg / "claims").exists()
+    assert out["executed"] is False and not claims.exists()
     assert not (world["store"] / "reanchor").exists()
 
 
 def test_no_store_build_for_the_champion_blocks(world):
     advance(world)
-    out = cr.plan(world["store"], world["repo"], registry_root=world["tmp"] / "r", branch=BRANCH,
+    out = cr.plan(world["store"], world["repo"], master=master_in(world["tmp"]), role=ROLE, branch=BRANCH,
                   builds_root=world["builds"])
     assert not out["actionable"] and "store" in out["blockers"][0]

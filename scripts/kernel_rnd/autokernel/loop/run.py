@@ -1626,14 +1626,15 @@ def _gate_floor(reading) -> tuple[float | None, str | None]:
 
 
 #: Execution-equivalence floor registry (inference-backlog audit 2026-10-21, change E). OFF unless
-#: `--floor-registry DIR` is given; set once by `main`. A module global because the floor is
+#: `--floor-registry MASTER.yaml` is given; set once by `main`. A module global because the floor is
 #: selected/written at three call sites deep in the keep path; every use is `if _FLOOR_REGISTRY`.
 _FLOOR_REGISTRY = None
 
 
 class _FloorRegistryContext:
-    def __init__(self, root, *, numerics_epoch, require_grade, co_tenancy, source_repo, branch):
-        self.registry = floor_registry.FloorRegistry(root)
+    def __init__(self, master, *, role, numerics_epoch, require_grade, co_tenancy, source_repo, branch):
+        self.registry = floor_registry.FloorRegistry(master)  # READ-ONLY view of the master registry
+        self.role = role
         self.numerics_epoch, self.require_grade = numerics_epoch, require_grade
         self.co_tenancy, self.source_repo, self.branch = co_tenancy, Path(source_repo), branch
 
@@ -1654,7 +1655,7 @@ def _registry_floor_reading(recipe, launch, *, frozen_requests, pairs):
             equivalence_key=equivalence["equivalence_key"], recipe_hash=recipe.recipe_hash,
             request_digest=serving.request_digest(recipe, frozen_requests),
             model_sha=launch.model.sha256, numerics_epoch=ctx.numerics_epoch,
-            require_grade=ctx.require_grade, pairs=pairs, champion=champion_now,
+            require_grade=ctx.require_grade, pairs=pairs, champion=champion_now, role=ctx.role,
             frame_digest=floor_registry.digest(serving._matched_frame(recipe, launch, frozen_requests)))
         if not result:
             print(f"serving   floor registry: {result.status} ({'; '.join(result.reasons)})")
@@ -1676,27 +1677,35 @@ def _registry_floor_reading(recipe, launch, *, frozen_requests, pairs):
     return reading
 
 
-def _registry_register(recipe, anchor, row, *, frozen_requests, pairs):
-    """File a freshly calibrated matched floor in the registry. A failure here is LOUD but never
-    discards the calibration that was just paid for."""
+def _registry_register(recipe, anchor, row, *, written, frozen_requests, pairs):
+    """PLAN the master-registry entry for a freshly calibrated matched floor. The floor is already
+    sealed on durable disk (`written`, in the campaign store) and the run keeps using it in-process;
+    the master registry is changed only by the OWNING SESSION, from a clean worktree of origin/main,
+    via `apply_registry_serving_floors` (floors are registered at most once per champion advance).
+    This writes only the plan file next to the floor and prints the command. A failure here is LOUD
+    but never discards the calibration that was just paid for."""
     ctx = _FLOOR_REGISTRY
     try:
+        floor = json.loads(Path(written).read_text(encoding="utf-8"))
         equivalence = floor_registry.equivalence_for_build(anchor.build_dir, source_repo=ctx.source_repo)
         argv = list(getattr(anchor, "argv", ()) or ())
         threads = int(argv[argv.index("-t") + 1]) if "-t" in argv else None
         if threads is None:
             raise floor_registry.FloorRegistryError("anchor launch states no -t thread count")
         quiet = ctx.co_tenancy == "quiet"
-        path = ctx.registry.register(
-            row, equivalence=equivalence, numerics_epoch=ctx.numerics_epoch,
+        plan = floor_registry.plan_registration(
+            floor, floor_file=written, role=ctx.role, equivalence=equivalence,
+            numerics_epoch=ctx.numerics_epoch,
             grade={"threads": threads, "co_tenancy": ctx.co_tenancy,
                    "claim_class": "decision" if quiet else "indicative"},
-            registered_by=f"autokernel.loop.run pid {os.getpid()}",
-            validator=lambda floor: serving._validate_matched_floor(
-                floor, recipe, frozen_requests, pairs, resolved=anchor))
-        print(f"serving   floor registered: {path}")
+            registered_by=f"autokernel.loop.run pid {os.getpid()}")
+        plan_path = Path(written).with_name(Path(written).name + ".registry-plan.json")
+        floor_registry._write_atomic(plan_path, plan)
+        print(f"serving   floor calibrated; registry plan: {plan_path}\n"
+              f"          owning session registers it (once per champion advance):\n"
+              f"          {floor_registry.applier_command(plan_path)}")
     except Exception as exc:  # noqa: BLE001 -- never lose the measured floor to a registry fault
-        print(f"WARNING   floor registry write FAILED ({type(exc).__name__}: {exc}); the "
+        print(f"WARNING   floor registry PLAN failed ({type(exc).__name__}: {exc}); the "
               f"identity-keyed floor on disk is unaffected")
 
 
@@ -1725,7 +1734,8 @@ def _write_new_source_floor(floor_store: Path, recipe, anchor, row, *, frozen_re
         unit=serving.CALIBRATION_UNIT,
         instrument=instrument, pairs=pairs)
     if _FLOOR_REGISTRY is not None and instrument == serving.MATCHED_INSTRUMENT:
-        _registry_register(recipe, anchor, row, frozen_requests=frozen_requests, pairs=pairs)
+        _registry_register(recipe, anchor, row, written=written, frozen_requests=frozen_requests,
+                           pairs=pairs)
     return written
 
 
@@ -2122,14 +2132,18 @@ def main(argv: list[str] | None = None) -> int:
                         action="store_false", default=True,
                         help="DS41-C69 escape hatch: never carry a lineage serving floor across "
                              "a source-only anchor change; recalibrate (24 pairs) as before")
-    parser.add_argument("--floor-registry", type=Path, metavar="DIR",
-                        help="OFF by default. Execution-equivalence floor registry "
-                             "(loop.floor_registry): consult it for a floor calibrated on a "
-                             "byte-equivalent build before calibrating, and register every matched "
-                             "floor this run calibrates. Requires --serving-instrument "
-                             "matched_process_v2. A store build (kernels/builds/<name>: VERSION.txt "
-                             "+ SHA256SUMS, no provenance.json) is then accepted as --anchor-build "
-                             "when its commit descends from the champion head.")
+    parser.add_argument("--floor-registry", type=Path, metavar="MASTER.yaml",
+                        help="OFF by default. Read the MASTER model registry's `serving_floors` "
+                             "section (loop.floor_registry) for a floor measured on a byte-equivalent "
+                             "build before calibrating; a floor THIS run calibrates is used "
+                             "in-process and a registry plan is emitted for the owning session to "
+                             "apply (this flag never writes the registry). Requires "
+                             "--serving-instrument matched_process_v2 and --floor-registry-role. A "
+                             "store build (kernels/builds/<name>: VERSION.txt + SHA256SUMS, no "
+                             "provenance.json) is then accepted as --anchor-build when its commit "
+                             "descends from the champion head.")
+    parser.add_argument("--floor-registry-role",
+                        help="the `serving_floors.<role>` key this target's floors live under")
     parser.add_argument("--floor-numerics-epoch", default="default",
                         help="numerics label of the registry era; a floor is never reused across "
                              "a different label (e.g. bump it when the W5.1a numerics default flips)")
@@ -2644,8 +2658,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.floor_registry is not None:
         if args.serving_instrument != serving.MATCHED_INSTRUMENT:
             parser.error("--floor-registry requires --serving-instrument matched_process_v2")
+        if not args.floor_registry_role:
+            parser.error("--floor-registry requires --floor-registry-role")
         _FLOOR_REGISTRY = _FloorRegistryContext(
-            args.floor_registry, numerics_epoch=args.floor_numerics_epoch,
+            args.floor_registry, role=args.floor_registry_role, numerics_epoch=args.floor_numerics_epoch,
             require_grade=args.floor_require_grade, co_tenancy=args.floor_co_tenancy,
             source_repo=args.worktree, branch=args.champion_branch)
     if args.cpu_window_wait_bound_s <= 0:

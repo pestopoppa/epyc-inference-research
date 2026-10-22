@@ -42,7 +42,7 @@ _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving
 #: adding or removing them must carry the lineage, exactly like the other opt-in policy flags. All
 #: absent by default => every binding and every child argv is byte-identical to before.
 ANCHOR_EPOCH_FLAGS = frozenset({"--new-anchor-epoch"})
-FLOOR_REGISTRY_FLAGS = frozenset({"--floor-registry", "--floor-numerics-epoch",
+FLOOR_REGISTRY_FLAGS = frozenset({"--floor-registry", "--floor-registry-role", "--floor-numerics-epoch",
                                   "--floor-require-grade", "--floor-co-tenancy"})
 _CHANGING_FLAGS = frozenset({*ANCHOR_EPOCH_FLAGS, *FLOOR_REGISTRY_FLAGS, "--out", "--iterations", "--resume-run", "--anchor-build",
                             "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",

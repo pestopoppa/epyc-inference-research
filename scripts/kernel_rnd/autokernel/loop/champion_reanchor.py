@@ -283,7 +283,7 @@ def _drop_pair(argv: list[str], flag: str) -> list[str]:
     return out
 
 
-def plan(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
+def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: str | None = None, claims_root: Path | str = fr.DEFAULT_CLAIMS,
          branch: str = fr.DEFAULT_CHAMPION_BRANCH, builds_root: Path | str = DEFAULT_BUILDS_ROOT,
          numerics_epoch: str = "default", require_grade: str = "decision",
          co_tenancy: str = "quiet", floor_identity: dict | None = None,
@@ -320,12 +320,12 @@ def plan(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
         out["blockers"].append("no floor identity: the campaign has no matched floor on disk; pass "
                                "floor_identity (--floor FILE) so the registry can be consulted")
         return out
-    registry = fr.FloorRegistry(registry_root)
+    registry = fr.FloorRegistry(master, claims_root)
     kw = dict(equivalence_key=equivalence["equivalence_key"], recipe_hash=identity["recipe_hash"],
               request_digest=identity["request_digest"], model_sha=identity["model_sha"],
               pairs=identity["pairs"], numerics_epoch=numerics_epoch)
     found_floor = registry.lookup_detail(require_grade=require_grade, champion=champion,
-                                         frame_digest=identity.get("frame_digest"), **kw)
+                                         frame_digest=identity.get("frame_digest"), role=role, **kw)
     condition = registry.condition_key(champion_tree_hash=champion["source_tree_hash"],
                                        equivalence_key=equivalence["equivalence_key"],
                                        recipe_hash=identity["recipe_hash"],
@@ -336,9 +336,10 @@ def plan(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
     out["floor"] = {"would": ("reuse" if found_floor else "claimed" if holder else "calibrate"),
                     "registry_status": found_floor.status, "condition": condition,
                     "holder": (holder or {}).get("owner"), "identity": identity}
-    out["run_argv_additions"] = _run_argv(equivalence["build_dir"], champion["commit"], registry_root,
+    out["run_argv_additions"] = _run_argv(equivalence["build_dir"], champion["commit"], master,
                                           numerics_epoch, require_grade, co_tenancy,
-                                          needs_epoch=out["anchor_preflight"]["needs_new_anchor_epoch"])
+                                          needs_epoch=out["anchor_preflight"]["needs_new_anchor_epoch"],
+                                          role=role)
     out["actionable"] = True
     if launch is not None and preview_dir is not None:
         try:
@@ -350,21 +351,22 @@ def plan(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
     return out
 
 
-def _run_argv(build: str, champion_commit: str, registry_root, numerics_epoch: str, grade: str,
-              co_tenancy: str, *, needs_epoch: bool) -> list[str]:
+def _run_argv(build: str, champion_commit: str, master, numerics_epoch: str, grade: str,
+              co_tenancy: str, *, needs_epoch: bool, role: str | None = None) -> list[str]:
     argv = ["--anchor-build", str(build)]
     if needs_epoch:
         argv += ["--new-anchor-epoch", champion_commit]
-    return argv + ["--floor-registry", str(registry_root), "--floor-numerics-epoch", numerics_epoch,
+    return argv + ["--floor-registry", str(master), "--floor-registry-role", str(role or "ROLE"),
+                   "--floor-numerics-epoch", numerics_epoch,
                    "--floor-require-grade", grade, "--floor-co-tenancy", co_tenancy]
 
 
-def apply(store: Path | str, worktree: Path | str, *, registry_root: Path | str, relaunch_cmd: list[str],
+def apply(store: Path | str, worktree: Path | str, *, master: Path | str, relaunch_cmd: list[str],
           owner: str, execute: bool = False, **plan_kwargs) -> dict:
     """Claim the (single) recalibration, write the SPEC, run the owner's relaunch command.
     A dry run (the default) returns the plan and does none of that."""
     store = Path(store)
-    planned = plan(store, worktree, registry_root=registry_root, **plan_kwargs)
+    planned = plan(store, worktree, master=master, **plan_kwargs)
     if not planned["actionable"] or not execute:
         planned["executed"] = False
         return planned
@@ -375,13 +377,13 @@ def apply(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
     champion = planned["detect"]["champion"]
     equivalence = fr.equivalence_for_build(planned["anchor_build"], source_repo=worktree)
     ident = planned["floor"]["identity"]
-    registry = fr.FloorRegistry(registry_root)
+    registry = fr.FloorRegistry(master, plan_kwargs.get("claims_root", fr.DEFAULT_CLAIMS))
     decision = fr.check_launch(
         registry, equivalence=equivalence, recipe_hash=ident["recipe_hash"],
         request_digest=ident["request_digest"], model_sha=ident["model_sha"], pairs=ident["pairs"],
         numerics_epoch=plan_kwargs.get("numerics_epoch", "default"),
         require_grade=plan_kwargs.get("require_grade", "decision"), champion=champion, owner=owner,
-        frame_digest=ident.get("frame_digest"))
+        frame_digest=ident.get("frame_digest"), role=plan_kwargs.get("role"))
     if decision["action"] == "error":
         raise ReanchorRefused("floor registry refused: " + "; ".join(decision.get("reasons", [decision["status"]])))
     if decision["action"] == "claimed":
@@ -415,6 +417,14 @@ def apply(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
     if decision["action"] == "calibrate" and done.returncode != 0:
         # The calibration never produced a floor: hand the condition back (register would have).
         spec_after["claim_released"] = registry.release_claim(decision["condition"])
+    if decision["action"] == "calibrate" and done.returncode == 0:
+        # The run uses its fresh floor in-process and leaves a registry PLAN next to the sealed floor.
+        # Say so on the claim: waiters learn a floor EXISTS and only awaits the owner's registry commit.
+        plans = sorted(store.glob("runtime-source-floors/**/*.registry-plan.json"),
+                       key=lambda q: q.stat().st_mtime, reverse=True)
+        if plans:
+            spec_after["registry_plan"] = str(plans[0])
+            spec_after["claim_marked"] = registry.mark_awaiting_registration(decision["condition"], plans[0])
     planned.update({"executed": True, **spec_after})
     return planned
 
@@ -426,7 +436,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--store", type=Path, required=True)
     p.add_argument("--worktree", type=Path, required=True, help="a worktree of the champion's repo")
     p.add_argument("--champion-branch", default=fr.DEFAULT_CHAMPION_BRANCH)
-    p.add_argument("--registry", type=Path, default=fr.DEFAULT_ROOT)
+    p.add_argument("--master", type=Path, default=fr.DEFAULT_MASTER,
+                   help="the MASTER model registry (the only floor store)")
+    p.add_argument("--role", help="the serving_floors.<role> key of this campaign's target")
+    p.add_argument("--claims", type=Path, default=fr.DEFAULT_CLAIMS)
     p.add_argument("--builds-root", type=Path, default=DEFAULT_BUILDS_ROOT)
     p.add_argument("--reference-build", type=Path,
                    help="require the store build's CMake recipe to equal this build's (the old anchor)")
@@ -458,7 +471,7 @@ def main(argv: list[str] | None = None) -> int:
             facts = fr.floor_facts(json.loads(args.floor.read_text(encoding="utf-8")))
             identity = {k: facts[k] for k in ("recipe_hash", "request_digest", "model_sha",
                                               "frame_digest", "pairs")}
-        kw = dict(registry_root=args.registry, branch=args.champion_branch, builds_root=args.builds_root,
+        kw = dict(master=args.master, role=args.role, claims_root=args.claims, branch=args.champion_branch, builds_root=args.builds_root,
                   numerics_epoch=args.numerics_epoch, require_grade=args.require_grade,
                   co_tenancy=args.co_tenancy, floor_identity=identity,
                   reference_build=args.reference_build)

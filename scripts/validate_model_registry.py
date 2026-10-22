@@ -172,6 +172,22 @@ def validate(registry_path: str) -> tuple[list, list]:
                              f"role '{role}': model_role '{cfg.get('model_role')}' version token "
                              f"'{mtok.group(0)}' absent from model '{os.path.basename(sm_path or '')}'"))
 
+    # --- Check 5: serving_floors (measured noise floors; the only floor store) ---
+    # Rules live in floor_registry.validate_section so the reader, the applier and this
+    # validator cannot disagree. The module is loaded by file path (it is stdlib + yaml and has no
+    # package-relative imports), not through the heavy `autokernel` package.
+    if "serving_floors" in data:
+        import importlib.util
+        fr_path = (Path(__file__).resolve().parent / "kernel_rnd" / "autokernel" / "loop"
+                   / "floor_registry.py")
+        spec = importlib.util.spec_from_file_location("floor_registry_validate", fr_path)
+        fr = importlib.util.module_from_spec(spec)
+        sys.modules["floor_registry_validate"] = fr
+        spec.loader.exec_module(fr)
+        floor_errors, floor_warnings = fr.validate_section(data, Path(registry_path).resolve().parent.parent)
+        errors.extend(("SERVING_FLOOR", m) for m in floor_errors)
+        warnings.extend(("SERVING_FLOOR", m) for m in floor_warnings)
+
     return errors, warnings
 
 

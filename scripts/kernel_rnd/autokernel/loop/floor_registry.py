@@ -42,9 +42,16 @@ calibrating gets `claimed` + the owner instead of burning another 48 launches. I
 path (AKX-AUTO-6, the re-anchor/relaunch watchdog, is a separate unchecked task; this hook is the
 floor half only).
 
-stdlib ONLY and no relative imports: the module is loadable by file path from root launchers.
-Records are plain JSON (`entries/<id>.json` immutable, `index.jsonl` append-only) so a belief adapter
-can project them; the floor row is embedded verbatim and sealed by `floor_sha256`.
+STORAGE (operator decision 2026-10-22): the MASTER model registry (research
+`orchestration/model_registry.yaml`, top-level `serving_floors:` keyed by role) is the ONLY floor store.
+Readers read only it -- no pending file, no fallback. This module is READ-ONLY over it: a calibration
+seals its record under durable disk (campaign store), uses the fresh floor in-process, and
+`plan_registration` emits an entry + the applier command; the owning session adds the entry in a normal
+commit through `apply_registry_serving_floors.py` (comment-preserving, round-trip proven) from a clean
+worktree of origin/main. Only the in-flight calibration CLAIMS (locks, not floors) live outside it.
+
+stdlib + yaml and no relative imports: the module is loadable by file path (root shim, the registry
+validator).
 """
 from __future__ import annotations
 
@@ -66,7 +73,9 @@ EQUIVALENCE_SCHEMA = "epyc.autokernel.build_equivalence.v1"
 FLOOR_SCHEMAS = ("epyc.autokernel.serving_floor.v1", "epyc.autokernel.serving_floor.v2")
 MATCHED_SCHEMA = "epyc.autokernel.serving_floor.v2"
 
-DEFAULT_ROOT = Path(os.environ.get("FLOOR_REGISTRY_ROOT", "/mnt/raid0/llm/autokernel/floor-registry"))
+DEFAULT_MASTER = Path(os.environ.get(
+    "FLOOR_REGISTRY_MASTER", "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"))
+DEFAULT_CLAIMS = Path(os.environ.get("FLOOR_REGISTRY_CLAIMS", "/mnt/raid0/llm/autokernel/floor-claims"))
 DEFAULT_SOURCE_REPO = Path("/mnt/raid0/llm/llama.cpp")
 DEFAULT_CHAMPION_BRANCH = "ak/champion/llama-cpp-ffc1bac82eec"
 
@@ -337,6 +346,137 @@ def validate_grade(grade: Mapping, *, floor_threads: int | None = None) -> dict:
     return out
 
 
+# ----------------------------------------------------------------------------- master registry I/O
+SECTION = "serving_floors"
+ENTRY_FIELDS = ("id", "recipe", "recipe_hash", "frame_digest", "request_digest", "model_sha",
+                "equivalence_key", "numerics_epoch", "champion_tree_hash", "build", "schema",
+                "floor_pct", "unit", "n", "k", "interval", "grade", "measured_at", "record",
+                "record_sha256", "content_sha256", "annotation")
+
+
+def repo_root_of(master_path: Path | str) -> Path:
+    """The research repo root that relative `record:` paths resolve against."""
+    return Path(master_path).resolve().parent.parent
+
+
+def section_slice(lines: list[str]) -> tuple[int, int] | None:
+    """[start, end) of the top-level `serving_floors:` block (end = next unindented non-comment line)."""
+    start = next((i for i, ln in enumerate(lines) if ln == f"{SECTION}:"), None)
+    if start is None:
+        return None
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i] and not lines[i].startswith((" ", "#")):
+            end = i
+            break
+    return start, end
+
+
+def load_section(master_path: Path | str) -> dict[str, list[dict]]:
+    """role -> entries, read from ONLY the `serving_floors:` slice of the master (no 13k-line parse)."""
+    import yaml
+    lines = Path(master_path).read_text(encoding="utf-8").split("\n")
+    span = section_slice(lines)
+    if span is None:
+        return {}
+    loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+    body = yaml.load("\n".join(lines[span[0]:span[1]]), Loader=loader) or {}
+    section = body.get(SECTION) or {}
+    if not isinstance(section, dict) or any(not isinstance(v, list) for v in section.values()):
+        raise FloorRegistryError(f"{master_path}: `{SECTION}` must map role -> list of entries")
+    return section
+
+
+def _iso_z(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        return _iso(float(value))
+    text = str(value)
+    if text.endswith("+00:00"):
+        text = text[:-6] + "Z"
+    return text.split(".")[0].rstrip("Z") + "Z" if "T" in text else text
+
+
+def _epoch(value: Any) -> float:
+    import calendar
+    try:
+        return float(calendar.timegm(time.strptime(_iso_z(value).rstrip("Z"), "%Y-%m-%dT%H:%M:%S")))
+    except ValueError:
+        return 0.0
+
+
+def plan_registration(floor: Mapping, *, floor_file: Path | str, role: str, equivalence: Mapping,
+                      grade: Mapping, numerics_epoch: str, annotation: str = "",
+                      model_sha: str | None = None, registered_by: str = "unknown") -> dict:
+    """The REGISTRY ENTRY for a calibrated floor plus the applier invocation. Writes NOTHING: the
+    master registry is changed only by `apply_registry_serving_floors.py`, run by the owning session
+    from a clean worktree on origin/main in a normal commit. `floor_file` is the sealed record already
+    on durable disk (the campaign store); the applier copies it to `record_dest` and pins its sha."""
+    if not role or not isinstance(role, str):
+        raise FloorRegistryError("a registry role/key is required")
+    if not isinstance(numerics_epoch, str) or not numerics_epoch:
+        raise FloorRegistryError("numerics_epoch must be a non-empty label")
+    if equivalence.get("schema") != EQUIVALENCE_SCHEMA or not equivalence.get("equivalence_key"):
+        raise FloorRegistryError("equivalence must come from equivalence_for_build")
+    raw = Path(floor_file).read_bytes()
+    if json.loads(raw) != json.loads(json.dumps(floor)):
+        raise FloorRegistryError("floor_file does not contain the floor being registered")
+    facts = floor_facts(floor, model_sha=model_sha)
+    clean = validate_grade(grade, floor_threads=facts["threads"])
+    base = floor.get("baseline_resolved_recipe") or {}
+    measured = (floor.get("conditions") or {}).get("recorded_at") or facts.get("calibrated_at") or _now()
+    interval = floor.get("interval") or {}
+    record_name = Path(floor_file).name
+    entry = {
+        "id": str(floor.get("content_sha256") or hashlib.sha256(raw).hexdigest())[:16],
+        "recipe": facts["recipe"], "recipe_hash": facts["recipe_hash"],
+        "frame_digest": facts["frame_digest"], "request_digest": facts["request_digest"],
+        "model_sha": facts["model_sha"], "equivalence_key": equivalence["equivalence_key"],
+        "numerics_epoch": numerics_epoch, "champion_tree_hash": equivalence["source_tree_hash"],
+        "build": {"commit": equivalence["commit"], "build_dir": equivalence["build_dir"],
+                  "execution_digest": facts["execution_digest"], "executable_sha256": facts["executable"],
+                  "dso_sha256": dict(sorted(facts["dsos"].items()))},
+        "schema": facts["schema"], "floor_pct": facts["floor_pct"], "unit": "process", "n": facts["n"],
+        "k": facts["pairs"],
+        "interval": {"level": interval.get("level"), "low_pct": interval.get("low_pct"),
+                     "high_pct": interval.get("high_pct")},
+        "grade": clean, "measured_at": _iso_z(measured),
+        "record": f"artifacts/serving-floors/{record_name}",
+        "record_sha256": hashlib.sha256(raw).hexdigest(),
+        "content_sha256": floor.get("content_sha256"), "annotation": annotation,
+    }
+    plan = {"schema": "epyc.autokernel.floor_registry_plan.v1", "role": role, "entry": entry,
+            "record_src": str(Path(floor_file).resolve()), "record_dest": entry["record"],
+            "registered_by": registered_by}
+    return plan
+
+
+def applier_command(plan_path: Path | str, master: Path | str = DEFAULT_MASTER) -> str:
+    return (f"python3 -m autokernel.loop.apply_registry_serving_floors --registry <CLEAN-WORKTREE>/"
+            f"orchestration/model_registry.yaml --plan {plan_path}   # from scripts/kernel_rnd, on a clean "
+            f"worktree of origin/main; then commit; canonical master: {master}")
+
+
+def _load_record(master_path: Path, entry: Mapping) -> dict:
+    """The entry's sealed record, verified against its pinned sha and against the entry's own claims."""
+    path = repo_root_of(master_path) / str(entry.get("record", ""))
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise FloorRegistryError(f"record {entry.get('record')!r} unreadable: {exc}") from exc
+    if hashlib.sha256(raw).hexdigest() != entry.get("record_sha256"):
+        raise FloorRegistryError(f"record {path} does not match its pinned record_sha256")
+    floor = json.loads(raw)
+    facts = floor_facts(floor)
+    for mine, theirs in (("recipe_hash", "recipe_hash"), ("request_digest", "request_digest"),
+                         ("floor_pct", "floor_pct"), ("n", "n"), ("frame_digest", "frame_digest"),
+                         ("model_sha", "model_sha")):
+        if facts[mine] != entry.get(theirs):
+            raise FloorRegistryError(f"record {path}: {mine} {facts[mine]!r} != entry {entry.get(theirs)!r}")
+    if floor.get("content_sha256") != entry.get("content_sha256"):
+        raise FloorRegistryError(f"record {path}: content_sha256 differs from the entry's")
+    return floor
+
+
 # ----------------------------------------------------------------------------- registry
 @dataclass
 class LookupResult:
@@ -349,86 +489,40 @@ class LookupResult:
         return self.floor is not None
 
 
+def _normalize(role: str, e: Mapping) -> dict:
+    return {"_role": role, "_id": e.get("id"), "_path": e.get("record"),
+            "key": {"equivalence_key": e.get("equivalence_key"), "recipe_hash": e.get("recipe_hash"),
+                    "request_digest": e.get("request_digest"), "model_sha": e.get("model_sha"),
+                    "frame_digest": e.get("frame_digest"), "pairs": e.get("k")},
+            "era": {"champion_commit": (e.get("build") or {}).get("commit", ""),
+                    "champion_source_tree_hash": e.get("champion_tree_hash"),
+                    "numerics_epoch": e.get("numerics_epoch")},
+            "grade": e.get("grade") or {},
+            "summary": {"recipe": e.get("recipe"), "floor_pct": e.get("floor_pct"), "n": e.get("n"),
+                        "calibrated_at": _epoch(e.get("measured_at"))},
+            "registered_ts": _epoch(e.get("measured_at")), "raw": dict(e)}
+
+
 class FloorRegistry:
-    def __init__(self, root: Path | str = DEFAULT_ROOT):
-        self.root = Path(root)
+    """READ-ONLY view of the master registry's `serving_floors` section, plus the in-flight
+    calibration CLAIMS (locks, not floors). It never writes a floor: see `plan_registration`."""
 
-    # ---- write
-    def register(self, floor: Mapping, *, equivalence: Mapping, grade: Mapping,
-                 numerics_epoch: str, model_sha: str | None = None,
-                 registered_by: str = "unknown",
-                 validator: Callable[[Mapping], None] | None = None) -> Path:
-        """Admit one calibrated floor. Idempotent on identical content; entries are immutable.
-
-        `validator` is the AK-side frame check (`serving._validate_matched_floor` bound to its
-        recipe/requests/pairs) -- the registry stays stdlib-only and cannot run it itself.
-        """
-        if not isinstance(numerics_epoch, str) or not numerics_epoch:
-            raise FloorRegistryError("numerics_epoch must be a non-empty label")
-        if equivalence.get("schema") != EQUIVALENCE_SCHEMA or not equivalence.get("equivalence_key"):
-            raise FloorRegistryError("equivalence must come from equivalence_for_build")
-        facts = floor_facts(floor, model_sha=model_sha)
-        if validator is not None:
-            validator(floor)
-        clean = validate_grade(grade, floor_threads=facts["threads"])
-        now = _now()
-        floor_doc = json.loads(_canon(floor))  # detached, JSON-clean copy
-        entry = {
-            "schema": ENTRY_SCHEMA, "registered_at": _iso(now), "registered_ts": now,
-            "registered_by": registered_by,
-            "key": {"equivalence_key": equivalence["equivalence_key"],
-                    "recipe_hash": facts["recipe_hash"], "request_digest": facts["request_digest"],
-                    "model_sha": facts["model_sha"], "frame_digest": facts["frame_digest"],
-                    "pairs": facts["pairs"]},
-            "era": {"champion_commit": equivalence["commit"],
-                    "champion_source_tree_hash": equivalence["source_tree_hash"],
-                    "numerics_epoch": numerics_epoch},
-            "grade": clean,
-            "anchor": {"commit": equivalence["commit"], "build_dir": equivalence["build_dir"],
-                       "execution_digest": facts["execution_digest"],
-                       "executable_sha256": facts["executable"],
-                       "dso_sha256": facts["dsos"], "file_shas": equivalence.get("file_shas", {})},
-            "equivalence": {k: equivalence[k] for k in
-                            ("source_tree_hash", "cmake_recipe_digest", "compiler", "cmake_recipe")},
-            "summary": {"recipe": facts["recipe"], "floor_pct": facts["floor_pct"], "n": facts["n"],
-                        "unit": "process", "schema": facts["schema"],
-                        "calibrated_at": facts["calibrated_at"]},
-            "floor": floor_doc, "floor_sha256": digest(floor_doc)}
-        entry_id = digest({"key": entry["key"], "era": entry["era"], "grade": clean,
-                           "floor_sha256": entry["floor_sha256"]})[:32]
-        path = self.root / "entries" / f"{entry_id}.json"
-        try:
-            _write_atomic(path, entry, exclusive=True)
-        except FileExistsError:
-            return path  # same content already registered
-        with (self.root / "index.jsonl").open("a", encoding="utf-8") as idx:
-            idx.write(_canon({"id": entry_id, "registered_at": entry["registered_at"],
-                              "key": entry["key"], "era": entry["era"], "grade": clean,
-                              "floor_pct": facts["floor_pct"], "n": facts["n"]}) + "\n")
-        self.release_claim_for(entry, note=f"registered {entry_id}")
-        return path
+    def __init__(self, master: Path | str = DEFAULT_MASTER, claims_root: Path | str = DEFAULT_CLAIMS):
+        self.master = Path(master)
+        self.claims_root = Path(claims_root)
 
     # ---- read
-    def entries(self) -> list[dict]:
+    def entries(self, role: str | None = None) -> list[dict]:
         out = []
-        for path in sorted((self.root / "entries").glob("*.json")):
-            try:
-                entry = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            entry["_path"] = str(path)
-            out.append(entry)
+        for r, rows in load_section(self.master).items():
+            if role is None or r == role:
+                out.extend(_normalize(r, e) for e in rows if isinstance(e, dict))
         return out
-
-    @staticmethod
-    def _intact(entry: Mapping) -> bool:
-        return (entry.get("schema") == ENTRY_SCHEMA
-                and entry.get("floor_sha256") == digest(entry.get("floor")))
 
     def lookup_detail(self, *, equivalence_key: str, recipe_hash: str, request_digest: str,
                       model_sha: str, numerics_epoch: str, require_grade: str = "decision",
                       frame_digest: str | None = None, pairs: int | None = None,
-                      threads: int | None = None,
+                      threads: int | None = None, role: str | None = None,
                       champion: Mapping | None = None,
                       check_champion: bool = True) -> LookupResult:
         """`champion` = `champion_state(...)`. With `check_champion` (the default) a lookup that
@@ -441,17 +535,13 @@ class FloorRegistry:
             want["frame_digest"] = frame_digest
         if pairs is not None:
             want["pairs"] = pairs
-        keyed = [e for e in self.entries() if all(e.get("key", {}).get(k) == v for k, v in want.items())]
+        keyed = [e for e in self.entries(role) if all(e["key"].get(k) == v for k, v in want.items())]
         if not keyed:
             return LookupResult(STATUS_MISS, reasons=["no entry for this key"])
-        sound = [e for e in keyed if self._intact(e)]
-        if not sound:
-            return LookupResult(STATUS_CORRUPT, reasons=[f"{len(keyed)} keyed entr(ies) fail their "
-                                                         f"floor_sha256 seal"])
         reasons: list[str] = []
-        live = [e for e in sound if e["era"]["numerics_epoch"] == numerics_epoch]
+        live = [e for e in keyed if e["era"]["numerics_epoch"] == numerics_epoch]
         if not live:
-            have = sorted({e["era"]["numerics_epoch"] for e in sound})
+            have = sorted({str(e["era"]["numerics_epoch"]) for e in keyed})
             return LookupResult(STATUS_STALE_NUMERICS, reasons=[
                 f"registered under numerics_epoch {have}, caller is {numerics_epoch!r}: a floor is "
                 f"never reused across a numerics change (MEASUREMENT.md A4)"])
@@ -468,18 +558,23 @@ class FloorRegistry:
                     f"reused across a champion advance -- recalibrate once"])
             live = fresh
         rank = {"decision": 1, "indicative": 0}
-        graded = [e for e in live if rank[e["grade"]["claim_class"]] >= rank[require_grade]]
+        graded = [e for e in live if rank.get(e["grade"].get("claim_class"), -1) >= rank[require_grade]]
         if threads is not None:
-            graded = [e for e in graded if e["grade"]["threads"] == threads]
+            graded = [e for e in graded if e["grade"].get("threads") == threads]
         if not graded:
-            have = sorted({(e["grade"]["claim_class"], e["grade"]["threads"], e["grade"]["co_tenancy"])
-                           for e in live})
+            have = sorted({(str(e["grade"].get("claim_class")), e["grade"].get("threads"),
+                            str(e["grade"].get("co_tenancy"))) for e in live})
             return LookupResult(STATUS_GRADE, reasons=[
                 f"need {require_grade}" + (f" threads={threads}" if threads else "")
                 + f"; registered: {have}"])
         # newest only -- never shop among floors for a wider or narrower bar (cf. DS41-C69)
         best = max(graded, key=lambda e: (e["summary"].get("calibrated_at") or 0, e["registered_ts"]))
-        return LookupResult(STATUS_HIT, floor=json.loads(_canon(best["floor"])), entry=best)
+        try:
+            floor = _load_record(self.master, best["raw"])
+        except FloorRegistryError as exc:
+            return LookupResult(STATUS_CORRUPT, entry=best, reasons=[str(exc)])
+        best["_path"] = str(repo_root_of(self.master) / best["raw"]["record"])
+        return LookupResult(STATUS_HIT, floor=floor, entry=best)
 
     def lookup(self, **kwargs) -> dict | None:
         """The floor row or None (see `lookup_detail` for the reason a miss happened)."""
@@ -489,16 +584,20 @@ class FloorRegistry:
         """Every entry with its freshness against the CURRENT champion (the Q38FN flag)."""
         rows = []
         for e in self.entries():
-            fresh = e.get("era", {}).get("champion_source_tree_hash") == champion.get("source_tree_hash")
-            rows.append({"id": Path(e["_path"]).stem, "recipe": e["summary"].get("recipe"),
+            fresh = e["era"]["champion_source_tree_hash"] == champion.get("source_tree_hash")
+            try:
+                _load_record(self.master, e["raw"])
+                intact = True
+            except FloorRegistryError:
+                intact = False
+            rows.append({"role": e["_role"], "id": e["_id"], "recipe": e["summary"]["recipe"],
                          "floor_pct": e["summary"]["floor_pct"], "n": e["summary"]["n"],
                          "grade": e["grade"], "anchor": e["era"]["champion_commit"][:12],
                          "numerics_epoch": e["era"]["numerics_epoch"],
-                         "state": "fresh" if fresh else "STALE_CHAMPION_ADVANCED",
-                         "intact": self._intact(e)})
+                         "state": "fresh" if fresh else "STALE_CHAMPION_ADVANCED", "intact": intact})
         return rows
 
-    # ---- one recalibration per (champion advance x condition)
+    # ---- one recalibration per (champion advance x condition): claims are locks, not floors
     def condition_key(self, *, champion_tree_hash: str, equivalence_key: str, recipe_hash: str,
                       request_digest: str, model_sha: str, pairs: int | None, numerics_epoch: str,
                       grade: str) -> str:
@@ -509,10 +608,10 @@ class FloorRegistry:
 
     def claim_calibration(self, condition: str, *, owner: str, note: str = "") -> dict:
         """Atomically take the right to calibrate `condition`. {granted, claim}; a held claim is
-        reported, never stolen (release is explicit: `release_claim` or registering the floor)."""
-        path = self.root / "claims" / f"{condition}.json"
+        reported, never stolen (release is explicit: `release_claim`)."""
+        path = self.claims_root / f"{condition}.json"
         claim = {"schema": CLAIM_SCHEMA, "condition": condition, "owner": owner, "pid": os.getpid(),
-                 "claimed_at": _iso(_now()), "claimed_ts": _now(), "note": note}
+                 "claimed_at": _iso(_now()), "claimed_ts": _now(), "note": note, "state": "calibrating"}
         try:
             _write_atomic(path, claim, exclusive=True)
             return {"granted": True, "claim": claim}
@@ -523,51 +622,60 @@ class FloorRegistry:
 
     def claim_holder(self, condition: str) -> dict | None:
         """Read-only: the live claim for `condition`, or None (never creates or steals)."""
-        path = self.root / "claims" / f"{condition}.json"
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            return json.loads((self.claims_root / f"{condition}.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
 
+    def mark_awaiting_registration(self, condition: str, plan_path: Path | str) -> bool:
+        """The holder finished calibrating and has emitted its registry plan; the claim now says so
+        (so a waiter knows a floor EXISTS and is only waiting for the owner's commit)."""
+        held = self.claim_holder(condition)
+        if held is None:
+            return False
+        held.update({"state": "awaiting_registration", "plan": str(plan_path),
+                     "calibrated_at": _iso(_now())})
+        _write_atomic(self.claims_root / f"{condition}.json", held)
+        return True
+
     def release_claim(self, condition: str) -> bool:
-        path = self.root / "claims" / f"{condition}.json"
+        path = self.claims_root / f"{condition}.json"
         if path.exists():
             path.rename(path.with_suffix(f".released-{int(_now())}"))
             return True
         return False
 
-    def release_claim_for(self, entry: Mapping, *, note: str = "") -> None:
-        """Registering a floor settles every claim of its condition (any champion tree matching)."""
-        k, era, g = entry["key"], entry["era"], entry["grade"]
-        for grade in {g["claim_class"], "indicative"}:
-            self.release_claim(self.condition_key(
-                champion_tree_hash=era["champion_source_tree_hash"],
-                equivalence_key=k["equivalence_key"], recipe_hash=k["recipe_hash"],
-                request_digest=k["request_digest"], model_sha=k["model_sha"], pairs=k["pairs"],
-                numerics_epoch=era["numerics_epoch"], grade=grade))
-
 
 def check_launch(registry: FloorRegistry, *, equivalence: Mapping, recipe_hash: str,
                  request_digest: str, model_sha: str, pairs: int | None, numerics_epoch: str,
                  require_grade: str, champion: Mapping, owner: str,
-                 frame_digest: str | None = None, threads: int | None = None) -> dict:
+                 frame_digest: str | None = None, threads: int | None = None,
+                 role: str | None = None) -> dict:
     """THE LAUNCHER HOOK. `{action: reuse|calibrate|claimed, ...}`.
 
-    reuse     -- a fresh registered floor satisfies this condition; run NO A/A. `floor_path` names it.
-    calibrate -- none does and this caller now HOLDS the condition's claim: run the A/A once, then
-                 `register` (which releases the claim).
-    claimed   -- another launcher already holds the claim for this exact condition; wait for its
-                 floor (poll `lookup`), do not calibrate.
+    reuse     -- a fresh floor in the MASTER registry satisfies this condition; run NO A/A.
+                 `floor_path` names its sealed record.
+    calibrate -- none does and this caller now HOLDS the condition's claim: run the A/A once, use the
+                 floor in-process, then emit the registry plan (`plan_registration`) and
+                 `mark_awaiting_registration`; the owning session commits it.
+    claimed   -- another launcher already holds the claim for this exact condition (its `state` says
+                 calibrating or awaiting_registration); wait for the master to carry its floor, do
+                 not calibrate.
     """
     result = registry.lookup_detail(
         equivalence_key=equivalence["equivalence_key"], recipe_hash=recipe_hash,
         request_digest=request_digest, model_sha=model_sha, numerics_epoch=numerics_epoch,
         require_grade=require_grade, frame_digest=frame_digest, pairs=pairs, threads=threads,
-        champion=champion)
+        role=role, champion=champion)
+    condition = registry.condition_key(
+        champion_tree_hash=champion["source_tree_hash"], equivalence_key=equivalence["equivalence_key"],
+        recipe_hash=recipe_hash, request_digest=request_digest, model_sha=model_sha, pairs=pairs,
+        numerics_epoch=numerics_epoch, grade=require_grade)
     if result:
+        registry.release_claim(condition)  # the floor is in the master: any awaiting claim is settled
         return {"action": "reuse", "status": result.status, "floor_path": result.entry["_path"],
-                "floor_pct": result.floor["floor_pct"], "n": result.floor["n"],
-                "grade": result.entry["grade"]}
+                "role": result.entry["_role"], "floor_pct": result.floor["floor_pct"],
+                "n": result.floor["n"], "grade": result.entry["grade"]}
     if result.status in (STATUS_CORRUPT,):
         return {"action": "error", "status": result.status, "reasons": result.reasons}
     if equivalence.get("source_tree_hash") != champion.get("source_tree_hash"):
@@ -576,14 +684,74 @@ def check_launch(registry: FloorRegistry, *, equivalence: Mapping, recipe_hash: 
         return {"action": "error", "status": STATUS_STALE_CHAMPION, "reasons": [
             f"anchor build {equivalence.get('commit', '')[:12]} is not the current champion "
             f"{str(champion.get('commit'))[:12]}: re-anchor (--new-anchor-epoch) before calibrating"]}
-    condition = registry.condition_key(
-        champion_tree_hash=champion["source_tree_hash"], equivalence_key=equivalence["equivalence_key"],
-        recipe_hash=recipe_hash, request_digest=request_digest, model_sha=model_sha, pairs=pairs,
-        numerics_epoch=numerics_epoch, grade=require_grade)
     taken = registry.claim_calibration(condition, owner=owner,
                                        note=f"miss status={result.status}: {'; '.join(result.reasons)}")
     return {"action": "calibrate" if taken["granted"] else "claimed", "status": result.status,
             "reasons": result.reasons, "condition": condition, "claim": taken["claim"]}
+
+
+# ----------------------------------------------------------------------------- validator rules
+def validate_section(master_data: Mapping, repo_root: Path | str) -> tuple[list[str], list[str]]:
+    """(errors, warnings) for the `serving_floors` section of a parsed master registry.
+    Called by `scripts/validate_model_registry.py`."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    section = master_data.get(SECTION)
+    if section is None:
+        return errors, warnings
+    if not isinstance(section, dict):
+        return [f"{SECTION}: must map role -> list of entries"], warnings
+    roles = master_data.get("roles") or {}
+    seen: set[tuple] = set()
+    for role, rows in section.items():
+        if not isinstance(rows, list):
+            errors.append(f"{SECTION}.{role}: must be a list")
+            continue
+        if role not in roles:
+            warnings.append(f"{SECTION}.{role}: not a roles.* id (a campaign key with no served role is "
+                            f"allowed for catalogue measurements; bind it when the model is served)")
+        elif roles[role].get("deprecated"):
+            warnings.append(f"{SECTION}.{role}: role is deprecated; its floors are history")
+        for i, e in enumerate(rows):
+            where = f"{SECTION}.{role}[{i}]"
+            if not isinstance(e, dict):
+                errors.append(f"{where}: not a mapping")
+                continue
+            missing = [f for f in ENTRY_FIELDS if f not in e]
+            if missing:
+                errors.append(f"{where}: missing {missing}")
+                continue
+            if e["unit"] != "process":
+                errors.append(f"{where}: unit {e['unit']!r} (only between-process floors gate; R23-55)")
+            if type(e["n"]) is not int or (e["schema"] == MATCHED_SCHEMA and e["n"] < 24):
+                errors.append(f"{where}: n {e['n']!r} (matched floors need an int n >= 24)")
+            g = e["grade"] if isinstance(e["grade"], dict) else {}
+            if (g.get("claim_class") not in GRADES or g.get("co_tenancy") not in CO_TENANCY
+                    or type(g.get("threads")) is not int):
+                errors.append(f"{where}: grade needs claim_class {GRADES}, co_tenancy {CO_TENANCY}, int threads")
+            elif g["claim_class"] == "decision" and g["co_tenancy"] != "quiet":
+                errors.append(f"{where}: decision-grade requires co_tenancy quiet")
+            iv = e["interval"] if isinstance(e["interval"], dict) else {}
+            if not (type(iv.get("low_pct")) in (int, float) and type(iv.get("high_pct")) in (int, float)
+                    and iv["low_pct"] <= iv["high_pct"]):
+                errors.append(f"{where}: interval needs low_pct <= high_pct")
+            ident = (role, e["equivalence_key"], e["recipe_hash"], e["request_digest"], e["k"],
+                     e["numerics_epoch"], g.get("claim_class"), e["measured_at"])
+            if ident in seen:
+                errors.append(f"{where}: duplicate of an earlier entry")
+            seen.add(ident)
+            pinned = ((roles.get(role) or {}).get("model") or {}).get("sha256")
+            if pinned and pinned != e["model_sha"] and not (
+                    isinstance(pinned, str) and e["model_sha"] in pinned):
+                errors.append(f"{where}: model_sha differs from roles.{role}.model.sha256")
+            try:
+                _load_record(Path(repo_root) / "orchestration" / "model_registry.yaml", e)
+            except (FloorRegistryError, ValueError) as exc:
+                errors.append(f"{where}: {exc}")
+            rec = str(e["record"])
+            if rec.startswith(("/mnt/raid0/llm/tmp", "/tmp")) or "/llm/tmp/" in rec:
+                errors.append(f"{where}: record is in scratch ({rec})")
+    return errors, warnings
 
 
 # ----------------------------------------------------------------------------- CLI
@@ -596,18 +764,25 @@ def _grade_args(p: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="floor_registry", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    p.add_argument("--master", type=Path, default=DEFAULT_MASTER,
+                   help="the MASTER model registry (the only floor store); default %(default)s")
+    p.add_argument("--claims", type=Path, default=DEFAULT_CLAIMS, help="in-flight calibration claim locks")
     p.add_argument("--source-repo", type=Path, default=DEFAULT_SOURCE_REPO)
     p.add_argument("--champion-branch", default=DEFAULT_CHAMPION_BRANCH)
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("equivalence", help="print a build's equivalence record")
     s.add_argument("build", type=Path)
     s.add_argument("--commit", help="the build's commit (required for an in-tree build with no VERSION.txt)")
-    s = sub.add_parser("register", help="register a calibrated floor json")
-    s.add_argument("floor", type=Path)
+    s = sub.add_parser("register", help="PLAN the registry entry for a calibrated floor (writes only "
+                       "the plan file; the master is changed by apply_registry_serving_floors)")
+    s.add_argument("floor", type=Path, help="the sealed floor json, already on durable disk")
     s.add_argument("--build", type=Path, required=True, help="the build the A/A ran on")
+    s.add_argument("--commit", help="the build's commit (in-tree build with no VERSION.txt)")
+    s.add_argument("--role", required=True, help="registry role id / campaign key to file it under")
     s.add_argument("--numerics-epoch", required=True)
     s.add_argument("--model-sha")
+    s.add_argument("--annotation", default="")
+    s.add_argument("--plan-out", type=Path, help="default: <floor>.registry-plan.json")
     s.add_argument("--by", default=os.environ.get("USER", "unknown"))
     _grade_args(s)
     for name, helptext in (("lookup", "print the registered floor path, or the miss reason"),
@@ -622,6 +797,7 @@ def build_parser() -> argparse.ArgumentParser:
         s.add_argument("--require-grade", choices=GRADES, default="decision")
         s.add_argument("--threads", type=int)
         s.add_argument("--owner", default=os.environ.get("USER", "unknown"))
+        s.add_argument("--role")
         s.add_argument("--write-floor", type=Path, help="on a hit, write the registered floor json here")
     s = sub.add_parser("status", help="every entry vs the CURRENT champion (flags advanced anchors)")
     s = sub.add_parser("release", help="release a held calibration claim")
@@ -644,7 +820,7 @@ def _identity(args) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    reg = FloorRegistry(args.root)
+    reg = FloorRegistry(args.master, args.claims)
     try:
         if args.cmd == "equivalence":
             print(json.dumps(equivalence_for_build(args.build, source_repo=args.source_repo,
@@ -660,30 +836,36 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "release":
             print("released" if reg.release_claim(args.condition) else "no such claim")
             return 0
-        equiv = equivalence_for_build(args.build, source_repo=args.source_repo)
+        equiv = equivalence_for_build(args.build, source_repo=args.source_repo,
+                                      commit=getattr(args, "commit", None))
         if args.cmd == "register":
             floor = json.loads(args.floor.read_text(encoding="utf-8"))
-            path = reg.register(floor, equivalence=equiv, numerics_epoch=args.numerics_epoch,
-                                model_sha=args.model_sha, registered_by=args.by,
-                                grade={"threads": args.threads, "co_tenancy": args.co_tenancy,
-                                       "claim_class": args.claim_class})
-            print(path)
+            plan = plan_registration(
+                floor, floor_file=args.floor, role=args.role, equivalence=equiv,
+                numerics_epoch=args.numerics_epoch, model_sha=args.model_sha,
+                annotation=args.annotation, registered_by=args.by,
+                grade={"threads": args.threads, "co_tenancy": args.co_tenancy,
+                       "claim_class": args.claim_class})
+            out_path = args.plan_out or args.floor.with_name(args.floor.name + ".registry-plan.json")
+            _write_atomic(out_path, plan)
+            print(f"plan written: {out_path}\nnext (owning session, clean origin/main worktree):\n  "
+                  f"{applier_command(out_path, args.master)}")
             return 0
         ident = _identity(args)
         champ = champion_state(args.source_repo, args.champion_branch)
         if args.cmd == "lookup":
             res = reg.lookup_detail(equivalence_key=equiv["equivalence_key"], numerics_epoch=args.numerics_epoch,
                                     require_grade=args.require_grade, threads=args.threads,
-                                    champion=champ, **ident)
+                                    role=args.role, champion=champ, **ident)
             print(res.entry["_path"] if res else f"{res.status}: {'; '.join(res.reasons)}")
             if res and args.write_floor:
                 _write_atomic(args.write_floor, res.floor)
             return 0 if res else 1
         out = check_launch(reg, equivalence=equiv, numerics_epoch=args.numerics_epoch,
                            require_grade=args.require_grade, champion=champ, owner=args.owner,
-                           threads=args.threads, **ident)
+                           threads=args.threads, role=args.role, **ident)
         if out["action"] == "reuse" and args.write_floor:
-            _write_atomic(args.write_floor, json.loads(Path(out["floor_path"]).read_text())["floor"])
+            _write_atomic(args.write_floor, json.loads(Path(out["floor_path"]).read_text()))
         print(json.dumps(out, indent=1, sort_keys=True))
         return {"reuse": EXIT_REUSE, "calibrate": EXIT_CALIBRATE, "claimed": EXIT_CLAIMED}.get(
             out["action"], EXIT_ERROR)
