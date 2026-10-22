@@ -332,7 +332,7 @@ def assumptions(model, threads, kind):
     if threads != 96:
         a.append(f"{threads} threads: prefill time scaled by 96/{threads} (linear) is ASSUMED; D4 ran at 96")
     if kind == "gen":
-        a.append(f"np1 decode {DECODE_NP1_ASSUMED:.0f} tok/s and the snapshot cost 0.4 s are ASSUMED (D4 measured only decode shared with prefill: {DECODE_SHARED_MEASURED})")
+        a.append(f"np1 decode {MODELS[model]['decode_tps']:.0f} tok/s ({model}) and the snapshot cost 0.4 s are ASSUMED (D4 measured only decode shared with prefill: {DECODE_SHARED_MEASURED})")
     a.append("np=1 serial prefill is the D4 wave-0 shape (measured); depth-resume cost = T(n)-T(checkpoint), the depth tax is read off the measured curve")
     return a
 

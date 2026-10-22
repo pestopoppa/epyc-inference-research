@@ -576,7 +576,7 @@ class RunLoop(unittest.TestCase):
 
     def test_a_refused_launch_does_not_stop_a_cheaper_one(self):
         # quarter, 32k, 2 waves: tail_junction plans ~63 min per cell (refused under a 50 min cap), fixed_s4k_c8 ~41.5 min (fits). Order: tail first.
-        rc, calls, out = self.run_main("--stages", "select", "--arms", "tail_junction,fixed_s4k_c8", "--lens-select", "q36_35b=32k", "--cap-s", "3000")
+        rc, calls, out = self.run_main("--stages", "select", "--arms", "tail_junction,fixed_s4k_c8", "--lens-select", "q36_35b=32k", "--waves", "2", "--cap-s", "3000")
         self.assertEqual(calls, [("select__q36_35b__fixed_s4k_c8", 2)])
         self.assertEqual(out.count("REFUSED_START"), 1)
 
