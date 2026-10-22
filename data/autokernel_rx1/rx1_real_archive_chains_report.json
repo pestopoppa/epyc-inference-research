@@ -1,0 +1,300 @@
+{
+ "archive": {
+  "has_repair_tree": true,
+  "kept": 38,
+  "nodes": 219,
+  "roots": 172,
+  "total_cost": 251
+ },
+ "arms": {
+  "fixed": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8396,
+    "mean": 0.95272
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 21857,
+   "unobserved_selections": 0
+  },
+  "iid": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8718,
+    "mean": 0.96148
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.14400000000000002,
+    "lo95": -0.12,
+    "mean": 0.00876
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 22283,
+   "unobserved_selections": 0
+  },
+  "rex_C10": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.6798000000000001,
+    "mean": 0.9303199999999999
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.1439999999999999,
+    "lo95": -0.264,
+    "mean": -0.022399999999999993
+   },
+   "coverage": 0.6264224983649445,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 14367,
+   "unobserved_selections": 8568
+  },
+  "rex_C20": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.6798000000000001,
+    "mean": 0.92604
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.10420000000000003,
+    "lo95": -0.29640000000000005,
+    "mean": -0.026679999999999992
+   },
+   "coverage": 0.6259068263263701,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 14322,
+   "unobserved_selections": 8560
+  },
+  "rex_C5": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.7198,
+    "mean": 0.9301999999999999
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.1359999999999999,
+    "lo95": -0.248,
+    "mean": -0.022519999999999995
+   },
+   "coverage": 0.6239759456161758,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 14319,
+   "unobserved_selections": 8629
+  },
+  "rex_C50": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.7344,
+    "mean": 0.92976
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.11280000000000018,
+    "lo95": -0.24979999999999997,
+    "mean": -0.022959999999999994
+   },
+   "coverage": 0.6224267271458479,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 14271,
+   "unobserved_selections": 8657
+  },
+  "split_R0": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8398,
+    "mean": 0.95884
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.14420000000000005,
+    "lo95": -0.1364,
+    "mean": 0.006119999999999999
+   },
+   "coverage": 1.0,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 22249,
+   "unobserved_selections": 0
+  },
+  "split_R1": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.816,
+    "mean": 0.955
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.136,
+    "lo95": -0.1286,
+    "mean": 0.0022800000000000008
+   },
+   "coverage": 0.7055212731406301,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 21723,
+   "unobserved_selections": 9067
+  },
+  "split_R2": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8318,
+    "mean": 0.9572400000000001
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.12820000000000004,
+    "lo95": -0.1282,
+    "mean": 0.004520000000000003
+   },
+   "coverage": 0.49363093225115545,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 21895,
+   "unobserved_selections": 22460
+  },
+  "split_R3": {
+   "auc_frontier": {
+    "hi95": 1.0,
+    "lo95": 0.8236,
+    "mean": 0.94916
+   },
+   "auc_minus_fixed": {
+    "hi95": 0.136,
+    "lo95": -0.1519999999999999,
+    "mean": -0.003559999999999996
+   },
+   "coverage": 0.3815245635758009,
+   "endpoint": {
+    "hi95": 1.0,
+    "lo95": 1.0,
+    "mean": 1.0
+   },
+   "endpoint_minus_fixed": {
+    "hi95": 0.0,
+    "lo95": 0.0,
+    "mean": 0.0
+   },
+   "observed_calls": 21877,
+   "unobserved_selections": 35464
+  }
+ },
+ "budget_calls": 125,
+ "limitations": "Replay uses only recorded outcomes. Refinements/repairs the archive never ran are unobserved: a refine of a node with no recorded child costs one call and yields no outcome (REx arms); sweep repairs past a recorded chain end are uncharged and counted unobserved. Bootstrap resamples whole proposal trees with replacement; intervals are 2.5/97.5 percentiles over replicates. Success = cleared the keep gate; AUC-frontier = mean over calls 1..budget of P(best-so-far success).",
+ "repair_chain_stats": {
+  "chain_length_counts": {
+   "1": 125,
+   "2": 47
+  },
+  "chains": 172,
+  "cost_basis": "author_calls",
+  "excluded_status_counts": {
+   "abstained": 356,
+   "anchor_guard_excursion": 4,
+   "anchor_verified": 30,
+   "authoring_failed": 1,
+   "hypothesis_rejected": 64,
+   "hypothesis_retired": 13,
+   "integrity_refused": 5,
+   "lane_error": 10,
+   "measured_divergence": 2,
+   "measured_serving_gate": 2,
+   "measurement_invalid": 2,
+   "patch_rounds_exhausted": 20,
+   "planner_transient": 363,
+   "refused_at_formation": 6,
+   "refused_duplicate": 3,
+   "resume_rejected": 29,
+   "runtime_observed": 11,
+   "scope_blocked": 12,
+   "stopped_mid_formation": 17,
+   "superseded": 10
+  },
+  "rows_included": 219,
+  "rows_total": 1179,
+  "stores": 7
+ },
+ "reps": 200,
+ "schema": "epyc.autokernel.rex_arm_replay.v1",
+ "seed": "rx1",
+ "source": "experiments.db(repair_chains):/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/store/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-b0ba1d427/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run8-cor-ebb68dc55/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store-b0ba1d427/experiments.db,/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store/experiments.db"
+}

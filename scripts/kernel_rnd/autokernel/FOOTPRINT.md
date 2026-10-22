@@ -282,6 +282,7 @@ incident or measured fact when you next touch the module.
 | `history_replay/ak_hr2_taxfree.py` | 324 | no | AK-HR-2 taxonomy-free parts, run after the held-out agreement gate FAILED (kappa < 0.6). Not reachable from the declared campaign-#1 roots. |
 | `history_replay/ak_hr2_taxonomy.py` | 161 | no | AK-HR-2 frozen mechanism taxonomy v1 and its deterministic rule parser. Not reachable from the declared campaign-#1 roots. |
 | `history_replay/export.py` | 936 | no | Closed-store history exporter and census (AK-HR-1). Not reachable from the declared campaign-#1 roots. |
+| `history_replay/rex_arm_replay.py` | 482 | no | AK-RX-1/1.1: offline REx-arm policy-panel replay (iid and split-budget controls) and the repair-chain adapter over closed `experiments.db` stores. Not reachable from the declared campaign-#1 roots. |
 | `hypothesis_portfolio.py` | 1,220 | no | Strict, read-only loader for the discovery hypothesis portfolio. Not reachable from the declared campaign-#1 roots. |
 | `loop/__init__.py` | 10 | yes | The AutoKernel discovery loop, rebuilt. On the campaign path: first reached via `controller.experiments`. |
 | `loop/a2_execution_state.py` | 421 | yes | Closed durable state for controller-owned A2 runtime phase events. On the campaign path: first reached via `journal`. |
