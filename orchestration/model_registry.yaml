@@ -1371,6 +1371,8 @@ server_mode:
     port: 8196
     slots: 1
     model_role: reap_25b_frontdoor
+    chat_template:
+      served_template_sha256: "5a38bfa05833266240066aedc497decc9b00cc0d3e3b8cceea98cf530196ab06"
     description: REAP-pruned Qwen3-Coder-25B-A3B — 25% expert removal, pure MoE, spec decode viable
     model:
       name: cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M
@@ -2557,6 +2559,8 @@ server_mode:
     url: http://localhost:9001
     port: 9001
     model_role: document_preprocessing
+    chat_template:
+      served_template_sha256: "0942a43ee0ba48a608814e0b40ac9cb70bcc29ea72f19c84b1bf2597f05aa2bd"
     description: PDF/document OCR with figure localization using llama.cpp
     model: LightOnOCR-2-1B-bbox-Q4_K_M.gguf
     mmproj: LightOnOCR-2-1B-bbox-mmproj-F16.gguf
