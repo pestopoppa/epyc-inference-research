@@ -267,6 +267,14 @@ scorer refuses a set mismatch.
 
 ## 6. Judge (B4): gemma-4-26B-A4B-it-ORIG-Q8_0, a separate launch after the reader
 
+> **2026-10-22 update (operator decision): the judge for HS-PROF-1 BEAM judging is now Claude via the Anthropic API, pinned model id
+> `claude-sonnet-5-5`** (`judge_beam_run.py --judge-backend anthropic`, key from `$ANTHROPIC_API_KEY` only; the judged payload records
+> `judge_backend`, `judge_model_id`, the API's echoed `model`, and token-usage totals). gemma-4-26B-A4B-it-ORIG was **retired and its
+> GGUFs deleted on 2026-09-23**, so the gemma judge below can no longer be launched. The judge-family rule is unchanged and satisfied
+> (Claude is not the Qwen3.6 reader family; held fixed across arms). With the API judge there is no judge server, no GPU phase and no
+> co-residency concern; `run_hs_prof1_beam_arm.sh PHASE=judge JUDGE_BACKEND=anthropic` keeps the 5-question smoke first. The history
+> below is the 2026-09-16 decision and is left as written.
+
 **What was decided (operator, 2026-09-16):**
 - The M-12 judge is **gemma-4-26B-A4B-it-ORIG**.
 - It is a different model family from the Qwen3.6-35B-A3B reader, satisfying

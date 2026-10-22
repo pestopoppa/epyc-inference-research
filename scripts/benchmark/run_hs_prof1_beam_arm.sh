@@ -5,7 +5,7 @@
 # (docs/m12-long-context-gpu-recipe.md §6: sequential, never co-resident):
 #
 #   PHASE=reader   derive + build snapshots + one run_benchmark per arm; records each arm's result JSON path
-#   PHASE=judge    judge smoke (5 questions) -> judge + score every arm -> table.json   (NO model swap inside)
+#   PHASE=judge    (JUDGE_BACKEND=served, default) judge smoke (5 questions) -> judge + score every arm -> table.json   (NO model swap inside)
 #
 # THE ONE STEP THAT STAYS A LAUNCHER STEP: between the phases the reader server is stopped and the judge server is
 # started (recipe §6 line, `python scripts/benchmark/m12_launch_argv.py <judge recipe> --port P`). This script does not
@@ -16,6 +16,12 @@
 #     OUT_DIR=/mnt/raid0/llm/tmp/hs-prof1 scripts/benchmark/run_hs_prof1_beam_arm.sh
 #   WINDOW_CONFIRMED=1 PHASE=judge  JUDGE_PORT=Q JUDGE_PID=<pid> OUT_DIR=/mnt/raid0/llm/tmp/hs-prof1 \
 #     scripts/benchmark/run_hs_prof1_beam_arm.sh
+#
+# JUDGE_BACKEND=anthropic (operator decision 2026-10-22: Claude via API, pinned id; gemma ORIG retired): PHASE=judge needs NO
+# JUDGE_PORT/JUDGE_PID and no server proof (no GPU, no local model). It reads ANTHROPIC_API_KEY from the environment only (never
+# a file/arg), exits 5 "BLOCKED: ANTHROPIC_API_KEY unset" without it, and keeps the 5-question smoke first. JUDGE_MODEL_ID pins
+# the API model id (default claude-sonnet-5-5). Judge calls cost money: judge_beam_run prints the call estimate before calling.
+#   WINDOW_CONFIRMED=1 PHASE=judge JUDGE_BACKEND=anthropic OUT_DIR=... scripts/benchmark/run_hs_prof1_beam_arm.sh
 #
 # score_beam_run is called WITHOUT --belief-measurements: that flag requires --arm to equal the rows' recorded
 # context mode, which is "profile" for BOTH arms here, and beam_memory_capture has no profile-arm ladder (belief wiring is
@@ -29,7 +35,9 @@ fi
 : "${PHASE:?PHASE=reader|judge}" "${OUT_DIR:?}"
 PY="${PY:-/workspace/repos/epyc-orchestrator/.venv/bin/python}"
 RESULTS_ROOT="${RESULTS_ROOT:-/mnt/raid0/llm/epyc-inference-research/benchmarks/results}"
-JUDGE_MODEL="${JUDGE_MODEL:-gemma-4-26B-A4B-it-ORIG-Q8_0}"
+JUDGE_BACKEND="${JUDGE_BACKEND:-served}"
+JUDGE_MODEL_ID="${JUDGE_MODEL_ID:-claude-sonnet-5-5}"
+if [[ "$JUDGE_BACKEND" == "anthropic" ]]; then JUDGE_MODEL="${JUDGE_MODEL:-$JUDGE_MODEL_ID}"; else JUDGE_MODEL="${JUDGE_MODEL:-gemma-4-26B-A4B-it-ORIG-Q8_0}"; fi
 ARMS=(pref_current admission)
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$OUT_DIR"
@@ -71,9 +79,18 @@ PYEOF
   done
   log "reader phase done. NEXT (launcher step): stop the reader (captured pid), start the judge, then PHASE=judge."
 elif [[ "$PHASE" == "judge" ]]; then
-  : "${JUDGE_PORT:?}" "${JUDGE_PID:?pid of the private judge server}"
-  prove_port "$JUDGE_PORT" "$JUDGE_PID"
-  JURL="http://127.0.0.1:${JUDGE_PORT}"
+  case "$JUDGE_BACKEND" in
+    served)
+      : "${JUDGE_PORT:?}" "${JUDGE_PID:?pid of the private judge server}"
+      prove_port "$JUDGE_PORT" "$JUDGE_PID"
+      JARGS=(--judge-model "$JUDGE_MODEL" --judge-url "http://127.0.0.1:${JUDGE_PORT}")
+      proof() { prove_port "$JUDGE_PORT" "$JUDGE_PID"; } ;;
+    anthropic)
+      [[ -n "${ANTHROPIC_API_KEY:-}" ]] || { echo "BLOCKED: ANTHROPIC_API_KEY unset" >&2; exit 5; }
+      JARGS=(--judge-backend anthropic --judge-model-id "$JUDGE_MODEL_ID" --judge-model "$JUDGE_MODEL")
+      proof() { :; } ;;   # no server, no port, no pid
+    *) echo "JUDGE_BACKEND must be served or anthropic" >&2; exit 2 ;;
+  esac
   first="${ARMS[0]}"
   [[ -s "$OUT_DIR/arm_${first}.result.path" ]] || { echo "no reader result recorded; run PHASE=reader first" >&2; exit 5; }
   cd "$here"
@@ -85,7 +102,7 @@ keep = dict(list(r["beam"].items())[:5])
 r2 = dict(r); r2["beam"] = keep
 json.dump({**d, "results": r2} if "results" in d else r2, open(sys.argv[2], "w"))
 PYEOF
-  "$PY" judge_beam_run.py "$OUT_DIR/smoke_slice.json" --out-json "$OUT_DIR/judged_smoke.json" --judge-model "$JUDGE_MODEL" --judge-url "$JURL"
+  "$PY" judge_beam_run.py "$OUT_DIR/smoke_slice.json" --out-json "$OUT_DIR/judged_smoke.json" "${JARGS[@]}"
   "$PY" - "$OUT_DIR/judged_smoke.json" <<'PYEOF'
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -94,8 +111,8 @@ if d.get("unjudged"):
 print("judge smoke ok")
 PYEOF
   for arm in "${ARMS[@]}"; do
-    prove_port "$JUDGE_PORT" "$JUDGE_PID"
-    "$PY" judge_beam_run.py "$(cat "$OUT_DIR/arm_${arm}.result.path")" --out-json "$OUT_DIR/judged_${arm}.json" --judge-model "$JUDGE_MODEL" --judge-url "$JURL"
+    proof
+    "$PY" judge_beam_run.py "$(cat "$OUT_DIR/arm_${arm}.result.path")" --out-json "$OUT_DIR/judged_${arm}.json" "${JARGS[@]}"
     "$PY" score_beam_run.py "$OUT_DIR/judged_${arm}.json" --out-json "$OUT_DIR/scored_${arm}.json" --check-dataset
   done
   "$PY" hs_prof1_profile_arms.py table --out-dir "$OUT_DIR" --out "$OUT_DIR/table.json"
