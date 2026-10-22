@@ -88,19 +88,20 @@ def test_common_prefix_len():
 
 def test_sampling_deterministic_and_filtered(tmp_path):
     h = mk_home(tmp_path)
-    a = adapter.sample_sessions(str(h), n=3, seed=1, min_requests=2)
-    b = adapter.sample_sessions(str(h), n=3, seed=1, min_requests=2)
+    oc = [str(h / ".local/share/opencode/opencode.db")]        # a synthetic snapshot standing in for the ro DBs
+    a = adapter.sample_sessions(str(h), n=3, seed=1, min_requests=2, opencode_dbs=oc)
+    b = adapter.sample_sessions(str(h), n=3, seed=1, min_requests=2, opencode_dbs=oc)
     assert [x[1] for x in a] == [x[1] for x in b]
     assert {x[0] for x in a} == {"claude", "codex", "opencode"}
-    assert adapter.sample_sessions(str(h), n=3, seed=1, min_requests=3) != [] and \
-        all(len(x[2]) >= 3 for x in adapter.sample_sessions(str(h), n=3, seed=1, min_requests=3))
+    assert adapter.sample_sessions(str(h), n=3, seed=1, min_requests=3, opencode_dbs=oc) != [] and \
+        all(len(x[2]) >= 3 for x in adapter.sample_sessions(str(h), n=3, seed=1, min_requests=3, opencode_dbs=oc))
     t = adapter.truncate(a[0][2] * 1, 5, 99)
     assert t == []                                    # prompt cap drops over-long leading request
 
 
 def test_adapter_cli_aggregates_only(tmp_path):
     h = mk_home(tmp_path)
-    r = subprocess.run([sys.executable, str(HERE / "adapter.py"), "--home", str(h), "--out", str(tmp_path / "o"),
+    r = subprocess.run([sys.executable, str(HERE / "adapter.py"), "--home", str(h), "--opencode-db", str(h / ".local/share/opencode/opencode.db"), "--out", str(tmp_path / "o"),
                         "--n", "3", "--min-requests", "2"], capture_output=True, text=True, check=True)
     assert "hello" not in r.stdout and json.loads(r.stdout)["sessions"] == 3
     assert "hello" not in (tmp_path / "o/manifest.json").read_text()
@@ -203,7 +204,7 @@ def test_launcher_dry_run_prints_command(tmp_path):
 def test_driver_stub_end_to_end(tmp_path):
     h = mk_home(tmp_path)
     s = tmp_path / "s"
-    subprocess.run([sys.executable, str(HERE / "adapter.py"), "--home", str(h), "--out", str(s), "--n", "3", "--min-requests", "2"],
+    subprocess.run([sys.executable, str(HERE / "adapter.py"), "--home", str(h), "--opencode-db", str(h / ".local/share/opencode/opencode.db"), "--out", str(s), "--n", "3", "--min-requests", "2"],
                    check=True, capture_output=True)
     o = tmp_path / "o"
     r = run([sys.executable, str(HERE / "replay_driver.py"), "--sessions", str(s), "--out", str(o), "--dry-run",

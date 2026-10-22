@@ -190,7 +190,7 @@ def test_opencode_without_v2_table_and_unknown_schema(tmp_path):
     db.commit()
     db.close()
     with pytest.raises(adapter.ZeroSessionsError, match="neither opencode layout"):
-        adapter.candidates("opencode", str(h))
+        adapter.candidates("opencode", str(h), opencode_dbs=[str(h / ".local/share/opencode/opencode.db")])
 
 
 def test_head_index_cross_session_bound():

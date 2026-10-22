@@ -3,7 +3,8 @@
 
 Store parsing is copied from the 2026-10-21 trace-chunk-reuse study (reuse.py): Claude Code
 (~/.claude/projects/*/*.jsonl + subagents), Codex (~/.codex/sessions/Y/M/D/*.jsonl) and
-opencode (~/.local/share/opencode/opencode.db). Request model is the study's: request k's prompt
+opencode (the operator's READ-ONLY snapshots /mnt/raid0/llm/opencode-db/{epyc,host-daniele}.db, 2026-10-22;
+live stores are refused, see opencode_ro.py). Request model is the study's: request k's prompt
 is everything before the k-th generated run; the original assistant output is kept as the
 reference (`ref`) and the replay may substitute live output (--history live).
 
@@ -36,6 +37,10 @@ import sys
 import threading
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import opencode_ro  # noqa: E402
+
+OPENCODE_RO_DBS = opencode_ro.OPENCODE_RO_DBS     # default opencode sources: both read-only snapshots
 CHARS_PER_TOKEN = 4  # study's estimate; real token counts come from the server at replay time
 STORES = ("claude", "codex", "opencode")
 SPAWN_TOOLS = ("Task", "Agent")          # Claude Code tool_use names that launch a sub-agent
@@ -475,10 +480,11 @@ class HeadIndex:
 
 # ---- discovery + sampling -----------------------------------------------------------------------
 def _ro(db):
-    return sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    """Read-only opencode snapshot connection (?mode=ro, query_only, retry once); live stores are refused."""
+    return opencode_ro.open_ro(db)
 
 
-def candidates(store, home, include_subagents=True):
+def candidates(store, home, include_subagents=True, opencode_dbs=None):
     """Candidate sessions of `store`, sorted.
 
     `include_subagents=True` is the PREDECLARED pool (flat mode): Claude sub-agent transcripts and
@@ -494,20 +500,22 @@ def candidates(store, home, include_subagents=True):
         return [("claude", f, None) for f in sorted(fs)]
     if store == "codex":
         return [("codex", f, None) for f in sorted(glob.glob(home + "/.codex/sessions/*/*/*/*.jsonl"))]
-    db = home + "/.local/share/opencode/opencode.db"
-    if not os.path.exists(db):
-        return []
-    con = _ro(db)
-    try:
-        if not opencode_layouts(con):
-            raise ZeroSessionsError(f"{db}: sqlite_master declares neither opencode layout "
-                                    "(V1 message+part, V2 session_message): unknown schema, refusing to guess")
-        top_only = not include_subagents and opencode_has_parent_id(con)
-        q = "select id from session where parent_id is null order by id" if top_only \
-            else "select id from session order by id"
-        return [("opencode", r[0], db) for r in con.execute(q)]
-    finally:
-        con.close()
+    out = []
+    for _src, db in opencode_ro.resolve_dbs(opencode_dbs):      # default: both snapshots; live paths refused
+        if not os.path.exists(db):
+            continue
+        con = _ro(db)
+        try:
+            if not opencode_layouts(con):
+                raise ZeroSessionsError(f"{db}: sqlite_master declares neither opencode layout "
+                                        "(V1 message+part, V2 session_message): unknown schema, refusing to guess")
+            top_only = not include_subagents and opencode_has_parent_id(con)
+            q = "select id from session where parent_id is null order by id" if top_only \
+                else "select id from session order by id"
+            out += [("opencode", r[0], db) for r in con.execute(q)]
+        finally:
+            con.close()
+    return out
 
 
 def load_turns(cand):
@@ -657,7 +665,7 @@ def quotas(n, stores):
 
 def sample_sessions(home, n=20, seed=64, stores=STORES, min_requests=10,
                     max_prompt_chars=200_000, max_requests=200, allow_empty_store=False,
-                    mode="flat", min_children=2, min_child_requests=3, max_children=8):
+                    mode="flat", min_children=2, min_child_requests=3, max_children=8, opencode_dbs=None):
     """Deterministic. Per store: candidates sorted, shuffled with Random(f'{seed}:{store}'); the first
     `quota` sessions passing the filters (after truncation) are taken. A store that cannot fill its
     quota hands the shortfall to the others (round-robin, fixed order).
@@ -679,7 +687,7 @@ def sample_sessions(home, n=20, seed=64, stores=STORES, min_requests=10,
     q = quotas(n, stores)
     pools = {}
     for s in stores:
-        c = candidates(s, home, include_subagents=(mode == "flat"))
+        c = candidates(s, home, include_subagents=(mode == "flat"), opencode_dbs=opencode_dbs)
         if mode == "families" and c:
             c = [x for x in c if child_count(x) >= min_children]
         if not c and not allow_empty_store:
@@ -785,7 +793,7 @@ def fanout_stats(records):
             "spans_upper_bound": True}
 
 
-def store_fanout(home, stores=STORES, max_parents=None):
+def store_fanout(home, stores=STORES, max_parents=None, opencode_dbs=None):
     """Store-wide fan-out stats from timestamps only (no prompt text kept). claude: every
     `<proj>/<parent>/subagents/agent-*.jsonl` against its parent file; opencode: session.parent_id."""
     recs = []
@@ -815,8 +823,9 @@ def store_fanout(home, stores=STORES, max_parents=None):
             for k in sorted(glob.glob(os.path.splitext(f)[0] + "/subagents/agent-*.jsonl")):
                 a, b, n = span_claude(k)
                 recs.append({"id": "c:" + os.path.basename(k), "parent": "c:" + pid, "start": a, "end": b, "requests": n})
-    db = home + "/.local/share/opencode/opencode.db"
-    if "opencode" in stores and os.path.exists(db):
+    for _src, db in (opencode_ro.resolve_dbs(opencode_dbs) if "opencode" in stores else []):
+        if not os.path.exists(db):
+            continue
         con = _ro(db)
         try:
             lay = opencode_layouts(con)
@@ -890,7 +899,8 @@ def build_manifest(picked, params):
             union += max(within, c)
         pc = sum(p for p, _ in prof)
         gaps = [t["gap_s"] for t in turns if t.get("gap_s") is not None]
-        row = {"id": sid, "store": s, "source_hash": hashlib.blake2b(str(cand[1]).encode(), digest_size=6).hexdigest(),
+        row = {"id": sid, "store": s, "source": opencode_ro.source_for(cand[2]) if s == "opencode" else None,
+               "source_hash": hashlib.blake2b(str(cand[1]).encode(), digest_size=6).hexdigest(),
                **session_stats(turns), "ideal_cross_only_chars": cross, "ideal_union_chars": union,
                "ideal_share_cross_head": (union / pc) if pc else 0.0, "provider": provider_share(turns),
                "parent": meta["parent"], "gap_s_median": sorted(gaps)[len(gaps) // 2] if gaps else None,
@@ -936,7 +946,11 @@ def write_sessions(picked, out_dir, manifest):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", help="dir for per-session request files (contain transcript text)")
-    ap.add_argument("--home", default=os.environ.get("HOME", "/home/node"))
+    ap.add_argument("--home", default=os.environ.get("HOME", "/home/node"),
+                    help="where the claude/codex stores live (opencode is NOT read from here)")
+    ap.add_argument("--opencode-db", action="append", dest="opencode_db",
+                    help="opencode READ-ONLY snapshot (repeatable). Default: both "
+                         + ", ".join(OPENCODE_RO_DBS.values()) + ". Live stores are refused.")
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--seed", type=int, default=64)
     ap.add_argument("--stores", default=",".join(STORES))
@@ -958,14 +972,14 @@ def main(argv=None):
     a = ap.parse_args(argv)
     stores = tuple(a.stores.split(","))
     if a.fanout_store:
-        print(json.dumps(store_fanout(a.home, stores), indent=1))
+        print(json.dumps(store_fanout(a.home, stores, opencode_dbs=a.opencode_db), indent=1))
         return 0
     if not a.out:
         ap.error("--out is required unless --fanout-store")
     try:
         picked = sample_sessions(a.home, a.n, a.seed, stores, a.min_requests, a.max_prompt_chars,
                                  a.max_requests, a.allow_empty_store, a.mode, a.min_children,
-                                 a.min_child_requests, a.max_children)
+                                 a.min_child_requests, a.max_children, a.opencode_db)
     except ZeroSessionsError as e:
         sys.stderr.write(f"adapter: FAILED (zero sessions): {e}\n")
         return 4
