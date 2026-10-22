@@ -13444,3 +13444,68 @@ dflash_drafters:
     target_model: Qwen3-Coder-30B-A3B
     format: safetensors  # pre-GGUF conversion
     status: downloaded
+
+# =============================================================================
+# Serving floors — measured run-to-run noise floors, keyed by role (AKX-AUTO-6 / floor registry)
+# =============================================================================
+#
+# THE ONLY STORE of serving noise floors. A floor is a property of the measured CONDITION: it is keyed by
+# (equivalence_key = source tree minus tests/docs + CMake recipe + compiler, recipe_hash, request_digest,
+# model_sha, k) and is never reused across a champion advance (champion_tree_hash differs) or a numerics
+# change (numerics_epoch differs). `grade.claim_class: decision` requires `co_tenancy: quiet`.
+# `record` is the sealed A/A JSON (durable, non-scratch); `record_sha256` pins its bytes.
+#
+# DO NOT hand-edit. Entries are added by
+#     scripts/kernel_rnd/autokernel/loop/apply_registry_serving_floors.py
+# (comment-preserving, round-trip proven) from a clean worktree of origin/main. Readers:
+# autokernel.loop.floor_registry (lookup / check_launch). Validator: scripts/validate_model_registry.py.
+# The lean compiler drops this section (it is research-side evidence, not runtime input).
+#
+serving_floors:
+  deepseek_v41_flash_1017_mxfp4:
+    - annotation: launch 1 is a cold-start outlier (10.67 tok/s, before any disclosed activity); floor without it is 2.445%; launch 39 (14.85) dips inside a disclosed-activity window; post-hoc exclusion forbidden by PREDECLARED
+      build:
+        build_dir: /mnt/raid0/llm/kernels/builds/cpu-20261020-dd3d9721c
+        commit: dd3d9721ca37321ad9159520bbd9616e3d0d6228
+        dso_sha256:
+          libggml-base.so: e450926784e44b8992bcd48d7fe7a68617526c4644d435c445bbace98574f9e7
+          libggml-base.so.0: e450926784e44b8992bcd48d7fe7a68617526c4644d435c445bbace98574f9e7
+          libggml-cpu.so: daec59d2d845326c3bbc7f72eea52b8b8099b581f3091719a4dbd5bbcdf146c6
+          libggml-cpu.so.0: daec59d2d845326c3bbc7f72eea52b8b8099b581f3091719a4dbd5bbcdf146c6
+          libggml.so: 5d796a9f03e53ba3f019acb207e2e268685a437bd3ff6024e2d52709348ce47c
+          libggml.so.0: 5d796a9f03e53ba3f019acb207e2e268685a437bd3ff6024e2d52709348ce47c
+          libllama-common.so: d0d8c5dbc881613d6e632749ac902dd0dbd6c8aed610a8a48aaee4a308b79457
+          libllama-common.so.0: d0d8c5dbc881613d6e632749ac902dd0dbd6c8aed610a8a48aaee4a308b79457
+          libllama-server-impl.so: 880ec0d0529c97dde4c874cf84a7d043ef84647fd9f7036532fef992f2b68054
+          libllama.so: 9a0d8f9d15e5534ed7bb3808ff73ba984e313f534ef744e7380679d308a4c7c3
+          libllama.so.0: 9a0d8f9d15e5534ed7bb3808ff73ba984e313f534ef744e7380679d308a4c7c3
+          libmtmd.so: 6bbf907c323c8c05e4ec028e72c0378771092f272560aa0a2fde252173bd8fa0
+          libmtmd.so.0: 6bbf907c323c8c05e4ec028e72c0378771092f272560aa0a2fde252173bd8fa0
+        executable_sha256: 95c67110f81dc365da32501362717e14f18b0fe9ba8500417e0c3097e7227758
+        execution_digest: c70c8066c533d0cdf93daa117a9919f34dc561cc0938e966ce544e8d94d54dbb
+      champion_tree_hash: fa33ccecb9e201780cb2f71be0327a76866e7342154113d2ff9de65a2c9e44ec
+      content_sha256: 8f2e058d7686b9f77b3b3e8eac498664c8d3148fa30cd0e35a316e172db1cf06
+      equivalence_key: c28bd41baf245eebe54e05167735250477245b970e342b1b950604c2b9a63c3a
+      floor_pct: 2.862
+      frame_digest: 038568572871020314d40584347cd64fad97871537cea25cb735a9ca01748bb8
+      grade:
+        claim_class: decision
+        co_tenancy: quiet
+        threads: 48
+      id: 8f2e058d7686b9f7
+      interval:
+        high_pct: 5.757
+        level: 0.95
+        low_pct: 1.974
+      k: 5
+      measured_at: '2026-10-22T08:36:13Z'
+      model_sha: ba9f129c15f823503d00b088ff07e42aa3953d58cf287d019229af052b2e12b2
+      n: 24
+      numerics_epoch: pre-W5.1a
+      recipe: ds41-1017-mxfp4-cpu-t48-targetonly
+      recipe_hash: 65f1c793e12f37a2055e2f4b84c345663a09c4491b29553f7321f40461274e4b
+      record: /mnt/raid0/llm/autokernel/campaigns/ak-ds41-1017-cpu-decode-20261021/baseline-floor-20261022/serving-floor.ds41-1017-mxfp4-cpu-t48-targetonly.requests-e50732d9ce365259d5bb95fe31e36995f98bcd0986dc0e48d489f99390e42f58.matched_process_v2.pairs-5.json
+      record_sha256: be3e907963525ddca1df2eaf17e50d7f40fd8ae9feaad895990b0fa11d47fdb5
+      request_digest: e50732d9ce365259d5bb95fe31e36995f98bcd0986dc0e48d489f99390e42f58
+      schema: epyc.autokernel.serving_floor.v2
+      unit: process
