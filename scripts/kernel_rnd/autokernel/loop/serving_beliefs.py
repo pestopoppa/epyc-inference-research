@@ -57,6 +57,17 @@ def native_body(comparison):
             if key not in {"belief_capture", "surface", "baseline_scope"}}
 
 
+SESSION_REPS_BASIS = ("scored:session rounds against one running server per arm (paired A/B rounds, "
+                      "not independent server launches); not threads/prompts/affinity samples")
+
+
+def _reps_basis(inputs):
+    """Session-unit records (paired_loadgen) say so; every other record keeps the launch basis."""
+    unit = (inputs.get("recipe") or {}).get("unit")
+    return SESSION_REPS_BASIS if unit == "session" else \
+        "scored:original independent server launches; not threads/prompts/affinity samples"
+
+
 def finish(comparison, inputs):
     native = native_body(comparison)
     native_digest = digest(native)
@@ -74,7 +85,7 @@ def finish(comparison, inputs):
                      "unit": "t/s", "metric_direction": "higher_better", "category": category,
                      "claim": f"{arm} observed median aggregate serving rate; protocol and scientific witnesses unqualified",
                      "date": date, "protocol_id": "", "reps": len(samples),
-                     "reps_basis": "scored:original independent server launches; not threads/prompts/affinity samples",
+                     "reps_basis": _reps_basis(inputs),
                      "extra": {"arm": arm, "capture_id": capture_id,
                                "native_sha256": native_digest,
                                "build_path": inputs["build_paths"][arm],
