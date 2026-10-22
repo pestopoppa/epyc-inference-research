@@ -26,11 +26,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from scripts.benchmark.yarn_gate import retokenize  # noqa: E402
 from scripts.benchmark.yarn_gate.local_judge import JudgePin, LocalJudge, judge_rows  # noqa: E402
 
 HELMET_REPO = "https://github.com/princeton-nlp/HELMET"
 HELMET_PIN = "aeadacc6593e9a222a84b0660b186a4e23d2efda"
 SCHEMA = "epyc.yarn_helmet_judged_cell.v1"
+DECISION_SCHEMA = "epyc.yarn_gate_decision.v1"
 #: HELMET categories that need a judge (the hosted GPT-4o judge is replaced by the local pin).
 JUDGED_CATEGORIES = ("longqa", "summ")
 
@@ -68,8 +70,77 @@ def selfcheck_schema(rows: list[dict]) -> list[str]:
     return probs
 
 
+def load_judge_validation(path: Path) -> dict:
+    """Read a ``judge_pin.json`` (``epyc.yarn_judge_pin.v1``) -> {"judge_pin": ..., "judge_validation": ...} in the
+    shapes epyc.yarn_gate_decision.v1 wants. The pin's ``max_tokens`` lives at the top level of that file."""
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    v, pin = d["validation"], dict(d["judge_pin"])
+    pin.setdefault("max_tokens", d.get("max_tokens"))
+    return {"judge_pin": pin,
+            "judge_validation": {"n_compared": v["n_compared"], "accuracy": v["accuracy"],
+                                 "cohen_kappa": v.get("cohen_kappa"), "sheet_sha256": d["sheet_sha256"]}}
+
+
+def decision_records(*, rows: list[dict], res: dict, task: str, nominal_length: int, config_file: str,
+                     config_sha256: str | None, max_test_samples: int | None, helmet_pin: str, comparison: str,
+                     arm_role: str, model_pin: str, prompt_n_source: str | None, validation: dict | None,
+                     mock: bool = False) -> tuple[list[dict], list[dict]]:
+    """Judged-cell ``epyc.yarn_gate_decision.v1`` records, ONE per (REAL-length bin, zone): a cell that spans zones is
+    split, never labelled "mixed". -> (records, excluded-with-reason). Rows without a measured ``prompt_n`` are excluded."""
+    excl: list[dict] = []
+    if not validation:
+        return [], [{"reason": "no judge_validation supplied (judge pin must be validated against the 50-item sheet)"}]
+    if (res["judge_pin"].get("model"), res["judge_pin"].get("prompt_sha256")) != (
+            validation["judge_pin"].get("model"), validation["judge_pin"].get("prompt_sha256")):
+        return [], [{"reason": "judge used differs from the validated judge pin (model/prompt_sha256)"}]
+    if prompt_n_source not in retokenize.MEASURED_SOURCES:
+        return [], [{"reason": f"prompt_n source {prompt_n_source!r} is not a measured source"}]
+    if not config_sha256 or not config_file:
+        return [], [{"reason": "config_file/config_sha256 not recorded"}]
+    verdict_of = {j["i"]: j["verdict"] for j in res["judged"]}
+    groups: dict[tuple, dict] = {}
+    for i, r in enumerate(rows):
+        n = r.get("prompt_n")
+        if not isinstance(n, (int, float)) or isinstance(n, bool) or n <= 0 or int(n) != n:
+            excl.append({"row": i, "reason": "no measured prompt_n"})
+            continue
+        n = int(n)
+        g = groups.setdefault((retokenize.bin_label(n), retokenize.label_zone(n, source=prompt_n_source)),
+                              {"n": [], "v": [], "unjudged": 0})
+        g["n"].append(n)
+        if i in verdict_of:
+            g["v"].append(verdict_of[i])
+        else:
+            g["unjudged"] += 1
+    out = []
+    for (b, zone), g in sorted(groups.items()):
+        if not g["v"]:
+            excl.append({"group": [b, zone], "reason": "no judged rows in group"})
+            continue
+        ns_ = sorted(g["n"])
+        out.append({
+            "schema": DECISION_SCHEMA, "record_kind": "cell", "mock": mock, "comparison": comparison,
+            "arm_role": arm_role, "suite": "helmet", "task": task, "nominal_length": nominal_length,
+            "model_pin": model_pin,
+            "prompt_n": {"source": prompt_n_source, "count": len(ns_), "min": ns_[0],
+                         "median": ns_[(len(ns_) - 1) // 2], "max": ns_[-1]},
+            "bin": b, "zone": zone,
+            "source_pins": {"helmet_pin": helmet_pin, "config_file": config_file, "config_sha256": config_sha256,
+                            "max_test_samples": max_test_samples},
+            "comparable_to_published": False, "judged": True,
+            "judge_pin": {k: res["judge_pin"].get(k) for k in
+                          ("model", "prompt_version", "prompt_sha256", "temperature", "seed", "max_tokens")},
+            "judge_validation": validation["judge_validation"],
+            "metric": "accuracy", "value": sum(g["v"]) / len(g["v"]), "n_units": len(g["v"]), "unit": "items",
+            "n_unjudged": g["unjudged"]})
+    return out, excl
+
+
 def score_cell(cell_path: Path, judge: LocalJudge, *, task: str, nominal_length: int,
-               config_file: str, max_test_samples: int | None, helmet_pin: str = HELMET_PIN) -> dict:
+               config_file: str, max_test_samples: int | None, helmet_pin: str = HELMET_PIN,
+               comparison: str | None = None, arm_role: str | None = None, model_pin: str | None = None,
+               prompt_n_source: str | None = None, validation: dict | None = None,
+               config_sha256: str | None = None, mock: bool = False) -> dict:
     raw = load_cell(cell_path)
     probs = selfcheck_schema(raw)
     if probs:
@@ -77,12 +148,22 @@ def score_cell(cell_path: Path, judge: LocalJudge, *, task: str, nominal_length:
     rows = normalise(raw)
     res = judge_rows(judge, rows)
     pn = [r["prompt_n"] for r in rows if isinstance(r["prompt_n"], (int, float))]
-    return {"schema": SCHEMA, "task": task, "nominal_length": nominal_length,
-            "prompt_n": {"count": len(pn), "min": min(pn) if pn else None, "max": max(pn) if pn else None},
-            "helmet_repo": HELMET_REPO, "helmet_pin": helmet_pin, "config_file": config_file,
-            "max_test_samples": max_test_samples,
-            "cell_sha256": hashlib.sha256(cell_path.read_bytes()).hexdigest(),
-            "n_rows": len(rows), "comparable_to_published": False, **res}
+    rec = {"schema": SCHEMA, "task": task, "nominal_length": nominal_length,
+           "prompt_n": {"count": len(pn), "min": min(pn) if pn else None, "max": max(pn) if pn else None},
+           "helmet_repo": HELMET_REPO, "helmet_pin": helmet_pin, "config_file": config_file,
+           "max_test_samples": max_test_samples,
+           "cell_sha256": hashlib.sha256(cell_path.read_bytes()).hexdigest(),
+           "n_rows": len(rows), "comparable_to_published": False, **res}
+    if comparison and arm_role and model_pin:
+        if config_sha256 is None and Path(config_file).is_file():
+            config_sha256 = hashlib.sha256(Path(config_file).read_bytes()).hexdigest()
+        recs, excl = decision_records(
+            rows=rows, res=res, task=task, nominal_length=nominal_length, config_file=config_file,
+            config_sha256=config_sha256, max_test_samples=max_test_samples, helmet_pin=helmet_pin,
+            comparison=comparison, arm_role=arm_role, model_pin=model_pin, prompt_n_source=prompt_n_source,
+            validation=validation, mock=mock)
+        rec["decision_records"], rec["decision_excluded"] = recs, excl
+    return rec
 
 
 def main(argv=None) -> int:
@@ -98,6 +179,14 @@ def main(argv=None) -> int:
     ap.add_argument("--port", type=int, help="served backend")
     ap.add_argument("--judge-model", help="served backend: the served model id")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--comparison", choices=("A0_vs_A1", "CN_vs_CY2"), help="belief emit: which pair this cell belongs to")
+    ap.add_argument("--arm-role", choices=("A0", "A1", "CN", "CY2"))
+    ap.add_argument("--model-pin", help="belief emit: served model id (+ GGUF) the cell was generated with")
+    ap.add_argument("--prompt-n-source", help="measured source of the rows' prompt_n (served_tokenizer|server_timings|model_tokenizer_json)")
+    ap.add_argument("--judge-pin-json", help="judge_pin.json from the judge validation run (judge_pin + 50-item agreement)")
+    ap.add_argument("--config-sha256")
+    ap.add_argument("--emit-belief-dir", help="run dir: write yarn_gate_agg.beliefs.jsonl here from the judged-cell records")
+    ap.add_argument("--run-id")
     ap.add_argument("--selfcheck-schema", action="store_true", help="only validate the cell file and exit")
     a = ap.parse_args(argv)
     if a.selfcheck_schema:
@@ -120,10 +209,22 @@ def main(argv=None) -> int:
             ap.error("--judge-backend served needs --port and --judge-model")
         judge = LocalJudge(a.port, JudgePin(model=a.judge_model))
     rec = score_cell(Path(a.cell), judge, task=a.task, nominal_length=a.nominal_length,
-                     config_file=a.config_file, max_test_samples=a.max_test_samples)
+                     config_file=a.config_file, max_test_samples=a.max_test_samples,
+                     comparison=a.comparison, arm_role=a.arm_role, model_pin=a.model_pin,
+                     prompt_n_source=a.prompt_n_source, config_sha256=a.config_sha256,
+                     validation=load_judge_validation(Path(a.judge_pin_json)) if a.judge_pin_json else None)
     if caller is not None:
         rec["cloud_identity"] = caller.identity()
     Path(a.out).write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
+    if a.emit_belief_dir:
+        from scripts.benchmark.yarn_gate import decision_records as dr
+        recs = rec.get("decision_records") or []
+        if not recs:
+            print(f"belief emit skipped: {rec.get('decision_excluded')}", file=sys.stderr)
+        else:
+            st = dr.emit(Path(a.emit_belief_dir), run_id=a.run_id or f"yarn-helmet-judged:{a.task}:{rec['cell_sha256'][:12]}",
+                         cells=recs, pairs={}, rule_id="", alpha=0.05, final=True, excluded=rec["decision_excluded"])
+            print(f"belief emit: {st['status']} {st.get('sidecar', '')}")
     print(f"judged {rec['n_judged']}/{rec['n_rows']} accuracy={rec['accuracy']} unjudged={rec['n_unjudged']}")
     return 0 if rec["n_unjudged"] == 0 else 2
 

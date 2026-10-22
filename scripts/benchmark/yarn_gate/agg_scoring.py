@@ -69,8 +69,17 @@ def oolong_by_real_length(records: Iterable[Mapping[str, Any]]) -> dict:
         cells[(r.get("task_group"), retokenize.bin_label(n))].append({**r, "_zone": retokenize.label_zone(n, source="server_timings")})
     out = {}
     for (tg, b), rs in sorted(cells.items(), key=lambda kv: (str(kv[0][0]), int(kv[0][1].split("-")[0]))):
-        zones = {r["_zone"] for r in rs}
-        out[f"{tg}|{b}"] = {**bucket_stats(rs), "zone": zones.pop() if len(zones) == 1 else "mixed"}
+        by_zone: dict[str, list] = defaultdict(list)
+        for r in rs:
+            by_zone[r["_zone"]].append(r)
+        # a cell is ONE zone: a bin that straddles zones (e.g. native/boundary near 262144) is split, never "mixed"
+        for zone, zrs in sorted(by_zone.items()):
+            key = f"{tg}|{b}" if len(by_zone) == 1 else f"{tg}|{b}|{zone}"
+            ns_ = sorted(record_real_n(r) for r in zrs)
+            out[key] = {**bucket_stats(zrs), "zone": zone, "bin": b, "task": tg,
+                        "n_contexts": len({r.get("context_window_id", r.get("id")) for r in zrs}),
+                        "prompt_n": {"source": "server_timings", "count": len(ns_), "min": ns_[0],
+                                     "median": ns_[(len(ns_) - 1) // 2], "max": ns_[-1]}}
     return {"cells": out, "unmeasured_ids": unmeasured}
 
 

@@ -42,7 +42,7 @@ from typing import Any, Callable, Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.benchmark.yarn_gate import agg_scoring, cells, plans, retokenize  # noqa: E402
+from scripts.benchmark.yarn_gate import agg_scoring, cells, decision_records, plans, retokenize  # noqa: E402
 
 SCHEMA = "epyc.yarn_gate.arm_result.v1"
 DECISION_SCHEMA = "epyc.yarn_gate.decision.v1"
@@ -475,6 +475,29 @@ def _sha_file(p: Path) -> str | None:
     return sha256_bytes(p.read_bytes()) if p.exists() else None
 
 
+def _belief_emit(out: Path, plan: Plan, res: dict, gate_items: list, *, final: bool, identity: dict | None,
+                 rule_id: str) -> dict:
+    """VB-YARN-AGG-EMIT: epyc.yarn_gate_decision.v1 cell + verdict records -> yarn_gate_agg.beliefs.jsonl.
+    One adapter call per decide pass; INTERIM passes write nothing. A failure is recorded in decision.json
+    (``belief_emit.status == "error"``) and never blocks the decision or the COMPLETE marker."""
+    try:
+        model_id = next((r.get("model_id") for a in ARMS for r in res[a].values() if r.get("model_id")), None)
+        if not model_id:
+            return {"status": "skipped", "reason": "no ok result carries a model_id"}
+        mp = f"{model_id} [{Path(str((identity or {}).get('model', ''))).name or 'gguf unrecorded'}]"
+        items = {i["item_id"]: i for i in plan.items}
+        cells_, pairs, excl = decision_records.collect(res, items, model_pin=mp,
+                                                       gate_item_ids=[i["item_id"] for i in gate_items])
+        run_id = f"yarn-gate:{plan.meta['plan']}:{plan.meta['plan_sha256'][:12]}"
+        st = decision_records.emit(out, run_id=run_id, cells=cells_, pairs=pairs, rule_id=str(rule_id),
+                                   alpha=plan.meta["margins"]["alpha"], final=final, excluded=excl)
+        st["excluded"] = st.get("excluded", [])[:200]
+        return st
+    except Exception as exc:  # noqa: BLE001 - never fatal to the decision
+        print(f"belief emit failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+
+
 def decide(out: Path, *, identity: dict | None = None) -> dict:
     plan = Plan(out)
     st = status(out)
@@ -542,6 +565,8 @@ def decide(out: Path, *, identity: dict | None = None) -> dict:
                   "alpha": pooled["alpha"], "plan_sha256": plan.meta["plan_sha256"], "results_sha256": rfiles,
                   "identity": identity or {}},
     }
+    rec["belief_emit"] = _belief_emit(out, plan, res, gate_items, final=final, identity=identity,
+                                      rule_id=plan.meta.get("protocol_id") or plan.meta["margins"]["in_native_rule"])
     tmp = out / "decision.json.tmp"
     tmp.write_text(json.dumps(rec, indent=1, default=str))
     os.replace(tmp, out / "decision.json")
