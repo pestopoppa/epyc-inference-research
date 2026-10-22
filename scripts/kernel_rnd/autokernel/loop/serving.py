@@ -44,8 +44,8 @@ from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
-from . import (headline_admissibility, hip_launch_proof, kernel_coverage, loadgen_selfcheck,
-               lifecycle_observation, procguard, residency, status)
+from . import (headline_admissibility, hip_launch_proof, kernel_coverage, launch_affinity,
+               loadgen_selfcheck, lifecycle_observation, procguard, residency, status)
 from . import native_server_response as server_response
 from .serving_server_owner import (ServerOwnershipRefused, ServerPortOwner,
                                    require_free_port)
@@ -1054,6 +1054,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     request_start: float | None = None
     request_end: float | None = None
     hip_maps = None
+    affinity_pin = None
     try:
         if cpu_profile_capture is None:
             sampler = residency.Sampler()
@@ -1110,6 +1111,21 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         expectations=resolved_recipe.readback_expectations)
                 if backend == "gpu":
                     hip_maps = hip_launch_proof.mapped_ggml(srv.pid, Path(build_dir) / "bin")
+                # Every task of OUR server inside the recipe's cpu_list before a token is
+                # measured (2026-10-22): re-pin stragglers, refuse the launch if one escapes.
+                # Layer 2 only. The ROCr env knob (layer 1, HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0)
+                # is NOT set here: the loader env is identity-bearing across resolved_recipe,
+                # unified_planner, production_enrollment, runtime_identity and legacy_targets,
+                # so adding a loader key is an AutoKernel identity change for its owner
+                # (STACKCHG-GPUPIN-20261022 D2). `affinity.escapes_end` records whether a
+                # thread created after this pin (e.g. a later ROCr thread) escaped.
+                if recipe.cpu_list:
+                    pin = launch_affinity.pin_own_child(srv.pid, recipe.cpu_list)
+                    affinity_pin = None if pin is None else pin.as_dict()
+                    if pin is not None and not pin.ok:
+                        raise ServerDied(
+                            f"tasks escape cpu_list {recipe.cpu_list} after re-pin: "
+                            f"{pin.escapes_after or 'no tasks readable'} ({recipe.describe()})")
 
                 sched_log = (loadgen_selfcheck.SchedulingLog()
                              if loadgen_selfcheck.enabled() else None)
@@ -1228,6 +1244,14 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 observe("checkpoint", "measurement_end")
                 request_end = time.time()
                 request_ended_monotonic = time.monotonic()
+                # Post-warm-up re-check (read-only): threads born at the first request or the
+                # draft load must still be inside cpu_list. Recorded, not enforced, here.
+                if affinity_pin is not None:
+                    try:
+                        affinity_pin["escapes_end"] = launch_affinity.escapes(
+                            srv.pid, recipe.cpu_list)
+                    except Exception as exc:  # telemetry never alters serving
+                        affinity_pin["escapes_end_error"] = f"{type(exc).__name__}: {exc}"[:256]
                 request_rows = [row[3] for row in warmup_rows + rows]
                 if response_capture is not None:
                     # Persistence is outside both timed rounds and still inside the
@@ -1301,6 +1325,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                             record, maps=hip_maps,
                             link=hip_launch_proof.linkage(
                                 binary, dict(launch_env).get("LD_LIBRARY_PATH")))
+                    if affinity_pin is not None:
+                        record["affinity"] = affinity_pin
                     if cpu_observer is not None:
                         try:
                             record["cpu_lifecycle"] = cpu_observer.observation
