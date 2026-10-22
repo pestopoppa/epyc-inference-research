@@ -321,6 +321,13 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
                                "floor_identity (--floor FILE) so the registry can be consulted")
         return out
     registry = fr.FloorRegistry(master, claims_root)
+    out["registry"] = registry.provenance()
+    out["upstream"] = fr.upstream_check(registry.master, role=role, model_sha=identity["model_sha"])
+    if out["upstream"]["status"] == "behind":
+        out["blockers"].append(
+            f"registry at {registry.master} is behind origin/main; floor for {role or identity['model_sha']} "
+            f"exists upstream ({', '.join(out['upstream']['missing_locally'])})")
+        return out
     kw = dict(equivalence_key=equivalence["equivalence_key"], recipe_hash=identity["recipe_hash"],
               request_digest=identity["request_digest"], model_sha=identity["model_sha"],
               pairs=identity["pairs"], numerics_epoch=numerics_epoch)
@@ -336,7 +343,7 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
     out["floor"] = {"would": ("reuse" if found_floor else "claimed" if holder else "calibrate"),
                     "registry_status": found_floor.status, "condition": condition,
                     "holder": (holder or {}).get("owner"), "identity": identity}
-    out["run_argv_additions"] = _run_argv(equivalence["build_dir"], champion["commit"], master,
+    out["run_argv_additions"] = _run_argv(equivalence["build_dir"], champion["commit"], registry.master,
                                           numerics_epoch, require_grade, co_tenancy,
                                           needs_epoch=out["anchor_preflight"]["needs_new_anchor_epoch"],
                                           role=role)
@@ -436,8 +443,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--store", type=Path, required=True)
     p.add_argument("--worktree", type=Path, required=True, help="a worktree of the champion's repo")
     p.add_argument("--champion-branch", default=fr.DEFAULT_CHAMPION_BRANCH)
-    p.add_argument("--master", type=Path, default=fr.DEFAULT_MASTER,
-                   help="the MASTER model registry (the only floor store)")
+    p.add_argument("--master", type=Path, default=None,
+                   help="the MASTER model registry (the only floor store). Default: the registry of the "
+                        "repo this code runs from; an override is logged loudly")
     p.add_argument("--role", help="the serving_floors.<role> key of this campaign's target")
     p.add_argument("--claims", type=Path, default=fr.DEFAULT_CLAIMS)
     p.add_argument("--builds-root", type=Path, default=DEFAULT_BUILDS_ROOT)

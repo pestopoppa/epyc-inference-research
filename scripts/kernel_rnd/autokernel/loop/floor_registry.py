@@ -73,8 +73,14 @@ EQUIVALENCE_SCHEMA = "epyc.autokernel.build_equivalence.v1"
 FLOOR_SCHEMAS = ("epyc.autokernel.serving_floor.v1", "epyc.autokernel.serving_floor.v2")
 MATCHED_SCHEMA = "epyc.autokernel.serving_floor.v2"
 
-DEFAULT_MASTER = Path(os.environ.get(
-    "FLOOR_REGISTRY_MASTER", "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"))
+#: The research repo THIS FILE lives in (scripts/kernel_rnd/autokernel/loop/floor_registry.py -> repo
+#: root). The default master is that repo's registry, so a run from a pinned worktree reads the
+#: registry of EXACTLY that commit and never a shared clone that may be behind (operator 2026-10-22).
+CODE_REPO = Path(__file__).resolve().parents[4]
+DEFAULT_MASTER = CODE_REPO / "orchestration" / "model_registry.yaml"
+#: `--floor-registry @code` / `--master @code` spell the default explicitly (serial_run forwards
+#: flag values verbatim and cannot carry a value-less flag).
+CODE_REPO_TOKEN = "@code"
 DEFAULT_CLAIMS = Path(os.environ.get("FLOOR_REGISTRY_CLAIMS", "/mnt/raid0/llm/autokernel/floor-claims"))
 DEFAULT_SOURCE_REPO = Path("/mnt/raid0/llm/llama.cpp")
 DEFAULT_CHAMPION_BRANCH = "ak/champion/llama-cpp-ffc1bac82eec"
@@ -351,6 +357,112 @@ def validate_grade(grade: Mapping, *, floor_threads: int | None = None) -> dict:
     return out
 
 
+# ----------------------------------------------------------------------------- which registry, and is it stale
+class RegistryBehindUpstream(FloorRegistryError):
+    """The local registry lacks floors that origin/main has: refusing is the only safe answer."""
+
+
+def resolve_master(explicit: Path | str | None = None) -> tuple[Path, str]:
+    """(path, source). Order: explicit arg (`--master`/`--floor-registry`) > `FLOOR_REGISTRY_MASTER` >
+    the registry of the repo this code runs from. Any override is LOUD (stderr): an overridden
+    registry is the one way a run can read a different commit's floors than its own code."""
+    if explicit is not None and str(explicit) != CODE_REPO_TOKEN:
+        path, source = Path(explicit), "explicit"
+    elif explicit is None and os.environ.get("FLOOR_REGISTRY_MASTER"):
+        path, source = Path(os.environ["FLOOR_REGISTRY_MASTER"]), "env:FLOOR_REGISTRY_MASTER"
+    else:
+        return DEFAULT_MASTER, "code-repo"
+    try:
+        same = path.resolve() == DEFAULT_MASTER.resolve()
+    except OSError:
+        same = False
+    if not same:
+        print(f"WARNING   floor registry master OVERRIDDEN ({source}): {path} is NOT the registry of the "
+              f"code repo ({DEFAULT_MASTER}); floors are read from a different file than this code's own "
+              f"commit carries", file=sys.stderr)
+    return path, source
+
+
+def _git_out(repo: Path, *args: str) -> str | None:
+    done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=60)
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def registry_provenance(master: Path | str) -> dict:
+    """Where the registry file came from: path, repo, the commit it is checked out at, whether the file
+    has uncommitted edits, and origin/main as THIS repo last saw it (no fetch is performed)."""
+    master = Path(master)
+    out: dict[str, Any] = {"path": str(master), "git_root": None, "commit": None, "dirty": None,
+                           "origin_main_commit": None, "origin_main_age_s": None}
+    top = _git_out(master.parent, "rev-parse", "--show-toplevel")
+    if not top:
+        return out
+    out["git_root"] = top
+    out["commit"] = _git_out(Path(top), "rev-parse", "HEAD")
+    rel = os.path.relpath(master.resolve(), Path(top).resolve())
+    status = _git_out(Path(top), "status", "--porcelain", "--", rel)
+    out["dirty"] = bool(status) if status is not None else None
+    out["origin_main_commit"] = _git_out(Path(top), "rev-parse", "--verify", "origin/main^{commit}")
+    stamp = _git_out(Path(top), "log", "-1", "--format=%ct", "origin/main")
+    if stamp and stamp.isdigit():
+        out["origin_main_age_s"] = round(time.time() - int(stamp))
+    return out
+
+
+def upstream_check(master: Path | str, *, role: str | None, model_sha: str | None,
+                   show: Callable[[Path, str], str | None] | None = None) -> dict:
+    """Compare the LOCAL registry's serving_floors with origin/main's for this target.
+
+    `behind`  -- origin/main carries entries (matching `role`, or `model_sha`) whose ids the local file
+                 lacks: the local registry is behind and a lookup miss/hit would be silently wrong.
+    `ok`      -- every upstream entry for the target is present locally.
+    `skipped` -- origin/main cannot be read (no remote / ref); the caller WARNS, never refuses.
+    `show` is the seam for tests: (repo_root, relpath) -> origin/main's file text or None."""
+    master = Path(master)
+    top = _git_out(master.parent, "rev-parse", "--show-toplevel")
+    if not top:
+        return {"status": "skipped", "reason": f"{master} is not inside a git repository"}
+    rel = os.path.relpath(master.resolve(), Path(top).resolve())
+    text = (show or (lambda repo, r: _git_out(repo, "show", f"origin/main:{r}")))(Path(top), rel)
+    if text is None:
+        return {"status": "skipped", "reason": f"origin/main:{rel} is not readable in {top} "
+                                                f"(no origin remote or no origin/main ref)"}
+    upstream = _section_from_text(text)
+    local = load_section(master)
+
+    def matching(section: Mapping) -> dict[str, dict]:
+        out = {}
+        for r, rows in section.items():
+            for e in rows:
+                if isinstance(e, dict) and (r == role or (model_sha and e.get("model_sha") == model_sha)):
+                    out[f"{r}/{e.get('id')}"] = e
+        return out
+
+    up, here = matching(upstream), matching(local)
+    missing = sorted(set(up) - set(here))
+    return {"status": "behind" if missing else "ok", "upstream_entries": sorted(up),
+            "local_entries": sorted(here), "missing_locally": missing}
+
+
+def preflight_or_refuse(master: Path | str, *, role: str | None, model_sha: str | None,
+                        log: Callable[[str], None] = print,
+                        show: Callable[[Path, str], str | None] | None = None) -> dict:
+    """The AK launch gate: refuse (RegistryBehindUpstream) if origin/main has floors for this target
+    that the local registry lacks; WARN and continue only when origin/main cannot be read."""
+    result = upstream_check(master, role=role, model_sha=model_sha, show=show)
+    if result["status"] == "behind":
+        raise RegistryBehindUpstream(
+            f"registry at {master} is behind origin/main; floor for {role or model_sha} exists upstream "
+            f"({', '.join(result['missing_locally'])}). Update/rebase this repo (or run from a worktree "
+            f"of origin/main) -- refusing rather than calibrating or gating on a stale registry.")
+    if result["status"] == "skipped":
+        log(f"WARNING   floor registry upstream check SKIPPED: {result['reason']}")
+    else:
+        log(f"serving   floor registry upstream check ok ({len(result['local_entries'])} local / "
+            f"{len(result['upstream_entries'])} upstream entries for {role or model_sha})")
+    return result
+
+
 # ----------------------------------------------------------------------------- master registry I/O
 SECTION = "serving_floors"
 ENTRY_FIELDS = ("id", "recipe", "recipe_hash", "frame_digest", "request_digest", "model_sha",
@@ -377,10 +489,9 @@ def section_slice(lines: list[str]) -> tuple[int, int] | None:
     return start, end
 
 
-def load_section(master_path: Path | str) -> dict[str, list[dict]]:
-    """role -> entries, read from ONLY the `serving_floors:` slice of the master (no 13k-line parse)."""
+def _section_from_text(text: str, origin: str = "registry") -> dict[str, list[dict]]:
     import yaml
-    lines = Path(master_path).read_text(encoding="utf-8").split("\n")
+    lines = text.split("\n")
     span = section_slice(lines)
     if span is None:
         return {}
@@ -388,8 +499,13 @@ def load_section(master_path: Path | str) -> dict[str, list[dict]]:
     body = yaml.load("\n".join(lines[span[0]:span[1]]), Loader=loader) or {}
     section = body.get(SECTION) or {}
     if not isinstance(section, dict) or any(not isinstance(v, list) for v in section.values()):
-        raise FloorRegistryError(f"{master_path}: `{SECTION}` must map role -> list of entries")
+        raise FloorRegistryError(f"{origin}: `{SECTION}` must map role -> list of entries")
     return section
+
+
+def load_section(master_path: Path | str) -> dict[str, list[dict]]:
+    """role -> entries, read from ONLY the `serving_floors:` slice of the master (no 13k-line parse)."""
+    return _section_from_text(Path(master_path).read_text(encoding="utf-8"), str(master_path))
 
 
 def _iso_z(value: Any) -> str:
@@ -460,10 +576,10 @@ def plan_registration(floor: Mapping, *, floor_file: Path | str, role: str, equi
     return plan
 
 
-def applier_command(plan_path: Path | str, master: Path | str = DEFAULT_MASTER) -> str:
+def applier_command(plan_path: Path | str, master: Path | str | None = None) -> str:
     return (f"python3 -m autokernel.loop.apply_registry_serving_floors --registry <CLEAN-WORKTREE>/"
             f"orchestration/model_registry.yaml --plan {plan_path}   # from scripts/kernel_rnd, on a clean "
-            f"worktree of origin/main; then commit; canonical master: {master}")
+            f"worktree of origin/main; then commit; canonical master: {master or DEFAULT_MASTER}")
 
 
 def _load_record(master_path: Path, entry: Mapping) -> dict:
@@ -517,9 +633,20 @@ class FloorRegistry:
     """READ-ONLY view of the master registry's `serving_floors` section, plus the in-flight
     calibration CLAIMS (locks, not floors). It never writes a floor: see `plan_registration`."""
 
-    def __init__(self, master: Path | str = DEFAULT_MASTER, claims_root: Path | str = DEFAULT_CLAIMS):
-        self.master = Path(master)
+    def __init__(self, master: Path | str | None = None, claims_root: Path | str = DEFAULT_CLAIMS,
+                 log: Callable[[str], None] | None = None):
+        # None -> the registry of the repo THIS code runs from (see resolve_master); an override
+        # (argument or FLOOR_REGISTRY_MASTER) is logged loudly there.
+        self.master, self.master_source = resolve_master(master)
         self.claims_root = Path(claims_root)
+        self.log = log if log is not None else (lambda m: print(m, file=sys.stderr))
+        self.lookups: list[dict] = []   # every lookup this object served, for the run receipt
+        self._provenance: dict | None = None
+
+    def provenance(self) -> dict:
+        if self._provenance is None:
+            self._provenance = {**registry_provenance(self.master), "source": self.master_source}
+        return self._provenance
 
     # ---- read
     def entries(self, role: str | None = None) -> list[dict]:
@@ -529,12 +656,37 @@ class FloorRegistry:
                 out.extend(_normalize(r, e) for e in rows if isinstance(e, dict))
         return out
 
-    def lookup_detail(self, *, equivalence_key: str, recipe_hash: str, request_digest: str,
-                      model_sha: str, numerics_epoch: str, require_grade: str = "decision",
-                      frame_digest: str | None = None, pairs: int | None = None,
-                      threads: int | None = None, role: str | None = None,
-                      champion: Mapping | None = None,
-                      check_champion: bool = True) -> LookupResult:
+    def lookup_detail(self, **kwargs) -> LookupResult:
+        """`_lookup` plus the audit trail: EVERY lookup is logged (registry path, git commit, the matched
+        entry or the miss reason) and kept in `self.lookups` for the run receipt."""
+        result = self._lookup(**kwargs)
+        prov = self.provenance()
+        entry = result.entry or {}
+        rec = {"at": _iso(_now()), "registry": prov["path"], "registry_source": prov["source"],
+               "registry_commit": prov["commit"], "registry_dirty": prov["dirty"],
+               "role": kwargs.get("role"), "numerics_epoch": kwargs.get("numerics_epoch"),
+               "require_grade": kwargs.get("require_grade", "decision"), "status": result.status,
+               "entry_id": entry.get("_id"), "entry_role": entry.get("_role"),
+               "floor_pct": (result.floor or {}).get("floor_pct"), "reasons": list(result.reasons)}
+        self.lookups.append(rec)
+        self.log(f"serving   floor registry lookup: {result.status}"
+                 + (f" entry {rec['entry_role']}/{rec['entry_id']} floor {rec['floor_pct']}%"
+                    if result else f" ({'; '.join(result.reasons)})")
+                 + f" | registry {prov['path']} @ {str(prov['commit'])[:12]}"
+                 + (" DIRTY" if prov["dirty"] else "") + f" [{prov['source']}]")
+        return result
+
+    def receipt(self, limit: int = 20) -> dict:
+        """The block AK writes into its serving-gate records/status (`floor_registry` key)."""
+        return {"schema": "epyc.autokernel.floor_registry_receipt.v1", **self.provenance(),
+                "lookups": self.lookups[-limit:], "lookup_count": len(self.lookups)}
+
+    def _lookup(self, *, equivalence_key: str, recipe_hash: str, request_digest: str,
+                model_sha: str, numerics_epoch: str, require_grade: str = "decision",
+                frame_digest: str | None = None, pairs: int | None = None,
+                threads: int | None = None, role: str | None = None,
+                champion: Mapping | None = None,
+                check_champion: bool = True) -> LookupResult:
         """`champion` = `champion_state(...)`. With `check_champion` (the default) a lookup that
         cannot name the current champion REFUSES -- an unresolvable era is not a fresh one."""
         if require_grade not in GRADES:
@@ -774,8 +926,10 @@ def _grade_args(p: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="floor_registry", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--master", type=Path, default=DEFAULT_MASTER,
-                   help="the MASTER model registry (the only floor store); default %(default)s")
+    p.add_argument("--master", type=Path, default=None,
+                   help="the MASTER model registry (the only floor store). Default: the registry of the "
+                        f"repo this code runs from ({DEFAULT_MASTER}); an override is logged loudly. "
+                        f"`{CODE_REPO_TOKEN}` spells the default.")
     p.add_argument("--claims", type=Path, default=DEFAULT_CLAIMS, help="in-flight calibration claim locks")
     p.add_argument("--source-repo", type=Path, default=DEFAULT_SOURCE_REPO)
     p.add_argument("--champion-branch", default=DEFAULT_CHAMPION_BRANCH)
@@ -864,6 +1018,8 @@ def main(argv: list[str] | None = None) -> int:
         ident = _identity(args)
         champ = champion_state(args.source_repo, args.champion_branch)
         if args.cmd == "lookup":
+            preflight_or_refuse(reg.master, role=args.role, model_sha=ident["model_sha"],
+                                log=lambda m: print(m, file=sys.stderr))
             res = reg.lookup_detail(equivalence_key=equiv["equivalence_key"], numerics_epoch=args.numerics_epoch,
                                     require_grade=args.require_grade, threads=args.threads,
                                     role=args.role, champion=champ, **ident)
@@ -871,6 +1027,8 @@ def main(argv: list[str] | None = None) -> int:
             if res and args.write_floor:
                 _write_atomic(args.write_floor, res.floor)
             return 0 if res else 1
+        preflight_or_refuse(reg.master, role=args.role, model_sha=ident["model_sha"],
+                            log=lambda m: print(m, file=sys.stderr))
         out = check_launch(reg, equivalence=equiv, numerics_epoch=args.numerics_epoch,
                            require_grade=args.require_grade, champion=champ, owner=args.owner,
                            threads=args.threads, role=args.role, **ident)

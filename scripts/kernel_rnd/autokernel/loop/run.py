@@ -1632,11 +1632,44 @@ _FLOOR_REGISTRY = None
 
 
 class _FloorRegistryContext:
-    def __init__(self, master, *, role, numerics_epoch, require_grade, co_tenancy, source_repo, branch):
-        self.registry = floor_registry.FloorRegistry(master)  # READ-ONLY view of the master registry
+    def __init__(self, master, *, role, numerics_epoch, require_grade, co_tenancy, source_repo, branch,
+                 store=None, show=None):
+        # READ-ONLY view of the master registry; every lookup is logged to the run log (print) and kept
+        # for the receipt. `master` None / "@code" = the registry of the repo this code runs from.
+        self.registry = floor_registry.FloorRegistry(master, log=print)
         self.role = role
         self.numerics_epoch, self.require_grade = numerics_epoch, require_grade
         self.co_tenancy, self.source_repo, self.branch = co_tenancy, Path(source_repo), branch
+        self.store, self._persisted, self._preflight = store, 0, None
+        self._show = show    # test seam for origin/main's file text; None = `git show origin/main:<rel>`
+
+    def ensure_preflight(self, model_sha):
+        """Refuse (RegistryBehindUpstream) if origin/main has floors for this role/model that the local
+        registry lacks. Once per run; a skip (origin/main unreadable) WARNs and continues."""
+        if self._preflight is None:
+            self._preflight = floor_registry.preflight_or_refuse(
+                self.registry.master, role=self.role, model_sha=model_sha, log=print, show=self._show)
+            prov = self.registry.provenance()
+            print(f"serving   floor registry in use: {prov['path']} [{prov['source']}] commit "
+                  f"{str(prov['commit'])[:12]}{' DIRTY' if prov['dirty'] else ''}; origin/main "
+                  f"{str(prov['origin_main_commit'])[:12]} (as of the last fetch, {prov['origin_main_age_s']}s old)")
+        return self._preflight
+
+    def persist(self):
+        """Append the lookups not yet written to <store>/floor-registry-lookups.jsonl (durable audit)."""
+        if self.store is None:
+            return
+        fresh = self.registry.lookups[self._persisted:]
+        if fresh:
+            with (Path(self.store) / "floor-registry-lookups.jsonl").open("a", encoding="utf-8") as fh:
+                for row in fresh:
+                    fh.write(json.dumps(row, sort_keys=True) + "\n")
+            self._persisted = len(self.registry.lookups)
+
+
+def _floor_registry_receipt() -> dict:
+    """`{"floor_registry": receipt}` when the registry is enabled, else `{}` (records byte-identical off)."""
+    return {} if _FLOOR_REGISTRY is None else {"floor_registry": _FLOOR_REGISTRY.registry.receipt()}
 
 
 def _registry_floor_reading(recipe, launch, *, frozen_requests, pairs):
@@ -1648,6 +1681,7 @@ def _registry_floor_reading(recipe, launch, *, frozen_requests, pairs):
     `serving.compare` repeats. The baseline execution digest is deliberately NOT compared: that is
     exactly what a byte-equivalent tree changes."""
     ctx = _FLOOR_REGISTRY
+    ctx.ensure_preflight(launch.model.sha256)   # RegistryBehindUpstream propagates: never swallowed below
     try:
         equivalence = floor_registry.equivalence_for_build(launch.build_dir, source_repo=ctx.source_repo)
         champion_now = floor_registry.champion_state(ctx.source_repo, ctx.branch)
@@ -1665,10 +1699,14 @@ def _registry_floor_reading(recipe, launch, *, frozen_requests, pairs):
                                        Path(result.entry["_path"]), result.floor)
         if reading.gate_floor(effect_unit=serving.COMPARE_EFFECT_UNIT) is None:
             return None
+    except floor_registry.RegistryBehindUpstream:
+        raise
     except (floor_registry.FloorRegistryError, serving.ServingFloorMismatch, serving.RecipeError,
             OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         print(f"serving   floor registry unavailable for {launch.build_dir}: {type(exc).__name__}: {exc}")
         return None
+    finally:
+        ctx.persist()
     grade = result.entry["grade"]
     print(f"serving   floor REGISTERED for this execution-equivalence class "
           f"(anchor {result.entry['era']['champion_commit'][:12]}, {grade['claim_class']}/"
@@ -2132,9 +2170,10 @@ def main(argv: list[str] | None = None) -> int:
                         action="store_false", default=True,
                         help="DS41-C69 escape hatch: never carry a lineage serving floor across "
                              "a source-only anchor change; recalibrate (24 pairs) as before")
-    parser.add_argument("--floor-registry", type=Path, metavar="MASTER.yaml",
+    parser.add_argument("--floor-registry", type=Path, metavar="MASTER.yaml|@code",
                         help="OFF by default. Read the MASTER model registry's `serving_floors` "
-                             "section (loop.floor_registry) for a floor measured on a byte-equivalent "
+                             "section (loop.floor_registry; `@code` = the registry of the repo THIS code runs "
+                             "from, any other path is logged as an override) for a floor measured on a byte-equivalent "
                              "build before calibrating; a floor THIS run calibrates is used "
                              "in-process and a registry plan is emitted for the owning session to "
                              "apply (this flag never writes the registry). Requires "
@@ -2663,7 +2702,7 @@ def main(argv: list[str] | None = None) -> int:
         _FLOOR_REGISTRY = _FloorRegistryContext(
             args.floor_registry, role=args.floor_registry_role, numerics_epoch=args.floor_numerics_epoch,
             require_grade=args.floor_require_grade, co_tenancy=args.floor_co_tenancy,
-            source_repo=args.worktree, branch=args.champion_branch)
+            source_repo=args.worktree, branch=args.champion_branch, store=args.store)
     if args.cpu_window_wait_bound_s <= 0:
         parser.error("--cpu-window-wait-bound-s must be > 0")
     if args.hypothesis_author_attempts < 1:
@@ -3193,6 +3232,13 @@ def main(argv: list[str] | None = None) -> int:
         # Dry-run retains its established no-additional-artifact-hash contract.
         direct_launch = _cpu_arm(direct_launch, args.anchor_build)
         cpu_launch = direct_launch if direct_launch.backend == "cpu" else None
+        if _FLOOR_REGISTRY is not None:
+            # Fail LOUD at launch, before any claim or build: a registry that is behind origin/main
+            # for this target would turn a real floor into a silent miss (or a stale hit).
+            try:
+                _FLOOR_REGISTRY.ensure_preflight(direct_launch.model.sha256)
+            except floor_registry.RegistryBehindUpstream as refusal:
+                parser.error(f"REFUSED: {refusal}")
     if ((resumed is not None and not historical_target)
             or (source_resumed is not None and not cross_tree_source)):
         anchor_source = source_resumed if source_resumed is not None else resumed
@@ -5389,7 +5435,7 @@ def main(argv: list[str] | None = None) -> int:
         # the reason a reader must never have to infer which one happened.
         last_gate[0] = {"trigger": trigger, "outcome": plan["outcome"].value,
                         "floor_provenance": serving_floor_provenance,
-                        "floor_carry": serving_floor_carry,
+                        "floor_carry": serving_floor_carry, **_floor_registry_receipt(),
                         "at_commit": head, "keeps": len(bundle[0].keeps),
                         "compounded_bench_pct": round(bundle[0].compounded_bench_pct, 3),
                         "serving_effect_pct": sv_row.get("effect_pct"),
@@ -5402,7 +5448,7 @@ def main(argv: list[str] | None = None) -> int:
              # to this recipe. A grandfathered floor still gates, but it must never be
              # indistinguishable from a verified one in the record it produced.
              "floor_provenance": serving_floor_provenance,
-             "floor_carry": serving_floor_carry,
+             "floor_carry": serving_floor_carry, **_floor_registry_receipt(),
              "keeps_since_serving_gate": bundle[0].keeps_since_serving_gate,
              "gate_every_keeps": accum_policy.every_keeps,
              "bundled_keeps": list(bundle[0].keeps),
@@ -5419,7 +5465,7 @@ def main(argv: list[str] | None = None) -> int:
              "status": "measured_serving_gate" if promoted else "measured_divergence",
              "hypothesis": plan["reason"], "planner_evidence": plan.get("planner_evidence"),
              "trigger": trigger, "floor_provenance": serving_floor_provenance,
-             "floor_carry": serving_floor_carry,
+             "floor_carry": serving_floor_carry, **_floor_registry_receipt(),
              "gate_outcome": plan["outcome"].value,
              "bundled_keeps": list(bundle[0].keeps),
              "champion_of_record": cor_commit[0], "at_commit": head,
@@ -5751,7 +5797,7 @@ def main(argv: list[str] | None = None) -> int:
             # UNIT nobody recorded looked exactly like one measured in the effect's unit.
             "serving_floor_provenance": serving_floor_provenance,
             # DS41-C69: which sealed parent floor was carried and which A/A admitted it.
-            "serving_floor_carry": serving_floor_carry,
+            "serving_floor_carry": serving_floor_carry, **_floor_registry_receipt(),
             "serving_floor_unit": serving_floor_unit,
             "fire_multiple": accum_policy.fire_multiple,
             "fire_threshold_pct": round(thr, 3) if thr is not None else None,

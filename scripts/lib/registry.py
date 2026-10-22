@@ -22,7 +22,9 @@ import yaml
 
 
 # Default paths
-DEFAULT_REGISTRY_PATH = "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"
+# The registry of the repo THIS code runs from (scripts/lib/registry.py -> repo root), so a pinned
+# worktree reads its own commit's registry and never a possibly-behind shared clone (operator 2026-10-22).
+DEFAULT_REGISTRY_PATH = str(Path(__file__).resolve().parents[2] / "orchestration" / "model_registry.yaml")
 DEFAULT_MODEL_BASE_PATH = "/mnt/raid0/llm/lmstudio/models"
 
 
