@@ -39,6 +39,12 @@ THE FOUR STEPS
    --floor-require-grade/--floor-co-tenancy`, plus `calibrate_serving_pairs` only when the
    registry said `calibrate`.
 
+TWO RELAUNCH PATHS. With `--resolved-campaign/--owned-targets/--alias/--target-root` (and, to validate,
+`--rebound-launch`), plan/apply also emit BOTH commands, built by `serial_roster.build_targets` so the
+roster's own checks run: `serial_run` (patched owned-targets + common-args; `serial_run` now accepts
+`--new-anchor-epoch` and the `--floor-*` flags, forwarding the epoch to the FIRST child only) and
+`direct_run_py` (the exact run.py argv, for hand launches as in RUNBOOK-ak.md s1).
+
 WHAT THIS DELIBERATELY DOES NOT DO: regenerate the campaign's `launch.json`. A CanonicalResolvedRecipe
 binds `build_dir`, executable and DSO digests, and `serial_roster` refuses a launch whose build differs
 from the owner's anchor_build; producing the rebound launch is the campaign's input build
@@ -197,12 +203,95 @@ def _would_refuse(store: Path, worktree: Path, anchor_commit: str) -> dict:
             "blocking": bool(refuses and kind != accumulate.REFUSAL_KIND_ANCESTRY)}
 
 
+def launch_paths(*, anchor_build: str, run_argv_additions: list[str], floor_action: str,
+                 launch: dict, out_dir: Path | str) -> dict:
+    """BOTH ways to relaunch, built from the owner's own inputs and VALIDATED by `serial_roster`.
+
+    `launch` = {resolved_campaign, owned_targets, alias, target_root, [common_args], [rebound_launch],
+    [iterations], [state_dir]}. The owner map is copied with `anchor_build` swapped to the store build
+    (and `launch` -> `rebound_launch` when given -- required for a validating build, because the
+    CanonicalResolvedRecipe binds build_dir); `calibrate_serving` is dropped on `reuse` (no A/A when a
+    floor exists) and raised to 24 on `calibrate`. Written under `out_dir` (never over the originals).
+
+      serial_run     -- common-args + the re-anchor/registry flags and the patched owned-targets;
+                        `serial_run` forwards `--new-anchor-epoch` to the FIRST child only.
+      direct_run_py  -- the exact `run.py` argv/cwd (what `serial_run` would spawn), for operators
+                        that launch run.py by hand (RUNBOOK-ak.md s1).
+    Raises `ReanchorRefused` with the roster's own message when the inputs do not validate."""
+    import sys as _sys
+    from . import serial_roster
+    from . import serial_run as sr
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    owners = json.loads(Path(launch["owned_targets"]).read_text(encoding="utf-8"))
+    alias = launch["alias"]
+    if alias not in owners:
+        raise ReanchorRefused(f"alias {alias!r} not in {launch['owned_targets']}")
+    owner = dict(owners[alias], anchor_build=str(anchor_build))
+    if launch.get("rebound_launch"):
+        owner["launch"] = str(launch["rebound_launch"])
+    if floor_action == "reuse":
+        owner.pop("calibrate_serving", None)
+    elif floor_action == "calibrate":
+        owner["calibrate_serving"] = max(24, int(owner.get("calibrate_serving") or 0))
+    patched = out_dir / "owned-targets.reanchor.json"
+    fr._write_atomic(patched, {**owners, alias: owner})
+    flags = [a for a in _drop_pair(run_argv_additions, "--anchor-build")]  # anchor travels via the owner map
+    common = []
+    if launch.get("common_args"):
+        common = json.loads(Path(launch["common_args"]).read_text(encoding="utf-8"))
+    common_path = out_dir / "common-args.reanchor.json"
+    fr._write_atomic(common_path, [*common, *flags])
+    try:
+        argvs, _skipped, _cpus = serial_roster.build_targets(
+            launch["resolved_campaign"], patched, target_root=launch["target_root"], common_path=common_path)
+    except sr.SerialRefused as refusal:
+        raise ReanchorRefused(
+            f"owner inputs do not validate for the new anchor ({refusal}); "
+            + ("" if launch.get("rebound_launch") else
+               "pass a rebound launch.json (rebound_launch): the launch binds the build digest")) from refusal
+    chosen = [a for a in argvs if sr.option(a, "--target-id") == alias]
+    if len(chosen) != 1:
+        raise ReanchorRefused(f"alias {alias!r} did not resolve to exactly one ready target")
+    iterations = str(launch.get("iterations", 1))
+    state_dir = str(launch.get("state_dir", out_dir / "serial-state"))
+    repo_root = Path(sr.__file__).resolve().parents[4]
+    return {
+        "serial_run": {
+            "cwd": str(repo_root),
+            "argv": [_sys.executable, "-m", "scripts.kernel_rnd.autokernel.loop.serial_run",
+                     "--resolved-campaign", str(launch["resolved_campaign"]),
+                     "--owned-targets", str(patched), "--common-args", str(common_path),
+                     "--target-root", str(launch["target_root"]), "--batch-iterations", iterations,
+                     "--rounds", "1", "--state-dir", state_dir],
+            "note": "--new-anchor-epoch reaches the FIRST child only (serial_run._batch_argv)"},
+        "direct_run_py": {
+            "cwd": str(repo_root),
+            "argv": [_sys.executable, "-m", "scripts.kernel_rnd.autokernel.loop.run", *chosen[0],
+                     "--iterations", iterations, "--out", str(out_dir / "run-out")]}}
+
+
+def _drop_pair(argv: list[str], flag: str) -> list[str]:
+    out, skip = [], False
+    for item in argv:
+        if skip:
+            skip = False
+        elif item == flag:
+            skip = True
+        else:
+            out.append(item)
+    return out
+
+
 def plan(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
          branch: str = fr.DEFAULT_CHAMPION_BRANCH, builds_root: Path | str = DEFAULT_BUILDS_ROOT,
          numerics_epoch: str = "default", require_grade: str = "decision",
          co_tenancy: str = "quiet", floor_identity: dict | None = None,
-         reference_build: Path | str | None = None) -> dict:
-    """Read-only. Everything `apply` would do, with the floor decision made WITHOUT claiming."""
+         reference_build: Path | str | None = None, launch: dict | None = None,
+         preview_dir: Path | str | None = None) -> dict:
+    """Read-only (except `preview_dir`, the one place launch artifacts may be written). Everything
+    `apply` would do, with the floor decision made WITHOUT claiming. With `launch` (see
+    `launch_paths`) the output also carries both relaunch paths, validated by `serial_roster`."""
     store, worktree = Path(store), Path(worktree)
     found = detect(store, worktree, branch)
     out: dict[str, Any] = {"schema": SPEC_SCHEMA, "detect": found, "actionable": False, "blockers": []}
@@ -251,6 +340,13 @@ def plan(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
                                           numerics_epoch, require_grade, co_tenancy,
                                           needs_epoch=out["anchor_preflight"]["needs_new_anchor_epoch"])
     out["actionable"] = True
+    if launch is not None and preview_dir is not None:
+        try:
+            out["launch_paths"] = launch_paths(
+                anchor_build=equivalence["build_dir"], run_argv_additions=out["run_argv_additions"],
+                floor_action=out["floor"]["would"], launch=launch, out_dir=preview_dir)
+        except ReanchorRefused as refusal:
+            out["launch_paths_error"] = str(refusal)
     return out
 
 
@@ -291,14 +387,27 @@ def apply(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
     if decision["action"] == "claimed":
         raise ReanchorRefused(f"another launcher ({decision['claim'].get('owner')}) already holds the "
                               f"recalibration for this champion advance; wait for its floor, do not calibrate")
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    paths = None
+    if plan_kwargs.get("launch") is not None:
+        try:
+            paths = launch_paths(anchor_build=planned["anchor_build"],
+                                 run_argv_additions=planned["run_argv_additions"],
+                                 floor_action=decision["action"], launch=plan_kwargs["launch"],
+                                 out_dir=store / "reanchor" / f"launch-{stamp}")
+        except ReanchorRefused:
+            if decision["action"] == "calibrate":
+                registry.release_claim(decision["condition"])  # nothing was launched: hand it back
+            raise
     spec = {"schema": SPEC_SCHEMA, "created": fr._iso(time.time()), "owner": owner, "store": str(store),
+            "launch_paths": paths,
             "previous_champion_of_record": campaign.get("cor_full"),
             "champion": champion, "anchor_build": planned["anchor_build"],
             "equivalence_key": planned["equivalence_key"], "anchor_preflight": planned["anchor_preflight"],
             "floor_action": decision["action"], "floor": {k: v for k, v in decision.items() if k != "claim"},
             "calibrate_serving_pairs": 24 if decision["action"] == "calibrate" else None,
             "run_argv_additions": planned["run_argv_additions"]}
-    spec_path = store / "reanchor" / f"reanchor-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.json"
+    spec_path = store / "reanchor" / f"reanchor-{stamp}.json"
     fr._write_atomic(spec_path, spec, exclusive=True)
     done = subprocess.run(relaunch_cmd, env={**os.environ, "REANCHOR_SPEC": str(spec_path)})
     spec_after = {"spec": str(spec_path), "relaunch_rc": done.returncode, "action": decision["action"]}
@@ -324,6 +433,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--require-grade", choices=fr.GRADES, default="decision")
     p.add_argument("--co-tenancy", choices=fr.CO_TENANCY, default="quiet")
     p.add_argument("--floor", type=Path, help="a floor json naming the condition (default: the store's newest)")
+    p.add_argument("--resolved-campaign", type=Path, help="with --owned-targets/--alias/--target-root: "
+                   "also emit both relaunch paths (serial_run and direct run.py), validated")
+    p.add_argument("--owned-targets", type=Path)
+    p.add_argument("--alias", help="the owned-targets alias (== --target-id) being re-anchored")
+    p.add_argument("--target-root", type=Path)
+    p.add_argument("--common-args", type=Path)
+    p.add_argument("--rebound-launch", type=Path, help="launch.json rebound to the new anchor build")
+    p.add_argument("--iterations", type=int, default=1)
+    p.add_argument("--state-dir", type=Path)
+    p.add_argument("--preview-dir", type=Path, help="plan: where launch artifacts may be written")
     p.add_argument("--relaunch-cmd", help="JSON argv array run by `apply --execute` with REANCHOR_SPEC set")
     p.add_argument("--owner", default=os.environ.get("USER", "unknown"))
     p.add_argument("--execute", action="store_true", help="apply: actually claim, write the spec, relaunch")
@@ -342,8 +461,17 @@ def main(argv: list[str] | None = None) -> int:
                   numerics_epoch=args.numerics_epoch, require_grade=args.require_grade,
                   co_tenancy=args.co_tenancy, floor_identity=identity,
                   reference_build=args.reference_build)
+        if args.resolved_campaign:
+            need = ("owned_targets", "alias", "target_root")
+            if any(getattr(args, n) is None for n in need):
+                p.error("--resolved-campaign needs --owned-targets, --alias and --target-root")
+            kw["launch"] = {"resolved_campaign": args.resolved_campaign, "owned_targets": args.owned_targets,
+                            "alias": args.alias, "target_root": args.target_root,
+                            "common_args": args.common_args, "rebound_launch": args.rebound_launch,
+                            "iterations": args.iterations,
+                            **({"state_dir": args.state_dir} if args.state_dir else {})}
         if args.cmd == "plan":
-            out = plan(args.store, args.worktree, **kw)
+            out = plan(args.store, args.worktree, preview_dir=args.preview_dir, **kw)
         else:
             if args.execute and not args.relaunch_cmd:
                 p.error("apply --execute needs --relaunch-cmd")
