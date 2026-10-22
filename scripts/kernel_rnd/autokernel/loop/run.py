@@ -3479,8 +3479,12 @@ def main(argv: list[str] | None = None) -> int:
              noise_floor_pct(args.surface, args.pairs, args.model, store=args.store))
     floor = None if direct_launch else bench_floor
     calibrated = floor is not None
+    # A direct (serving) launch never reads the bench floor: keeps are gated on the
+    # serving floor printed below, so "UNCALIBRATED ... keeps refused" here was false.
     print(f"surface   {args.surface}, {args.pairs} alternating pairs, "
-          + (f"noise floor {floor:.3f}%" if calibrated else
+          + ("bench floor NOT USED — keeps are gated on the serving launch (see 'serving')"
+             if direct_launch else
+             f"noise floor {floor:.3f}%" if calibrated else
              "UNCALIBRATED — decisive=None on every comparison; keeps refused"))
     # §5.3: configured once at startup, refused loudly here if misconfigured -- a
     # confirm rung that is not production-shaped must never gate a keep.
