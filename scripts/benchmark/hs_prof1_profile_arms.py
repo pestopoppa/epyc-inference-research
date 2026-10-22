@@ -112,6 +112,40 @@ def table(out_dir: Path) -> dict:
     return out
 
 
+#: Belief-kernel write side (VB-HSPROF1-WRITE). The writer and strict reader live in epyc-root
+#: (``scripts/vidya/adapters/hs_prof1_profile_arms.py``), resolved ONLY through ``$EPYC_ROOT``.
+BELIEF_CAPTURE_MODULE = "hs_prof1_profile_arms"
+
+
+def write_table_beliefs(out_dir: Path, table_path: Path, *, recipe: Path | None = None,
+                        model_sha256: str | None = None, server_build: str | None = None) -> int:
+    """Emit the profile-arm belief rows AFTER table.json is durable. Never silent: a capture
+    failure is printed and returns ``belief_capture.EXIT_CAPTURE_FAILED`` (the table stays)."""
+    import hashlib
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import belief_capture
+
+    log = belief_capture.CaptureLog()
+
+    def _write():
+        pins: dict = {}
+        if recipe is not None:  # an unreadable recipe is a recorded capture failure, not a crash
+            pins["recipe_path"] = str(Path(recipe).resolve())
+            pins["recipe_sha256"] = hashlib.sha256(Path(recipe).read_bytes()).hexdigest()
+        if model_sha256:
+            pins["model_sha256"] = model_sha256
+        if server_build:
+            pins["server_build"] = server_build
+        cap = belief_capture.load_capture(BELIEF_CAPTURE_MODULE)
+        return cap.write_belief_measurements(out_dir, table_path=table_path,
+                                             producer="hs_prof1_profile_arms.py table",
+                                             reader_pins=pins)
+    side = log.run("hs_prof1_profile_arms", _write)
+    if not log.failed:
+        print(f"belief sidecar: {side}")
+    return log.exit_code(0)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -127,11 +161,22 @@ def main(argv=None) -> int:
     t = sub.add_parser("table")
     t.add_argument("--out-dir", type=Path, required=True)
     t.add_argument("--out", type=Path, required=True)
+    t.add_argument("--belief-measurements", action="store_true",
+                   help="write hs_prof1_profile_arms.beliefs.jsonl beside --out through epyc-root's "
+                        "scripts/vidya/adapters/hs_prof1_profile_arms.py (named by $EPYC_ROOT)")
+    t.add_argument("--reader-recipe", type=Path, default=None,
+                   help="serving recipe the reader was launched from (recorded with its sha256)")
+    t.add_argument("--reader-model-sha256", default=None, help="reader GGUF sha256, if captured")
+    t.add_argument("--reader-server-build", default=None, help="reader llama-server build, if captured")
     a = ap.parse_args(argv)
     if a.cmd == "table":
         res = table(a.out_dir)
         a.out.write_text(json.dumps(res, indent=1))
         print(json.dumps(res["per_ability"], indent=1))
+        if a.belief_measurements:
+            return write_table_beliefs(a.out_dir, a.out, recipe=a.reader_recipe,
+                                       model_sha256=a.reader_model_sha256,
+                                       server_build=a.reader_server_build)
         return 0
     if a.cmd == "derive":
         a.out.write_text(json.dumps(derive(a.base_url, a.model, a.data_dir, a.split), indent=1))

@@ -26,8 +26,11 @@
 #   WINDOW_CONFIRMED=1 PHASE=judge JUDGE_BACKEND=cloud OUT_DIR=... scripts/benchmark/run_hs_prof1_beam_arm.sh
 #
 # score_beam_run is called WITHOUT --belief-measurements: that flag requires --arm to equal the rows' recorded
-# context mode, which is "profile" for BOTH arms here, and beam_memory_capture has no profile-arm ladder (belief wiring is
-# a recorded task in vidya-belief-substrate-program.md, not a silent omission).
+# context mode, which is "profile" for BOTH arms here. The belief rows for this experiment are written instead by
+# `hs_prof1_profile_arms.py table --belief-measurements` (VB-HSPROF1-WRITE: per ability x arm means + paired deltas,
+# judge identity in every claim) through epyc-root's scripts/vidya/adapters/hs_prof1_profile_arms.py. It needs
+# EPYC_ROOT=<epyc-root checkout>; the judge phase preflights it BEFORE any judge call (exit 5 if unresolvable).
+# HSPROF1_BELIEF=0 skips the capture explicitly (logged). READER_RECIPE (optional) is recorded with its sha256.
 # Resume: a finished arm (OUT_DIR/arm_<arm>.result.path exists and the file is there) is skipped; judge_beam_run keeps
 # its own <out>.partial.jsonl. The serving binary is the STORE build in docs/m12-long-context-gpu-recipe.md (§1).
 set -euo pipefail
@@ -98,6 +101,16 @@ elif [[ "$PHASE" == "judge" ]]; then
   first="${ARMS[0]}"
   [[ -s "$OUT_DIR/arm_${first}.result.path" ]] || { echo "no reader result recorded; run PHASE=reader first" >&2; exit 5; }
   cd "$here"
+  TARGS=()
+  if [[ "${HSPROF1_BELIEF:-1}" == "1" ]]; then
+    # VB-HSPROF1-WRITE: resolve the belief writer before spending any judge call
+    "$PY" -c 'import belief_capture; belief_capture.preflight("hs_prof1_profile_arms")' \
+      || { echo "BLOCKED: belief capture unresolvable (set EPYC_ROOT, or HSPROF1_BELIEF=0 to skip it explicitly)" >&2; exit 5; }
+    TARGS+=(--belief-measurements)
+    [[ -z "${READER_RECIPE:-}" ]] || TARGS+=(--reader-recipe "$READER_RECIPE")
+  else
+    log "HSPROF1_BELIEF=0: belief capture SKIPPED by request (no belief rows for this table)"
+  fi
   # judge smoke on a 5-question slice (recipe §6): unjudged empty, every verdict parses, else stop before the long judge pass
   "$PY" - "$(cat "$OUT_DIR/arm_${first}.result.path")" "$OUT_DIR/smoke_slice.json" <<'PYEOF'
 import json, sys
@@ -119,7 +132,7 @@ PYEOF
     "$PY" judge_beam_run.py "$(cat "$OUT_DIR/arm_${arm}.result.path")" --out-json "$OUT_DIR/judged_${arm}.json" "${JARGS[@]}"
     "$PY" score_beam_run.py "$OUT_DIR/judged_${arm}.json" --out-json "$OUT_DIR/scored_${arm}.json" --check-dataset
   done
-  "$PY" hs_prof1_profile_arms.py table --out-dir "$OUT_DIR" --out "$OUT_DIR/table.json"
+  "$PY" hs_prof1_profile_arms.py table --out-dir "$OUT_DIR" --out "$OUT_DIR/table.json" "${TARGS[@]}"
   log "judge phase done: $OUT_DIR/table.json"
 else
   echo "PHASE must be reader or judge" >&2; exit 2
