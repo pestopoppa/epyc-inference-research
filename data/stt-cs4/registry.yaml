@@ -25,7 +25,7 @@ datasets:
     content: "six whole calls (4483046, 4474955, 4468919 trimmed, 4482968, 4471586, 4475604), 114.9 min, 15,814 reference words"
     known_defects:
       - "Disjoint from the leaderboard's standard Earnings22 test (0 of 6 calls overlap); standard-vs-cleaned deltas mix calls, scorer, chunking and references. Never quote one as a pure reference effect."
-      - "Card says ESB test split; community discussion #2 (open, unanswered) says the six audios are in ESB train. Train membership unresolved (ESB gated): label train-overlap-unknown."
+      - "Card says ESB test split; community discussion #2 (open, unanswered) says the six audios are in ESB train. Train membership answered 2026-10-22 (OP-ESB-SPLIT) by exclusion: all six calls are absent from the ESB validation and test call sets and present in the 125-call corpus, so they sit in ESB train (113 calls, ~105 h): label train-overlap-yes-inferred (esb/datasets itself stayed gated for the supplied token; evidence from the sanchit-gandhi/earnings22_split mirror, source_id column only). Treat as train-contaminable: ordering and sanity only."
       - "Fillers left in references on purpose (600 of 15,814 words, 3.8%); AA normaliser is unpublished and versioned (v2.0 Feb, v2.1 Apr, v2.2 May 2026): do not copy it."
     exclusion_rules:
       - "Not a CS-4 set; labelled external English anchor for the STT bake-off only."
