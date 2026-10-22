@@ -387,7 +387,8 @@ def apply(store: Path | str, worktree: Path | str, *, registry_root: Path | str,
     if decision["action"] == "claimed":
         raise ReanchorRefused(f"another launcher ({decision['claim'].get('owner')}) already holds the "
                               f"recalibration for this champion advance; wait for its floor, do not calibrate")
-    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    # nanoseconds in the stamp: two applies inside one second must not collide on the exclusive spec file
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime()) + f"{time.time_ns() % 10**9:09d}Z"
     paths = None
     if plan_kwargs.get("launch") is not None:
         try:
