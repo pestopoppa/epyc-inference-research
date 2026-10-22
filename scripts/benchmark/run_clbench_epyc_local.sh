@@ -54,6 +54,8 @@ curl -fsS --max-time 10 "${CLBENCH_EPYC_BASE_URL%/}/models" >/dev/null \
 
 "$here/clbench_epyc_local/install_into_clbench.sh" "$CLBENCH_REPO"
 mkdir -p "$OUT_ROOT"
+# CME-7T: failed / empty / runaway raw replies land next to cache_hit_report.json (system.py honours this env)
+export CLBENCH_EPYC_RAW_LOG="$(cd "$OUT_ROOT" && pwd)/raw_replies.jsonl"
 cd "$CLBENCH_REPO"
 before="$(ls -d results/"$TASK"/traces/*/ 2>/dev/null | sort || true)"
 set +e

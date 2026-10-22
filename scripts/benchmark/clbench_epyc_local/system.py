@@ -22,12 +22,21 @@ the oldest messages.
 Endpoint config (constructor args, overridable with ``--system.<arg> value``;
 env fallbacks CLBENCH_EPYC_BASE_URL / CLBENCH_EPYC_API_KEY): base_url, model,
 temperature, max_output_tokens, max_context_tokens, timeout_s, enable_thinking (default False).
+
+Raw-reply capture (CME-7T): every reply that fails schema validation, is empty, or hits max_tokens
+(finish_reason "length") is appended, untruncated, to a JSONL sidecar (``raw_log`` arg / env
+CLBENCH_EPYC_RAW_LOG; the CME-7 runner sets it next to cache_hit_report.json). Each line carries
+event (parse_fail | empty | runaway), interaction, attempt, content, reasoning_content, finish_reason,
+completion_tokens and the error. A reply with finish_reason "length" additionally logs a distinct
+``runaway`` event line and a stderr warning, whether or not it later validates.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Optional
@@ -81,6 +90,7 @@ class EpycLocalSystem(ContinualLearningSystem):
         timeout_s: float = 600.0,
         parse_retries: int = 1,
         enable_thinking: bool | str = False,
+        raw_log: str | None = None,
     ):
         self._name = name
         self.base_url = (base_url or os.environ.get("CLBENCH_EPYC_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
@@ -94,6 +104,9 @@ class EpycLocalSystem(ContinualLearningSystem):
         # Qwen3.6+ think by default; thinking spends the whole max_output_tokens budget and leaves content == ""
         # (CME-7 s5 smoke 2026-10-22: 4/8 first calls ended at 2048 tokens, EOF json_invalid). Thinking OFF is the rule.
         self.enable_thinking = enable_thinking if isinstance(enable_thinking, bool) else str(enable_thinking).lower() in ("1", "true", "yes", "on")
+        self.raw_log = raw_log or os.environ.get("CLBENCH_EPYC_RAW_LOG") or "epyc_local_raw_replies.jsonl"
+        self.runaway_count = 0
+        self._last_raw: dict[str, Any] = {}
         self._api_key = os.environ.get("CLBENCH_EPYC_API_KEY", "")
         self.messages: list[dict[str, str]] = []
         self.interaction_count = 0
@@ -126,6 +139,7 @@ class EpycLocalSystem(ContinualLearningSystem):
             if attempt and last_err is not None:
                 out.append({"role": "assistant", "content": record})
                 out.append({"role": "user", "content": f"That was not valid ({last_err}). Reply with ONLY the JSON object."})
+            self._attempt = attempt
             text, usage = self._chat(out)
             self.record_usage_event(usage)
             record = text
@@ -134,6 +148,8 @@ class EpycLocalSystem(ContinualLearningSystem):
                 break
             except Exception as exc:  # noqa: BLE001 - any parse/validation failure
                 last_err = exc
+                self._log_raw("parse_fail", self._last_raw, error=f"{type(exc).__name__}: {exc}",
+                              will_retry=attempt < self.parse_retries)
         if action is None:
             raise EndpointError(f"response did not validate against schema after retries: {last_err}")
         self.messages.append({"role": "assistant", "content": record})
@@ -154,6 +170,8 @@ class EpycLocalSystem(ContinualLearningSystem):
             "messages": list(self.messages),
             "interaction_count": self.interaction_count,
             "truncation_count": self.truncation_count,
+            "runaway_count": self.runaway_count,
+            "raw_log": self.raw_log,
             "model": self.model,
             "base_url": self.base_url,
         }
@@ -172,6 +190,21 @@ class EpycLocalSystem(ContinualLearningSystem):
         while len(self.messages) > 1 and self._approx_tokens() > self.max_context_tokens:
             self.messages.pop(0)
             self.truncation_count += 1
+
+    _attempt = 0
+
+    def _log_raw(self, event: str, raw: dict[str, Any], **extra: Any) -> None:
+        """Append one JSONL record; never raises (capture must not break the run)."""
+        rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "event": event,
+               "interaction": self.interaction_count, "attempt": self._attempt,
+               "max_output_tokens": self.max_output_tokens, **raw, **extra}
+        try:
+            d = os.path.dirname(os.path.abspath(self.raw_log))
+            os.makedirs(d, exist_ok=True)
+            with open(self.raw_log, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            print(f"epyc_local: raw-reply log write failed: {exc}", file=sys.stderr)
 
     def _chat(self, messages: list[dict[str, str]]) -> tuple[str, UsageEvent]:
         body = json.dumps({
@@ -195,9 +228,20 @@ class EpycLocalSystem(ContinualLearningSystem):
             text = payload["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError) as exc:
             raise EndpointError(f"malformed chat response: {str(payload)[:200]}") from exc
+        choice = payload["choices"][0]
+        fin = choice.get("finish_reason")
+        reasoning = (choice.get("message") or {}).get("reasoning_content")
+        ctoks = (payload.get("usage") or {}).get("completion_tokens")
+        self._last_raw = {"content": text, "reasoning_content": reasoning, "finish_reason": fin,
+                          "completion_tokens": ctoks, "response_id": payload.get("id")}
+        if fin == "length":
+            self.runaway_count += 1
+            print(f"epyc_local: RUNAWAY reply (finish_reason={fin}, completion_tokens={ctoks}, "
+                  f"max_output_tokens={self.max_output_tokens}, interaction={self.interaction_count})", file=sys.stderr)
+            self._log_raw("runaway", self._last_raw)
         if not text.strip():
-            fin = payload["choices"][0].get("finish_reason")
-            think = bool((payload["choices"][0].get("message") or {}).get("reasoning_content"))
+            self._log_raw("empty", self._last_raw)
+            think = bool(reasoning)
             raise EndpointError(f"empty content (finish_reason={fin}, reasoning_content={'present' if think else 'absent'}, "
                                 f"enable_thinking={self.enable_thinking}): reasoning exhausted max_output_tokens={self.max_output_tokens}?")
         u = payload.get("usage") or {}

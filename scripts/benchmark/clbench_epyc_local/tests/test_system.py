@@ -144,3 +144,50 @@ def test_thinking_off_is_sent_and_empty_content_is_a_loud_error(mod):
         s = mod.EpycLocalSystem(base_url=srv.url)
         with pytest.raises(mod.EndpointError, match="empty content"):
             s.respond(Query(prompt="p", response_schema=Schema))
+
+
+def _records(path):
+    return [json.loads(l) for l in Path(path).read_text().splitlines()]
+
+
+def test_failed_and_retried_raw_replies_are_persisted_and_runaway_is_distinct(mod, tmp_path, capsys):
+    """CME-7T: the 2048-token first reply that failed the schema must be on disk, untruncated, with why."""
+    from src.interface import Query
+    log = tmp_path / "raw.jsonl"
+    long_text = "x" * 5000
+    runaway = {"content": long_text, "reasoning_content": "thinking...", "finish_reason": "length", "completion_tokens": 2048}
+    with StubServer([runaway, '{"action": "ok"}']) as srv:
+        s = mod.EpycLocalSystem(base_url=srv.url, raw_log=str(log))
+        assert s.respond(Query(prompt="p", response_schema=Schema)).action.action == "ok"
+    recs = _records(log)
+    assert [r["event"] for r in recs] == ["runaway", "parse_fail"]
+    pf = recs[1]
+    assert pf["content"] == long_text and pf["reasoning_content"] == "thinking..."
+    assert pf["finish_reason"] == "length" and pf["completion_tokens"] == 2048
+    assert pf["will_retry"] is True and pf["attempt"] == 0 and pf["interaction"] == 1 and "error" in pf
+    assert recs[0]["content"] == long_text
+    assert s.runaway_count == 1 and s.get_run_artifacts()["runaway_count"] == 1
+    assert "RUNAWAY" in capsys.readouterr().err
+
+
+def test_clean_reply_writes_nothing_and_empty_reply_is_logged(mod, tmp_path):
+    from src.interface import Query
+    log = tmp_path / "sub" / "raw.jsonl"
+    with StubServer(['{"action": "ok"}']) as srv:
+        s = mod.EpycLocalSystem(base_url=srv.url, raw_log=str(log))
+        s.respond(Query(prompt="p", response_schema=Schema))
+    assert not log.exists() and s.runaway_count == 0
+    with StubServer([{"content": "", "reasoning_content": "r", "finish_reason": "length", "completion_tokens": 2048}]) as srv:
+        s = mod.EpycLocalSystem(base_url=srv.url, raw_log=str(log))
+        with pytest.raises(mod.EndpointError, match="empty content"):
+            s.respond(Query(prompt="p", response_schema=Schema))
+    assert [r["event"] for r in _records(log)] == ["runaway", "empty"]
+
+
+def test_raw_log_env_fallback(mod, tmp_path, monkeypatch):
+    from src.interface import Query
+    log = tmp_path / "env.jsonl"
+    monkeypatch.setenv("CLBENCH_EPYC_RAW_LOG", str(log))
+    with StubServer(["bad", '{"action": "ok"}']) as srv:
+        mod.EpycLocalSystem(base_url=srv.url).respond(Query(prompt="p", response_schema=Schema))
+    assert [r["event"] for r in _records(log)] == ["parse_fail"]

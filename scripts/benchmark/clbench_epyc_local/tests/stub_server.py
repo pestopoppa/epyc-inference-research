@@ -19,11 +19,16 @@ class StubServer:
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 outer.requests.append(body)
                 text = outer._replies.pop(0) if outer._replies else '{"action": "fold"}'
+                extra = {}
+                if isinstance(text, dict):  # {"content", "reasoning_content", "finish_reason", "completion_tokens"}
+                    extra, text = text, text.get("content", "")
                 n = len(outer.requests)
                 out = json.dumps({
                     "id": f"stub-{n}",
-                    "choices": [{"message": {"role": "assistant", "content": text}}],
-                    "usage": {"prompt_tokens": 10 * n, "completion_tokens": 5,
+                    "choices": [{"message": {"role": "assistant", "content": text,
+                                             **({"reasoning_content": extra["reasoning_content"]} if "reasoning_content" in extra else {})},
+                                 "finish_reason": extra.get("finish_reason", "stop")}],
+                    "usage": {"prompt_tokens": 10 * n, "completion_tokens": extra.get("completion_tokens", 5),
                               "total_tokens": 10 * n + 5,
                               "prompt_tokens_details": {"cached_tokens": 4}},
                 }).encode()
