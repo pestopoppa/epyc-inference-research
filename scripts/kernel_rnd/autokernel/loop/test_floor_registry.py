@@ -143,7 +143,7 @@ def test_applier_preserves_every_comment_and_is_idempotent(tmp_path, repo):
     master = master_in(tmp_path)
     eq = eq_of(tmp_path, repo)
     res, plan = register(tmp_path, master, eq)
-    assert res["status"] == "applied" and (master.parent.parent / plan["record_dest"]).is_file()
+    assert res["status"] == "applied" and Path(plan["entry"]["record"]).is_file()
     text = master.read_text()
     for line in MASTER_TEXT.split("\n"):
         assert line in text.split("\n")          # pure insertion: no original line lost
@@ -226,7 +226,7 @@ def test_unsealed_floor_refused_and_tampered_record_is_corrupt(tmp_path, repo):
     with pytest.raises(fr.FloorRegistryError):
         register(tmp_path, master, eq, flr=bad)
     _, plan = register(tmp_path, master, eq)
-    rec = master.parent.parent / plan["record_dest"]
+    rec = Path(plan["entry"]["record"])
     doc = json.loads(rec.read_text())
     doc["floor_pct"] = 9.9
     rec.write_text(json.dumps(doc))

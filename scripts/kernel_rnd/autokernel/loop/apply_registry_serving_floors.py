@@ -7,8 +7,8 @@
 The master registry is a 13k-line hand-annotated YAML file; a `yaml.dump` round-trip would destroy the
 comments that carry its history (the same reason `apply_registry_integrity_pins.py` inserts line by
 line). This inserts one entry into the top-level `serving_floors:` section (creating the section at the
-end of the file if absent), copies the sealed floor RECORD to the durable path the entry cites, and then
-PROVES the edit:
+end of the file if absent), cites the sealed floor RECORD in place (it can be hundreds of MB and is never copied into
+git), and then PROVES the edit:
 
   * every original line is still present, in order (the diff is pure insertion);
   * re-parsed, the document equals the original plus EXACTLY the planned entry (no other change, no
@@ -29,7 +29,6 @@ import difflib
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -128,14 +127,19 @@ def apply_plan(registry: Path | str, plan: dict, *, dry_run: bool = False,
     if any(e.get("id") == entry["id"] for e in existing):
         return {"status": "already_present", "id": entry["id"], "role": role}
 
-    # 1. the record: copy to its durable cited path, byte-verified against the pinned sha
+    # 1. the record: cited IN PLACE (absolute, durable, untracked -- it can be hundreds of MB and raw
+    #    measurement material never goes into git); verify it is the one the entry pins.
     root = fr.repo_root_of(registry)
-    src, dest = Path(plan["record_src"]), root / plan["record_dest"]
-    raw = src.read_bytes()
-    if hashlib.sha256(raw).hexdigest() != entry["record_sha256"]:
-        raise ApplyError(f"record {src} does not match the entry's pinned record_sha256")
-    if dest.exists() and hashlib.sha256(dest.read_bytes()).hexdigest() != entry["record_sha256"]:
-        raise ApplyError(f"{dest} exists with different bytes: refusing to overwrite a record")
+    cited = Path(entry["record"])
+    cited = cited if cited.is_absolute() else root / cited
+    if fr.is_scratch(str(cited)):
+        raise ApplyError(f"record {cited} is in scratch: refusing")
+    h = hashlib.sha256()
+    with open(cited, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    if h.hexdigest() != entry["record_sha256"]:
+        raise ApplyError(f"record {cited} does not match the entry's pinned record_sha256")
 
     # 2. the edit, then the proof
     lines = text.split("\n")
@@ -155,11 +159,6 @@ def apply_plan(registry: Path | str, plan: dict, *, dry_run: bool = False,
     if dry_run:
         problems = ([], [])
     else:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if not dest.exists():
-            tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
-            shutil.copyfile(src, tmp)
-            os.replace(tmp, dest)
         problems = fr.validate_section(reparsed, root)
         if problems[0]:
             raise ApplyError("validate_section refuses the new document: " + "; ".join(problems[0]))
@@ -169,7 +168,7 @@ def apply_plan(registry: Path | str, plan: dict, *, dry_run: bool = False,
     diff = "\n".join(difflib.unified_diff(lines, new_lines, "a/model_registry.yaml",
                                           "b/model_registry.yaml", n=2, lineterm=""))
     return {"status": "dry_run" if dry_run else "applied", "id": entry["id"], "role": role,
-            "record": plan["record_dest"], "warnings": problems[1], "diff": diff}
+            "record": entry["record"], "warnings": problems[1], "diff": diff}
 
 
 def main(argv: list[str] | None = None) -> int:

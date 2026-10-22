@@ -142,6 +142,11 @@ def _write_atomic(path: Path, data: Mapping, *, exclusive: bool = False) -> None
 
 
 # ----------------------------------------------------------------------------- equivalence
+def is_scratch(path: str) -> bool:
+    """The registry's documented scratch root (check_evidence_durability): never citable evidence."""
+    return path.startswith("/mnt/raid0/llm/tmp/") or "/llm/tmp/" in path
+
+
 def _git(repo: Path, *args: str) -> str:
     done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=300)
     if done.returncode != 0:
@@ -410,7 +415,7 @@ def plan_registration(floor: Mapping, *, floor_file: Path | str, role: str, equi
     """The REGISTRY ENTRY for a calibrated floor plus the applier invocation. Writes NOTHING: the
     master registry is changed only by `apply_registry_serving_floors.py`, run by the owning session
     from a clean worktree on origin/main in a normal commit. `floor_file` is the sealed record already
-    on durable disk (the campaign store); the applier copies it to `record_dest` and pins its sha."""
+    on durable disk (the campaign store); it is cited in place (never copied into git) and its sha pinned."""
     if not role or not isinstance(role, str):
         raise FloorRegistryError("a registry role/key is required")
     if not isinstance(numerics_epoch, str) or not numerics_epoch:
@@ -425,7 +430,9 @@ def plan_registration(floor: Mapping, *, floor_file: Path | str, role: str, equi
     base = floor.get("baseline_resolved_recipe") or {}
     measured = (floor.get("conditions") or {}).get("recorded_at") or facts.get("calibrated_at") or _now()
     interval = floor.get("interval") or {}
-    record_name = Path(floor_file).name
+    if is_scratch(str(Path(floor_file).resolve())):
+        raise FloorRegistryError(f"{floor_file} is in scratch: seal the record under durable disk "
+                                 f"(campaign store) before registering it")
     entry = {
         "id": str(floor.get("content_sha256") or hashlib.sha256(raw).hexdigest())[:16],
         "recipe": facts["recipe"], "recipe_hash": facts["recipe_hash"],
@@ -440,12 +447,15 @@ def plan_registration(floor: Mapping, *, floor_file: Path | str, role: str, equi
         "interval": {"level": interval.get("level"), "low_pct": interval.get("low_pct"),
                      "high_pct": interval.get("high_pct")},
         "grade": clean, "measured_at": _iso_z(measured),
-        "record": f"artifacts/serving-floors/{record_name}",
+        # The record stays WHERE IT IS (durable, local, untracked): a matched floor carries its full
+        # residency series (the DS41-1017 one is 336 MB) and raw measurement material reaches git only
+        # as distilled knowledge (operator ruling 2026-08-03), so it is cited by absolute path.
+        "record": str(Path(floor_file).resolve()),
         "record_sha256": hashlib.sha256(raw).hexdigest(),
         "content_sha256": floor.get("content_sha256"), "annotation": annotation,
     }
     plan = {"schema": "epyc.autokernel.floor_registry_plan.v1", "role": role, "entry": entry,
-            "record_src": str(Path(floor_file).resolve()), "record_dest": entry["record"],
+            "record_src": str(Path(floor_file).resolve()),
             "registered_by": registered_by}
     return plan
 
@@ -749,7 +759,7 @@ def validate_section(master_data: Mapping, repo_root: Path | str) -> tuple[list[
             except (FloorRegistryError, ValueError) as exc:
                 errors.append(f"{where}: {exc}")
             rec = str(e["record"])
-            if rec.startswith(("/mnt/raid0/llm/tmp", "/tmp")) or "/llm/tmp/" in rec:
+            if is_scratch(rec):
                 errors.append(f"{where}: record is in scratch ({rec})")
     return errors, warnings
 
