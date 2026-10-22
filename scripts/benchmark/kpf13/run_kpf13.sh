@@ -30,5 +30,5 @@ if [ "$dry" = 1 ]; then
     exec python3 -B "$DRIVER" "${args[@]}"
 fi
 [ -x "$REGION_LOCK" ] || { echo "REFUSING: $REGION_LOCK not found" >&2; exit 64; }
-exec "$REGION_LOCK" run --cpu-list "$KPF13_CPU_LIST" --role build --tag "kpf13:$KPF13_WINDOW_ID" -- \
+exec "$REGION_LOCK" run --cpu-list "$KPF13_CPU_LIST" --role build --timeout-s "${KPF13_LOCK_TIMEOUT_S:-3600}" --tag "kpf13:$KPF13_WINDOW_ID" -- \
     env KPF13_REGION="$KPF13_CPU_LIST" python3 -B "$DRIVER" "${args[@]}"

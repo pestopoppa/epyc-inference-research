@@ -800,7 +800,7 @@ class Server:
         a = list(self.ctx.gate_argv)
         a = set_flag(a, ("--slot-save-path",), str(self.ctx.out / "slot-save" / self.label))
         if self.ctx.args.device == "cpu":
-            n = str(cpu_threads(self.ctx.args.cpu_list))
+            n = str(self.ctx.args.threads or cpu_threads(self.ctx.args.cpu_list))
             a = set_flag(a, ("-t", "--threads"), n)
             a = set_flag(a, ("-tb", "--threads-batch"), n)
         a += ["--port", str(self.ctx.args.port), "--metrics", "--slot-fork-min-tokens", str(self.ctx.args.fork_min)]
@@ -1355,7 +1355,7 @@ def preflight(args, ps: PromptSet | None, gate_argv: list[str]) -> tuple[list[st
             cpus = parse_cpu_list(args.cpu_list)
             if not cpus:
                 raise ValueError("empty")
-            notes.append(f"cpu-list {args.cpu_list} = {len(cpus)} cpus; -t/-tb set to {len(cpus)}")
+            notes.append(f"cpu-list {args.cpu_list} = {len(cpus)} cpus; -t/-tb set to {args.threads or len(cpus)}")
         except ValueError:
             probs.append(f"--cpu-list {args.cpu_list!r} unparsable")
     if args.drafter == "dflash2":
@@ -1395,6 +1395,10 @@ def parse_args(argv=None):
     ap.add_argument("--device", choices=["cpu", "gpu"], default="cpu")
     ap.add_argument("--cpu-list", default=None, help="the CPU list this run holds (required: a CPU quarter, or the GPU "
                     "host threads); also the taskset list. The wrapper's region-lock claim must name the same list")
+    ap.add_argument("--threads", type=int, default=None,
+                    help="-t/-tb for the server (default: the size of --cpu-list). A quarter given with its SMT siblings "
+                         "(e.g. 24-47,120-143) should run -t 24, as the KPF-18 CPU runs did")
+    ap.add_argument("--stop-file", default=None, help="drain at the next step boundary if this file exists")
     ap.add_argument("--port", type=int, default=18973)
     ap.add_argument("--fork-min", type=int, default=1024)
     ap.add_argument("--trunk-tokens", type=int, default=2048)
@@ -1584,6 +1588,8 @@ def main(argv=None) -> int:
         for (cfg, steps), pl in zip(plans, plan_objs):
             for st in steps:
                 stop_step = "SIGTERM own pid" in st.desc  # always runs: it is how the own child dies
+                if not stop_step and args.stop_file and Path(args.stop_file).exists():
+                    raise Abort(f"stop file {args.stop_file} present: draining at this step boundary")
                 if not stop_step and not deadline.fits(st.est_s):
                     raise Abort(f"deadline: {fmt_s(max(0, deadline.remaining()))} left, next step est "
                                 f"{fmt_s(st.est_s)} + reserve; draining at this boundary")
@@ -1593,7 +1599,7 @@ def main(argv=None) -> int:
                 print(f"[kpf13]   done in {fmt_s(time.time() - t0)}", flush=True)
     except Abort as exc:
         print(f"[kpf13] ABORT: {exc}", flush=True)
-        rc = 5 if "deadline" in str(exc) else 3
+        rc = 5 if ("deadline" in str(exc) or "stop file" in str(exc)) else 3
     except Exception as exc:  # noqa: BLE001
         print(f"[kpf13] ERROR: {type(exc).__name__}: {exc}", flush=True)
         rc = 4

@@ -524,3 +524,12 @@ def test_reduced_run_judges_all_eight_cells_as_heldout(tmp_path):
     assert ana["configs"]["default"]["A"]["attempts"] == 8 and ana["configs"]["default"]["A"]["verdict"] == "PASS"
     assert ana["configs"]["default"]["B"]["attempts"] == 8
     assert all(not c["dev"] for c in ana["cells"].values())
+
+
+def test_threads_override_and_stop_file_flags_parse(tmp_path):
+    a = m.parse_args(["run", "--out", str(tmp_path), "--cpu-list", "24-47,120-143", "--threads", "24",
+                      "--stop-file", str(tmp_path / "STOP")])
+    assert a.threads == 24 and a.stop_file.endswith("STOP")
+    ctx = make_ctx(tmp_path, FakeClient(), argv=["--threads", "24"])
+    srv = m.Server(ctx, "default", Path("/x/llama-server"))
+    assert srv.argv[srv.argv.index("-t") + 1] == "24" and srv.argv[srv.argv.index("-tb") + 1] == "24"
