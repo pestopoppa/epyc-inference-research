@@ -5,6 +5,7 @@
 # (docs/m12-long-context-gpu-recipe.md §6: sequential, never co-resident):
 #
 #   PHASE=reader   derive + build snapshots + one run_benchmark per arm; records each arm's result JSON path
+#   PHASE=preflight no server/model/judge call: pyarrow + orchestrator imports + BEAM extract_all + tree-resolution check (run it BEFORE the GPU grant)
 #   PHASE=judge    (JUDGE_BACKEND=served, default) judge smoke (5 questions) -> judge + score every arm -> table.json   (NO model swap inside)
 #
 # THE ONE STEP THAT STAYS A LAUNCHER STEP: between the phases the reader server is stopped and the judge server is
@@ -37,8 +38,11 @@ set -euo pipefail
 if [[ "${WINDOW_CONFIRMED:-0}" != "1" ]]; then
   echo "refusing: needs a granted inference window (WINDOW_CONFIRMED=1)" >&2; exit 3
 fi
-: "${PHASE:?PHASE=reader|judge}" "${OUT_DIR:?}"
-PY="${PY:-/workspace/repos/epyc-orchestrator/.venv/bin/python}"
+: "${PHASE:?PHASE=reader|judge|preflight}" "${OUT_DIR:?}"
+# One interpreter for every step. The orchestrator venv has NO pyarrow (BEAM parquet load refuses without it); the research venv has
+# pyarrow AND imports the orchestrator's src.user_modeling / cloud_judges fine (pure python, loaded off EPYC_ORCH_ROOT). INC 2026-10-22.
+PY="${PY:-/mnt/raid0/llm/epyc-inference-research/.venv/bin/python}"
+export EPYC_ORCH_ROOT="${EPYC_ORCH_ROOT:-/workspace/repos/epyc-orchestrator}"
 RESULTS_ROOT="${RESULTS_ROOT:-/mnt/raid0/llm/epyc-inference-research/benchmarks/results}"
 JUDGE_BACKEND="${JUDGE_BACKEND:-served}"
 CLOUD_JUDGE="${CLOUD_JUDGE:-sonnet-low}"
@@ -84,6 +88,34 @@ PYEOF
     log "arm $arm -> $result"
   done
   log "reader phase done. NEXT (launcher step): stop the reader (captured pid), start the judge, then PHASE=judge."
+elif [[ "$PHASE" == "preflight" ]]; then
+  # No server, no model, no judge call: prove the interpreter + code tree BEFORE a GPU grant / server launch is spent.
+  # Checks: pyarrow importable, orchestrator imports (_orch), BEAM parquet loads (extract_all, data only), the modules resolve
+  # to THIS tree ($here), run_benchmark imports, and (if EPYC_ROOT is set) the belief writer resolves.
+  cd "$here"
+  "$PY" - "$here" "${EPYC_ROOT:-}" <<'PYEOF' || { echo "BLOCKED: preflight failed under PY=$PY (see above); no server started" >&2; exit 5; }
+import os, sys
+here = os.path.realpath(sys.argv[1]); epyc_root = sys.argv[2]
+sys.path.insert(0, here)
+try:
+    import pyarrow
+except ImportError as e:
+    sys.exit(f"preflight: interpreter {sys.executable} has no pyarrow ({e})")
+import hs_prof1_profile_arms as h, long_context_adapters as L, judge_beam_run, score_beam_run
+for m in (h, L, judge_beam_run, score_beam_run):
+    if os.path.dirname(os.path.realpath(m.__file__)) != here:
+        sys.exit(f"preflight: {m.__name__} resolved to {m.__file__}, not the tree {here}")
+h._orch()
+ad = L.BEAMAdapter(data_dir=None, split="100K", context_mode="full")
+n = len(ad.extract_all())
+if n <= 0 or not ad._transcripts:
+    sys.exit("preflight: BEAM extract_all returned nothing")
+if epyc_root:
+    import belief_capture; belief_capture.preflight("hs_prof1_profile_arms")
+print(f"preflight ok: py={sys.executable} pyarrow={pyarrow.__version__} questions={n} conversations={len(ad._transcripts)} tree={here}")
+PYEOF
+  EPYC_ORCH_ROOT="$EPYC_ORCH_ROOT" "$PY" -c 'import sys; sys.argv=["run_benchmark.py","--help"]; sys.path.insert(0,"."); import run_benchmark' >/dev/null 2>&1 \
+    || { echo "BLOCKED: run_benchmark.py not importable under PY=$PY" >&2; exit 5; }
 elif [[ "$PHASE" == "judge" ]]; then
   case "$JUDGE_BACKEND" in
     served)
@@ -135,5 +167,5 @@ PYEOF
   "$PY" hs_prof1_profile_arms.py table --out-dir "$OUT_DIR" --out "$OUT_DIR/table.json" "${TARGS[@]}"
   log "judge phase done: $OUT_DIR/table.json"
 else
-  echo "PHASE must be reader or judge" >&2; exit 2
+  echo "PHASE must be reader, judge or preflight" >&2; exit 2
 fi
