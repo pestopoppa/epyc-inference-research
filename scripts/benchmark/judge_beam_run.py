@@ -30,12 +30,13 @@ recorded cannot be compared to anything.
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import importlib.util
 import json
-import os
+import shutil
 import sys
-import time
-import urllib.error
-import urllib.request
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -63,90 +64,77 @@ NUGGET_OUTPUT_SCHEMA = {
 
 Judge = Callable[[str], str]
 
-# ── anthropic backend (HS-PROF-1, operator decision 2026-10-22: Claude via API, pinned id) ──
-ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_VERSION = "2023-06-01"
-ANTHROPIC_KEY_ENV = "ANTHROPIC_API_KEY"  # the ONLY place the key is read; never logged or recorded
-DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5-5"
-ANTHROPIC_MAX_RETRIES = 6
-ANTHROPIC_BACKOFF_BASE_S = 2.0
-_RETRY_STATUS = frozenset({429, 500, 502, 503, 504, 529})
-USAGE_KEYS = ("input_tokens", "output_tokens", "calls")
+# ── cloud backend (HS-PROF-1, operator 2026-10-22: Claude via the claude_cli cloud-judge transport, subscription auth) ──
+# Reuses the orchestrator's typed_decisions.cloud_judges (registry orchestration/cloud_judges.yaml): `claude -p --json-schema
+# --restricted --tools "" --strict-mcp-config`, prompt on stdin, empty tmp cwd, own process group, timeout kill. No API key
+# is handled anywhere in this file.
+_CLOUD_JUDGES_PATH = Path("/mnt/raid0/llm/epyc-orchestrator/src/typed_decisions/cloud_judges.py")
+_CLOUD_KEY = "epyc_orch_cloud_judges"
+DEFAULT_CLOUD_JUDGE = "sonnet-low"
+DEFAULT_CLOUD_WORKERS = 2
+USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_input_tokens",
+              "cache_creation_input_tokens", "total_cost_usd", "calls")
 
 
-class MissingApiKey(RuntimeError):
-    """ANTHROPIC_API_KEY is unset or empty."""
+def load_cloud_judges():
+    """The orchestrator's cloud_judges module, loaded by absolute path (same pattern as the debug_scorer shim)."""
+    if _CLOUD_KEY in sys.modules:
+        return sys.modules[_CLOUD_KEY]
+    if not _CLOUD_JUDGES_PATH.is_file():
+        raise ImportError(f"orchestrator cloud_judges not found: {_CLOUD_JUDGES_PATH}")
+    spec = importlib.util.spec_from_file_location(_CLOUD_KEY, _CLOUD_JUDGES_PATH)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[_CLOUD_KEY] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
-class AnthropicUsage:
-    """Running token totals plus the set of ``model`` values the API echoed back."""
+class CloudJudge:
+    """``judge(prompt) -> text`` over one registered cloud judge; keeps THIS instance's usage.
 
-    def __init__(self) -> None:
-        self.totals = {k: 0 for k in USAGE_KEYS}
-        self.response_models: set[str] = set()
-
-    def snapshot(self) -> dict[str, int]:
-        return dict(self.totals)
-
-
-def _http_post(url: str, headers: Mapping[str, str], body: bytes, timeout: float) -> tuple[int, bytes]:
-    """The one network call (patched in tests). Returns (status, body); HTTP errors are returned, not raised."""
-    req = urllib.request.Request(url, data=body, headers=dict(headers), method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (fixed https URL)
-            return resp.status, resp.read()
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read()
-
-
-def anthropic_judge(model_id: str, usage: AnthropicUsage, *, timeout: float | None = None,
-                    post: Callable[..., tuple[int, bytes]] | None = None,
-                    sleep: Callable[[float], None] = time.sleep) -> Judge:
-    """A ``judge(prompt) -> text`` over the Anthropic Messages API (stdlib only).
-
-    The prompt is sent verbatim as the single user message, exactly as the served path
-    sends it. temperature 0, bounded ``NUGGET_MAX_TOKENS``. 429/5xx and network errors
-    are retried with exponential backoff, then surface as :class:`JudgeUnavailable`.
-    The key is read from the environment at call time and appears in no message or record.
+    One instance per question (judge_run reads ``.usage`` / ``.models`` afterwards), so concurrent
+    questions never share counters. The claude envelope is captured by wrapping ``run_fn``
+    (the registry transport returns only the schema object, not usage/cost).
     """
-    post = post or _http_post
-    key = os.environ.get(ANTHROPIC_KEY_ENV, "")
-    if not key.strip():
-        raise MissingApiKey(f"{ANTHROPIC_KEY_ENV} is unset: export it in the operator shell "
-                            f"(the judge backend 'anthropic' reads it from the environment only)")
-    headers = {"x-api-key": key.strip(), "anthropic-version": ANTHROPIC_VERSION,
-               "content-type": "application/json"}
 
-    def judge(prompt: str) -> str:
-        body = json.dumps({"model": model_id, "max_tokens": NUGGET_MAX_TOKENS, "temperature": 0,
-                           "messages": [{"role": "user", "content": prompt}]}).encode()
-        last = "no attempt"
-        for attempt in range(ANTHROPIC_MAX_RETRIES + 1):
-            try:
-                status, raw = post(ANTHROPIC_URL, headers, body, timeout or 120.0)
-            except (urllib.error.URLError, TimeoutError, OSError) as exc:
-                status, raw = 0, str(exc).encode()
-            if status == 200:
-                try:
-                    data = json.loads(raw)
-                    text = "".join(b.get("text", "") for b in data["content"] if b.get("type") == "text")
-                except (ValueError, KeyError, TypeError) as exc:
-                    raise JudgeUnavailable(f"anthropic: malformed 200 body: {type(exc).__name__}") from exc
-                u = data.get("usage") or {}
-                usage.totals["input_tokens"] += int(u.get("input_tokens") or 0)
-                usage.totals["output_tokens"] += int(u.get("output_tokens") or 0)
-                usage.totals["calls"] += 1
-                if data.get("model"):
-                    usage.response_models.add(str(data["model"]))
-                return text
-            last = f"HTTP {status}: {raw[:160].decode('utf-8', 'replace')}" if status else f"network: {raw[:160].decode('utf-8', 'replace')}"
-            if status and status not in _RETRY_STATUS:
-                raise JudgeUnavailable(f"anthropic: {last}")  # 4xx other than 429: do not hammer
-            if attempt < ANTHROPIC_MAX_RETRIES:
-                sleep(ANTHROPIC_BACKOFF_BASE_S * (2 ** attempt))
-        raise JudgeUnavailable(f"anthropic: gave up after {ANTHROPIC_MAX_RETRIES + 1} attempts ({last})")
+    def __init__(self, cj, spec, model: str | None, *, run_fn=None):
+        self._cj, self._spec, self._model = cj, spec, model
+        self._inner = run_fn or cj._default_run
+        self.usage = {k: 0 for k in USAGE_KEYS}
+        self.models: set[str] = set()
 
-    return judge
+    def _run(self, argv, stdin_text, timeout_s, cwd):
+        rc, out, err = self._inner(argv, stdin_text, timeout_s, cwd)
+        env = self._cj._first_object(out) or {}
+        u = env.get("usage") if isinstance(env.get("usage"), dict) else {}
+        for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+            self.usage[k] += int(u.get(k) or 0)
+        self.usage["total_cost_usd"] += float(env.get("total_cost_usd") or 0.0)
+        self.usage["calls"] += 1
+        mu = env.get("modelUsage")
+        if isinstance(mu, dict):
+            self.models.update(str(k) for k in mu)
+        return rc, out, err
+
+    def __call__(self, prompt: str) -> str:
+        try:
+            res = self._cj.run_cloud_judge(self._spec, prompt, NUGGET_OUTPUT_SCHEMA,
+                                           model=self._model, run_fn=self._run)
+        except self._cj.CloudJudgeError as exc:
+            raise JudgeUnavailable(str(exc)) from exc
+        return json.dumps(res.payload)
+
+
+def cloud_preflight(cj, spec, *, run_fn=None) -> None:
+    """One trivial call (60 s cap): fail fast if ``claude`` is missing or not logged in."""
+    probe_schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}
+    if run_fn is None and not (shutil.which("claude") or Path(cj.CLAUDE_BIN).exists()):
+        raise JudgeUnavailable("claude CLI not found on PATH")
+    try:
+        cj.run_cloud_judge(dataclasses.replace(spec, timeout_s=60.0), 'Reply with {"ok": true}.',
+                           probe_schema, run_fn=run_fn)
+    except cj.CloudJudgeError as exc:
+        raise JudgeUnavailable(f"claude not authenticated or unreachable: {exc}") from exc
 
 
 def estimate_judge_calls(payload: Mapping[str, Any], prompt_index: Mapping[str, dict],
@@ -165,7 +153,7 @@ def estimate_judge_calls(payload: Mapping[str, Any], prompt_index: Mapping[str, 
     avg = chars / calls if calls else 0.0
     return {"judge_calls": calls, "avg_prompt_chars": round(avg), "total_prompt_chars": chars,
             "approx_input_tokens": round(chars / 4),  # ~4 chars/token: an estimate, not a count
-            "approx_output_tokens_max": calls * NUGGET_MAX_TOKENS}
+            "approx_output_tokens": calls * 60}
 
 
 class JudgeUnavailable(RuntimeError):
@@ -214,48 +202,59 @@ def judge_run(
     *,
     judge_for: Callable[[Mapping[str, Any]], Judge],
     partial_path: Path | None = None,
-    usage_probe: Callable[[], dict[str, int]] | None = None,
+    workers: int = 1,
 ) -> dict:
     """Judge every stored BEAM response. Returns ``{"records", "unjudged"}``.
 
     ``judge_for(scoring_config)`` builds the judge for one question, so a test
-    can inject a fake and production binds the served transport.
+    can inject a fake and production binds the served transport. ``workers`` > 1 judges that many
+    QUESTIONS concurrently (nuggets within a question stay sequential); results are assembled in
+    sorted question order and the partial file is appended under a lock as each question finishes.
+    A judge exposing ``usage`` / ``models`` has them recorded on its question's row.
     """
     results = payload.get("results", {}).get("beam")
     if not isinstance(results, Mapping) or not results:
         raise BEAMFoldError("result file carries no results['beam'] rows")
     done = _load_partial(partial_path) if partial_path else {}
-    records: list[dict] = []
-    unjudged: list[dict] = []
-    for question_id in sorted(results):
+    lock = threading.Lock()
+
+    def one(question_id: str) -> dict:
         row = results[question_id]
-        if question_id in done:
-            records.append(done[question_id])
-            continue
         prompt = prompt_index.get(question_id)
         if prompt is None:
             outcome = {"question_id": question_id, "reason": "unknown_question_id"}
         elif not isinstance(row.get("response"), str) or not row["response"].strip():
             outcome = {"question_id": question_id, "reason": "empty_response"}
         else:
-            before = usage_probe() if usage_probe else None
+            judge = judge_for(prompt["scoring_config"])
             try:
-                outcome = judge_question(prompt, row["response"],
-                                         judge_for(prompt["scoring_config"]))
+                outcome = judge_question(prompt, row["response"], judge)
                 outcome["judge_prompt_version"] = JUDGE_PROMPT_VERSION
-                if usage_probe:  # per-question delta, so a resumed run still totals correctly
-                    after = usage_probe()
-                    outcome["judge_usage"] = {k: after[k] - before[k] for k in after}
             except JudgeUnavailable as exc:
                 outcome = {"question_id": question_id, "reason": "judge_unavailable",
                            "detail": str(exc)[:240]}
             except NuggetVerdictError as exc:
                 outcome = {"question_id": question_id, "reason": "unparseable_verdict",
                            "detail": str(exc)[:240]}
-        (records if "nugget_verdicts" in outcome else unjudged).append(outcome)
+            if isinstance(getattr(judge, "usage", None), dict):
+                outcome["judge_usage"] = dict(judge.usage)  # spent even when the verdict failed
+                outcome["judge_response_models"] = sorted(getattr(judge, "models", ()))
         if partial_path is not None:
-            with open(partial_path, "a") as handle:
+            with lock, open(partial_path, "a") as handle:
                 handle.write(json.dumps(outcome, sort_keys=True) + "\n")
+        return outcome
+
+    todo = [q for q in sorted(results) if q not in done]
+    if workers > 1 and len(todo) > 1:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            fresh = dict(zip(todo, pool.map(one, todo)))
+    else:
+        fresh = {q: one(q) for q in todo}
+    records: list[dict] = []
+    unjudged: list[dict] = []
+    for question_id in sorted(results):
+        outcome = done[question_id] if question_id in done else fresh[question_id]
+        (records if "nugget_verdicts" in outcome else unjudged).append(outcome)
     return {"records": records, "unjudged": unjudged}
 
 
@@ -291,18 +290,19 @@ def finish_reason_summary(payload: Mapping[str, Any]) -> dict:
 
 def build_judged_payload(payload: Mapping[str, Any], judged: Mapping[str, Any], *,
                          split: str, judge_model: str, judge_backend: str = "served",
-                         judge_model_id: str | None = None,
-                         response_models: list[str] | None = None) -> dict:
+                         cloud_judge: str | None = None) -> dict:
     if any(row.get("judge_prompt_version") != JUDGE_PROMPT_VERSION for row in judged["records"]):
         raise BEAMFoldError("cannot label judged rows with missing or incompatible judge_prompt_version")
     identity: dict[str, Any] = {"judge_backend": judge_backend}
-    if judge_backend == "anthropic":
-        totals = {k: 0 for k in USAGE_KEYS}
-        for row in judged["records"]:
+    if judge_backend == "cloud":
+        totals: dict[str, float] = {k: 0 for k in USAGE_KEYS}
+        models: set[str] = set()
+        for row in list(judged["records"]) + list(judged["unjudged"]):  # unjudged calls were paid for too
             for k, v in (row.get("judge_usage") or {}).items():
-                totals[k] = totals.get(k, 0) + int(v)
-        identity.update({"judge_model_id": judge_model_id,
-                         "judge_response_models": sorted(response_models or []),
+                totals[k] = totals.get(k, 0) + v
+            models.update(row.get("judge_response_models") or ())
+        totals["total_cost_usd"] = round(totals["total_cost_usd"], 6)
+        identity.update({"cloud_judge": cloud_judge, "judge_response_models": sorted(models),
                          "judge_usage_totals": totals})
     return {
         **identity,
@@ -329,30 +329,39 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-json", type=Path, required=True)
     parser.add_argument("--judge-model", default=None,
                         help="Identity of the judge that answers (model + quant). Required for "
-                             "--judge-backend served; defaults to --judge-model-id for anthropic")
-    parser.add_argument("--judge-backend", choices=("served", "anthropic"), default="served",
+                             "--judge-backend served; defaults to the cloud judge's pinned model for cloud")
+    parser.add_argument("--judge-backend", choices=("served", "cloud"), default="served",
                         help="served = llama-server via the orchestrator transport (default); "
-                             "anthropic = Messages API, key from $ANTHROPIC_API_KEY only")
+                             "cloud = orchestration/cloud_judges.yaml claude_cli (subscription CLI, no API key)")
+    parser.add_argument("--cloud-judge", default=DEFAULT_CLOUD_JUDGE,
+                        help="cloud_judges.yaml registry name (cloud backend)")
     parser.add_argument("--judge-model-id", default=None,
-                        help=f"Pinned API model id (anthropic backend; default {DEFAULT_ANTHROPIC_MODEL})")
+                        help="Override the registry entry's model; must be in its allow-list")
+    parser.add_argument("--workers", type=int, default=DEFAULT_CLOUD_WORKERS,
+                        help="questions judged concurrently (cloud backend; default 2)")
     parser.add_argument("--split", default="100K")
     parser.add_argument("--data-dir", type=Path, default=None)
     parser.add_argument("--judge-url", default=None, help="Direct llama-server judge base URL")
     parser.add_argument("--judge-role", default=None, help="Orchestrator force_role for the judge")
     parser.add_argument("--timeout", type=float, default=None)
     args = parser.parse_args(argv)
-    usage: AnthropicUsage | None = None
-    if args.judge_backend == "anthropic":
-        args.judge_model_id = args.judge_model_id or DEFAULT_ANTHROPIC_MODEL
-        args.judge_model = args.judge_model or args.judge_model_id
-        if not os.environ.get(ANTHROPIC_KEY_ENV, "").strip():
-            print(f"BLOCKED: {ANTHROPIC_KEY_ENV} unset (export it in the operator shell; "
-                  f"it is read from the environment only)", file=sys.stderr)
-            return 5
-        usage = AnthropicUsage()
+    cj = spec = None
+    if args.judge_backend == "cloud":
+        cj = load_cloud_judges()
+        registry = cj.load_registry()
+        if args.cloud_judge not in registry:
+            parser.error(f"unknown --cloud-judge {args.cloud_judge!r}; registry has {sorted(registry)}")
+        spec = registry[args.cloud_judge]
+        if spec.transport != "claude_cli":
+            parser.error("HS-PROF-1 cloud judge must be a claude_cli entry (judge != reader family)")
+        try:
+            args.judge_model_id = spec.resolve_model(args.judge_model_id)
+        except ValueError as exc:
+            parser.error(str(exc))
+        args.judge_model = args.judge_model or f"{args.cloud_judge}:{args.judge_model_id}"
     else:
         if args.judge_model_id:
-            parser.error("--judge-model-id applies to --judge-backend anthropic only")
+            parser.error("--judge-model-id applies to --judge-backend cloud only")
         if not args.judge_model:
             parser.error("--judge-model is required for --judge-backend served")
 
@@ -372,22 +381,28 @@ def main(argv: list[str] | None = None) -> int:
     # Validate resume provenance before creating directories or opening writers.
     done = _load_partial(partial)
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
-    if usage is not None:
+    workers = 1
+    if cj is not None:
         est = estimate_judge_calls(payload, prompt_index, done)
         print("judge estimate (before any call): " + json.dumps(
-            {**est, "backend": "anthropic", "model_id": args.judge_model_id,
-             "already_judged_questions": len(done)}), file=sys.stderr)
-        one = anthropic_judge(args.judge_model_id, usage, timeout=args.timeout)
-        judge_for = lambda cfg: one  # noqa: E731
-        probe = usage.snapshot
+            {**est, "backend": "cloud", "cloud_judge": args.cloud_judge, "model": args.judge_model_id,
+             "workers": args.workers, "already_judged_questions": len(done)}), file=sys.stderr)
+        if est["judge_calls"]:
+            try:
+                cloud_preflight(cj, spec)
+            except JudgeUnavailable as exc:
+                print(f"BLOCKED: {exc}", file=sys.stderr)
+                return 5
+        workers = max(1, args.workers)
+        judge_for = lambda cfg: CloudJudge(cj, spec, args.judge_model_id)  # noqa: E731
     else:
         judge_for = lambda cfg: served_judge(cfg, overrides)  # noqa: E731
-        probe = None
-    judged = judge_run(payload, prompt_index, judge_for=judge_for, partial_path=partial,
-                       usage_probe=probe)
+    judged = judge_run(payload, prompt_index, judge_for=judge_for, partial_path=partial, workers=workers)
     out = build_judged_payload(payload, judged, split=args.split, judge_model=args.judge_model,
-                               judge_backend=args.judge_backend, judge_model_id=args.judge_model_id,
-                               response_models=sorted(usage.response_models) if usage else None)
+                               judge_backend=args.judge_backend,
+                               cloud_judge=args.cloud_judge if cj else None)
+    if cj:
+        out["judge_model_id"] = args.judge_model_id
     args.out_json.write_text(json.dumps(out, indent=2) + "\n")
     print(json.dumps({"judged": len(out["records"]), "unjudged": len(out["unjudged"]),
                       "out": str(args.out_json)}))

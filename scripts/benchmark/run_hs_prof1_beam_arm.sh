@@ -17,11 +17,13 @@
 #   WINDOW_CONFIRMED=1 PHASE=judge  JUDGE_PORT=Q JUDGE_PID=<pid> OUT_DIR=/mnt/raid0/llm/tmp/hs-prof1 \
 #     scripts/benchmark/run_hs_prof1_beam_arm.sh
 #
-# JUDGE_BACKEND=anthropic (operator decision 2026-10-22: Claude via API, pinned id; gemma ORIG retired): PHASE=judge needs NO
-# JUDGE_PORT/JUDGE_PID and no server proof (no GPU, no local model). It reads ANTHROPIC_API_KEY from the environment only (never
-# a file/arg), exits 5 "BLOCKED: ANTHROPIC_API_KEY unset" without it, and keeps the 5-question smoke first. JUDGE_MODEL_ID pins
-# the API model id (default claude-sonnet-5-5). Judge calls cost money: judge_beam_run prints the call estimate before calling.
-#   WINDOW_CONFIRMED=1 PHASE=judge JUDGE_BACKEND=anthropic OUT_DIR=... scripts/benchmark/run_hs_prof1_beam_arm.sh
+# JUDGE_BACKEND=cloud (operator 2026-10-22: Claude via the claude_cli cloud judge, subscription CLI auth; gemma ORIG retired):
+# PHASE=judge needs NO JUDGE_PORT/JUDGE_PID and no server proof (no GPU, no local model). Transport = orchestrator
+# typed_decisions/cloud_judges.py, registry orchestration/cloud_judges.yaml entry $CLOUD_JUDGE (default sonnet-low). No API key
+# anywhere. judge_beam_run prints the call estimate, then makes ONE preflight `claude -p` call; if `claude` is missing or not
+# logged in it prints "BLOCKED: ..." and exits 5. The 5-question smoke still runs first. JUDGE_WORKERS (default 2) = questions
+# judged concurrently.
+#   WINDOW_CONFIRMED=1 PHASE=judge JUDGE_BACKEND=cloud OUT_DIR=... scripts/benchmark/run_hs_prof1_beam_arm.sh
 #
 # score_beam_run is called WITHOUT --belief-measurements: that flag requires --arm to equal the rows' recorded
 # context mode, which is "profile" for BOTH arms here, and beam_memory_capture has no profile-arm ladder (belief wiring is
@@ -36,8 +38,9 @@ fi
 PY="${PY:-/workspace/repos/epyc-orchestrator/.venv/bin/python}"
 RESULTS_ROOT="${RESULTS_ROOT:-/mnt/raid0/llm/epyc-inference-research/benchmarks/results}"
 JUDGE_BACKEND="${JUDGE_BACKEND:-served}"
-JUDGE_MODEL_ID="${JUDGE_MODEL_ID:-claude-sonnet-5-5}"
-if [[ "$JUDGE_BACKEND" == "anthropic" ]]; then JUDGE_MODEL="${JUDGE_MODEL:-$JUDGE_MODEL_ID}"; else JUDGE_MODEL="${JUDGE_MODEL:-gemma-4-26B-A4B-it-ORIG-Q8_0}"; fi
+CLOUD_JUDGE="${CLOUD_JUDGE:-sonnet-low}"
+JUDGE_WORKERS="${JUDGE_WORKERS:-2}"
+JUDGE_MODEL="${JUDGE_MODEL:-gemma-4-26B-A4B-it-ORIG-Q8_0}"
 ARMS=(pref_current admission)
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$OUT_DIR"
@@ -85,11 +88,12 @@ elif [[ "$PHASE" == "judge" ]]; then
       prove_port "$JUDGE_PORT" "$JUDGE_PID"
       JARGS=(--judge-model "$JUDGE_MODEL" --judge-url "http://127.0.0.1:${JUDGE_PORT}")
       proof() { prove_port "$JUDGE_PORT" "$JUDGE_PID"; } ;;
-    anthropic)
-      [[ -n "${ANTHROPIC_API_KEY:-}" ]] || { echo "BLOCKED: ANTHROPIC_API_KEY unset" >&2; exit 5; }
-      JARGS=(--judge-backend anthropic --judge-model-id "$JUDGE_MODEL_ID" --judge-model "$JUDGE_MODEL")
+    cloud)
+      # --judge-model left to default (<registry name>:<resolved model>) unless JUDGE_MODEL_ID pins another allow-listed id
+      JARGS=(--judge-backend cloud --cloud-judge "$CLOUD_JUDGE" --workers "$JUDGE_WORKERS")
+      [[ -z "${JUDGE_MODEL_ID:-}" ]] || JARGS+=(--judge-model-id "$JUDGE_MODEL_ID")
       proof() { :; } ;;   # no server, no port, no pid
-    *) echo "JUDGE_BACKEND must be served or anthropic" >&2; exit 2 ;;
+    *) echo "JUDGE_BACKEND must be served or cloud" >&2; exit 2 ;;
   esac
   first="${ARMS[0]}"
   [[ -s "$OUT_DIR/arm_${first}.result.path" ]] || { echo "no reader result recorded; run PHASE=reader first" >&2; exit 5; }

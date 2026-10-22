@@ -107,7 +107,7 @@ def score_judged_payload(payload: Mapping[str, Any],
         "finish_reason_by_row": dict(payload.get("finish_reason_by_row") or {"unrecorded": 0}),
         "truncated_rows": payload.get("truncated_rows"),
         "truncated_question_ids": list(payload.get("truncated_question_ids") or []),
-        **{k: payload[k] for k in ("judge_backend", "judge_model_id", "judge_response_models",
+        **{k: payload[k] for k in ("judge_backend", "cloud_judge", "judge_model_id", "judge_response_models",
                                    "judge_usage_totals") if k in payload},
         **folded,
     }

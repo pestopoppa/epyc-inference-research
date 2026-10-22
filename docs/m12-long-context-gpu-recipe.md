@@ -267,13 +267,14 @@ scorer refuses a set mismatch.
 
 ## 6. Judge (B4): gemma-4-26B-A4B-it-ORIG-Q8_0, a separate launch after the reader
 
-> **2026-10-22 update (operator decision): the judge for HS-PROF-1 BEAM judging is now Claude via the Anthropic API, pinned model id
-> `claude-sonnet-5-5`** (`judge_beam_run.py --judge-backend anthropic`, key from `$ANTHROPIC_API_KEY` only; the judged payload records
-> `judge_backend`, `judge_model_id`, the API's echoed `model`, and token-usage totals). gemma-4-26B-A4B-it-ORIG was **retired and its
-> GGUFs deleted on 2026-09-23**, so the gemma judge below can no longer be launched. The judge-family rule is unchanged and satisfied
-> (Claude is not the Qwen3.6 reader family; held fixed across arms). With the API judge there is no judge server, no GPU phase and no
-> co-residency concern; `run_hs_prof1_beam_arm.sh PHASE=judge JUDGE_BACKEND=anthropic` keeps the 5-question smoke first. The history
-> below is the 2026-09-16 decision and is left as written.
+> **2026-10-22 update (operator decision): the judge for HS-PROF-1 BEAM judging is now Claude via the `claude_cli` cloud judge
+> (subscription CLI auth, no API key), operator 2026-10-22.** `judge_beam_run.py --judge-backend cloud --cloud-judge sonnet-low` reuses
+> the orchestrator's `typed_decisions/cloud_judges.py` and `orchestration/cloud_judges.yaml`; the judged payload records
+> `judge_backend`, `cloud_judge`, the model the CLI envelope reports, and token/cost totals. gemma-4-26B-A4B-it-ORIG was **retired and
+> its GGUFs deleted on 2026-09-23**, so the gemma judge below can no longer be launched. The judge-family rule is unchanged and satisfied
+> (Claude is not the Qwen3.6 reader family; held fixed across arms). There is no judge server, no GPU phase and no co-residency concern;
+> `run_hs_prof1_beam_arm.sh PHASE=judge JUDGE_BACKEND=cloud` keeps the 5-question smoke first. The history below is the 2026-09-16
+> decision and is left as written.
 
 **What was decided (operator, 2026-09-16):**
 - The M-12 judge is **gemma-4-26B-A4B-it-ORIG**.
