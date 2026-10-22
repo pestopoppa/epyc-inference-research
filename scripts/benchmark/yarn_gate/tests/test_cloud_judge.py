@@ -73,6 +73,9 @@ class TestCloud(unittest.TestCase):
         self.assertEqual(pin["judge_kind"], "cloud-claude_cli")
         self.assertIsNone(pin["temperature"])
         self.assertFalse(pin["comparable_to_published"])
+        # root scripts/vidya/adapters/yarn_gate_agg.py JUDGE_PIN_KEYS must all be present on a cloud pin
+        for k in ("model", "prompt_version", "prompt_sha256", "temperature", "seed", "max_tokens"):
+            self.assertIn(k, pin)
 
     def test_failure_is_unavailable_never_zero(self):
         caller = cjm.CloudCaller(self.cj, cjm.resolve_spec(self.cj, "sonnet-5-5-low"),

@@ -642,7 +642,9 @@ def main(argv=None) -> int:
             if not args.judged:
                 ap.error("--judge-backend cloud needs --judged (its .identity.json)")
             ident = json.loads(Path(args.judged + ".identity.json").read_text())
-            pin_fields = {**ident["judge_pin"], "cloud_identity": {k: v for k, v in ident.items() if k != "judge_pin"}}
+            # max_tokens default: identity files from ddf985a51 predate the key (the cloud CLI sets no cap either way)
+            pin_fields = {"max_tokens": None, **ident["judge_pin"],
+                          "cloud_identity": {k: v for k, v in ident.items() if k != "judge_pin"}}
         else:
             if not args.judge_model:
                 ap.error("--judge-backend served needs --judge-model")

@@ -151,6 +151,7 @@ class CloudJudgePin:
     prompt_sha256: str = dataclasses.field(default_factory=prompt_sha256)
     temperature: float | None = None
     seed: int | None = None
+    max_tokens: int | None = None  # the claude CLI sets no output cap; key kept for the belief-kernel adapter
 
     def claim_fields(self) -> dict[str, Any]:
         d = asdict(self)
