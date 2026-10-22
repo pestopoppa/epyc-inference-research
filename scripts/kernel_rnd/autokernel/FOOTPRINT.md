@@ -398,6 +398,7 @@ incident or measured fact when you next touch the module.
 | `loop/native_server_t0_witness.py` | 720 | yes | Parent-issued same-server v1 T0 evidence; never CLI-to-server transfer. On the campaign path: first reached via `loop.native_capture_control`. |
 | `loop/new_epoch.py` | 161 | no | The supported new-anchor epoch path (DS41-C126 gap a/b). Not reachable from the declared campaign-#1 roots. |
 | `loop/node_profile.py` | 563 | no | Out-of-band instrumented node/host/engram profiling of the loop's own anchor. Not reachable from the declared campaign-#1 roots. |
+| `loop/noise_relative_tolerance.py` | 193 | yes | AK-PORT-LB1: noise-floor-relative model-level tolerance (candidate within 1.5x the incumbent's own batched-vs-single divergence, no greedy flips above max(0.25, 2x floor)) for non-bit-exact multi-row kernels. On the campaign path: first reached via `loop.gates`. |
 | `loop/noop_build.py` | 81 | no | AKX-ALL-29.3: recognise a GPU candidate build that changed no kernel code. Not reachable from the declared campaign-#1 roots. |
 | `loop/observation_binding.py` | 884 | yes | Versioned binding between contained planned units and lifecycle observations. On the campaign path: first reached via `loop.actor_lifecycle`. |
 | `loop/paired_loadgen.py` | 143 | no | AKR-SG-2: paired A/B/A/B alternation wrapper around a load generator, emitting the existing serving-gate record against a measured noise floor. Not reachable from the declared campaign-#1 roots. |

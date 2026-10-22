@@ -2728,6 +2728,25 @@ def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
                       else ""), detail)
 
 
+def check_noise_relative_tolerance(incumbent_single, incumbent_batched, candidate_batched, *,
+                                   config=None) -> Verdict:
+    """Model-level gate for a NON-bit-exact multi-row kernel (AK-PORT-LB1, intake-2386).
+
+    The yardstick is the incumbent's own batched-vs-single divergence (its noise floor), not an
+    absolute tolerance: the candidate's divergence from the incumbent single-row logits may be at
+    most 1.5x that floor, and there may be no greedy flip at a position whose incumbent top-2
+    margin is at least max(0.25, 2x floor). Arguments are per-position logit rows for the same
+    prompts; see `noise_relative_tolerance`. An empty, mismatched or under-sampled input is
+    `oracle_unavailable`, never a pass.
+    """
+    from . import noise_relative_tolerance as nrt
+
+    result = nrt.evaluate(incumbent_single, incumbent_batched, candidate_batched,
+                          config or nrt.Config())
+    return Verdict("oracle_unavailable" if result.status == nrt.UNAVAILABLE else "reference_comparison",
+                   result.status == nrt.PASS, result.reason, json.dumps(result.detail, sort_keys=True))
+
+
 def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                    backend: str = "ROCm0", resolved_recipe=None,
                    require_reference: bool = False,
