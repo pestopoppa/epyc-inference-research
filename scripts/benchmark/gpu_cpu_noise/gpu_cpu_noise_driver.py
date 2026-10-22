@@ -514,6 +514,11 @@ class Driver:
             time.sleep(2)
             ev["kfd_has_pid"] = p.pid in kfd_pids()
             ev["vram_used"] = read_int(os.path.join(self.gpu_dev, "mem_info_vram_used")) if self.gpu_dev else None
+            # ROCr starts one runtime thread with Cpus_allowed 0-191 regardless of the parent's taskset (diag
+            # 2026-10-22: 1 of 196 threads). Re-pin every task to the placement, then check.
+            ev["affinity_before_pin"] = task_affinities(p.pid)
+            ev["pin_rc"] = subprocess.run(["taskset", "-a", "-p", "-c", PLACEMENTS[placement][0], str(p.pid)],
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
             ev["affinity"] = task_affinities(p.pid)
             ok = (ev["kfd_has_pid"] and (ev["vram_used"] or 0) >= MIN_VRAM_BYTES and ev["hip_lib_mapped_from_build"]
                   and ev.get("props_build_info") == GPU_EXPECT_BUILD and affinity_within(ev["affinity"], PLACEMENTS[placement][0]))
