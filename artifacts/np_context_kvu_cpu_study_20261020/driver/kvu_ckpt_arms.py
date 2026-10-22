@@ -31,7 +31,25 @@ SCHEMA = "epyc.kvu121.ckpt_arms.v1"
 CELLS_FILE, REQS_FILE = "cells.jsonl", "requests.jsonl"
 
 # ----------------------------------------------------------------------------------------------- predeclared constants
-CAL_FACTOR = 1.72              # tonight's calibration: actual/estimate 1.723 (d4-launch.log, 2026-10-21 19:59Z, split np4 L64k A cell)
+# ---- Estimate model (REPLACES the single 1.72 factor; coordinator ruling 2026-10-22 after /mnt/raid0/llm/tmp/d4-why-20261022/REPORT.md).
+# The shared driver's prefill_tps(L) = 300*(1-0.35*L/131072) (195 tok/s at 128k) was calibrated on 2.7k prompts; D4 measured ~125 tok/s at 64.6k and ~65 at 130k,
+# and decode 0.08-0.12 tok/s/stream while sharing batches with prefill. One factor taken from the cheapest shape (np4 L64k, 1723/1000) hid actual/estimate
+# ratios from 0.29 (np4 t8 anchors) to >=3.1 (np8 L128k, censored). So: cumulative cold-prefill time T(n) is interpolated log-log through MEASURED points
+# (below), a resume of n tokens from checkpoint position p costs T(n)-T(p) (the depth tax is inside T), and the correction is per (model, kind, unit) key,
+# learned from this run's own cells (Calibrator); an unseen key carries SAFETY_UNSEEN.
+PREFILL_POINTS = (   # (tokens, cold-prefill seconds at 96 threads, one stream prefilling), provenance
+    (2700, 2700 / 298.0, "frontdoor live log ~298 tok/s @2.7k (driver prefill_tps comment); older, single point"),
+    (64595, 516.0, "D4 wave-0 TTFT increments 513/518/512 s for 64,595-token prompts (k4_A/k4_B/k5 waves.json: 125-126 tok/s; later streams 109-115)"),
+    (130112, 2000.0, "D4 k5_s4 server.log: 130k prompts 1838-2145 s (65-71 tok/s), serial, REPORT.md section 2a"),
+)
+D4_RATIOS = {   # actual/driver-estimate per shape in the 2026-10-21 window (REPORT.md section 3): why a single factor cannot work
+    "np4_L64k": (1.72, 1.81), "np8_L64k_unified": 2.19, "np8_L64k_split": 2.02, "np4_t8_anchor": 0.29, "bank_build": 1.45, "mtpoff": 1.89, "np8_L128k_s4": ">=3.1",
+}
+# measured aggregate decode tok/s per stream while OTHER slots prefill (shared batches). np=1 has no sharing; its 40 tok/s is ASSUMED (driver AGG_DECODE[1]).
+DECODE_SHARED_MEASURED = {(4, 65536): 6.8, (8, 65536): 1.5, (8, 131072): 0.10}
+DECODE_NP1_ASSUMED = 40.0
+LOAD_WARM_S = {"q36_35b": 20.0, "q38_27b": 60.0}   # 35B: D4 step wall minus cell wall = 16-19 s (page cache warm); 27B ASSUMED cold
+SAFETY_UNSEEN = 1.25           # applied to a (model, kind, unit) key this run has not measured yet; replaced by the measured actual/est ratio after its first cell
 EST_MARGIN_S = 90              # filler protocol: stop starting new items 90 s before the hard end
 DENSE_MIN_STEP, DENSE_CTX = 8192, 32          # v10/champion defaults (common/common.h:633-634 per UFH14-A7); passed EXPLICITLY so the arm is unambiguous
 HUGE_STEP = 1 << 30            # --checkpoint-min-step that disables min-step spaced checkpoints (tail_junction)
@@ -286,37 +304,70 @@ def message_starts(n_msgs, tok_user=TURN_USER_TOK, tok_asst=TURN_ASST_TOK, overh
     return out
 
 
-def est_ckpt_cell(model, arm, Lname, threads=96, cal=CAL_FACTOR):
-    """Seconds (raw, calibrated) for one KVU-12.1 cell: cold build + the probe plan, priced by the policy simulator."""
+def cold_prefill_s(n, model="q36_35b", threads=96):
+    """Cold prefill seconds for n tokens: log-log interpolation of t(n) through PREFILL_POINTS (linear below the first point, last segment's exponent
+    above the last). Threads scale linearly and the 27B by MODELS[...]['prefill_scale'] (both ASSUMED; only the 35B at 96 threads is measured)."""
+    if n <= 0:
+        return 0.0
+    pts = [(a, b) for a, b, _ in PREFILL_POINTS]
+    if n <= pts[0][0]:
+        t = pts[0][1] * n / pts[0][0]
+    else:
+        i = 0 if n <= pts[1][0] else 1
+        (n0, t0), (n1, t1) = pts[i], pts[i + 1]
+        t = t0 * math.exp(math.log(t1 / t0) / math.log(n1 / n0) * math.log(n / n0))
+    return t / MODELS[model]["prefill_scale"] * 96.0 / threads
+
+
+def prefill_increment_s(n_from, n_to, model="q36_35b", threads=96):
+    """Seconds to prefill tokens [n_from, n_to) on top of an existing n_from-token state (resume from a checkpoint): T(n_to) - T(n_from)."""
+    return max(0.0, cold_prefill_s(n_to, model, threads) - cold_prefill_s(n_from, model, threads))
+
+
+def assumptions(model, threads, kind):
+    """What the estimate rests on that D4 did NOT measure (printed with the plan)."""
+    a = []
+    if model != "q36_35b":
+        a.append(f"{model}: prefill scale {MODELS[model]['prefill_scale']} x the 35B curve and load {LOAD_WARM_S[model]:.0f} s are ASSUMED")
+    if threads != 96:
+        a.append(f"{threads} threads: prefill time scaled by 96/{threads} (linear) is ASSUMED; D4 ran at 96")
+    if kind == "gen":
+        a.append(f"np1 decode {DECODE_NP1_ASSUMED:.0f} tok/s and the snapshot cost 0.4 s are ASSUMED (D4 measured only decode shared with prefill: {DECODE_SHARED_MEASURED})")
+    a.append("np=1 serial prefill is the D4 wave-0 shape (measured); depth-resume cost = T(n)-T(checkpoint), the depth tax is read off the measured curve")
+    return a
+
+
+def est_ckpt_cell(model, arm, Lname, threads=96, safety=SAFETY_UNSEEN):
+    """Seconds (raw model, planned = raw x safety for an unseen key) for one KVU-12.1 cell: cold build + the probe plan priced by the policy simulator."""
     L = LS_ARM[Lname]
     mod = MODELS[model]
-    pf = lambda n: M.prefill_tps(n) * mod["prefill_scale"] * threads / 96.0
+    inc = lambda a, b: prefill_increment_s(a, b, model, threads)
     pair = TURN_USER_TOK + TURN_ASST_TOK + 16
     n_msgs = max(3, 2 * round(L / pair) + 1)
     starts = message_starts(n_msgs)
     n_total = starts[-1] + TURN_USER_TOK
     ck = simulate_prefill([s for i, s in enumerate(starts) if i % 2 == 0], n_total, arm)
-    t = n_total / pf(n_total) + 2.0
+    t = cold_prefill_s(n_total, model, threads) + 2.0
     prev_end = n_total
     n_new = n_total + pair
     ustarts = [s for i, s in enumerate(starts) if i % 2 == 0] + [n_total + TURN_ASST_TOK + 16]
     rp = prev_end                                   # extend_1 = CONTROL: the new prompt extends the cached tokens exactly, so the live state is used (A7: 179/230 turns)
-    t += (n_new - rp) / pf(n_new) + 2.0
+    t += inc(rp, n_new) + 2.0
     ck = simulate_prefill(ustarts, n_new, arm, held=[c for c in ck if c[0] <= rp], from_pos=rp, id_task=2)
     for name, back in probe_plan(L, n_new)[1:]:
         lcp = max(1, n_new - back)
         rp = resume_pos(ck, lcp)
-        t += (n_new - rp) / pf(n_new) + 2.0
+        t += inc(rp, n_new) + 2.0
         ck = simulate_prefill(ustarts, n_new, arm, held=[c for c in ck if c[0] <= rp], from_pos=rp, id_task=3)
-    return t, t * cal
+    return t, t * safety
 
 
-def est_gen_cell(model, arm, G, threads=96, cal=CAL_FACTOR):
-    """Seconds for one KVU-12.3 cell: base prefill + G decoded tokens (+snapshot cost) + three divergent turn-2 probes (deep -> shallow)."""
+def est_gen_cell(model, arm, G, threads=96, safety=SAFETY_UNSEEN):
+    """Seconds (raw, planned) for one KVU-12.3 cell: base prefill + G decoded tokens (+snapshot cost) + three divergent turn-2 probes (deep -> shallow).
+    np=1, nothing shares the batch, so decode is the ASSUMED unshared rate (MODELS[...]['decode_tps'], 35B 40 tok/s)."""
     mod = MODELS[model]
-    pf = lambda n: M.prefill_tps(n) * mod["prefill_scale"] * threads / 96.0
     dec = mod["decode_tps"] * min(1.0, threads / 96.0 + 0.25)
-    t = GEN_BASE_TOK / pf(GEN_BASE_TOK) + G / dec
+    t = cold_prefill_s(GEN_BASE_TOK, model, threads) + G / dec
     if arm.decode_every:
         t += (G / arm.decode_every) * 0.4                      # ASSUMPTION: ~0.4 s per recurrent+drafter snapshot (memcpy of ~100 MiB), measured by the first cell
     n2 = GEN_BASE_TOK + G + GEN_SUFFIX_TOK
@@ -326,9 +377,9 @@ def est_gen_cell(model, arm, G, threads=96, cal=CAL_FACTOR):
             rp = GEN_BASE_TOK + (g // arm.decode_every) * arm.decode_every
         else:
             rp = GEN_BASE_TOK - 4
-        t += (n2 - rp) / pf(n2) + PROBE_NPREDICT / dec + 2.0
+        t += prefill_increment_s(rp, n2, model, threads) + PROBE_NPREDICT / dec + 2.0
     t += 5.0
-    return t, t * cal
+    return t, t * safety
 
 
 # ----------------------------------------------------------------------------------------------- plan
@@ -367,7 +418,7 @@ class Launch:
 
 
 def load_estimate(model):
-    return 120.0 if model == "q36_35b" else 100.0           # ~38 GB / ~29 GB mlock page-in, driver's per-launch constant
+    return LOAD_WARM_S[model]
 
 
 def bin_tag(path):
@@ -379,7 +430,7 @@ def bin_tag(path):
         return "missing"
 
 
-def build_plan(models, stages, waves=WAVES_DEFAULT, threads=96, selection=None, lens_override=None, only_arms=None, cal=CAL_FACTOR, bins=None, gen_g=None):
+def build_plan(models, stages, waves=WAVES_DEFAULT, threads=96, selection=None, lens_override=None, only_arms=None, cal=SAFETY_UNSEEN, bins=None, gen_g=None):
     """Ordered launches. Order = stage (select, holdout, gen) -> model -> arm; cells inside a launch = L ascending, waves inner.
     `selection` = {model: (stride, cap)} from the select stage (holdout refuses to plan a fixed arm without it).
     `bins` = {"ckpt": fork build (KVU-12.1 arms and, unless "gen" is given, the gen dense baseline), "gen": patched build for KVU-12.3}.
@@ -417,7 +468,10 @@ def build_plan(models, stages, waves=WAVES_DEFAULT, threads=96, selection=None, 
 
 
 def print_plan(launches, a):
+    """Per launch: per-cell raw model estimate and planned (raw x safety for an unseen key), then totals; flags any cell that cannot fit --cap-s."""
     tot = tot_raw = 0.0
+    cap = getattr(a, "cap_s", 0) or 0
+    models = sorted({lc.model for lc in launches})
     for lc in launches:
         arm = arm_by_name(lc.arm)
         print(f"\n== launch {lc.id}  model={lc.model} arm={lc.arm} -c {lc.c} np=1 needs={list(lc.needs) or 'champion-only'} "
@@ -428,11 +482,16 @@ def print_plan(launches, a):
         for c in lc.cells:
             seen.setdefault(c.unit, []).append(c)
         for u, cs in seen.items():
-            print(f"   cell {u:>6} x{len(cs)} waves  est raw {cs[0].est_raw/60:6.1f} min  calibrated {cs[0].est_cal/60:6.1f} min each")
+            flag = "" if not cap or cs[0].est_cal + lc.load_s <= cap else f"   REFUSED at start: exceeds --cap-s {cap}"
+            print(f"   cell {u:>6} x{len(cs)} waves  model {cs[0].est_raw/60:6.1f} min  planned {cs[0].est_cal/60:6.1f} min each{flag}")
         tot += lc.est_cal(); tot_raw += lc.load_s + sum(c.est_raw for c in lc.cells)
-        print(f"   LAUNCH est raw {(lc.load_s + sum(c.est_raw for c in lc.cells))/3600:.2f} h  calibrated x{a.cal} = {lc.est_cal()/3600:.2f} h")
-    print(f"\nTOTAL launches={len(launches)} cells={sum(len(l.cells) for l in launches)} est raw={tot_raw/3600:.2f} h calibrated(x{a.cal})={tot/3600:.2f} h "
-          f"(threads={a.threads}; prefill scaled linearly with threads, ASSUMPTION; first cell recalibrates)")
+        print(f"   LAUNCH model {(lc.load_s + sum(c.est_raw for c in lc.cells))/3600:.2f} h  planned (safety x{a.safety} on unseen keys) = {lc.est_cal()/3600:.2f} h")
+    print(f"\nTOTAL launches={len(launches)} cells={sum(len(l.cells) for l in launches)} model={tot_raw/3600:.2f} h planned(safety x{a.safety})={tot/3600:.2f} h "
+          f"(threads={a.threads}; D4-measured prefill curve, per-key recalibration from this run's own cells replaces the safety factor)")
+    for m in models:
+        for kind in sorted({c.kind for lc in launches if lc.model == m for c in lc.cells}):
+            for x in assumptions(m, a.threads, kind):
+                print(f"ASSUMPTION[{m}/{kind}] {x}")
 
 
 # ----------------------------------------------------------------------------------------------- conversation building
@@ -546,6 +605,14 @@ def render_tokens(port, messages):
 
 
 # ----------------------------------------------------------------------------------------------- budgets (filler contract)
+def effective_deadline(deadline_epoch, cap_s, now=time.time):
+    """Hard end = the earlier of the filler grant's end and (now + --cap-s); 0 = none."""
+    cands = [int(deadline_epoch)] if deadline_epoch else []
+    if cap_s:
+        cands.append(int(now()) + int(cap_s))
+    return min(cands) if cands else 0
+
+
 class Budget:
     """STOP file between cells; hard end with a margin; a cell that does not fit is not started."""
     def __init__(self, stop_file="", deadline_epoch=0, margin_s=EST_MARGIN_S, now=time.time):
@@ -561,6 +628,48 @@ class Budget:
 
     def remaining(self):
         return (self.deadline - self.now()) if self.deadline else None
+
+
+class Calibrator:
+    """Per-(model, kind, unit) actual/estimate ratios learned from this run's own completed cells (and from an earlier run's cells.jsonl rows that
+    carry est_raw_s). There is NO global factor: a key never measured gets `safety`; a measured key uses the WORST ratio seen for it (conservative)."""
+    def __init__(self, safety=SAFETY_UNSEEN):
+        self.safety, self.ratios = safety, {}
+
+    @staticmethod
+    def key(model, kind, unit):
+        return (model, kind, unit)
+
+    def observe(self, model, kind, unit, est_raw_s, wall_s):
+        if est_raw_s and est_raw_s > 0 and wall_s and wall_s > 0:
+            self.ratios.setdefault(self.key(model, kind, unit), []).append(wall_s / est_raw_s)
+
+    def factor(self, model, kind, unit):
+        r = self.ratios.get(self.key(model, kind, unit))
+        return max(r) if r else self.safety
+
+    def planned(self, cell):
+        return cell.est_raw * self.factor(cell.model, cell.kind, cell.unit)
+
+    @classmethod
+    def from_rows(cls, rows, safety=SAFETY_UNSEEN):
+        c = cls(safety)
+        for r in rows:
+            if r.get("result") == "OK" and r.get("est_raw_s") and r.get("wall_s"):
+                c.observe(r.get("model"), r.get("kind"), r.get("unit"), r["est_raw_s"], r["wall_s"])
+        return c
+
+
+def read_rows(path):
+    p = Path(path)
+    out = []
+    if p.exists():
+        for line in p.read_text().splitlines():
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+    return out
 
 
 def done_keys(cells_path):
@@ -580,7 +689,7 @@ def done_keys(cells_path):
             if not k: continue
             if r.get("result") == "OK": done.add(k)
             elif r.get("result") == "BLOCKED_ON_PATCH": blocked.add(k)
-            elif r.get("result") in ("ERRORS", "REFUSED", "EXCEPTION"): fails[k] = fails.get(k, 0) + 1
+            elif r.get("result") in ("ERRORS", "REFUSED", "EXCEPTION", "PARTIAL"): fails[k] = fails.get(k, 0) + 1
     parked = {k for k, n in fails.items() if n >= 2}
     return done, parked, blocked
 
@@ -793,7 +902,7 @@ def run_ckpt_cell(ctx, cell):
     for t in texts_tok[:-1]:
         starts.append(starts[-1] + t + over)
     user_starts = [s for m, s in zip(msgs, starts) if m["role"] == "user"]
-    reqs, rows_req = [], []
+    reqs = ctx["reqs"] = []                          # visible to run_launch so a killed cell still leaves a PARTIAL row
     la = _la(ctx["launch"], arm, ctx["launch"].c)
     loadavg = [round(x, 2) for x in os.getloadavg()]
 
@@ -868,7 +977,7 @@ def run_gen_cell(ctx, cell):
     extra = {}
     if arm.decode_every:
         extra = {"checkpoint_decode_every": arm.decode_every, "checkpoint_decode_cap": arm.decode_cap}
-    reqs = []
+    reqs = ctx["reqs"] = []
     tail.events()
     t1 = completion_request(port, base_ids, G, extra)
     ev1 = tail.events(); cs.apply(ev1)
@@ -917,7 +1026,17 @@ def probe_capability(port, arm):
     return True
 
 
-def run_launch(a, launch, todo, budget, ctx_common, out):
+def partial_row(cell, reqs, wall_s):
+    """What a cell that was killed (cap, STOP escalation, SIGTERM) had completed: one compact entry per finished request. The full per-request rows
+    (validated capture rows with retained-checkpoint state) are already in requests.jsonl, written as each request completed."""
+    done = [dict(probe=r.get("probe"), prompt_n=r.get("prompt_n"), cache_n=r.get("cache_n"), ttft_s=r.get("ttft_s"), error=r.get("error"),
+                 retained_count=(r.get("retained") or {}).get("count"), retained_positions=(r.get("retained") or {}).get("positions")) for r in reqs]
+    return dict(schema=SCHEMA, cell_key=cell.key, result="PARTIAL", model=cell.model, kind=cell.kind, arm=cell.arm, unit=cell.unit, wave=cell.wave,
+                n_requests_done=len(done), requests_done=done, wall_s=round(wall_s, 1), est_raw_s=round(cell.est_raw, 1),
+                ts=time.strftime("%FT%TZ", time.gmtime()), note="indicative only; not a decision row (no OK summary)")
+
+
+def run_launch(a, launch, todo, budget, calib, ctx_common, out):
     arm = arm_by_name(launch.arm)
     ldir = out / launch.id; ldir.mkdir(parents=True, exist_ok=True)
     argv = arm_argv(launch.model, arm, launch.c, a.port, a.threads, launch.binary)
@@ -950,19 +1069,29 @@ def run_launch(a, launch, todo, budget, ctx_common, out):
             why = budget.stop_reason()
             if why:
                 say(f"STOP {why}: not starting {c.key}"); return "stop"
-            if not budget.fits(c.est_cal):
-                say(f"NO_FIT {c.key}: est {c.est_cal:.0f}s + margin {budget.margin}s > remaining {budget.remaining():.0f}s"); return "nofit"
-            t0 = time.time()
+            est = calib.planned(c)                    # per-(model, kind, unit) corrected estimate, never a global factor
+            if not budget.fits(est):
+                say(f"REFUSED_START {c.key}: corrected est {est:.0f}s (+{budget.margin}s margin) exceeds remaining {budget.remaining():.0f}s; not started")
+                append_jsonl(out / CELLS_FILE, dict(schema=SCHEMA, cell_key=c.key, result="SKIPPED_NO_FIT", est_planned_s=round(est, 1), remaining_s=round(budget.remaining() or 0, 1),
+                                                    ts=time.strftime("%FT%TZ", time.gmtime())))
+                return "nofit"
+            t0 = time.time(); ctx["reqs"] = []; row = None
             try:
                 row = run_ckpt_cell(ctx, c) if c.kind == "ckpt" else run_gen_cell(ctx, c)
             except M.CellRefused as e:
                 row = dict(schema=SCHEMA, cell_key=c.key, result="REFUSED", reason=str(e))
             except Exception as e:                                # noqa: BLE001 - recorded as a failed attempt; parked after 2
                 row = dict(schema=SCHEMA, cell_key=c.key, result="EXCEPTION", reason=repr(e)[:400])
-            row.update(est_cal_s=round(c.est_cal, 1), wall_s=round(time.time() - t0, 1), ts=time.strftime("%FT%TZ", time.gmtime()),
-                       cpu_list=a.cpu_list, threads=a.threads, calibration_factor=round((time.time() - t0) / max(c.est_raw, 1.0), 3))
+            finally:
+                if row is None:                               # SystemExit / SIGTERM at the cap: keep what completed (per-request rows are already on disk)
+                    append_jsonl(out / CELLS_FILE, partial_row(c, ctx.get("reqs") or [], time.time() - t0))
+            wall = time.time() - t0
+            row.update(est_raw_s=round(c.est_raw, 1), est_planned_s=round(est, 1), wall_s=round(wall, 1), ts=time.strftime("%FT%TZ", time.gmtime()),
+                       cpu_list=a.cpu_list, threads=a.threads, model=c.model, kind=c.kind, unit=c.unit, actual_over_model=round(wall / max(c.est_raw, 1.0), 3))
             append_jsonl(out / CELLS_FILE, row)
-            say(f"CELL {c.key} result={row['result']} wall={row['wall_s']}s est_cal={row['est_cal_s']}s factor={row['calibration_factor']}")
+            if row["result"] == "OK":
+                calib.observe(c.model, c.kind, c.unit, c.est_raw, wall)
+            say(f"CELL {c.key} result={row['result']} wall={row['wall_s']}s model_est={row['est_raw_s']}s planned={row['est_planned_s']}s actual/model={row['actual_over_model']}")
         return "done"
     finally:
         dead = srv.stop(); say(f"STOP server dead={dead} pid={srv.proc.pid}")
@@ -982,7 +1111,7 @@ def plan_from_args(a):
     bins = {"ckpt": a.fork_binary, "gen": a.gen_binary}
     lens = {"select": parse_kv_list(a.lens_select), "holdout": parse_kv_list(a.lens_holdout)}
     return sel, build_plan(a.models.split(","), a.stages.split(","), a.waves, a.threads, sel, lens_override=lens,
-                           only_arms=set(a.arms.split(",")) if a.arms else None, cal=a.cal, bins=bins, gen_g=parse_kv_list(a.gen_g, int))
+                           only_arms=set(a.arms.split(",")) if a.arms else None, cal=a.safety, bins=bins, gen_g=parse_kv_list(a.gen_g, int))
 
 
 def cmd_run(a):
@@ -1001,11 +1130,13 @@ def cmd_run(a):
             sys.exit(f"verify_ggml_linkage failed for {b}; refusing to measure")
     corpus = M.Corpus(a.corpus_roots.split(","))
     print(f"corpus sha256={corpus.sha} files={corpus.nfiles}", flush=True)
-    budget = Budget(a.stop_file, a.deadline_epoch)
+    deadline = effective_deadline(a.deadline_epoch, a.cap_s)
+    budget = Budget(a.stop_file, deadline)
     done, parked, blocked = done_keys(out / CELLS_FILE)
+    calib = Calibrator.from_rows(read_rows(out / CELLS_FILE), a.safety)
     if a.retry_blocked:
         blocked = set()
-    reason, n_blocked = "all cells done", 0
+    reason, n_blocked, n_nofit = "all cells done", 0, 0
     for lc in launches:
         todo = [c for c in lc.cells if c.key not in done and c.key not in parked and c.key not in blocked]
         if not todo:
@@ -1019,13 +1150,16 @@ def cmd_run(a):
         why = budget.stop_reason()
         if why:
             reason = why; break
-        if not budget.fits(lc.load_s + todo[0].est_cal):
-            reason = "next launch does not fit before the deadline"; break
-        res = run_launch(a, lc, todo, budget, dict(corpus=corpus), out)
+        if not budget.fits(lc.load_s + calib.planned(todo[0])):        # corrected estimate of the launch's first cell must fit the remaining cap/deadline
+            print(f"REFUSED_START {lc.id}: load {lc.load_s:.0f}s + corrected first cell {calib.planned(todo[0]):.0f}s exceeds remaining "
+                  f"{budget.remaining():.0f}s; trying the next launch", flush=True)
+            n_nofit += 1; continue
+        res = run_launch(a, lc, todo, budget, calib, dict(corpus=corpus), out)
         if res == "blocked": n_blocked += len(todo)
-        if res in ("stop", "nofit"):
-            reason = {"stop": "STOP file", "nofit": "cell would not fit"}[res]; break
-    print(f"RUN_END reason={reason} blocked_cells={n_blocked}", flush=True)
+        if res == "nofit": n_nofit += 1                                # a later, cheaper launch may still fit
+        if res == "stop":
+            reason = "STOP file"; break
+    print(f"RUN_END reason={reason} blocked_cells={n_blocked} refused_start_launches={n_nofit}", flush=True)
     return 0
 
 
@@ -1073,7 +1207,9 @@ def main(argv=None):
         sp.add_argument("--gen-g", default="", help="per-model generated lengths for the gen stage, e.g. 'q36_35b=1024,4096;q38_27b=1024'")
         sp.add_argument("--threads", type=int, default=24, help="one quarter by default (filler)")
         sp.add_argument("--cpu-list", default="72-95")
-        sp.add_argument("--cal", type=float, default=CAL_FACTOR)
+        sp.add_argument("--safety", type=float, default=SAFETY_UNSEEN, help="multiplier on the model estimate for a (model, kind, unit) key this run has not measured; "
+                                                                            "measured keys use their own worst actual/model ratio (no global factor)")
+        sp.add_argument("--cap-s", type=int, default=0, help="hard cap on this run's wall time: no cell whose corrected estimate exceeds the remaining cap is started (plan flags them)")
         sp.add_argument("--selection", default="", help="selection.json written by `decide --write-selection` (holdout)")
         sp.add_argument("--fork-binary", default=FORK_BIN, help="build serving the KVU-12.1 arms (needs checkpoint_at)")
         sp.add_argument("--gen-binary", default="", help="patched build (patch P-A) serving the KVU-12.3 arms; both gen arms use it so the baseline shares the binary. "

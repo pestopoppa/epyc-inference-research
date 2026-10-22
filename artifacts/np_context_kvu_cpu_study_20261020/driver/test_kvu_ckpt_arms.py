@@ -176,12 +176,42 @@ class PolicySimulator(unittest.TestCase):
 
 
 class Estimates(unittest.TestCase):
-    def test_calibration_factor_is_tonights(self):
-        self.assertEqual(K.CAL_FACTOR, 1.72)
-        raw, cal = K.est_ckpt_cell("q36_35b", K.ARM_DENSE, "32k", 24)
-        self.assertAlmostEqual(cal, raw * 1.72, places=6)
-        raw2, cal2 = K.est_gen_cell("q36_35b", K.GEN_DENSE, 1024, 24, cal=2.0)
-        self.assertAlmostEqual(cal2, raw2 * 2.0, places=6)
+    def test_no_global_factor_any_more(self):
+        self.assertFalse(hasattr(K, "CAL_FACTOR"))
+        raw, planned = K.est_ckpt_cell("q36_35b", K.ARM_DENSE, "32k", 24)
+        self.assertAlmostEqual(planned, raw * K.SAFETY_UNSEEN, places=6)
+        raw2, planned2 = K.est_gen_cell("q36_35b", K.GEN_DENSE, 1024, 24, safety=2.0)
+        self.assertAlmostEqual(planned2, raw2 * 2.0, places=6)
+
+    def test_prefill_curve_reproduces_the_d4_measurements(self):
+        # D4 (REPORT.md): 64.6k prompts took ~513-522 s to first token, 130k prompts 1838-2145 s; the old driver model said 331 s and 667 s
+        self.assertAlmostEqual(K.cold_prefill_s(64595), 516.0, delta=5)
+        self.assertAlmostEqual(K.cold_prefill_s(130112), 2000.0, delta=20)
+        self.assertTrue(1838 <= K.cold_prefill_s(130112) <= 2145)
+        old = lambda n: n / (300.0 * (1 - 0.35 * n / 131072))
+        self.assertGreater(K.cold_prefill_s(130112) / old(130112), 2.5)       # the old model was ~3x too fast at 128k
+        ts = [K.cold_prefill_s(n) for n in (1000, 2700, 8192, 32768, 64595, 100000, 130112, 200000)]
+        self.assertEqual(ts, sorted(ts))
+        rate = lambda n: n / K.cold_prefill_s(n)
+        self.assertGreater(rate(8192), rate(32768)); self.assertGreater(rate(32768), rate(64595)); self.assertGreater(rate(64595), rate(130112))
+        self.assertAlmostEqual(rate(130112), 65.0, delta=2)
+        self.assertEqual(K.cold_prefill_s(0), 0.0)
+
+    def test_resume_cost_is_the_difference_of_cumulative_curves_and_depth_taxed(self):
+        a = K.prefill_increment_s(30000, 32000)
+        self.assertAlmostEqual(a, K.cold_prefill_s(32000) - K.cold_prefill_s(30000), places=9)
+        self.assertGreater(K.prefill_increment_s(60000, 62000), K.prefill_increment_s(4000, 6000))     # the same 2k tokens cost more at depth
+        self.assertEqual(K.prefill_increment_s(5000, 5000), 0.0); self.assertEqual(K.prefill_increment_s(6000, 5000), 0.0)
+
+    def test_threads_and_model_scaling_are_declared_assumptions(self):
+        self.assertAlmostEqual(K.cold_prefill_s(8192, "q36_35b", 24), 4 * K.cold_prefill_s(8192, "q36_35b", 96), places=6)
+        self.assertGreater(K.cold_prefill_s(8192, "q38_27b", 96), K.cold_prefill_s(8192, "q36_35b", 96))
+        txt = " ".join(K.assumptions("q38_27b", 24, "gen"))
+        self.assertIn("ASSUMED", txt); self.assertIn("24 threads", txt); self.assertIn("q38_27b", txt)
+        self.assertEqual(len(K.assumptions("q36_35b", 96, "ckpt")), 1)       # nothing but the measured shape is claimed
+
+    def test_d4_ratio_table_documents_why_one_factor_failed(self):
+        self.assertEqual(K.D4_RATIOS["np4_t8_anchor"], 0.29); self.assertEqual(K.D4_RATIOS["np8_L128k_s4"], ">=3.1")
 
     def test_monotone_in_context_model_and_threads(self):
         r8 = K.est_ckpt_cell("q36_35b", K.ARM_DENSE, "8k", 24)[0]
@@ -256,7 +286,7 @@ class Planning(unittest.TestCase):
             rc = K.main(["plan", "--stages", "select,gen", "--models", "q36_35b", "--fork-binary", str(self.fork)])
         out = buf.getvalue()
         self.assertEqual(rc, 0)
-        self.assertIn("TOTAL launches=", out); self.assertIn("calibrated(x1.72)", out)
+        self.assertIn("TOTAL launches=", out); self.assertIn("planned(safety x1.25)", out); self.assertIn("ASSUMPTION[", out)
         self.assertIn("BLOCKED_ON_PATCH", out); self.assertIn("gen_dense", out); self.assertIn("RESOURCES:", out)
         self.assertIn("--checkpoint-min-step", out)
 
@@ -276,11 +306,59 @@ class Budgets(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "cells.jsonl"
             rows = [dict(cell_key="a", result="OK"), dict(cell_key="b", result="ERRORS"), dict(cell_key="b", result="EXCEPTION"),
-                    dict(cell_key="c", result="ERRORS"), dict(cell_key="d", result="BLOCKED_ON_PATCH"), dict(result="SERVER_DIED")]
+                    dict(cell_key="c", result="ERRORS"), dict(cell_key="d", result="BLOCKED_ON_PATCH"), dict(result="SERVER_DIED"),
+                    dict(cell_key="e", result="PARTIAL"), dict(cell_key="e", result="PARTIAL"), dict(cell_key="f", result="SKIPPED_NO_FIT")]
             p.write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n\n")
             done, parked, blocked = K.done_keys(p)
-            self.assertEqual(done, {"a"}); self.assertEqual(parked, {"b"}); self.assertEqual(blocked, {"d"})     # c has one failure: retried
+            self.assertEqual(done, {"a"}); self.assertEqual(parked, {"b", "e"}); self.assertEqual(blocked, {"d"})     # c has one failure: retried; f (not started) is not a failure
             self.assertEqual(K.done_keys(Path(d) / "missing.jsonl"), (set(), set(), set()))
+
+
+class Calibration(unittest.TestCase):
+    def cell(self, model="q36_35b", kind="ckpt", unit="8k", raw=100.0):
+        return K.Cell(model, "dense", kind, unit, 0, raw, raw * 1.25, "t")
+
+    def test_unseen_key_gets_safety_measured_key_gets_its_own_worst_ratio(self):
+        c = K.Calibrator(1.25)
+        self.assertEqual(c.planned(self.cell()), 125.0)
+        c.observe("q36_35b", "ckpt", "8k", 100.0, 80.0); c.observe("q36_35b", "ckpt", "8k", 100.0, 140.0)
+        self.assertEqual(c.planned(self.cell()), 140.0)                              # worst ratio seen, conservative
+        self.assertEqual(c.planned(self.cell(unit="32k")), 125.0)                    # other keys do NOT inherit it (D4: ratios 0.29 .. >=3.1 across shapes)
+        self.assertEqual(c.planned(self.cell(kind="gen", unit="G1024")), 125.0)
+        self.assertEqual(c.planned(self.cell(model="q38_27b")), 125.0)
+        c.observe("q36_35b", "ckpt", "8k", 0, 10.0); c.observe("q36_35b", "ckpt", "8k", 10.0, 0)    # junk observations ignored
+        self.assertEqual(c.planned(self.cell()), 140.0)
+
+    def test_from_rows_uses_only_ok_rows_with_both_numbers(self):
+        rows = [dict(result="OK", model="q36_35b", kind="ckpt", unit="8k", est_raw_s=100.0, wall_s=260.0),
+                dict(result="ERRORS", model="q36_35b", kind="ckpt", unit="8k", est_raw_s=100.0, wall_s=999.0),
+                dict(result="OK", model="q36_35b", kind="ckpt", unit="32k", wall_s=5.0)]
+        c = K.Calibrator.from_rows(rows, 1.25)
+        self.assertEqual(c.planned(self.cell()), 260.0); self.assertEqual(c.planned(self.cell(unit="32k")), 125.0)
+
+    def test_effective_deadline_is_the_earlier_of_grant_and_cap(self):
+        self.assertEqual(K.effective_deadline(0, 0), 0)
+        self.assertEqual(K.effective_deadline(5000, 0), 5000)
+        self.assertEqual(K.effective_deadline(0, 600, now=lambda: 1000.0), 1600)
+        self.assertEqual(K.effective_deadline(5000, 600, now=lambda: 1000.0), 1600)
+        self.assertEqual(K.effective_deadline(1200, 600, now=lambda: 1000.0), 1200)
+
+    def test_a_cell_exceeding_the_remaining_cap_does_not_fit(self):
+        b = K.Budget("", 1000, 90, now=lambda: 0.0)
+        cal = K.Calibrator(1.25)
+        big = self.cell(unit="128k", raw=2000.0)                                    # planned 2500 s
+        self.assertFalse(b.fits(cal.planned(big)))
+        cal.observe("q36_35b", "ckpt", "128k", 2000.0, 400.0)                       # once measured faster, the same cell fits
+        self.assertTrue(b.fits(cal.planned(big)))
+
+    def test_partial_row_keeps_what_completed(self):
+        reqs = [dict(probe="cold_build", prompt_n=8100, cache_n=0, ttft_s=40.0, error=None, retained=dict(count=3, positions=[2064, 8090, 8096])),
+                dict(probe="extend_1", prompt_n=None, cache_n=None, ttft_s=None, error="timeout", retained=None)]
+        row = K.partial_row(self.cell(), reqs, 123.456)
+        self.assertEqual((row["result"], row["n_requests_done"], row["wall_s"]), ("PARTIAL", 2, 123.5))
+        self.assertEqual(row["requests_done"][0]["retained_positions"], [2064, 8090, 8096])
+        self.assertIn("not a decision row", row["note"])
+        self.assertEqual(K.partial_row(self.cell(), [], 1.0)["n_requests_done"], 0)
 
 
 class FitConversation(unittest.TestCase):
@@ -472,7 +550,7 @@ class RunLoop(unittest.TestCase):
     def run_main(self, *extra, launch_side_effect=None):
         argv = ["run", "--out", str(self.out), "--fork-binary", str(self.fork), "--models", "q36_35b", *extra]
         calls = []
-        def fake_launch(a, lc, todo, budget, ctx, out):
+        def fake_launch(a, lc, todo, budget, calib, ctx, out):
             calls.append((lc.id, len(todo)))
             if launch_side_effect: return launch_side_effect(lc, todo, out)
             for c in todo:
@@ -490,7 +568,17 @@ class RunLoop(unittest.TestCase):
 
     def test_deadline_that_cannot_fit_starts_nothing(self):
         rc, calls, out = self.run_main("--stages", "select", "--arms", "dense", "--deadline-epoch", "1")
-        self.assertEqual(calls, []); self.assertIn("does not fit", out)
+        self.assertEqual(calls, []); self.assertIn("REFUSED_START", out)
+
+    def test_cap_refuses_every_launch_whose_corrected_estimate_exceeds_it(self):
+        rc, calls, out = self.run_main("--stages", "select", "--arms", "dense,coarse", "--cap-s", "30")
+        self.assertEqual(calls, []); self.assertEqual(out.count("REFUSED_START"), 2); self.assertIn("refused_start_launches=2", out)
+
+    def test_a_refused_launch_does_not_stop_a_cheaper_one(self):
+        # quarter, 32k, 2 waves: tail_junction plans ~63 min per cell (refused under a 50 min cap), fixed_s4k_c8 ~41.5 min (fits). Order: tail first.
+        rc, calls, out = self.run_main("--stages", "select", "--arms", "tail_junction,fixed_s4k_c8", "--lens-select", "q36_35b=32k", "--cap-s", "3000")
+        self.assertEqual(calls, [("select__q36_35b__fixed_s4k_c8", 2)])
+        self.assertEqual(out.count("REFUSED_START"), 1)
 
     def test_resume_skips_done_cells_and_only_runs_the_rest(self):
         rc, calls, out = self.run_main("--stages", "select", "--arms", "dense,coarse")
