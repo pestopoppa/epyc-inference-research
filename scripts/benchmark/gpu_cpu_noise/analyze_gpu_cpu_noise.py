@@ -48,6 +48,16 @@ CLASSES = {
 }
 AA_BIAS_MAX_PCT = 0.5            # V1
 VALID_FRAC_MIN = 0.8             # V2
+# ---- W2-Q38FN DECISION (PREREG.ADDENDUM-W2-Q38FN.md section 7-8; predeclared; do not edit after the session starts)
+W2_AA_BIAS_MAX_PCT = 1.0         # V1 for the served instrument (A/A spans the whole ABBA block)
+W2_BLOCKS_MIN = 4                # V3
+W2_CORUN_TG_BOUND_PCT = 5.0      # decode bias CI must lie inside +-5%
+W2_CORUN_PP_BOUND_PCT = 10.0     # prefill bias CI must lie inside +-10%
+W2_CORUN_VR_OK_U95 = 3.0         # decode rep-unit VR upper-95 < 3 for CO-RUN-OK
+W2_CORUN_VR_BAD_L95 = 2.0        # decode rep-unit VR lower-95 >= 2 -> CO-RUN-NOT-OK
+W2_TRANSFER_TG_PCT = 3.0         # W1 transfer: decode bias bound
+W2_TRANSFER_PP_PCT = 8.0         # W1 transfer: prefill CI entirely below -8% contradicts W1's -4.8%
+W2_TRANSFER_VR = 2.0             # W1 transfer: decode VR bound
 
 
 def load(path: str) -> list[dict]:
@@ -291,12 +301,14 @@ def analyze(sess: str, include_invalid: bool = False, seed: int = 20261021) -> d
     meas = [r for r in rows if r.get("phase") == "measure"]
     rep["valid_frac"] = {c: (round(sum(1 for r in meas if r["cond"] == c and r.get("valid")) /
                                    max(1, sum(1 for r in meas if r["cond"] == c)), 3))
-                         for c in ["G0"] + CONDS}
+                         for c in ["G0"] + active_conds(rows)}
     rep["invalid_reasons"] = sorted({w for r in meas for w in (r.get("why_invalid") or [])})
+    conds = active_conds(rows)
+    rep["conds"] = conds
     for m in METRICS:
         runs = organize(rows, m, include_invalid)
-        mm = {"aa": aa_check(runs, rng), "pair_p95": {c: pair_p95(runs, c) for c in ["G0"] + CONDS}, "cond": {}}
-        for c in CONDS:
+        mm = {"aa": aa_check(runs, rng), "pair_p95": {c: pair_p95(runs, c) for c in ["G0"] + conds}, "cond": {}}
+        for c in conds:
             blocks = complete_blocks(runs, c)
             cand, anch = block_data(runs, c, blocks)
             cand = {b: np.asarray(v) for b, v in cand.items() if v}
@@ -317,7 +329,7 @@ def analyze(sess: str, include_invalid: bool = False, seed: int = 20261021) -> d
     rep["gates"] = {"V1_aa_tg": v1, "V1_aa_pp": rep["metrics"]["pp"]["aa"].get("pass"),
                     "V2_valid_frac": {c: f >= VALID_FRAC_MIN for c, f in rep["valid_frac"].items()}}
     table = {}
-    for c in CONDS:
+    for c in conds:
         table[c] = {}
         for cls in CLASSES:
             vt = rep["metrics"]["tg"]["cond"][c]["verdict"][cls]["verdict"]
@@ -330,7 +342,74 @@ def analyze(sess: str, include_invalid: bool = False, seed: int = 20261021) -> d
             table[c][cls] = v
     rep["decision_table"] = table
     rep["gpu_side"] = gpu_side(sess, rows)
+    rep["workload"] = "w2-q38fn" if any(r.get("workload") == "w2-q38fn" for r in rows) else "w1"
+    if rep["workload"] == "w2-q38fn":
+        rep["w2"] = w2_decision(rep, rows)
     return rep
+
+
+def active_conds(rows: list[dict]) -> list[str]:
+    """GPU conditions present among the measured rows (W1: all five; W2: G2, plus G3 if run)."""
+    seen = {r.get("cond") for r in rows if r.get("phase") == "measure"}
+    return [c for c in CONDS if c in seen]
+
+
+def _inside(ci, bound):
+    return ci is not None and -bound <= ci[0] and ci[1] <= bound
+
+
+def w2_decision(rep: dict, rows: list[dict]) -> dict:
+    """Predeclared W2-Q38FN rule (addendum section 7-8): CO-RUN verdict + W1 transfer, per GPU condition."""
+    meas = [r for r in rows if r.get("phase") == "measure" and r.get("_hash_ok")]
+    aa = {m: rep["metrics"][m]["aa"] for m in METRICS}
+    v1 = all(a.get("ci_pct") is not None and a["ci_pct"][0] <= 0 <= a["ci_pct"][1]
+             and abs(a["bias_pct"]) <= W2_AA_BIAS_MAX_PCT for a in aa.values())
+    out = {"gates": {"V1_aa": v1, "V1_aa_bias_pct": {m: aa[m].get("bias_pct") for m in METRICS},
+                     "V1_bound_pct": W2_AA_BIAS_MAX_PCT}, "cond": {}}
+    for c in rep["conds"]:
+        tg, pp = rep["metrics"]["tg"]["cond"][c], rep["metrics"]["pp"]["cond"][c]
+        btg, bpp = tg["bias"].get("ci_pct"), pp["bias"].get("ci_pct")
+        vr = (tg["noise"].get("process") or {}).get("vr_ci")
+        blocks = tg["bias"].get("n_blocks", 0)
+        v2 = rep["gates"]["V2_valid_frac"].get(c, False) and rep["gates"]["V2_valid_frac"].get("G0", False)
+        v3 = blocks >= W2_BLOCKS_MIN
+        why = []
+        if btg is None or bpp is None:
+            corun, transfer = "UNTESTED", "UNRESOLVED"
+            why.append("no paired blocks")
+        else:
+            bad = []
+            if btg[1] < -W2_CORUN_TG_BOUND_PCT:
+                bad.append(f"decode bias CI {btg} entirely below -{W2_CORUN_TG_BOUND_PCT}%")
+            if bpp[1] < -W2_CORUN_PP_BOUND_PCT:
+                bad.append(f"prefill bias CI {bpp} entirely below -{W2_CORUN_PP_BOUND_PCT}%")
+            if vr and vr[0] >= W2_CORUN_VR_BAD_L95:
+                bad.append(f"decode VR lower-95 {vr[0]:.2f} >= {W2_CORUN_VR_BAD_L95}")
+            ok = (_inside(btg, W2_CORUN_TG_BOUND_PCT) and _inside(bpp, W2_CORUN_PP_BOUND_PCT)
+                  and vr is not None and vr[1] < W2_CORUN_VR_OK_U95)
+            corun = "CO-RUN-NOT-OK" if bad else ("CO-RUN-OK(labelled correction)" if ok else "UNDECIDED")
+            why += bad
+            contra = (btg[1] < -W2_TRANSFER_TG_PCT or (vr is not None and vr[0] > W2_TRANSFER_VR)
+                      or bpp[1] < -W2_TRANSFER_PP_PCT)
+            consist = (_inside(btg, W2_TRANSFER_TG_PCT) and vr is not None and vr[1] < W2_TRANSFER_VR
+                       and bpp[0] > -W2_TRANSFER_PP_PCT)
+            transfer = "CONTRADICTED" if contra else ("CONSISTENT" if consist else "UNRESOLVED")
+        if not v1:
+            corun, transfer = "WITHHELD(V1 A/A drift)", "WITHHELD(V1 A/A drift)"
+        elif not v2:
+            corun, transfer = "UNTESTED(V2 positive controls)", "UNTESTED(V2 positive controls)"
+        elif not v3:
+            corun, transfer = corun + "[reduced-power]", transfer + "[reduced-power]"
+        out["cond"][c] = {"corun": corun, "w1_transfer": transfer, "why": why, "n_blocks": blocks,
+                          "correction_note": {"decode_bias_pct": tg["bias"].get("bias_pct"), "decode_ci_pct": btg,
+                                              "prefill_bias_pct": pp["bias"].get("bias_pct"), "prefill_ci_pct": bpp,
+                                              "decode_vr_rep": (tg["noise"].get("process") or {}).get("vr"),
+                                              "decode_vr_rep_ci": vr,
+                                              "decode_vr_request": (tg["noise"].get("arm") or {}).get("vr"),
+                                              "decode_vr_request_ci": (tg["noise"].get("arm") or {}).get("vr_ci")}}
+    acc = [a for r in meas for a in ((r.get("tg") or {}).get("draft_n_accepted") or []) if a is not None]
+    out["decode_draft_accepted"] = {"n": len(acc), "distinct": sorted(set(acc))[:10]}
+    return out
 
 
 def render_md(r: dict) -> str:
@@ -345,7 +424,7 @@ def render_md(r: dict) -> str:
               f"A/A (G0 vs G0, same blocks): {json.dumps({k: (round(v, 3) if isinstance(v, float) else v) for k, v in mm['aa'].items() if k != 'boot_p95_abs_pct'})}",
               "", "| cond | n blk | bias % [95% CI] | VR proc [CI] | sigma_add % [CI] | VR arm [CI] | pair p95 % (n) |",
               "|---|---|---|---|---|---|---|"]
-        for c in ["G0"] + CONDS:
+        for c in ["G0"] + r.get("conds", CONDS):
             pp = mm["pair_p95"][c]
             p95 = f"{pp['p95_pct']:.2f} ({pp['n_pairs']})" if pp.get("n_pairs") else "-"
             if c == "G0":
@@ -361,6 +440,21 @@ def render_md(r: dict) -> str:
         if mm.get("mechanism"):
             L += ["", f"Mechanism: {json.dumps(mm['mechanism'])}"]
     L += ["", f"GPU side (reverse direction): {json.dumps(r['gpu_side'])}", ""]
+    if r.get("w2"):
+        w = r["w2"]
+        L += ["## W2-Q38FN predeclared decision (addendum section 8; production lens)", "",
+              "Units: 'process' columns above = REP (1 prefill + 2 decode requests, one persistent server); "
+              "'arm' = REQUEST (decode only). DG/AK cells above are NOT used for W2.", "",
+              f"V1 A/A (bound {w['gates']['V1_bound_pct']}%): {w['gates']['V1_aa']} {json.dumps(w['gates']['V1_aa_bias_pct'])}",
+              "", "| cond | n blk | CO-RUN | W1 transfer | decode b % [CI] | prefill b % [CI] | decode VR rep [CI] |",
+              "|---|---|---|---|---|---|---|"]
+        for c, d in w["cond"].items():
+            n = d["correction_note"]
+            f = lambda x: "-" if x is None else f"{x:.2f}"
+            ci = lambda x: "" if not x else f" [{x[0]:.2f},{x[1]:.2f}]"
+            L.append(f"| {c} | {d['n_blocks']} | {d['corun']} | {d['w1_transfer']} | {f(n['decode_bias_pct'])}{ci(n['decode_ci_pct'])} | "
+                     f"{f(n['prefill_bias_pct'])}{ci(n['prefill_ci_pct'])} | {f(n['decode_vr_rep'])}{ci(n['decode_vr_rep_ci'])} |")
+        L += ["", f"decode draft_n_accepted: {json.dumps(w['decode_draft_accepted'])}", ""]
     return "\n".join(L)
 
 

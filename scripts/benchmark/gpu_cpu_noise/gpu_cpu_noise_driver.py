@@ -28,6 +28,13 @@ TERM -> wait -> KILL -> verify /proc gone. On SIGTERM it stops at once, cleans, 
 
 Modes:  run | dry-run | stub (lifecycle test: stub bench + stub HTTP server, no inference)
         client (internal: the GPU load generator) | stub-server (internal)
+
+--workload w2-q38fn (addendum <run-dir>/PREREG.ADDENDUM-W2-Q38FN.md): the CPU workload is ONE persistent
+Qwen3.8-Flash-Next UD-IQ4_XS server on 0-95, launched with the production :8074 recipe from the v10 kernel store
+under its OWN `region-lock run --cpu-list 0-95` claim (held for its lifetime; no --gpu-quiet: hold-once). A rep is
+1 prefill request (unique seeded ~4.1k-token prompt) + 2 decode requests (fixed seeded prompt, 256 tokens). Blocks
+are ABBA [G0, G2, G2, G0]. The rows, timeline and END.json keep the W1 shapes (plus `workload`), so the analyzer
+reads both; it adds the predeclared W2 CO-RUN / W1-transfer decision.
 """
 from __future__ import annotations
 
@@ -81,6 +88,134 @@ CONDITIONS = {
 }
 BASE_BLOCK = ["G0", "G0", "G1", "G2", "G3", "G4"]
 MIN_VRAM_BYTES = 20 * 2**30
+
+# ---------------------------------------------------------------- W2-Q38FN (served whole-host CPU model)
+# Pre-registration: <run-dir>/PREREG.ADDENDUM-W2-Q38FN.md. ONE persistent Qwen3.8-Flash-Next UD-IQ4_XS server on
+# 0-95 with the PRODUCTION serving recipe: the argv/env orchestrator_stack.py builds for architect_general (:8074),
+# read 2026-10-22 from build_server_command()/build_launch_env() + orchestration/derived/stack_priors.yaml.
+# Only the port and the slot-save path differ.
+WORKLOADS = ("w1", "w2-q38fn")
+Q38FN_STORE_LINK = "/mnt/raid0/llm/kernels/production/cpu"          # production v10 kernel store (read-only)
+Q38FN_BINDIR = "/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin"   # = stack prior runtime.binary_dir
+Q38FN_EXPECT_COMMIT = "ffc1bac82"                                   # v10, build 10303
+Q38FN_MODEL_DIR = "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS"
+Q38FN_SHARDS = [f"{Q38FN_MODEL_DIR}/Qwen3.8-Flash-Next-UD-IQ4_XS-0000{i}-of-00003.gguf" for i in (1, 2, 3)]
+Q38FN_MODEL = Q38FN_SHARDS[0]
+Q38FN_MTP = "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"
+Q38FN_PORT = 18962
+Q38FN_CPUS = "0-95"
+Q38FN_PRE_EVICT_GIB = 40          # stack_topology.yaml architect_general.numa_pre_evict_gib
+Q38FN_MAX_NODE_SHARE = 40         # canonical_recipe.CANONICAL_MAX_NODE_SHARE_PCT
+Q38FN_RAM_NEED_GIB = 140          # addendum section 5
+PROD_Q38FN_PORT = 8074            # production architect_general: refuse to run beside it
+REGION_LOCK = "/workspace/repos/epyc-orchestrator/scripts/region-lock"
+NUMA_EVICT = os.path.join(CODE_ROOT, "scripts/utils/numa_evict.py")
+PLACEMENT_CHECK = os.path.join(CODE_ROOT, "scripts/utils/numa_placement_check.sh")
+RAM_ADMIT = "/mnt/raid0/llm/tmp/compute-flags/ram_admit.sh"
+W2_SEED = "gpu-cpu-noise-w2-q38fn-20261022"
+W2_BLOCK = ["G0", "G2", "G2", "G0"]                       # ABBA, fixed order
+W2_BLOCK_G3 = ["G0", "G2", "G3", "G3", "G2", "G0"]        # --w2-with-g3 (NOT in the registered session)
+W2_PREFILL_WORDS = 3080           # ~4.1k tokens
+W2_DECODE_PREAMBLE_WORDS = 400    # ~0.55k-token fixed decode prompt
+W2_DECODE_N = 256
+W2_DECODES_PER_REP = 2
+W2_PROMPT_N_MIN_FRAC = 0.9        # prefill prompt_n >= 0.9 x warm-up median (no prompt-cache reuse)
+
+
+def q38fn_env(base: dict | None = None) -> dict:
+    """Production env for architect_general (build_launch_env + runtime requirements), with the store bindir
+    PREPENDED to LD_LIBRARY_PATH (three ggml generations on this host; every launcher sets its own)."""
+    env = dict(os.environ if base is None else base)
+    for k in [k for k in env if k.startswith(("GGML_", "OMP_", "KMP_", "LLAMA_"))]:
+        env.pop(k)
+    env.update({"OMP_PROC_BIND": "spread", "OMP_PLACES": "cores", "OMP_WAIT_POLICY": "active",
+                "OMP_DYNAMIC": "false", "KMP_BLOCKTIME": "10", "GGML_IQK": "1",
+                "LD_LIBRARY_PATH": f"{Q38FN_BINDIR}:/usr/lib/llvm-20/lib"})
+    return env
+
+
+def q38fn_server_argv(port: int, slot_dir: str) -> list[str]:
+    """taskset/numactl prefix + the production argv (orchestrator_stack.build_server_command, architect_general)."""
+    return ["taskset", "-c", Q38FN_CPUS, "numactl", "--interleave=all", f"{Q38FN_BINDIR}/llama-server",
+            "-m", Q38FN_MODEL, "--host", "127.0.0.1", "--port", str(port), "-np", "1", "-c", "262144",
+            "-t", "96", "-ub", "2048", "--flash-attn", "on", "--jinja", "-ctk", "f16", "-ctv", "f16",
+            "--mlock", "--no-mmap", "--cache-ram", "32768", "-md", Q38FN_MTP, "--spec-type", "draft-mtp",
+            "--spec-draft-n-max", "4", "--draft-p-min", "0.5", "--reasoning", "off",
+            "--slot-save-path", slot_dir, "--device", "none", "--device-draft", "none"]
+
+
+def q38fn_launch_argv(port: int, slot_dir: str, tag: str, env: dict) -> list[str]:
+    """The server's OWN CPU claim on 0-95, held for the server's lifetime (region-lock is the parent; bash execs
+    into env -> taskset -> numactl -> llama-server, so the server is region-lock's direct child).
+    HOLD-ONCE: no --gpu-quiet here -- the session already holds gpu-quiet EXCLUSIVE, and a shared request from
+    inside it would wait on itself. Nothing else in the session takes a CPU claim (no bench_canonical)."""
+    keys = ("OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY", "OMP_DYNAMIC", "KMP_BLOCKTIME", "GGML_IQK",
+            "LD_LIBRARY_PATH")
+    envs = " ".join(f"{k}={env[k]}" for k in keys)
+    evict = f"/usr/bin/python3 -I {NUMA_EVICT} --target-gib {Q38FN_PRE_EVICT_GIB}"
+    serve = " ".join(q38fn_server_argv(port, slot_dir))
+    return [REGION_LOCK, "run", "--cpu-list", Q38FN_CPUS, "--role", "bench", "--tag", tag, "--timeout-s", "600",
+            "--", "bash", "-c", f"{evict} || echo 'WARN pre-evict short'; exec env {envs} {serve}"]
+
+
+def make_schedule_w2(blocks: int, run_len: int, with_g3: bool = False) -> list[dict]:
+    pat = W2_BLOCK_G3 if with_g3 else W2_BLOCK
+    return [{"block": b, "run": j, "cond": cond, "reps": [f"b{b:02d}-r{j}-{cond}-{k}" for k in range(run_len)]}
+            for b in range(blocks) for j, cond in enumerate(pat)]
+
+
+def w2_words(seed: str, key: str, n: int) -> str:
+    h = hashlib.blake2b(f"{seed}\x1f{key}".encode(), digest_size=16).digest()
+    rng = random.Random(int.from_bytes(h, "big"))
+    return " ".join(rng.choice(WORDS) for _ in range(n))
+
+
+def w2_prefill_body(seed: str, i: int) -> dict:
+    return {"prompt": f"[{i}] " + w2_words(seed, f"prefill{i}", W2_PREFILL_WORDS) +
+            "\nSummarize the text above in one line.", "n_predict": 1, "temperature": 0, "top_k": 1,
+            "seed": 7, "cache_prompt": False}
+
+
+def w2_decode_body(seed: str) -> dict:
+    return {"prompt": w2_words(seed, "decode", W2_DECODE_PREAMBLE_WORDS) +
+            "\nWrite a long, detailed technical essay about how compilers optimize loops.",
+            "n_predict": W2_DECODE_N, "temperature": 0, "top_k": 1, "seed": 7, "ignore_eos": True,
+            "cache_prompt": False}
+
+
+def w2_controls(r: dict) -> list[str]:
+    """W2 per-rep controls (addendum section 2/3): server identity, no prompt-cache reuse, full decode length."""
+    why = []
+    if not (r.get("cpu_server") or {}).get("ok_after_rep"):
+        why.append("Q38FN server not alive or not owning its port after the rep")
+    ref = r.get("prompt_n_ref")
+    pn = [n for n in ((r.get("pp") or {}).get("prompt_n") or []) if n is not None]
+    if ref and any(n < W2_PROMPT_N_MIN_FRAC * ref for n in pn):
+        why.append(f"prefill prompt_n {pn} < {W2_PROMPT_N_MIN_FRAC} x ref {ref} (prompt-cache reuse?)")
+    dn = (r.get("tg") or {}).get("predicted_n") or []
+    if dn and any(n != W2_DECODE_N for n in dn):
+        why.append(f"decode predicted_n {dn} != {W2_DECODE_N}")
+    return why
+
+
+def child_pids(pid: int) -> list[int]:
+    out = []
+    try:
+        for t in os.listdir(f"/proc/{pid}/task"):
+            try:
+                out += [int(x) for x in open(f"/proc/{pid}/task/{t}/children").read().split()]
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return out
+
+
+def proc_comm(pid: int) -> str | None:
+    try:
+        return open(f"/proc/{pid}/comm").read().strip()
+    except OSError:
+        return None
 
 
 def gpu_server_argv(placement: str, port: int) -> list[str]:
@@ -395,6 +530,13 @@ class Driver:
         self.lockfh = None
         self.stopping = False
         self.rep_seconds: list[float] = []
+        self.w2 = a.workload == "w2-q38fn"
+        self.cpu_port = a.cpu_port
+        self.cpu_server = None      # (Popen of the region-lock wrapper, server pid, server starttime)
+        self.cpu_server_info: dict = {}
+        self.req_i = 0
+        self.prompt_n_ref = None
+        self.stop_file = a.stop_file or os.path.join(a.run_dir, "STOP")
         signal.signal(signal.SIGTERM, self._on_term)
         signal.signal(signal.SIGINT, self._on_term)
 
@@ -514,6 +656,11 @@ class Driver:
             time.sleep(2)
             ev["kfd_has_pid"] = p.pid in kfd_pids()
             ev["vram_used"] = read_int(os.path.join(self.gpu_dev, "mem_info_vram_used")) if self.gpu_dev else None
+            # ROCr starts one runtime thread with Cpus_allowed 0-191 regardless of the parent's taskset (diag
+            # 2026-10-22: 1 of 196 threads). Re-pin every task to the placement, then check.
+            ev["affinity_before_pin"] = task_affinities(p.pid)
+            ev["pin_rc"] = subprocess.run(["taskset", "-a", "-p", "-c", PLACEMENTS[placement][0], str(p.pid)],
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
             ev["affinity"] = task_affinities(p.pid)
             ok = (ev["kfd_has_pid"] and (ev["vram_used"] or 0) >= MIN_VRAM_BYTES and ev["hip_lib_mapped_from_build"]
                   and ev.get("props_build_info") == GPU_EXPECT_BUILD and affinity_within(ev["affinity"], PLACEMENTS[placement][0]))
@@ -531,6 +678,139 @@ class Driver:
                 t = time.time()
                 while kfd_pids() and time.time() - t < 30:
                     time.sleep(1)
+
+    # -- W2: the persistent Q38FN CPU server (its own 0-95 claim, held for its lifetime)
+    def start_cpu_server(self) -> bool:
+        if port_listening(self.cpu_port):
+            self.tl("cpu_server_refused", reason=f"port {self.cpu_port} already listening")
+            return False
+        log = os.path.join(self.sess, "q38fn_server.log")
+        slot_dir = os.path.join(self.sess, "kv_slots")
+        os.makedirs(slot_dir, exist_ok=True)
+        if self.stub:
+            argv = [sys.executable, os.path.abspath(__file__), "stub-server", "--port", str(self.cpu_port),
+                    "--stub-cpu"]
+            p = self.spawn(argv, "stub-q38fn-server", log)
+        else:
+            env = q38fn_env()
+            argv = q38fn_launch_argv(self.cpu_port, slot_dir, f"gpu-cpu-noise-w2-{self.a.session}-q38fn", env)
+            p = self.spawn(argv, "q38fn-server(region-lock)", log, env)
+        self.cpu_server = (p, None, None)    # so every failure path below is reaped by stop_cpu_server
+        t = time.time()
+        spid = None
+        while time.time() - t < self.a.cpu_server_timeout_s:
+            if p.poll() is not None:
+                self.tl("cpu_server_died", rc=p.returncode, log=log)
+                return False
+            if self.stub:
+                spid = p.pid
+            elif spid is None or not alive(spid):
+                kids = [k for k in child_pids(p.pid) if proc_comm(k) == "llama-server"]
+                spid = kids[0] if kids else None
+            if spid:
+                self.cpu_server = (p, spid, proc_starttime(spid))
+                try:
+                    if http_json(self.cpu_port, "/health", timeout=3).get("status") == "ok" and \
+                            (self.stub or listener_owned_by(self.cpu_port, spid)):
+                        break
+                except Exception:
+                    pass
+            time.sleep(1)
+        else:
+            self.tl("cpu_server_health_timeout", log=log, server_pid=spid)
+            return False
+        if not self.stub:
+            self.register(spid, "q38fn-llama-server")
+        ev = {"wrapper_pid": p.pid, "server_pid": spid, "load_s": round(time.time() - t, 1), "log": log,
+              "port": self.cpu_port}
+        ok = True
+        if not self.stub:
+            try:
+                ev["props_build_info"] = http_json(self.cpu_port, "/props", timeout=10).get("build_info")
+            except Exception as e:
+                ev["props_error"] = str(e)[:120]
+            try:
+                maps = open(f"/proc/{spid}/maps").read()
+                ev["cpu_lib_mapped_from_store"] = os.path.join(Q38FN_BINDIR, "libggml-cpu.so") in maps
+            except OSError:
+                ev["cpu_lib_mapped_from_store"] = False
+            ev["affinity"] = task_affinities(spid)
+            try:
+                ev["environ"] = sorted(x for x in open(f"/proc/{spid}/environ").read().split("\0")
+                                       if x.startswith(("GGML_", "OMP_", "KMP_", "LD_LIBRARY_PATH")))
+                ev["thp_enabled"] = [l.strip() for l in open(f"/proc/{spid}/status") if l.startswith("THP_enabled")]
+            except OSError:
+                pass
+            plog = os.path.join(self.sess, "q38fn_placement.log")
+            pr = subprocess.run(["bash", PLACEMENT_CHECK, str(spid), "--threshold", str(Q38FN_MAX_NODE_SHARE),
+                                 "--label", "w2-q38fn"], capture_output=True, text=True, timeout=120)
+            with open(plog, "a") as fh:
+                fh.write(pr.stdout + pr.stderr)
+            ev["placement_rc"], ev["placement_log"] = pr.returncode, plog
+            ok = (Q38FN_EXPECT_COMMIT in str(ev.get("props_build_info")) and ev["cpu_lib_mapped_from_store"]
+                  and affinity_within(ev["affinity"], Q38FN_CPUS) and pr.returncode == 0)
+        else:
+            ev["placement_rc"], ev["placement_log"] = 0, None
+        ev["identity_ok"] = ok
+        self.cpu_server = (p, spid, proc_starttime(spid))
+        self.cpu_server_info = ev
+        self.tl("cpu_server_up", **ev)
+        return ok
+
+    def cpu_server_ok(self) -> bool:
+        if not self.cpu_server:
+            return False
+        p, spid, st = self.cpu_server
+        if p.poll() is not None or not spid or not alive(spid, st):
+            return False
+        return self.stub or listener_owned_by(self.cpu_port, spid)
+
+    def stop_cpu_server(self):
+        if not self.cpu_server:
+            return
+        p, spid, st = self.cpu_server
+        self.kill_proc(p, "q38fn-server", grace=self.a.cpu_server_grace_s)
+        t = time.time()
+        while spid and alive(spid, st) and time.time() - t < 30:
+            time.sleep(1)
+        if spid and alive(spid, st):
+            try:
+                os.kill(spid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            time.sleep(2)
+        self.tl("cpu_server_down", server_pid=spid, verified_dead=not (spid and alive(spid, st)))
+        self.cpu_server = None
+
+    def w2_request(self, body: dict) -> dict:
+        t = time.time()
+        try:
+            r = http_json(self.cpu_port, "/completion", body, timeout=self.a.request_timeout_s)
+            tm = r.get("timings") or {}
+            return {"ok": True, "t": utc(t), "wall": round(time.time() - t, 3), "prompt_n": tm.get("prompt_n"),
+                    "prompt_per_second": tm.get("prompt_per_second"), "predicted_n": tm.get("predicted_n"),
+                    "predicted_per_second": tm.get("predicted_per_second"), "draft_n": tm.get("draft_n"),
+                    "draft_n_accepted": tm.get("draft_n_accepted")}
+        except Exception as e:
+            return {"ok": False, "t": utc(t), "wall": round(time.time() - t, 3), "error": str(e)[:160]}
+
+    def w2_work(self) -> dict:
+        """One W2 rep: 1 prefill request (unique seeded prompt), then W2_DECODES_PER_REP fixed decode requests."""
+        reqs = {"pp": [], "tg": []}
+        self.req_i += 1
+        reqs["pp"].append(self.w2_request(w2_prefill_body(self.a.w2_seed, self.req_i)))
+        for _ in range(W2_DECODES_PER_REP):
+            reqs["tg"].append(self.w2_request(w2_decode_body(self.a.w2_seed)))
+        res = {}
+        for m, key in (("pp", "prompt_per_second"), ("tg", "predicted_per_second")):
+            ok = [q for q in reqs[m] if q.get("ok") and q.get(key)]
+            if len(ok) == len(reqs[m]):
+                res[m] = {"samples_ts": [q[key] for q in ok], "avg_ts": sum(q[key] for q in ok) / len(ok),
+                          "prompt_n": [q.get("prompt_n") for q in ok], "predicted_n": [q.get("predicted_n") for q in ok],
+                          "draft_n": [q.get("draft_n") for q in ok],
+                          "draft_n_accepted": [q.get("draft_n_accepted") for q in ok]}
+        rc = 0 if all(q.get("ok") for v in reqs.values() for q in v) else 1
+        return {"rc": rc, "res": res, "requests": reqs}
 
     # -- GPU client load
     def start_client(self, mode: str) -> bool:
@@ -647,21 +927,26 @@ class Driver:
         cpu0 = cpu_times()
         t0 = time.time()
         sampler.start()
-        p = self.spawn(self.bench_argv(logdir), f"bench-{rep_id}", log)
-        self.bench = p
         timed_out = False
-        try:
-            p.wait(self.a.rep_timeout_s)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            self.kill_proc(p, f"bench-{rep_id}-timeout")
-        self.bench = None
+        w2 = None
+        if self.w2:
+            w2 = self.w2_work()
+            p = None
+        else:
+            p = self.spawn(self.bench_argv(logdir), f"bench-{rep_id}", log)
+            self.bench = p
+            try:
+                p.wait(self.a.rep_timeout_s)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                self.kill_proc(p, f"bench-{rep_id}-timeout")
+            self.bench = None
         t1 = time.time()
         samples = sampler.stop()
         snap1 = proc_cpu_snapshot()
         cpu1 = cpu_times()
-        roots = {os.getpid(), p.pid}
-        for h in (self.server, self.client, self.spinner):
+        roots = {os.getpid()} | ({p.pid} if p else set())
+        for h in (self.server, self.client, self.spinner, self.cpu_server):
             if h:
                 roots.add(h[0].pid)
         own = descendants(snap1, roots) | descendants(snap0, roots)
@@ -676,27 +961,39 @@ class Driver:
         wall = max(t1 - t0, 1e-6)
         foreign_cores = round(sum(foreign.values()) / hz / wall, 3)
         top = sorted(foreign.items(), key=lambda kv: -kv[1])[:5]
-        text = open(log, errors="replace").read() if os.path.exists(log) else ""
-        res = parse_bench_jsonl(text)
-        place = re.search(r"Placement proof: (\S+) \(exit (\d+)\)", text)
+        if w2 is not None:
+            res, rc = w2["res"], w2["rc"]
+            with open(log, "w") as fh:
+                json.dump(w2["requests"], fh)
+            place_path, place_rc = self.cpu_server_info.get("placement_log"), self.cpu_server_info.get("placement_rc")
+        else:
+            text = open(log, errors="replace").read() if os.path.exists(log) else ""
+            res, rc = parse_bench_jsonl(text), p.returncode
+            place = re.search(r"Placement proof: (\S+) \(exit (\d+)\)", text)
+            place_path, place_rc = (place.group(1), int(place.group(2))) if place else (None, None)
         smry = summarize_samples(samples, own_kfd)
         row = {"schema": SCHEMA_REP, "session": self.a.session, "rep_id": rep_id, "phase": phase,
                "cond": cond, "block": block, "run": run, "idx": idx, "start": utc(t0), "end": utc(t1),
-               "wall_s": round(wall, 2), "rc": p.returncode, "timed_out": timed_out,
+               "wall_s": round(wall, 2), "rc": rc, "timed_out": timed_out,
                "pp": res.get("pp"), "tg": res.get("tg"),
-               "placement_proof": place.group(1) if place else None,
-               "placement_rc": int(place.group(2)) if place else None,
+               "placement_proof": place_path,
+               "placement_rc": place_rc,
                "gpu": smry, "foreign_cores": foreign_cores,
                "foreign_top": [[k, round(v / hz, 2)] for k, v in top],
                "host_cpu_busy_all": busy_frac(cpu0, cpu1, list(range(192))),
                "server": None if not self.server else {"pid": self.server[0].pid, "placement": self.server[1]},
                "client_mode": None if not self.client else self.client[1],
                "spinners": bool(self.spinner), "stub": self.stub}
+        if self.w2:
+            row["workload"] = "w2-q38fn"
+            row["cpu_server"] = {"pid": self.cpu_server[1] if self.cpu_server else None, "port": self.cpu_port,
+                                 "ok_after_rep": self.cpu_server_ok()}
+            row["prompt_n_ref"] = self.prompt_n_ref
         row["valid"], row["why_invalid"] = self.validate(row)
         self_hash(row)
         with open(self.reps_path, "a") as fh:
             fh.write(json.dumps(row) + "\n")
-        self.tl("rep", rep_id=rep_id, cond=cond, phase=phase, rc=p.returncode, wall_s=row["wall_s"],
+        self.tl("rep", rep_id=rep_id, cond=cond, phase=phase, rc=rc, wall_s=row["wall_s"],
                 tg=(res.get("tg") or {}).get("avg_ts"), pp=(res.get("pp") or {}).get("avg_ts"),
                 valid=row["valid"], why=row["why_invalid"], foreign_cores=foreign_cores,
                 busy_med=(smry.get("gpu_busy") or {}).get("median"))
@@ -710,6 +1007,8 @@ class Driver:
             why.append(f"bench rc={r['rc']} timed_out={r['timed_out']}")
         if not (r.get("tg") and r.get("pp")):
             why.append("missing pp/tg jsonl rows")
+        if r.get("workload") == "w2-q38fn":
+            why += w2_controls(r)
         if r["stub"]:
             return (not why, why)
         if r.get("placement_rc") not in (0,):
@@ -740,7 +1039,8 @@ class Driver:
 
     # -- session
     def preflight(self) -> dict:
-        rec = {"schema": SCHEMA_RUN, "session": self.a.session, "mode": self.a.mode, "start": utc(self.t0),
+        rec = {"schema": SCHEMA_RUN, "session": self.a.session, "mode": self.a.mode, "workload": self.a.workload,
+               "start": utc(self.t0),
                "deadline": utc(self.deadline), "code_root": CODE_ROOT, "seed": self.a.seed,
                "blocks_target": self.a.blocks, "blocks_min": self.a.blocks_min, "run_len": self.a.run_len,
                "s8_every": self.a.s8_every, "prereg": self.a.prereg, "prereg_sha256": sha256_file(self.a.prereg)
@@ -767,7 +1067,9 @@ class Driver:
             rec["gpu_sysfs"] = self.gpu_dev
             if not self.gpu_dev:
                 problems.append(f"MI210 ({MI210_PCI_ID}) sysfs not found")
-            for f in (CPU_MODEL, GPU_MODEL, GPU_DRAFT, GPU_TEMPLATE, BENCH_CANONICAL, VERIFY_LINKAGE,
+            cpu_files = ((*Q38FN_SHARDS, Q38FN_MTP, os.path.join(Q38FN_BINDIR, "llama-server"), REGION_LOCK,
+                          NUMA_EVICT, PLACEMENT_CHECK, RAM_ADMIT) if self.w2 else (CPU_MODEL, BENCH_CANONICAL))
+            for f in (*cpu_files, GPU_MODEL, GPU_DRAFT, GPU_TEMPLATE, VERIFY_LINKAGE,
                       os.path.join(GPU_BUILD, "bin", "llama-server")):
                 if not os.path.exists(f):
                     problems.append(f"missing {f}")
@@ -779,17 +1081,20 @@ class Driver:
             rec["gpu_linkage_tail"] = lk.stdout[-400:]
             if lk.returncode != 0:
                 problems.append("verify_ggml_linkage FAILED for the GPU build")
-            bc = subprocess.run(["bash", BENCH_CANONICAL, "-m", CPU_MODEL, *BENCH_ARGS, "--log-dir",
-                                 os.path.join(self.sess, "bench-dry"), "--dry-run", "--", "-o", "jsonl"],
-                                capture_output=True, text=True, timeout=300)
-            rec["bench_canonical_dry_rc"] = bc.returncode
-            m = re.search(r"Cmd:\s+(.*)", bc.stdout + bc.stderr)
-            rec["bench_cmd"] = m.group(1) if m else None
-            b = re.search(r"Binary:\s+(\S+)", bc.stdout + bc.stderr)
-            rec["bench_binary"] = b.group(1) if b else None
-            rec["bench_binary_sha256"] = sha256_file(b.group(1)) if b else None
-            if bc.returncode != 0 or not m or "-o jsonl" not in m.group(1) or "-t 96" not in m.group(1):
-                problems.append(f"bench_canonical dry-run rc={bc.returncode} cmd={rec['bench_cmd']}")
+            if self.w2:
+                problems += self.preflight_w2(rec)
+            else:
+                bc = subprocess.run(["bash", BENCH_CANONICAL, "-m", CPU_MODEL, *BENCH_ARGS, "--log-dir",
+                                     os.path.join(self.sess, "bench-dry"), "--dry-run", "--", "-o", "jsonl"],
+                                    capture_output=True, text=True, timeout=300)
+                rec["bench_canonical_dry_rc"] = bc.returncode
+                m = re.search(r"Cmd:\s+(.*)", bc.stdout + bc.stderr)
+                rec["bench_cmd"] = m.group(1) if m else None
+                b = re.search(r"Binary:\s+(\S+)", bc.stdout + bc.stderr)
+                rec["bench_binary"] = b.group(1) if b else None
+                rec["bench_binary_sha256"] = sha256_file(b.group(1)) if b else None
+                if bc.returncode != 0 or not m or "-o jsonl" not in m.group(1) or "-t 96" not in m.group(1):
+                    problems.append(f"bench_canonical dry-run rc={bc.returncode} cmd={rec['bench_cmd']}")
             rec["kfd_at_start"] = kfd_pids()
             rec["port_free"] = not port_listening(self.port)
             if not rec["port_free"]:
@@ -802,17 +1107,55 @@ class Driver:
                     text=True, timeout=30).stdout
             except Exception as e:
                 rec["region_lock_status"] = f"error {e}"
+        if self.w2:
+            rec["w2"] = {"seed": self.a.w2_seed, "cpu_port": self.cpu_port, "with_g3": self.a.w2_with_g3,
+                         "decode_body_sha256": hashlib.sha256(json.dumps(w2_decode_body(self.a.w2_seed),
+                                                                         sort_keys=True).encode()).hexdigest(),
+                         "prefill_words": W2_PREFILL_WORDS, "decode_n": W2_DECODE_N,
+                         "decodes_per_rep": W2_DECODES_PER_REP,
+                         "server_argv": q38fn_launch_argv(self.cpu_port, os.path.join(self.sess, "kv_slots"),
+                                                          f"gpu-cpu-noise-w2-{self.a.session}-q38fn", q38fn_env())}
         rec["problems"] = problems
         return rec
 
+    def preflight_w2(self, rec: dict) -> list[str]:
+        problems = []
+        store = os.path.realpath(Q38FN_STORE_LINK)
+        rec["q38fn_store_resolved"] = store
+        if store != Q38FN_BINDIR:
+            problems.append(f"{Q38FN_STORE_LINK} resolves to {store}, not the production v10 store {Q38FN_BINDIR}")
+        srv = os.path.join(Q38FN_BINDIR, "llama-server")
+        rec["q38fn_server_sha256"] = sha256_file(srv)
+        rec["q38fn_ggml_cpu_sha256"] = sha256_file(os.path.join(Q38FN_BINDIR, "libggml-cpu.so"))
+        rec["q38fn_mtp_bytes"] = os.path.getsize(Q38FN_MTP) if os.path.exists(Q38FN_MTP) else None
+        rec["q38fn_trunk_bytes"] = sum(os.path.getsize(f) for f in Q38FN_SHARDS if os.path.exists(f))
+        lk = subprocess.run(["bash", VERIFY_LINKAGE, srv, Q38FN_BINDIR], capture_output=True, text=True,
+                            timeout=120, env=q38fn_env())
+        rec["q38fn_linkage_rc"], rec["q38fn_linkage_tail"] = lk.returncode, lk.stdout[-400:]
+        if lk.returncode != 0:
+            problems.append("verify_ggml_linkage FAILED for the Q38FN store binary")
+        ra = subprocess.run(["bash", RAM_ADMIT, str(Q38FN_RAM_NEED_GIB)], capture_output=True, text=True, timeout=60)
+        rec["ram_admit"] = {"rc": ra.returncode, "out": ra.stdout.strip()[:200], "need_gib": Q38FN_RAM_NEED_GIB}
+        if ra.returncode != 0:
+            problems.append(f"ram_admit refused: {ra.stdout.strip()[:160]}")
+        rec["prod_q38fn_listening"] = port_listening(PROD_Q38FN_PORT)
+        if rec["prod_q38fn_listening"]:
+            problems.append(f"production architect_general :{PROD_Q38FN_PORT} is listening (a second Q38FN would "
+                            "contend for 0-95 and add 90+ GiB)")
+        if port_listening(self.cpu_port):
+            problems.append(f"Q38FN port {self.cpu_port} is listening")
+        return problems
+
     def run(self) -> int:
         rec = self.preflight()
-        sched = make_schedule(self.a.seed, self.a.blocks, self.a.run_len, self.a.s8_every)
+        sched = (make_schedule_w2(self.a.blocks, self.a.run_len, self.a.w2_with_g3) if self.w2
+                 else make_schedule(self.a.seed, self.a.blocks, self.a.run_len, self.a.s8_every))
         sched_blob = json.dumps(sched, sort_keys=True)
         rec["schedule_sha256"] = hashlib.sha256(sched_blob.encode()).hexdigest()
         with open(os.path.join(self.sess, "schedule.json"), "w") as fh:
             fh.write(sched_blob)
-        est = self.a.est_rep_s * sum(len(r["reps"]) for r in sched) + self.a.est_switch_s * len(sched) + 600
+        est = self.a.est_rep_s * sum(len(r["reps"]) for r in sched) + self.a.est_switch_s * len(sched) + \
+            (420 if self.w2 else 600)
         rec["estimated_s"] = est
         with open(os.path.join(self.sess, "RUN_RECORD.json"), "w") as fh:
             json.dump(rec, fh, indent=1)
@@ -826,18 +1169,31 @@ class Driver:
             return 2
         if not self.take_device_lock():
             return 4
+        # ---- W2: the persistent CPU server (own 0-95 claim), one relaunch on a failed identity/placement proof
+        if self.w2:
+            if not self.start_cpu_server():
+                self.stop_cpu_server()
+                self.tl("cpu_server_retry")
+                if not self.start_cpu_server():
+                    self.tl("abort", reason="Q38FN server failed its identity/placement proof twice")
+                    return 8
         # ---- warm-up (discarded)
         self.ensure("G0")
         for k in range(self.a.warm_cpu):
-            self.one_rep(f"warm-cpu-{k}", "G0", -1, -1, k, "warmup")
+            row = self.one_rep(f"warm-cpu-{k}", "G0", -1, -1, k, "warmup")
+            if self.w2 and k == 0:
+                pn = [n for n in ((row.get("pp") or {}).get("prompt_n") or []) if n]
+                self.prompt_n_ref = sorted(pn)[len(pn) // 2] if pn else None
+                self.tl("prompt_n_ref", prompt_n_ref=self.prompt_n_ref)
         if not self.ensure("G2"):
             self.tl("abort", reason="GPU warm-up failed (server/residency/client)")
             return 5
         time.sleep(self.a.warm_gpu_s)
         self.one_rep("warm-both-0", "G2", -1, -1, 0, "warmup")
-        if not self.ensure("G3"):
-            return 5
-        self.one_rep("warm-both-1", "G3", -1, -1, 0, "warmup")
+        if not self.w2 or self.a.w2_with_g3:
+            if not self.ensure("G3"):
+                return 5
+            self.one_rep("warm-both-1", "G3", -1, -1, 0, "warmup")
         # ---- blocks
         blocks_plan = self.a.blocks
         done_blocks = 0
@@ -857,7 +1213,7 @@ class Driver:
                     if b >= blocks_plan:
                         break
                 block_start = time.time()
-            if os.path.exists(os.path.join(self.a.run_dir, "STOP")):  # FILLERS rule 2: honoured between items
+            if os.path.exists(self.stop_file):  # FILLERS rule 2: honoured between items
                 self.tl("stop_file", block=b, run=r["run"])
                 break
             need = (sum(self.rep_seconds) / len(self.rep_seconds) if self.rep_seconds else self.a.est_rep_s)
@@ -872,7 +1228,11 @@ class Driver:
             for k, rid in enumerate(r["reps"]):
                 row = self.one_rep(rid, r["cond"], b, r["run"], k, "measure")
                 if not row["valid"] and (row["rc"] != 0 or row["timed_out"]):
-                    self.one_rep(rid + "-retry", r["cond"], b, r["run"], k, "measure")
+                    row = self.one_rep(rid + "-retry", r["cond"], b, r["run"], k, "measure")
+                if self.w2 and not self.cpu_server_ok():
+                    self.tl("abort", reason="Q38FN server died or lost its port", block=b, run=r["run"])
+                    self.blocks_done = done_blocks
+                    return 8
             if r["run"] == max(x["run"] for x in sched if x["block"] == b):
                 done_blocks = b + 1
                 self.tl("block_done", block=b)
@@ -881,12 +1241,16 @@ class Driver:
 
     def plan_argv(self, cond: str) -> dict:
         placement, mode, spin = CONDITIONS[cond]
-        return {"gpu_server": gpu_server_argv(placement, self.port) if placement else None,
-                "client": mode, "spinners": SPIN_CPUS if spin else None,
-                "bench": self.bench_argv(os.path.join(self.sess, "reps", "<rep>"))}
+        out = {"gpu_server": gpu_server_argv(placement, self.port) if placement else None,
+               "client": mode, "spinners": SPIN_CPUS if spin else None}
+        if self.w2:
+            out["cpu_work"] = {"prefill": 1, "decode": W2_DECODES_PER_REP, "port": self.cpu_port}
+        else:
+            out["bench"] = self.bench_argv(os.path.join(self.sess, "reps", "<rep>"))
+        return out
 
     def cleanup(self):
-        for fn in (self.stop_client, self.stop_spinners, self.stop_server):
+        for fn in (self.stop_client, self.stop_spinners, self.stop_server, self.stop_cpu_server):
             try:
                 fn()
             except Exception as e:
@@ -964,7 +1328,16 @@ class _Stub(http.server.BaseHTTPRequestHandler):
         self._send({"status": "ok"} if self.path == "/health" else [{"id": 0, "is_processing": False}])
 
     def do_POST(self):
-        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        if getattr(self.server, "stub_cpu", False):
+            req = json.loads(body or b"{}")
+            n_words = len(str(req.get("prompt", "")).split())
+            time.sleep(0.05)
+            self._send({"content": "x", "timings": {
+                "prompt_n": int(n_words * 1.33), "prompt_per_second": 230.0 * random.uniform(0.995, 1.005),
+                "predicted_n": int(req.get("n_predict", 1)), "predicted_per_second": 40.0 * random.uniform(0.995, 1.005),
+                "draft_n": 100, "draft_n_accepted": 82}})
+            return
         time.sleep(0.2)
         self._send({"content": "x", "timings": {"prompt_n": 10, "predicted_n": 8, "predicted_per_second": 1.0}})
 
@@ -1000,6 +1373,16 @@ def main() -> int:
     ap.add_argument("--foreign-exclude-cores", type=float, default=4.0)
     ap.add_argument("--lock-wait-s", type=float, default=300)
     ap.add_argument("--stub-rep-s", type=float, default=0.3)
+    ap.add_argument("--stop-file", default=None, help="default <run-dir>/STOP")
+    # W2-Q38FN (addendum PREREG.ADDENDUM-W2-Q38FN.md)
+    ap.add_argument("--workload", choices=WORKLOADS, default="w1")
+    ap.add_argument("--cpu-port", type=int, default=Q38FN_PORT)
+    ap.add_argument("--w2-seed", default=W2_SEED)
+    ap.add_argument("--w2-with-g3", action="store_true", help="ABBA + G3 (NOT in the registered W2 session)")
+    ap.add_argument("--cpu-server-timeout-s", type=float, default=600)
+    ap.add_argument("--cpu-server-grace-s", type=float, default=45)
+    ap.add_argument("--request-timeout-s", type=float, default=300)
+    ap.add_argument("--stub-cpu", action="store_true", help=argparse.SUPPRESS)
     # client / stub-server
     ap.add_argument("--client-mode", choices=["decode", "prefill"])
     ap.add_argument("--out")
@@ -1008,7 +1391,9 @@ def main() -> int:
     if a.mode == "client":
         return client_main(a)
     if a.mode == "stub-server":
-        http.server.ThreadingHTTPServer(("127.0.0.1", a.port), _Stub).serve_forever()
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", a.port), _Stub)
+        srv.stub_cpu = a.stub_cpu
+        srv.serve_forever()
         return 0
     d = Driver(a)
     rc, reason = 1, "exception"
@@ -1016,7 +1401,7 @@ def main() -> int:
     try:
         rc = d.run()
         reason = {0: "complete", 2: "preflight-problems", 4: "refused:device-lock", 5: "gpu-warmup-failed",
-                  6: "condition-failed", 7: "partial(<blocks_min)"}.get(rc, f"rc{rc}")
+                  6: "condition-failed", 7: "partial(<blocks_min)", 8: "cpu-server-failed"}.get(rc, f"rc{rc}")
     except SystemExit as e:
         rc, reason = int(e.code or 143), "signalled"
     except Exception as e:  # never leave children behind
@@ -1024,7 +1409,7 @@ def main() -> int:
     finally:
         d.cleanup()
         end = {"rc": rc, "reason": reason, "time": utc(), "blocks_done": getattr(d, "blocks_done", 0),
-               "session": a.session, "mode": a.mode}
+               "session": a.session, "mode": a.mode, "workload": a.workload}
         with open(os.path.join(d.sess, "END.json"), "w") as fh:
             json.dump(end, fh)
         d.tl("end", **end)
