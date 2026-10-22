@@ -25,7 +25,7 @@ Predeclared rules (fixed before the run):
   lines (split on blank lines or newlines); a chunk is a review chunk iff it matches REVIEW_RE.
   Reported only where the answer has >=4 chunks; coverage is stated. AUROC computed like tokens.
 """
-import argparse, collections as C, glob, json, os, random, re, sys
+import argparse, collections as C, datetime as dt, glob, hashlib, json, os, random, re, sys
 
 REVIEW_RE = re.compile(r"\b(wait|hold on|let me (?:re-?check|re-?read|verify|double[- ]check|reconsider)|re-?check|double[- ]check|"
                        r"actually|on second thought|hmm|let me verify|verify that|to verify|i made (?:a|an) (?:mistake|error)|"
@@ -93,6 +93,47 @@ def review_ratio(text):
     return sum(1 for c in chunks if REVIEW_RE.search(c)) / len(chunks)
 
 
+def input_files(results_dir):
+    """The eval JSONL files `load` reads (same selection rule), sorted."""
+    return [f for f in sorted(glob.glob(os.path.join(results_dir, "eval", "*.jsonl")))
+            if not os.path.basename(f).startswith("seen_questions")]
+
+
+def _sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def input_digests(results_dir):
+    """Provenance of the scan (additive result key): per input file name, byte size and sha256."""
+    return [{"file": os.path.relpath(f, results_dir), "bytes": os.path.getsize(f), "sha256": _sha256_file(f)}
+            for f in input_files(results_dir)]
+
+
+def script_sha256():
+    return _sha256_file(os.path.abspath(__file__))
+
+
+ROOT_CANDIDATES = ("/mnt/raid0/llm/views/epyc-root-main", "/mnt/raid0/llm/worktrees/root-pbe-3c4ca599", "/workspace")
+
+
+def load_rus2_adapter(explicit=None):
+    """Import the root `rus2_probe` writer: explicit path, else $EPYC_ROOT, else the main view / pinned worktree /
+    /workspace, first that holds the adapter. Raises FileNotFoundError naming what was tried."""
+    import importlib
+    tried = [c for c in ([explicit] if explicit else [os.environ.get("EPYC_ROOT"), *ROOT_CANDIDATES]) if c]
+    for root in tried:
+        if os.path.isfile(os.path.join(root, "scripts", "vidya", "adapters", "rus2_probe.py")):
+            vidya = os.path.join(root, "scripts", "vidya")
+            if vidya not in sys.path:
+                sys.path.insert(0, vidya)
+            return importlib.import_module("adapters.rus2_probe")
+    raise FileNotFoundError(f"rus2_probe writer not found under {tried} (set EPYC_ROOT or --epyc-root)")
+
+
 def load(results_dir):
     drops = C.Counter(); seen = set(); cells = C.defaultdict(lambda: C.defaultdict(list)); temp = C.Counter()
     nfiles = 0
@@ -134,6 +175,9 @@ def main():
     ap.add_argument("--results-dir", default="benchmarks/results")
     ap.add_argument("--out", required=True)
     ap.add_argument("--min-questions", type=int, default=20)
+    ap.add_argument("--belief-out", help="VB-RUS2-PROBE-WIRE: also write rus2_probe.beliefs.jsonl into this dir via the root writer")
+    ap.add_argument("--run-id", default="rus2-trace-length-probe")
+    ap.add_argument("--epyc-root", help="root checkout (default: $EPYC_ROOT, main view, pinned worktree, /workspace)")
     a = ap.parse_args()
     cells, drops, temp, nfiles = load(a.results_dir)
     rows = []
@@ -164,8 +208,14 @@ def main():
                      "review_ratio_auroc": None if rb is None else round(rb, 4)})
     out = {"files_scanned": nfiles, "drops": dict(drops), "temperature_field": dict(temp),
            "fields_absent": ["finish_reason", "per-sample temperature (unless temperature_field.recorded>0)", "reasoning trace text (answer only)"],
-           "rows": rows}
-    json.dump(out, open(a.out, "w"), indent=1)
+           "rows": rows,
+           # provenance (additive): when, over which inputs, by which script
+           "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+           "results_dir": os.path.abspath(a.results_dir), "input_digests": input_digests(a.results_dir),
+           "script": os.path.relpath(os.path.abspath(__file__), os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+           "script_sha256": script_sha256()}
+    with open(a.out, "w") as fh:
+        json.dump(out, fh, indent=1)
     print("files", nfiles, "drops", dict(drops), "temp", dict(temp), "cells", len(rows))
     print("role|mode|suite|Q|S|between_auroc[ci]|within(mixedQ,pairs)|within_auroc[ci]|share_shorter|cap_excl|review_n|review_auroc")
     for r in rows:
@@ -173,7 +223,24 @@ def main():
             print("|".join(str(x) for x in [r["role"], r["mode"], r["suite"], r["questions"], r["samples"], r["between_auroc_tokens"], r["between_ci95"],
                   r["within_questions_mixed"], r["within_pairs"], r["within_pooled_auroc"], r["within_ci95"], r["within_share_correct_shorter"],
                   r["cap_proxy_excluded"], r["review_ratio_samples"], r["review_ratio_auroc"]]))
+    if a.belief_out:
+        return write_belief_sidecar(a, out)
+    return 0
+
+
+def write_belief_sidecar(a, result):
+    """Emit the sidecar AFTER the result is on disk; a refusal is loud (exit 3), never swallowed."""
+    try:
+        os.makedirs(a.belief_out, exist_ok=True)
+        side = load_rus2_adapter(a.epyc_root).write_belief_measurements(
+            a.belief_out, run_id=a.run_id, producer="epyc-inference-research/scripts/analysis/rus2_trace_length_probe.py",
+            results_path=a.out, min_questions=a.min_questions, emitted_at=result["generated_at"])
+    except Exception as exc:  # noqa: BLE001
+        print(f"!!! BELIEF CAPTURE FAILED [rus2]: REFUSED {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 3
+    print(f"belief sidecar: {side}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
