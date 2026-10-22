@@ -411,6 +411,7 @@ incident or measured fact when you next touch the module.
 | `loop/procguard.py` | 775 | yes | No AutoKernel process outlives the actor call, gate or run that spawned it (DS41-C84). On the campaign path: first reached via `loop.actors`. |
 | `loop/production.py` | 1,914 | no | Publish the champion's gain over the FROZEN PRODUCTION kernel, at every advance. Not reachable from the declared campaign-#1 roots. |
 | `loop/production_enrollment.py` | 508 | yes | Offline consumer for canonical production-launcher enrollment exports. On the campaign path: first reached via `loop.unified_planner`. |
+| `loop/production_surfaces.py` | 108 | no | AKX-ALL-LB2: the 27B GPU recipe's production-shape verify surfaces (N=8/16/32 and ragged {1,8,8,8}) and the `not-yet-transferable` keep label. Not reachable from the declared campaign-#1 roots. |
 | `loop/profile_preparation.py` | 639 | yes | Installed selected-profile execution and original settled-profile feedback. On the campaign path: first reached via `loop.cpu_profile`. |
 | `loop/recal_serving_floor.py` | 141 | no | Re-calibrate the SERVING floor under a given recipe (R23-49). Not reachable from the declared campaign-#1 roots. |
 | `loop/residency.py` | 612 | yes | Prove the run actually happened on the GPU. On the campaign path: first reached via `loop.bench`. |
