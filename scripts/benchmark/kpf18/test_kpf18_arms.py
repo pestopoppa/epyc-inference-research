@@ -1137,3 +1137,50 @@ def test_localise_window_arg_and_preflight(tmp_path):
     args.n_predict = 256
     args.s1_loc_group = 99
     assert any("--s1-loc-group 99" in p for p in A.PREFLIGHTS[184](ctx, GATE)[0])
+
+
+# ================================================================ --resume
+def test_step_key_ignores_launch_timestamps_but_not_content():
+    a = GATE.step_key(184, 3, "[kpf18s1-dflash2-20261022T092027Z] linkage + launch")
+    b = GATE.step_key(184, 3, "[kpf18s1-dflash2-20261023T011500Z] linkage + launch")
+    assert a == b and a != GATE.step_key(184, 4, "[kpf18s1-dflash2-20261023T011500Z] linkage + launch")
+    assert a != GATE.step_key(184, 3, "[kpf18s1-dflash2-20261023T011500Z] linkage + launch X")
+
+
+DESCS = ["[item2-fork_on-1] linkage + launch + healthy", "open item-2 record", "item2 g0.0 S=512: fork child", "judge item 2",
+         "[item2-fork_on-1] SIGTERM own pid, verify dead, then finalize its records",
+         "[kpf18s1-d-1] linkage + launch + healthy", "181 A [checkpoint_at=[T]] groups [0]", "181 B g0: identical resend",
+         "182 parity summary: x", "183.1 chunk-split cost", "[kpf18s1-d-1] SIGTERM own pid, verify dead, then finalize its records",
+         "[item3-fork_on-1] linkage + launch + healthy", "item3 g3 T=32000", "[item3-fork_on-1] SIGTERM own pid, verify dead"]
+
+
+def test_resume_plan_skips_finished_blocks_and_done_arm_steps_only():
+    none = GATE.resume_plan(DESCS, lambda k: False)
+    assert not any(none)
+    # item-2 block finished (its stop step done): the whole block is skipped; the S1 block is unfinished:
+    done = {4, 6, 7, 9}
+    sk = GATE.resume_plan(DESCS, lambda k: k in done)
+    assert sk[0:5] == [True] * 5
+    assert sk[5] is False and sk[10] is False                          # the launch and the stop of an unfinished block re-run
+    assert sk[6] and sk[7] and sk[9] and not sk[8]                     # done arm steps skip, the (not done) summary re-runs
+    assert not any(sk[11:])
+    # a done step that is NOT an arm step (item 2/3 keep closure state) re-runs inside an unfinished block
+    sk2 = GATE.resume_plan(DESCS, lambda k: k in {2, 3})
+    assert not any(sk2)
+    # everything finished: every block skipped
+    assert all(GATE.resume_plan(DESCS, lambda k: k in {4, 10, 13}))
+
+
+def test_parity_vectors_survive_a_resume(tmp_path, cpu_spec):
+    import json as _json
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    rec = {"kpf_task": "KPF-18.2", "kpf18_arm": "parity_mtp_request_off", "column": "request_off", "kpf_config": "mtp",
+           "siblings_vector": [["g0.s0", 4096], ["g0.s1", 4096]]}
+    ref = dict(rec, kpf18_arm="parity_mtp_drafter_on", column="drafter_on")
+    (tmp_path / "belief_measurements.jsonl").write_text(_json.dumps(rec) + "\n" + "not json\n" + _json.dumps(ref) + "\n")
+    assert A.load_vectors_from_records(tmp_path)["mtp:request_off"] == [("g0.s0", 4096), ("g0.s1", 4096)]
+    R = A.run_182_parity_summary(env, {})                              # nothing in memory: both columns come from the records
+    rr = R.extra["rule_result"]
+    assert rr["reference"] == "mtp:drafter_on" and rr["columns"] == ["mtp:drafter_on", "mtp:request_off"]
+    assert rr["predeclared_rule_satisfied"] is True
+    assert A.load_vectors_from_records(tmp_path / "nope") == {}

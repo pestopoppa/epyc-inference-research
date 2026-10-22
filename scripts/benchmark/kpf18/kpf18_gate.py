@@ -1994,6 +1994,40 @@ def print_plan(ctx: Ctx, items: list[int], steps_by_item: dict[int, list[Step]],
     return total
 
 
+# ---------------------------------------------------------------- resume (arms 181-184 only; items 1-7 never skip a body step)
+_TS_RE = re.compile(r"\d{8}T\d{6}Z")
+_ARM_STEP_RE = re.compile(r"^18[1-4][ .]")
+
+
+def step_key(it: int, idx: int, desc: str) -> str:
+    """Stable across restarts: the launch labels carry a timestamp, which is stripped."""
+    return f"{it}-{idx:03d}-{hashlib.sha1(_TS_RE.sub('', desc).encode()).hexdigest()[:8]}"
+
+
+def resume_plan(descs: list[str], is_done) -> list[bool]:
+    """skip[i] for the steps of one item. A server block (launch ... SIGTERM-and-finalize) whose STOP step is done is complete:
+    the whole block is skipped. In an unfinished block the launch runs again and only the arm steps (181-184, which keep no
+    state in a closure) that are done are skipped; every other step re-runs. Steps outside blocks never skip."""
+    skip = [False] * len(descs)
+    i = 0
+    while i < len(descs):
+        if "linkage + launch" in descs[i]:
+            j = next((k for k in range(i + 1, len(descs)) if "SIGTERM own pid" in descs[k]), None)
+            if j is None:
+                break
+            if is_done(j):
+                for k in range(i, j + 1):
+                    skip[k] = True
+            else:
+                for k in range(i + 1, j):
+                    if _ARM_STEP_RE.match(descs[k]) and is_done(k):
+                        skip[k] = True
+            i = j + 1
+        else:
+            i += 1
+    return skip
+
+
 # ---------------------------------------------------------------- main
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -2034,6 +2068,10 @@ def main() -> int:
     ap.add_argument("--no-device-claim", default=None, metavar="REASON",
                     help="skip taking the mi210_0 device claim (reason is recorded); default: take it")
     ap.add_argument("--cpu", action="store_true", help="CPU adaptation: reduced spec, GPU-only checks skipped")
+    ap.add_argument("--resume", action="store_true",
+                    help="continue an earlier run in the same --out: skip server blocks whose stop step finished and, in an "
+                         "unfinished block, the arm steps (181-184) that finished (markers under <out>/done/). A step that was "
+                         "running when the earlier run ended is run again.")
     ARMS.add_arguments(ap)
     args = ap.parse_args()
     if args.cpu:
@@ -2121,13 +2159,24 @@ def main() -> int:
                 first.stop()
             ctx.ps = PromptSet.load(pth)
             steps_by_item = {it: ITEMS[it](ctx) for it in items}  # re-plan on the real prompt set
+        done_dir = Path(args.out) / "done"
+        done_dir.mkdir(parents=True, exist_ok=True)
         for it in items:
-            for st in steps_by_item[it]:
+            sts = steps_by_item[it]
+            keys = [step_key(it, k, st.desc) for k, st in enumerate(sts)]
+            skip = (resume_plan([st.desc for st in sts], lambda k: (done_dir / keys[k]).exists())
+                    if args.resume else [False] * len(sts))
+            for k, st in enumerate(sts):
+                if skip[k]:
+                    print(f"[kpf18 {time.strftime('%H:%M:%SZ', time.gmtime())}] item {it}: RESUME-SKIP (done earlier): "
+                          f"{st.desc[:150]}", flush=True)
+                    continue
                 t0 = time.time()
                 print(f"[kpf18 {time.strftime('%H:%M:%SZ', time.gmtime())}] item {it}: {st.desc} "
                       f"(est {fmt_s(st.est_s)})", flush=True)
                 if st.fn:
                     st.fn()
+                (done_dir / keys[k]).write_text(f"{now_iso()} {st.desc[:200]}\n")
                 print(f"[kpf18]   done in {fmt_s(time.time() - t0)}", flush=True)
     except Abort as exc:
         print(f"[kpf18] ABORT: {exc}", flush=True)

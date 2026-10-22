@@ -1384,12 +1384,34 @@ def run_182_policy(env: Env, g: int, dense_u: int):
     return R
 
 
+def load_vectors_from_records(out) -> dict:
+    """Per-column sibling vectors of protocol runs finished by an EARLIER process (resume): read back from the belief jsonl."""
+    vec: dict = {}
+    pth = Path(out) / "belief_measurements.jsonl"
+    try:
+        lines = pth.read_text().splitlines()
+    except OSError:
+        return vec
+    for ln in lines:
+        try:
+            r = json.loads(ln)
+        except ValueError:
+            continue
+        sv = r.get("siblings_vector")
+        if r.get("kpf18_arm", "").startswith("parity_") and r.get("kpf_task") == "KPF-18.2" and sv is not None and r.get("column"):
+            vec[f"{r.get('kpf_config')}:{r['column']}"] = [tuple(x) for x in sv]
+    return vec
+
+
 def run_182_parity_summary(env: Env, shared: dict):
+    for k, v in load_vectors_from_records(env.ctx.out).items():     # columns finished before a resume
+        shared.setdefault("vec", {}).setdefault(k, v)
     R = open_run(env, 182, "parity_summary", rule=RULES[182]["parity"], arm_key="parity")
     R.extra["vectors"] = shared.get("vec", {})
     R.extra["note"] = ("compares the per-sibling n_fork_tokens recorded by the protocol runs of every drafter column; the "
                        "columns come from different launches (see each protocol record for its binary/argv)")
-    R.extra["rule_result"] = eval_182_parity(shared.get("vec", {}))
+    ordered = dict(sorted(shared.get("vec", {}).items(), key=lambda kv: (0 if kv[0].endswith(":drafter_on") else 1, kv[0])))
+    R.extra["rule_result"] = eval_182_parity(ordered)       # the drafter-on column is the reference
     return R
 
 
