@@ -531,9 +531,10 @@ def decide(out: Path, *, identity: dict | None = None) -> dict:
         "metric": "mean paired score difference A1 - A0 inside the native window (net-paired McNemar gate)",
         "value": pooled["mean_score_diff_a1_minus_a0"], "unit": "score fraction per item (0-1)",
         "metric_direction": "higher_better", "category": "quality", "date": date,
-        "claim": f"YaRN f2 (A1) {'does not fall below' if pooled['verdict'] == 'NOT-FAIL' else 'falls below'} "
-                 f"native RoPE (A0) inside the native window on {plan_name} "
-                 f"(b={pooled['b_a0right_a1wrong']}, c={pooled['c_a0wrong_a1right']}, p={pooled['p_one_sided']:.4g})",
+        "claim": f"A1 (YaRN f2) vs A0 (native RoPE) inside the native window on {plan_name}: "
+                 f"{pooled['verdict'] if final else 'INTERIM'} under the net-paired one-sided McNemar rule "
+                 f"(b={pooled['b_a0right_a1wrong']}, c={pooled['c_a0wrong_a1right']}, p={pooled['p_one_sided']:.4g}, "
+                 f"n_pairs={pooled['n_pairs']}); NOT-FAIL means no significant net loss, not equivalence",
         "protocol_id": plan.meta.get("protocol_id"), "reps": pooled["n_pairs"], "reps_basis": "scored (paired, native zone)",
         "attestation_path": str(out / "decision.json"), "attestation_locator": "pooled_native",
         "status": "FINAL" if final else "INTERIM", "verdict": verdict,
