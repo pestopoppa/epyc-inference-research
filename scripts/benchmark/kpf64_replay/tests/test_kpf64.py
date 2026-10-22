@@ -225,3 +225,30 @@ def test_error_session_excluded_from_all_arms(tmp_path):
     write_arm(tmp_path / "B", ok[:2] + [req("s2", 0, 100, 0, 0), {"session": "s2", "k": 1, "error": "timeout"}])
     res = analysis.analyse({"A": tmp_path / "A", "B": tmp_path / "B"}, "A", B=20)
     assert res["arms"]["A"]["sessions"] == 1 and res["arms"]["A"]["excluded_sessions"] == ["s2"]
+
+
+def _driver(monkeypatch):
+    import importlib
+    monkeypatch.setenv("WINDOW_CONFIRMED", "1")  # import-time guard; build_body itself starts nothing
+    return importlib.import_module("replay_driver")
+
+
+def test_request_body_cap_and_raw_completion(monkeypatch):
+    d = _driver(monkeypatch)
+    assert d.cap_n_predict("x" * 30, 128) == 10 and d.cap_n_predict("x" * 4000, 128) == 128
+    assert d.cap_n_predict("", 128) == 1 and d.cap_n_predict(None, 128) == 1
+    b = d.build_body("PROMPT", "x" * 30, "live", 128)
+    assert b["n_predict"] == 10 and b["cache_prompt"] is True and b["prompt"] == "PROMPT" and b["temperature"] == 0.0
+    # raw /completion: no chat template, so no thinking knob and no messages/max_tokens keys
+    assert not {"chat_template_kwargs", "messages", "max_tokens"} & set(b)
+    assert d.build_body("P", "x" * 4000, "reference", 128)["n_predict"] == 1
+
+
+def test_reference_bound_excludes_unheld_output():
+    turns = [{"pre": "AAAA", "ref": "OUT1", "reset": False}, {"pre": "BB", "ref": "OUT2", "reset": False}]
+    live = list(adapter.iter_prompts(turns, ["gen1", None]))
+    ref = list(adapter.iter_prompts(turns, None, slot_holds_output=False))
+    assert live[1][2] == "AAAAgen1" and live[1][1] == "AAAAgen1BB"
+    assert ref[1][1] == "AAAAOUT1BB" and ref[1][2] == "AAAA"
+    assert adapter.common_prefix_len(ref[1][1], ref[1][2]) == 4  # not 8: the slot never held OUT1
+    assert list(adapter.iter_prompts(turns, None))[1][2] == "AAAAOUT1"  # default behaviour unchanged

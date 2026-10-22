@@ -388,9 +388,11 @@ def common_prefix_len(a: str, b: str) -> int:
     return lo
 
 
-def iter_prompts(turns, outputs=None):
+def iter_prompts(turns, outputs=None, slot_holds_output=True):
     """Yield (k, prompt, prev_text); prev_text = previous prompt + its output (what the slot cache
-    holds if it kept the generated tokens), None at a lineage start. outputs=None -> reference."""
+    holds if it kept the generated tokens), None at a lineage start. outputs=None -> reference.
+    slot_holds_output=False (reference/prefill-only replay, n_predict 1): the slot holds only the previous PROMPT
+    (+1 token), so the attainable bound stops at the previous prompt; the replayed recorded output is new text."""
     hist, prev = "", None
     for k, t in enumerate(turns):
         if t.get("reset"):
@@ -399,7 +401,7 @@ def iter_prompts(turns, outputs=None):
         yield k, prompt, prev
         out = t["ref"] if outputs is None or k >= len(outputs) or outputs[k] is None else outputs[k]
         hist = prompt + out
-        prev = hist
+        prev = hist if slot_holds_output else prompt
 
 
 def ideal_profile(turns):

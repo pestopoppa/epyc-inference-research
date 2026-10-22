@@ -136,6 +136,23 @@ def load_outputs(path):
     return outs
 
 
+def cap_n_predict(ref, n_predict, chars_per_token=3.0):
+    """Live-history generation cap: the recorded reply length in tokens (chars/3 is an UPPER bound for these
+    prompts, which measure ~4 chars/token), never above --n-predict, at least 1."""
+    return max(1, min(int(n_predict), -(-len(ref or "") // int(chars_per_token))))
+
+
+def build_body(prompt, ref, history, n_predict):
+    """Request body for the OWN server's RAW /completion. Deliberately NOT /v1/chat/completions: the chat template
+    wraps the prompt in a user turn and appends an assistant header, so the next request (prompt + output + new text)
+    would diverge from the slot at the template tail instead of extending it -- forcing a recurrent-state rollback on
+    every request and measuring something other than the declared bound. Raw /completion applies no template, so
+    enable_thinking / chat_template_kwargs do not exist on this path (see PREDECLARED amendment 2)."""
+    n = cap_n_predict(ref, n_predict) if history == "live" else 1
+    return {"prompt": prompt, "n_predict": n, "cache_prompt": True,
+            "temperature": 0.0, "stream": False, "return_tokens": False}
+
+
 class Replay:
     def __init__(self, a, base):
         self.a, self.base = a, base
@@ -222,7 +239,7 @@ class Replay:
             outputs.append(self.outs.get((sid, k)) if live else None)
         n = 0
         paused_after_burst = False
-        for k, prompt, prev in adapter.iter_prompts(turns, outputs if live else None):
+        for k, prompt, prev in adapter.iter_prompts(turns, outputs if live else None, slot_holds_output=live):
             if self.stop.is_set():
                 return n
             if (sid, k) in self.done:
@@ -236,8 +253,7 @@ class Replay:
                 self.seq += 1
             self._bump("inflight", 1)
             t0 = time.time()
-            body = {"prompt": prompt, "n_predict": self.a.n_predict if live else 1, "cache_prompt": True,
-                    "temperature": 0.0, "stream": False, "return_tokens": False}
+            body = build_body(prompt, turns[k]["ref"], self.a.history, self.a.n_predict)
             try:
                 r = http_json(f"{self.base}/completion", body, timeout=self.a.timeout)
             except Exception as e:  # recorded, session stops; analysis excludes the session from all arms

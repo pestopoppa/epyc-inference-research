@@ -78,6 +78,17 @@ PY
 mapfile -t DARGS <<<"$DARGS_OUT"
 SESSIONS_MODE="${DARGS[0]}"; DARGS=("${DARGS[@]:1}")
 [ "${DARGS[0]:-}" != "" ] || DARGS=()
+# Qwen3.x thinking default is ON; server-side `--reasoning off` (frozen v10: default enable_thinking=false; a per-request
+# enable_thinking:true still overrides) + a first-reply preflight. Shared helper, coordinator 3c4ca599, 2026-10-22.
+QWEN_LIB="${KPF64_QWEN_LIB:-/mnt/raid0/llm/tmp/fillers-3c4ca599/jobs/qwen_thinking_lib.sh}"
+if [ -r "$QWEN_LIB" ]; then
+  # shellcheck disable=SC1090
+  source "$QWEN_LIB"
+  mapfile -t RARGS < <(qwen_reasoning_args "$(printf '%s\n' "${CMD[@]}" | awk '$0=="-m"{getline; print; exit}')" | tr ' ' '\n' | sed '/^$/d')
+  CMD+=("${RARGS[@]}")
+elif [ "$DRY" != 1 ]; then
+  echo "arm_launcher: refusing: $QWEN_LIB not readable (needed for --reasoning off + preflight; set KPF64_QWEN_LIB)" >&2; exit 2
+fi
 LINK="${KPF64_LINKAGE:-$HERE/../../utils/verify_ggml_linkage.sh}"
 PREFIX=(); [ -z "${KPF64_LAUNCH_PREFIX:-}" ] || read -r -a PREFIX <<<"$KPF64_LAUNCH_PREFIX"
 OUT="${OUT:-/mnt/raid0/llm/tmp/kpf64-arm-$ARM}"
@@ -85,6 +96,7 @@ DRIVER=(python3 "$HERE/replay_driver.py" --sessions "${SESSIONS:-SESSIONS_DIR}" 
         --port "$PORT" --server-log "$OUT/server.log" --slots 4 "${DARGS[@]}")
 
 if [ "$DRY" = 1 ]; then
+  echo "preflight: qwen_first_reply_preflight $PORT after own-PID port proof, before replay (rc!=0 fails the arm)"
   echo "DRY-RUN arm=$ARM device=$DEVICE port=$PORT (nothing started)"
   echo "LD_LIBRARY_PATH=$BIN_DIR"
   echo "server : ${PREFIX[*]:-} ${CMD[*]}"
@@ -129,5 +141,11 @@ if [ "$DEVICE" = gpu ]; then
     done ) &
   VPID=$!
 fi
+
+# own-PID port proof, then the first-reply preflight (rc 9 = thinking ON / empty content, rc 8 = transport)
+tr '\0' ' ' <"/proc/$SPID/cmdline" | grep -q -- "--port $PORT " || { echo "arm_launcher: pid $SPID does not serve --port $PORT" >&2; exit 1; }
+pf=0; pfout="$(qwen_first_reply_preflight "$PORT")" || pf=$?
+echo "$pfout" | tee "$OUT/preflight.txt"
+[ "$pf" = 0 ] || { echo "arm_launcher: first-reply preflight failed rc=$pf; arm failed cleanly" >&2; exit "$pf"; }
 
 "${DRIVER[@]}" --own-server-pid "$SPID" "${EXTRA[@]}"

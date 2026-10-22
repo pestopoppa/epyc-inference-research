@@ -152,3 +152,39 @@ store-wide).
 `tests/test_kpf_lb2.py` (15 test functions: link order, time fallback, V1/V2 never-both, zero-session failures, gaps and
 scale/cap, burst pause ordering, anchor-only parents, oversubscription flag, both bounds, fan-out); the original 14
 tests are unchanged and pass.
+
+---
+
+# Amendment 2 (KPF-64 runtime, 2026-10-22, pre-run; no arm has completed)
+Voided partial arms: `pass1-A` (196/400 requests, 10,140 s wall) and `pass2-D` (260/400, 9,586 s); both hit the 2h50m window
+end with no DONE marker, were moved (not deleted) to `qb2-kpf64/results/voided-20261022T1420/`, and contribute nothing.
+Their request logs were used only to measure rates.
+
+**Finding.** Model OUTPUT is used in `--history live`: the generated text is stored (`outputs.jsonl`), re-sent as part of
+every later prompt of the lineage, and defines `prev`/`ideal` (`adapter.iter_prompts`). It is not used in the metric itself
+(only server `prompt_n`/`cache_n` are). So the "output unused, set n_predict 1" branch does NOT apply to the primary run.
+The "thinking burns the decode budget" diagnosis is also not what the logs show: predicted_n averaged 119 per request, below
+the 128 cap, and the driver talks to RAW `/completion` (no chat template, so `enable_thinking` does not exist on this path).
+Decode cost is contention: 23,313 tokens took 29,070 summed slot-seconds (0.80 tok/s per slot; 1.08 in pass2-D) because
+three other slots are prefilling in the same batches, while prefill alone runs at ~200 tok/s aggregate (server.log).
+
+**Changes (primary design unchanged).**
+1. Live generation is capped at the recorded reply length (`cap_n_predict`: ceil(ref_chars/3) tokens, <= 128, >= 1).
+   Effect: ~17% fewer decode tokens (42.6k vs 51.2k per arm); outputs stay live, so the lineage and the bound are unchanged.
+2. The endpoint stays raw `/completion`, by design: `/v1/chat/completions` would add a template tail between the prompt
+   and the generated text, so every next request would diverge from the slot at that tail and force a recurrent-state
+   rollback, changing what the arms measure. No `chat_template_kwargs` is sent (`build_body`, unit-tested).
+3. `--history reference` (n_predict 1) is now a valid labelled variant: the ideal bound uses `slot_holds_output=False`
+   (the slot holds only the previous prompt, so recorded output text is new tokens for every arm). Not the primary run.
+
+**Time (24 threads, CPU, measured).** Live: ~20.7 ks (A) / ~14.7 ks (D) per arm by extrapolation of 196/10,140 s and
+260/9,586 s, i.e. 5.7 h / 4.1 h; job MINARM (x1.15): A, B, C 23,800 s, D 16,900 s (B, C unmeasured, priced as A).
+Reference variant: prefill-only at ~200 tok/s, A ~1.9M uncached tokens ~9.4 ks + load, D ~1.1M ~5.5 ks; MINARM 11,500 / 8,100 s.
+The poller `--min-window 4500` is below every arm: raise it (live >= 16,900 s; reference >= 8,100 s). A 2h50m (10,200 s)
+window cannot complete a live arm; arms are atomic, so live runs need windows of >= 6.6 h.
+
+**Amendment 2 addendum (same day).** The server argv now carries `--reasoning off` and the launcher runs `qwen_first_reply_preflight`
+(shared helper, rc 9 = reasoning_content non-empty or content empty) after the own-PID port proof and before replay; a
+non-zero rc fails the arm cleanly. The preflight is one 16-token chat request on slot 0 before any replay prompt; it shares no
+prefix with replay prompts and is identical across arms. The replay body itself stays raw `/completion`, where no chat-template
+kwarg exists, so no per-request `enable_thinking` is sent there.
