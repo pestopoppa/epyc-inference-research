@@ -16,7 +16,7 @@ request plus its reply. Truncation (rare) drops the oldest messages.
 
 Endpoint config (constructor args, overridable with ``--system.<arg> value``;
 env fallbacks CLBENCH_EPYC_BASE_URL / CLBENCH_EPYC_API_KEY): base_url, model,
-temperature, max_output_tokens, max_context_tokens, timeout_s.
+temperature, max_output_tokens, max_context_tokens, timeout_s, enable_thinking (default False).
 """
 
 from __future__ import annotations
@@ -75,6 +75,7 @@ class EpycLocalSystem(ContinualLearningSystem):
         max_context_tokens: int = 120000,
         timeout_s: float = 600.0,
         parse_retries: int = 1,
+        enable_thinking: bool | str = False,
     ):
         self._name = name
         self.base_url = (base_url or os.environ.get("CLBENCH_EPYC_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
@@ -85,6 +86,9 @@ class EpycLocalSystem(ContinualLearningSystem):
         self.max_context_tokens = int(max_context_tokens)
         self.timeout_s = float(timeout_s)
         self.parse_retries = int(parse_retries)
+        # Qwen3.6+ think by default; thinking spends the whole max_output_tokens budget and leaves content == ""
+        # (CME-7 s5 smoke 2026-10-22: 4/8 first calls ended at 2048 tokens, EOF json_invalid). Thinking OFF is the rule.
+        self.enable_thinking = enable_thinking if isinstance(enable_thinking, bool) else str(enable_thinking).lower() in ("1", "true", "yes", "on")
         self._api_key = os.environ.get("CLBENCH_EPYC_API_KEY", "")
         self.messages: list[dict[str, str]] = []
         self.interaction_count = 0
@@ -176,6 +180,7 @@ class EpycLocalSystem(ContinualLearningSystem):
             "temperature": self.temperature,
             "max_tokens": self.max_output_tokens,
             "stream": False,
+            "chat_template_kwargs": {"enable_thinking": self.enable_thinking},
         }).encode()
         headers = {"Content-Type": "application/json"}
         if self._api_key:
@@ -190,6 +195,11 @@ class EpycLocalSystem(ContinualLearningSystem):
             text = payload["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError) as exc:
             raise EndpointError(f"malformed chat response: {str(payload)[:200]}") from exc
+        if not text.strip():
+            fin = payload["choices"][0].get("finish_reason")
+            think = bool((payload["choices"][0].get("message") or {}).get("reasoning_content"))
+            raise EndpointError(f"empty content (finish_reason={fin}, reasoning_content={'present' if think else 'absent'}, "
+                                f"enable_thinking={self.enable_thinking}): reasoning exhausted max_output_tokens={self.max_output_tokens}?")
         u = payload.get("usage") or {}
         cached = (u.get("prompt_tokens_details") or {}).get("cached_tokens")
         usage = UsageEvent(

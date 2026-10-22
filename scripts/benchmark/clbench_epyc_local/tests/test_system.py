@@ -120,3 +120,20 @@ def test_truncation_drops_oldest(mod):
         for _ in range(3):
             s.respond(Query(prompt="x" * 150, response_schema=Schema))
     assert s.truncation_count > 0
+
+
+def test_thinking_off_is_sent_and_empty_content_is_a_loud_error(mod):
+    """CME-7 s5 regression: Qwen3.6 thinking ate the 2048-token budget -> content "" -> pydantic json_invalid."""
+    from src.interface import Query
+    with StubServer(['{"action": "ok"}']) as srv:
+        s = mod.EpycLocalSystem(base_url=srv.url)
+        s.respond(Query(prompt="p", response_schema=Schema))
+        assert srv.requests[0]["chat_template_kwargs"] == {"enable_thinking": False}
+    with StubServer(['{"action": "ok"}']) as srv:
+        s = mod.EpycLocalSystem(base_url=srv.url, enable_thinking="true")
+        s.respond(Query(prompt="p", response_schema=Schema))
+        assert srv.requests[0]["chat_template_kwargs"] == {"enable_thinking": True}
+    with StubServer([""]) as srv:
+        s = mod.EpycLocalSystem(base_url=srv.url)
+        with pytest.raises(mod.EndpointError, match="empty content"):
+            s.respond(Query(prompt="p", response_schema=Schema))
