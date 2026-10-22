@@ -314,6 +314,37 @@ class Budgets(unittest.TestCase):
             self.assertEqual(K.done_keys(Path(d) / "missing.jsonl"), (set(), set(), set()))
 
 
+class SmokeGate(unittest.TestCase):
+    def good(self):
+        cell = dict(result="OK", junction_materialized=None)
+        reqs = [dict(probe="cold_build", prompt_n=8000, cache_n=0, n_prompt_total=8100, retained=dict(positions=[2064, 8040, 8096]), validation_problems=[]),
+                dict(probe="extend_1", prompt_n=2100, cache_n=8000, n_prompt_total=10200, validation_problems=[]),
+                dict(probe="edit_back_2048", prompt_n=2500, cache_n=7700, n_prompt_total=10200, validation_problems=[])]
+        return cell, reqs
+
+    def test_good_cell_passes(self):
+        self.assertEqual(K.smoke_check(*self.good()), [])
+
+    def test_each_assumption_failing_is_reported(self):
+        cell, reqs = self.good(); reqs[1]["prompt_n"] = None
+        self.assertTrue(any("prompt_n/cache_n missing" in p for p in K.smoke_check(cell, reqs)))
+        cell, reqs = self.good(); reqs[0]["retained"] = dict(positions=[])
+        self.assertTrue(any("no checkpoint log lines" in p for p in K.smoke_check(cell, reqs)))
+        cell, reqs = self.good(); reqs[0]["retained"] = dict(positions=[2064])
+        self.assertTrue(any("not near the prompt end" in p for p in K.smoke_check(cell, reqs)))
+        cell, reqs = self.good(); reqs[1]["prompt_n"] = 9000
+        self.assertTrue(any("extend_1 control" in p for p in K.smoke_check(cell, reqs)))
+        cell, reqs = self.good(); reqs[0]["prompt_n"] = 100
+        self.assertTrue(any("not cold" in p for p in K.smoke_check(cell, reqs)))
+        cell, reqs = self.good(); reqs[2]["validation_problems"] = ["missing cpu_list"]
+        self.assertTrue(any("validator" in p for p in K.smoke_check(cell, reqs)))
+        cell, reqs = self.good(); cell["result"] = "ERRORS"
+        self.assertTrue(any("cell result" in p for p in K.smoke_check(cell, reqs)))
+        cell, reqs = self.good(); cell["junction_materialized"] = False
+        self.assertTrue(any("junction" in p for p in K.smoke_check(cell, reqs)))
+        self.assertTrue(K.smoke_check(dict(result="OK"), []))
+
+
 class Calibration(unittest.TestCase):
     def cell(self, model="q36_35b", kind="ckpt", unit="8k", raw=100.0):
         return K.Cell(model, "dense", kind, unit, 0, raw, raw * 1.25, "t")
@@ -615,6 +646,10 @@ class RunLoop(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             self.run_main("--stages", "holdout")
         self.assertIn("selection", str(cm.exception))
+
+    def test_smoke_failure_aborts_with_rc_7(self):
+        rc, calls, out = self.run_main("--stages", "select", "--arms", "dense,coarse", "--smoke", launch_side_effect=lambda lc, todo, out: "smoke")
+        self.assertEqual(rc, 7); self.assertEqual(len(calls), 1); self.assertIn("RUN_END reason=SMOKE_FAILED", out)
 
     def test_production_ports_refused(self):
         with self.assertRaises(SystemExit):

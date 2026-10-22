@@ -1026,6 +1026,39 @@ def probe_capability(port, arm):
     return True
 
 
+def smoke_check(cell_row, req_rows):
+    """Live smoke gate on the FIRST cell of a run (--smoke): does what the driver assumed about the server actually appear? Pure; returns problems ([] = pass).
+    Checks: the cell is OK; every request row has prompt_n and cache_n (timings reached the driver) and passes the shared validator; the server's checkpoint
+    log lines were parsed (>=1 retained after the cold build, one of them near the prompt end); the extend_1 control re-processed only the appended turn;
+    a junction arm shows its pinned junction."""
+    bad = []
+    if cell_row.get("result") != "OK":
+        bad.append(f"cell result {cell_row.get('result')}")
+    if not req_rows:
+        bad.append("no per-request rows written")
+    for r in req_rows:
+        if r.get("prompt_n") is None or r.get("cache_n") is None:
+            bad.append(f"{r.get('probe')}: prompt_n/cache_n missing (chat stream timings/usage not reaching the driver)")
+        if r.get("validation_problems"):
+            bad.append(f"{r.get('probe')}: validator {r['validation_problems']}")
+    cold = [r for r in req_rows if r.get("probe") == "cold_build"]
+    if cold:
+        c = cold[0]
+        pos = (c.get("retained") or {}).get("positions") or []
+        if not pos:
+            bad.append("cold_build: no checkpoint log lines parsed (check -lv 4 and the log format)")
+        elif c.get("n_prompt_total") and max(pos) < c["n_prompt_total"] - 64:
+            bad.append(f"cold_build: newest checkpoint {max(pos)} is not near the prompt end {c['n_prompt_total']}")
+        if c.get("prompt_n") is not None and c.get("n_prompt_total") and c["prompt_n"] < 0.5 * c["n_prompt_total"]:
+            bad.append(f"cold_build: prompt_n {c['prompt_n']} << prompt {c['n_prompt_total']}: the slot was not cold")
+    ext = [r for r in req_rows if r.get("probe") == "extend_1"]
+    if ext and ext[0].get("prompt_n") is not None and ext[0].get("n_prompt_total") and ext[0]["prompt_n"] > 0.5 * ext[0]["n_prompt_total"]:
+        bad.append(f"extend_1 control re-processed {ext[0]['prompt_n']} of {ext[0]['n_prompt_total']} tokens (expected ~ the appended turn)")
+    if cell_row.get("junction_materialized") is False:
+        bad.append("junction arm: no pinned junction checkpoint appeared")
+    return bad
+
+
 def partial_row(cell, reqs, wall_s):
     """What a cell that was killed (cap, STOP escalation, SIGTERM) had completed: one compact entry per finished request. The full per-request rows
     (validated capture rows with retained-checkpoint state) are already in requests.jsonl, written as each request completed."""
@@ -1091,6 +1124,15 @@ def run_launch(a, launch, todo, budget, calib, ctx_common, out):
             append_jsonl(out / CELLS_FILE, row)
             if row["result"] == "OK":
                 calib.observe(c.model, c.kind, c.unit, c.est_raw, wall)
+            if getattr(a, "smoke", False) and not ctx_common.get("smoke_done"):
+                ctx_common["smoke_done"] = True
+                mine = [r for r in read_rows(out / REQS_FILE) if r.get("cell_key") == c.key]
+                probs = smoke_check(row, mine)
+                append_jsonl(out / CELLS_FILE, dict(schema=SCHEMA, cell_key=f"smoke|{c.key}", result=("SMOKE_OK" if not probs else "SMOKE_FAILED"), problems=probs,
+                                                    ts=time.strftime("%FT%TZ", time.gmtime())))
+                say(f"SMOKE {'OK' if not probs else 'FAILED: ' + '; '.join(probs)}")
+                if probs:
+                    return "smoke"
             say(f"CELL {c.key} result={row['result']} wall={row['wall_s']}s model_est={row['est_raw_s']}s planned={row['est_planned_s']}s actual/model={row['actual_over_model']}")
         return "done"
     finally:
@@ -1159,6 +1201,9 @@ def cmd_run(a):
         if res == "nofit": n_nofit += 1                                # a later, cheaper launch may still fit
         if res == "stop":
             reason = "STOP file"; break
+        if res == "smoke":
+            print(f"RUN_END reason=SMOKE_FAILED blocked_cells={n_blocked} refused_start_launches={n_nofit}", flush=True)
+            return 7
     print(f"RUN_END reason={reason} blocked_cells={n_blocked} refused_start_launches={n_nofit}", flush=True)
     return 0
 
@@ -1218,6 +1263,7 @@ def main(argv=None):
     pl = sub.add_parser("plan", help="dry-run: launches, cells, estimates, resources; starts nothing"); common(pl)
     ru = sub.add_parser("run", help="run as a filler: STOP file + deadline + per-cell resume"); common(ru)
     ru.add_argument("--out", required=True); ru.add_argument("--stop-file", default=""); ru.add_argument("--deadline-epoch", type=int, default=0)
+    ru.add_argument("--smoke", action="store_true", help="validate the FIRST cell run (checkpoint log lines parsed, prompt_n/cache_n present, control probe sane); abort rc 7 if not");
     ru.add_argument("--dry-run", action="store_true"); ru.add_argument("--retry-blocked", action="store_true"); ru.add_argument("--corpus-roots", default="/workspace/handoffs,/workspace/docs")
     de = sub.add_parser("decide", help="predeclared rules over cells.jsonl (starts nothing)")
     de.add_argument("--out", required=True); de.add_argument("--write-selection", default="")
