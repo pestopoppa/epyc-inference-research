@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **163,626** |
-| **DEFERRED** (provably unreachable) | **123,532** |
-| **TOTAL** | **287,158** |
+| **ON THE CAMPAIGN PATH** | **165,198** |
+| **DEFERRED** (provably unreachable) | **125,029** |
+| **TOTAL** | **290,227** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -172,7 +172,7 @@ incident or measured fact when you next touch the module.
 | `release/live_material.py` | 280 | no | actual-journal release-material compiler; hash-binds composed champion evidence to an exact externally measured full-build seal for operator-triggered dry run only, with no build, inference, process, transport, freeze, cutover or production-write authority |
 | `evaluator/__init__.py` | 41 | yes | docstring only — it binds no submodule, so importing `evaluator.api` does not drag the plane in |
 | `evaluator/api.py` | 3,320 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
-| `evaluator/correctness.py` | 4,160 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
+| `evaluator/correctness.py` | 4,235 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
 | `evaluator/recipes.py` | 2,471 | yes | argv from a hashed constructor — production drifted off NUMA interleave 2026-05-24 and the front door ended up at 46% of canonical |
 | `evaluator/devices.py` | 813 | yes | a GPU cell must not be satisfied by `Device 0: CPU` |
 | `evaluator/controls.py` | 2,406 | yes | the A/A control plane — 2026-08-04 measured 1.62% / 1.88% between-run CV over four identical runs |
@@ -201,7 +201,7 @@ incident or measured fact when you next touch the module.
 | `execution/reward_hack_scan.py` | 265 | yes | RVP-C6-6/C6-9 plus static C6-2/C6-3 detectors: protected-frame, pointer-memo, structured-shortcut, environment/timing and stream/thread findings; the named 10 planted/15 clean corpus states sensitivity/specificity/FPR, not arbitrary-program coverage |
 | `execution/reward_hack_corpus.py` | 586 | no | operator-invoked instrument producer that compiles and runs the named 10 planted/15 clean HIP corpus on gfx90a under the shared device claim, then prospectively writes 3 detector and 50 exact case×ranked-unit observations with no candidate-speed or campaign authority |
 | `execution/sandbox.py` | 1,076 | yes | C6/INF-03 process boundary: default candidate profile retains Landlock write confinement; broker-only controller profile default-denies networking and read/exec outside exact roots/files/executables while inheriting one peer-bound broker UDS; direct model profile binds fixed Claude/Bun self/kernel reads to the actual model PID, permits outbound INET clients, and denies broker/GPU/new AF_UNIX/server authority; evaluator profile exposes only exact ROCm devices and pinned runtime inputs while denying networking, broker inheritance, cross-process memory and io_uring; all retain signal/ptrace/namespace denials, finite limits, owned cgroup and policy-hashed receipts |
-| `execution/t0_provider.py` | 4,108 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
+| `execution/t0_provider.py` | 4,143 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
 | `execution/control_runner.py` | 1,859 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
 | `execution/live_controls.py` | 2,514 | no | standalone, operator-invoked calibration producer for the fixed five controls; it prepares the instrument before campaign #1 and is deliberately not imported by the mutation/build entrypoint |
 | `execution/cpu_region_claim.py` | 2,408 | yes | 2026-08-04: two A/A runs were destroyed by a legitimate co-tenant because the loop held no claim. Before this module a claim could be READ but never acquired |
@@ -245,7 +245,7 @@ incident or measured fact when you next touch the module.
 | `check_regrowth_guards.py` | 272 | no | Enforced guards against the growth pattern that produced this codebase. Not reachable from the declared campaign-#1 roots. |
 | `check_suite_floors.py` | 224 | no | Refuse a CI run whose suites silently got smaller. Not reachable from the declared campaign-#1 roots. |
 | `codegen_summary.py` | 678 | yes | Bounded, non-authoritative codegen evidence for a retained AutoKernel build. On the campaign path: first reached via `campaign`. |
-| `conftest.py` | 58 | no | Host-isolation for every AutoKernel unit test. Not reachable from the declared campaign-#1 roots. |
+| `conftest.py` | 114 | no | Host-isolation for every AutoKernel unit test. Not reachable from the declared campaign-#1 roots. |
 | `controller/anchor_integrity.py` | 184 | no | Code-section digests for the anchor guard's hash pre-check (R22-3). Not reachable from the declared campaign-#1 roots. |
 | `controller/build_recipe.py` | 357 | no | The GPU build recipe, versioned, with a stated reason for every divergence. Not reachable from the declared campaign-#1 roots. |
 | `controller/champion_seed.py` | 145 | no | Derive a sealed :class:`champion.AnchorIdentity` by MEASURING a real tree. Not reachable from the declared campaign-#1 roots. |
@@ -286,6 +286,7 @@ incident or measured fact when you next touch the module.
 | `hypothesis_portfolio.py` | 1,220 | no | Strict, read-only loader for the discovery hypothesis portfolio. Not reachable from the declared campaign-#1 roots. |
 | `loop/__init__.py` | 10 | yes | The AutoKernel discovery loop, rebuilt. On the campaign path: first reached via `controller.experiments`. |
 | `loop/a2_execution_state.py` | 421 | yes | Closed durable state for controller-owned A2 runtime phase events. On the campaign path: first reached via `journal`. |
+| `loop/ab_server_pair.py` | 204 | no | AKR-SG-2: launch an A/B llama-server pair on private ports with port-ownership, ggml-linkage and residency proofs (used only by the shakedown driver inside a confirmed window). Not reachable from the declared campaign-#1 roots. |
 | `loop/accumulate.py` | 796 | no | Compound-then-gate: batch cheap bench keeps until their compounded gain clears the serving floor, THEN spend the expensive serving gate once (R23-44, operator directive 2026-09-04: "collect llama-bench keeps until they compound to 2x-3x noise floor before the llama-server final c Not reachable from the declared campaign-#1 roots. |
 | `loop/actor_context.py` | 709 | yes | Variable-mode actor context: the bundle is a DIRECTORY, the prompt is its INDEX. On the campaign path: first reached via `loop.actors`. |
 | `loop/actor_lifecycle.py` | 341 | yes | Concrete actor-stage adapter over the owning campaign-controller path. On the campaign path: first reached via `loop.campaign_control`. |
@@ -297,11 +298,11 @@ incident or measured fact when you next touch the module.
 | `loop/actor_preparation_state.py` | 238 | yes | Closed native state machine for selected actor-preparation accounting. On the campaign path: first reached via `journal`. |
 | `loop/actor_serving.py` | 463 | yes | Client-side serving parameters for an actor talking to a LOCAL llama-server (UFH14-B1, F1). On the campaign path: first reached via `loop.actor_passthrough`. |
 | `loop/actor_tools_mcp.py` | 1,015 | no | Bounded-output code and profile tools for the autokernel planner/author actor. Not reachable from the declared campaign-#1 roots. |
-| `loop/actors.py` | 4,140 | yes | Real planner and critic, driven by an external coding agent. On the campaign path: first reached via `loop.actor_lifecycle`. |
+| `loop/actors.py` | 4,261 | yes | Real planner and critic, driven by an external coding agent. On the campaign path: first reached via `loop.actor_lifecycle`. |
 | `loop/ak_check.py` | 1,498 | yes | `ak-check`: the AutoKernel author's scratch sanity-check sandbox (operator 2026-09-26). On the campaign path: first reached via `loop.actors`. |
 | `loop/anchor.py` | 211 | no | Prove the promoted anchor IS the champion, before the loop draws any more work. Not reachable from the declared campaign-#1 roots. |
 | `loop/archive.py` | 658 | yes | Champion source identity and immutable measurement history. On the campaign path: first reached via `loop.serving_beliefs`. |
-| `loop/belief_context.py` | 655 | yes | Read-only Vidya belief context for the AutoKernel planner, and its receipt. On the campaign path: first reached via `loop.actors`. |
+| `loop/belief_context.py` | 813 | yes | Read-only Vidya belief context for the AutoKernel planner, and its receipt. On the campaign path: first reached via `loop.actors`. |
 | `loop/bench.py` | 702 | yes | Build one arm, measure it, compare the pair. On the campaign path: first reached via `loop.gates`. |
 | `loop/bestof.py` | 1,530 | no | Best-of-N concurrent authoring: N author calls for ONE accepted hypothesis. Not reachable from the declared campaign-#1 roots. |
 | `loop/calibrate_served_shapes.py` | 849 | no | Calibrate the ppl_contract layer (a) served-shape case set against the ANCHOR. Not reachable from the declared campaign-#1 roots. |
@@ -325,8 +326,9 @@ incident or measured fact when you next touch the module.
 | `loop/cpu_norm_reference.py` | 343 | yes | Independent RMS_NORM check for the `cpu_norm_rowsplit` route (DS41 hc_mixes norm). On the campaign path: first reached via `loop.cpu_route_witness`. |
 | `loop/cpu_profile.py` | 1,480 | yes | Owned, request-scoped CPU perf observations; no correctness or promotion authority. On the campaign path: first reached via `loop.serving`. |
 | `loop/cpu_quant_reference.py` | 378 | yes | Independent output check for fixed CPU Q4_K/Q5_K/Q8_0 (and F16/BF16/F32) matmul probes. On the campaign path: first reached via `loop.cpu_route_witness`. |
+| `loop/cpu_repack_cases.py` | 801 | yes | CPU_REPACK MUL_MAT_ID correctness gate for the DS41-1017 lane: exercises the repacked MXFP4 expert kernel that test-backend-ops never reaches. On the campaign path: first reached via `loop.gates`. |
 | `loop/cpu_route_gdb_probe.py` | 46 | no | Trusted GDB-side record for a stopped, single-case CPU source-route probe. Not reachable from the declared campaign-#1 roots. |
-| `loop/cpu_route_witness.py` | 361 | yes | Engagement witness plus independent scalar reference for the widened CPU routes. On the campaign path: first reached via `loop.gates`. |
+| `loop/cpu_route_witness.py` | 369 | yes | Engagement witness plus independent scalar reference for the widened CPU routes. On the campaign path: first reached via `loop.gates`. |
 | `loop/cpu_screen.py` | 573 | no | Reduced common CPU conditions in the existing loop, not transfer authority. Not reachable from the declared campaign-#1 roots. |
 | `loop/cpu_window.py` | 781 | no | CPU windows: yield the CPU-region claim during actor phases and say so (2026-09-26). Not reachable from the declared campaign-#1 roots. |
 | `loop/cross_target.py` | 615 | no | Cross-target lineage under the ONE-champion invariant: lane working branches fold into the single global champion. Not reachable from the declared campaign-#1 roots. |
@@ -344,7 +346,7 @@ incident or measured fact when you next touch the module.
 | `loop/feed_runtime.py` | 509 | yes | Execution-thread-owned continuous evidence; configuration is never authority. On the campaign path: first reached via `loop.evidence_feed`. |
 | `loop/fold2_gates.py` | 378 | no | The FOLD-2 correctness/perf gate battery, run by hand with the loop dead and GPU free. Not reachable from the declared campaign-#1 roots. |
 | `loop/fresh_correctness.py` | 202 | yes | Opt-in, non-ranked fresh-input correctness receipt for one benchmark arm. On the campaign path: first reached via `loop.bench`. |
-| `loop/gates.py` | 4,187 | yes | Correctness gates. On the campaign path: first reached via `loop.loop`. |
+| `loop/gates.py` | 4,293 | yes | Correctness gates. On the campaign path: first reached via `loop.loop`. |
 | `loop/gdn_reference.py` | 131 | yes | Independent, exact F32 GDN fixture for the CPU AutoKernel lane. On the campaign path: first reached via `loop.gates`. |
 | `loop/gpu_phases.py` | 161 | no | Original local resource owners for a GPU run without a run-wide CPU claim. Not reachable from the declared campaign-#1 roots. |
 | `loop/gpu_serving_profile.py` | 784 | no | GPU SERVING profile as a planner input (G2, AK long-context audit 2026-10-04 §4.2). Not reachable from the declared campaign-#1 roots. |
@@ -374,11 +376,13 @@ incident or measured fact when you next touch the module.
 | `loop/lifecycle_observation.py` | 1,814 | yes | Bounded, observation-only whole-lifecycle serving sampler. On the campaign path: first reached via `loop.cpu_profile`. |
 | `loop/lineage_beliefs.py` | 136 | no | Prospective, report-only lineage observation over committed loop outcomes. Not reachable from the declared campaign-#1 roots. |
 | `loop/lineage_capture.py` | 108 | no | Default-off prospective source capture for offline lineage diagnostics. Not reachable from the declared campaign-#1 roots. |
+| `loop/loadgen_selfcheck.py` | 134 | yes | AKR-SG-1: load-driver self-check (requested vs achieved start rate, client scheduling delay) and the survivorship rule for session-replay headlines. On the campaign path: first reached via `loop.serving`. |
 | `loop/longctx.py` | 980 | no | Long-context serving surface with prefill-once (audit C1 + C4, 2026-10-04). Not reachable from the declared campaign-#1 roots. |
 | `loop/longctx_tools.py` | 186 | no | Offline tooling for the long-context surface (longctx.py). Not reachable from the declared campaign-#1 roots. |
-| `loop/loop.py` | 2,097 | yes | The discovery loop. On the campaign path: first reached via `loop.actors`. |
+| `loop/loop.py` | 2,184 | yes | The discovery loop. On the campaign path: first reached via `loop.actors`. |
 | `loop/maintenance_execution.py` | 740 | yes | Bounded orchestration for retention maintenance ownership. On the campaign path: first reached via `journal`. |
 | `loop/measurement_capture.py` | 801 | yes | Prospective, per-arm evidence capture for :mod:`planned_serving`. On the campaign path: first reached via `loop.campaign_control`. |
+| `loop/metrics_map.py` | 69 | no | AKR-SG-2: map llama-server /metrics (Prometheus text, v10 names) into the paired serving-gate report; KV usage is reported as not_exposed, never zero. Not reachable from the declared campaign-#1 roots. |
 | `loop/migration_cli.py` | 84 | no | CLI for bounded legacy migration snapshots and rollback inspection. Not reachable from the declared campaign-#1 roots. |
 | `loop/model_identity.py` | 394 | yes | Whole-model output identity: the correctness gate for a placement/loader route. On the campaign path: first reached via `loop.gates`. |
 | `loop/native_capture_control.py` | 942 | yes | Validate prospective native carriers before the controller journals them. On the campaign path: first reached via `loop.campaign_control`. |
@@ -396,8 +400,9 @@ incident or measured fact when you next touch the module.
 | `loop/node_profile.py` | 563 | no | Out-of-band instrumented node/host/engram profiling of the loop's own anchor. Not reachable from the declared campaign-#1 roots. |
 | `loop/noop_build.py` | 81 | no | AKX-ALL-29.3: recognise a GPU candidate build that changed no kernel code. Not reachable from the declared campaign-#1 roots. |
 | `loop/observation_binding.py` | 884 | yes | Versioned binding between contained planned units and lifecycle observations. On the campaign path: first reached via `loop.actor_lifecycle`. |
+| `loop/paired_loadgen.py` | 143 | no | AKR-SG-2: paired A/B/A/B alternation wrapper around a load generator, emitting the existing serving-gate record against a measured noise floor. Not reachable from the declared campaign-#1 roots. |
 | `loop/perf_cache.py` | 306 | yes | Content-addressed cache for `perf report` / `perf annotate` subprocess output. On the campaign path: first reached via `loop.cpu_profile`. |
-| `loop/pipeline.py` | 475 | no | Run several iterations concurrently, with one serialized tail. Not reachable from the declared campaign-#1 roots. |
+| `loop/pipeline.py` | 514 | no | Run several iterations concurrently, with one serialized tail. Not reachable from the declared campaign-#1 roots. |
 | `loop/planned_serving.py` | 839 | yes | Execute a frozen serving ExperimentPlan through the existing launcher consumer. On the campaign path: first reached via `loop.cpu_profile`. |
 | `loop/planned_unit_selection.py` | 248 | yes | Immutable planned-unit transport. On the campaign path: first reached via `loop.native_capture_control`. |
 | `loop/pool.py` | 725 | no | The concurrent path's real-world wiring: git worktrees, refs, timing. Not reachable from the declared campaign-#1 roots. |
@@ -413,7 +418,8 @@ incident or measured fact when you next touch the module.
 | `loop/retention.py` | 568 | yes | Immutable retained-artifact closure and dry expiry planning. On the campaign path: first reached via `loop.campaign_control`. |
 | `loop/retention_consumer.py` | 461 | yes | Native, held consumer for the pure retention closure. On the campaign path: first reached via `loop.campaign_control`. |
 | `loop/roofline_coverage.py` | 394 | no | Per-node CPU roofline + admitted-route coverage: the loop's own autonomy self-check. Not reachable from the declared campaign-#1 roots. |
-| `loop/run.py` | 7,550 | no | Drive the discovery loop end to end on real hardware. Not reachable from the declared campaign-#1 roots. |
+| `loop/run.py` | 7,667 | no | Drive the discovery loop end to end on real hardware. Not reachable from the declared campaign-#1 roots. |
+| `loop/run_paired_serving_ab.py` | 146 | no | AKR-SG shakedown driver: paired A/B serving gate on a real endpoint pair (A/A shakedown allowed), run only with WINDOW_CONFIRMED=1. Not reachable from the declared campaign-#1 roots. |
 | `loop/runtime_admission.py` | 871 | no | Existing-loop runtime-only selection, using the original evaluator policy. Not reachable from the declared campaign-#1 roots. |
 | `loop/runtime_aggregates.py` | 199 | yes | Bounded diagnostic carrier; no execution, evidence or qualification authority. On the campaign path: first reached via `loop.campaign_control`. |
 | `loop/runtime_arms.py` | 709 | no | Declared runtime arms for the existing strict runtime-admission path. Not reachable from the declared campaign-#1 roots. |
@@ -430,11 +436,11 @@ incident or measured fact when you next touch the module.
 | `loop/seed_bundle.py` | 154 | no | R23-51a -- seed the durable accumulator bundle with a MEASURED tip-vs-cor number. Not reachable from the declared campaign-#1 roots. |
 | `loop/serial_build_retention.py` | 466 | no | Bounded reclamation of reproducible build caches from retired serial states. Not reachable from the declared campaign-#1 roots. |
 | `loop/serial_control.py` | 186 | no | Authenticated commands queued to the existing serial owner, never a second writer. Not reachable from the declared campaign-#1 roots. |
-| `loop/serial_roster.py` | 232 | no | Resolve owned launch inputs into the existing serial runner's ordinary argv. Not reachable from the declared campaign-#1 roots. |
+| `loop/serial_roster.py` | 238 | no | Resolve owned launch inputs into the existing serial runner's ordinary argv. Not reachable from the declared campaign-#1 roots. |
 | `loop/serial_run.py` | 2,701 | no | Serial finite batches of the existing loop, not another measurement owner. Not reachable from the declared campaign-#1 roots. |
-| `loop/serial_scheduling.py` | 713 | no | Closed scheduling inputs for the existing serial loop owner. Not reachable from the declared campaign-#1 roots. |
-| `loop/served_shape_cases.py` | 1,155 | yes | Served-shape `test-backend-ops` case set for the ppl_contract layer (a) gate (review 2026-10-06, `gates.ppl_contract_op_nmse` HONEST LIMITATIONS). On the campaign path: first reached via `loop.gates`. |
-| `loop/serving.py` | 2,340 | yes | Serving-throughput measurement: a keep is real only if it improves SERVING, not a llama-bench proxy (R23-43, operator directive 2026-09-04: "the only performance that matters is serving performance"). On the campaign path: first reached via `loop.bench`. |
+| `loop/serial_scheduling.py` | 716 | no | Closed scheduling inputs for the existing serial loop owner. Not reachable from the declared campaign-#1 roots. |
+| `loop/served_shape_cases.py` | 1,191 | yes | Served-shape `test-backend-ops` case set for the ppl_contract layer (a) gate (review 2026-10-06, `gates.ppl_contract_op_nmse` HONEST LIMITATIONS). On the campaign path: first reached via `loop.gates`. |
+| `loop/serving.py` | 2,351 | yes | Serving-throughput measurement: a keep is real only if it improves SERVING, not a llama-bench proxy (R23-43, operator directive 2026-09-04: "the only performance that matters is serving performance"). On the campaign path: first reached via `loop.bench`. |
 | `loop/serving_beliefs.py` | 216 | yes | Prospective direct-serving observations, using the established belief row vocabulary. On the campaign path: first reached via `loop.archive`. |
 | `loop/serving_gate.py` | 212 | no | Run the R23-44 serving gate ONCE on the seeded bundle, BY HAND. Not reachable from the declared campaign-#1 roots. |
 | `loop/serving_preparation.py` | 1,061 | yes | Prospective inputs for serving calibration through the existing worker. On the campaign path: first reached via `loop.campaign_control`. |
@@ -451,7 +457,7 @@ incident or measured fact when you next touch the module.
 | `loop/startup_factory.py` | 467 | no | Build closed standalone startup inputs offline from pinned enrollment artifacts. Not reachable from the declared campaign-#1 roots. |
 | `loop/status.py` | 392 | yes | The loop's live status, written for the dashboard to read. On the campaign path: first reached via `loop.campaign_control`. |
 | `loop/surface_fold.py` | 267 | no | Bounded original source-keep receipts; no fold or promotion authority. Not reachable from the declared campaign-#1 roots. |
-| `loop/surface_validation.py` | 483 | no | Exact original serving-gate rows for a propagated whole-source candidate. Not reachable from the declared campaign-#1 roots. |
+| `loop/surface_validation.py` | 489 | no | Exact original serving-gate rows for a propagated whole-source candidate. Not reachable from the declared campaign-#1 roots. |
 | `loop/target_profile_execution.py` | 291 | yes | Selected target-profile execution through the campaign-controller worker owner. On the campaign path: first reached via `loop.campaign_control`. |
 | `loop/unified_driver.py` | 1,344 | yes | Opt-in standalone consumer for unified planning and durable dispatch intent. On the campaign path: first reached via `loop.actor_lifecycle`. |
 | `loop/unified_planner.py` | 1,372 | yes | Pure unified planning and scheduler handoff for enrolled CPU/GPU targets. On the campaign path: first reached via `loop.actors`. |
@@ -462,6 +468,7 @@ incident or measured fact when you next touch the module.
 | `loop/validation_objective_decision.py` | 235 | no | Seal the actual AutoKernel readiness result without upgrading its authority. Not reachable from the declared campaign-#1 roots. |
 | `loop/validation_projection_source.py` | 251 | yes | Prospective canonical receipt provenance, never live or scientific authority. On the campaign path: first reached via `loop.validation_claim_receipt`. |
 | `loop/validation_semantic_adapter.py` | 569 | yes | Pinned bridge to the canonical ROOT ClaimTuple projection and grade. On the campaign path: first reached via `loop.feed_runtime`. |
+| `loop/width_dimension.py` | 226 | no | AKX-ALL-27: width invariance as an observe-only keep dimension, compared relative to the anchor's own AKX-ALL-26 table; refuses nothing. Not reachable from the declared campaign-#1 roots. |
 | `loop/width_invariance.py` | 399 | no | AKX-ALL-26 width-invariance op probe: driver, first-fail-k table and prediction scoring. Not reachable from the declared campaign-#1 roots. |
 | `loop/worker_bootstrap.py` | 282 | yes | Pipe-gated bootstrap for one exact lifecycle worker command. On the campaign path: first reached via `loop.worker_lifecycle`. |
 | `loop/worker_lifecycle.py` | 2,471 | yes | Durable consumer for one exactly owned, provider-authorized worker stage. On the campaign path: first reached via `journal`. |
