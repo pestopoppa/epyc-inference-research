@@ -7,6 +7,7 @@ from pathlib import Path
 
 import adapter
 import analysis
+import pytest
 
 HERE = Path(__file__).resolve().parents[1]
 
@@ -252,3 +253,68 @@ def test_reference_bound_excludes_unheld_output():
     assert ref[1][1] == "AAAAOUT1BB" and ref[1][2] == "AAAA"
     assert adapter.common_prefix_len(ref[1][1], ref[1][2]) == 4  # not 8: the slot never held OUT1
     assert list(adapter.iter_prompts(turns, None))[1][2] == "AAAAOUT1"  # default behaviour unchanged
+
+
+# ---- KPF-64.1: cloud-LLM vault sources ---------------------------------------------------------
+def mk_vault(tmp_path):
+    v = tmp_path / "vault"
+    cl = [{"type": "user", "message": {"content": "vault q " * 30}},
+          {"type": "assistant", "message": {"content": [{"type": "text", "text": "VA1"}]}},
+          {"type": "user", "message": {"content": "vault q2 " * 30}},
+          {"type": "assistant", "message": {"content": [{"type": "text", "text": "VA2"}]}}]
+    w(v / "twyne/claude/-proj/vsess.jsonl", cl)
+    w(v / "twyne/claude/-proj/vsess/subagents/agent-ab12.jsonl", cl)
+    w(v / "host/claude/-proj/s1.jsonl", cl)                      # same name as a live session: deduped
+    w(v / "host/codex/2026/10/01/rollout-v.jsonl", [{"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"text": "q " * 30}]}},
+                                                      {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"text": "done"}]}}])
+    w(v / "host/claude/-proj/notes.txt", [])                     # not a transcript
+    return v
+
+
+def test_vault_files_layout_and_unknown_source(tmp_path):
+    v = mk_vault(tmp_path)
+    cl = adapter.vault_files("claude", ("twyne", "host"), str(v))
+    names = sorted(os.path.basename(f) for f, _ in cl)
+    assert names == ["agent-ab12.jsonl", "s1.jsonl", "vsess.jsonl"]
+    assert {t for _, t in cl} == {"vault:twyne", "vault:host"}
+    assert [os.path.basename(f) for f, _ in adapter.vault_files("claude", ("twyne",), str(v), include_subagents=False)] == ["vsess.jsonl"]
+    assert len(adapter.vault_files("codex", ("host",), str(v))) == 1
+    assert adapter.vault_files("claude", ("epyc",), str(v)) == []        # source dir absent -> empty, not an error
+    with pytest.raises(ValueError):
+        adapter.vault_files("claude", ("nope",), str(v))
+
+
+def test_vault_default_off_and_live_wins_dedup(tmp_path):
+    h, v = mk_home(tmp_path), mk_vault(tmp_path)
+    base = adapter.candidates("claude", str(h), vault_sources=None, vault_root=str(v))
+    assert all(c[2] is None for c in base)                               # default: predeclared pool unchanged
+    withv = adapter.candidates("claude", str(h), vault_sources=("host", "twyne"), vault_root=str(v))
+    assert [c for c in withv if c[2] is None] == base                    # live candidates unchanged and first
+    tags = [adapter.source_of(c) for c in withv]
+    assert "vault:twyne" in tags and tags.count("live") == len(base)
+    assert not any(c[2] == "vault:host" and os.path.basename(c[1]) == "s1.jsonl" for c in withv)
+
+
+def test_vault_sampling_tags_source_and_loads_turns(tmp_path):
+    h, v = mk_home(tmp_path), mk_vault(tmp_path)
+    oc = [str(h / ".local/share/opencode/opencode.db")]
+    picked = adapter.sample_sessions(str(h), n=4, seed=1, min_requests=2, stores=("claude", "codex"), opencode_dbs=oc,
+                                     vault_sources=("host", "twyne"), vault_root=str(v))
+    srcs = {adapter.source_of(x[1]) for x in picked}
+    assert srcs & {"vault:twyne", "vault:host"} and all(len(x[2]) >= 2 for x in picked)
+    man = adapter.build_manifest(picked, {})
+    assert {r["source"] for r in man["sessions"]} == srcs
+
+
+def test_vault_unreadable_dir_is_reported_not_chmodded(tmp_path, monkeypatch):
+    v = mk_vault(tmp_path)
+    real = os.walk
+    def walk(top, onerror=None, **kw):
+        if onerror:
+            onerror(PermissionError(13, "Permission denied", str(v / "host/claude/locked")))
+        return real(top, onerror=onerror, **kw)
+    monkeypatch.setattr(os, "walk", walk)
+    adapter.VAULT_ERRORS.clear()
+    adapter.vault_files("claude", ("host",), str(v))
+    assert adapter.VAULT_ERRORS and "locked" in adapter.VAULT_ERRORS[0][0]
+    adapter.VAULT_ERRORS.clear()

@@ -486,7 +486,54 @@ def _ro(db):
     return opencode_ro.open_ro(db)
 
 
-def candidates(store, home, include_subagents=True, opencode_dbs=None):
+# KPF-64.1: the operator's cloud-LLM vault (read-only copies of the Claude/Codex transcripts of every host):
+# <root>/<source>/{claude,codex}/ with the same on-disk layout as ~/.claude/projects and ~/.codex/sessions.
+VAULT_ROOT = "/mnt/raid0/llm/cloud-llm-vault"
+VAULT_SOURCES = ("host", "twyne", "epyc")
+VAULT_ERRORS = []     # (path, error) of every directory the walk could not read; reported, never chmod'ed
+
+
+def vault_tag(source):
+    return f"vault:{source}"
+
+
+def source_of(cand):
+    """Source tag of a candidate: opencode -> epyc|host snapshot; claude/codex -> vault:<src> or 'live'."""
+    store, _ref, tag = cand
+    if store == "opencode":
+        return opencode_ro.source_for(tag)
+    return tag or "live"
+
+
+def vault_files(store, vault_sources, vault_root=VAULT_ROOT, include_subagents=True):
+    """(path, tag) of the vault transcripts of `store` under each requested source, sorted.
+    claude: <src>/claude/<proj>/<id>.jsonl (+ <proj>/<id>/subagents/agent-*.jsonl); codex:
+    <src>/codex/Y/M/D/*.jsonl. A directory the walk cannot read is appended to VAULT_ERRORS."""
+    out = []
+    for src in (vault_sources or ()):
+        if src not in VAULT_SOURCES:
+            raise ValueError(f"unknown vault source {src!r}; expected one of {VAULT_SOURCES}")
+        root = os.path.join(vault_root, src, store)
+        if not os.path.isdir(root):
+            continue
+        for dp, _dn, fns in os.walk(root, onerror=lambda e: VAULT_ERRORS.append((str(e.filename), str(e)))):
+            rel = os.path.relpath(dp, root).split(os.sep)
+            for fn in fns:
+                if not fn.endswith(".jsonl"):
+                    continue
+                if store == "claude":
+                    # top-level: depth 1 (<proj>/x.jsonl); subagent: <proj>/<id>/subagents/agent-*.jsonl
+                    top = len(rel) == 1
+                    sub_ = len(rel) == 3 and rel[2] == "subagents" and fn.startswith("agent-")
+                    if not (top or (sub_ and include_subagents)):
+                        continue
+                elif len(rel) != 3:      # Y/M/D
+                    continue
+                out.append((os.path.join(dp, fn), vault_tag(src)))
+    return sorted(out)
+
+
+def candidates(store, home, include_subagents=True, opencode_dbs=None, vault_sources=None, vault_root=VAULT_ROOT):
     """Candidate sessions of `store`, sorted.
 
     `include_subagents=True` is the PREDECLARED pool (flat mode): Claude sub-agent transcripts and
@@ -499,9 +546,11 @@ def candidates(store, home, include_subagents=True, opencode_dbs=None):
         fs = glob.glob(home + "/.claude/projects/*/*.jsonl")
         if include_subagents:
             fs += glob.glob(home + "/.claude/projects/*/*/subagents/*.jsonl")
-        return [("claude", f, None) for f in sorted(fs)]
+        live = [("claude", f, None) for f in sorted(fs)]
+        return live + _vault_cands("claude", live, vault_sources, vault_root, include_subagents)
     if store == "codex":
-        return [("codex", f, None) for f in sorted(glob.glob(home + "/.codex/sessions/*/*/*/*.jsonl"))]
+        live = [("codex", f, None) for f in sorted(glob.glob(home + "/.codex/sessions/*/*/*/*.jsonl"))]
+        return live + _vault_cands("codex", live, vault_sources, vault_root, include_subagents)
     out = []
     for _src, db in opencode_ro.resolve_dbs(opencode_dbs):      # default: both snapshots; live paths refused
         if not os.path.exists(db):
@@ -517,6 +566,22 @@ def candidates(store, home, include_subagents=True, opencode_dbs=None):
             out += [("opencode", r[0], db) for r in con.execute(q)]
         finally:
             con.close()
+    return out
+
+
+def _vault_cands(store, live, vault_sources, vault_root, include_subagents):
+    """Vault candidates not already present as a live session (same file name = same session id;
+    the live store wins so the current container's sessions are never double counted)."""
+    if not vault_sources:
+        return []
+    seen = {os.path.basename(c[1]) for c in live}
+    out = []
+    for f, tag in vault_files(store, vault_sources, vault_root, include_subagents):
+        b = os.path.basename(f)
+        if b in seen:
+            continue
+        seen.add(b)
+        out.append((store, f, tag))
     return out
 
 
@@ -579,7 +644,7 @@ def children_of(cand, parent_turns):
             k, link = (spawn_turn.get(tid), "explicit") if tid in spawn_turn else (None, None)
             if k is None:
                 k, link = _parent_turn_by_time(parent_turns, _first_ts(turns)), ("time" if parent_turns else "none")
-            kids.append({"cand": ("claude", f, None), "turns": turns, "parent_turn": k,
+            kids.append({"cand": ("claude", f, db), "turns": turns, "parent_turn": k,
                          "async": bool(v and v["async"]), "link": link or "none"})
     elif store == "opencode":
         con = _ro(db)
@@ -667,7 +732,8 @@ def quotas(n, stores):
 
 def sample_sessions(home, n=20, seed=64, stores=STORES, min_requests=10,
                     max_prompt_chars=200_000, max_requests=200, allow_empty_store=False,
-                    mode="flat", min_children=2, min_child_requests=3, max_children=8, opencode_dbs=None):
+                    mode="flat", min_children=2, min_child_requests=3, max_children=8, opencode_dbs=None,
+                    vault_sources=None, vault_root=VAULT_ROOT):
     """Deterministic. Per store: candidates sorted, shuffled with Random(f'{seed}:{store}'); the first
     `quota` sessions passing the filters (after truncation) are taken. A store that cannot fill its
     quota hands the shortfall to the others (round-robin, fixed order).
@@ -689,7 +755,8 @@ def sample_sessions(home, n=20, seed=64, stores=STORES, min_requests=10,
     q = quotas(n, stores)
     pools = {}
     for s in stores:
-        c = candidates(s, home, include_subagents=(mode == "flat"), opencode_dbs=opencode_dbs)
+        c = candidates(s, home, include_subagents=(mode == "flat"), opencode_dbs=opencode_dbs,
+                       vault_sources=vault_sources, vault_root=vault_root)
         if mode == "families" and c:
             c = [x for x in c if child_count(x) >= min_children]
         if not c and not allow_empty_store:
@@ -795,7 +862,8 @@ def fanout_stats(records):
             "spans_upper_bound": True}
 
 
-def store_fanout(home, stores=STORES, max_parents=None, opencode_dbs=None):
+def store_fanout(home, stores=STORES, max_parents=None, opencode_dbs=None, vault_sources=None,
+                 vault_root=VAULT_ROOT):
     """Store-wide fan-out stats from timestamps only (no prompt text kept). claude: every
     `<proj>/<parent>/subagents/agent-*.jsonl` against its parent file; opencode: session.parent_id."""
     recs = []
@@ -817,7 +885,9 @@ def store_fanout(home, stores=STORES, max_parents=None, opencode_dbs=None):
         return first, last, n
 
     if "claude" in stores:
-        parents = sorted(glob.glob(home + "/.claude/projects/*/*.jsonl"))[:max_parents]
+        live_p = sorted(glob.glob(home + "/.claude/projects/*/*.jsonl"))
+        parents = (live_p + [c[1] for c in _vault_cands("claude", [("claude", f, None) for f in live_p],
+                                                        vault_sources, vault_root, False)])[:max_parents]
         for f in parents:
             pid = os.path.basename(f)
             a, b, n = span_claude(f)
@@ -901,7 +971,7 @@ def build_manifest(picked, params):
             union += max(within, c)
         pc = sum(p for p, _ in prof)
         gaps = [t["gap_s"] for t in turns if t.get("gap_s") is not None]
-        row = {"id": sid, "store": s, "source": opencode_ro.source_for(cand[2]) if s == "opencode" else None,
+        row = {"id": sid, "store": s, "source": source_of(cand),
                "source_hash": hashlib.blake2b(str(cand[1]).encode(), digest_size=6).hexdigest(),
                **session_stats(turns), "ideal_cross_only_chars": cross, "ideal_union_chars": union,
                "ideal_share_cross_head": (union / pc) if pc else 0.0, "provider": provider_share(turns),
@@ -953,6 +1023,11 @@ def main(argv=None):
     ap.add_argument("--opencode-db", action="append", dest="opencode_db",
                     help="opencode READ-ONLY snapshot (repeatable). Default: both "
                          + ", ".join(OPENCODE_RO_DBS.values()) + ". Live stores are refused.")
+    ap.add_argument("--vault-sources", default="",
+                    help="comma list of cloud-LLM vault sources to ADD to the claude/codex pools "
+                         f"({','.join(VAULT_SOURCES)}); default none = the live ~/.claude and ~/.codex only "
+                         "(the predeclared draw is unchanged). Tagged by `source` in the manifest.")
+    ap.add_argument("--vault-root", default=VAULT_ROOT)
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--seed", type=int, default=64)
     ap.add_argument("--stores", default=",".join(STORES))
@@ -973,18 +1048,22 @@ def main(argv=None):
                     help="print STORE-WIDE fan-out stats (timestamps only, no text) and exit; no --out needed")
     a = ap.parse_args(argv)
     stores = tuple(a.stores.split(","))
+    vault = tuple(x for x in a.vault_sources.split(",") if x) or None
     if a.fanout_store:
-        print(json.dumps(store_fanout(a.home, stores, opencode_dbs=a.opencode_db), indent=1))
+        print(json.dumps(store_fanout(a.home, stores, opencode_dbs=a.opencode_db, vault_sources=vault,
+                                      vault_root=a.vault_root), indent=1))
         return 0
     if not a.out:
         ap.error("--out is required unless --fanout-store")
     try:
         picked = sample_sessions(a.home, a.n, a.seed, stores, a.min_requests, a.max_prompt_chars,
                                  a.max_requests, a.allow_empty_store, a.mode, a.min_children,
-                                 a.min_child_requests, a.max_children, a.opencode_db)
+                                 a.min_child_requests, a.max_children, a.opencode_db, vault, a.vault_root)
     except ZeroSessionsError as e:
         sys.stderr.write(f"adapter: FAILED (zero sessions): {e}\n")
         return 4
+    for path, err in VAULT_ERRORS:      # permission/read errors are reported, never repaired
+        sys.stderr.write(f"adapter: vault read error (not chmod'ed): {path}: {err}\n")
     man = build_manifest(picked, {k: v for k, v in vars(a).items() if k not in ("out", "home", "fanout_store")})
     write_sessions(picked, a.out, man)
     t = man["totals"]
