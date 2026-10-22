@@ -89,6 +89,7 @@ def main(argv=None) -> int:
     ap.add_argument("--ctx", type=int, default=4096)
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--base-seed", type=int, default=20261021)
+    ap.add_argument("--belief-store", help="store root for serving-beliefs/ export (default: OUT_DIR/store)")
     ap.add_argument("--ready-timeout", type=float, default=600.0)
     a = ap.parse_args(argv)
     out = Path(a.out_dir); out.mkdir(parents=True, exist_ok=True)
@@ -118,12 +119,29 @@ def main(argv=None) -> int:
             urls = {"A": pair.url("A"), "B": pair.url("B")}
         (out / "proof.json").write_text(json.dumps(proof, indent=1))
         arm = {k: metered_arm(pl.http_arm(k, urls[k], np=a.np, n_predict=a.n_predict), urls[k], stop, sink) for k in "AB"}
+        # Belief write side, at record time. Unit is `session` (rounds against one running server, not
+        # independent launches). A toy endpoint or an A/A (same build) shakedown shakes down the PIPELINE
+        # only and is marked so; it is still exported so the record grades like any other observation.
+        pipeline_only = bool(a.toy or a.a_build == a.b_build)
         rec = pl.paired_record(arm["A"], arm["B"], pairs=a.pairs, base_seed=a.base_seed, aa_pairs=a.aa_pairs,
-                               name="akr-sg-shakedown")
+                               name="akr-sg-shakedown",
+                               belief={"model": a.model or "toy://in-process-endpoint",
+                                       "anchor_build": a.a_build or "toy://A",
+                                       "candidate_build": a.b_build or "toy://B",
+                                       "pipeline_only": pipeline_only,
+                                       "pipeline_only_reason": ("toy endpoint" if a.toy else "A/A same-build shakedown")
+                                       if pipeline_only else ""})
         rec["generator"]["metrics"] = {"mapping": "metrics_map.py (llamacpp:* names of the v10 tree)", "kv": mm.KV_NOT_EXPOSED,
                                        "windows": sink}
+        pl.reseal_belief(rec)   # the capture digests the native body, which now includes generator.metrics
         problems = pl.validate_record(rec)
         (out / "serving_ab.json").write_text(json.dumps(rec, indent=1))
+        if not problems:
+            now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            exported = pl.export_belief(a.belief_store or out / "store", rec, campaign_id="akr-sg-shakedown",
+                                        epoch="akr-sg-" + now[:10], recorded_at=now,
+                                        mechanism_id="paired-loadgen-shakedown")
+            manifest["belief_receipt"] = str(exported)
         manifest.update(verdict="OK" if not problems else "INVALID_RECORD", problems=problems, effect_pct=rec["effect_pct"],
                         noise_floor_pct=rec["noise_floor_pct"], decisive=rec["decisive"], metric_windows=len(sink))
         rc = 0 if not problems else 1

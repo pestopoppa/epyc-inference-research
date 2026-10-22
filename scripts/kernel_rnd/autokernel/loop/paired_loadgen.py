@@ -49,6 +49,8 @@ class Arm:
     name: str
     #: measure(seed) -> (aggregate_rate, selfcheck_report_or_None)
     measure: Callable[[int], tuple[float, dict | None]]
+    #: concurrent request count, when the arm knows it (recorded as native `np` for the belief capture)
+    np: int | None = None
 
 
 def http_arm(name: str, base_url: str, *, np: int, n_predict: int = 16,
@@ -71,7 +73,7 @@ def http_arm(name: str, base_url: str, *, np: int, n_predict: int = 16,
         with cf.ThreadPoolExecutor(np) as ex:
             rates = list(ex.map(one, range(np)))
         return sum(rates), log.require_valid(requested_n=np)
-    return Arm(name, measure)
+    return Arm(name, measure, np=np)
 
 
 def _effect(a: float, b: float) -> float:
@@ -83,15 +85,21 @@ def run_pairs(a: Arm, b: Arm, pairs: int, base_seed: int):
     for k in range(pairs):
         seed = base_seed + k
         for arm, sink in ((a, a_vals), (b, b_vals)):      # A then B, every pair
+            t0 = time.time()
             value, check = arm.measure(seed)
             sink.append(value)
-            checks.append({"pair": k, "arm": arm.name, "seed": seed, "selfcheck": check})
+            checks.append({"pair": k, "arm": arm.name, "seed": seed, "selfcheck": check,
+                           "window_start": t0, "window_end": time.time()})
     return a_vals, b_vals, checks
 
 
 def paired_record(a: Arm, b: Arm, *, pairs: int, base_seed: int, metric: str = "aggregate_tok_s",
                   aa_pairs: int = 0, floor_pct: float | None = None,
-                  floor_unit: str | None = None, name: str = "paired-loadgen") -> dict:
+                  floor_unit: str | None = None, name: str = "paired-loadgen",
+                  belief: dict | None = None) -> dict:
+    """`belief` (optional) = {model, anchor_build, candidate_build, pipeline_only?, pipeline_only_reason?}
+    makes this the WRITE side for the belief kernel: the record carries the `belief_capture` the strict
+    root adapter (`autokernel_legacy_serving`) accepts. Without it the record is the old, capture-less one."""
     if pairs < 2:
         raise ValueError("a paired run needs >= 2 pairs")
     floor_source = "supplied" if floor_pct is not None else None
@@ -113,7 +121,7 @@ def paired_record(a: Arm, b: Arm, *, pairs: int, base_seed: int, metric: str = "
     decisive = None if floor_pct is None else (abs(effect) > 0 and abs(effect) * 100.0 >= floor_pct)
     ident = hashlib.sha256(json.dumps([a.name, b.name, metric, base_seed],
                                       sort_keys=True).encode()).hexdigest()
-    return {"schema": SCHEMA, "recipe": name, "recipe_hash": ident, "recipe_env": {},
+    rec = {"schema": SCHEMA, "recipe": name, "recipe_hash": ident, "recipe_env": {},
             "recipe_describe": f"{a.name} vs {b.name} via {GENERATOR}",
             "metric": metric, "np": None, "pairs": pairs,
             "anchor_tok_s": a_med, "candidate_tok_s": b_med,
@@ -128,6 +136,70 @@ def paired_record(a: Arm, b: Arm, *, pairs: int, base_seed: int, metric: str = "
                           "base_seed": base_seed, "pair_seeds": [base_seed + k for k in range(pairs)],
                           "pair_delta_pct": deltas, "floor_source": floor_source,
                           "aa_pair_abs_delta_pct": aa_deltas, "selfchecks": checks}}
+    if belief is not None:
+        _attach_belief(rec, a, b, belief, checks)
+    return rec
+
+
+class _BeliefRecipe:
+    """The minimal recipe shape `serving_beliefs.prepare` reads (metric + to_dict)."""
+
+    def __init__(self, d: dict):
+        self._d, self.metric = d, d["metric"]
+
+    def to_dict(self) -> dict:
+        return dict(self._d)
+
+
+def _attach_belief(rec: dict, a: Arm, b: Arm, belief: dict, checks: list) -> None:
+    """Add the capture. Native fields the capture binds (recipe_hash, np, residency windows) are
+    set FIRST because the capture digests the native body; nothing here invents a measurement:
+    the windows are the wall-clock bounds of each real round, `np` is the arm's own request count."""
+    from . import serving_beliefs as sb
+    for key in ("model", "anchor_build", "candidate_build"):
+        if not isinstance(belief.get(key), str) or not belief[key]:
+            raise ValueError(f"belief capture needs a non-empty {key!r}")
+    np_ = a.np if a.np is not None and a.np == b.np else None
+    recipe = {"name": rec["recipe"], "model": belief["model"], "np": np_, "metric": rec["metric"],
+              "generator": GENERATOR, "order": "A,B per pair, fixed", "unit": serving.UNIT_SESSION}
+    rec["np"] = np_
+    rec["recipe_hash"] = sb.digest(recipe)
+    for arm, offset in (("anchor", 0), ("candidate", 1)):   # run_pairs order is A,B per pair, fixed
+        rec[f"{arm}_residency"] = [
+            {"schema": "epyc.autokernel.paired_loadgen.window.v1", "arm": arm, "pair": c["pair"],
+             "window_start": c["window_start"], "window_end": c["window_end"]}
+            for c in checks[offset::2]]
+    if belief.get("pipeline_only"):
+        rec["pipeline_only"] = True
+        rec["pipeline_only_reason"] = str(belief.get("pipeline_only_reason") or "shakedown")
+    inputs = sb.prepare(_BeliefRecipe(recipe), anchor=None, candidate=None,
+                        anchor_build=belief["anchor_build"], candidate_build=belief["candidate_build"],
+                        frozen_requests=None, pairs=rec["pairs"])
+    rec["belief_capture"] = sb.finish(rec, inputs)
+
+
+def reseal_belief(rec: dict) -> dict:
+    """Re-derive the capture after the caller added native keys (the capture digests the native body)."""
+    from . import serving_beliefs as sb
+    if "belief_capture" not in rec:
+        raise ValueError("record has no belief_capture to reseal")
+    rec["belief_capture"] = sb.finish(rec, rec["belief_capture"]["inputs"])
+    return rec
+
+
+def export_belief(store_root, rec: dict, *, campaign_id: str, epoch: str, recorded_at: str,
+                  mechanism_id: str | None = None):
+    """Write `<store>/serving-beliefs/<capture_id>.json`. A record WITHOUT the capture is refused
+    loudly (`serving_beliefs.export` would silently return None, which is how these were lost)."""
+    if not isinstance(rec, dict) or "belief_capture" not in rec:
+        raise ValueError("paired_loadgen record has no belief_capture; pre-hook records are never "
+                         "reconstructed -- re-run with belief={...} to capture")
+    from . import serving_beliefs as sb
+    path = sb.export(store_root, {"comparison": rec, "mechanism_id": mechanism_id},
+                     campaign_id=campaign_id, epoch=epoch, recorded_at=recorded_at)
+    if path is None:
+        raise ValueError("belief export wrote nothing")
+    return path
 
 
 def validate_record(rec: dict) -> list[str]:

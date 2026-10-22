@@ -63,3 +63,30 @@ def test_voided_sample_is_not_averaged():
     with pytest.raises(lgs.LoadDriverVoided):
         pl.paired_record(pl.Arm("A", bad), pl.Arm("B", bad), pairs=2, base_seed=1,
                          floor_pct=1.0, floor_unit="session")
+
+
+# --- belief-kernel write side (VB-AK-PAIRED-LOADGEN-WRITE / VB-AKRSG-WRITE) ---------------------
+
+def _belief_record(**extra):
+    a = pl.Arm("A", lambda s: (100.0, None), np=2); b = pl.Arm("B", lambda s: (110.0, None), np=2)
+    return pl.paired_record(a, b, pairs=3, base_seed=1, floor_pct=1.0, floor_unit="session",
+                            belief={"model": "/m/x.gguf", "anchor_build": "/b/a", "candidate_build": "/b/b", **extra})
+
+
+def test_record_carries_capture_that_rederives_and_exports(tmp_path):
+    from . import serving_beliefs as sb
+    rec = _belief_record()
+    assert pl.validate_record(rec) == []
+    cap = rec["belief_capture"]
+    assert cap == sb.finish(rec, cap["inputs"])
+    p = pl.export_belief(tmp_path, rec, campaign_id="c", epoch="e", recorded_at="2026-10-22T00:00:00Z")
+    assert p.is_file() and p.parent == tmp_path / "serving-beliefs"
+
+
+def test_record_without_capture_is_refused_loudly(tmp_path):
+    a = pl.Arm("A", lambda s: (100.0, None)); b = pl.Arm("B", lambda s: (101.0, None))
+    rec = pl.paired_record(a, b, pairs=2, base_seed=1, floor_pct=1.0, floor_unit="session")
+    assert "belief_capture" not in rec
+    with pytest.raises(ValueError, match="no belief_capture"):
+        pl.export_belief(tmp_path, rec, campaign_id="c", epoch="e", recorded_at="2026-10-22T00:00:00Z")
+    assert not (tmp_path / "serving-beliefs").exists()

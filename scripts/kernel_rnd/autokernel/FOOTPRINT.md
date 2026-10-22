@@ -401,7 +401,7 @@ incident or measured fact when you next touch the module.
 | `loop/noise_relative_tolerance.py` | 193 | yes | AK-PORT-LB1: noise-floor-relative model-level tolerance (candidate within 1.5x the incumbent's own batched-vs-single divergence, no greedy flips above max(0.25, 2x floor)) for non-bit-exact multi-row kernels. On the campaign path: first reached via `loop.gates`. |
 | `loop/noop_build.py` | 81 | no | AKX-ALL-29.3: recognise a GPU candidate build that changed no kernel code. Not reachable from the declared campaign-#1 roots. |
 | `loop/observation_binding.py` | 884 | yes | Versioned binding between contained planned units and lifecycle observations. On the campaign path: first reached via `loop.actor_lifecycle`. |
-| `loop/paired_loadgen.py` | 143 | no | AKR-SG-2: paired A/B/A/B alternation wrapper around a load generator, emitting the existing serving-gate record against a measured noise floor. Not reachable from the declared campaign-#1 roots. |
+| `loop/paired_loadgen.py` | 215 | no | AKR-SG-2: paired A/B/A/B alternation wrapper around a load generator, emitting the existing serving-gate record against a measured noise floor. Not reachable from the declared campaign-#1 roots. |
 | `loop/perf_cache.py` | 306 | yes | Content-addressed cache for `perf report` / `perf annotate` subprocess output. On the campaign path: first reached via `loop.cpu_profile`. |
 | `loop/pipeline.py` | 514 | no | Run several iterations concurrently, with one serialized tail. Not reachable from the declared campaign-#1 roots. |
 | `loop/planned_serving.py` | 839 | yes | Execute a frozen serving ExperimentPlan through the existing launcher consumer. On the campaign path: first reached via `loop.cpu_profile`. |
@@ -421,7 +421,7 @@ incident or measured fact when you next touch the module.
 | `loop/retention_consumer.py` | 461 | yes | Native, held consumer for the pure retention closure. On the campaign path: first reached via `loop.campaign_control`. |
 | `loop/roofline_coverage.py` | 394 | no | Per-node CPU roofline + admitted-route coverage: the loop's own autonomy self-check. Not reachable from the declared campaign-#1 roots. |
 | `loop/run.py` | 7,667 | no | Drive the discovery loop end to end on real hardware. Not reachable from the declared campaign-#1 roots. |
-| `loop/run_paired_serving_ab.py` | 146 | no | AKR-SG shakedown driver: paired A/B serving gate on a real endpoint pair (A/A shakedown allowed), run only with WINDOW_CONFIRMED=1. Not reachable from the declared campaign-#1 roots. |
+| `loop/run_paired_serving_ab.py` | 164 | no | AKR-SG shakedown driver: paired A/B serving gate on a real endpoint pair (A/A shakedown allowed), run only with WINDOW_CONFIRMED=1. Not reachable from the declared campaign-#1 roots. |
 | `loop/runtime_admission.py` | 871 | no | Existing-loop runtime-only selection, using the original evaluator policy. Not reachable from the declared campaign-#1 roots. |
 | `loop/runtime_aggregates.py` | 199 | yes | Bounded diagnostic carrier; no execution, evidence or qualification authority. On the campaign path: first reached via `loop.campaign_control`. |
 | `loop/runtime_arms.py` | 709 | no | Declared runtime arms for the existing strict runtime-admission path. Not reachable from the declared campaign-#1 roots. |
