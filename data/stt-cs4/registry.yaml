@@ -1,0 +1,45 @@
+# stt-cs4 dataset registry. Pins and facts are quoted from the intake dives
+# (/mnt/raid0/llm/tmp/dive-aa-earnings22-cleaned, dive-contextual-earnings22, 2026-10-21/22).
+# Internal evaluation only. Audio is fetched by pinned revision and NEVER committed to a public repo
+# (epyc-root and epyc-inference-research are public); clip ids and sha256 only.
+# Not legal advice.
+datasets:
+  - id: earnings22-cleaned-aa
+    hf_repo: ArtificialAnalysis/Earnings22-Cleaned-AA
+    pin: 5999936ee3d8d3cde160e3c65a8cc6ff5b7c5276
+    chunked_variant: {hf_repo: ArtificialAnalysis/Earnings22-Cleaned-AA-chunked, pin: 27f7d0056d593231974a752ce03c1e965da69b3f}
+    label: public-anchor            # contaminable by public-trained arms; never a headline gate; never pooled with private sets
+    track: cleaned                  # reference-only cleaning by AA; never pooled with verbatim tracks
+    language: en
+    licence: CC-BY-SA-4.0           # conservative reading: ESB and Rev license Earnings-22 as CC-BY-SA-4.0; cleaned refs are an adaptation over unchanged Rev audio
+    licence_note: "Hub card tag says Apache-2.0 ('for upstream terms see esb/datasets'): conflicting tags; treat as CC-BY-SA-4.0 (attribution, share-alike)."
+    use: internal-evaluation-only
+    audio_committed: false
+    content: "six whole calls (4483046, 4474955, 4468919 trimmed, 4482968, 4471586, 4475604), 114.9 min, 15,814 reference words"
+    known_defects:
+      - "Disjoint from the leaderboard's standard Earnings22 test (0 of 6 calls overlap); standard-vs-cleaned deltas mix calls, scorer, chunking and references. Never quote one as a pure reference effect."
+      - "Card says ESB test split; community discussion #2 (open, unanswered) says the six audios are in ESB train. Train membership unresolved (ESB gated): label train-overlap-unknown."
+      - "Fillers left in references on purpose (600 of 15,814 words, 3.8%); AA normaliser is unpublished and versioned (v2.0 Feb, v2.1 Apr, v2.2 May 2026): do not copy it."
+    exclusion_rules:
+      - "Not a CS-4 set; labelled external English anchor for the STT bake-off only."
+      - "If also run alongside contextual-earnings22, drop the 19 shared clips (3 shared calls) from one of the two; never pool."
+    cluster_unit: call
+  - id: contextual-earnings22
+    hf_repo: argmaxinc/contextual-earnings22
+    pin: 59d7f94771cc197984d8038e494c83abeff87282
+    label: public-anchor
+    track: verbatim                 # track as released is not stated in the dive: confirm at first download
+    language: en
+    licence: CC-BY-SA-4.0           # inherited from Earnings-22 (paper); HF record has no licence field
+    licence_note: "HF record carries no licence field; the share-alike licence is inherited from Earnings-22 (paper) and keeps audio out of public repos."
+    use: internal-evaluation-only
+    audio_committed: false
+    known_defects:
+      - "HF counts (772 test / 100 dev clips) differ from the paper (630 / 130)."
+      - "8 of 9 dev calls also appear in test; annotation unfinished per the card; paper says release 'upon acceptance' yet the HF release exists."
+      - "Paper baseline tables S1/S2 absent from the saved source."
+      - "Overlaps Earnings22-Cleaned-AA in 3 of AA's 6 calls (19 clips); 1 call overlaps the leaderboard's standard E22 test (non-dev), 1 in dev."
+    exclusion_rules:
+      - "Drop every clip whose call id is in the dev split: valid test set = 46 non-dev calls, 755 clips (~3.1 h)."
+      - "Report separately from earnings22-cleaned-aa; drop the 19 shared clips from one of them if both are run."
+    record_fields_when_scored: [dataset, hf_sha, exclusion_rule, context_regime, scorer_variant]

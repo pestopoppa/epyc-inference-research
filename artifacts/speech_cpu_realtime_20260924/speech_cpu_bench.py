@@ -163,6 +163,21 @@ def tts_request(text, fmt, seed=42):
 LLM_CAP_S = float(os.environ.get("LLM_CAP_S", "900"))
 LLM_REPS = int(os.environ.get("LLM_REPS", "2"))
 
+# ---------------------------------------------------------------- VB-SPEECH-CPU-1 write side (opt-in)
+# With SPEECH_CPU_CAPTURE_DIR set, every request is bracketed by a co-tenant sampler (frontdoor
+# :8070, sampled DURING the request) and each emitted row also becomes schema-versioned, self-hashed
+# capture rows (speech_cpu_capture.py). RAW is redirected to that directory so a re-measurement can
+# never append to the 2026-09-24 raw/ (SHA256SUMS-bound evidence). Unset: legacy behaviour unchanged.
+CAPTURE_DIR = os.environ.get("SPEECH_CPU_CAPTURE_DIR")
+CAPTURE = None
+if CAPTURE_DIR:
+    import speech_cpu_capture as _cap
+    CAPTURE = _cap.HarnessCapture(
+        os.environ.get("SPEECH_CPU_CAPTURE_HARNESS", "speech_cpu_bench"), CAPTURE_DIR,
+        cotenant_port=int(os.environ.get("SPEECH_CPU_COTENANT_PORT", "8070")),
+        binaries={"stt": WH + "/build/bin/whisper-server", "tts": QT + "/build/tts-server"})
+    RAW = CAPTURE_DIR
+
 
 def llm_tps(d):
     t = d.get("llm_timings") or {}
@@ -218,10 +233,34 @@ def llm_request(results, key, cap_s=900):
                     "chunks_per_s_after_first": round((n_chunks - 1) / (dt - t_first), 2) if t_first and n_chunks > 1 else None}
 
 
+if CAPTURE:
+    stt_request = CAPTURE.wrap(stt_request)
+    tts_request = CAPTURE.wrap(tts_request)
+    llm_request = CAPTURE.wrap(llm_request, own_load=True)
+
+
+def _capture_emit(res):
+    """Queue capture rows for one legacy row (placement read from the row itself)."""
+    kind = res.get("kind")
+    if kind == "tts":
+        t, cl = res.get("tts_threads", res.get("threads")), res.get("tts_cores", res.get("cores"))
+        shim, cap = 2 * t if isinstance(t, int) else None, 600.0
+    elif kind == "stt":
+        t, cl, shim, cap = res.get("stt_threads", res.get("threads")), res.get("stt_cores", res.get("cores")), None, 600.0
+    else:  # llm co-tenant row: placement of the speech layout it ran beside
+        t, cl, shim, cap = res.get("stt_threads"), res.get("stt_cores"), None, LLM_CAP_S
+    CAPTURE.emit(res, cores=cl, threads=t, shim_nprocs=shim, cap_s=cap, mode=res.get("mode", ""))
+
+
 # ---------------------------------------------------------------- phases
-def emit(res, fh, jl):
-    jl.write(json.dumps(res) + "\n"); jl.flush()
-    log(json.dumps(res), fh)
+def emit(res, fh, jl, defer=False):
+    legacy = _cap.strip_private(res) if CAPTURE else res
+    jl.write(json.dumps(legacy) + "\n"); jl.flush()
+    log(json.dumps(legacy), fh)
+    if CAPTURE:
+        _capture_emit(res)
+        if not defer:
+            CAPTURE.flush()
 
 
 def parse_spec(spec):
@@ -275,8 +314,8 @@ def phase_concurrent(stt_spec, tts_spec, reps, tag="conc"):
         stt_request(SHORT_WAV); tts_request(TEXT_SHORT, "pcm")  # warm-up
         base = dict(tag=tag, stt_threads=stt_t, stt_cores=stt_cl, tts_threads=tts_t, tts_cores=tts_cl)
 
-        def put(r, mode, rep):
-            r.update(base); r.update(mode=mode, rep=rep); emit(r, fh, jl)
+        def put(r, mode, rep, defer=False):
+            r.update(base); r.update(mode=mode, rep=rep); emit(r, fh, jl, defer)
 
         # solo baselines at the SAME layout (servers both resident, only one active)
         for rep in range(reps):
@@ -319,13 +358,15 @@ def phase_concurrent(stt_spec, tts_spec, reps, tag="conc"):
                 for t_ in th:
                     t_.join()
                 for r in out + llms:
-                    put(r, mode, rep)
+                    put(r, mode, rep, defer=mode.endswith("llm"))
                 if mode.endswith("llm"):
                     # production guard: stop once the frontdoor collapsed (<10 tok/s) in >1 repetition
                     tps = [llm_tps(d) for d in llms]
                     if any(t is not None and t < 10 for t in tps):
                         collapsed[0] += 1
                     log(f"guard: rep={rep} frontdoor tok/s={tps} collapsed_reps={collapsed[0]}", fh)
+                    if CAPTURE:
+                        CAPTURE.flush(guard_aborted=collapsed[0] > 1)
                     if collapsed[0] > 1:
                         log("guard: frontdoor <10 tok/s in more than one repetition -> stopping", fh)
                         break
