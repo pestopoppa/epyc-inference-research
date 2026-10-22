@@ -4,8 +4,20 @@
 Refuses (exit 3) unless WINDOW_CONFIRMED=1 -- checked FIRST, before any network or heavy import.
 Refuses production/dashboard ports (8000-8199) and a port that already has a listener.
 One in-flight request per session; sessions advance in order; `--active` sessions run at once
-(default = slot count). Results are appended per request (requests.jsonl) and the run is resumable.
+(default = slot count; `--active` > `--slots` is the sessions>slots arm). Results are appended per
+request (requests.jsonl) and the run is resumable.
 --dry-run drives an in-process stub /completion server (NOT inference) on an ephemeral port.
+
+KPF-LB2 (PREDECLARED.md "Amendment 1"):
+  --think-scale S   sleep min(S * recorded gap_s, --think-cap-s) before each request k>0 (default 0 =
+                    back to back, the arms A-D behaviour); the wait is recorded per request.
+  --children bursts replay linked sub-agent children as BURSTS: after a parent's request k completes,
+                    every child whose parent_turn == k starts at once (children concurrent, on top of
+                    the --active parents); with --parent-during-burst pause (default) the parent issues
+                    nothing until the burst ends, `continue` lets it run beside async children. A parent
+                    that is not replayable (live Claude parents outgrow the slot) is a virtual anchor:
+                    only its bursts run, in parent_turn order.
+  run_meta.json records peak in-flight requests, peak active lineages and burst counts.
 """
 from __future__ import annotations
 
@@ -134,38 +146,111 @@ class Replay:
         self.done = load_done(self.req_path)
         self.outs = load_outputs(self.outs_path)
         self.stop = threading.Event()
+        self.head = adapter.HeadIndex()
+        self.cnt, self.peak, self.bursts = {}, {}, []
 
     def append(self, path, rec):
         with self.lock, open(path, "a") as f:
             f.write(json.dumps(rec) + "\n")
 
-    def run_session(self, sid):
+    # ---- concurrency accounting (realised peaks, as opposed to the manifest's span upper bounds) ----
+    def _bump(self, key, d):
+        with self.lock:
+            self.cnt[key] = self.cnt.get(key, 0) + d
+            self.peak[key] = max(self.peak.get(key, 0), self.cnt[key])
+
+    def _think_wait(self, turn):
+        gap = turn.get("gap_s")
+        if not self.a.think_scale or gap is None:
+            return 0.0
+        wait = min(self.a.think_scale * gap, self.a.think_cap_s)
+        self.stop.wait(wait)
+        return wait
+
+    def run_burst(self, parent_sid, k, kids):
+        """Start every child of (parent, request k) at once; join them unless the parent continues."""
+        threads = []
+        for kid in kids:
+            t = threading.Thread(target=self.run_session, args=(kid["id"], parent_sid), daemon=True)
+            t.start()
+            threads.append(t)
+        with self.lock:
+            self.bursts.append({"parent": parent_sid, "k": k, "children": [c["id"] for c in kids]})
+        if self.a.parent_during_burst == "pause":
+            for t in threads:
+                t.join()
+            return []
+        return threads
+
+    def run_virtual(self, sid, by_turn):
+        """Non-replayable parent: only its bursts, in parent_turn order, parent paused through each."""
+        self._bump("sessions", 1)
+        try:
+            for k in sorted(by_turn):
+                if self.stop.is_set():
+                    break
+                for t in self.run_burst(sid, k, by_turn[k]):   # no parent requests to overlap: serialise
+                    t.join()
+        finally:
+            self._bump("sessions", -1)
+
+    def run_session(self, sid, parent=None):
         sess = json.loads((Path(self.a.sessions) / f"{sid}.json").read_text())
+        by_turn = {}
+        if self.a.children == "bursts" and parent is None:
+            for kid in sess.get("children") or []:
+                if kid.get("parent_turn") is not None:
+                    by_turn.setdefault(kid["parent_turn"], []).append(kid)
+        if parent is None and not sess.get("replayable", True):
+            if by_turn:
+                self.run_virtual(sid, by_turn)
+            return 0
+        self._bump("sessions", 1)
+        tail = []
+        try:
+            return self._run_turns(sid, sess, by_turn, parent, tail)
+        finally:
+            for t in tail:
+                t.join()
+            self._bump("sessions", -1)
+
+    def _run_turns(self, sid, sess, by_turn, parent, tail):
         turns, live = sess["turns"], self.a.history == "live"
         outputs = []
         for k in range(len(turns)):
             outputs.append(self.outs.get((sid, k)) if live else None)
         n = 0
+        paused_after_burst = False
         for k, prompt, prev in adapter.iter_prompts(turns, outputs if live else None):
             if self.stop.is_set():
                 return n
             if (sid, k) in self.done:
                 continue
             ideal_c = adapter.common_prefix_len(prompt, prev) if prev is not None else 0
+            cross_c = min(self.head.cross_chars(prompt, sid), len(prompt))
+            waited = 0.0 if (k == 0 or paused_after_burst) else self._think_wait(turns[k])
+            paused_after_burst = False
+            self._bump("inflight", 1)
             t0 = time.time()
             body = {"prompt": prompt, "n_predict": self.a.n_predict if live else 1, "cache_prompt": True,
                     "temperature": 0.0, "stream": False, "return_tokens": False}
             try:
                 r = http_json(f"{self.base}/completion", body, timeout=self.a.timeout)
             except Exception as e:  # recorded, session stops; analysis excludes the session from all arms
+                self._bump("inflight", -1)
                 self.append(self.req_path, {"session": sid, "k": k, "error": f"{type(e).__name__}: {e}"[:200]})
                 return n
+            self._bump("inflight", -1)
             t1 = time.time()
             tm = r.get("timings") or {}
             pn, cn = int(tm.get("prompt_n", 0)), int(tm.get("cache_n", 0))
             total = pn + cn
             ideal_tok = round(total * ideal_c / len(prompt)) if prompt else 0
+            union_tok = round(total * max(ideal_c, cross_c) / len(prompt)) if prompt else 0
+            self.head.add(prompt, sid)
             rec = {"session": sid, "store": sess.get("store"), "k": k, "reset": bool(turns[k].get("reset")),
+                   "parent": parent, "is_child": parent is not None, "think_wait_s": waited,
+                   "ideal_cross_chars": cross_c, "ideal_union_tok": union_tok,
                    "history": self.a.history, "prompt_chars": len(prompt), "prompt_n": pn, "cache_n": cn,
                    "total_tok": total, "ideal_chars": ideal_c, "ideal_tok": ideal_tok,
                    "prompt_ms": tm.get("prompt_ms"), "predicted_n": tm.get("predicted_n"),
@@ -178,6 +263,9 @@ class Replay:
                 self.append(self.outs_path, {"session": sid, "k": k, "out": out})
             self.append(self.req_path, rec)
             n += 1
+            if by_turn.get(k):
+                tail += self.run_burst(sid, k, by_turn[k])
+                paused_after_burst = self.a.parent_during_burst == "pause"
         return n
 
     def snapshots(self):
@@ -265,6 +353,11 @@ def main(argv=None):
     ap.add_argument("--server-log", default=None)
     ap.add_argument("--patterns", default=None, help="JSON {name: [regex, counts_as_eviction]}")
     ap.add_argument("--only", default=None, help="comma list of session ids")
+    ap.add_argument("--think-scale", type=float, default=0.0,
+                    help="multiply recorded think/tool gaps by this and sleep before each request (0 = none)")
+    ap.add_argument("--think-cap-s", type=float, default=120.0, help="upper bound on one emitted gap, seconds")
+    ap.add_argument("--children", choices=("off", "bursts"), default="off")
+    ap.add_argument("--parent-during-burst", choices=("pause", "continue"), default="pause")
     ap.add_argument("--own-server-pid", type=int, default=None,
                     help="PID of the server the launcher started; the listener is then expected")
     ap.add_argument("--dry-run", action="store_true", help="drive an in-process stub (not inference)")
@@ -282,7 +375,13 @@ def main(argv=None):
         check_port(a.port, own_pid=a.own_server_pid)
     base = f"http://127.0.0.1:{a.port}"
     man = json.loads((Path(a.sessions) / "manifest.json").read_text())
-    ids = [s["id"] for s in man["sessions"] if not a.only or s["id"] in a.only.split(",")]
+    if not man["sessions"]:
+        raise SystemExit("replay_driver: refusing: the manifest has zero sessions")
+    ids = [s["id"] for s in man["sessions"] if not s.get("parent") and (not a.only or s["id"] in a.only.split(","))]
+    if a.children == "off":   # nothing to replay for an anchor-only parent
+        ids = [i for i in ids if next(m for m in man["sessions"] if m["id"] == i).get("replayable", True)]
+    if not ids:
+        raise SystemExit("replay_driver: refusing: zero replayable sessions selected (children=off skips anchor-only parents)")
     rp = Replay(a, base)
     snap = threading.Thread(target=rp.snapshots, daemon=True)
     snap.start()
@@ -304,7 +403,11 @@ def main(argv=None):
     (Path(a.out) / "run_meta.json").write_text(json.dumps({
         "arm": a.arm, "history": a.history, "slots": a.slots, "active": a.active, "sessions": ids,
         "wall_s": time.time() - t0, "events": events, "infer_tol_tokens": a.infer_tol_tokens,
-        "dry_run": a.dry_run}, indent=1))
+        "dry_run": a.dry_run, "oversubscribed": a.active > a.slots, "children": a.children,
+        "parent_during_burst": a.parent_during_burst, "think_scale": a.think_scale,
+        "think_cap_s": a.think_cap_s, "peak_inflight_requests": rp.peak.get("inflight", 0),
+        "peak_active_lineages": rp.peak.get("sessions", 0), "bursts": len(rp.bursts),
+        "burst_sizes": [len(b["children"]) for b in rp.bursts]}, indent=1))
     print(json.dumps({"arm": a.arm, "requests": len(load_done(rp.req_path)), "events": events["observed_eviction_events"]}))
     return 0
 

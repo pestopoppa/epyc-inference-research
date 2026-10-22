@@ -67,11 +67,22 @@ print("\n".join(c))
 PY
 )" || exit 2
 mapfile -t CMD <<<"$CMDOUT"
+# per-arm replay-driver args (KPF-LB2 follow-up arms E/F; A-D declare none) and the sessions mode they need
+DARGS_OUT="$(python3 - "$ARMS" "$ARM" <<'PY'
+import json, sys
+a = json.load(open(sys.argv[1]))["arms"][sys.argv[2]]
+print(a.get("sessions_mode", "flat"))
+print("\n".join(a.get("driver_args", [])))
+PY
+)"
+mapfile -t DARGS <<<"$DARGS_OUT"
+SESSIONS_MODE="${DARGS[0]}"; DARGS=("${DARGS[@]:1}")
+[ "${DARGS[0]:-}" != "" ] || DARGS=()
 LINK="${KPF64_LINKAGE:-$HERE/../../utils/verify_ggml_linkage.sh}"
 PREFIX=(); [ -z "${KPF64_LAUNCH_PREFIX:-}" ] || read -r -a PREFIX <<<"$KPF64_LAUNCH_PREFIX"
 OUT="${OUT:-/mnt/raid0/llm/tmp/kpf64-arm-$ARM}"
 DRIVER=(python3 "$HERE/replay_driver.py" --sessions "${SESSIONS:-SESSIONS_DIR}" --out "$OUT/replay" --arm "$ARM"
-        --port "$PORT" --server-log "$OUT/server.log" --slots 4)
+        --port "$PORT" --server-log "$OUT/server.log" --slots 4 "${DARGS[@]}")
 
 if [ "$DRY" = 1 ]; then
   echo "DRY-RUN arm=$ARM device=$DEVICE port=$PORT (nothing started)"
@@ -79,6 +90,7 @@ if [ "$DRY" = 1 ]; then
   echo "server : ${PREFIX[*]:-} ${CMD[*]}"
   echo "linkage: $LINK $KPF64_SERVER_BIN $BIN_DIR"
   [ "$DEVICE" = gpu ] && echo "vram   : sampler loop (rocm-smi --showmeminfo vram) every 10s -> $OUT/vram.csv during the run"
+  echo "sessions: adapter.py --mode $SESSIONS_MODE (arm $ARM needs the $SESSIONS_MODE sessions dir)"
   echo "driver : ${DRIVER[*]} --own-server-pid <captured> ${EXTRA[*]:-}"
   exit 0
 fi

@@ -6,6 +6,13 @@ Input: one dir per arm (requests.jsonl + run_meta.json from replay_driver.py). A
   share_ideal    = sum(ideal_tok) / sum(prompt_n + cache_n)    (never-evicted prefix bound, same requests)
   gap            = share_ideal - share_realised                (primary metric, in pp)
   uncached/request = sum(prompt_n) / requests                   (second primary metric)
+
+KPF-LB2 additions (secondary, never the predeclared decision metric):
+  ideal_cross_head_share = sum(ideal_union_tok) / total          bound that also lets a request match any OTHER
+                           session's earlier prompt head (block-granular lower bound)
+  provider_cache_share   = recorded provider usage (manifest `reference`), what the commercial cache achieved
+  fanout                 = child share of requests, realised peak in-flight requests from [t_start, t_end]
+                           intervals, and run_meta's peak in-flight / active lineages
 """
 from __future__ import annotations
 
@@ -32,24 +39,27 @@ def load_arm(d):
 
 
 def per_session(reqs):
-    s = defaultdict(lambda: {"n": 0, "total": 0, "cache": 0, "ideal": 0, "uncached": 0, "inferred": 0})
+    s = defaultdict(lambda: {"n": 0, "total": 0, "cache": 0, "ideal": 0, "uncached": 0, "inferred": 0, "union": 0})
     for r in reqs:
         a = s[r["session"]]
         a["n"] += 1
         a["total"] += r["total_tok"]
         a["cache"] += r["cache_n"]
         a["ideal"] += r["ideal_tok"]
+        a["union"] += r.get("ideal_union_tok", r["ideal_tok"])
         a["uncached"] += r["prompt_n"]
         a["inferred"] += 1 if r.get("inferred_evict") else 0
     return dict(s)
 
 
 def metrics(sess, ids):
-    t = {k: sum(sess[i][k] for i in ids) for k in ("n", "total", "cache", "ideal", "uncached", "inferred")}
+    t = {k: sum(sess[i][k] for i in ids) for k in ("n", "total", "cache", "ideal", "uncached", "inferred", "union")}
     if t["total"] == 0 or t["n"] == 0:
         return None
     re_, id_ = t["cache"] / t["total"], t["ideal"] / t["total"]
+    un = t["union"] / t["total"]
     return {"realised_share": re_, "ideal_share": id_, "gap_pp": 100 * (id_ - re_),
+            "ideal_cross_head_share": un, "gap_cross_head_pp": 100 * (un - re_),
             "uncached_per_request": t["uncached"] / t["n"], "inferred_evictions": t["inferred"], **t}
 
 
@@ -78,7 +88,44 @@ def differs(delta_draws, min_pp=MIN_EFFECT_PP):
             "exceeds_min_effect": abs(mean) > min_pp, "real_effect": (lo > 0 or hi < 0) and abs(mean) > min_pp}
 
 
-def analyse(arm_dirs, baseline=None, B=BOOT_B, seed=BOOT_SEED, min_pp=MIN_EFFECT_PP):
+def peak_overlap(reqs):
+    """Realised peak of simultaneously in-flight requests from the [t_start, t_end] intervals."""
+    ev = []
+    for r in reqs:
+        if r.get("t_start") is not None and r.get("t_end") is not None:
+            ev += [(r["t_start"], 1), (r["t_end"], -1)]
+    cur = best = 0
+    for _, d in sorted(ev, key=lambda e: (e[0], e[1])):
+        cur += d
+        best = max(best, cur)
+    return best
+
+
+def fanout(reqs, meta):
+    n = len(reqs)
+    kids = sum(1 for r in reqs if r.get("is_child"))
+    return {"requests": n, "child_requests": kids, "child_request_share": (kids / n) if n else 0.0,
+            "peak_inflight_from_intervals": peak_overlap(reqs),
+            "peak_inflight_requests": meta.get("peak_inflight_requests"),
+            "peak_active_lineages": meta.get("peak_active_lineages"), "bursts": meta.get("bursts"),
+            "oversubscribed": meta.get("oversubscribed"), "children": meta.get("children"),
+            "think_scale": meta.get("think_scale"),
+            "think_wait_s_total": sum(r.get("think_wait_s") or 0 for r in reqs)}
+
+
+def reference_from_manifest(path):
+    """Recorded-transcript reference numbers: the two ideal bounds, the provider-realised cache share
+    and the recorded fan-out of the SAMPLE (not of the replay)."""
+    m = json.loads(Path(path).read_text())
+    t = m["totals"]
+    return {"manifest": str(path), "schema": m.get("schema"), "sessions": t["sessions"],
+            "ideal_within_session_share": t["ideal_share"],
+            "ideal_cross_session_head_share": t.get("ideal_share_cross_head"),
+            "provider_cache_share": t.get("provider_cache_share"),
+            "by_store": t["by_store"], "recorded_fanout": m.get("fanout"), "child_links": m.get("child_links")}
+
+
+def analyse(arm_dirs, baseline=None, B=BOOT_B, seed=BOOT_SEED, min_pp=MIN_EFFECT_PP, manifest=None):
     data = {name: load_arm(d) for name, d in arm_dirs.items()}
     bad_any = set().union(*[set(m["excluded_sessions"]) for _, m in data.values()])
     sess = {n: per_session([r for r in rs if r["session"] not in bad_any]) for n, (rs, _) in data.items()}
@@ -92,7 +139,8 @@ def analyse(arm_dirs, baseline=None, B=BOOT_B, seed=BOOT_SEED, min_pp=MIN_EFFECT
                    "observed_eviction_events": ev.get("observed_eviction_events"),
                    "log_present": ev.get("log_present"), "events_by_pattern": ev.get("by_pattern"),
                    "gap_pp_ci95": pct_ci(boot[n]["gap_pp"]), "uncached_per_request_ci95": pct_ci(boot[n]["uncached"]),
-                   "realised_share_ci95": pct_ci(boot[n]["realised"])}
+                   "realised_share_ci95": pct_ci(boot[n]["realised"]),
+                   "fanout": fanout([r for r in reqs if r["session"] not in bad_any], meta)}
     base = baseline or sorted(arms)[0]
     contrasts = {}
     for n in arms:
@@ -100,8 +148,11 @@ def analyse(arm_dirs, baseline=None, B=BOOT_B, seed=BOOT_SEED, min_pp=MIN_EFFECT
             contrasts[f"{n}_minus_{base}"] = {
                 "gap_pp": differs([a - b for a, b in zip(boot[n]["gap_pp"], boot[base]["gap_pp"])], min_pp),
                 "uncached_per_request": differs([a - b for a, b in zip(boot[n]["uncached"], boot[base]["uncached"])], float("inf"))}
-    return {"schema": "kpf64.analysis.v1", "baseline": base, "paired_sessions": len(ids), "bootstrap_B": B,
-            "seed": seed, "min_effect_pp": min_pp, "arms": arms, "contrasts_vs_baseline": contrasts}
+    out = {"schema": "kpf64.analysis.v2", "baseline": base, "paired_sessions": len(ids), "bootstrap_B": B,
+           "seed": seed, "min_effect_pp": min_pp, "arms": arms, "contrasts_vs_baseline": contrasts}
+    if manifest:
+        out["reference"] = reference_from_manifest(manifest)
+    return out
 
 
 def to_markdown(res):
@@ -118,6 +169,20 @@ def to_markdown(res):
     for k, c in res["contrasts_vs_baseline"].items():
         g = c["gap_pp"]
         L.append(f"| {k} | {g['mean']:.2f} | [{g['ci95'][0]:.2f}, {g['ci95'][1]:.2f}] | {'YES' if g['real_effect'] else 'no'} |")
+    L += ["", "Secondary bounds and fan-out (not decision metrics):", "",
+          "| arm | ideal within % | ideal cross-head % | gap vs cross-head pp | child req share | peak in-flight (intervals / driver) | peak lineages |",
+          "|---|---|---|---|---|---|---|"]
+    for n, a in sorted(res["arms"].items()):
+        f = a["fanout"]
+        L.append(f"| {n} | {100*a['ideal_share']:.2f} | {100*a['ideal_cross_head_share']:.2f} | {a['gap_cross_head_pp']:.2f} | "
+                 f"{100*f['child_request_share']:.1f}% | {f['peak_inflight_from_intervals']} / {f['peak_inflight_requests']} | "
+                 f"{f['peak_active_lineages']} |")
+    ref = res.get("reference")
+    if ref:
+        L += ["", f"Recorded-transcript reference ({ref['sessions']} sessions): ideal within-session "
+              f"{100*ref['ideal_within_session_share']:.2f}%, cross-session-head "
+              f"{100*(ref['ideal_cross_session_head_share'] or 0):.2f}%, provider-realised cache share "
+              + ("n/a" if ref["provider_cache_share"] is None else f"{100*ref['provider_cache_share']:.2f}%")]
     return "\n".join(L) + "\n"
 
 
@@ -154,9 +219,10 @@ def main(argv=None):
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--boot", type=int, default=BOOT_B)
+    ap.add_argument("--manifest", default=None, help="adapter manifest.json for the recorded-transcript reference")
     a = ap.parse_args(argv)
     arms = dict(x.split("=", 1) for x in a.arm)
-    res = analyse(arms, a.baseline, a.boot)
+    res = analyse(arms, a.baseline, a.boot, manifest=a.manifest)
     Path(a.out_json).write_text(json.dumps(res, indent=1))
     md = to_markdown(res)
     Path(a.out_md).write_text(md)
