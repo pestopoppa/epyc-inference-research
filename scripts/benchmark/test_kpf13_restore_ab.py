@@ -492,3 +492,35 @@ def test_analyze_command_recomputes_from_stored_cells(tmp_path, capsys):
     assert m.cmd_analyze(args) == 0
     v = json.loads((tmp_path / "out" / "verdict.json").read_text())
     assert v["decisions"]["restore_faithful"] is True and v["rules_sha256"] == m.rules_sha256()
+
+
+def test_reduced_preset_is_eight_heldout_cells_one_launch(tmp_path, capsys, monkeypatch):
+    started = []
+    monkeypatch.setattr(m.Server, "start", lambda self: started.append(1))
+    ps = make_prompt_set(tmp_path / "ps.jsonl")
+    args = m.parse_args(["run", "--out", str(tmp_path / "o"), "--cpu-list", "24-47,120-143", "--reduced"])
+    assert args.configs == ["default"] and args.dev_groups == [] and args.n_list == [64]
+    assert args.eval_groups == [0, 1, 2, 3] and args.suffix_lens == [1, 128]
+    rc = m.main(["run", "--out", str(tmp_path / "o"), "--cpu-list", "24-47,120-143", "--fork-bin", str(fake_bin(tmp_path)),
+                 "--prompt-set", str(ps), "--reduced", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0 and not started
+    assert out.count("cell g") == 8 and "launch default" in out and "launch skip" not in out and "TOTAL est" in out
+
+
+def test_reduced_run_judges_all_eight_cells_as_heldout(tmp_path):
+    args = m.parse_args(["run", "--out", str(tmp_path / "out"), "--cpu-list", "24-47", "--reduced",
+                         "--prompt-set", str(make_prompt_set(tmp_path / "ps.jsonl"))])
+    args.window_id = "t"
+    ps = m.PromptSet(Path(args.prompt_set), args.trunk_tokens, args.suffix_lens)
+    ctx = m.Ctx(args, ps, ["-np", "4", "--kv-unified"], m.Deadline(None))
+    ctx.client, ctx.results, ctx.start_utc = FakeClient(), {}, m.now_iso()
+    pl = m.Plan(ctx, "default", ctx.results, False)
+    pl.srv = FakeSrv()
+    for st in pl.build():
+        if st.fn and ("sources" in st.desc or "cell g" in st.desc):
+            st.fn()
+    ana = m.analyze_results(ctx.results, set(args.dev_groups), args.n_list)
+    assert ana["configs"]["default"]["A"]["attempts"] == 8 and ana["configs"]["default"]["A"]["verdict"] == "PASS"
+    assert ana["configs"]["default"]["B"]["attempts"] == 8
+    assert all(not c["dev"] for c in ana["cells"].values())

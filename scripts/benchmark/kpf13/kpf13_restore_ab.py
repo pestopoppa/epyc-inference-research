@@ -1405,6 +1405,10 @@ def parse_args(argv=None):
     ap.add_argument("--source-build", choices=["fork", "fresh"], default="fork",
                     help="how the restore source (slot 3) is built: a one-hop fork + N-token tail (cheap, the default) "
                          "or a fresh full prefill (N-independent, T tokens per rebuild)")
+    ap.add_argument("--reduced", action="store_true",
+                    help="audit-sized preset: acceptance over 64 tokens on 8 held-out cells (groups 0-3 x suffix 1,128), "
+                         "ONE launch (default: A restore, B recompute, twins), N fixed at 64, no dev sweep, no skip/full. "
+                         "Run once per drafter (--drafter plain-mtp, then --drafter dflash2 with its own --argv-file)")
     ap.add_argument("--draft-debug", action="store_true", help="add -lv 4 and parse DFlash2 first-draft candidates")
     ap.add_argument("--deadline-utc", default=None, help="HARD deadline, YYYY-MM-DDTHH:MM:SSZ (required to execute)")
     ap.add_argument("--deadline-s", type=float, default=None, help="relative deadline (tests, short runs)")
@@ -1426,6 +1430,10 @@ def parse_args(argv=None):
     args.n_list = [int(x) for x in args.n_list.split(",") if x.strip()]
     args.dev_groups = [int(x) for x in args.dev_groups.split(",") if x.strip() != ""]
     args.eval_groups = [int(x) for x in args.eval_groups.split(",") if x.strip() != ""]
+    if args.reduced:
+        # 8 held-out prompts: every group is held out because N is a single pre-declared value (nothing is tuned on them)
+        args.configs, args.dev_groups, args.eval_groups, args.n_list = ["default"], [], [0, 1, 2, 3], [64]
+        args.suffix_lens = [1, 128]
     return args
 
 
