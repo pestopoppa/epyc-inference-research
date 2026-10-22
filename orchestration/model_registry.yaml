@@ -985,7 +985,7 @@ server_mode:
     # CT-1b evidence: epyc-root handoffs/active/qwen-chat-template-evaluation.md — never worse,
     # significantly better where budget binds, 34-99.5% fewer answer tokens on Qwen3.6-35B-A3B.
     # REVERT: removing the single chat_template_file line below fully reverts the pilot.
-    chat_template_file: /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja
+    chat_template_file: /mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja  # SEC-ART-6 store copy of epyc-qwen3x-v1-terse.jinja; publish BEFORE landing
     chat_template:
       provenance: epyc_built_terse_v1
       served_template_bytes: 25808
@@ -1762,7 +1762,7 @@ server_mode:
     # is unmeasured-on-model (base-template fidelity on 3.8 shapes IS proven, CT-5 battery);
     # coder_escalation aliases this server, so the pilot covers coding traffic where the CT-1b
     # cruxeval watch-item applies. sha256 first-12: 1443ea9ab4bb. REVERT: delete the line below.
-    chat_template_file: /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja
+    chat_template_file: /mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja  # SEC-ART-6 store copy of epyc-qwen3x-v1-terse.jinja; publish BEFORE landing
     chat_template:
       provenance: epyc_built_terse_v1
       served_template_bytes: 25808
