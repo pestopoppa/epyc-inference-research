@@ -78,6 +78,10 @@ _CMAKE_KEEP = re.compile(
     r"^(CMAKE_BUILD_TYPE|CMAKE_(C|CXX)_COMPILER|CMAKE_(C|CXX)_FLAGS(_RELEASE)?|"
     r"CMAKE_(EXE|SHARED)_LINKER_FLAGS|BUILD_SHARED_LIBS|GGML_[A-Z0-9_]+|LLAMA_[A-Z0-9_]+)$")
 _CMAKE_DROP = re.compile(r"(_DIR|_PATH|_ROOT|_DIRECTORY|BUILD_TESTS|CURL_|RPATH)")
+#: Entries the tree declares deprecated and ignores (llama.cpp CMakeLists.txt:170
+#: `llama_option_depr(WARNING LLAMA_CURL)`): a store build passes -DLLAMA_CURL=OFF, an in-tree build
+#: does not, and the two are the same executable. Measured 2026-10-22 on dd3d9721c vs 06b169e27.
+_CMAKE_DEPRECATED_NOOP = frozenset({"LLAMA_CURL"})
 
 GRADES = ("decision", "indicative")
 CO_TENANCY = ("quiet", "co-tenant")
@@ -173,24 +177,42 @@ def cmake_recipe(build_dir: Path | str) -> dict[str, str]:
             continue
         name_type, _, value = line.partition("=")
         name = name_type.split(":", 1)[0]
-        if _CMAKE_KEEP.match(name) and not _CMAKE_DROP.search(name):
+        if (_CMAKE_KEEP.match(name) and not _CMAKE_DROP.search(name)
+                and name not in _CMAKE_DEPRECATED_NOOP):
             out[name] = value
     if not out:
         raise FloorRegistryError(f"{cache} carries no GGML_/LLAMA_/compiler entries")
     return dict(sorted(out.items()))
 
 
-def _version_info(build_dir: Path) -> tuple[str, str]:
-    """(short commit, compiler line) from a store build's VERSION.txt: `10345 (dd3d9721c)`."""
+def _compiler(build_dir: Path, version_text: str | None) -> str:
+    """`<ID> <version>` (e.g. `GNU 15.2.0`) -- from VERSION.txt's `built with` line when the build is a
+    store image, else from CMake's own compiler record, so an in-tree build compares equal to a store one."""
+    if version_text:
+        match = re.search(r"^built with (\S+) (\S+)", version_text, re.M)
+        if match:
+            return f"{match.group(1)} {match.group(2)}"
+    for path in sorted(build_dir.glob("CMakeFiles/*/CMakeCXXCompiler.cmake")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        cid = re.search(r'set\(CMAKE_CXX_COMPILER_ID "([^"]+)"\)', text)
+        ver = re.search(r'set\(CMAKE_CXX_COMPILER_VERSION "([^"]+)"\)', text)
+        if cid and ver:
+            return f"{cid.group(1)} {ver.group(1)}"
+    raise FloorRegistryError(f"{build_dir}: no compiler identity (VERSION.txt `built with` or "
+                             f"CMakeFiles/*/CMakeCXXCompiler.cmake)")
+
+
+def _version_info(build_dir: Path, commit: str | None = None) -> tuple[str, str]:
+    """(commit, compiler). A store build names its commit in VERSION.txt (`10345 (dd3d9721c)`); an
+    in-tree build has no VERSION.txt, so the caller must pass `commit`."""
     path = build_dir / "VERSION.txt"
-    if not path.is_file():
-        raise FloorRegistryError(f"{path} missing: pass commit= explicitly")
-    text = path.read_text(encoding="utf-8", errors="replace")
-    match = re.search(r"\(([0-9a-f]{7,40})\)", text)
-    built = re.search(r"^built with .*$", text, re.M)
-    if not match or not built:
-        raise FloorRegistryError(f"{path} names no commit or no compiler line")
-    return match.group(1), built.group(0).strip()
+    text = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else None
+    if commit is None:
+        match = re.search(r"\(([0-9a-f]{7,40})\)", text or "")
+        if not match:
+            raise FloorRegistryError(f"{path} missing or names no commit: pass commit= explicitly")
+        commit = match.group(1)
+    return commit, _compiler(build_dir, text)
 
 
 def _sha256sums(build_dir: Path) -> dict[str, str]:
@@ -209,8 +231,7 @@ def equivalence_for_build(build_dir: Path | str, *, source_repo: Path | str = DE
                           commit: str | None = None) -> dict:
     """The execution-equivalence record of a build: key + the facts it was derived from."""
     build = Path(build_dir)
-    short, compiler = _version_info(build)
-    commit = commit or short
+    commit, compiler = _version_info(build, commit)
     full = _git(Path(source_repo), "rev-parse", "--verify", f"{commit}^{{commit}}")
     tree = source_tree_hash(source_repo, full)
     recipe = cmake_recipe(build)
@@ -581,6 +602,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("equivalence", help="print a build's equivalence record")
     s.add_argument("build", type=Path)
+    s.add_argument("--commit", help="the build's commit (required for an in-tree build with no VERSION.txt)")
     s = sub.add_parser("register", help="register a calibrated floor json")
     s.add_argument("floor", type=Path)
     s.add_argument("--build", type=Path, required=True, help="the build the A/A ran on")
@@ -625,7 +647,8 @@ def main(argv: list[str] | None = None) -> int:
     reg = FloorRegistry(args.root)
     try:
         if args.cmd == "equivalence":
-            print(json.dumps(equivalence_for_build(args.build, source_repo=args.source_repo), indent=1))
+            print(json.dumps(equivalence_for_build(args.build, source_repo=args.source_repo,
+                                                         commit=args.commit), indent=1))
             return 0
         if args.cmd == "status":
             champ = champion_state(args.source_repo, args.champion_branch)
