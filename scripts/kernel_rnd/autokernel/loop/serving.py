@@ -1116,9 +1116,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 # Layer 2 only. The ROCr env knob (layer 1, HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0)
                 # is NOT set here: the loader env is identity-bearing across resolved_recipe,
                 # unified_planner, production_enrollment, runtime_identity and legacy_targets,
-                # so adding a loader key is an AutoKernel identity change for its owner
-                # (STACKCHG-GPUPIN-20261022 D2). `affinity.escapes_end` records whether a
-                # thread created after this pin (e.g. a later ROCr thread) escaped.
+                # so adding a loader key is an AutoKernel identity change for its owner.
+                # Operator 2026-10-22, STACKCHG-GPUPIN-20261022: D1 = REFUSE on a stray thread
+                # (the raise below; no warn mode). D2 = re-check one GPU AK A/A at the next GPU
+                # AK window BEFORE the env knob is added here (pending task GPS-PIN-3, which
+                # threads it through the five identity sites). `affinity.escapes_end` records
+                # whether a thread created after this pin (e.g. a later ROCr thread) escaped.
                 if recipe.cpu_list:
                     pin = launch_affinity.pin_own_child(srv.pid, recipe.cpu_list)
                     affinity_pin = None if pin is None else pin.as_dict()
