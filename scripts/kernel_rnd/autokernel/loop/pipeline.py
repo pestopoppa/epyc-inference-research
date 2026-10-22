@@ -512,7 +512,9 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 # at their next draw -- continuous runs too: `remaining` is no longer None.
                 aborted.append(exc)
                 budget.remaining = 0
-                outcome = loop_mod.Outcome("run_aborted", None, [str(exc)])
+                outcome = loop_mod.Outcome(
+                    "run_aborted", None, [str(exc)],
+                    abort_evidence=getattr(exc, "inflight_keep", None))
             except Exception as exc:      # noqa: BLE001 -- deliberate, see below
                 # A lane used to die on ANY exception that was not Superseded:
                 # RatchetRefused, a git timeout, an OSError. The thread ended with a

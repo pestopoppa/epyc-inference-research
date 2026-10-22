@@ -5247,7 +5247,13 @@ def main(argv: list[str] | None = None) -> int:
             prior_floor = None
         # FIRST, before the loop draws any further work: nothing below is worth doing
         # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
-        verify_anchor(guard_floor=prior_floor)
+        try:
+            verify_anchor(guard_floor=prior_floor)
+        except loop.RunAborted as aborted:
+            # The keep's commit already landed; name its head on the abort so the
+            # run_aborted row can carry it (loop.iterate adds the rest).
+            aborted.committed_head = current_anchor_commit[0]
+            raise
         if direct_launch is not None:
             # This slot supplies the next hypothesis, not the recipe of the run's
             # initial binary. Rebind once at the actual owning keep boundary.

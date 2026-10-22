@@ -131,7 +131,8 @@ def verify(*, champion_commit: str, anchor_build: Path,
     if not getattr(built, "passed", False):
         raise loop_mod.RunAborted(
             f"anchor guard: champion {champion_commit[:12]} would not build "
-            f"({getattr(built, 'reason', '') or 'no reason given'}), so the promoted "
+            f"({getattr(built, 'reason', '') or 'no reason given'}"
+            f"{': ' + str(getattr(built, 'detail', '') or '')[-2000:] if getattr(built, 'detail', '') else ''}), so the promoted "
             f"anchor is UNCHECKED — which is what produced 114 void measurements")
     a_dig, f_dig = [digest(p) if digest else None for p in (anchor_build, scratch_build)]
     if a_dig and f_dig and a_dig != f_dig:

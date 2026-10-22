@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 from typing import Callable
 import subprocess
 
@@ -187,6 +188,28 @@ class Verdict:
         return row
 
 
+def _clear_stale_build_dir(source_root: Path, build_dir: Path) -> bool:
+    """Remove `build_dir` when its CMake cache was generated from a DIFFERENT source tree.
+
+    CMake refuses `-S new -B old-cache` ("source does not match the source used to
+    generate cache"). A persistent scratch build (the anchor guard's) hits this the
+    moment the campaign moves to a new worktree. Returns True when it cleared."""
+    cache = Path(build_dir) / "CMakeCache.txt"
+    try:
+        text = cache.read_text(errors="replace")
+    except OSError:
+        return False
+    match = re.search(r"^CMAKE_HOME_DIRECTORY:INTERNAL=(.*)$", text, re.M)
+    if not match:
+        return False
+    if Path(match.group(1).strip()).resolve() == Path(source_root).resolve():
+        return False
+    print(f"gates.compiles: {build_dir} was configured from {match.group(1).strip()}, "
+          f"not {source_root}; clearing the stale build dir and configuring fresh")
+    shutil.rmtree(build_dir, ignore_errors=True)
+    return True
+
+
 def compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
              jobs: int, cpu_list: str | None, targets: tuple = DEFAULT_TARGETS,
              cmake: str = "cmake", env: dict | None = None) -> Verdict:
@@ -209,6 +232,7 @@ def _compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
               jobs: int, cpu_list: str | None, targets: tuple = DEFAULT_TARGETS,
               cmake: str = "cmake", env: dict | None = None) -> Verdict:
     prefix = ("taskset", "-c", cpu_list) if cpu_list else ()
+    _clear_stale_build_dir(source_root, build_dir)
     configure = [*prefix, cmake, "-S", str(source_root), "-B", str(build_dir),
                  "-DCMAKE_BUILD_TYPE=Release",
                  *[f"-D{name}={value}" for name, value in cmake_defines]]

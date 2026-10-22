@@ -549,6 +549,9 @@ class Outcome:
     invalid_measurement: dict | None = None
     instrument_failure: dict | None = None
     integrity_screen: dict | None = None
+    # Evidence of a keep in flight when a guard aborted the run after `commit` landed
+    # (status "run_aborted" only). Audit trail; the keep is NOT recorded as kept.
+    abort_evidence: dict | None = None
     # AKX-ALL-29.3: both body hashes when the build was a no-op (status "no_op_build").
     no_op_build: dict | None = None
     attempt_identity: str | None = None
@@ -635,6 +638,8 @@ class Outcome:
             row["instrument_failure"] = self.instrument_failure
         if self.integrity_screen is not None:
             row["integrity_screen"] = self.integrity_screen
+        if self.abort_evidence is not None:
+            row["abort_evidence"] = self.abort_evidence
         if self.no_op_build is not None:
             row["no_op_build"] = self.no_op_build
         for key in ("attempt_identity", "exact_repeat_dispatch_count", "duplicate_of",
@@ -2101,6 +2106,22 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         # single-rung keep as ever.
                         try:
                             head = commit(hypothesis, paths, comparison)
+                        except RunAborted as aborted:
+                            # commit landed, then a guard (anchor A/A, build) aborted the
+                            # run: attach the keep's evidence so it is auditable. Not a keep.
+                            pair = hypothesis.runtime_pair
+                            aborted.inflight_keep = {
+                                "mechanism_id": hypothesis.mechanism_id,
+                                "statement": hypothesis.statement,
+                                "committed_head": getattr(aborted, "committed_head", None),
+                                "paths": [str(path) for path in paths],
+                                "comparison": comparison.to_dict(),
+                                "runtime_pair_digests": (
+                                    None if pair is None else {
+                                        "anchor": getattr(pair.anchor, "execution_digest", None),
+                                        "candidate": getattr(pair.candidate, "execution_digest", None)}),
+                            }
+                            raise
                         except ConfirmVetoed as veto:
                             return Outcome("keep_candidate", hypothesis,
                                            [str(veto)], comparison, verdicts,
