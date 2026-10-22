@@ -46,7 +46,7 @@ def metered_arm(inner: pl.Arm, url: str, stop_file: Path, sink: list) -> pl.Arm:
         after = mm.scrape(url)
         sink.append({"arm": inner.name, "seed": seed, "metrics": mm.window_report(before, after)})
         return value, check
-    return pl.Arm(inner.name, measure)
+    return pl.Arm(inner.name, measure, np=inner.np)
 
 
 def toy_servers(rate_a: float, rate_b: float):
