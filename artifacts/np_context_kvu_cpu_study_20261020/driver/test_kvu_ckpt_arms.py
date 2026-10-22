@@ -123,19 +123,19 @@ class LogEvents(unittest.TestCase):
 
 class PolicySimulator(unittest.TestCase):
     def test_dense_positions(self):
-        self.assertEqual(positions(K.ARM_DENSE), [2064, 10320, 18576, 26832, 30444, 30960, 32492])
+        self.assertEqual(positions(K.ARM_DENSE), [2064, 10320, 18576, 26832, 30448, 30960, 32492])
 
     def test_tail_junction_realises_four_states_not_two(self):
         res = K.simulate_prefill(USER_STARTS, N_TOTAL, K.ARM_TAIL)
-        self.assertEqual([c[0] for c in res], [2064, 30444, 30960, 32492])
+        self.assertEqual([c[0] for c in res], [2064, 30448, 30960, 32492])
         self.assertEqual([c[0] for c in res if c[1]], [30960])           # only the junction is pinned
         self.assertGreater(len(res), 2)       # => the arm records meets_le2_states=False until patch P-B (PLAN 11.5)
 
     def test_coarse_and_fixed(self):
-        self.assertEqual(positions(K.ARM_COARSE), [2064, 18576, 30444, 30960, 32492])
+        self.assertEqual(positions(K.ARM_COARSE), [2064, 18576, 30448, 30960, 32492])
         fx = positions(K.fixed_arm(4096, 8))
         self.assertEqual(len(fx), 8)
-        self.assertEqual(fx, [10320, 14448, 18576, 22704, 26832, 30444, 30960, 32492])
+        self.assertEqual(fx, [10320, 14448, 18576, 22704, 26832, 30448, 30960, 32492])
 
     def test_dense_never_exceeds_cap_and_counts_are_ordered(self):
         a = K.Arm("tiny", "ckpt", min_step=1024, ctx_ckpts=4)
@@ -156,7 +156,7 @@ class PolicySimulator(unittest.TestCase):
         later = K.simulate_prefill(USER_STARTS + [N_TOTAL + 528], N_TOTAL + 2064, K.ARM_DENSE, held=held, from_pos=N_TOTAL, id_task=2)
         pos = [c[0] for c in later]
         self.assertNotIn(32492, pos)
-        self.assertNotIn(30444, pos)
+        self.assertNotIn(30448, pos)
         self.assertIn(26832, pos)
 
     def test_probe_plan(self):
@@ -237,21 +237,23 @@ class Planning(unittest.TestCase):
 
     def test_select_stage_arms_models_and_waves(self):
         pl = K.build_plan(["q36_35b", "q38_27b"], ["select"], 3, 24, bins=self.bins)
-        self.assertEqual([l.arm for l in pl if l.model == "q36_35b"],
+        self.assertEqual(list(dict.fromkeys(l.arm for l in pl if l.model == "q36_35b")),
                          ["dense", "tail_junction", "coarse", "fixed_s4k_c8", "fixed_s8k_c8", "fixed_s16k_c8"])
-        l0 = pl[0]
-        self.assertEqual(len(l0.cells), 2 * 3)                         # 8k, 32k x 3 waves
-        self.assertEqual(l0.c, 32768 + K.HEADROOM_TOK)
+        dense = [l for l in pl if l.model == "q36_35b" and l.arm == "dense"]
+        self.assertEqual(len(dense), 2 * 3)                            # KVU-12.1a fix 4: one launch (fresh server) per cell: 8k, 32k x 3 waves
+        self.assertTrue(all(len(l.cells) == 1 for l in pl))
+        self.assertEqual([l.id for l in dense][:2], ["select__q36_35b__dense__8k__w0", "select__q36_35b__dense__8k__w1"])
+        self.assertEqual({l.cells[0].unit: l.c for l in dense}, {"8k": 8192 + K.HEADROOM_TOK, "32k": 32768 + K.HEADROOM_TOK})   # fix 2: -c per L
         self.assertTrue(all(l.binary == str(self.fork) for l in pl))
         self.assertEqual(len({c.key for l in pl for c in l.cells}), sum(len(l.cells) for l in pl))     # keys are unique
 
     def test_holdout_needs_selection_and_caps_128k_waves(self):
         pl = K.build_plan(["q36_35b", "q38_27b"], ["holdout"], 3, 96, selection=None, bins=self.bins)
-        self.assertEqual([l.arm for l in pl], ["dense", "tail_junction", "coarse"])        # no fixed arm without a selection; 27B has no holdout lens
+        self.assertEqual(list(dict.fromkeys(l.arm for l in pl)), ["dense", "tail_junction", "coarse"])        # no fixed arm without a selection; 27B has no holdout lens
         pl = K.build_plan(["q36_35b"], ["holdout"], 3, 96, selection={"q36_35b": (8192, 8)}, bins=self.bins)
         self.assertIn("fixed_s8k_c8", [l.arm for l in pl])
-        waves_128 = [c.wave for c in pl[0].cells if c.unit == "128k"]
-        waves_64 = [c.wave for c in pl[0].cells if c.unit == "64k"]
+        waves_128 = [c.wave for l in pl if l.arm == "dense" for c in l.cells if c.unit == "128k"]
+        waves_64 = [c.wave for l in pl if l.arm == "dense" for c in l.cells if c.unit == "64k"]
         self.assertEqual(waves_128, [0, 1]); self.assertEqual(waves_64, [0, 1, 2])
 
     def test_gen_stage_blocks_decode_arm_without_a_patched_binary(self):
@@ -271,7 +273,7 @@ class Planning(unittest.TestCase):
 
     def test_only_arms_and_lens_override(self):
         pl = K.build_plan(["q36_35b"], ["select"], 2, 24, only_arms={"dense"}, bins=self.bins, lens_override={"select": {"q36_35b": ("8k",)}})
-        self.assertEqual(len(pl), 1); self.assertEqual({c.unit for c in pl[0].cells}, {"8k"}); self.assertEqual(len(pl[0].cells), 2)
+        self.assertEqual(len(pl), 2); self.assertEqual({c.unit for l in pl for c in l.cells}, {"8k"}); self.assertEqual([len(l.cells) for l in pl], [1, 1])
         self.assertEqual(K.build_plan(["q38_27b"], ["select"], 1, 24, bins=self.bins, lens_override={"select": {"q38_27b": ()}}), [])
 
     def test_parse_kv_list(self):
@@ -603,18 +605,18 @@ class RunLoop(unittest.TestCase):
 
     def test_cap_refuses_every_launch_whose_corrected_estimate_exceeds_it(self):
         rc, calls, out = self.run_main("--stages", "select", "--arms", "dense,coarse", "--cap-s", "30")
-        self.assertEqual(calls, []); self.assertEqual(out.count("REFUSED_START"), 2); self.assertIn("refused_start_launches=2", out)
+        self.assertEqual(calls, []); self.assertEqual(out.count("REFUSED_START"), 12); self.assertIn("refused_start_launches=12", out)
 
     def test_a_refused_launch_does_not_stop_a_cheaper_one(self):
         # quarter, 32k, 2 waves: tail_junction plans ~63 min per cell (refused under a 50 min cap), fixed_s4k_c8 ~41.5 min (fits). Order: tail first.
         rc, calls, out = self.run_main("--stages", "select", "--arms", "tail_junction,fixed_s4k_c8", "--lens-select", "q36_35b=32k", "--waves", "2", "--cap-s", "3000")
-        self.assertEqual(calls, [("select__q36_35b__fixed_s4k_c8", 2)])
-        self.assertEqual(out.count("REFUSED_START"), 1)
+        self.assertEqual(calls, [("select__q36_35b__fixed_s4k_c8__32k__w0", 1), ("select__q36_35b__fixed_s4k_c8__32k__w1", 1)])
+        self.assertEqual(out.count("REFUSED_START"), 2)
 
     def test_resume_skips_done_cells_and_only_runs_the_rest(self):
         rc, calls, out = self.run_main("--stages", "select", "--arms", "dense,coarse")
-        self.assertEqual([c[0] for c in calls], ["select__q36_35b__dense", "select__q36_35b__coarse"])
-        self.assertEqual(calls[0][1], 6)
+        self.assertEqual(len(calls), 12); self.assertEqual(calls[0], ("select__q36_35b__dense__8k__w0", 1))
+        self.assertEqual(sum(c[1] for c in calls), 12)
         rc, calls, out = self.run_main("--stages", "select", "--arms", "dense,coarse")
         self.assertEqual(calls, []); self.assertIn("all cells done", out)
         # drop one coarse cell from the ledger: only that launch runs again, with exactly one cell todo
@@ -622,7 +624,7 @@ class RunLoop(unittest.TestCase):
         rows = [r for r in p.read_text().splitlines() if "coarse" not in r or "|8k|w0|" not in r]
         p.write_text("\n".join(rows) + "\n")
         rc, calls, out = self.run_main("--stages", "select", "--arms", "dense,coarse")
-        self.assertEqual(calls, [("select__q36_35b__coarse", 1)])
+        self.assertEqual(calls, [("select__q36_35b__coarse__8k__w0", 1)])
 
     def test_failed_cells_are_retried_once_then_parked(self):
         def fail(lc, todo, out):
@@ -671,6 +673,224 @@ class RunLoop(unittest.TestCase):
         self.assertIn("kvu121", buf.getvalue())
         a = types.SimpleNamespace(selection=str(sel))
         self.assertEqual(K.load_selection(a), {"q36_35b": None})
+
+
+# ================================================================================================ KVU-12.1a driver fixes
+FX = Path(__file__).resolve().parent / "fixtures" / "kvu121_recorded_20261022"
+
+
+def _fx_rows(name):
+    return [json.loads(x) for x in (FX / name).read_text().splitlines() if x.strip()]
+
+
+class Fix1FitFailsLoud(unittest.TestCase):
+    def test_overshoot_is_refused_not_returned(self):
+        # the recorded 32k cell: every probe the old make() could reach overshot the 32,688 target (35,863 / 38,868 tokens)
+        make = lambda k: [{"content": "x" * k}]
+        measure = lambda m: 35863 + len(m[0]["content"]) // 1000
+        with self.assertRaises(K.FitRefused) as cm:
+            K.fit_conversation(measure, make, 32688, lo=160, hi=36000, tol=0.01)
+        self.assertIn("REFUSED_FIT", str(cm.exception)); self.assertEqual(cm.exception.result, "REFUSED_FIT")
+        self.assertTrue(issubclass(K.FitRefused, M.CellRefused))           # run_launch records it as a counted REFUSED_FIT row
+
+    def test_a_coarse_step_that_jumps_the_band_is_refused(self):
+        make = lambda k: [{"content": "x" * k}]
+        measure = lambda m: (len(m[0]["content"]) // 500) * 500          # 500-token steps never land in a 1% band below 5,040
+        with self.assertRaises(K.FitRefused):
+            K.fit_conversation(measure, make, 5040, lo=16, hi=100000, tol=0.005)
+
+    def test_result_is_never_above_the_target(self):
+        make = lambda k: [{"content": "x" * k}]
+        measure = lambda m: len(m[0]["content"]) // 4
+        for target in (812, 5000, 32688):
+            _msgs, n, _k = K.fit_conversation(measure, make, target, lo=16, hi=400000, tol=0.01)
+            self.assertLessEqual(n, target); self.assertGreaterEqual(n, 0.99 * target)
+
+    def test_make_scales_every_turn(self):
+        corpus = types.SimpleNamespace(text="abcdefgh" * 100000, cursor=123)
+        corpus.take = lambda n, c=corpus: (c.text[c.cursor:c.cursor + n], setattr(c, "cursor", c.cursor + n))[0]
+        make = K.ckpt_cell_texts(corpus, 3, 4.0)
+        small, big = make(500), make(2000)
+        self.assertEqual(len(small), 7)
+        self.assertTrue(all(len(b["content"]) == 4 * len(a["content"]) for a, b in zip(small, big)))   # not only the last message
+        self.assertEqual(make(1000), make(1000))                                                   # pure given the cursor
+
+    def test_deterministic_refusals_are_counted_and_parked(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "cells.jsonl"
+            K.append_jsonl(p, dict(cell_key="m|dense|ckpt|32k|w1|bX", result="REFUSED_FIT", reason="x"))
+            done, parked, _b = K.done_keys(p)
+            self.assertIn("m|dense|ckpt|32k|w1|bX", parked)
+            self.assertIn(("m", "32k", "dense"), K._bad_keys(K.read_rows(p)))          # a refused cell fails its arm at that L
+
+
+class Fix2ContextFollowsTheFit(unittest.TestCase):
+    def test_the_recorded_overflow_would_be_refused(self):
+        # 32k w1: extend_1 rendered 40,965 tokens on -c 40,960 -> HTTP 400 in the recorded run
+        self.assertGreater(K.ctx_needed(40965), 32768 + K.HEADROOM_TOK)
+        self.assertLessEqual(K.ctx_needed(32688 + 2 * 2100), 32768 + K.HEADROOM_TOK)     # a fitted cell + its extend pair fits
+
+    def test_headroom_covers_the_largest_probe(self):
+        pair = K.TURN_USER_TOK + K.TURN_ASST_TOK + 64                    # extend pair with template tokens, generous
+        self.assertGreaterEqual(K.HEADROOM_TOK, pair + K.EDIT_SLACK_TOK + K.PROBE_NPREDICT + 64 + K.PROBE_NPREDICT)
+
+    def test_run_ckpt_cell_refuses_before_any_request(self):
+        IM, U, A = 9, 7, 8
+        def ids_for(messages):
+            out = [5] * 150 + [IM, 6, 1, 1]                               # template system block: first user starts at 154
+            for m in messages:
+                out += [IM, U if m["role"] == "user" else A] + [1] * (len(m["content"]) // 4)
+            return out + [IM, A]
+        tok = lambda port, text, add_special=False: [IM, U] if text == K.USER_DELIM else [IM]
+        corpus = types.SimpleNamespace(text="lorem ipsum " * 200000, cursor=0)
+        corpus.take = lambda n, c=corpus: (c.text[c.cursor:c.cursor + n], setattr(c, "cursor", c.cursor + n))[0]
+        with tempfile.TemporaryDirectory() as d:
+            srv = types.SimpleNamespace(dir=Path(d), argv=["/x"]); (Path(d) / "server.log").write_text("")
+            launch = types.SimpleNamespace(c=8192 + 100, cells=[1], id="l", model="q36_35b")     # too small for 8k + extend pair
+            ctx = dict(a=None, srv=srv, port=1, corpus=corpus, arm=K.ARM_DENSE, launch=launch)
+            cell = K.Cell("q36_35b", "dense", "ckpt", "8k", 0, 1.0, 1.0, "bX")
+            with mock.patch.object(K, "render_ids", side_effect=lambda port, m: ids_for(m)), mock.patch.object(K, "tokenize_ids", side_effect=tok), \
+                 mock.patch.object(K, "chat_request") as chat:
+                with self.assertRaises(K.CtxRefused) as cm:
+                    K.run_ckpt_cell(ctx, cell)
+            chat.assert_not_called()
+            self.assertIn("REFUSED_CTX", str(cm.exception)); self.assertEqual(cm.exception.result, "REFUSED_CTX")
+
+
+class Fix3ExactSimulator(unittest.TestCase):
+    """The simulator re-judged OFFLINE against the recorded run (/mnt/raid0/llm/tmp/kvu121-arms/out, 2026-10-22), fed the real rendered
+    offsets that kvu121_offline_offsets.py derived without a server (its self-check: every offline prompt length == the logged one)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.offs = json.loads((FX / "offsets.json").read_text())
+        cls.reqs = _fx_rows("requests.jsonl")
+        cls.cells = _fx_rows("cells.jsonl")
+
+    def replay(self, unit, wave, arm, seed=None):
+        logged = {r["probe"]: r for r in self.reqs if r["unit"] == unit and r["wave"] == wave and r["policy_arm"] == arm}
+        return K.replay_cell_sim(K.arm_by_name(arm), self.offs["cells"][f"{unit}:w{wave}"], logged, seed=seed)
+
+    def test_offline_offsets_match_every_logged_prompt_length(self):
+        for key, rows in self.offs["cells"].items():
+            for r in rows:
+                if r["logged_n_prompt_total"] is not None:
+                    self.assertEqual(r["n_prompt_total"], r["logged_n_prompt_total"], f"{key} {r['probe']}")
+
+    def test_first_user_start_is_the_template_header_and_delimiters_are_the_servers(self):
+        cold = self.offs["cells"]["8k:w0"][0]
+        self.assertEqual(cold["user_starts"][0], 154)                    # the server's empty-set checkpoint (sim used to drop it: 0 < x)
+        self.assertEqual(cold["user_starts"][-1], 8093)                  # last user message, logged checkpoint 8093
+        self.assertEqual(K.user_starts_from_ids([1, 9, 7, 2, 9, 8, 9, 7], [9, 7]), [1, 6])
+
+    def test_before_the_fix_no_wave0_cell_agreed(self):
+        w0 = [c for c in self.cells if c["wave"] == 0 and c["result"] == "OK"]
+        self.assertEqual(len(w0), 8)
+        self.assertEqual(sum(1 for c in w0 if c["sim_matches_log"]), 0)
+        self.assertEqual(sum(1 for c in w0 if sorted(c["sim_positions_cold"]) == sorted(c["ckpt_positions"])), 0)
+
+    def test_after_the_fix_every_wave0_cell_agrees_exactly(self):
+        arms_by_unit = {"8k": ["dense", "tail_junction", "coarse", "fixed_s4k_c8", "fixed_s8k_c8", "fixed_s16k_c8"], "32k": ["dense", "tail_junction"]}
+        n = 0
+        for unit, arms in arms_by_unit.items():
+            for arm in arms:
+                res = self.replay(unit, 0, arm)
+                self.assertTrue(res["matches"], f"{unit} {arm}: {res['mismatches']}")
+                n += len(res["per_probe"])
+        self.assertEqual(n, 6 * 4 + 2 * 5)                               # 34 requests: prompt_n, cache_n, positions, count, bytes all exact
+
+    def test_tail_checkpoint_is_n_minus_n_ubatch(self):
+        res = self.replay("8k", 0, "dense")
+        self.assertEqual(res["per_probe"]["cold_build"]["positions"][0], [154, 6137, 8093, 8181])   # 8185 - 2048 = 6137 (the old sim said 6133)
+        self.assertEqual(K.ServerSim(K.ARM_DENSE).request(8185, [154, 2961, 5512, 8093], 0)["positions"], [154, 6137, 8093, 8181])
+
+    def test_wave1_disagrees_only_by_the_inherited_checkpoint(self):
+        # fix 4's evidence: w1 ran on the server w0 warmed. Its cold build restored w0's checkpoint at 154 (cache_n 154) and the per-cell
+        # replay never saw that checkpoint, so every w1 row under-counts by one state. Everything else (all resume probes) agrees.
+        res = self.replay("8k", 1, "dense")
+        self.assertFalse(res["matches"])
+        cb = res["per_probe"]["cold_build"]
+        self.assertEqual(cb["cache_n"], [0, 154])
+        for probe, rec in res["per_probe"].items():
+            self.assertEqual(rec["positions"][0], [154] + rec["positions"][1], probe)
+            if probe != "cold_build":
+                self.assertEqual(rec["prompt_n"][0], rec["prompt_n"][1]); self.assertEqual(rec["cache_n"][0], rec["cache_n"][1])
+
+    def test_failed_request_cannot_agree(self):
+        res = self.replay("32k", 1, "dense")                            # extend_1 overflowed -c (HTTP 400)
+        self.assertFalse(res["matches"])
+        self.assertTrue(any("extend_1: request failed" in m for m in res["mismatches"]))
+
+    def test_eviction_order_and_restore_rule(self):
+        sim = K.ServerSim(K.ARM_DENSE)
+        sim.request(8185, [154, 2961, 5512, 8093], 0)
+        r = sim.request(10700, [154, 2961, 5512, 8093, 8769], 8185)       # extend: restore n-4, the n-n_ubatch checkpoint evicts the old tail
+        self.assertEqual((r["cache_n"], r["prompt_n"], r["restored_n_tokens"]), (8181, 2519, 8181))
+        self.assertEqual(r["positions"], [154, 8652, 8769, 10696])
+        r = sim.request(10725, [154, 2961, 5512, 8106, 8782], 7404)       # edit before every surviving checkpoint but 154
+        self.assertEqual((r["cache_n"], r["prompt_n"]), (154, 10571))
+        r = K.ServerSim(K.ARM_DENSE).request(100, [10], 0)
+        self.assertEqual(r["full_reprocess"], False); self.assertEqual(r["cache_n"], 0)
+
+
+class Fix4FreshServerPerWave(unittest.TestCase):
+    def test_every_ckpt_cell_is_its_own_launch(self):
+        with tempfile.TemporaryDirectory() as d:
+            fork = Path(d) / "fork"; fork.write_text("x")
+            pl = K.build_plan(["q36_35b"], ["select"], 2, 24, bins={"ckpt": str(fork), "gen": ""}, only_arms={"dense"})
+        self.assertEqual([(l.id, len(l.cells)) for l in pl], [("select__q36_35b__dense__8k__w0", 1), ("select__q36_35b__dense__8k__w1", 1),
+                                                               ("select__q36_35b__dense__32k__w0", 1), ("select__q36_35b__dense__32k__w1", 1)])
+        self.assertEqual(len({l.id for l in pl}), len(pl))               # each launch dir (and server) is distinct
+
+
+class Fix5PhaseGate(unittest.TestCase):
+    def ok(self, key, match=True):
+        return dict(schema=K.SCHEMA, kind="ckpt", cell_key=key, result="OK", sim_check=dict(mismatches=[] if match else ["cold_build: count sim 4 != log 3"]),
+                    sim_matches_log=match)
+
+    def test_problems(self):
+        self.assertEqual(K.sim_gate_problems([]), [])
+        self.assertEqual(K.sim_gate_problems([self.ok("m|dense|ckpt|8k|w0|bX")]), [])
+        p = K.sim_gate_problems([self.ok("m|dense|ckpt|8k|w0|bX", match=False)])
+        self.assertEqual(len(p), 1); self.assertIn("count sim 4 != log 3", p[0])
+        old = dict(self.ok("m|dense|ckpt|8k|w1|bX")); old.pop("sim_check")
+        self.assertIn("before KVU-12.1a", K.sim_gate_problems([old])[0])
+        self.assertIn("REFUSED_FIT", K.sim_gate_problems([dict(cell_key="m|dense|ckpt|8k|w2|bX", result="REFUSED_FIT", reason="r")])[0])
+        retried = [dict(cell_key="m|dense|ckpt|8k|w0|bX", result="EXCEPTION"), self.ok("m|dense|ckpt|8k|w0|bX")]
+        self.assertEqual(K.sim_gate_problems(retried), [])               # the last attempt counts
+        self.assertEqual(K.sim_gate_problems([self.ok("m|dense|ckpt|8k|w0|bX", match=False)], exclude_keys={"m|dense|ckpt|8k|w0|bX"}), [])
+
+    def test_the_recorded_phase1_would_have_refused_phase2(self):
+        cells = _fx_rows("cells.jsonl")
+        p1 = [dict(c, schema=K.SCHEMA, kind="ckpt") for c in cells if c["unit"] == "8k"]
+        probs = K.sim_gate_problems(p1)
+        self.assertEqual(len(probs), 12)                                 # all 12 phase-1 cells: no exact check recorded / disagreement
+
+
+class Fix5PhaseGateRun(unittest.TestCase):
+    setUp, run_main = RunLoop.setUp, RunLoop.run_main
+
+    def test_phase2_refused_with_reason_when_phase1_disagrees(self):
+        self.out.mkdir(parents=True, exist_ok=True)
+        bad = dict(schema=K.SCHEMA, kind="ckpt", cell_key="q36_35b|dense|ckpt|8k|w0|bX", result="OK", sim_matches_log=False,
+                   sim_check=dict(mismatches=["cold_build: positions sim [154] != log []"]))
+        K.append_jsonl(self.out / K.CELLS_FILE, bad)
+        rc, calls, out = self.run_main("--stages", "select", "--arms", "dense", "--lens-select", "q36_35b=32k", "--waves", "2")
+        self.assertEqual((rc, calls), (8, []))
+        self.assertIn("REFUSED_SIM_GATE", out); self.assertIn("positions sim [154] != log []", out)
+        self.assertIn("REFUSED_SIM_GATE", (self.out / K.CELLS_FILE).read_text())
+
+    def test_phase2_starts_when_phase1_agrees(self):
+        self.out.mkdir(parents=True, exist_ok=True)
+        K.append_jsonl(self.out / K.CELLS_FILE, dict(schema=K.SCHEMA, kind="ckpt", cell_key="q36_35b|dense|ckpt|8k|w0|bX", result="OK",
+                                                     sim_matches_log=True, sim_check=dict(mismatches=[])))
+        rc, calls, out = self.run_main("--stages", "select", "--arms", "dense", "--lens-select", "q36_35b=32k", "--waves", "2")
+        self.assertEqual(rc, 0); self.assertEqual(len(calls), 2)
+
+    def test_a_phase_resumes_itself(self):
+        rc, calls, out = self.run_main("--stages", "select", "--arms", "dense", "--lens-select", "q36_35b=8k", "--waves", "1",
+                                       launch_side_effect=lambda lc, todo, out: [K.append_jsonl(out / K.CELLS_FILE, dict(cell_key=c.key, result="EXCEPTION")) for c in todo] and "done")
+        rc, calls, out = self.run_main("--stages", "select", "--arms", "dense", "--lens-select", "q36_35b=8k", "--waves", "1")
+        self.assertEqual(rc, 0); self.assertEqual(len(calls), 1)         # its own failed cell is retried, not gated
 
 
 if __name__ == "__main__":

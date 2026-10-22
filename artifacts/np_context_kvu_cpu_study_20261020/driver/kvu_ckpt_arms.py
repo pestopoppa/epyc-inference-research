@@ -241,42 +241,137 @@ def resume_summary(events):
 
 
 # ----------------------------------------------------------------------------------------------- policy simulator (prices the plan; cross-checks the log)
-def simulate_prefill(starts, n_total, arm, held=(), ubatch=UBATCH, from_pos=0, id_task=1):
-    """Checkpoints a request would create while prefilling tokens [from_pos, n_total), following server-context.cpp pre_decode:
-    first user-start while the set is empty, user starts more than min_step past the newest, the last user message, n-4-n_ubatch and n-4,
-    plus the pinned junction. `held` = surviving (n_tokens, pinned, id_task) from earlier requests. Returns the retained list after the
-    min-step closeness and capacity eviction of create_checkpoint. APPROXIMATE (chunk boundaries are modelled at checkpoint positions)."""
-    held = [tuple(h) for h in held if h[0] <= from_pos]
-    last_user = max((s for s in starts if 0 < s < n_total), default=None)
-    want = []
-    back = max([h[0] for h in held], default=None)
-    for s in sorted(x for x in starts if 0 < x < n_total and x >= from_pos):
-        if back is None or s > back + arm.min_step or s == last_user:
-            want.append((s, False)); back = s
-    for off in (4 + ubatch, 4):
-        p = n_total - off
-        if p > from_pos:
-            want.append((p, False))
-    if arm.junction and last_user is not None:
-        want.append((last_user, True))
-    cks = list(held)
-    for p, pinned in sorted(set(want)):
-        if any(c[0] == p for c in cks):
-            cks = [(c[0], c[1] or pinned, c[2]) if c[0] == p else c for c in cks]
-            continue
-        last, keep = None, []
-        for c in sorted(cks):                                  # evict unpinned older checkpoints within min_step of an earlier one
-            if (not c[1]) and c[2] != id_task and last is not None and c[0] <= last + arm.min_step:
+N_BATCH = 2048                 # llama-server -b default (the arms do not pass -b); the tail checkpoint sits min(n_batch, 4 + n_ubatch) before the end
+
+
+@dataclasses.dataclass
+class SimCkpt:
+    n: int                     # n_tokens of the state (pos_min = pos_max = n - 1)
+    pinned: bool
+    task: int
+
+
+class ServerSim:
+    """EXACT replay of the fork server's checkpoint policy for one slot (kv-prefix-fork tools/server/server-context.cpp, KVU-12.1a fix 3):
+    - request start: n_past = longest common prefix with the cached tokens; when the cached recurrent state lies past it, restore the newest
+      checkpoint (list order) with n_tokens <= n_past, else re-process from 0; then erase every checkpoint with pos_max > pos_next
+      ("erased invalidated"); n_past == n_total is pulled back by one token [TAG_PROMPT_LOGITS].
+    - prefill: a batch holds at most n_batch tokens and ends early at a requested checkpoint_at position, at a user-message start that is the
+      last one / the set is empty / more than min_step past the newest checkpoint, or min(n_batch, 4 + n_ubatch) and min(n_batch, 4) tokens
+      before the end. The checkpoint is taken at the batch START when that start is a user start or the batch ends within n_ubatch of the
+      end (or the batch is the last one), unless the memory is empty; then the min_step spacing rule; pinned (checkpoint_at) bypasses both.
+    - create_checkpoint: an existing state at the same position is only re-pinned; unpinned checkpoints of OTHER tasks within min_step of an
+      earlier kept one are erased (list order), then the oldest unpinned is erased while the set is at --ctx-checkpoints.
+    User starts must be the server's: positions of the user delimiter tokens in the rendered prompt (user_starts_from_ids)."""
+
+    def __init__(self, arm, n_batch=N_BATCH, n_ubatch=UBATCH, held=(), cached=0):
+        self.arm, self.n_batch, self.n_ubatch = arm, n_batch, n_ubatch
+        self.ckpts = [SimCkpt(int(h[0]), bool(h[1]) if len(h) > 1 else False, int(h[2]) if len(h) > 2 else 0) for h in held]
+        self.cached = cached           # tokens the slot holds (prompt + generated - 1)
+        self.task = max([c.task for c in self.ckpts] + [0])
+
+    def positions(self):
+        return sorted(c.n for c in self.ckpts)
+
+    def retained(self):
+        return sorted((c.n, c.pinned, c.task) for c in self.ckpts)
+
+    def _create(self, n, pinned):
+        for c in self.ckpts:
+            if c.n != n:
                 continue
-            keep.append(c); last = c[0]
-        cks = keep
-        while len(cks) >= arm.ctx_ckpts:
-            old = [c for c in sorted(cks) if not c[1]]
-            if not old:
+            if pinned:
+                c.pinned = True
+                return
+            if c.pinned:
+                return
+        keep, last = [], -1
+        for c in self.ckpts:
+            if not c.pinned and c.task != self.task and last >= 0 and c.n <= last + self.arm.min_step:
+                continue
+            keep.append(c); last = c.n
+        self.ckpts = keep
+        while len(self.ckpts) >= self.arm.ctx_ckpts:
+            old = next((c for c in self.ckpts if not c.pinned), None)
+            if old is None:
                 break
-            cks.remove(old[0])
-        cks.append((p, pinned, id_task))
-    return sorted(cks)
+            self.ckpts.remove(old)
+        self.ckpts.append(SimCkpt(n, pinned, self.task))
+
+    def restore(self, n_total, lcp):
+        """Request start. Returns (n_past, restored_n_tokens or None, full_reprocess)."""
+        n_past = max(0, min(int(lcp), self.cached))
+        pos_next, restored, full = n_past, None, False
+        if 0 < n_past <= self.cached:
+            thold = max(0, n_past - (0 if n_past < n_total else 1))
+            if self.cached - 1 >= thold:                       # the recurrent state sits past the common prefix: a checkpoint is needed
+                hit = None
+                for c in reversed(self.ckpts):
+                    if c.n - 1 > pos_next:
+                        continue
+                    if c.n - 1 < thold or c.n - 1 == 0:
+                        hit = c; break
+                if hit is not None:
+                    pos_next = min(pos_next, hit.n)
+                    n_past = min(pos_next, hit.n)
+                    restored = hit.n
+                else:
+                    pos_next, n_past, full = 0, 0, True
+        self.ckpts = [c for c in self.ckpts if c.n - 1 <= pos_next]
+        if n_past == n_total and n_past > 0:
+            n_past -= 1
+        return n_past, restored, full
+
+    def prefill(self, n_total, user_starts, from_pos, checkpoint_at=()):
+        users = set(u for u in user_starts if 0 <= u < n_total)
+        last_user = max(users) if users else -1
+        at = set(int(x) for x in checkpoint_at)
+        offs = (min(self.n_batch, 4 + self.n_ubatch), min(self.n_batch, 4))
+        created, pos = [], from_pos
+        while pos < n_total:
+            start, n = pos, 0
+            while pos < n_total and n < self.n_batch:
+                pos += 1; n += 1
+                if pos in at and pos < n_total:
+                    break
+                if pos in users and (pos == last_user or not self.ckpts or pos > self.ckpts[-1].n + self.arm.min_step):
+                    break
+                if any(n_total == pos + o for o in offs):
+                    break
+            do = True
+            near_end = n_total < pos + self.n_ubatch
+            if pos != n_total and start not in users and not near_end:
+                do = False
+            pinned = start in at and start > 0
+            if pinned:
+                do = True
+            if start == 0:                                     # memory empty: nothing to snapshot (pos_min < 0)
+                do = False
+            do = do and (pinned or not self.ckpts or start == last_user or near_end or start > self.ckpts[-1].n + self.arm.min_step)
+            if do:
+                self._create(start, pinned); created.append(start)
+        return created
+
+    def request(self, n_total, user_starts, lcp, n_generated=PROBE_NPREDICT, checkpoint_at=()):
+        """One request: restore + prefill + generation. Returns dict(cache_n, prompt_n, restored_n_tokens, full_reprocess, created, positions)."""
+        self.task += 1
+        n_past, restored, full = self.restore(n_total, lcp)
+        created = self.prefill(n_total, user_starts, n_past, checkpoint_at)
+        self.cached = n_total + max(0, n_generated - 1)
+        return dict(cache_n=n_past, prompt_n=n_total - n_past, restored_n_tokens=restored, full_reprocess=full, created=created,
+                    positions=self.positions())
+
+
+def simulate_prefill(starts, n_total, arm, held=(), ubatch=UBATCH, from_pos=0, id_task=1, n_batch=N_BATCH, checkpoint_at=None):
+    """Retained (n_tokens, pinned, id_task) after prefilling [from_pos, n_total) on top of `held` (surviving checkpoints of earlier requests),
+    through the exact ServerSim. The junction arm pins the last user start (checkpoint_at {"message": -1, "at": "start"})."""
+    sim = ServerSim(arm, n_batch=n_batch, n_ubatch=ubatch, held=[h for h in held if h[0] <= from_pos])
+    sim.task = id_task
+    if checkpoint_at is None:
+        lu = max((s for s in starts if 0 <= s < n_total), default=None)
+        checkpoint_at = (lu,) if (arm.junction and lu) else ()
+    sim.prefill(n_total, starts, from_pos, checkpoint_at)
+    return sim.retained()
 
 
 def resume_pos(ckpts, lcp):
@@ -457,12 +552,16 @@ def build_plan(models, stages, waves=WAVES_DEFAULT, threads=96, selection=None, 
                             cells.append(Cell(model, arm.name, "gen", f"G{G}", w, raw, cal_s, tag))
                     c = GEN_BASE_TOK + max(Gs) + GEN_SUFFIX_TOK + HEADROOM_TOK
                 else:
+                    # KVU-12.1a fix 4: ONE fresh server per ckpt cell (wave and L). The recorded w1 cells ran on the server w0 warmed and
+                    # inherited its checkpoint at the template header, so count/bytes and the cold build were not a cold build. -c follows
+                    # the cell's own L (fix 2; the cell refuses itself if the fitted conversation + probes do not fit).
                     binary = bins["ckpt"]; tag = bin_tag(binary)
                     for l in lens:
                         raw, cal_s = est_ckpt_cell(model, arm, l, threads, cal)
                         for w in range(min(waves, WAVES_CAP_BY_L.get(l, waves))):
-                            cells.append(Cell(model, arm.name, "ckpt", l, w, raw, cal_s, tag))
-                    c = slot_ctx(lens)
+                            out.append(Launch(f"{st}__{model}__{arm.name}__{l}__w{w}", model, arm.name, st, slot_ctx((l,)),
+                                              [Cell(model, arm.name, "ckpt", l, w, raw, cal_s, tag)], arm.needs, load_estimate(model), binary))
+                    continue
                 out.append(Launch(f"{st}__{model}__{arm.name}", model, arm.name, st, c, cells, arm.needs, load_estimate(model), binary))
     return out
 
@@ -494,21 +593,74 @@ def print_plan(launches, a):
                 print(f"ASSUMPTION[{m}/{kind}] {x}")
 
 
+# ----------------------------------------------------------------------------------------------- rendered offsets (KVU-12.1a fix 3)
+USER_DELIM = "<|im_start|>user"      # the user-role delimiter the server's span finder matches on this template (common_chat_msg_delimiters)
+MSG_DELIM = "<|im_start|>"           # every message (system, user, assistant, generation prompt) starts with it
+
+
+def user_starts_from_ids(ids, delim_ids):
+    """Positions i where ids[i:i+len(delim)] == delim: the server's rule (common_chat_msg_delimiters::split) for message spans, so the
+    simulator sees exactly the user starts the server sees, including the first one after the template's system block."""
+    n = len(delim_ids)
+    if not n:
+        return []
+    d0 = delim_ids[0]
+    return [i for i in range(len(ids) - n + 1) if ids[i] == d0 and ids[i:i + n] == delim_ids]
+
+
+def tokenize_ids(port, text, add_special=False):
+    return M.http(port, "/tokenize", {"content": text, "add_special": add_special, "parse_special": True})["tokens"]
+
+
+def render_ids(port, messages):
+    """Rendered-prompt token ids through the server's own /apply-template + /tokenize (includes the generation prompt)."""
+    r = M.http(port, "/apply-template", {"messages": messages})
+    return tokenize_ids(port, r["prompt"], add_special=True)
+
+
+def common_prefix(a, b):
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n
+
+
 # ----------------------------------------------------------------------------------------------- conversation building
+class FitRefused(M.CellRefused):
+    """KVU-12.1a fix 1: the conversation could not be fitted to its target from below; the cell is refused (a counted REFUSED_FIT row),
+    never run on an oversized prompt."""
+    result = "REFUSED_FIT"
+
+
+class CtxRefused(M.CellRefused):
+    """KVU-12.1a fix 2: the fitted conversation plus every probe would not fit the server's -c; the cell is refused before any request."""
+    result = "REFUSED_CTX"
+
+
 def fit_conversation(measure, make, target_tok, lo, hi, tol=0.01, max_iter=24):
-    """Find the integer size parameter k in [lo, hi] so that measure(make(k)) is within tol of target_tok (token count grows with k).
-    `make(k)` -> messages, `measure(messages)` -> tokens. Pure bisection; the caller supplies both functions, so tests need no server.
-    Returns (messages, tokens, k) of the closest probe seen."""
-    best = None
+    """Find the integer size parameter k in [lo, hi] so that target*(1-tol) <= measure(make(k)) <= target (token count grows with k).
+    `make(k)` -> messages, `measure(messages)` -> tokens. Bisection; the caller supplies both functions, so tests need no server.
+    Returns (messages, tokens, k). FAILS LOUD (FitRefused) when no probe lands inside the band: an overshoot is never returned
+    (the recorded run silently returned 35,863 and 38,868 tokens for a 32,688 target and overflowed -c on extend_1)."""
+    best, seen = None, []
+    floor = target_tok * (1.0 - tol)
     for _ in range(max_iter):
         k = (lo + hi) // 2
         msgs = make(k); n = measure(msgs)
-        if best is None or abs(n - target_tok) < abs(best[1] - target_tok):
+        seen.append((k, n))
+        if floor <= n <= target_tok:
             best = (msgs, n, k)
-        if abs(n - target_tok) <= tol * target_tok or lo >= hi - 1:
             break
         if n < target_tok: lo = k
         else: hi = k
+        if lo >= hi - 1:
+            break
+    if best is None:
+        near = min(seen, key=lambda x: abs(x[1] - target_tok)) if seen else (None, None)
+        raise FitRefused(f"REFUSED_FIT: no probe within [{floor:.0f}, {target_tok}] tokens (closest k={near[0]} -> {near[1]} tokens, "
+                         f"{len(seen)} probes, k in [{lo}, {hi}])")
     return best
 
 
@@ -672,6 +824,9 @@ def read_rows(path):
     return out
 
 
+REFUSED_DETERMINISTIC = ("REFUSED_FIT", "REFUSED_CTX", "REFUSED_SPANS")
+
+
 def done_keys(cells_path):
     """Per-cell resume -> (done, parked, blocked). OK rows are done; a cell with >= 2 failed attempts is parked (never a hot retry loop
     under a filler); BLOCKED_ON_PATCH cells are skipped until the caller passes --retry-blocked (a new binary changes the key anyway)."""
@@ -690,6 +845,7 @@ def done_keys(cells_path):
             if r.get("result") == "OK": done.add(k)
             elif r.get("result") == "BLOCKED_ON_PATCH": blocked.add(k)
             elif r.get("result") in ("ERRORS", "REFUSED", "EXCEPTION", "PARTIAL"): fails[k] = fails.get(k, 0) + 1
+            elif r.get("result") in REFUSED_DETERMINISTIC: fails[k] = fails.get(k, 0) + 2       # same text next time: parked at once
     parked = {k for k, n in fails.items() if n >= 2}
     return done, parked, blocked
 
@@ -713,7 +869,7 @@ def _bad_keys(rows):
     """(model, unit, arm) of every failed attempt (ERRORS / REFUSED / EXCEPTION): the denominator is every request, so one failed attempt fails the arm at that L."""
     bad = set()
     for r in rows:
-        if r.get("result") in ("ERRORS", "REFUSED", "EXCEPTION") and r.get("cell_key"):
+        if r.get("result") in ("ERRORS", "REFUSED", "EXCEPTION") + REFUSED_DETERMINISTIC and r.get("cell_key"):
             parts = r["cell_key"].split("|")
             if len(parts) >= 4 and parts[2] == "ckpt":
                 bad.add((parts[0], parts[3], parts[1]))
@@ -873,80 +1029,168 @@ class LogTail:
         return parse_ckpt_events(self.new_text())
 
 
+WARMUP_TEXT, WARMUP_N = "Warm up. " * 50, 16
+EDIT_SLACK_TOK = 64            # an edit probe prefixes "[edit wN edit_back_B] " (~12 tokens) to one message of the extended conversation
+FIT_SCALE = (250, 4000)        # fit_conversation k range: per-mille scale of EVERY turn (0.25x .. 4x of the nominal turn sizes)
+
+
+def ckpt_cell_texts(corpus, n_pairs, ratio):
+    """make(k): the conversation at per-mille scale k of every turn (KVU-12.1a fix 1: the recorded driver scaled only the final user message,
+    with turn texts cut at a fixed chars/token, so a denser corpus slice could not be brought down to the target). Pure given the cursor."""
+    c0 = corpus.cursor
+
+    def make(k):
+        corpus.cursor = c0
+        texts = []
+        for i in range(2 * n_pairs + 1):
+            ntok = TURN_USER_TOK if i % 2 == 0 else TURN_ASST_TOK
+            texts.append(corpus.take(max(16, int(ntok * ratio * k / 1000))))
+        return conv_messages(texts)
+    return make
+
+
+def ctx_needed(n_extended, n_predict=PROBE_NPREDICT, slack=EDIT_SLACK_TOK):
+    """Tokens the slot must hold for the largest probe: the extended conversation, the edit tag and the generated tokens."""
+    return n_extended + slack + n_predict
+
+
+def sizes_from_rows(rows):
+    """Logged size (MiB) per checkpoint position, from the per-request retained summaries (the size is a property of the state at n_tokens)."""
+    out = {}
+    for r in rows:
+        ret = r.get("retained") or {}
+        for p_, m_ in zip(ret.get("positions") or [], ret.get("mib_each") or []):
+            out[p_] = m_
+    return out
+
+
+def sim_compare(sim_res, row, sizes):
+    """Simulator vs log for one request: exact on prompt_n, cache_n, retained positions, count and bytes (bytes priced with the logged size of
+    each simulated position; a position the server never logged has no size, so it cannot agree). Returns (record, mismatches)."""
+    ret = row.get("retained") or {}
+    log_pos = sorted(ret.get("positions") or [])
+    sim_pos = sorted(sim_res["positions"])
+    sb = [sizes.get(x) for x in sim_pos]
+    sim_bytes = round(sum(sb), 3) if all(x is not None for x in sb) else None
+    rec = dict(prompt_n=[sim_res["prompt_n"], row.get("prompt_n")], cache_n=[sim_res["cache_n"], row.get("cache_n")],
+               count=[len(sim_pos), ret.get("count")], bytes_mib=[sim_bytes, ret.get("bytes_total_mib")], positions=[sim_pos, log_pos])
+    bad = [f"{row.get('probe')}: {k} sim {v[0]} != log {v[1]}" for k, v in rec.items()
+           if k != "positions" and (v[0] is None or v[1] is None or (abs(v[0] - v[1]) > 1e-3 if k == "bytes_mib" else v[0] != v[1]))]
+    if sim_pos != log_pos:
+        bad.append(f"{row.get('probe')}: positions sim {sim_pos} != log {log_pos}")
+    return rec, bad
+
+
+def replay_cell_sim(arm, req_inputs, logged_rows, seed=None):
+    """Re-judge one cell offline: req_inputs = [dict(probe, n_prompt_total, user_starts, lcp_prev)] in request order (the rendered offsets),
+    logged_rows = {probe: per-request row}. A failed request never reached the slot, so the simulator skips it (and the cell cannot agree).
+    `seed` = dict(held, cached) for a server that was not fresh. Returns dict(per_probe, mismatches, matches)."""
+    seed = seed or {}
+    sim = ServerSim(arm, held=seed.get("held", ()), cached=seed.get("cached", 0))
+    sizes = sizes_from_rows(logged_rows.values())
+    per, bad = {}, []
+    for q in req_inputs:
+        row = logged_rows.get(q["probe"])
+        if row is None or row.get("error") is not None or row.get("status") != 200:
+            bad.append(f"{q['probe']}: request failed or missing (status {None if row is None else row.get('status')})")
+            continue
+        at = (q["user_starts"][-1],) if (arm.junction and q["user_starts"]) else ()
+        res = sim.request(q["n_prompt_total"], q["user_starts"], q["lcp_prev"], n_generated=row.get("predicted_n") or PROBE_NPREDICT, checkpoint_at=at)
+        per[q["probe"]], b = sim_compare(res, row, sizes)
+        bad += b
+    return dict(per_probe=per, mismatches=bad, matches=not bad and bool(per))
+
+
 def run_ckpt_cell(ctx, cell):
-    """KVU-12.1 cell: cold build of an L-token conversation, then the probe plan. Returns the cell summary row."""
+    """KVU-12.1 cell on a FRESH server (KVU-12.1a fix 4): cold build of an L-token conversation, then the probe plan. Every request is also
+    run through the exact ServerSim on the rendered token ids (fix 3), and the cell records the simulator-vs-log agreement the phase gate
+    reads (fix 5). Returns the cell summary row."""
     a, srv, port, corpus, arm, model = ctx["a"], ctx["srv"], ctx["port"], ctx["corpus"], ctx["arm"], cell.model
     L = LS_ARM[cell.unit]
-    tail, cs = LogTail(srv.dir / "server.log"), CkptSet()
+    c_slot = ctx["launch"].c
+    logp = srv.dir / "server.log"
+    tail, cs = LogTail(logp), CkptSet()
+    cs.apply(parse_ckpt_events(logp.read_bytes()[:tail.off].decode(errors="ignore") if logp.exists() else ""))   # every checkpoint the server holds
+    seed = ctx.get("sim_seed") or {}
+    sim = ServerSim(arm, held=[(n, False, 0) for n in cs.positions()], cached=seed.get("cached", 0))
+    prev_ids = list(seed.get("prev_ids") or [])
+    udelim, mdelim = tokenize_ids(port, USER_DELIM), tokenize_ids(port, MSG_DELIM)
     # same text for every arm of a wave: the corpus cursor is a pure function of (model, L, wave)
     corpus.cursor = (int(hashlib.sha1(f"{model}|{cell.unit}|{cell.wave}".encode()).hexdigest()[:8], 16) * 7919) % max(1, len(corpus.text) // 2)
     ratio = ctx.setdefault("ratio", 4.0)
     pair = TURN_USER_TOK + TURN_ASST_TOK + 16
-    n_pairs = max(1, (L - PROBE_NPREDICT - 64 - 64) // pair)       # the last user message absorbs the remainder (16 .. ~2 turns of tokens)
-    cell_texts = {}
-
-    def make(k):                                     # k = scale in tokens*10 of the final user message; keeps earlier turns fixed-size
-        texts = []
-        corpus.cursor = cell_texts.setdefault("c0", corpus.cursor)
-        for i in range(2 * n_pairs + 1):
-            ntok = TURN_USER_TOK if i % 2 == 0 else TURN_ASST_TOK
-            if i == 2 * n_pairs: ntok = max(16, k // 10)
-            texts.append(corpus.take(int(ntok * ratio)))
-        return conv_messages(texts)
-
-    measure = lambda msgs: render_tokens(port, msgs)
-    msgs, n_total, _k = fit_conversation(measure, make, L - PROBE_NPREDICT - 64, lo=160, hi=(pair + TURN_USER_TOK) * 10, tol=0.01)
-    texts_tok = [M.n_tokens(port, m["content"]) for m in msgs]
-    starts = [0]
-    over = max(0, (n_total - sum(texts_tok)) // max(1, len(msgs)))
-    for t in texts_tok[:-1]:
-        starts.append(starts[-1] + t + over)
-    user_starts = [s for m, s in zip(msgs, starts) if m["role"] == "user"]
+    n_pairs = max(1, (L - PROBE_NPREDICT - 64 - 64) // pair)
+    make = ckpt_cell_texts(corpus, n_pairs, ratio)
+    measure = lambda msgs: len(render_ids(port, msgs))
+    target = L - PROBE_NPREDICT - 64
+    msgs, n_total, _k = fit_conversation(measure, make, target, lo=FIT_SCALE[0], hi=FIT_SCALE[1], tol=0.01)    # raises FitRefused
+    ids0 = render_ids(port, msgs)
+    mstarts = user_starts_from_ids(ids0, mdelim)
+    if len(mstarts) != len(msgs) + 2:              # system block + every message + generation prompt; anything else = content carries a delimiter
+        raise M.CellRefused(f"REFUSED_SPANS: {len(mstarts)} message delimiters in the rendered prompt for {len(msgs)} messages (+2)")
+    ext_msgs = msgs[:] + [{"role": "assistant", "content": corpus.take(int(TURN_ASST_TOK * ratio))},
+                          {"role": "user", "content": corpus.take(int(TURN_USER_TOK * ratio))}]
+    n_ext = len(render_ids(port, ext_msgs))
+    need = ctx_needed(n_ext)
+    if need > c_slot:
+        raise CtxRefused(f"REFUSED_CTX: fitted {n_total} + extend -> {n_ext} + slack {EDIT_SLACK_TOK} + n_predict {PROBE_NPREDICT} = {need} > -c {c_slot}")
     reqs = ctx["reqs"] = []                          # visible to run_launch so a killed cell still leaves a PARTIAL row
-    la = _la(ctx["launch"], arm, ctx["launch"].c)
+    la = _la(ctx["launch"], arm, c_slot)
     loadavg = [round(x, 2) for x in os.getloadavg()]
+    sim_inputs, sim_bad, sim_per = [], [], {}
 
-    def do(name, messages, lcp_expected, n_prev_total):
-        t_pre = tail.events()                        # drain anything unrelated first
+    def do(name, messages):
+        nonlocal prev_ids
+        tail.events()                                # drain anything unrelated first
+        ids = render_ids(port, messages)
+        ustarts, mst = user_starts_from_ids(ids, udelim), user_starts_from_ids(ids, mdelim)
+        lcp = common_prefix(prev_ids, ids)
         rec = chat_request(port, messages, PROBE_NPREDICT, arm.request_extra())
         evs = tail.events()
         created = cs.apply(evs)
         res = resume_summary(evs)
-        n_new = render_tokens(port, messages) if rec["error"] is None else None
-        ideal = (n_new - lcp_expected) if (n_new is not None and lcp_expected is not None) else None
+        ok = rec["error"] is None and rec["status"] == 200
         row = dict(cell_key=cell.key, model=model, policy_arm=arm.name, unit=cell.unit, L=L, probe=name, wave=cell.wave, status=rec["status"], error=rec["error"],
-                   ttft_s=rec["ttft"], prompt_n=rec["prompt_n"], cache_n=rec["cache_n"], n_prompt_total=n_new, ideal_prompt_n_approx=ideal,
-                   regret_tok=(rec["prompt_n"] - ideal if (ideal is not None and rec["prompt_n"] is not None) else None),
+                   ttft_s=rec["ttft"], prompt_n=rec["prompt_n"], cache_n=rec["cache_n"], predicted_n=rec.get("predicted_n"), n_prompt_total=len(ids),
+                   ideal_prompt_n_approx=len(ids) - lcp, regret_tok=(rec["prompt_n"] - (len(ids) - lcp) if rec["prompt_n"] is not None else None),
                    created_this_request=created, retained=cs.summary(), **res,
+                   sim_inputs=dict(n_prompt_total=len(ids), user_starts=ustarts, msg_starts=mst, lcp_prev=lcp),
                    result_class="counts=correctness; ttft_s=INDICATIVE timing")
+        sim_inputs.append(dict(probe=name, **row["sim_inputs"]))
+        if ok:
+            at = (ustarts[-1],) if (arm.junction and ustarts) else ()
+            sres = sim.request(len(ids), ustarts, lcp, n_generated=rec.get("predicted_n") or PROBE_NPREDICT, checkpoint_at=at)
+            sizes = sizes_from_rows(reqs + [row])
+            row["sim"], b = sim_compare(sres, row, sizes)
+            sim_per[name] = row["sim"]; sim_bad.extend(b)
+            prev_ids = ids                           # a refused request never reached the slot
+        else:
+            sim_bad.append(f"{name}: request failed (status {rec['status']})")
         reqs.append(row)
         append_jsonl(ctx["req_path"], emit_request_row(row, a, la, srv, ctx["facts"], loadavg, cell.wave))
-        return rec, row
+        return rec, row, mst
 
-    rec0, r0 = do("cold_build", msgs, 0, 0)
+    rec0, r0, mst0 = do("cold_build", msgs)
     build_summary = cs.summary()
     created_build = r0["created_this_request"]
-    cur, cur_starts, n_cur = msgs, starts, r0["n_prompt_total"] or n_total
+    cold_sim = list(sim.positions())
+    cur, cur_mst, n_cur = msgs, mst0, r0["n_prompt_total"]
     for name, back in probe_plan(L, n_cur):
         if name == "extend_1":
-            tx = [corpus.take(int(TURN_ASST_TOK * ratio)), corpus.take(int(TURN_USER_TOK * ratio))]
-            nxt = cur[:] + [{"role": "assistant", "content": tx[0]}, {"role": "user", "content": tx[1]}]
-            lcp = n_cur                              # control: exact extension, expected prompt_n ~ the appended turn pair for EVERY arm
+            nxt = ext_msgs                           # control: exact extension, expected prompt_n ~ the appended turn pair for EVERY arm
         else:
-            idx = edit_index_for_back(cur_starts, n_cur, back)
+            msg_starts = cur_mst[1:1 + len(cur)]     # rendered start of every message (index 0 = the system block)
+            idx = edit_index_for_back(msg_starts, n_cur, back)
             nxt = edit_message(cur, idx, f"[edit w{cell.wave} {name}] ")
-            lcp = cur_starts[idx]
-        rec, row = do(name, nxt, lcp, n_cur)
+        rec, row, mst = do(name, nxt)
         if rec["error"] is None and row["n_prompt_total"]:
-            if name == "extend_1":
-                cur_starts = cur_starts + [n_cur, n_cur + TURN_ASST_TOK + over]
-            cur, n_cur = nxt, row["n_prompt_total"]
+            cur, cur_mst, n_cur = nxt, mst, row["n_prompt_total"]
     ok = all(r["error"] is None and r["status"] == 200 for r in reqs)
     pn = {r["probe"]: r["prompt_n"] for r in reqs if r["probe"] != "cold_build"}
     cn = {r["probe"]: r["cache_n"] for r in reqs if r["probe"] != "cold_build"}
-    pred = simulate_prefill([s for m, s in zip(msgs, starts) if m["role"] == "user"], n_total, arm)
     row = dict(schema=SCHEMA, cell_key=cell.key, result="OK" if ok else "ERRORS", kind="ckpt", model=model, arm=arm.name, unit=cell.unit, L=L, wave=cell.wave,
                n_requests=len(reqs), n_ok=sum(1 for r in reqs if r["error"] is None and r["status"] == 200),
+               n_fit=n_total, fit_target=target, n_extended=n_ext, c_slot=c_slot, fresh_server=(len(ctx["launch"].cells) == 1),
                ckpt_count=build_summary["count"], ckpt_bytes_mib=build_summary["bytes_total_mib"], ckpt_mib_each=build_summary["mib_each"],
                ckpt_positions=build_summary["positions"], ckpt_gaps=build_summary["gaps"], ckpt_max_gap=build_summary["max_gap"],
                ckpt_pinned=build_summary["pinned"], states_created_cold=created_build,
@@ -955,7 +1199,8 @@ def run_ckpt_cell(ctx, cell):
                junction_materialized=(build_summary["pinned"] >= 1) if arm.junction else None,
                probe_prompt_n=pn, probe_cache_n=cn, probe_ttft_s={r["probe"]: r["ttft_s"] for r in reqs},
                probe_regret_tok={r["probe"]: r["regret_tok"] for r in reqs},
-               sim_positions_cold=[c[0] for c in pred], sim_matches_log=(sorted(c[0] for c in pred) == sorted(build_summary["positions"])),
+               sim_positions_cold=cold_sim, sim_inputs=sim_inputs, sim_check=dict(per_probe=sim_per, mismatches=sim_bad),
+               sim_matches_log=(not sim_bad and len(sim_per) == len(reqs)),
                binary_sha256=M.file_sha256(os.path.realpath(srv.argv[0])), result_class="counts/prompt_n/bytes=correctness; ttft=INDICATIVE")
     return row
 
@@ -1096,8 +1341,11 @@ def run_launch(a, launch, todo, budget, calib, ctx_common, out):
         slog = (ldir / "server.log").read_text(errors="ignore")
         facts = {k: (re.findall(p, slog) or [None])[-1] for k, p in M.LOAD_PATS.items()}
         facts["rss_after_load_gib"] = srv.rss_gib()[0]
-        M.one_request(a.port, "Warm up. " * 50, 16, "warmup")
+        M.one_request(a.port, WARMUP_TEXT, WARMUP_N, "warmup")
         ctx = dict(ctx_common, a=a, srv=srv, port=a.port, arm=arm, launch=launch, facts=facts, req_path=out / REQS_FILE)
+        if launch.cells and launch.cells[0].kind == "ckpt":   # what the slot holds before the first cell (the simulator's starting state)
+            warm = tokenize_ids(a.port, WARMUP_TEXT, add_special=True)
+            ctx["sim_seed"] = dict(prev_ids=warm, cached=len(warm) + WARMUP_N - 1)
         for c in todo:
             why = budget.stop_reason()
             if why:
@@ -1111,8 +1359,8 @@ def run_launch(a, launch, todo, budget, calib, ctx_common, out):
             t0 = time.time(); ctx["reqs"] = []; row = None
             try:
                 row = run_ckpt_cell(ctx, c) if c.kind == "ckpt" else run_gen_cell(ctx, c)
-            except M.CellRefused as e:
-                row = dict(schema=SCHEMA, cell_key=c.key, result="REFUSED", reason=str(e))
+            except M.CellRefused as e:                         # REFUSED_FIT / REFUSED_CTX / REFUSED_SPANS: counted, never run oversized
+                row = dict(schema=SCHEMA, cell_key=c.key, result=getattr(e, "result", "REFUSED"), reason=str(e), arm=c.arm, unit=c.unit, wave=c.wave)
             except Exception as e:                                # noqa: BLE001 - recorded as a failed attempt; parked after 2
                 row = dict(schema=SCHEMA, cell_key=c.key, result="EXCEPTION", reason=repr(e)[:400])
             finally:
@@ -1170,6 +1418,16 @@ def cmd_run(a):
         print(f"verify_ggml_linkage {b} rc={r.returncode}", flush=True)
         if r.returncode != 0:
             sys.exit(f"verify_ggml_linkage failed for {b}; refusing to measure")
+    prior = read_rows(out / CELLS_FILE)
+    if a.sim_gate and any(lc.cells and lc.cells[0].kind == "ckpt" for lc in launches):
+        probs = sim_gate_problems(prior, exclude_keys={c.key for lc in launches for c in lc.cells})   # this invocation's own cells resume freely
+        if probs:
+            append_jsonl(out / CELLS_FILE, dict(schema=SCHEMA, cell_key="gate|sim", result="REFUSED_SIM_GATE", problems=probs,
+                                                ts=time.strftime("%FT%TZ", time.gmtime())))
+            print(f"REFUSED_SIM_GATE: {len(probs)} earlier ckpt cell(s) in {out} do not agree exactly with the simulator; starting nothing:", flush=True)
+            for x in probs:
+                print(f"  - {x}", flush=True)
+            return 8
     corpus = M.Corpus(a.corpus_roots.split(","))
     print(f"corpus sha256={corpus.sha} files={corpus.nfiles}", flush=True)
     deadline = effective_deadline(a.deadline_epoch, a.cap_s)
@@ -1206,6 +1464,29 @@ def cmd_run(a):
             return 7
     print(f"RUN_END reason={reason} blocked_cells={n_blocked} refused_start_launches={n_nofit}", flush=True)
     return 0
+
+
+def sim_gate_problems(rows, exclude_keys=()):
+    """KVU-12.1a fix 5: a later phase may start only if EVERY ckpt cell already in the out dir agreed with the exact simulator (prompt_n,
+    cache_n, checkpoint count, bytes and positions on every request). [] = pass. No ckpt row yet = phase 1, nothing to gate on.
+    A pre-KVU-12.1a row has no sim_check, so it cannot pass: re-run phase 1 with this driver into a fresh out dir. Cells the current
+    invocation plans are excluded, so a phase resumes itself; only EARLIER phases gate it."""
+    last = {}
+    for r in rows:                                   # a cell's LAST attempt counts (a retried failure that then passed is not a disagreement)
+        k = str(r.get("cell_key") or "")
+        if "|ckpt|" in k and not k.startswith(("smoke|", "launch|", "gate|")) and k not in exclude_keys:
+            last[k] = r
+    bad = []
+    for r in last.values():
+        k = r.get("cell_key")
+        if r.get("result") != "OK":
+            bad.append(f"{k}: result {r.get('result')} ({r.get('reason') or 'see requests.jsonl'})")
+        elif "sim_check" not in r:
+            bad.append(f"{k}: no exact simulator check recorded (row written before KVU-12.1a)")
+        elif not r.get("sim_matches_log"):
+            mm = (r.get("sim_check") or {}).get("mismatches") or ["sim_matches_log false"]
+            bad.append(f"{k}: simulator disagrees with the log: " + "; ".join(mm[:4]) + (f" (+{len(mm) - 4} more)" if len(mm) > 4 else ""))
+    return bad
 
 
 def load_selection(a):
@@ -1263,6 +1544,8 @@ def main(argv=None):
     pl = sub.add_parser("plan", help="dry-run: launches, cells, estimates, resources; starts nothing"); common(pl)
     ru = sub.add_parser("run", help="run as a filler: STOP file + deadline + per-cell resume"); common(ru)
     ru.add_argument("--out", required=True); ru.add_argument("--stop-file", default=""); ru.add_argument("--deadline-epoch", type=int, default=0)
+    ru.add_argument("--no-sim-gate", dest="sim_gate", action="store_false",
+                    help="DO NOT USE for decision runs: skip the KVU-12.1a phase gate (every earlier ckpt cell in --out must agree exactly with the simulator)")
     ru.add_argument("--smoke", action="store_true", help="validate the FIRST cell run (checkpoint log lines parsed, prompt_n/cache_n present, control probe sane); abort rc 7 if not");
     ru.add_argument("--dry-run", action="store_true"); ru.add_argument("--retry-blocked", action="store_true"); ru.add_argument("--corpus-roots", default="/workspace/handoffs,/workspace/docs")
     de = sub.add_parser("decide", help="predeclared rules over cells.jsonl (starts nothing)")
