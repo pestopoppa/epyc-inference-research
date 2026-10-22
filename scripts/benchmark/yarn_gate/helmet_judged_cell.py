@@ -12,7 +12,7 @@ Output is a judged-cell record carrying everything the claim tuple needs: judge 
 config file, ``max_test_samples``, the cell task, nominal length, REAL prompt_n stats (when rows carry
 ``prompt_n`` / ``input_len``) and the unjudged list. The record states ``comparable_to_published: false``.
 
-Judging runs outside the YaRN timing window. The runner script ``run_local_judge_window.sh`` wraps this
+Judging runs outside the YaRN timing window (``--judge-backend cloud`` needs no server). The runner script ``run_local_judge_window.sh`` wraps this
 behind ``WINDOW_CONFIRMED=1``; this module has no inference of its own beyond the localhost judge call.
 """
 
@@ -92,8 +92,11 @@ def main(argv=None) -> int:
     ap.add_argument("--nominal-length", type=int, required=True)
     ap.add_argument("--config-file", required=True)
     ap.add_argument("--max-test-samples", type=int)
-    ap.add_argument("--port", type=int, required=True)
-    ap.add_argument("--judge-model", required=True)
+    ap.add_argument("--judge-backend", choices=("served", "cloud"), default="served",
+                    help="cloud = pinned cloud judge via the orchestrator cloud_judges transport (no server)")
+    ap.add_argument("--cloud-judge", default="sonnet-5-5-low", help="cloud backend: cloud_judges.yaml entry")
+    ap.add_argument("--port", type=int, help="served backend")
+    ap.add_argument("--judge-model", help="served backend: the served model id")
     ap.add_argument("--out", required=True)
     ap.add_argument("--selfcheck-schema", action="store_true", help="only validate the cell file and exit")
     a = ap.parse_args(argv)
@@ -101,9 +104,25 @@ def main(argv=None) -> int:
         probs = selfcheck_schema(load_cell(Path(a.cell)))
         print("OK" if not probs else "PROBLEMS: " + "; ".join(probs))
         return 1 if probs else 0
-    judge = LocalJudge(a.port, JudgePin(model=a.judge_model))
+    caller = None
+    if a.judge_backend == "cloud":
+        from scripts.benchmark.yarn_gate import cloud_judge as cjm
+        cj = cjm.load_cloud_judges()
+        caller = cjm.CloudCaller(cj, cjm.resolve_spec(cj, a.cloud_judge, transport="claude_cli"))
+        try:
+            caller.preflight()
+        except cjm.JudgeError as exc:
+            print(f"BLOCKED: {exc}", file=sys.stderr)
+            return 5
+        judge = cjm.CloudJudge(caller)
+    else:
+        if a.port is None or not a.judge_model:
+            ap.error("--judge-backend served needs --port and --judge-model")
+        judge = LocalJudge(a.port, JudgePin(model=a.judge_model))
     rec = score_cell(Path(a.cell), judge, task=a.task, nominal_length=a.nominal_length,
                      config_file=a.config_file, max_test_samples=a.max_test_samples)
+    if caller is not None:
+        rec["cloud_identity"] = caller.identity()
     Path(a.out).write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
     print(f"judged {rec['n_judged']}/{rec['n_rows']} accuracy={rec['accuracy']} unjudged={rec['n_unjudged']}")
     return 0 if rec["n_unjudged"] == 0 else 2

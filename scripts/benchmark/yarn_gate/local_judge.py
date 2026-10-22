@@ -15,6 +15,10 @@ Contract:
   * Results are relative to the pinned local judge and never comparable to published figures.
 
 Nothing here starts a server. The caller serves the judge model (the worker model) in a window.
+
+Operator ruling 2026-10-22: the YaRN judge of record is the pinned Claude cloud judge (``cloud_judge.py``,
+``--judge-backend cloud --cloud-judge sonnet-5-5-low``). This localhost client stays for a served judge; it
+still refuses non-localhost endpoints, because the cloud path goes through the orchestrator transport, not here.
 """
 
 from __future__ import annotations
