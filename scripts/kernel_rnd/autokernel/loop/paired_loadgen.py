@@ -151,7 +151,8 @@ class _BeliefRecipe:
         return dict(self._d)
 
 
-def _attach_belief(rec: dict, a: Arm, b: Arm, belief: dict, checks: list) -> None:
+def _attach_belief(rec: dict, a: Arm, b: Arm, belief: dict, checks: list, *,
+                   window_basis: str | None = None) -> None:
     """Add the capture. Native fields the capture binds (recipe_hash, np, residency windows) are
     set FIRST because the capture digests the native body; nothing here invents a measurement:
     the windows are the wall-clock bounds of each real round, `np` is the arm's own request count."""
@@ -167,7 +168,8 @@ def _attach_belief(rec: dict, a: Arm, b: Arm, belief: dict, checks: list) -> Non
     for arm, offset in (("anchor", 0), ("candidate", 1)):   # run_pairs order is A,B per pair, fixed
         rec[f"{arm}_residency"] = [
             {"schema": "epyc.autokernel.paired_loadgen.window.v1", "arm": arm, "pair": c["pair"],
-             "window_start": c["window_start"], "window_end": c["window_end"]}
+             "window_start": c["window_start"], "window_end": c["window_end"],
+             **({"window_basis": window_basis} if window_basis else {})}
             for c in checks[offset::2]]
     if belief.get("pipeline_only"):
         rec["pipeline_only"] = True
@@ -176,6 +178,28 @@ def _attach_belief(rec: dict, a: Arm, b: Arm, belief: dict, checks: list) -> Non
                         anchor_build=belief["anchor_build"], candidate_build=belief["candidate_build"],
                         frozen_requests=None, pairs=rec["pairs"])
     rec["belief_capture"] = sb.finish(rec, inputs)
+
+
+def recapture_from_stored(rec: dict, *, run_start: float, run_end: float, np: int, belief: dict) -> dict:
+    """Attach the capture to a STORED pre-hook record, with no re-run (VB-AKRSG-INGEST).
+
+    The stored record keeps no per-round clock, so each window is the run's own recorded envelope
+    [run_start, run_end] (manifest `started`/`finished`) and says so (`window_basis`); nothing is
+    measured again and no sample is touched. `np` is the run's recorded request count. Returns a
+    new record; the input is not mutated."""
+    import copy
+    if "belief_capture" in rec:
+        raise ValueError("record already carries a belief_capture")
+    if not (isinstance(run_start, (int, float)) and isinstance(run_end, (int, float)) and run_start <= run_end):
+        raise ValueError("run envelope must be finite with start <= end")
+    if rec.get("schema") != SCHEMA or not (len(rec["anchor_samples"]) == rec["pairs"] == len(rec["candidate_samples"])):
+        raise ValueError("not a completed serving_ab.v1 paired record")
+    out = copy.deepcopy(rec)
+    checks = [{"pair": k, "arm": arm, "window_start": float(run_start), "window_end": float(run_end)}
+              for k in range(out["pairs"]) for arm in ("A", "B")]
+    _attach_belief(out, Arm("A", None, np=np), Arm("B", None, np=np), belief, checks,
+                   window_basis="run_envelope_not_per_round")
+    return out
 
 
 def reseal_belief(rec: dict) -> dict:

@@ -90,3 +90,21 @@ def test_record_without_capture_is_refused_loudly(tmp_path):
     with pytest.raises(ValueError, match="no belief_capture"):
         pl.export_belief(tmp_path, rec, campaign_id="c", epoch="e", recorded_at="2026-10-22T00:00:00Z")
     assert not (tmp_path / "serving-beliefs").exists()
+
+
+def test_recapture_from_stored_record_is_pipeline_only_envelope_and_does_not_touch_samples():
+    from . import serving_beliefs as sb
+    a = pl.Arm("A", lambda s: (100.0, None), np=2)
+    b = pl.Arm("B", lambda s: (110.0, None), np=2)
+    stored = pl.paired_record(a, b, pairs=3, base_seed=1, floor_pct=1.0, floor_unit="session")
+    assert "belief_capture" not in stored
+    rec = pl.recapture_from_stored(stored, run_start=1000.0, run_end=1060.0, np=2,
+                                   belief={"model": "/m/x.gguf", "anchor_build": "/b/a", "candidate_build": "/b/a",
+                                           "pipeline_only": True, "pipeline_only_reason": "A/A same-build shakedown"})
+    assert "belief_capture" not in stored and rec["anchor_samples"] == stored["anchor_samples"]
+    assert rec["pipeline_only"] is True and rec["np"] == 2
+    assert all(w["window_basis"] == "run_envelope_not_per_round" and (w["window_start"], w["window_end"]) == (1000.0, 1060.0)
+               for w in rec["anchor_residency"] + rec["candidate_residency"])
+    assert rec["belief_capture"] == sb.finish(rec, rec["belief_capture"]["inputs"])
+    with pytest.raises(ValueError, match="already carries"):
+        pl.recapture_from_stored(rec, run_start=0, run_end=1, np=2, belief={})
