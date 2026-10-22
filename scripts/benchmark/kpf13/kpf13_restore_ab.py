@@ -2,13 +2,23 @@
 """KPF-13.1 / KPF-13.1a driver: drafter state at a cross-slot prefix fork, restore vs recompute A/B.
 
 Handoff: handoffs/active/kv-prefix-fork-and-paged-attention.md (RTG-58), rows KPF-13.1 and KPF-13.1a.
-Written 2026-10-21 (code only, NOT yet run). Class: correctness (token identity and draft counts, not timing).
+Written 2026-10-21; rules v2 (no-fork cache-hit controls, S=2 cell, measured near-tie band) 2026-10-22.
+Class: correctness (token identity and draft counts, not timing).
 
 WHAT IT MEASURES
   For each (prompt group g, suffix length S) cell, on ONE llama-server (the P1 fork build, a plain-KV MTP drafter or
   DFlash2), greedy, seed 42, n_predict 64:
-    W1, W2  the UNFORKED TWINS. slot_fork=false, cache_prompt=false on a fresh slot: the target AND the drafter are
-            prefilled over the whole prompt. This is the baseline and, with W1 vs W2, the run-to-run spread.
+    W1, W2  the UNFORKED COLD TWINS. slot_fork=false, cache_prompt=false on a fresh slot: the target AND the drafter
+            are prefilled over the whole prompt. INFORMATIONAL since rules v2 (see CA/CB below).
+    CA, CB  the CONTROLS (rules v2, 2026-10-22), the baseline every arm is judged against. A NO-FORK prompt-cache hit
+            on slot 2 with the SAME batch partition as the arm it controls: CA seeds the trunk exactly as the restore
+            source was built (trunk[:T-N] then trunk, or trunk alone) and sends P, so P is a cache hit with the same
+            S-token remainder as A; CB seeds trunk[:T-N] and sends P (an N+S remainder, as B). Why: on this CPU build a
+            1-token ubatch takes a different reduction path than a ubatch of 2+ tokens (llamafile_sgemm refuses n<2,
+            the iqk float GEMM tiles differently at nrc_y==1, MoE top-k amplifies it), and the cold twin's partition
+            differs from the arms' (the server's checkpoint split cuts an n_batch+1-token prompt as [1][...][4]), so
+            "arm == cold twin" mixes fork state with batch shape. The kpf13-repro run (2026-10-22) reproduced A1 with
+            a no-fork cache hit and B1 with a no-1-token-ubatch prefill, bit-for-bit (verdict "fork cleared").
     A       RESTORE. A child on a fresh slot forks from a source slot at the junction p = T (the end of the trunk):
             the drafter state comes through do_slot_fork exactly as KPF-13 ships it (attention-only share, then
             load_dft(PARTIAL_ONLY)).
@@ -16,8 +26,9 @@ WHAT IT MEASURES
             own prefill recomputes the target AND drafter state over [T-N, T+S). (Server-side "re-prefill the drafter
             only" does not exist on any build; this is the request-level equivalent, and the only difference from the
             task text is that the target tail is recomputed too, which is bit-for-bit what an ordinary prefill does.)
-  Order inside a cell is  W1 A1 B1 A2 B2 W2  (A/B/A/B, the twins bracketing). 13.1a adds two more server launches that
-  run the A arm only, against the default launch's twins of the same cells:
+  Order inside a cell is  W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 W2  (each arm right after its control, A/B/A/B, the twins
+  bracketing). 13.1a adds two more server launches that run  W1 CA1 A1 CA2 A2  (A arm only), judged against their OWN
+  launch's controls (W1 is the launch-variance check against the default launch's twins):
     skip    LLAMA_KPF_MUTATE=dft_partial_noop: keep the attention-only share, skip load_dft (what 13.1a proposes;
             the hook is the test-only switch already on the P1 branch, recorded in the record).
     full    --slot-fork-dft-full: full drafter KV via seq_cp (KPF-19.1's explicit-restore variant).
@@ -29,6 +40,9 @@ WHAT IT DOES NOT MEASURE (recorded in every record)
   * Not carried by the restore (stated, not measured as absent): MTP pending_h (common_speculative_impl_draft_mtp has
     no get_state/set_state) and the DFlash2 per-seq selector RNG (seed pinned here).
   * A fork inside a prompt (S >= 1) rebuilds pending_h through the suffix prefill; the S=1 cell is the sharpest one.
+    S=2 is its companion: a 2-token remainder puts no 1-token ubatch anywhere (twin, arm or control), so it is the one
+    cell where even the informational cold-twin column is expected to agree bit-for-bit. Suffix index = position in
+    --suffix-lens, so the default 1,128,2 keeps S=1 and S=128 on the same suffixes as the v1 runs.
 
 PREDECLARED RULES: RULES below is written to <out>/rules.json and run_meta.json with its sha256 BEFORE the first
 launch, and every verdict is a pure function of the stored cells (`analyze` recomputes it).
@@ -102,39 +116,67 @@ STOP_RESERVE_S = 150.0   # a step is not started unless est + this fits before t
 WATCHDOG_GRACE_S = 120.0  # past the deadline the watchdog kills the own child after this long
 
 # ---------------------------------------------------------------- predeclared rules (hashed into the run metadata)
+NEAR_TIE_FLOOR = 1e-3     # the v1 constant; v2 keeps it only as the band's floor
+NEAR_TIE_QUANTILE = 0.95
+
 RULES = {
-    "schema": "epyc.kpf13.rules.v1",
+    "schema": "epyc.kpf13.rules.v2",
     "task": "KPF-13.1 (restore vs recompute A/B) and KPF-13.1a (skip load_dft for plain drafters)",
     "declared": "before the first launch; every verdict below is a pure function of the stored cells (analyze)",
+    "supersedes": ("rules v1 (sha 43e936f9...), which judged arms against COLD twins. The v1 reduced run "
+                   "(2026-10-22 09:23Z) failed A and B at S=1 against the twins; the kpf13-repro run showed the cause "
+                   "is a 1-token ubatch reduction path, not fork state (no-fork cache hit == A1, no-1-token-ubatch "
+                   "prefill == B1, bit-for-bit). v1's #30141 trigger is withdrawn as measured against the wrong control"),
     "sampling": {"temperature": 0.0, "seed": SEED, "ignore_eos": True, "n_generated": N_GEN, "n_probs": 2},
-    "twin": ("unforked slot: slot_fork=false, cache_prompt=false (target and drafter fully prefilled). Two twins W1, W2 "
-             "bracket each cell in the default launch; skip/full launches run W1 only and are compared against the "
-             "default launch's twins of the same cell"),
-    "order": "W1 A1 B1 A2 B2 W2 (A = restore, B = recompute over the last N tokens); skip/full: W1 A1 A2",
+    "control": ("the baseline. A no-fork prompt-cache hit on slot 2 (slot_fork=false, cache_prompt=true) with the SAME "
+                "batch partition as the arm it controls. CA (for A): seed trunk[:T-N] then trunk (--source-build fork) "
+                "or trunk (--source-build fresh, and every non-default launch), each with n_predict 0 and "
+                "checkpoint_at [-1] exactly as the sources, then P: a cache hit at T with an S-token remainder. CB (for "
+                "B): seed trunk[:T-N], then P: a cache hit at T-N with an N+S remainder. Slot 2 is erased before and "
+                "after every control so no fork can ever land on it"),
+    "twin": ("INFORMATIONAL ONLY. Unforked cold slot: slot_fork=false, cache_prompt=false (target and drafter fully "
+             "prefilled, its own batch partition). W1, W2 bracket each default-launch cell; skip/full launches run W1 as "
+             "the launch-variance check against the default launch's twins. Every arm is ALSO judged against the twins "
+             "and reported as `A_vs_twin` / `B_vs_twin`; that column never enters a verdict or a decision"),
+    "order": ("W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 W2 (A = restore, B = recompute over the last N tokens, each right after "
+              "its control); skip/full: W1 CA1 A1 CA2 A2"),
+    "suffix_cells": ("S in --suffix-lens (default 1,128,2; the suffix index is the position in that list, so S=1 and "
+                     "S=128 keep the v1 suffixes). S=2 is the cell with no 1-token ubatch in any request: the "
+                     "informational twin column is expected to agree there too"),
     "cell_invalid_if": [
         "an HTTP error or fewer than n_generated tokens (ignore_eos)",
-        "a twin has draft_n == 0 or None (speculation inactive: the comparison would be vacuous)",
-        "a twin reports cache_n != 0 or n_fork_tokens != 0 (it was not a fresh unforked run)",
+        "a control (or a twin) has draft_n == 0 or None (speculation inactive: the comparison would be vacuous)",
+        "a control reports n_fork_tokens != 0, or cache_n / prompt_n other than designed (CA: cache_n T, prompt_n S; "
+        "CB: cache_n T-N, prompt_n N+S): it did not reproduce the arm's partition",
+        "the twin column only: a twin reports cache_n != 0 or n_fork_tokens != 0 (that column is then INVALID)",
         "a restore child's n_fork_tokens != T, or a recompute child's n_fork_tokens != T-N (the fork was not taken "
         "where designed)",
         "a skip/full launch's own twin W1 falls outside the default launch's twin range for that cell (launch variance)",
     ],
     "cell_pass": {
-        "tokens": ("the first 64 generated token ids of X equal a twin's. If W1 and W2 themselves differ at position k, "
-                   "X must agree with some twin for at least k positions (twin spread)"),
-        "acceptance": ("draft_n and draft_n_accepted of X lie in [min, max] of the twins' values for the same request "
-                       "(twins equal => exact equality; no extra tolerance is granted)"),
+        "tokens": ("the first 64 generated token ids of X equal a control's (A vs CA1/CA2, B vs CB1/CB2). If the two "
+                   "controls themselves differ at position k, X must agree with some control for at least k positions"),
+        "acceptance": ("draft_n and draft_n_accepted of X lie in [min, max] of its controls' values for the same request "
+                       "(controls equal => exact equality; no extra tolerance is granted)"),
         "both_required": True,
     },
+    "near_tie_band": ("a LABEL on a first divergence, never part of a verdict. band = max(%g, Q) where Q is the %g "
+                      "quantile (nearest rank) of the pooled |gap_W1[i] - gap_C[i]| for C in {CA1, CB1} over every "
+                      "default-launch cell where W1, C are both valid, at every position i before the first token "
+                      "where W1 and C differ and where both top-2 gaps are known (gap = p1 - p2 of the reported "
+                      "top-2). That pool is the measured twin-vs-control spread: the gap movement a batch-partition "
+                      "change alone produces. A first divergence of X at position k is `near_tie` iff X's gap at k is "
+                      "< band. With no pooled position, band = the floor" % (NEAR_TIE_FLOOR, NEAR_TIE_QUANTILE)),
     "arm_verdict": ("over HELD-OUT (eval) cells only; dev cells are reported, not counted. PASS iff every attempted cell "
                     "passes (all attempts counted, invalid included); FAIL if any valid cell fails; else INCONCLUSIVE"),
-    "n_selection": ("N is the smallest value in --n-list whose B arm PASSES every DEV cell; if none passes, the largest "
-                    "N is used and `n_selected_by_default` is recorded true. N is never revised after the eval cells start"),
+    "n_selection": ("N is the smallest value in --n-list whose B arm PASSES (against CB) every DEV cell; if none passes, "
+                    "the largest N is used and `n_selected_by_default` is recorded true. N is never revised after the "
+                    "eval cells start"),
     "decisions": {
-        "restore_faithful": "arm A verdict on the default launch == PASS",
-        "trigger_port_30141": ("arm A verdict FAIL with at least one cell where draft_n_accepted of X is BELOW the twins' "
-                               "minimum (an acceptance drop after fork restore). A token divergence without an "
-                               "acceptance drop is reported as `investigate`, not as the trigger"),
+        "restore_faithful": "arm A verdict (against CA) on the default launch == PASS",
+        "trigger_port_30141": ("arm A verdict FAIL (against CA) with at least one cell where draft_n_accepted of X is "
+                               "BELOW the controls' minimum (an acceptance drop after fork restore). A token divergence "
+                               "without an acceptance drop is reported as `investigate`, not as the trigger"),
         "kpf13_1a_skip_load_dft_plain": ("YES iff restore_faithful AND the skip launch's A verdict == PASS AND the skip "
                                          "launch's A runs equal the default launch's A runs cell by cell on tokens, "
                                          "draft_n and draft_n_accepted. NO if restore_faithful and skip is not equal. "
@@ -143,6 +185,8 @@ RULES = {
                            "re-prefill. restore FAIL and recompute PASS: drafter re-prefill over the last N. both FAIL: "
                            "neither; investigate"),
         "dft_full_equals_restore": "same test as skip, for the --slot-fork-dft-full launch",
+        "fork_equals_cache_hit": ("the v11 acceptance property: restore_faithful AND recompute PASS, i.e. a fork is "
+                                  "indistinguishable from a prompt-cache hit with the same remainder"),
     },
     "first_draft": ("identity of the first draft block is evaluated only when the server logged it for both runs "
                     "(--draft-debug, DFlash2); otherwise it is recorded `unobservable` and the rule above uses the "
@@ -153,7 +197,8 @@ RULES = {
         "DFlash2 per-seq selector RNG: re-seeded or continued after a restore, so draft sampling is not reproducible "
         "across a fork; the target verifies so output is unaffected; seed is pinned to 42 in every request",
     ],
-    "info_only": ["TTFT and fork wall time are recorded and are NOT part of any verdict (correctness class, no quiet host)"],
+    "info_only": ["TTFT and fork wall time are recorded and are NOT part of any verdict (correctness class, no quiet host)",
+                  "the cold-twin column (A_vs_twin, B_vs_twin) and the near_tie label"],
 }
 
 
@@ -392,46 +437,67 @@ def prefix_len(a: list[int], b: list[int], n: int) -> int:
     return k
 
 
-def judge_run(twins: list[dict], x: dict, expect_fork: int | None, n: int = N_GEN) -> dict:
-    """One arm run against the twins of its cell. Returns {verdict: PASS|FAIL|INVALID, reasons, ...}."""
-    reasons: list[str] = []
-    invalid: list[str] = []
-    if not twins:
-        return {"verdict": "INVALID", "reasons": ["no twin"], "invalid": ["no twin"]}
-    for i, w in enumerate(twins):
+def ref_problems(refs: list[dict], kind: str, ref_expect: dict | None, n: int = N_GEN) -> list[str]:
+    """Why a reference set (controls or twins) cannot judge anything. kind: "control" | "twin"."""
+    out: list[str] = []
+    if not refs:
+        return [f"no {kind}"]
+    for i, w in enumerate(refs):
+        tag = f"{kind}{i + 1}"
         if w.get("error") or len(w.get("tokens") or []) < n:
-            invalid.append(f"twin{i + 1} short or failed ({len(w.get('tokens') or [])} tokens)")
+            out.append(f"{tag} short or failed ({len(w.get('tokens') or [])} tokens)")
         if not w.get("draft_n"):
-            invalid.append(f"twin{i + 1} draft_n {w.get('draft_n')!r}: speculation inactive (vacuous)")
-        if w.get("cache_n") not in (0, None) or w.get("n_fork_tokens") not in (0, None):
-            invalid.append(f"twin{i + 1} not fresh (cache_n {w.get('cache_n')}, n_fork_tokens {w.get('n_fork_tokens')})")
+            out.append(f"{tag} draft_n {w.get('draft_n')!r}: speculation inactive (vacuous)")
+        if kind == "twin":
+            if w.get("cache_n") not in (0, None) or w.get("n_fork_tokens") not in (0, None):
+                out.append(f"{tag} not fresh (cache_n {w.get('cache_n')}, n_fork_tokens {w.get('n_fork_tokens')})")
+        else:
+            if w.get("n_fork_tokens") not in (0, None):
+                out.append(f"{tag} forked (n_fork_tokens {w.get('n_fork_tokens')}): not a no-fork control")
+            for k, v in (ref_expect or {}).items():
+                if w.get(k) != v:
+                    out.append(f"{tag} {k} {w.get(k)} != designed {v} (partition not reproduced)")
+    return out
+
+
+def judge_run(refs: list[dict], x: dict, expect_fork: int | None, n: int = N_GEN, *, kind: str = "twin",
+              ref_expect: dict | None = None, band: float | None = None) -> dict:
+    """One arm run against the references of its cell (its controls, or the informational twins). Returns
+    {verdict: PASS|FAIL|INVALID, reasons, ...}. `band` labels a first divergence as a near-tie (never a verdict)."""
+    reasons: list[str] = []
+    invalid = ref_problems(refs, kind, ref_expect, n)
+    if x is None:
+        invalid.append("run missing")
+        x = {}
     if x.get("error") or len(x.get("tokens") or []) < n:
         invalid.append(f"run short or failed ({len(x.get('tokens') or [])} tokens)")
     if expect_fork is not None and x.get("n_fork_tokens") != expect_fork:
         invalid.append(f"n_fork_tokens {x.get('n_fork_tokens')} != designed {expect_fork}")
     if invalid:
-        return {"verdict": "INVALID", "reasons": invalid, "invalid": invalid}
-    tw_tokens = [w["tokens"][:n] for w in twins]
-    twin_agree = prefix_len(tw_tokens[0], tw_tokens[1], n) if len(tw_tokens) >= 2 else n
-    best = max(prefix_len(x["tokens"], t, n) for t in tw_tokens)
-    tokens_ok = best >= twin_agree
+        return {"verdict": "INVALID", "reasons": invalid, "invalid": invalid, "basis": kind}
+    ref_tokens = [w["tokens"][:n] for w in refs]
+    ref_agree = prefix_len(ref_tokens[0], ref_tokens[1], n) if len(ref_tokens) >= 2 else n
+    best = max(prefix_len(x["tokens"], t, n) for t in ref_tokens)
+    tokens_ok = best >= ref_agree
     if not tokens_ok:
-        reasons.append(f"tokens: best twin prefix {best} < required {twin_agree}")
-    dn = [w["draft_n"] for w in twins]
-    da = [w.get("draft_n_accepted") or 0 for w in twins]
+        reasons.append(f"tokens: best {kind} prefix {best} < required {ref_agree}")
+    dn = [w["draft_n"] for w in refs]
+    da = [w.get("draft_n_accepted") or 0 for w in refs]
     x_dn, x_da = x.get("draft_n") or 0, x.get("draft_n_accepted") or 0
     acc_ok = min(dn) <= x_dn <= max(dn) and min(da) <= x_da <= max(da)
     acc_drop = x_da < min(da)
     if not acc_ok:
         reasons.append(f"acceptance: draft_n {x_dn} not in [{min(dn)},{max(dn)}] or accepted {x_da} not in "
                        f"[{min(da)},{max(da)}]")
-    near_tie = None
+    near_tie, gap_at = None, None
     if not tokens_ok:
         gaps = x.get("gaps") or []
-        near_tie = bool(best < len(gaps) and gaps[best] is not None and gaps[best] < 1e-3)
+        gap_at = gaps[best] if best < len(gaps) else None
+        near_tie = bool(gap_at is not None and gap_at < (NEAR_TIE_FLOOR if band is None else band))
     return {"verdict": "PASS" if tokens_ok and acc_ok else "FAIL", "reasons": reasons, "tokens_ok": tokens_ok,
-            "accept_ok": acc_ok, "acceptance_drop": acc_drop, "twin_agree": twin_agree, "prefix_best": best,
-            "first_divergence_near_tie": near_tie}
+            "accept_ok": acc_ok, "acceptance_drop": acc_drop, "ref_agree": ref_agree, "twin_agree": ref_agree,
+            "prefix_best": best, "first_divergence_gap": gap_at, "first_divergence_near_tie": near_tie,
+            "near_tie_band": NEAR_TIE_FLOOR if band is None else band, "basis": kind}
 
 
 def same_run(a: dict, b: dict, n: int = N_GEN) -> bool:
@@ -439,11 +505,53 @@ def same_run(a: dict, b: dict, n: int = N_GEN) -> bool:
             and a.get("draft_n_accepted") == b.get("draft_n_accepted"))
 
 
-def cell_arm_verdict(twins: list[dict], runs: list[dict], expect_fork: int | None) -> dict:
-    js = [judge_run(twins, r, expect_fork) for r in runs if r is not None]
+def cell_arm_verdict(refs: list[dict], runs: list[dict], expect_fork: int | None, *, kind: str = "twin",
+                     ref_expect: dict | None = None, band: float | None = None) -> dict:
+    js = [judge_run(refs, r, expect_fork, kind=kind, ref_expect=ref_expect, band=band) for r in runs if r is not None]
     kinds = [j["verdict"] for j in js]
     v = "FAIL" if "FAIL" in kinds else ("INVALID" if "INVALID" in kinds or not kinds else "PASS")
-    return {"verdict": v, "runs": js, "acceptance_drop": any(j.get("acceptance_drop") for j in js)}
+    return {"verdict": v, "runs": js, "acceptance_drop": any(j.get("acceptance_drop") for j in js), "basis": kind}
+
+
+def control_expect(T: int | None, N: int | None, S: int | None, arm: str) -> dict | None:
+    """The partition a control must reproduce (RULES['control']): CA = cache hit at T with S remaining, CB = cache hit
+    at T-N with N+S remaining."""
+    if T is None or S is None:
+        return None
+    if arm == "A":
+        return {"cache_n": T, "prompt_n": S}
+    if N is None:
+        return None
+    return {"cache_n": T - N, "prompt_n": N + S}
+
+
+def controls_of(cell: dict, arm: str) -> list[dict]:
+    c = cell.get("controls") or {}
+    return [r for r in (c.get(f"C{arm}1"), c.get(f"C{arm}2")) if r]
+
+
+def near_tie_band(cells: list[dict], floor: float = NEAR_TIE_FLOOR, q: float = NEAR_TIE_QUANTILE) -> dict:
+    """RULES['near_tie_band']: the measured twin-vs-control gap spread, pooled over default-launch cells."""
+    pool: list[float] = []
+    for c in cells:
+        w1 = (c.get("twins") or {}).get("W1")
+        if not w1 or ref_problems([w1], "twin", None):
+            continue
+        for key, arm in (("CA1", "A"), ("CB1", "B")):
+            ctl = (c.get("controls") or {}).get(key)
+            if not ctl or ref_problems([ctl], "control", control_expect(c.get("T"), c.get("N"), c.get("suffix_len"), arm)):
+                continue
+            k = prefix_len(w1["tokens"], ctl["tokens"], N_GEN)
+            gw, gc = w1.get("gaps") or [], ctl.get("gaps") or []
+            for i in range(min(k, len(gw), len(gc))):
+                if gw[i] is not None and gc[i] is not None:
+                    pool.append(abs(gw[i] - gc[i]))
+    if not pool:
+        return {"band": floor, "quantile_value": None, "n_positions": 0, "floor": floor, "q": q}
+    srt = sorted(pool)
+    qv = srt[max(0, math.ceil(q * len(srt)) - 1)]  # nearest rank
+    return {"band": max(floor, qv), "quantile_value": qv, "n_positions": len(srt), "floor": floor, "q": q,
+            "max": srt[-1]}
 
 
 def arm_verdict(cell_verdicts: list[dict]) -> dict:
@@ -487,6 +595,7 @@ def decide(summary: dict) -> dict:
         out["kpf19_1_choice"] = "neither passes: investigate"
     else:
         out["kpf19_1_choice"] = "NOT_MEASURED"
+    out["fork_equals_cache_hit"] = (restore == "PASS" and bool(b) and b["verdict"] == "PASS")
     for cfg, key in (("skip", "kpf13_1a_skip_load_dft_plain"), ("full", "dft_full_equals_restore")):
         s = summary.get(cfg)
         if not summary.get("plain_drafter", True) or s is None or s.get("A") is None:
@@ -508,22 +617,36 @@ def cell_id(g: int, S: int, N: int | None) -> str:
 
 
 def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plain_drafter: bool = True) -> dict:
-    """results: {config: {cell_id: cell}} where cell = {"group","suffix_len","N","T","twins":{"W1","W2"},"runs":
-    {"A1","B1","A2","B2"},"ok"}. A cell of the default launch may inherit its twins (`twins_from`). Non-default launches
-    run held-out groups only and are judged against the DEFAULT launch's twins of the same (group, suffix_len)."""
+    """results: {config: {cell_id: cell}} where cell = {"group","suffix_len","N","T","twins":{"W1","W2"},
+    "controls":{"CA1","CA2","CB1","CB2"},"runs":{"A1","B1","A2","B2"},"ok"}. Arms are judged against their OWN cell's
+    controls (RULES v2); the cold twins (inherited through `twins_from` across the N sweep) give the informational
+    `*_vs_twin` column. Non-default launches judge A against their own controls, and their own W1 against the DEFAULT
+    launch's twins of the same (group, suffix_len) as the launch-variance check."""
     dflt = results.get("default", {})
 
     def twins_of(cell: dict, cells: dict) -> list[dict]:
         ref = cells.get(cell["twins_from"], {}) if cell.get("twins_from") else cell
         return [w for w in (ref.get("twins", {}).get("W1"), ref.get("twins", {}).get("W2")) if w]
 
-    # N selection on DEV cells (B arm, default launch)
+    # the near-tie band: measured twin-vs-control spread over the default launch (twins resolved through twins_from)
+    band_cells = []
+    for c in dflt.values():
+        if c.get("ok", True):
+            tw = twins_of(c, dflt)
+            band_cells.append({**c, "twins": {"W1": tw[0]} if tw else {}})
+    band_rec = near_tie_band(band_cells)
+    band = band_rec["band"]
+
+    def arm_v(c: dict, arm: str, runs: list, exp_fork):
+        return cell_arm_verdict(controls_of(c, arm), runs, exp_fork, kind="control",
+                                ref_expect=control_expect(c.get("T"), c.get("N"), c.get("suffix_len"), arm), band=band)
+
+    # N selection on DEV cells (B arm against CB, default launch)
     dev_b: dict[int, list[dict]] = {}
     for c in dflt.values():
         if c.get("group") in dev_groups and c.get("N") is not None and c.get("ok", True):
             exp = (c["T"] - c["N"]) if c.get("T") else None
-            dev_b.setdefault(c["N"], []).append(
-                cell_arm_verdict(twins_of(c, dflt), [c["runs"].get("B1"), c["runs"].get("B2")], exp))
+            dev_b.setdefault(c["N"], []).append(arm_v(c, "B", [c["runs"].get("B1"), c["runs"].get("B2")], exp))
     sel = select_n(dev_b, n_list) if dev_b else {"N": None, "n_selected_by_default": None}
 
     def default_cell(g, S):
@@ -531,10 +654,11 @@ def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plai
         pick = [c for c in cands if c.get("N") == sel["N"]]
         return (pick or cands or [None])[0]
 
-    out: dict = {"n_selection": sel, "configs": {}, "cells": {}}
+    out: dict = {"n_selection": sel, "near_tie_band": band_rec, "configs": {}, "cells": {}}
     summary: dict = {"plain_drafter": plain_drafter}
     for cfg, cells in results.items():
         per_arm: dict[str, list[dict]] = {"A": [], "B": []}
+        per_arm_twin: dict[str, list[dict]] = {"A": [], "B": []}
         eq_default: list[bool] = []
         for cid, c in sorted(cells.items()):
             is_dev = c.get("group") in dev_groups
@@ -549,16 +673,23 @@ def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plai
                 w1 = c.get("twins", {}).get("W1")
                 # launch-variance check: this launch's own twin must lie inside the default launch's twin range
                 launch = (judge_run(tw, w1, None)["verdict"] if (tw and w1) else "INVALID")
-            a_v = cell_arm_verdict(tw, [c["runs"].get("A1"), c["runs"].get("A2")], expT)
+            a_runs = [c["runs"].get("A1"), c["runs"].get("A2")]
+            a_v = arm_v(c, "A", a_runs, expT)
             if launch is not None and launch != "PASS":
                 a_v = {**a_v, "verdict": "INVALID", "launch_check": launch}
+            a_tw = cell_arm_verdict(tw, a_runs, expT, kind="twin", band=band)
             rec = {"group": c.get("group"), "suffix_len": c.get("suffix_len"), "N": c.get("N"), "dev": is_dev,
-                   "A": a_v}
+                   "A": a_v, "A_vs_twin": a_tw}
             if launch is not None:
                 rec["launch_check"] = launch
+            ca = controls_of(c, "A")
+            if tw and ca:
+                rec["CA_equals_twin"] = all(same_run(x, tw[0]) for x in ca)
             if "B1" in c.get("runs", {}):
                 exp_b = (c["T"] - c["N"]) if c.get("T") and c.get("N") is not None else None
-                rec["B"] = cell_arm_verdict(tw, [c["runs"].get("B1"), c["runs"].get("B2")], exp_b)
+                b_runs = [c["runs"].get("B1"), c["runs"].get("B2")]
+                rec["B"] = arm_v(c, "B", b_runs, exp_b)
+                rec["B_vs_twin"] = cell_arm_verdict(tw, b_runs, exp_b, kind="twin", band=band)
                 rec["A_equals_B"] = all(same_run(c["runs"][f"A{i}"], c["runs"][f"B{i}"]) for i in (1, 2)
                                         if c["runs"].get(f"A{i}") and c["runs"].get(f"B{i}"))
             if dc is not None:
@@ -571,11 +702,15 @@ def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plai
             out["cells"][f"{cfg}:{cid}"] = rec
             if not is_dev:
                 per_arm["A"].append(a_v)
+                per_arm_twin["A"].append(a_tw)
                 if "B" in rec and (sel["N"] is None or c.get("N") == sel["N"]):
                     per_arm["B"].append(rec["B"])
+                    per_arm_twin["B"].append(rec["B_vs_twin"])
         av = arm_verdict(per_arm["A"]) if per_arm["A"] else None
         bv = arm_verdict(per_arm["B"]) if per_arm["B"] else None
-        out["configs"][cfg] = {"A": av, "B": bv}
+        out["configs"][cfg] = {"A": av, "B": bv,
+                               "info_vs_twin": {"A": arm_verdict(per_arm_twin["A"]) if per_arm_twin["A"] else None,
+                                                "B": arm_verdict(per_arm_twin["B"]) if per_arm_twin["B"] else None}}
         summary[cfg] = {"A": av, "B": bv,
                         "equal_to_default_A": None if cfg == "default" or not eq_default else all(eq_default)}
     out["decisions"] = decide(summary)
@@ -1125,14 +1260,23 @@ class Plan:
                 n_tw = 0 if (has_b and (g, S) in twin_seen) else (2 if has_b else 1)
                 twin_seen.add((g, S))
                 est = n_tw * self.est_req(T + S) + 2 * self.est_req(S)
+                # controls (RULES v2): CA re-seeds the trunk the way the restore source was built, then P (S remainder)
+                ca_seed = (self.est_req(T - n_est, 0) + self.est_req(n_est, 0)) if self._ca_two_hop() else self.est_req(T, 0)
+                est += 2 * (ca_seed + self.est_req(S))
                 if has_b:
                     est += 2 * self.est_req(n_est + S) + 2 * self.est_req(n_est, 0)
-                est += 8 * ctx.rates.req
+                    est += 2 * (self.est_req(T - n_est, 0) + self.est_req(n_est + S))      # CB: seed T-N, then P
+                est += (18 if has_b else 9) * ctx.rates.req
                 steps.append(Step(f"[{self.cfg_name}] cell g{g} S={S} N={N}: "
-                                  + ("W1 A1 B1 A2 B2 W2" if has_b else "W1 A1 A2"), est,
+                                  + ("W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 W2" if has_b else "W1 CA1 A1 CA2 A2"), est,
                                   lambda g=g, S=S, N=N: self._cell(g, S, N)))
         steps.append(Step(f"[{self.cfg_name}] SIGTERM own pid, verify dead, write record", ctx.rates.stop, self._stop))
         return steps
+
+    def _ca_two_hop(self) -> bool:
+        """The restore source was built as trunk[:T-N] then a one-hop fork + N-token tail (default launch, --source-build
+        fork): CA reproduces that partition by seeding trunk[:T-N] then trunk. Otherwise the source is a fresh trunk."""
+        return "B" in self.cfg["arms"] and self.ctx.args.source_build == "fork"
 
     def _start(self) -> None:
         self.srv = Server(self.ctx, self.cfg_name, Path(self.ctx.args.fork_bin))
@@ -1155,12 +1299,11 @@ class Plan:
             devb: dict[int, list[dict]] = {}
             for cid, c in dflt.items():
                 if c.get("group") in a.dev_groups and c.get("N") is not None and c.get("ok"):
-                    tw = [w for w in (c["twins"].get("W1"), c["twins"].get("W2")) if w] if "twins" in c else []
-                    if not tw and c.get("twins_from"):
-                        ref = dflt.get(c["twins_from"], {})
-                        tw = [w for w in (ref.get("twins", {}).get("W1"), ref.get("twins", {}).get("W2")) if w]
+                    # RULES v2: B is judged against its no-fork control CB (same partition), not the cold twin
                     devb.setdefault(c["N"], []).append(
-                        cell_arm_verdict(tw, [c["runs"].get("B1"), c["runs"].get("B2")], c["T"] - c["N"]))
+                        cell_arm_verdict(controls_of(c, "B"), [c["runs"].get("B1"), c["runs"].get("B2")],
+                                         c["T"] - c["N"], kind="control",
+                                         ref_expect=control_expect(c["T"], c["N"], c.get("suffix_len"), "B")))
             sel = select_n(devb, a.n_list)
             self.state["N"], self.state["n_sel"] = sel["N"], sel
             print(f"[kpf13] N selected on DEV: {sel}", flush=True)
@@ -1205,7 +1348,8 @@ class Plan:
         P = trunk + ctx.ps.suffix(g, S)
         meta = {"phase": "cell", "cell": cid, "group": g, "S": S, "N": N, "config": self.cfg_name}
         cell = {"cell": cid, "group": g, "suffix_len": S, "N": N, "T": T, "config": self.cfg_name,
-                "prompt_sha256": sha256_json(P), "runs": {}, "twins": {}, "ok": False, "start_utc": now_iso()}
+                "prompt_sha256": sha256_json(P), "runs": {}, "twins": {}, "controls": {}, "ok": False,
+                "start_utc": now_iso(), "rules_schema": RULES["schema"]}
         # twins are N-independent: reuse the first N's twins for the same (g, S) in the default launch
         reuse = None
         if has_b:
@@ -1214,10 +1358,11 @@ class Plan:
                     reuse = oid
                     break
         n = N_GEN
+        ctl_slot = 2  # the twin slot; erased before and after every twin/control, and controls never fork
 
         def twin(tag: str) -> dict:
-            r = self.req(f"twin_{tag}", P, 2, fork=False, cache=False, n_predict=n, meta={**meta, "arm": tag})
-            self.erase((2,))
+            r = self.req(f"twin_{tag}", P, ctl_slot, fork=False, cache=False, n_predict=n, meta={**meta, "arm": tag})
+            self.erase((ctl_slot,))
             return r
 
         def child(tag: str) -> dict:
@@ -1225,26 +1370,47 @@ class Plan:
             self.erase((1,))
             return r
 
+        # RULES v2 controls: a no-fork prompt-cache hit with the arm's partition (seeds mirror the sources exactly:
+        # cache_prompt true, n_predict 0, checkpoint_at [-1])
+        ca_seeds = [trunk[: T - N], trunk] if (self._ca_two_hop() and N) else [trunk]
+        cb_seeds = [trunk[: T - N]] if (has_b and N) else []
+
+        def control(tag: str, seeds: list[list[int]]) -> dict:
+            self.erase((ctl_slot,))
+            for i, ids in enumerate(seeds):
+                self.req(f"control_{tag}_seed{i}", ids, ctl_slot, fork=False, cache=True, n_predict=0, ckpt=[-1],
+                         meta={**meta, "arm": f"{tag}_seed{i}"})
+            r = self.req(f"control_{tag}", P, ctl_slot, fork=False, cache=True, n_predict=n, meta={**meta, "arm": tag})
+            self.erase((ctl_slot,))
+            return r
+
         if reuse:
             cell["twins_from"] = reuse
         else:
             cell["twins"]["W1"] = twin("W1")
         if has_b:
+            cell["controls"]["CA1"] = control("CA1", ca_seeds)
             cell["runs"]["A1"] = child("A1")                      # restore: source 3 (trunk, T) is the longest candidate
             self.erase((3,))                                      # B must fork from slot 0 (trunk[:T-N]) only
+            cell["controls"]["CB1"] = control("CB1", cb_seeds)
             cell["runs"]["B1"] = child("B1")
             self._regen_source3(g, N)
+            cell["controls"]["CA2"] = control("CA2", ca_seeds)
             cell["runs"]["A2"] = child("A2")
             self.erase((3,))
+            cell["controls"]["CB2"] = control("CB2", cb_seeds)
             cell["runs"]["B2"] = child("B2")
             self._regen_source3(g, N)
             if not reuse:
                 cell["twins"]["W2"] = twin("W2")
         else:
+            cell["controls"]["CA1"] = control("CA1", ca_seeds)
             cell["runs"]["A1"] = child("A1")
+            cell["controls"]["CA2"] = control("CA2", ca_seeds)
             cell["runs"]["A2"] = child("A2")
         # fork designed positions (validated again by the judge; recorded here for the rows)
-        cell["expect"] = {"A": T, "B": (T - N) if has_b else None}
+        cell["expect"] = {"A": T, "B": (T - N) if has_b else None,
+                          "CA": control_expect(T, N, S, "A"), "CB": control_expect(T, N, S, "B") if has_b else None}
         cell["end_utc"] = now_iso()
         cell["ok"] = True
         self.results[cid] = cell
@@ -1252,7 +1418,7 @@ class Plan:
         write_json(self.ctx.out / "cells" / self.cfg_name / f"{cid}.json", cell)
         print(f"[kpf13]   cell {self.cfg_name}:{cid} stored: "
               + json.dumps({k: [r["n_fork_tokens"], r["draft_n"], r["draft_n_accepted"]]
-                            for k, r in {**cell["twins"], **cell["runs"]}.items()}), flush=True)
+                            for k, r in {**cell["twins"], **cell["controls"], **cell["runs"]}.items()}), flush=True)
 
     # ---- record (epyc.kpf.run.v1 shape, KPF-13.1 extension)
     def finish_record(self) -> None:
@@ -1278,8 +1444,10 @@ class Plan:
             "drafter": a.drafter, "dflash2": a.drafter == "dflash2",
             "spec_type_from_argv": flag_val(ctx.gate_argv, ("--spec-type",)),
             "n_predict": N_GEN, "seed": SEED,
-            "equivalence": {"counts_basis": "per cell: tokens identical to a twin, draft_n and draft_n_accepted inside "
-                                            "the twins' range; see rules_sha256",
+            "equivalence": {"counts_basis": "per cell (rules v2): tokens identical to the arm's no-fork cache-hit "
+                                            "control (same batch partition), draft_n and draft_n_accepted inside the "
+                                            "controls' range; the cold-twin column is informational; see rules_sha256",
+                            "near_tie_band": ana.get("near_tie_band"),
                             "configs": ana["configs"].get(self.cfg_name), "n_selection": ana["n_selection"],
                             "decisions": ana["decisions"]},
             "ttft_ms": [r["prompt_ms"] for r in sums if r and r.get("prompt_ms") is not None],
@@ -1409,7 +1577,9 @@ def parse_args(argv=None):
     ap.add_argument("--port", type=int, default=18973)
     ap.add_argument("--fork-min", type=int, default=1024)
     ap.add_argument("--trunk-tokens", type=int, default=2048)
-    ap.add_argument("--suffix-lens", default="1,128", help="comma list; the prompt set must carry that many suffixes")
+    ap.add_argument("--suffix-lens", default="1,128,2",
+                    help="comma list; the suffix index is the position in this list (1,128 keep the v1 suffixes; 2 is the "
+                         "no-1-token-ubatch companion of 1); the prompt set must carry that many suffixes")
     ap.add_argument("--n-list", default="64,512", help="candidate N (tokens recomputed before the fork point)")
     ap.add_argument("--dev-groups", default="0")
     ap.add_argument("--eval-groups", default="1,2,3")
@@ -1417,8 +1587,9 @@ def parse_args(argv=None):
                     help="how the restore source (slot 3) is built: a one-hop fork + N-token tail (cheap, the default) "
                          "or a fresh full prefill (N-independent, T tokens per rebuild)")
     ap.add_argument("--reduced", action="store_true",
-                    help="audit-sized preset: acceptance over 64 tokens on 8 held-out cells (groups 0-3 x suffix 1,128), "
-                         "ONE launch (default: A restore, B recompute, twins), N fixed at 64, no dev sweep, no skip/full. "
+                    help="audit-sized preset: acceptance over 64 tokens on 12 held-out cells (groups 0-3 x suffix "
+                         "1,128,2), ONE launch (default: A restore, B recompute, their controls CA/CB, the informational "
+                         "twins), N fixed at 64, no dev sweep, no skip/full. "
                          "Run once per drafter (--drafter plain-mtp, then --drafter dflash2 with its own --argv-file)")
     ap.add_argument("--draft-debug", action="store_true", help="add -lv 4 and parse DFlash2 first-draft candidates")
     ap.add_argument("--deadline-utc", default=None, help="HARD deadline, YYYY-MM-DDTHH:MM:SSZ (required to execute)")
@@ -1444,7 +1615,7 @@ def parse_args(argv=None):
     if args.reduced:
         # 8 held-out prompts: every group is held out because N is a single pre-declared value (nothing is tuned on them)
         args.configs, args.dev_groups, args.eval_groups, args.n_list = ["default"], [], [0, 1, 2, 3], [64]
-        args.suffix_lens = [1, 128]
+        args.suffix_lens = [1, 128, 2]
     return args
 
 
@@ -1468,7 +1639,7 @@ def cmd_analyze(args) -> int:
     ana = analyze_results(results, set(args.dev_groups), args.n_list, args.drafter == "plain-mtp")
     write_json(out / "verdict.json", ana)
     print(json.dumps({"configs": ana["configs"], "n_selection": ana["n_selection"], "decisions": ana["decisions"],
-                      "rules_sha256": ana["rules_sha256"]}, indent=1))
+                      "near_tie_band": ana["near_tie_band"], "rules_sha256": ana["rules_sha256"]}, indent=1))
     return 0
 
 

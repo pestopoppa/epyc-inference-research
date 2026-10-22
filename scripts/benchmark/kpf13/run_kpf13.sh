@@ -9,6 +9,16 @@
 #   KPF13_WINDOW_ID=<grant id> KPF13_CPU_LIST=72-95 run_kpf13.sh --out DIR --deadline-utc 2026-10-23T06:00:00Z
 #   KPF13_WINDOW_ID=x KPF13_CPU_LIST=72-95 run_kpf13.sh --out DIR --dry-run
 #
+# KPF-13.1 REDUCED RE-RUN under rules v2 (no-fork cache-hit controls, S=2 cell, measured near-tie band), plain MTP,
+# one CPU quarter (q1 shown; q3 = 72-95,168-191), RAM admission first (ram_admit.sh 45):
+#   KPF13_WINDOW_ID=<grant id> KPF13_CPU_LIST=24-47,120-143 run_kpf13.sh --reduced --threads 24 \
+#       --out /mnt/raid0/llm/tmp/kpf13-reduced-v2/run --deadline-utc <grant end - 2 min> \
+#       --stop-file /mnt/raid0/llm/tmp/kpf13-reduced-v2/STOP --prefill-tok-s 120 --decode-tok-s 12 --load-s 120
+#   12 held-out cells (groups 0-3 x S 1,128,2), N=64, per cell W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 W2.
+#   Estimate: ~44 min at the planning rates above (largest step ~205 s); ~31 min at the rates measured in the v1
+#   reduced run (prefill ~180 tok/s, MTP decode ~19 tok/s), and v1 itself ran 1.36x under that model, so expect
+#   ~23-25 min wall. Ask for a 45-min grant. (The default rates 30/3.5/240 give ~140 min: ~4.5x pessimistic.)
+#
 # This script signals nothing: the python driver owns its one llama-server child by PID.
 set -euo pipefail
 

@@ -2,7 +2,8 @@
 
 No llama-server, no model, no GPU: the cell protocol runs against an in-process fake that models the one server
 behaviour the protocol depends on (a fork child takes the longest shared prefix among the OTHER slots' stored prompts),
-so the A/B/A/B order, the source construction (A forks at T, B forks at T-N) and the judging are all exercised.
+so the A/B/A/B order, the source construction (A forks at T, B forks at T-N), the no-fork cache-hit controls (rules v2:
+CA = cache hit at T with S remaining, CB = cache hit at T-N with N+S remaining) and the judging are all exercised.
 Run: python3 -m pytest scripts/benchmark/test_kpf13_restore_ab.py
 """
 from __future__ import annotations
@@ -32,15 +33,27 @@ def twin(**kw):
     return run(**kw)
 
 
+def ctl(cache=2048, prompt_n=1, **kw):
+    r = run(cache=cache, **kw)
+    r["prompt_n"] = prompt_n
+    return r
+
+
+CA_EXP = {"cache_n": 2048, "prompt_n": 1}
+
+
 # ---------------------------------------------------------------- rules are declared and hashed
 def test_rules_hash_is_stable_and_complete():
     h = m.rules_sha256()
     assert h == m.rules_sha256() and len(h) == 64
-    for k in ("sampling", "twin", "order", "cell_invalid_if", "cell_pass", "arm_verdict", "n_selection", "decisions",
-              "restore_does_not_carry", "first_draft"):
+    for k in ("sampling", "twin", "control", "order", "suffix_cells", "cell_invalid_if", "cell_pass", "near_tie_band",
+              "arm_verdict", "n_selection", "decisions", "restore_does_not_carry", "first_draft", "supersedes"):
         assert k in m.RULES, k
+    assert m.RULES["schema"] == "epyc.kpf13.rules.v2"
     assert m.RULES["sampling"]["n_generated"] == 64 and m.RULES["sampling"]["seed"] == 42
-    assert m.RULES["order"].startswith("W1 A1 B1 A2 B2 W2")
+    assert m.RULES["order"].startswith("W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 W2")
+    assert "INFORMATIONAL" in m.RULES["twin"] and "fork_equals_cache_hit" in m.RULES["decisions"]
+    assert "%g" not in m.RULES["near_tie_band"] and "0.95" in m.RULES["near_tie_band"]
     txt = json.dumps(m.RULES)
     assert "pending_h" in txt and "selector RNG" in txt
     json.dumps(m.RULES)  # serialisable into rules.json
@@ -100,6 +113,64 @@ def test_non_fresh_twin_is_invalid():
 def test_short_or_errored_run_is_invalid():
     assert m.judge_run([twin(), twin()], run(tokens=[1, 2, 3], fork=1), 1)["verdict"] == "INVALID"
     assert m.judge_run([twin(), twin()], run(err="HTTP 500", fork=1), 1)["verdict"] == "INVALID"
+
+
+def test_control_basis_checks_partition_and_no_fork():
+    ok = m.judge_run([ctl(), ctl()], run(fork=2048), 2048, kind="control", ref_expect=CA_EXP)
+    assert ok["verdict"] == "PASS" and ok["basis"] == "control"
+    # a control that forked, or that did not reproduce the arm's partition, cannot judge anything
+    assert m.judge_run([ctl(fork=2048), ctl()], run(fork=2048), 2048, kind="control",
+                       ref_expect=CA_EXP)["verdict"] == "INVALID"
+    assert m.judge_run([ctl(cache=1984, prompt_n=65), ctl()], run(fork=2048), 2048, kind="control",
+                       ref_expect=CA_EXP)["verdict"] == "INVALID"
+    assert m.judge_run([ctl(dn=0), ctl()], run(fork=2048), 2048, kind="control", ref_expect=CA_EXP)["verdict"] == "INVALID"
+    # a cache-hit control is NOT a fresh twin: the twin rule would reject it, the control rule accepts it
+    assert m.judge_run([ctl(), ctl()], run(fork=2048), 2048)["verdict"] == "INVALID"
+    assert m.judge_run([], run(fork=2048), 2048, kind="control")["reasons"] == ["no control"]
+
+
+def test_near_tie_label_uses_the_given_band():
+    toks = list(range(N))
+    toks[0] = 999
+    gaps = [0.5] * N
+    gaps[0] = 0.02  # the KPF-13.1 S=1 first-token gaps were 0.001-0.03
+    x = run(tokens=toks, fork=2048, gaps=gaps)
+    assert m.judge_run([twin(), twin()], x, 2048)["first_divergence_near_tie"] is False      # v1 floor 1e-3
+    v = m.judge_run([twin(), twin()], x, 2048, band=0.05)
+    assert v["first_divergence_near_tie"] is True and v["first_divergence_gap"] == 0.02 and v["verdict"] == "FAIL"
+
+
+def _band_cell(w_gaps, c_gaps, w_toks=None, c_toks=None, S=1):
+    w = run(tokens=w_toks, gaps=w_gaps)
+    c = ctl(tokens=c_toks, gaps=c_gaps, prompt_n=S)
+    return {"T": 2048, "N": 64, "suffix_len": S, "twins": {"W1": w}, "controls": {"CA1": c}}
+
+
+def test_near_tie_band_is_the_measured_twin_control_spread():
+    # no spread at all -> the floor
+    b = m.near_tie_band([_band_cell([0.5] * N, [0.5] * N)])
+    assert b["band"] == m.NEAR_TIE_FLOOR and b["n_positions"] == N and b["quantile_value"] == 0
+    # a spread of 0.04 on every position -> band 0.04 (nearest-rank q95)
+    b = m.near_tie_band([_band_cell([0.5] * N, [0.54] * N)])
+    assert abs(b["band"] - 0.04) < 1e-9
+    # positions at or after the first token divergence are not pooled
+    ct = list(range(N))
+    ct[10] = 999
+    cg = [0.5] * 10 + [0.9] * (N - 10)
+    b = m.near_tie_band([_band_cell([0.5] * N, cg, c_toks=ct)])
+    assert b["n_positions"] == 10 and b["band"] == m.NEAR_TIE_FLOOR
+    # an invalid control (wrong partition) is excluded; no pool -> floor
+    bad = _band_cell([0.5] * N, [0.9] * N)
+    bad["controls"]["CA1"]["cache_n"] = 0
+    assert m.near_tie_band([bad]) == {"band": m.NEAR_TIE_FLOOR, "quantile_value": None, "n_positions": 0,
+                                      "floor": m.NEAR_TIE_FLOOR, "q": m.NEAR_TIE_QUANTILE}
+
+
+def test_control_expect():
+    assert m.control_expect(2048, 64, 1, "A") == {"cache_n": 2048, "prompt_n": 1}
+    assert m.control_expect(2048, 64, 1, "B") == {"cache_n": 1984, "prompt_n": 65}
+    assert m.control_expect(2048, None, 2, "A") == {"cache_n": 2048, "prompt_n": 2}
+    assert m.control_expect(2048, None, 2, "B") is None
 
 
 def test_arm_verdict_counts_invalid_as_not_pass():
@@ -184,18 +255,30 @@ class FakeClient:
     stored prompt (>= fork_min). Every request stores its prompt in its slot (the real slot keeps its KV). Tokens depend
     only on the prompt; draft counts are fixed unless `penalty` hits a given fork length."""
 
-    def __init__(self, fork_min=512, penalty=None, drift_on_fork_len=None):
+    def __init__(self, fork_min=512, penalty=None, drift_on_fork_len=None, cold_shift=False):
         self.slots: dict[int, list[int]] = {}
         self.fork_min, self.penalty, self.drift = fork_min, penalty, drift_on_fork_len
+        self.cold_shift = cold_shift  # a cold full prefill (cache_n 0) takes a different first token: batch shape
         self.log: list[tuple] = []
 
     def erase(self, slot):
         self.slots.pop(slot, None)
         self.log.append(("erase", slot))
 
+    @staticmethod
+    def _lcp(a, b):
+        k = 0
+        for x, y in zip(a, b):
+            if x != y:
+                break
+            k += 1
+        return k
+
     def complete(self, body, timeout):
         ids, slot = body["prompt"], body["id_slot"]
         fork = body.get("slot_fork", True) and body["cache_prompt"]
+        own = self._lcp(ids, self.slots.get(slot, [])) if body["cache_prompt"] else 0
+        own = min(own, len(ids) - 1)  # the server always evaluates at least one token
         nfork = 0
         if fork:
             best = 0
@@ -208,19 +291,22 @@ class FakeClient:
                         break
                     k += 1
                 best = max(best, k)
-            if best >= self.fork_min:
+            if best >= self.fork_min and best > own:
                 nfork = best
         self.slots[slot] = list(ids)
         npred = body["n_predict"]
         self.log.append(("req", slot, len(ids), nfork, npred))
+        cache_n = nfork or own
         toks = [(sum(ids) + 7 * i) % 997 for i in range(npred)]
+        if self.cold_shift and cache_n == 0 and npred:
+            toks[0] = (toks[0] + 1) % 997
         if self.drift is not None and nfork == self.drift and npred > 20:
             toks[20] = (toks[20] + 1) % 997
         da = 20
         if self.penalty is not None and nfork == self.penalty:
             da = 17
-        t = {"n_fork_tokens": nfork, "fork_src_kind": "end" if nfork else None, "cache_n": nfork,
-             "prompt_n": len(ids) - nfork, "prompt_ms": 1.0, "predicted_ms": 1.0}
+        t = {"n_fork_tokens": nfork, "fork_src_kind": "end" if nfork else None, "cache_n": cache_n,
+             "prompt_n": len(ids) - cache_n, "prompt_ms": 1.0, "predicted_ms": 1.0}
         if npred:
             t.update(draft_n=30, draft_n_accepted=da)
         return {"http": 200, "wall_s": 0.0, "t_send": 0.0, "t_end": 0.0, "tokens": toks, "probs": [], "timings": t}
@@ -230,7 +316,7 @@ def make_prompt_set(path: Path, groups=4, trunk_len=2100):
     lines = []
     for g in range(groups):
         lines.append({"kind": "trunk", "group": g, "ids": [10_000 * (g + 1) + i for i in range(trunk_len)]})
-        for i, ln in enumerate((5, 140)):
+        for i, ln in enumerate((5, 140, 8)):
             lines.append({"kind": "pair", "group": g, "suffix_index": i,
                           "suffix_ids": [900_000 + 1000 * g + 100 * i + j for j in range(ln)]})
     path.write_text("".join(json.dumps(x) + "\n" for x in lines))
@@ -266,13 +352,26 @@ def test_cell_order_is_W1_A1_B1_A2_B2_W2_and_forks_land_where_designed(tmp_path)
     # read the stored request rows of that cell in order
     rows = [json.loads(x) for x in (tmp_path / "out" / "rows" / "default.jsonl").read_text().splitlines()]
     cell_rows = [r for r in rows if r.get("cell") == cid]
-    assert [r["arm"] for r in cell_rows] == ["W1", "A1", "B1", "A2", "B2", "W2"]
+    assert [r["arm"] for r in cell_rows if "_seed" not in r["arm"]] == \
+        ["W1", "CA1", "A1", "CB1", "B1", "CA2", "A2", "CB2", "B2", "W2"]
+    # CA re-seeds trunk[:T-N] then trunk (the restore source's own construction), CB seeds trunk[:T-N]
+    assert [r["arm"] for r in cell_rows if r["arm"].startswith("CA1")] == ["CA1_seed0", "CA1_seed1", "CA1"]
+    assert [r["arm"] for r in cell_rows if r["arm"].startswith("CB1")] == ["CB1_seed0", "CB1"]
     byarm = {r["arm"]: r for r in cell_rows}
     N_ = ctx.results["default"][cid]["N"]
     T = 2048
     assert byarm["A1"]["n_fork_tokens"] == T and byarm["A2"]["n_fork_tokens"] == T
     assert byarm["B1"]["n_fork_tokens"] == T - N_ and byarm["B2"]["n_fork_tokens"] == T - N_
     assert byarm["W1"]["n_fork_tokens"] == 0 and byarm["W2"]["n_fork_tokens"] == 0 and byarm["W1"]["cache_n"] == 0
+    # the controls never fork and land exactly on the arms' partitions
+    for k in ("CA1", "CA2", "CB1", "CB2"):
+        assert byarm[k]["n_fork_tokens"] == 0 and byarm[k]["slot"] == 2, k
+    assert byarm["CA1"]["cache_n"] == T and byarm["CA1"]["prompt_n"] == 1
+    assert byarm["CB1"]["cache_n"] == T - N_ and byarm["CB1"]["prompt_n"] == N_ + 1
+    # slot 2 is erased right before and right after every control (nothing can fork from or into it)
+    for i, e in enumerate(cl.log):
+        if e[0] == "req" and e[1] == 2 and e[4] == N and e[3] == 0 and i + 1 < len(cl.log):
+            assert cl.log[i + 1] == ("erase", 2)
     # slot 3 (the restore source) is erased before each B child and rebuilt after it
     seq = [e for e in cl.log]
     assert ("erase", 3) in seq
@@ -309,6 +408,28 @@ def test_recompute_divergence_is_isolated_to_arm_b(tmp_path):
     assert ana["configs"]["default"]["A"]["verdict"] == "PASS"
 
 
+def test_shape_only_twin_divergence_is_informational_not_a_failure(tmp_path):
+    """The KPF-13.1 v1 situation: the cold twin's batch partition gives a different first token, while every arm
+    equals its same-partition no-fork control. v2 PASSes the arms and reports the twin column as FAIL (info only)."""
+    ctx, pl = run_default(tmp_path, FakeClient(cold_shift=True))
+    ana = m.analyze_results(ctx.results, {0}, [64, 512])
+    assert ana["configs"]["default"]["A"]["verdict"] == "PASS"
+    assert ana["configs"]["default"]["B"]["verdict"] == "PASS"
+    assert ana["configs"]["default"]["info_vs_twin"]["A"]["verdict"] == "FAIL"
+    d = ana["decisions"]
+    assert d["restore_faithful"] is True and d["trigger_port_30141"] is False and d["fork_equals_cache_hit"] is True
+    assert all(c["A_vs_twin"]["verdict"] == "FAIL" and c["CA_equals_twin"] is False for c in ana["cells"].values())
+
+
+def test_v1_cells_without_controls_are_invalid_not_fail(tmp_path):
+    ctx, pl = run_default(tmp_path, FakeClient(cold_shift=True))
+    for c in ctx.results["default"].values():
+        c.pop("controls")
+    ana = m.analyze_results(ctx.results, {0}, [64, 512])
+    assert ana["configs"]["default"]["A"]["verdict"] == "INCONCLUSIVE"
+    assert ana["configs"]["default"]["A"]["fail"] == 0 and ana["decisions"]["trigger_port_30141"] is False
+
+
 def test_twins_are_reused_across_the_n_sweep(tmp_path):
     ctx, pl = run_default(tmp_path, FakeClient())
     dev = [c for c in ctx.results["default"].values() if c["group"] == 0 and c["suffix_len"] == 1]
@@ -331,6 +452,10 @@ def test_non_default_launch_is_judged_against_default_twins(tmp_path):
     ana = m.analyze_results(ctx.results, {0}, [64, 512])
     assert ana["configs"]["skip"]["A"]["verdict"] == "PASS"
     assert ana["decisions"]["kpf13_1a_skip_load_dft_plain"] == "YES"
+    # the skip launch's own controls: a fresh trunk seed then P (cache hit at T, S remaining)
+    for c in ctx.results["skip"].values():
+        assert set(c["controls"]) == {"CA1", "CA2"}
+        assert c["controls"]["CA1"]["cache_n"] == 2048 and c["controls"]["CA1"]["prompt_n"] == c["suffix_len"]
 
 
 def test_skip_launch_that_diverges_is_NO_and_a_drifting_own_twin_is_invalid(tmp_path):
@@ -434,7 +559,7 @@ def test_dry_run_prints_plan_and_estimate_and_starts_nothing(tmp_path, capsys, m
     out = capsys.readouterr().out
     assert rc == 0 and not started
     assert "TOTAL est" in out and "launch default" in out and "launch skip" in out and "launch full" in out
-    assert "W1 A1 B1 A2 B2 W2" in out and "rules_sha256=" in out
+    assert "W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 W2" in out and "W1 CA1 A1 CA2 A2" in out and "rules_sha256=" in out
     assert not (tmp_path / "o").exists()
 
 
@@ -494,21 +619,22 @@ def test_analyze_command_recomputes_from_stored_cells(tmp_path, capsys):
     assert v["decisions"]["restore_faithful"] is True and v["rules_sha256"] == m.rules_sha256()
 
 
-def test_reduced_preset_is_eight_heldout_cells_one_launch(tmp_path, capsys, monkeypatch):
+def test_reduced_preset_is_twelve_heldout_cells_one_launch(tmp_path, capsys, monkeypatch):
     started = []
     monkeypatch.setattr(m.Server, "start", lambda self: started.append(1))
     ps = make_prompt_set(tmp_path / "ps.jsonl")
     args = m.parse_args(["run", "--out", str(tmp_path / "o"), "--cpu-list", "24-47,120-143", "--reduced"])
     assert args.configs == ["default"] and args.dev_groups == [] and args.n_list == [64]
-    assert args.eval_groups == [0, 1, 2, 3] and args.suffix_lens == [1, 128]
+    assert args.eval_groups == [0, 1, 2, 3] and args.suffix_lens == [1, 128, 2]
     rc = m.main(["run", "--out", str(tmp_path / "o"), "--cpu-list", "24-47,120-143", "--fork-bin", str(fake_bin(tmp_path)),
                  "--prompt-set", str(ps), "--reduced", "--dry-run"])
     out = capsys.readouterr().out
     assert rc == 0 and not started
-    assert out.count("cell g") == 8 and "launch default" in out and "launch skip" not in out and "TOTAL est" in out
+    assert out.count("cell g") == 12 and "launch default" in out and "launch skip" not in out and "TOTAL est" in out
+    assert out.count("S=2 ") == 4
 
 
-def test_reduced_run_judges_all_eight_cells_as_heldout(tmp_path):
+def test_reduced_run_judges_all_twelve_cells_as_heldout(tmp_path):
     args = m.parse_args(["run", "--out", str(tmp_path / "out"), "--cpu-list", "24-47", "--reduced",
                          "--prompt-set", str(make_prompt_set(tmp_path / "ps.jsonl"))])
     args.window_id = "t"
@@ -521,8 +647,8 @@ def test_reduced_run_judges_all_eight_cells_as_heldout(tmp_path):
         if st.fn and ("sources" in st.desc or "cell g" in st.desc):
             st.fn()
     ana = m.analyze_results(ctx.results, set(args.dev_groups), args.n_list)
-    assert ana["configs"]["default"]["A"]["attempts"] == 8 and ana["configs"]["default"]["A"]["verdict"] == "PASS"
-    assert ana["configs"]["default"]["B"]["attempts"] == 8
+    assert ana["configs"]["default"]["A"]["attempts"] == 12 and ana["configs"]["default"]["A"]["verdict"] == "PASS"
+    assert ana["configs"]["default"]["B"]["attempts"] == 12
     assert all(not c["dev"] for c in ana["cells"].values())
 
 
