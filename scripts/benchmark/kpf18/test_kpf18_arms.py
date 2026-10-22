@@ -396,7 +396,7 @@ def mk_args(tmp_path, **over):
     ns = ap.parse_args([])
     base = dict(out=str(tmp_path), card="/nonexistent", fork_bin="/x/bin/llama-server", fork_min=1024, n_predict=32,
                 n_probs=5, port=18999, budget_min=1e9, window_id="w", gpu_window_id=None, trigger_tokens=32,
-                item2_groups=None, item2_aa_repeats=1, item3_groups=None)
+                item2_groups=None, item2_aa_repeats=1, item3_groups=None, item3_suffix=2)
     base.update(over)
     for k, v in base.items():
         setattr(ns, k, v)
@@ -1061,8 +1061,17 @@ def test_s1_composite_is_one_load_plus_the_aa_control(tmp_path):
     assert not any("drafter off" in d for d in descs)
     first_arm = next(i for i, d in enumerate(descs) if "kpf18s1" in d)
     assert first_arm > 0                                            # the item-2 A/A launches come first
+    # step 5 is ON by default: the localisation arm on the one load, then item 3 on group 3 on its own launch
+    assert any("184 item-3 localisation g3" in d and "tokens 150..170" in d for d in descs)
+    assert any(d.startswith("[item3-fork_on") and "linkage + launch" in d for d in descs)
+    assert any(d.startswith("item3 g3 ") for d in descs) and not any(d.startswith("item3 g5") for d in descs)
+    assert args.item3_groups == "3"
     args.s1_skip_aa = True
     assert "kpf18s1" in A.BUILDERS[184](ctx, GATE)[0].desc
+    args.s1_no_item3 = True
+    d2 = [s.desc for s in A.BUILDERS[184](ctx, GATE)]
+    assert not any("localisation" in d or d.startswith("item3") or "[item3" in d for d in d2)
+    args.s1_no_item3 = False
     probs, notes = A.PREFLIGHTS[184](ctx, GATE)
     assert probs == [] and any(n.startswith("S1:") for n in notes)
 
@@ -1070,3 +1079,59 @@ def test_s1_composite_is_one_load_plus_the_aa_control(tmp_path):
 def test_s1_rules_predeclare_all_three_arm_families():
     r = A.rules_for([184])
     assert set(r) == {"181", "182", "183", "184"} and r["184"]["task"] == "KPF-18-S1"
+
+
+def test_localisation_window_topk_and_margin():
+    probs = [{"id": 7, "logprob": -0.1, "top_logprobs": [{"id": 7, "logprob": -0.1}, {"id": 9, "logprob": -2.0},
+                                                          {"id": 3, "logprob": -5.0}]} for _ in range(10)]
+    w = A.window_topk(probs, list(range(10)), 3, 6, k=2)
+    assert [x["pos"] for x in w] == [3, 4, 5] and w[0]["top"] == [(7, -0.1), (9, -2.0)]
+    assert w[0]["margin"] == pytest.approx(1.9) and w[0]["token"] == 3
+    assert A.window_topk(probs, [], 8, 20)[-1]["pos"] == 9              # clipped to what was generated
+    assert A.top2_margin({"top_logprobs": [{"id": 1, "logprob": -1}]}) is None
+
+
+def _stream(tokens, margins=None, lp=-0.5):
+    margins = margins or {}
+    return {"tokens": tokens, "probs": [{"id": t, "logprob": lp, "top_logprobs": [
+        {"id": t, "logprob": lp}, {"id": t + 1, "logprob": lp - margins.get(i, 3.0)}]} for i, t in enumerate(tokens)]}
+
+
+def test_eval_184_localise_classifications():
+    base = list(range(200))
+    flip = base[:161] + [999] + base[162:]
+    # only fork flips (A/A identical) with a margin above the A/A noise -> a fork-effect candidate, item 3 stays open
+    r = A.eval_184_localise({"fork": _stream(flip), "nofork": _stream(base, {161: 0.5}), "nofork_repeat": _stream(base)}, 150, 171)
+    assert r["pairs"]["fork_vs_nofork"]["first_divergence"] == 161 and r["pairs"]["fork_vs_nofork"]["in_window"] is True
+    assert r["pairs"]["nofork_vs_repeat"]["first_divergence"] is None
+    assert r["classification"] == "fork_effect_candidate" and r["keeps_item3_open"] is True
+    assert r["margin_nofork_at_fork_divergence"] == pytest.approx(0.5) and r["aa_noise_max_abs_dlogprob"] == pytest.approx(0.0)
+    # the no-fork arms also flip at 161 -> near-tie sensitive position
+    r = A.eval_184_localise({"fork": _stream(flip), "nofork": _stream(base), "nofork_repeat": _stream(flip)}, 150, 171)
+    assert r["classification"] == "near_tie_sensitive_position" and r["keeps_item3_open"] is False
+    # the A/A flips earlier -> undetermined (stays open), no divergence at all -> none
+    early = base[:100] + [998] + base[101:]
+    assert A.eval_184_localise({"fork": _stream(flip), "nofork": _stream(base), "nofork_repeat": _stream(early)}, 150, 171)["classification"] == "aa_diverges_earlier"
+    assert A.eval_184_localise({"fork": _stream(base), "nofork": _stream(base), "nofork_repeat": _stream(base)}, 150, 171)["classification"] == "no_fork_divergence"
+    # a margin inside the A/A noise is NOT a fork-effect candidate
+    noisy = _stream(base, lp=-0.5)
+    noisy2 = _stream(base, lp=-0.9)                                       # A/A chosen-token logprobs differ by 0.4 everywhere
+    r = A.eval_184_localise({"fork": _stream(flip), "nofork": noisy, "nofork_repeat": noisy2}, 150, 171)
+    assert r["aa_noise_max_abs_dlogprob"] == pytest.approx(0.4) and r["classification"] == "fork_effect_candidate"   # margin 3.0 > 0.4
+    r = A.eval_184_localise({"fork": _stream(flip), "nofork": _stream(base, {161: 0.2}), "nofork_repeat": noisy2}, 150, 171)
+    assert r["classification"] == "within_aa_noise"
+
+
+def test_localise_window_arg_and_preflight(tmp_path):
+    ctx, args = mk_plan_ctx(tmp_path)
+    assert A._loc_window(args) == (150, 171)
+    args.s1_loc_window = "9"
+    with pytest.raises(ValueError):
+        A._loc_window(args)
+    assert any("expected LO,HI" in p for p in A.PREFLIGHTS[184](ctx, GATE)[0])
+    args.s1_loc_window = "150,171"
+    args.n_predict = 100
+    assert any("never generated" in p for p in A.PREFLIGHTS[184](ctx, GATE)[0])
+    args.n_predict = 256
+    args.s1_loc_group = 99
+    assert any("--s1-loc-group 99" in p for p in A.PREFLIGHTS[184](ctx, GATE)[0])

@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import statistics
+import threading
 from typing import Callable
 
 ARM_ITEMS = (181, 182, 183, 184)
@@ -545,7 +546,10 @@ def add_arguments(ap) -> None:
     g.add_argument("--kpf183-long-group", default=None, help="part 4 trunk group (default: the first with T >= 50000)")
     g.add_argument("--kpf183-chat-probe-tokens", type=int, default=1500)
     g.add_argument("--s1-skip-aa", action="store_true", help="kpf18s1: do not prepend the KPF-18.0e item-2 A/A control launches")
-    g.add_argument("--s1-with-item3", action="store_true", help="kpf18s1: append item 3 (default groups 5,6,7) on its own launch")
+    g.add_argument("--s1-no-item3", action="store_true", help="kpf18s1: do NOT append the item-3 follow-on (default: item 3 "
+                   "on group 3, its own launch, plus the localisation arm on the one load)")
+    g.add_argument("--s1-loc-group", type=int, default=3, help="kpf18s1 localisation arm: trunk group (default 3)")
+    g.add_argument("--s1-loc-window", default="150,171", help="kpf18s1 localisation arm: per-token record window LO,HI (default 150,171)")
 
 
 def groups_arg(spec: str | None, default: list[int]) -> list[int]:
@@ -1848,16 +1852,160 @@ BUILDERS[183] = build_183
 PREFLIGHTS[183] = preflight_183
 
 
+# ================================================================ item-3 group-3 localisation (S1 step 5)
+def _loc_window(a) -> tuple[int, int]:
+    try:
+        lo, hi = (int(x) for x in str(a.s1_loc_window).split(","))
+    except ValueError as exc:
+        raise ValueError(f"--s1-loc-window {a.s1_loc_window!r}: expected LO,HI") from exc
+    if not 0 <= lo < hi:
+        raise ValueError(f"--s1-loc-window {a.s1_loc_window!r}: need 0 <= LO < HI")
+    return lo, hi
+
+
+def top2_margin(entry: dict) -> float | None:
+    lps = sorted((float(t["logprob"]) for t in entry.get("top_logprobs") or [] if t.get("logprob") is not None), reverse=True)
+    return (lps[0] - lps[1]) if len(lps) >= 2 else None
+
+
+def window_topk(probs: list[dict], tokens: list[int], lo: int, hi: int, k: int = 5) -> list[dict]:
+    """Per generated position in [lo, hi): the sampled token, its logprob, the top-k (id, logprob) and the top-2 margin."""
+    out = []
+    for i in range(lo, min(hi, len(probs))):
+        e = probs[i]
+        top = sorted(((t.get("id"), float(t["logprob"])) for t in e.get("top_logprobs") or [] if t.get("logprob") is not None),
+                     key=lambda x: -x[1])[:k]
+        out.append({"pos": i, "token": tokens[i] if i < len(tokens) else None, "logprob": logprob_of_chosen(e),
+                    "top": top, "margin": top2_margin(e)})
+    return out
+
+
+def first_divergence(a: list[int], b: list[int]) -> int | None:
+    i = lcp(a, b)
+    return None if i >= min(len(a), len(b)) else i
+
+
+def eval_184_localise(streams: dict[str, dict], lo: int, hi: int) -> dict:
+    """streams: arm -> {tokens, probs} of the SOURCE stream. Arms: fork, nofork, nofork_repeat (the A/A)."""
+    pairs = {"fork_vs_nofork": ("fork", "nofork"), "nofork_vs_repeat": ("nofork", "nofork_repeat"),
+             "fork_vs_repeat": ("fork", "nofork_repeat")}
+    res: dict = {}
+    for name, (x, y) in pairs.items():
+        sx, sy = streams.get(x) or {}, streams.get(y) or {}
+        tx, ty = sx.get("tokens") or [], sy.get("tokens") or []
+        d = first_divergence(tx, ty)
+        mx = top2_margin(sx["probs"][d]) if d is not None and d < len(sx.get("probs") or []) else None
+        my = top2_margin(sy["probs"][d]) if d is not None and d < len(sy.get("probs") or []) else None
+        res[name] = {"first_divergence": d, "in_window": (lo <= d < hi) if d is not None else None,
+                     "tokens_at_divergence": [tx[d], ty[d]] if d is not None else None,
+                     f"margin_{x}": mx, f"margin_{y}": my, "n_compared": min(len(tx), len(ty))}
+    d_f, d_aa = res["fork_vs_nofork"]["first_divergence"], res["nofork_vs_repeat"]["first_divergence"]
+    nf, rp = streams.get("nofork") or {}, streams.get("nofork_repeat") or {}
+    upto = d_aa if d_aa is not None else min(len(nf.get("tokens") or []), len(rp.get("tokens") or []))
+    noise = mean_abs_dlogprob(nf, rp, upto)
+    aa_noise = noise["max_abs_dlogprob"]
+    margin_ref = res["fork_vs_nofork"].get("margin_nofork")
+    if d_f is None:
+        cls = "no_fork_divergence"
+    elif d_aa is not None and d_aa == d_f:
+        cls = "near_tie_sensitive_position"
+    elif d_aa is not None and d_aa < d_f:
+        cls = "aa_diverges_earlier"
+    elif margin_ref is None or aa_noise is None:
+        cls = "undetermined_margin_not_recorded"
+    elif margin_ref > aa_noise:
+        cls = "fork_effect_candidate"
+    else:
+        cls = "within_aa_noise"
+    return {"pairs": res, "aa_noise_max_abs_dlogprob": aa_noise, "aa_noise_positions": noise["n_positions"],
+            "margin_nofork_at_fork_divergence": margin_ref, "classification": cls,
+            "keeps_item3_open": cls in ("fork_effect_candidate", "undetermined_margin_not_recorded", "aa_diverges_earlier"),
+            "window": [lo, hi], "predeclared_rule_satisfied": None}
+
+
+def _slots_brief(slots: list[dict]) -> list[dict]:
+    return [{"id": s.get("id"), "is_processing": s.get("is_processing"), "n_prompt_tokens": s.get("n_prompt_tokens"),
+             "kv_cells": s.get("kv_cells"), "checkpoints": [{"n_tokens": c["n_tokens"], "pos_max": c["pos_max"], "pinned": c["pinned"]}
+                                                           for c in checkpoint_set(s)]} for s in slots]
+
+
+def run_184_localise(env: Env, g: int, lo: int, hi: int):
+    gate, ctx, a = env.gate, env.ctx, env.ctx.args
+    arm_name = "item3_localisation"
+    R = open_run(env, 184, arm_name, rule=RULES[184]["localise"], arm_key="localise", group=g, window=[lo, hi])
+    grp = gate.G(ctx, g)
+    T, n = grp["T"], a.n_predict
+    si = a.item3_suffix
+    src_ids = grp["trunk"] + grp["src_tail"]
+    child_ids = grp["trunk"] + grp["suffixes"][si]
+    streams: dict = {}
+    detail: dict = {}
+    for arm in ("fork", "nofork", "nofork_repeat"):
+        ctx.check_boundary()
+        env.erase_all()
+        if arm == "fork":   # equal-length filler so the source's cells sit at the same offset in every arm
+            R.row("seed_filler", ctx.client.complete(gate.body_for(grp["filler"], 0, 2, fork=False, cache=False, n_probs=0)),
+                  group=g, arm=arm)
+        else:               # the child's own trunk + pinned junction: it prefills only the suffix, like the fork
+            R.row("seed_child_trunk", ctx.client.complete(gate.body_for(grp["trunk"], 0, 1, fork=False, ckpt=[-1], n_probs=0)),
+                  group=g, arm=arm)
+        trig = threading.Event()
+        res: dict = {}
+
+        def src_thread(res=res, trig=trig):
+            res["src"] = ctx.client.stream(gate.body_for(src_ids, n, 0, fork=False, ckpt=[T], n_probs=a.n_probs),
+                                           on_token=lambda k: k >= a.trigger_tokens and trig.set())
+            trig.set()
+        th = threading.Thread(target=src_thread, daemon=True)
+        th.start()
+        trig.wait(timeout=3600)
+        snap_release = _slots_brief(ctx.client.slots())
+        res["child"] = ctx.client.stream(gate.body_for(child_ids, n, 1, fork=(arm == "fork"), n_probs=a.n_probs))
+        snap_after = _slots_brief(ctx.client.slots())
+        th.join(timeout=7200)
+        src = R.row("source", res["src"], group=g, arm=arm, slot=0)
+        ch = R.row("child", res["child"], group=g, arm=arm, slot=1)
+        ct = ch.get("timings") or {}
+        R.check("source_still_decoding_at_child_send", bool(src.get("token_times")) and src["token_times"][-1][0] > ch["t_send"], [g, arm])
+        streams[arm] = {"tokens": list(src.get("tokens") or []), "probs": src.get("probs") or []}
+        detail[arm] = {
+            "slots_at_release": snap_release, "slots_after_child": snap_after,
+            "child": {"n_fork_tokens": ct.get("n_fork_tokens"), "fork_src_slot": ct.get("fork_src_slot"),
+                      "fork_src_kind": ct.get("fork_src_kind"), "cache_n": ct.get("cache_n"), "prompt_n": ct.get("prompt_n"),
+                      "window": window_topk(ch.get("probs") or [], list(ch.get("tokens") or []), lo, hi)},
+            "source_window": window_topk(src.get("probs") or [], list(src.get("tokens") or []), lo, hi),
+            "n_source_tokens": len(src.get("tokens") or []), "source_tokens_sha256": hashlib.sha256(
+                json.dumps(src.get("tokens") or []).encode()).hexdigest()}
+    env.erase_all()
+    R.extra["localisation"] = detail
+    R.extra["rule_result"] = eval_184_localise(streams, lo, hi)
+    return R
+
+
 # ================================================================ KPF-18-S1  one GPU sweep from one load
 RULES[184] = {
     "order": ("KPF-18-S1 (handoff KPF-18-S1, backlog audit S1): (1) A/A control = the KPF-18.0e item-2 launches "
               "(skip with --s1-skip-aa); then ONE fork-on launch of the :8083 shape runs (2) 18.1 arms A, B, D and row C CUT to "
               "six lengths L0 + {0, 1, ub/2-1, ub/2, ub-1, ub} x drafter on only, (3) 18.2 parts 1, 3, 4, 5 (parity = drafter on vs "
               "request-level off; clause 2 abstains until the build exposes drafter_kv_hit), (4) 18.3 parts 1 and 4; optionally "
-              "(5) item 3 groups 5-7 on its own launch (--s1-with-item3). NOT in this runner: item 4 (needs the prefill-budget trial "
+              "(5) the item-3 group-3 localisation arm on the same load plus item 3 on group 3 on its own launch (default; "
+              "--s1-no-item3 drops both, --s1-loc-group / --item3-groups change the group). NOT in this runner: item 4 (needs the prefill-budget trial "
               "binary), KPF-19.1a, HSF-4/5. Dropped by the single load: the fork-off baseline launch of A/B, the no-drafter D "
               "launch and the no-drafter parity column (run `kpf181 --kpf181-arms A,B,D` / `kpf182 --kpf182-parts 1` for them). "
               "The per-arm decision rules are those of RULES[181], RULES[182], RULES[183]."),
+    "localise": ("KPF-18.0d item 3 group 3 localisation (the reproducible fork-vs-no-fork divergence at token 161, A/A identical "
+                 "3/3). On the one load, for the localisation group: the item-3 scenario (source on slot 0 decodes, a child is "
+                 "released at --trigger-tokens source tokens) in three arms, fork / nofork / nofork_repeat (= the A/A), each with the "
+                 "same fresh batch order. Recorded raw: for the SOURCE and the CHILD of every arm the per-token chosen logprob and "
+                 "top-5 (id, logprob) with the top-2 margin for every position in [LO, HI), the slots snapshot at release (per "
+                 "slot: n_prompt_tokens, checkpoint positions with pinned flags, kv_cells), the child's n_fork_tokens / "
+                 "fork_src_slot / fork_src_kind. First divergence position d for fork-vs-nofork, nofork-vs-repeat and "
+                 "fork-vs-repeat of the source streams, and the top-2 margin at d in each arm. aa_noise = max |chosen-token "
+                 "logprob difference| nofork vs repeat over the positions before their first divergence. Classification "
+                 "(counts of each, no pass word): no_fork_divergence (d absent); near_tie_sensitive_position (the no-fork arms "
+                 "also flip at the same d); aa_diverges_earlier (the A/A flips before d: undetermined); fork_effect_candidate "
+                 "(only fork flips at d and the nofork arm's top-2 margin at d is ABOVE aa_noise); within_aa_noise (only fork "
+                 "flips at d and that margin is at or below aa_noise). Only fork_effect_candidate keeps KPF-18 item 3 open."),
 }
 
 
@@ -1882,9 +2030,17 @@ def build_s1(ctx, gate) -> list:
     body.append(gate.Step("182 parity summary: drafter-on vs request-off columns of the one load", 0,
                           lambda: run_182_parity_summary(env, shared)))
     body += body_183(ctx, gate, env, ["1", "4"])
+    if not a.s1_no_item3:
+        lo, hi = _loc_window(a)
+        T = gate.G(ctx, a.s1_loc_group)["T"]
+        body.append(gate.Step(f"184 item-3 localisation g{a.s1_loc_group}: fork / nofork / nofork_repeat (A/A), per-token top-5 + "
+                              f"top-2 margin for tokens {lo}..{hi - 1}, slots + checkpoint positions at release (rule localise)",
+                              3 * (gate.pf_s(T, 0) + gate.pf_s(T + gate.SRC_TAIL, T) + gate.pf_s(512, 2 * T)
+                                   + gate.dec_s(a.n_predict, 2 * T, True, conc=2) + 4 * gate.REQ_OVERHEAD_S),
+                              lambda: run_184_localise(env, a.s1_loc_group, lo, hi)))
     steps += gate.start_steps(ctx, srv) + body + [gate.stop_step(srv)]
-    if a.s1_with_item3:
-        a.item3_groups = a.item3_groups or "5,6,7"
+    if not a.s1_no_item3:   # the cumulative item-3 result (fork vs no-fork 17/21 vs A/A 20/21) is carried by group 3
+        a.item3_groups = a.item3_groups or str(a.s1_loc_group)
         steps += gate.ITEMS[3](ctx)
     return steps
 
@@ -1892,6 +2048,16 @@ def build_s1(ctx, gate) -> list:
 def preflight_s1(ctx, gate) -> tuple[list[str], list[str]]:
     _apply_s1(ctx)
     probs: list[str] = []
+    a = ctx.args
+    if not a.s1_no_item3:
+        try:
+            lo, hi = _loc_window(a)
+        except ValueError as exc:
+            return [str(exc)], []
+        if a.s1_loc_group not in ctx.ps.groups:
+            probs.append(f"--s1-loc-group {a.s1_loc_group} not in the prompt set")
+        if a.n_predict < hi + 1:
+            probs.append(f"--n-predict {a.n_predict} < localisation window end {hi}: tokens {lo}..{hi - 1} are never generated")
     notes = ["S1: one fork-on load for 18.1 A,B,C(cut),D + 18.2 parts 1,3,4,5 + 18.3 parts 1,4"
              + ("" if ctx.args.s1_skip_aa else "; A/A control launches first (item 2)")
              + "; fork-off baseline / no-drafter launches are NOT included"]
