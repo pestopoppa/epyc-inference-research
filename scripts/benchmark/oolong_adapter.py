@@ -173,9 +173,22 @@ class LlamaServerClient:
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             body = json.load(resp)
         ch = body["choices"][0]
+        p = self.payload(messages, **kw)
+        usage = body.get("usage", {})
+        tm = body.get("timings") or {}
+        # REAL prompt tokens as the server counted them: usage.prompt_tokens (= prompt_n + cache_n);
+        # timings are the fallback. Never estimated from text length.
+        if isinstance(usage.get("prompt_tokens"), int):
+            ptok, psrc = usage["prompt_tokens"], "server_usage"
+        elif isinstance(tm.get("prompt_n"), int) and isinstance(tm.get("cache_n"), int):
+            ptok, psrc = tm["prompt_n"] + tm["cache_n"], "server_timings"
+        else:
+            ptok, psrc = None, None
         return {"content": ch["message"].get("content") or "",
                 "finish_reason": ch.get("finish_reason"),
-                "usage": body.get("usage", {})}
+                "usage": usage, "prompt_tokens": ptok, "prompt_tokens_source": psrc,
+                "request": {"temperature": p["temperature"], "seed": p["seed"],
+                            "max_tokens": p["max_tokens"], "id_slot": p["id_slot"]}}
 
 
 # ── scoring / classification ──────────────────────────────────────────────────
@@ -203,8 +216,18 @@ def classify_failure(score: float, output: str, finish_reason: Optional[str],
     return "wrong"
 
 
+def gguf_sha256(path: str | Path) -> str:
+    """sha256 of the served GGUF, streamed (a 35 GB file takes minutes: pass a precomputed digest to run_arm)."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 24), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def make_record(datapoint: dict, comp: dict, *, model: str, arm: str, family: str,
-                source: str, labels_given: bool = False) -> dict:
+                source: str, labels_given: bool = False, run_id: Optional[str] = None,
+                gguf_sha256: Optional[str] = None, n_slots: Optional[int] = None) -> dict:
     out = comp["content"]
     answered = bool(out.strip()) and comp.get("finish_reason") != "length"
     scored = score_item(datapoint, out, model, family) if out.strip() else {
@@ -229,6 +252,11 @@ def make_record(datapoint: dict, comp: dict, *, model: str, arm: str, family: st
         "usage": comp.get("usage", {}),
         "attempted_parse": str(scored.get("attempted_parse")),
         "full_answer": out, "gold": str(scored.get("answer")),
+        # Belief-kernel pins (VB-OOLONG-WIRE producer gaps). None == not known to the caller, never invented.
+        "run_id": run_id, "gguf_sha256": gguf_sha256,
+        "sampling": {**(comp.get("request") or {}), "n_slots": n_slots},
+        "prompt_tokens": comp.get("prompt_tokens"),
+        "prompt_tokens_source": comp.get("prompt_tokens_source"),
     }
 
 
@@ -326,8 +354,12 @@ def load_rows(source: str, split: str, config: Optional[str] = None,
 
 def run_arm(client: LlamaServerClient, rows: list[dict], *, model: str, thinking: bool,
             source: str, family: str, out_path: Path, max_tokens: int, n_slots: int = 4,
-            labels_given: bool = False) -> list[dict]:
-    """Inference path (window only).  Resumable JSONL, one record per question."""
+            labels_given: bool = False, run_id: Optional[str] = None,
+            gguf_sha256: Optional[str] = None) -> list[dict]:
+    """Inference path (window only).  Resumable JSONL, one record per question.
+
+    ``run_id`` / ``gguf_sha256`` are stamped on every record with the sampling params and the server's
+    real prompt token count; a resumed file keeps the run_id of its first writer (pass the same one)."""
     arm = ("labels_given_" if labels_given else "") + ("thinking_on" if thinking else "thinking_off")
     done = set()
     if out_path.exists():
@@ -342,7 +374,8 @@ def run_arm(client: LlamaServerClient, rows: list[dict], *, model: str, thinking
                                        slot=ci % n_slots, thinking=thinking,
                                        max_tokens=max_tokens)
                 rec = make_record(r, comp, model=model, arm=arm, family=family,
-                                  source=source, labels_given=labels_given)
+                                  source=source, labels_given=labels_given, run_id=run_id,
+                                  gguf_sha256=gguf_sha256, n_slots=n_slots)
                 fh.write(json.dumps(rec) + "\n"); fh.flush()
                 recs.append(rec)
     return recs
@@ -361,6 +394,9 @@ def main(argv=None) -> int:
     ap.add_argument("--limit-contexts", type=int, default=None)
     ap.add_argument("--max-tokens", type=int, default=4096)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--gguf-path", default=None, help="served GGUF; hashed (sha256) and stamped on every record")
+    ap.add_argument("--gguf-sha256", default=None, help="precomputed digest (skips hashing a multi-GB file)")
+    ap.add_argument("--run-id", default=None, help="default oolong-<arm>-<UTC start>")
     a = ap.parse_args(argv)
     if os.environ.get("WINDOW_CONFIRMED") != "1":
         print("refusing: inference run needs an inference window (WINDOW_CONFIRMED=1)", file=sys.stderr)
@@ -370,9 +406,11 @@ def main(argv=None) -> int:
     if a.labels_given:  # ablation: re-read the labelled column explicitly
         raise SystemExit("labels-given ablation loader not enabled in the gate run; "
                          "use run_arm(labels_given=True) with an explicitly loaded labelled column")
+    digest = a.gguf_sha256 or (gguf_sha256(a.gguf_path) if a.gguf_path else None)
+    run_id = a.run_id or f"oolong-{a.arm}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
     run_arm(LlamaServerClient(a.base_url, a.model), rows, model=a.model,
             thinking=a.arm == "thinking_on", source=a.source, family=family,
-            out_path=Path(a.out), max_tokens=a.max_tokens)
+            out_path=Path(a.out), max_tokens=a.max_tokens, run_id=run_id, gguf_sha256=digest)
     return 0
 
 

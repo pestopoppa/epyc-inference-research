@@ -144,6 +144,46 @@ class OolongAdapterTest(unittest.TestCase):
             if old is not None:
                 os.environ["WINDOW_CONFIRMED"] = old
 
+    def test_complete_returns_real_prompt_tokens_and_request_params(self):
+        import io, json as _j
+        from unittest import mock
+        body = {"choices": [{"message": {"content": "Answer: x"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 98765, "completion_tokens": 3}}
+        resp = io.BytesIO(_j.dumps(body).encode())
+        with mock.patch.object(oa.urllib.request, "urlopen", return_value=resp):
+            comp = oa.LlamaServerClient("http://x", "m").complete(
+                oa.build_messages("C", "Q"), slot=2, thinking=False, max_tokens=64)
+        self.assertEqual((comp["prompt_tokens"], comp["prompt_tokens_source"]), (98765, "server_usage"))
+        self.assertEqual(comp["request"], {"temperature": 0.0, "seed": 0, "max_tokens": 64, "id_slot": 2})
+        # timings fallback, and honest absence when neither is reported
+        body2 = {"choices": [{"message": {"content": "x"}, "finish_reason": "stop"}],
+                 "timings": {"prompt_n": 10, "cache_n": 90}}
+        with mock.patch.object(oa.urllib.request, "urlopen", return_value=io.BytesIO(_j.dumps(body2).encode())):
+            c2 = oa.LlamaServerClient("http://x").complete(oa.build_messages("C", "Q"), slot=0, thinking=True, max_tokens=8)
+        self.assertEqual((c2["prompt_tokens"], c2["prompt_tokens_source"]), (100, "server_timings"))
+        body3 = {"choices": [{"message": {"content": "x"}, "finish_reason": "stop"}]}
+        with mock.patch.object(oa.urllib.request, "urlopen", return_value=io.BytesIO(_j.dumps(body3).encode())):
+            c3 = oa.LlamaServerClient("http://x").complete(oa.build_messages("C", "Q"), slot=0, thinking=True, max_tokens=8)
+        self.assertIsNone(c3["prompt_tokens"])
+
+    def test_record_stamps_run_gguf_sampling_and_prompt_tokens(self):
+        comp = {"content": "Answer: more common", "finish_reason": "stop", "prompt_tokens": 4242,
+                "prompt_tokens_source": "server_usage",
+                "request": {"temperature": 0.0, "seed": 0, "max_tokens": 4096, "id_slot": 1}}
+        rec = oa.make_record(_row(1, "c1"), comp, model="m", arm="thinking_off", family="synth",
+                             source="oolongbench/oolong-synth", run_id="r1", gguf_sha256="a" * 64, n_slots=4)
+        self.assertEqual((rec["run_id"], rec["gguf_sha256"], rec["prompt_tokens"]), ("r1", "a" * 64, 4242))
+        self.assertEqual(rec["sampling"], {"temperature": 0.0, "seed": 0, "max_tokens": 4096, "id_slot": 1, "n_slots": 4})
+        bare = oa.make_record(_row(1, "c1"), {"content": "x", "finish_reason": "stop"}, model="m", arm="x",
+                              family="synth", source="oolongbench/oolong-synth")
+        self.assertIsNone(bare["gguf_sha256"]); self.assertIsNone(bare["prompt_tokens"])
+
+    def test_gguf_sha256_streams_file(self):
+        import hashlib, tempfile
+        with tempfile.NamedTemporaryFile() as f:
+            f.write(b"abc" * 1000); f.flush()
+            self.assertEqual(oa.gguf_sha256(f.name), hashlib.sha256(b"abc" * 1000).hexdigest())
+
 
 if __name__ == "__main__":
     unittest.main()
