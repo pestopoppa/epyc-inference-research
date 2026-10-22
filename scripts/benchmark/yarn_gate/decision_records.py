@@ -8,7 +8,7 @@ records, plus ``emit`` which writes each record to a durable JSON file (its sha2
 Rules enforced here (the adapter re-checks them):
   * a cell is ONE zone: results are grouped by (suite, task, REAL-length bin, zone), never "mixed";
   * only measured prompt counts are used; a result without ``real_n`` / ``n_source`` is excluded WITH a reason;
-  * only suites the schema knows (oolong, helmet, longbio) emit; others (ruler) are excluded with a reason;
+  * only suites the schema knows (oolong, helmet, longbio, ruler) emit; others are excluded with a reason;
   * ``comparable_to_published`` is always false;
   * a record the adapter rejects is excluded with its problems listed, never silently dropped.
 """
@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from scripts.benchmark.yarn_gate import agg_scoring, retokenize  # noqa: E402
 
 DECISION_SCHEMA = "epyc.yarn_gate_decision.v1"
-SUITES = ("oolong", "helmet", "longbio")
+SUITES = ("oolong", "helmet", "longbio", "ruler")
 MEASURED_SOURCES = retokenize.MEASURED_SOURCES
 PIN_WORKTREE = "/mnt/raid0/llm/worktrees/root-pbe-3c4ca599"
 ROOT_VIEW = "/mnt/raid0/llm/views/epyc-root-main"
@@ -62,6 +62,11 @@ def source_pins(suite: str, pins: Mapping[str, Any] | None) -> dict | None:
                 "max_test_samples": p.get("max_test_samples", cfg.get("max_test_samples"))}
     if suite == "longbio":
         return {"generator_pin": p["longbio_sha"]} if p.get("longbio_sha") else None
+    if suite == "ruler":
+        if not p.get("ruler_sha") or not p.get("essay_sha256") or not p.get("words_source") or not p.get("deviations"):
+            return None
+        return {"ruler_repo": p.get("ruler_repo"), "ruler_pin": p["ruler_sha"], "essay_sha256": p["essay_sha256"],
+                "words_source": p["words_source"], "deviations": list(p["deviations"])}
     return None
 
 

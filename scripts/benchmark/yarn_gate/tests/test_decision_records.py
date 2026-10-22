@@ -22,6 +22,8 @@ from scripts.benchmark.yarn_gate.tests.test_arm_runner import FakeLlama, patch_b
 HEX40 = "a" * 40
 SHA = "b" * 64
 PINS = {"dataset": f"oolongbench/oolong-synth@{HEX40}", "vendored_sha256": SHA}
+RULER_PINS = {"ruler_repo": "/mnt/raid0/llm/data/eval/ruler/repo", "ruler_sha": "ab17b78", "essay_sha256": SHA,
+              "words_source": "essay_vocab_hyphen_pairs", "deviations": ["word_keys: hyphen pairs", "essay_source: local"]}
 SEGS = [{"name": "ool", "builder": "oolong", "args": {}, "arms": ["A0", "A1"], "gate": "native_mcnemar", "required": True},
         {"name": "rul", "builder": "ruler", "args": {}, "arms": ["A0", "A1"], "gate": "native_mcnemar", "required": True}]
 
@@ -31,7 +33,8 @@ def items(name, suite, n):
              "context_id": f"{name}-ctx{i // 2}",
              "messages": [{"role": "user", "content": f"w w GOLD={name}-v{i} QUESTION?"}], "max_tokens": 16,
              "thinking": False, "scorer": "string_match_all", "gold": [f"{name}-v{i}"], "nominal_len": 131072,
-             "real_n_offline": 100000, "n_source": "model_tokenizer_json", "pins": dict(PINS)} for i in range(n)]
+             "real_n_offline": 100000, "n_source": "model_tokenizer_json",
+             "pins": dict(RULER_PINS if suite == "ruler" else PINS)} for i in range(n)]
 
 
 @unittest.skipIf(dr.locate_root() is None, "no epyc-root checkout carrying yarn_gate_agg.py")
@@ -62,13 +65,17 @@ class Emit(unittest.TestCase):
         self.assertEqual(be["status"], "written", be)
         rows = self.adapter.rows_for_run(self.out)
         kinds = sorted((r["row"]["extra"]["decision"]["record_kind"], r["row"]["extra"]["decision"]["arm_role"]) for r in rows)
-        # oolong: A0+A1 x (mean_score, no_answer_rate) + 1 verdict; ruler has no schema slot -> excluded with reason
-        self.assertEqual(len(kinds), 5, kinds)
-        v = next(r["row"]["extra"]["decision"] for r in rows if r["row"]["extra"]["decision"]["record_kind"] == "verdict")
+        # oolong and ruler each: A0+A1 x (mean_score, no_answer_rate) + 1 verdict
+        self.assertEqual(len(kinds), 10, kinds)
+        rul = [r['row']['extra']['decision'] for r in rows if r['row']['extra']['decision']['suite'] == 'ruler']
+        self.assertEqual(len(rul), 5)
+        self.assertTrue(all(d['source_pins']['ruler_pin'] == 'ab17b78' and not d['comparable_to_published'] for d in rul))
+        v = next(r["row"]["extra"]["decision"] for r in rows if r["row"]["extra"]["decision"]["record_kind"] == "verdict"
+                 and r["row"]["extra"]["decision"]["suite"] == "oolong")
         self.assertEqual((v["arm_role"], v["b_a0right_a1wrong"], v["n_pairs"], v["zone"]), ("A1_vs_A0", 2, 6, "native"))
         self.assertEqual(v["bin"], "98304-131072")
         self.assertNotIn("mixed", json.dumps(v))
-        self.assertTrue(any("no slot" in e.get("reason", "") for e in be["excluded"]))
+        self.assertFalse(any("no slot" in e.get("reason", "") for e in be["excluded"]))
         for r in rows:
             d = r["row"]["extra"]["decision"]
             self.assertFalse(d["comparable_to_published"])
