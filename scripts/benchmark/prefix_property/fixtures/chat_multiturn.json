@@ -1,0 +1,33 @@
+{
+ "id": "chat_multiturn",
+ "client": "plain chat client (no tools)",
+ "synthetic": true,
+ "messages": [
+  {
+   "role": "system",
+   "content": "You are a concise assistant."
+  },
+  {
+   "role": "user",
+   "content": "What is the capital of Australia?"
+  },
+  {
+   "role": "assistant",
+   "content": "Canberra.",
+   "generated": "Canberra."
+  },
+  {
+   "role": "user",
+   "content": "And its population, roughly?"
+  },
+  {
+   "role": "assistant",
+   "content": "About 450,000 people.",
+   "generated": "About 450,000 people."
+  },
+  {
+   "role": "user",
+   "content": "Thanks. One more: which river runs through it?"
+  }
+ ]
+}

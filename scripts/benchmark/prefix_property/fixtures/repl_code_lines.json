@@ -1,0 +1,33 @@
+{
+ "id": "repl_code_lines",
+ "client": "orchestrator REPL turns (assistant replies are single code lines)",
+ "synthetic": true,
+ "messages": [
+  {
+   "role": "system",
+   "content": "You drive a Python REPL. Reply with exactly one line of code or FINAL(answer)."
+  },
+  {
+   "role": "user",
+   "content": "Task: count the lines in notes.txt."
+  },
+  {
+   "role": "assistant",
+   "content": "n = len(open('notes.txt').read().splitlines())",
+   "generated": "n = len(open('notes.txt').read().splitlines())"
+  },
+  {
+   "role": "user",
+   "content": "[exec ok] n = 42"
+  },
+  {
+   "role": "assistant",
+   "content": "FINAL(42)",
+   "generated": "FINAL(42)"
+  },
+  {
+   "role": "user",
+   "content": "[next task] now count words."
+  }
+ ]
+}
