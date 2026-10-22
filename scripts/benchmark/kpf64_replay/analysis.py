@@ -101,6 +101,32 @@ def peak_overlap(reqs):
     return best
 
 
+def ordering_report(reqs):
+    """DS-LB1: compare the admission ordering keys offline. Pairs of requests that were in flight at
+    the same time (intervals overlap) are ordered two ways: by arrival (FCFS: `arrival_seq`) and by
+    least accumulated service (`svc_before_ms`, the session's served time before the request). A pair
+    DISAGREES when the earlier arrival has the larger accumulated service. `las_disagreement_share` is
+    the share of overlapping cross-session pairs on which a least-attained-service queue would have
+    reordered an FCFS one; 0 means the two keys never differ on this load."""
+    rows = [r for r in reqs if r.get("arrival_seq") is not None and r.get("t_start") is not None
+            and r.get("t_end") is not None]
+    rows.sort(key=lambda r: r["arrival_seq"])
+    pairs = dis = 0
+    for i, a in enumerate(rows):
+        for b in rows[i + 1:]:
+            if not (a["t_start"] < b["t_end"] and b["t_start"] < a["t_end"]):
+                continue                       # intervals disjoint: never in flight together
+            if a["session"] == b["session"]:
+                continue
+            pairs += 1
+            if a["svc_before_ms"] > b["svc_before_ms"]:
+                dis += 1
+    return {"requests": len(rows), "overlapping_cross_session_pairs": pairs, "las_vs_fcfs_disagreements": dis,
+            "las_disagreement_share": (dis / pairs) if pairs else None,
+            "service_ms_total": sum(r["svc_ms"] for r in rows),
+            "max_session_service_ms": max((r["svc_after_ms"] for r in rows), default=0.0)}
+
+
 def fanout(reqs, meta):
     n = len(reqs)
     kids = sum(1 for r in reqs if r.get("is_child"))
@@ -140,7 +166,8 @@ def analyse(arm_dirs, baseline=None, B=BOOT_B, seed=BOOT_SEED, min_pp=MIN_EFFECT
                    "log_present": ev.get("log_present"), "events_by_pattern": ev.get("by_pattern"),
                    "gap_pp_ci95": pct_ci(boot[n]["gap_pp"]), "uncached_per_request_ci95": pct_ci(boot[n]["uncached"]),
                    "realised_share_ci95": pct_ci(boot[n]["realised"]),
-                   "fanout": fanout([r for r in reqs if r["session"] not in bad_any], meta)}
+                   "fanout": fanout([r for r in reqs if r["session"] not in bad_any], meta),
+                   "ordering": ordering_report([r for r in reqs if r["session"] not in bad_any])}
     base = baseline or sorted(arms)[0]
     contrasts = {}
     for n in arms:

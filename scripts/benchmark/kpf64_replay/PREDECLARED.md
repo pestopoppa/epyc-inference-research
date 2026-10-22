@@ -129,6 +129,13 @@ intake-2437). Arms A-D, their decision rule, N=20, seed 64 and the 7/7/6 stratif
    and interval sweep) and peak active lineages. `analysis.py --manifest` prints the recorded reference beside the arms.
    Sample reference (20 flat sessions): within-session 93.4 %, cross-session-head 93.5 %, provider-realised 93.8 %.
 
+6. **Ordering-key log (DS-LB1).** Every request records `arrival_seq` (global dispatch order), `svc_before_ms` (the
+   session's accumulated server time -- `prompt_ms + predicted_ms` -- before the request), `svc_ms` and `svc_after_ms`.
+   `analysis.ordering_report` compares FCFS against least-accumulated-service offline: among cross-session request
+   pairs that were in flight together, the share where the earlier arrival had the larger accumulated service
+   (`las_disagreement_share`; 0 = the two admission keys never differ on this load). Logged for every arm; no decision
+   rule depends on it.
+
 ## New follow-up arms (labelled; NOT part of the A-D decision rule; contrasts are against D)
 | arm | server | sessions dir | driver args | question |
 |---|---|---|---|---|
@@ -142,6 +149,6 @@ children of >= 3 requests, which over-represents heavy fan-out (child share of r
 store-wide).
 
 ## Verification
-`tests/test_kpf_lb2.py` (13 test functions: link order, time fallback, V1/V2 never-both, zero-session failures, gaps and
+`tests/test_kpf_lb2.py` (15 test functions: link order, time fallback, V1/V2 never-both, zero-session failures, gaps and
 scale/cap, burst pause ordering, anchor-only parents, oversubscription flag, both bounds, fan-out); the original 14
 tests are unchanged and pass.

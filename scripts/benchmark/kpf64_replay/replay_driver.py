@@ -148,6 +148,7 @@ class Replay:
         self.stop = threading.Event()
         self.head = adapter.HeadIndex()
         self.cnt, self.peak, self.bursts = {}, {}, []
+        self.seq, self.svc = 0, {}      # global arrival counter; per-session accumulated service time (ms)
 
     def append(self, path, rec):
         with self.lock, open(path, "a") as f:
@@ -230,6 +231,9 @@ class Replay:
             cross_c = min(self.head.cross_chars(prompt, sid), len(prompt))
             waited = 0.0 if (k == 0 or paused_after_burst) else self._think_wait(turns[k])
             paused_after_burst = False
+            with self.lock:   # DS-LB1: arrival order and the session's service time BEFORE this request
+                arrival, svc_before = self.seq, self.svc.get(sid, 0.0)
+                self.seq += 1
             self._bump("inflight", 1)
             t0 = time.time()
             body = {"prompt": prompt, "n_predict": self.a.n_predict if live else 1, "cache_prompt": True,
@@ -247,9 +251,14 @@ class Replay:
             total = pn + cn
             ideal_tok = round(total * ideal_c / len(prompt)) if prompt else 0
             union_tok = round(total * max(ideal_c, cross_c) / len(prompt)) if prompt else 0
+            svc_ms = float(tm.get("prompt_ms") or 0) + float(tm.get("predicted_ms") or 0)
+            with self.lock:
+                self.svc[sid] = self.svc.get(sid, 0.0) + svc_ms
             self.head.add(prompt, sid)
             rec = {"session": sid, "store": sess.get("store"), "k": k, "reset": bool(turns[k].get("reset")),
                    "parent": parent, "is_child": parent is not None, "think_wait_s": waited,
+                   "arrival_seq": arrival, "svc_before_ms": svc_before, "svc_ms": svc_ms,
+                   "svc_after_ms": svc_before + svc_ms,
                    "ideal_cross_chars": cross_c, "ideal_union_tok": union_tok,
                    "history": self.a.history, "prompt_chars": len(prompt), "prompt_n": pn, "cache_n": cn,
                    "total_tok": total, "ideal_chars": ideal_c, "ideal_tok": ideal_tok,

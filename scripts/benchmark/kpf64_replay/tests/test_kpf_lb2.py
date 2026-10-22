@@ -320,3 +320,44 @@ def test_oversubscribed_flag_and_cross_head_in_analysis(tmp_path):
     a = res["arms"]["E"]
     assert a["ideal_cross_head_share"] >= a["ideal_share"] and res["reference"]["provider_cache_share"] == 0.9
     assert "cross-head" in analysis.to_markdown(res)
+
+
+# ---- DS-LB1: per-session accumulated service time next to arrival order ----------------------------
+def test_driver_logs_arrival_order_and_session_service_time(tmp_path):
+    s = tmp_path / "s"
+    s.mkdir()
+    for i in range(3):
+        (s / f"claude-0{i}.json").write_text(json.dumps({"id": f"claude-0{i}", "store": "claude", "replayable": True, "turns": [
+            {"pre": f"q{i} " * 60, "ref": "r", "reset": False}, {"pre": "more " * 40, "ref": "", "reset": False},
+            {"pre": "again " * 40, "ref": "", "reset": False}]}))
+    (s / "manifest.json").write_text(json.dumps({"sessions": [{"id": f"claude-0{i}", "store": "claude", "parent": None}
+                                                              for i in range(3)], "totals": {}}))
+    o = tmp_path / "o"
+    r = run_driver(["--sessions", str(s), "--out", str(o), "--dry-run", "--active", "3", "--history", "live"])
+    assert r.returncode == 0, r.stderr
+    rows = [json.loads(x) for x in open(o / "requests.jsonl")]
+    assert sorted(x["arrival_seq"] for x in rows) == list(range(9))            # one global arrival order
+    by = {}
+    for x in sorted(rows, key=lambda x: x["arrival_seq"]):
+        by.setdefault(x["session"], []).append(x)
+    for sid, rs in by.items():
+        assert rs[0]["svc_before_ms"] == 0.0
+        for a, b in zip(rs, rs[1:]):                                            # accumulation is exact and monotone
+            assert b["svc_before_ms"] == pytest.approx(a["svc_after_ms"])
+            assert a["svc_after_ms"] == pytest.approx(a["svc_before_ms"] + a["svc_ms"])
+    res = analysis.analyse({"A": o}, "A", B=20)
+    od = res["arms"]["A"]["ordering"]
+    assert od["requests"] == 9 and od["service_ms_total"] > 0
+
+
+def test_ordering_report_known_answer():
+    mk = lambda sess, seq, ts, te, before, svc: {"session": sess, "arrival_seq": seq, "t_start": ts, "t_end": te,
+                                                  "svc_before_ms": before, "svc_ms": svc, "svc_after_ms": before + svc}
+    reqs = [mk("a", 0, 0, 10, 500, 5),       # arrived first but has consumed more service
+            mk("b", 1, 1, 9, 100, 5),        # overlaps a, little service: LAS would admit b first
+            mk("c", 2, 20, 30, 0, 5),        # starts after both finished: never queued with them
+            mk("a", 3, 2, 8, 505, 5)]        # same session as a: not a cross-session pair
+    od = analysis.ordering_report(reqs)
+    assert od["overlapping_cross_session_pairs"] == 2          # a0-b1 and b1-a3 (a0-a3 same session)
+    assert od["las_vs_fcfs_disagreements"] == 1 and od["las_disagreement_share"] == 0.5
+    assert analysis.ordering_report([])["las_disagreement_share"] is None
