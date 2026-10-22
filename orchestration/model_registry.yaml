@@ -2817,6 +2817,7 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
       hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
       sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
@@ -3026,6 +3027,7 @@ roles:
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.8-27B-GGUF
       hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
       sha256: a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348
@@ -3181,6 +3183,7 @@ roles:
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.8-27B-GGUF
       hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
       sha256: a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348
@@ -3297,6 +3300,7 @@ roles:
       name: Qwen3.8-Flash-Next-UD-IQ4_XS
       huggingface_id: unsloth/Qwen3.8-Flash-Next-GGUF
       path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.8-Flash-Next-GGUF
       hf_revision: 766911a6b7369840a91dbcd95f9f997acaab6cd6
       sha256: 5ce89370720f8bf90890f439361282104c1aa1482d4013bb9a50923e758e71a4
@@ -3444,6 +3448,7 @@ roles:
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.8-27B-GGUF
       hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
       sha256: a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348
@@ -6426,6 +6431,7 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
       hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
       sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
@@ -6542,6 +6548,7 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
       hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
       sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
@@ -6600,6 +6607,7 @@ roles:
     model:
       name: Qwen3-VL-30B-A3B-Instruct
       path: /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF
       hf_revision: 02ee4a8e98a6f436e6aa255d413c320cc547b0b9
       sha256: 7bd52989f39ddca3dde36edb902fef72c5fde81e9211ca0f5ceca0119bd16d9c
@@ -6701,6 +6709,7 @@ roles:
     model:
       name: Qwen3-VL-30B-A3B-Instruct
       path: /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF
       hf_revision: 02ee4a8e98a6f436e6aa255d413c320cc547b0b9
       sha256: 7bd52989f39ddca3dde36edb902fef72c5fde81e9211ca0f5ceca0119bd16d9c
@@ -6804,6 +6813,7 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
       hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
       sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
@@ -6881,6 +6891,7 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
       hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
       sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
@@ -8920,6 +8931,7 @@ roles:
     model:
       name: Qwen3.8-Flash-Next-UD-IQ4_XS
       path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.8-Flash-Next-GGUF
       hf_revision: 766911a6b7369840a91dbcd95f9f997acaab6cd6
       sha256: 5ce89370720f8bf90890f439361282104c1aa1482d4013bb9a50923e758e71a4
@@ -11636,6 +11648,7 @@ roles:
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.8-27B-GGUF
       hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
       sha256: a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348
@@ -11782,6 +11795,7 @@ roles:
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      uploader_class: allowlisted_requantizer
       hf_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
       hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
       sha256: c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131
