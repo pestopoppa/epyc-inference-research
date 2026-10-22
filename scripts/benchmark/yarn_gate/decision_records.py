@@ -220,6 +220,10 @@ def emit(run_dir: Path, *, run_id: str, cells: Sequence[Mapping[str, Any]], pair
                "verdict": mc["verdict"], "rule_id": rule_id, "alpha": mc["alpha"], "p_one_sided": mc["p_one_sided"],
                "b_a0right_a1wrong": mc["b_a0right_a1wrong"], "c_a0wrong_a1right": mc["c_a0wrong_a1right"],
                "n_pairs": mc["n_pairs"], "mean_score_diff_a1_minus_a0": mc["mean_score_diff_a1_minus_a0"],
+               "n_discordant": mc["n_discordant"],
+               "interpretation": mc["interpretation"],
+               "min_losses_to_fail_given_discordant": mc["min_losses_to_fail_given_discordant"],
+               "power_note": mc["power_note"],
                "a0_record_sha256": digest[names["A0"]], "a1_record_sha256": digest[names["A1"]]}
         path = rdir / f"{COMPARISON}.A1_vs_A0.{suite}.{task}.{b}.{zone}.verdict.json".replace("/", "_")
         sha = _write_json(path, ver)

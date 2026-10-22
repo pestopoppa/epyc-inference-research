@@ -125,6 +125,41 @@ class McNemarMath(unittest.TestCase):
         r = agg_scoring.net_paired_mcnemar({1: 1.0, 2: 0.0}, {1: 1.0, 2: 0.0})
         self.assertEqual((r["n_discordant"], r["verdict"]), (0, "NOT-FAIL"))
 
+    def _mc(self, b, c, same=0):
+        a0 = {i: 1.0 for i in range(b)}
+        a1 = {i: 0.0 for i in range(b)}
+        for i in range(b, b + c):
+            a0[i], a1[i] = 0.0, 1.0
+        for i in range(b + c, b + c + same):
+            a0[i] = a1[i] = 1.0
+        return agg_scoring.net_paired_mcnemar(a0, a1)
+
+    def test_power_fields_n_discordant_0_3_10(self):
+        r = self._mc(0, 0, same=6)
+        self.assertEqual((r["n_discordant"], r["verdict"], r["interpretation"]), (0, "NOT-FAIL", "NOT-FAIL-underpowered"))
+        self.assertIsNone(r["min_losses_to_fail_given_discordant"])
+        self.assertEqual(r["min_losses_to_fail_with_zero_wins"], 5)
+        self.assertIn("NOT an equivalence or safety claim", r["power_note"])
+        self.assertIn("n_discordant=0", r["power_note"])
+        self.assertIn("underpowered: few disagreements", r["power_note"])
+        r = self._mc(3, 0)  # 3 losses, 0 wins: p = 1/8, cannot fail
+        self.assertEqual((r["n_discordant"], r["verdict"], r["interpretation"]), (3, "NOT-FAIL", "NOT-FAIL-underpowered"))
+        self.assertIsNone(r["min_losses_to_fail_given_discordant"])
+        self.assertIn("underpowered", r["power_note"])
+        r = self._mc(2, 8)  # 10 discordants, net gain
+        self.assertEqual((r["n_discordant"], r["verdict"], r["interpretation"]), (10, "NOT-FAIL", "NOT-FAIL"))
+        self.assertEqual(r["min_losses_to_fail_given_discordant"], 9)  # P(X>=9|10)=11/1024 <= .05; P(X>=8|10)=56/1024 > .05
+        self.assertNotIn("underpowered", r["power_note"])
+        self.assertIn("n_discordant=10", r["power_note"])
+
+    def test_interpretation_fail_and_verdict_unchanged(self):
+        r = self._mc(5, 0)
+        self.assertEqual((r["verdict"], r["interpretation"], r["min_losses_to_fail_given_discordant"]), ("FAIL", "FAIL", 5))
+        r = self._mc(8, 1)
+        self.assertEqual((r["verdict"], r["interpretation"]), ("FAIL", "FAIL"))
+        r = self._mc(4, 0)
+        self.assertEqual((r["verdict"], r["interpretation"]), ("NOT-FAIL", "NOT-FAIL-underpowered"))
+
     def test_partial_credit_is_wrong(self):
         r = agg_scoring.net_paired_mcnemar({1: 1.0}, {1: 0.75})
         self.assertEqual(r["b_a0right_a1wrong"], 1)
@@ -167,6 +202,9 @@ class RunnerEndToEnd(unittest.TestCase):
         self.assertEqual(rec["status"], "FINAL")
         self.assertEqual(rec["verdict"], "NOT-FAIL")
         self.assertEqual(rec["pooled_native"]["n_pairs"], 12)
+        self.assertEqual((rec["n_pairs"], rec["n_discordant"], rec["interpretation"]), (12, 0, "NOT-FAIL-underpowered"))
+        self.assertIn("NOT an equivalence or safety claim", rec["power_note"])
+        self.assertEqual(rec["claim_tuple"]["extra"]["interpretation"], "NOT-FAIL-underpowered")
         ct = rec["claim_tuple"]
         for k in ("measurement_id", "metric", "value", "date", "category", "claim", "metric_direction",
                   "protocol_id", "reps", "reps_basis", "unit", "attestation_path"):
@@ -181,11 +219,15 @@ class RunnerEndToEnd(unittest.TestCase):
         rec = ar.decide(self.out)
         self.assertEqual(rec["status"], "INTERIM")
         self.assertTrue(rec["verdict"].startswith("INTERIM"))
+        for k in ("n_pairs", "n_discordant", "b_a0right_a1wrong", "c_a0wrong_a1right", "min_losses_to_fail_given_discordant",
+                  "power_note", "interpretation"):
+            self.assertIn(k, rec)
         self._run("A1", bad)
         rec = ar.decide(self.out)
         self.assertEqual(rec["status"], "FINAL")
         self.assertEqual(rec["pooled_native"]["b_a0right_a1wrong"], 6)
         self.assertEqual(rec["verdict"], "FAIL")
+        self.assertEqual(rec["interpretation"], "FAIL")
         self.assertEqual(rec["per_cell_native"]["cellA"]["verdict"], "FAIL")
 
     def test_resume_skips_done_and_catches_up_other_arm_first(self):

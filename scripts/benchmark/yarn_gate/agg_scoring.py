@@ -116,6 +116,30 @@ def _binom_sf(b: int, n: int) -> float:
     return sum(math.comb(n, k) for k in range(b, n + 1)) / 2 ** n
 
 
+UNDERPOWERED_BELOW = 10  # discordant pairs; below this a NOT-FAIL is read as "few disagreements", not as evidence
+
+
+def power_fields(b: int, c: int, verdict: str, alpha: float = ALPHA) -> dict:
+    """Interpretation-only statistics for a net-paired McNemar result. NEVER feeds the verdict.
+
+    min_losses_to_fail_given_discordant: smallest b' in [0, n_discordant] whose one-sided exact p
+    (b' losses out of the current n_discordant) is <= alpha, or None when even all-losses cannot reach alpha
+    at this n_discordant. min_losses_to_fail_with_zero_wins: smallest b' with c=0 (p = 2**-b'), independent
+    of n_discordant (5 at alpha=0.05)."""
+    d = b + c
+    need = next((k for k in range(d + 1) if _binom_sf(k, d) <= alpha), None) if d else None
+    zero_wins = next(k for k in range(1, 200) if 0.5 ** k <= alpha)
+    interp = "FAIL" if verdict == "FAIL" else ("NOT-FAIL-underpowered" if d < UNDERPOWERED_BELOW else "NOT-FAIL")
+    note = (f"NOT-FAIL = no harm detected at this sample size; this is NOT an equivalence or safety claim "
+            f"(n_discordant={d})")
+    if d < UNDERPOWERED_BELOW:
+        note += "; underpowered: few disagreements"
+    if verdict == "FAIL":
+        note = f"FAIL = net loss significant at alpha={alpha} (n_discordant={d}); NOT-FAIL on other cells is harm-detection only"
+    return {"n_discordant": d, "min_losses_to_fail_given_discordant": need,
+            "min_losses_to_fail_with_zero_wins": zero_wins, "power_note": note, "interpretation": interp}
+
+
 def net_paired_mcnemar(a0: Mapping[Any, float], a1: Mapping[Any, float], alpha: float = ALPHA,
                        right_at: float = 1.0) -> dict:
     """Net, paired: A1 FAILS iff the one-sided exact McNemar p (b = A0 right/A1 wrong discordants) <= alpha.
@@ -129,9 +153,11 @@ def net_paired_mcnemar(a0: Mapping[Any, float], a1: Mapping[Any, float], alpha: 
     p = _binom_sf(b, b + c)
     n = len(ids)
     diff = sum(a1[i] - a0[i] for i in ids) / n if n else None
-    return {"verdict": "FAIL" if (b + c) > 0 and p <= alpha else "NOT-FAIL", "n_pairs": n, "b_a0right_a1wrong": b,
-            "c_a0wrong_a1right": c, "n_discordant": b + c, "p_one_sided": p, "alpha": alpha,
-            "mean_score_diff_a1_minus_a0": diff, "rule": "Net, paired (one-sided exact McNemar), no absolute slack"}
+    verdict = "FAIL" if (b + c) > 0 and p <= alpha else "NOT-FAIL"
+    return {"verdict": verdict, "n_pairs": n, "b_a0right_a1wrong": b,
+            "c_a0wrong_a1right": c, "p_one_sided": p, "alpha": alpha,
+            "mean_score_diff_a1_minus_a0": diff, "rule": "Net, paired (one-sided exact McNemar), no absolute slack",
+            **power_fields(b, c, verdict, alpha)}
 
 
 _WS = re.compile(r"\s+")

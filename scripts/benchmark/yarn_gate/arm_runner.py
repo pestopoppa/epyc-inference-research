@@ -546,7 +546,13 @@ def decide(out: Path, *, identity: dict | None = None) -> dict:
         "verdict": verdict, "pooled_native": pooled, "per_cell_native": cells_out,
         "excluded_from_gate": excluded, "per_arm_cells": report, "progress": st, "dropped_segments":
             plan.meta.get("dropped", []), "results_sha256": rfiles, "identity": identity or {},
-        "power_note": "NOT-FAIL on few discordant pairs is weak evidence; read b, c and the mean difference.",
+        # Interpretation fields (INTERIM and FINAL alike); the verdict above is untouched. For an INTERIM record
+        # they describe the partial pairs seen so far.
+        "n_pairs": pooled["n_pairs"], "b_a0right_a1wrong": pooled["b_a0right_a1wrong"],
+        "c_a0wrong_a1right": pooled["c_a0wrong_a1right"], "n_discordant": pooled["n_discordant"],
+        "min_losses_to_fail_given_discordant": pooled["min_losses_to_fail_given_discordant"],
+        "min_losses_to_fail_with_zero_wins": pooled["min_losses_to_fail_with_zero_wins"],
+        "power_note": pooled["power_note"], "interpretation": pooled["interpretation"],
     }
     # Belief-kernel write side: the producer-authored claim tuple fields (projection lives in scripts/vidya).
     rec["claim_tuple"] = {
@@ -562,7 +568,8 @@ def decide(out: Path, *, identity: dict | None = None) -> dict:
         "attestation_path": str(out / "decision.json"), "attestation_locator": "pooled_native",
         "status": "FINAL" if final else "INTERIM", "verdict": verdict,
         "extra": {"b": pooled["b_a0right_a1wrong"], "c": pooled["c_a0wrong_a1right"], "p_one_sided": pooled["p_one_sided"],
-                  "alpha": pooled["alpha"], "plan_sha256": plan.meta["plan_sha256"], "results_sha256": rfiles,
+                  "alpha": pooled["alpha"], "n_discordant": pooled["n_discordant"],
+                  "interpretation": pooled["interpretation"], "plan_sha256": plan.meta["plan_sha256"], "results_sha256": rfiles,
                   "identity": identity or {}},
     }
     rec["belief_emit"] = _belief_emit(out, plan, res, gate_items, final=final, identity=identity,
