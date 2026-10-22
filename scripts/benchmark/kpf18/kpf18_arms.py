@@ -1412,6 +1412,8 @@ def run_182_parity_summary(env: Env, shared: dict):
                        "columns come from different launches (see each protocol record for its binary/argv)")
     ordered = dict(sorted(shared.get("vec", {}).items(), key=lambda kv: (0 if kv[0].endswith(":drafter_on") else 1, kv[0])))
     R.extra["rule_result"] = eval_182_parity(ordered)       # the drafter-on column is the reference
+    for col, vec in ordered.items():                        # VB-KVU-PF.2: the rows file attests the compared inputs
+        R.rows.add({"kind": "parity_column", "column": col, "siblings_vector": [list(x) for x in vec]})
     return R
 
 

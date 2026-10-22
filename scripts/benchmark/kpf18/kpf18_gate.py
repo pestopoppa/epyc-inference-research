@@ -1183,6 +1183,10 @@ class Run:
         for k, v in self.ident.items():
             if k not in eq:
                 eq[k] = ident_summary(v)
+        # VB-KVU-PF.2: every record attests a rows file. A run that issued no request (e.g. 18.2 parity_summary) still
+        # gets one -- empty or holding what the run consumed -- so rows_sha256 is a real digest, never null.
+        if not self.rows.path.exists():
+            self.rows.path.touch()
         rows_sha = sha256_file(self.rows.path)
         rec = {
             "schema": SCHEMA, "kpf_task": "KPF-18", "kpf18_item": self.item, "run_id": self.run_id, "arm": self.arm,

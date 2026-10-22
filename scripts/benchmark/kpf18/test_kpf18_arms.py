@@ -1184,3 +1184,31 @@ def test_parity_vectors_survive_a_resume(tmp_path, cpu_spec):
     assert rr["reference"] == "mtp:drafter_on" and rr["columns"] == ["mtp:drafter_on", "mtp:request_off"]
     assert rr["predeclared_rule_satisfied"] is True
     assert A.load_vectors_from_records(tmp_path / "nope") == {}
+
+
+# ---------------------------------------------------------------- VB-KVU-PF.2: every record attests a rows file
+def test_parity_summary_rows_file_holds_the_compared_columns(tmp_path, cpu_spec):
+    import json as _json
+    shared = {"vec": {"mtp:drafter_on": [("g0.s0", 4096)], "mtp:request_off": [("g0.s0", 4096)]}}
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    R = A.run_182_parity_summary(env, shared)
+    lines = [_json.loads(x) for x in R.rows.path.read_text().splitlines()]
+    assert [x["column"] for x in lines] == ["mtp:drafter_on", "mtp:request_off"]
+    assert lines[0]["siblings_vector"] == [["g0.s0", 4096]]
+
+
+def test_finish_emits_rows_sha256_for_a_run_that_issued_no_request(tmp_path, cpu_spec):
+    import json as _json
+    ctx, env = mk_env(tmp_path, cpu_spec)
+    srv = env.srv
+    for k, v in dict(env_note={}, log=tmp_path / "srv.log", linkage=None, sampler=None, t_start=None, t_stop=None,
+                     stop_rec=None, log_counts=lambda: {}).items():
+        setattr(srv, k, v)
+    ctx.bin_sha = lambda b: "0" * 64
+    R = A.run_182_parity_summary(env, {})                  # no columns, no request: nothing written to rows
+    assert not R.rows.path.exists()
+    rec = R.finish()
+    assert R.rows.path.is_file() and rec["rows_sha256"] == GATE.sha256_file(R.rows.path)
+    assert isinstance(rec["rows_sha256"], str) and len(rec["rows_sha256"]) == 64
+    side = [_json.loads(x) for x in (ctx.out / "belief_measurements.jsonl").read_text().splitlines()]
+    assert side[-1]["arm"] == "parity_summary" and side[-1]["rows_sha256"] == rec["rows_sha256"]
