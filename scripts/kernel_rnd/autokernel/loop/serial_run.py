@@ -44,14 +44,16 @@ _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving
 ANCHOR_EPOCH_FLAGS = frozenset({"--new-anchor-epoch"})
 FLOOR_REGISTRY_FLAGS = frozenset({"--floor-registry", "--floor-registry-role", "--floor-numerics-epoch",
                                   "--floor-require-grade", "--floor-co-tenancy"})
-_CHANGING_FLAGS = frozenset({*ANCHOR_EPOCH_FLAGS, *FLOOR_REGISTRY_FLAGS, "--out", "--iterations", "--resume-run", "--anchor-build",
+#: Bare switch of the same family (no value): `_BOOLEAN_FLAGS` so `_without` never eats the next token.
+FLOOR_REGISTRY_SWITCHES = frozenset({"--floor-allow-stale-upstream"})
+_CHANGING_FLAGS = frozenset({*ANCHOR_EPOCH_FLAGS, *FLOOR_REGISTRY_FLAGS, *FLOOR_REGISTRY_SWITCHES, "--out", "--iterations", "--resume-run", "--anchor-build",
                             "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",
                             "--scheduler-selection", "--dry-run", "--cpu-screen-scope",
                             "--cpu-confirm-from", "--source-anchor-continuation",
                             "--source-anchor-sha256", "--runtime-recipe-reference",
                             "--runtime-recovery-reference", "--validate-source-continuation",
                             "--validate-source-loo"})
-_BOOLEAN_FLAGS = frozenset({"--dry-run", "--validate-source-continuation",
+_BOOLEAN_FLAGS = frozenset({*FLOOR_REGISTRY_SWITCHES, "--dry-run", "--validate-source-continuation",
                             "--validate-source-loo"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",

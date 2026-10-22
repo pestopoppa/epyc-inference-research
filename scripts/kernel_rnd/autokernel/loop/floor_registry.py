@@ -362,6 +362,43 @@ class RegistryBehindUpstream(FloorRegistryError):
     """The local registry lacks floors that origin/main has: refusing is the only safe answer."""
 
 
+class RegistryUpstreamUnknown(FloorRegistryError):
+    """origin/main could not be refreshed AND the last known fetch is too old to trust."""
+
+
+STALE_UPSTREAM_AGE_S = 24 * 3600
+FETCH_TIMEOUT_S = 15
+
+
+def fetch_origin(repo: Path, timeout: int = FETCH_TIMEOUT_S) -> dict:
+    """Best-effort `git fetch --quiet origin main` (updates origin/main only; never merges, never
+    prunes). {ok, error}."""
+    try:
+        done = subprocess.run(["git", "-C", str(repo), "fetch", "--quiet", "origin", "main"],
+                              capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": f"git fetch timed out after {timeout}s"}
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": done.returncode == 0, "error": (done.stderr or "").strip()[:300] or None}
+
+
+def last_fetch_age_s(repo: Path) -> int | None:
+    """Seconds since this repo last fetched, from FETCH_HEAD's mtime (the worktree's and the shared
+    common dir's; the newer wins). NOT the age of origin/main's commit: a quiet remote has an old commit
+    and a fresh fetch. None when no fetch was ever recorded."""
+    paths = []
+    for flag in ("--git-path", ):
+        got = _git_out(repo, "rev-parse", flag, "FETCH_HEAD")
+        if got:
+            paths.append(Path(got) if Path(got).is_absolute() else repo / got)
+    common = _git_out(repo, "rev-parse", "--git-common-dir")
+    if common:
+        paths.append((Path(common) if Path(common).is_absolute() else repo / common) / "FETCH_HEAD")
+    times = [q.stat().st_mtime for q in paths if q.exists()]
+    return round(time.time() - max(times)) if times else None
+
+
 def resolve_master(explicit: Path | str | None = None) -> tuple[Path, str]:
     """(path, source). Order: explicit arg (`--master`/`--floor-registry`) > `FLOOR_REGISTRY_MASTER` >
     the registry of the repo this code runs from. Any override is LOUD (stderr): an overridden
@@ -403,30 +440,48 @@ def registry_provenance(master: Path | str) -> dict:
     status = _git_out(Path(top), "status", "--porcelain", "--", rel)
     out["dirty"] = bool(status) if status is not None else None
     out["origin_main_commit"] = _git_out(Path(top), "rev-parse", "--verify", "origin/main^{commit}")
-    stamp = _git_out(Path(top), "log", "-1", "--format=%ct", "origin/main")
-    if stamp and stamp.isdigit():
-        out["origin_main_age_s"] = round(time.time() - int(stamp))
+    out["origin_main_age_s"] = last_fetch_age_s(Path(top))   # seconds since the last fetch
     return out
 
 
 def upstream_check(master: Path | str, *, role: str | None, model_sha: str | None,
-                   show: Callable[[Path, str], str | None] | None = None) -> dict:
+                   show: Callable[[Path, str], str | None] | None = None,
+                   fetch: Callable[[Path], dict] | None = None,
+                   age: Callable[[Path], int | None] | None = None,
+                   allow_stale: bool = False) -> dict:
     """Compare the LOCAL registry's serving_floors with origin/main's for this target.
 
-    `behind`  -- origin/main carries entries (matching `role`, or `model_sha`) whose ids the local file
-                 lacks: the local registry is behind and a lookup miss/hit would be silently wrong.
-    `ok`      -- every upstream entry for the target is present locally.
-    `skipped` -- origin/main cannot be read (no remote / ref); the caller WARNS, never refuses.
-    `show` is the seam for tests: (repo_root, relpath) -> origin/main's file text or None."""
+    origin/main is first REFRESHED (`git fetch --quiet origin main`, 15 s): comparing against a stale
+    ref would reproduce the blind spot this check exists to close. If the fetch fails the result says
+    so, and if the last known fetch is older than 24 h (or unknown) the check is `stale_upstream` --
+    a refusal unless `allow_stale` (`--floor-allow-stale-upstream`).
+
+    `behind`         -- origin/main carries entries (matching `role`, or `model_sha`) whose ids the local
+                        file lacks: the local registry is behind.
+    `ok`             -- every upstream entry for the target is present locally.
+    `stale_upstream` -- fetch failed and the last fetch is >24 h old / unknown (and not allowed).
+    `skipped`        -- origin/main cannot be read at all (no remote / ref); the caller WARNS.
+    Seams for tests: `show` (repo, relpath) -> origin/main's file text; `fetch` (repo) -> {ok, error};
+    `age` (repo) -> seconds since the last fetch."""
     master = Path(master)
     top = _git_out(master.parent, "rev-parse", "--show-toplevel")
     if not top:
         return {"status": "skipped", "reason": f"{master} is not inside a git repository"}
-    rel = os.path.relpath(master.resolve(), Path(top).resolve())
-    text = (show or (lambda repo, r: _git_out(repo, "show", f"origin/main:{r}")))(Path(top), rel)
+    repo = Path(top)
+    rel = os.path.relpath(master.resolve(), repo.resolve())
+    fetched = (fetch or fetch_origin)(repo)
+    since = 0 if fetched["ok"] else (age or last_fetch_age_s)(repo)
+    info = {"fetch_ok": fetched["ok"], "fetch_error": fetched.get("error"), "last_fetch_age_s": since}
+    text = (show or (lambda r, f: _git_out(r, "show", f"origin/main:{f}")))(repo, rel)
     if text is None:
-        return {"status": "skipped", "reason": f"origin/main:{rel} is not readable in {top} "
-                                                f"(no origin remote or no origin/main ref)"}
+        return {"status": "skipped", **info,
+                "reason": f"origin/main:{rel} is not readable in {top} (no origin remote or no "
+                          f"origin/main ref)" + ("" if fetched["ok"] else f"; fetch failed: {fetched.get('error')}")}
+    if not fetched["ok"] and (since is None or since > STALE_UPSTREAM_AGE_S) and not allow_stale:
+        return {"status": "stale_upstream", **info,
+                "reason": f"git fetch origin main failed ({fetched.get('error')}) and the last fetch was "
+                          f"{'never recorded' if since is None else f'{since}s ago'} (> "
+                          f"{STALE_UPSTREAM_AGE_S}s): origin/main may be hours behind the truth"}
     upstream = _section_from_text(text)
     local = load_section(master)
 
@@ -440,26 +495,41 @@ def upstream_check(master: Path | str, *, role: str | None, model_sha: str | Non
 
     up, here = matching(upstream), matching(local)
     missing = sorted(set(up) - set(here))
-    return {"status": "behind" if missing else "ok", "upstream_entries": sorted(up),
+    return {"status": "behind" if missing else "ok", **info, "upstream_entries": sorted(up),
             "local_entries": sorted(here), "missing_locally": missing}
 
 
 def preflight_or_refuse(master: Path | str, *, role: str | None, model_sha: str | None,
-                        log: Callable[[str], None] = print,
-                        show: Callable[[Path, str], str | None] | None = None) -> dict:
-    """The AK launch gate: refuse (RegistryBehindUpstream) if origin/main has floors for this target
-    that the local registry lacks; WARN and continue only when origin/main cannot be read."""
-    result = upstream_check(master, role=role, model_sha=model_sha, show=show)
+                        log: Callable[[str], None] = print, allow_stale: bool = False,
+                        show: Callable[[Path, str], str | None] | None = None,
+                        fetch: Callable[[Path], dict] | None = None,
+                        age: Callable[[Path], int | None] | None = None) -> dict:
+    """The AK launch gate: refresh origin/main, then refuse if it has floors for this target that the
+    local registry lacks (RegistryBehindUpstream), or if it could not be refreshed and the last fetch is
+    too old to trust (RegistryUpstreamUnknown, unless `allow_stale`). A fetch failure with a recent
+    fetch, or an unreadable origin/main, only WARNs."""
+    result = upstream_check(master, role=role, model_sha=model_sha, show=show, fetch=fetch, age=age,
+                            allow_stale=allow_stale)
     if result["status"] == "behind":
         raise RegistryBehindUpstream(
             f"registry at {master} is behind origin/main; floor for {role or model_sha} exists upstream "
             f"({', '.join(result['missing_locally'])}). Update/rebase this repo (or run from a worktree "
             f"of origin/main) -- refusing rather than calibrating or gating on a stale registry.")
+    if result["status"] == "stale_upstream":
+        raise RegistryUpstreamUnknown(
+            f"cannot establish whether registry at {master} is behind origin/main: {result['reason']}. "
+            f"Restore network access to origin, or pass --floor-allow-stale-upstream to proceed on the "
+            f"local file knowingly.")
+    if not result.get("fetch_ok", True):
+        log(f"WARNING   floor registry: git fetch origin main FAILED ({result.get('fetch_error')}); "
+            f"comparing against origin/main as of the last fetch, "
+            f"{result.get('last_fetch_age_s')}s ago")
     if result["status"] == "skipped":
         log(f"WARNING   floor registry upstream check SKIPPED: {result['reason']}")
     else:
         log(f"serving   floor registry upstream check ok ({len(result['local_entries'])} local / "
-            f"{len(result['upstream_entries'])} upstream entries for {role or model_sha})")
+            f"{len(result['upstream_entries'])} upstream entries for {role or model_sha}"
+            f"{'; allow-stale in force' if allow_stale else ''})")
     return result
 
 
@@ -962,6 +1032,8 @@ def build_parser() -> argparse.ArgumentParser:
         s.add_argument("--threads", type=int)
         s.add_argument("--owner", default=os.environ.get("USER", "unknown"))
         s.add_argument("--role")
+        s.add_argument("--allow-stale-upstream", action="store_true",
+                       help="proceed even if origin/main cannot be refreshed and the last fetch is >24h old")
         s.add_argument("--write-floor", type=Path, help="on a hit, write the registered floor json here")
     s = sub.add_parser("status", help="every entry vs the CURRENT champion (flags advanced anchors)")
     s = sub.add_parser("release", help="release a held calibration claim")
@@ -1019,7 +1091,8 @@ def main(argv: list[str] | None = None) -> int:
         champ = champion_state(args.source_repo, args.champion_branch)
         if args.cmd == "lookup":
             preflight_or_refuse(reg.master, role=args.role, model_sha=ident["model_sha"],
-                                log=lambda m: print(m, file=sys.stderr))
+                                log=lambda m: print(m, file=sys.stderr),
+                                allow_stale=args.allow_stale_upstream)
             res = reg.lookup_detail(equivalence_key=equiv["equivalence_key"], numerics_epoch=args.numerics_epoch,
                                     require_grade=args.require_grade, threads=args.threads,
                                     role=args.role, champion=champ, **ident)
@@ -1028,7 +1101,8 @@ def main(argv: list[str] | None = None) -> int:
                 _write_atomic(args.write_floor, res.floor)
             return 0 if res else 1
         preflight_or_refuse(reg.master, role=args.role, model_sha=ident["model_sha"],
-                            log=lambda m: print(m, file=sys.stderr))
+                            log=lambda m: print(m, file=sys.stderr),
+                            allow_stale=args.allow_stale_upstream)
         out = check_launch(reg, equivalence=equiv, numerics_epoch=args.numerics_epoch,
                            require_grade=args.require_grade, champion=champ, owner=args.owner,
                            threads=args.threads, role=args.role, **ident)

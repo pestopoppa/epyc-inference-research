@@ -288,7 +288,7 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
          numerics_epoch: str = "default", require_grade: str = "decision",
          co_tenancy: str = "quiet", floor_identity: dict | None = None,
          reference_build: Path | str | None = None, launch: dict | None = None,
-         preview_dir: Path | str | None = None) -> dict:
+         allow_stale_upstream: bool = False, preview_dir: Path | str | None = None) -> dict:
     """Read-only (except `preview_dir`, the one place launch artifacts may be written). Everything
     `apply` would do, with the floor decision made WITHOUT claiming. With `launch` (see
     `launch_paths`) the output also carries both relaunch paths, validated by `serial_roster`."""
@@ -322,7 +322,11 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
         return out
     registry = fr.FloorRegistry(master, claims_root)
     out["registry"] = registry.provenance()
-    out["upstream"] = fr.upstream_check(registry.master, role=role, model_sha=identity["model_sha"])
+    out["upstream"] = fr.upstream_check(registry.master, role=role, model_sha=identity["model_sha"],
+                                        allow_stale=bool(allow_stale_upstream))
+    if out["upstream"]["status"] == "stale_upstream":
+        out["blockers"].append(out["upstream"]["reason"] + " (pass --allow-stale-upstream to override)")
+        return out
     if out["upstream"]["status"] == "behind":
         out["blockers"].append(
             f"registry at {registry.master} is behind origin/main; floor for {role or identity['model_sha']} "
@@ -347,6 +351,8 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
                                           numerics_epoch, require_grade, co_tenancy,
                                           needs_epoch=out["anchor_preflight"]["needs_new_anchor_epoch"],
                                           role=role)
+    if allow_stale_upstream:
+        out["run_argv_additions"].append("--floor-allow-stale-upstream")
     out["actionable"] = True
     if launch is not None and preview_dir is not None:
         try:
@@ -448,6 +454,8 @@ def main(argv: list[str] | None = None) -> int:
                         "repo this code runs from; an override is logged loudly")
     p.add_argument("--role", help="the serving_floors.<role> key of this campaign's target")
     p.add_argument("--claims", type=Path, default=fr.DEFAULT_CLAIMS)
+    p.add_argument("--allow-stale-upstream", action="store_true",
+                   help="proceed although origin/main cannot be refreshed and the last fetch is >24h old")
     p.add_argument("--builds-root", type=Path, default=DEFAULT_BUILDS_ROOT)
     p.add_argument("--reference-build", type=Path,
                    help="require the store build's CMake recipe to equal this build's (the old anchor)")
@@ -479,7 +487,7 @@ def main(argv: list[str] | None = None) -> int:
             facts = fr.floor_facts(json.loads(args.floor.read_text(encoding="utf-8")))
             identity = {k: facts[k] for k in ("recipe_hash", "request_digest", "model_sha",
                                               "frame_digest", "pairs")}
-        kw = dict(master=args.master, role=args.role, claims_root=args.claims, branch=args.champion_branch, builds_root=args.builds_root,
+        kw = dict(master=args.master, role=args.role, allow_stale_upstream=args.allow_stale_upstream, claims_root=args.claims, branch=args.champion_branch, builds_root=args.builds_root,
                   numerics_epoch=args.numerics_epoch, require_grade=args.require_grade,
                   co_tenancy=args.co_tenancy, floor_identity=identity,
                   reference_build=args.reference_build)

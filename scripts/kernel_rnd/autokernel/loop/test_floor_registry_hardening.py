@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,14 @@ import pytest
 from autokernel.loop import floor_registry as fr
 from autokernel.loop.test_floor_registry import (BRANCH, MASTER_TEXT, QUIET, ROLE, eq_of, git, master_in,
                                                  register, repo)  # noqa: F401  (repo is a fixture)
+
+def ok_fetch(repo):
+    return {"ok": True, "error": None}
+
+
+def failed_fetch(repo):
+    return {"ok": False, "error": "could not resolve host"}
+
 
 DS41_RECORD = ("/mnt/raid0/llm/autokernel/campaigns/ak-ds41-1017-cpu-decode-20261021/baseline-floor-20261022/"
                "serving-floor.ds41-1017-mxfp4-cpu-t48-targetonly.requests-e50732d9ce365259d5bb95fe31e36995f98bcd0"
@@ -58,9 +67,9 @@ def test_behind_registry_makes_ak_refuse(tmp_path, repo):
     git(root, "update-ref", "refs/remotes/origin/main", "HEAD")      # origin/main has it
     master.write_text(MASTER_TEXT)                                    # ... the local file does not
     with pytest.raises(fr.RegistryBehindUpstream, match="behind origin/main"):
-        fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64)
+        fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, fetch=ok_fetch)
     ctx = run._FloorRegistryContext(master, role=ROLE, numerics_epoch="n1", require_grade="decision",
-                                    co_tenancy="quiet", source_repo=repo, branch=BRANCH)
+                                    co_tenancy="quiet", source_repo=repo, branch=BRANCH, fetch=ok_fetch)
     with pytest.raises(fr.RegistryBehindUpstream):
         ctx.ensure_preflight("m" * 64)
     # the lookup path must propagate it, never swallow it into "registry unavailable"
@@ -79,10 +88,12 @@ def test_behind_registry_makes_ak_refuse(tmp_path, repo):
 def test_up_to_date_registry_passes_and_unreadable_upstream_only_warns(tmp_path, repo):
     root, master = _behind_repo(tmp_path)
     lines: list[str] = []
-    res = fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, log=lines.append)   # no origin/main
+    res = fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, log=lines.append,
+                                 fetch=ok_fetch)   # no origin/main ref at all
     assert res["status"] == "skipped" and any("SKIPPED" in l for l in lines)
     git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
-    assert fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, log=lines.append)["status"] == "ok"
+    assert fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, log=lines.append,
+                                  fetch=ok_fetch)["status"] == "ok"
 
 
 def test_model_sha_alone_is_enough_to_detect_a_behind_registry(tmp_path, repo):
@@ -93,7 +104,7 @@ def test_model_sha_alone_is_enough_to_detect_a_behind_registry(tmp_path, repo):
     git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
     master.write_text(MASTER_TEXT)
     with pytest.raises(fr.RegistryBehindUpstream):
-        fr.preflight_or_refuse(master, role="a_different_role", model_sha="m" * 64)
+        fr.preflight_or_refuse(master, role="a_different_role", model_sha="m" * 64, fetch=ok_fetch)
 
 
 # ---------------------------------------------------------------- 3. hit/miss logging reaches the receipt
@@ -162,3 +173,84 @@ def test_ds41_1017_lookup_through_the_default_registry(monkeypatch):
         model_sha="ba9f129c15f823503d00b088ff07e42aa3953d58cf287d019229af052b2e12b2",
         numerics_epoch="post-W5.1a", pairs=5, champion=champion)
     assert stale.status == fr.STATUS_STALE_NUMERICS
+
+
+# ---------------------------------------------------------------- 5. origin/main is REFRESHED before comparing
+def _up_to_date_repo(tmp_path):
+    root, master = _behind_repo(tmp_path)
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return master
+
+
+def test_fetch_runs_before_the_comparison(tmp_path):
+    master = _up_to_date_repo(tmp_path)
+    order: list[str] = []
+    fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, log=lambda m: None,
+                           fetch=lambda r: order.append("fetch") or {"ok": True, "error": None},
+                           show=lambda r, rel: order.append("show") or master.read_text())
+    assert order == ["fetch", "show"]
+
+
+def test_failed_fetch_with_a_recent_fetch_only_warns(tmp_path):
+    master = _up_to_date_repo(tmp_path)
+    lines: list[str] = []
+    res = fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, log=lines.append,
+                                 fetch=failed_fetch, age=lambda r: 3600)
+    assert res["status"] == "ok" and res["last_fetch_age_s"] == 3600
+    assert any("FAILED" in l and "3600s ago" in l for l in lines)
+
+
+@pytest.mark.parametrize("age", [25 * 3600, None])
+def test_failed_fetch_with_an_old_or_unknown_fetch_refuses_unless_allowed(tmp_path, age):
+    master = _up_to_date_repo(tmp_path)
+    with pytest.raises(fr.RegistryUpstreamUnknown, match="--floor-allow-stale-upstream"):
+        fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, fetch=failed_fetch, age=lambda r: age)
+    res = fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, log=lambda m: None,
+                                 fetch=failed_fetch, age=lambda r: age, allow_stale=True)
+    assert res["status"] == "ok"
+
+
+def test_allow_stale_never_hides_a_behind_registry(tmp_path, repo):
+    root, master = _behind_repo(tmp_path)
+    register(tmp_path, master, eq_of(tmp_path, repo))
+    git(root, "add", "-A")
+    git(root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "floor")
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    master.write_text(MASTER_TEXT)
+    with pytest.raises(fr.RegistryBehindUpstream):
+        fr.preflight_or_refuse(master, role=ROLE, model_sha="m" * 64, fetch=failed_fetch,
+                               age=lambda r: 60, allow_stale=True)
+
+
+def test_real_fetch_failure_is_reported_not_raised(tmp_path):
+    root, _ = _behind_repo(tmp_path)               # a repo with no `origin` remote
+    got = fr.fetch_origin(root, timeout=5)
+    assert got["ok"] is False and got["error"]
+
+
+def test_ak_flag_and_serial_switch_are_wired():
+    from autokernel.loop import serial_run as sr
+    assert "--floor-allow-stale-upstream" in sr.FLOOR_REGISTRY_SWITCHES
+    assert "--floor-allow-stale-upstream" in sr._BOOLEAN_FLAGS and "--floor-allow-stale-upstream" in sr._CHANGING_FLAGS
+    argv = ["--worktree", "/w", "--floor-allow-stale-upstream", "--store", "/s"]
+    assert sr._without(argv, sr.FLOOR_REGISTRY_SWITCHES) == ["--worktree", "/w", "--store", "/s"]
+
+
+# ---------------------------------------------------------------- 6. scripts/lib/registry.py from any cwd
+def test_lib_registry_default_is_cwd_independent(tmp_path):
+    repo_root = Path(fr.__file__).resolve().parents[4]
+    lib = repo_root / "scripts" / "lib" / "registry.py"
+    code = ("import importlib.util, sys\n"
+            "spec = importlib.util.spec_from_file_location('lib_registry_probe', sys.argv[1])\n"
+            "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+            "print(m.DEFAULT_REGISTRY_PATH)\n")
+    expected = str(repo_root / "orchestration" / "model_registry.yaml")
+    store_like = tmp_path / "autokernel-store"
+    store_like.mkdir()
+    (tmp_path / "linked").symlink_to(lib.parent)                    # the /workspace/repos/... symlink shape
+    for cwd, path in ((tmp_path, lib), (store_like, lib), (store_like, tmp_path / "linked" / "registry.py")):
+        out = subprocess.run([sys.executable, "-I", "-c", code, str(path)], cwd=cwd, capture_output=True,
+                             text=True)
+        assert out.returncode == 0, out.stderr
+        assert out.stdout.strip() == expected
+    assert Path(expected).is_file()

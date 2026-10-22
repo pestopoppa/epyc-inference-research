@@ -1633,7 +1633,7 @@ _FLOOR_REGISTRY = None
 
 class _FloorRegistryContext:
     def __init__(self, master, *, role, numerics_epoch, require_grade, co_tenancy, source_repo, branch,
-                 store=None, show=None):
+                 store=None, show=None, fetch=None, allow_stale=False):
         # READ-ONLY view of the master registry; every lookup is logged to the run log (print) and kept
         # for the receipt. `master` None / "@code" = the registry of the repo this code runs from.
         self.registry = floor_registry.FloorRegistry(master, log=print)
@@ -1641,14 +1641,16 @@ class _FloorRegistryContext:
         self.numerics_epoch, self.require_grade = numerics_epoch, require_grade
         self.co_tenancy, self.source_repo, self.branch = co_tenancy, Path(source_repo), branch
         self.store, self._persisted, self._preflight = store, 0, None
-        self._show = show    # test seam for origin/main's file text; None = `git show origin/main:<rel>`
+        self._show, self._fetch = show, fetch    # test seams (origin/main's text; the fetch)
+        self.allow_stale = allow_stale           # --floor-allow-stale-upstream
 
     def ensure_preflight(self, model_sha):
         """Refuse (RegistryBehindUpstream) if origin/main has floors for this role/model that the local
         registry lacks. Once per run; a skip (origin/main unreadable) WARNs and continues."""
         if self._preflight is None:
             self._preflight = floor_registry.preflight_or_refuse(
-                self.registry.master, role=self.role, model_sha=model_sha, log=print, show=self._show)
+                self.registry.master, role=self.role, model_sha=model_sha, log=print, show=self._show,
+                fetch=self._fetch, allow_stale=self.allow_stale)
             prov = self.registry.provenance()
             print(f"serving   floor registry in use: {prov['path']} [{prov['source']}] commit "
                   f"{str(prov['commit'])[:12]}{' DIRTY' if prov['dirty'] else ''}; origin/main "
@@ -1699,7 +1701,7 @@ def _registry_floor_reading(recipe, launch, *, frozen_requests, pairs):
                                        Path(result.entry["_path"]), result.floor)
         if reading.gate_floor(effect_unit=serving.COMPARE_EFFECT_UNIT) is None:
             return None
-    except floor_registry.RegistryBehindUpstream:
+    except (floor_registry.RegistryBehindUpstream, floor_registry.RegistryUpstreamUnknown):
         raise
     except (floor_registry.FloorRegistryError, serving.ServingFloorMismatch, serving.RecipeError,
             OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
@@ -2183,6 +2185,10 @@ def main(argv: list[str] | None = None) -> int:
                              "descends from the champion head.")
     parser.add_argument("--floor-registry-role",
                         help="the `serving_floors.<role>` key this target's floors live under")
+    parser.add_argument("--floor-allow-stale-upstream", action="store_true",
+                        help="proceed on the local registry even when origin/main cannot be refreshed "
+                             "(`git fetch origin main` failed) and the last fetch is >24h old. Without it "
+                             "that situation refuses to launch; a behind registry always refuses.")
     parser.add_argument("--floor-numerics-epoch", default="default",
                         help="numerics label of the registry era; a floor is never reused across "
                              "a different label (e.g. bump it when the W5.1a numerics default flips)")
@@ -2702,7 +2708,8 @@ def main(argv: list[str] | None = None) -> int:
         _FLOOR_REGISTRY = _FloorRegistryContext(
             args.floor_registry, role=args.floor_registry_role, numerics_epoch=args.floor_numerics_epoch,
             require_grade=args.floor_require_grade, co_tenancy=args.floor_co_tenancy,
-            source_repo=args.worktree, branch=args.champion_branch, store=args.store)
+            source_repo=args.worktree, branch=args.champion_branch, store=args.store,
+            allow_stale=args.floor_allow_stale_upstream)
     if args.cpu_window_wait_bound_s <= 0:
         parser.error("--cpu-window-wait-bound-s must be > 0")
     if args.hypothesis_author_attempts < 1:
@@ -3237,7 +3244,8 @@ def main(argv: list[str] | None = None) -> int:
             # for this target would turn a real floor into a silent miss (or a stale hit).
             try:
                 _FLOOR_REGISTRY.ensure_preflight(direct_launch.model.sha256)
-            except floor_registry.RegistryBehindUpstream as refusal:
+            except (floor_registry.RegistryBehindUpstream,
+                    floor_registry.RegistryUpstreamUnknown) as refusal:
                 parser.error(f"REFUSED: {refusal}")
     if ((resumed is not None and not historical_target)
             or (source_resumed is not None and not cross_tree_source)):

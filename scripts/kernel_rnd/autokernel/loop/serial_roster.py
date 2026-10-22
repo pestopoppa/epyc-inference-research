@@ -110,7 +110,7 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
         # Bare switches: instruments and rankers, never identities.
         switches = {"--rank-prior-experiments", "--no-rank-prior-experiments", "--node-profile",
                     "--require-serving-floor", "--serving-calibration-only",
-                    *sr.RUNTIME_PROTOCOL_SWITCHES}
+                    *sr.RUNTIME_PROTOCOL_SWITCHES, *sr.FLOOR_REGISTRY_SWITCHES}
         iterator = iter(extra)
         for arg in iterator:
             flag, equals, value = arg.partition("=")
