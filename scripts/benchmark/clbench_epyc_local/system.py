@@ -9,10 +9,15 @@ the one-line ``__init__.py`` (``install_into_clbench.sh`` does both). The class
 registers itself with ``@register_system("epyc_local")`` and is therefore
 discoverable as ``clbench run <task> --system epyc_local``.
 
-Layout is prefix-stable for KV reuse: [system prompt] + append-only history; the
-per-turn structured-output instruction is attached to the OUTGOING last user
-message only and is never stored, so turn N's request begins with turn N-1's
-request plus its reply. Truncation (rare) drops the oldest messages.
+Layout is prefix-stable for KV reuse: [system prompt] + append-only history. The
+structured-output instruction is part of each STORED user message (appended once,
+when the message is stored), so turn N's request begins byte-for-byte with turn
+N-1's request plus its reply. (It used to be attached to the outgoing last user
+message only; that made the previous user message differ at its tail, so the
+longest common prefix ended inside it and a hybrid/recurrent server, which can
+only resume from a checkpoint, re-prefilled that whole message every turn:
+CME-7 poker smoke 2026-10-22, hit_ratio_reusable 0.795.) Truncation (rare) drops
+the oldest messages.
 
 Endpoint config (constructor args, overridable with ``--system.<arg> value``;
 env fallbacks CLBENCH_EPYC_BASE_URL / CLBENCH_EPYC_API_KEY): base_url, model,
@@ -111,13 +116,13 @@ class EpycLocalSystem(ContinualLearningSystem):
 
     def respond(self, query: Query) -> Response:
         self.interaction_count += 1
-        self.messages.append({"role": "user", "content": query.prompt or "(no content)"})
-        self._truncate()
         instruction = _schema_instruction(query.response_schema)
+        self.messages.append({"role": "user", "content": (query.prompt or "(no content)") + instruction})
+        self._truncate()
         action, record = None, ""
         last_err: Exception | None = None
         for attempt in range(self.parse_retries + 1):
-            out = self._outgoing(instruction)
+            out = self._outgoing()
             if attempt and last_err is not None:
                 out.append({"role": "assistant", "content": record})
                 out.append({"role": "user", "content": f"That was not valid ({last_err}). Reply with ONLY the JSON object."})
@@ -157,13 +162,8 @@ class EpycLocalSystem(ContinualLearningSystem):
     def _prefix(self) -> list[dict[str, str]]:
         return [{"role": "system", "content": self.system_prompt}] if self.system_prompt else []
 
-    def _outgoing(self, instruction: str) -> list[dict[str, str]]:
-        msgs = [m.copy() for m in self._prefix() + self.messages]
-        for m in reversed(msgs):
-            if m["role"] == "user":
-                m["content"] += instruction
-                break
-        return msgs
+    def _outgoing(self) -> list[dict[str, str]]:
+        return [m.copy() for m in self._prefix() + self.messages]
 
     def _approx_tokens(self) -> int:
         return sum(len(m["content"]) + 16 for m in self._prefix() + self.messages) // 4

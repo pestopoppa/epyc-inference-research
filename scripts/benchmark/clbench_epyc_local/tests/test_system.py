@@ -72,9 +72,9 @@ def test_turns_prefix_stable_and_usage(mod):
     assert r1.action.action == "call" and r2.action.action == "raise"
     a, b = srv.requests[0]["messages"], srv.requests[1]["messages"]
     assert a[0] == {"role": "system", "content": "SYS"}
-    # turn 2 re-sends turn 1's prompt WITHOUT the transient schema suffix, then the reply
-    assert b[1] == {"role": "user", "content": "hand 1"}
-    assert a[1]["content"].startswith("hand 1") and a[1]["content"] != b[1]["content"]
+    # turn 2 re-sends turn 1's request byte-for-byte (schema suffix included), then the reply
+    assert b[1] == a[1] and a[1]["content"].startswith("hand 1") and "JSON Schema" in a[1]["content"]
+    assert b[:len(a)] == a
     assert b[2] == {"role": "assistant", "content": '{"action": "call"}'}
     assert b[3]["content"] == "FEEDBACK: you won 3"
     assert b[4]["content"].startswith("hand 2")
@@ -83,13 +83,20 @@ def test_turns_prefix_stable_and_usage(mod):
     assert ev[1].input_tokens == 20 and ev[0].provider == "epyc-local"
 
 
-def test_stored_history_never_contains_schema_instruction(mod):
-    from src.interface import Query
-    with StubServer(['{"action": "x"}']) as srv:
+def test_every_request_extends_the_previous_one_exactly(mod):
+    """CME-7 cache regression: the previous request must be a strict message-prefix of the next
+    (a recurrent/hybrid server can only resume from a checkpoint, so a tail edit re-prefills a whole message)."""
+    from src.interface import Observation, Query
+    with StubServer(['{"action": "a"}'] * 4) as srv:
         s = mod.EpycLocalSystem(base_url=srv.url)
-        s.respond(Query(prompt="p", response_schema=Schema))
-    assert all("JSON Schema" not in m["content"] for m in s.messages)
-    assert "JSON Schema" in srv.requests[0]["messages"][-1]["content"]
+        for n in range(4):
+            s.respond(Query(prompt=f"hand {n}", response_schema=Schema))
+            s.observe(Observation(content=f"fb {n}"))
+    reqs = [r["messages"] for r in srv.requests]
+    for prev, nxt in zip(reqs, reqs[1:]):
+        assert nxt[:len(prev)] == prev and len(nxt) > len(prev)
+        assert nxt[len(prev)]["role"] == "assistant"
+    assert "JSON Schema" in reqs[0][-1]["content"]
 
 
 def test_parse_retry_then_success_and_failure(mod):
