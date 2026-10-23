@@ -910,3 +910,212 @@ def test_gl2_hip_graphs_state_is_presence_of_the_variable():
     assert m.hip_graphs_state({"GGML_CUDA_DISABLE_GRAPHS": "0"}, "gpu") == "disabled"   # ggml: getenv != nullptr
     assert m.hip_graphs_state({}, "gpu") == "enabled"
     assert m.hip_graphs_state({"GGML_CUDA_DISABLE_GRAPHS": "1"}, "cpu") == "n/a (cpu)"
+
+
+# ---------------------------------------------------------------- KPF-13.1b: rules v4 (spec-OFF discriminator, CB3 order probe, GPU clause)
+V4_CELLS = "g0-S2,g1-S2,g3-S2,g2-S1,g2-S2,g3-S1"
+V4_ARGV = ["--rules", "v4", "--reduced", "--only-cells", V4_CELLS]
+
+
+class FakeClientSpecOff(FakeClient):
+    """No drafter: no draft counts reported."""
+
+    def complete(self, body, timeout):
+        r = super().complete(body, timeout)
+        r["timings"].pop("draft_n", None)
+        r["timings"].pop("draft_n_accepted", None)
+        return r
+
+
+def run_v4(tmp_path, clients: dict, extra=()):
+    ctx = make_ctx(tmp_path, None, argv=V4_ARGV + list(extra))
+    for cfg in ctx.args.configs:
+        ctx.client = clients[cfg]
+        pl = m.Plan(ctx, cfg, ctx.results, False)
+        pl.srv = FakeSrv()
+        for st in pl.build():
+            if st.fn and ("sources" in st.desc or "cell g" in st.desc):
+                st.fn()
+    return ctx
+
+
+def test_v4_rules_are_new_and_v3_is_unchanged():
+    assert m.rules_sha256("v3") == "7466b774bfb586056805078c72cd4575a21e12b09b34f5c3e177b70d4418e276"
+    assert m.RULES_V4["schema"] == "epyc.kpf13.rules.v4" and m.rules_sha256("v4") not in (m.rules_sha256("v3"),
+                                                                                           m.rules_sha256("v2"))
+    for k in ("gpu_clause", "decisions_v4", "judged_controls", "spec_off_judge", "spec_on_judge", "cells", "order"):
+        assert k in m.RULES_V4, k
+    assert m.RULES_V4["cells"]["target"] == {"g0-S2": "A", "g1-S2": "A", "g3-S2": "A", "g2-S1": "B"}
+    assert "CB_A_abs" in m.RULES_V4["order"] and "0.031567" in m.RULES_V4["spec_on_judge"]
+    json.dumps(m.RULES_V4)
+
+
+def test_v4_args_run_spec_off_first_on_six_cells(tmp_path):
+    a = m.parse_args(["run", "--out", str(tmp_path)] + V4_ARGV)
+    assert a.configs == ["default_specoff", "default"] and a.control_repeats == 3
+    assert sorted(a.only_cells) == [(0, 2), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)]
+
+
+def test_v4_cell_order_has_the_probe_and_all_equal_is_draft_path(tmp_path):
+    ctx = run_v4(tmp_path, {"default_specoff": FakeClientSpecOff(), "default": FakeClient()})
+    assert sorted(ctx.results) == ["default", "default_specoff"]
+    assert sorted(c["cell"] for c in ctx.results["default"].values()) == \
+        sorted(["g0-S2-N64", "g1-S2-N64", "g3-S2-N64", "g2-S1-N64", "g2-S2-N64", "g3-S1-N64"])
+    rows = [json.loads(x) for x in (tmp_path / "out" / "rows" / "default_specoff.jsonl").read_text().splitlines()]
+    arms = [r["arm"] for r in rows if r.get("cell") == "g0-S2-N64" and "_seed" not in r["arm"]]
+    assert arms == ["W1", "CA1", "A1", "CB1", "B1", "CA2", "A2", "CB2", "B2", "CA3", "CB3",
+                    "A3", "CB_A_abs", "A4", "CB_A_pres", "CA4", "CB_CA_pres", "CA5", "CB_CA_abs", "W2"]
+    c = ctx.results["default_specoff"]["g0-S2-N64"]
+    T, N_ = 2048, 64
+    assert c["spec_off"] is True and c["order_probe"]["A3"]["n_fork_tokens"] == T
+    assert c["order_probe"]["A4"]["n_fork_tokens"] == T
+    for k in ("CB_A_abs", "CB_A_pres", "CB_CA_pres", "CB_CA_abs"):
+        assert c["order_probe"][k]["cache_n"] == T - N_ and c["order_probe"][k]["n_fork_tokens"] == 0, k
+    ana = m.analyze_results(ctx.results, set(), [64], False, "v4")
+    assert ana["rules"] == "v4" and ana["configs"]["default_specoff"]["A"]["verdict"] == "PASS"
+    assert ana["configs"]["default_specoff"]["B"]["verdict"] == "PASS" and ana["configs"]["default"]["A"]["verdict"] == "PASS"
+    d = ana["decisions"]
+    assert d["decision_grade"] is True and d["kpf13_1b_locus"] == "draft_path"
+    assert d["spec_on_reproduces_v3"]["overall"] == "no" and d["cb_order_effect"] == {"default_specoff": "none",
+                                                                                      "default": "none"}
+    assert d["first_draft_A1_vs_CA1"]["unobservable"] == 6
+
+
+def test_v4_spec_off_restore_divergence_is_a_target_restore_defect(tmp_path):
+    ctx = run_v4(tmp_path, {"default_specoff": FakeClientSpecOff(drift_on_fork_len=2048), "default": FakeClient()})
+    ana = m.analyze_results(ctx.results, set(), [64], False, "v4")
+    assert ana["configs"]["default_specoff"]["A"]["verdict"] == "FAIL"
+    d = ana["decisions"]
+    assert d["kpf13_1b_locus"] == "target_restore_defect" and d["kpf13_1_dflash2_gpu"] == "RESTORE_DEFECT_TARGET_SIDE"
+    assert "g0-S2:A" in d["kpf13_1b_locus_failing"] and d["kpf19_1_choice_dflash2"].startswith("neither")
+
+
+def test_v4_spec_on_near_tie_with_clean_spec_off_is_the_draft_path(tmp_path):
+    ctx = run_v4(tmp_path, {"default_specoff": FakeClientSpecOff(), "default": FakeClient(drift_on_fork_len=2048)})
+    ana = m.analyze_results(ctx.results, set(), [64], False, "v4")
+    d = ana["decisions"]
+    assert d["kpf13_1b_locus"] == "draft_path" and ana["configs"]["default"]["A"]["verdict"] == "FAIL"
+    # the fake carries no top-2 probabilities, so the divergence cannot be labelled a near-tie: not cleared
+    assert d["kpf13_1_dflash2_gpu"] == "INVESTIGATE" and d["spec_on_reproduces_v3"]["per_cell"]["g0-S2"] == "moved"
+
+
+def test_v4_decide_gpu_clause_outcomes():
+    nt = {"verdict": "FAIL", "runs": [{"verdict": "FAIL", "accept_ok": True, "first_divergence_near_tie": True,
+                                        "acceptance_drop": False, "first_divergence": 2}]}
+    ok = {"verdict": "PASS", "runs": [{"verdict": "PASS"}]}
+    runs = {("default_specoff", gs, a): ok for gs in list(m.V4_TARGET_CELLS) + m.V4_CHECK_CELLS for a in "AB"}
+    runs.update({("default", gs, a): ok for gs in list(m.V4_TARGET_CELLS) + m.V4_CHECK_CELLS for a in "AB"})
+    runs[("default", "g0-S2", "A")] = nt
+    d = m.decide_v4({}, runs, True)
+    assert d["kpf13_1_dflash2_gpu"] == "TARGET_RESTORE_FAITHFUL_DRAFT_PATH_NEAR_TIE"
+    assert d["kpf19_1_choice_dflash2"].startswith("keep load_dft") and d["spec_on_reproduces_v3"]["per_cell"]["g0-S2"] == "yes"
+    drop = {"verdict": "FAIL", "runs": [{"verdict": "FAIL", "accept_ok": False, "acceptance_drop": True}]}
+    runs[("default", "g1-S2", "A")] = drop
+    assert m.decide_v4({}, runs, True)["kpf13_1_dflash2_gpu"] == "DRAFT_PATH_ACCEPTANCE_DROP"
+    assert m.decide_v4({}, runs, False)["kpf13_1b_locus"] == "NOT_DECISION_GRADE"
+    del runs[("default_specoff", "g3-S1", "B")]
+    assert m.decide_v4({}, runs, True)["kpf13_1b_locus"] == "INCONCLUSIVE"       # a missing arm is not a pass
+
+
+def _cb_cell(sigs: dict) -> dict:
+    """sigs: CB name -> first token; every run otherwise identical."""
+    def r(t):
+        return run(tokens=[t] + list(range(1, N)))
+    ctl = {"CA1": r(5), "CB1": r(sigs["CB1"]), "CB2": r(sigs["CB2"]), "CB3": r(sigs["CB3"])}
+    pr = {k: r(sigs[k]) for k in ("CB_A_abs", "CB_A_pres", "CB_CA_pres", "CB_CA_abs")}
+    return {"controls": ctl, "order_probe": pr}
+
+
+def test_v4_cb_order_effect_classes():
+    base = dict(CB1=1, CB2=1, CB3=1, CB_A_abs=1, CB_A_pres=1, CB_CA_pres=1, CB_CA_abs=1)
+    assert m.cb_order_class(_cb_cell(base), True)["label"] == "none"
+    pred = dict(base, CB3=5, CB_CA_pres=5, CB_CA_abs=5)                     # every CB after a CA differs
+    co = m.cb_order_class(_cb_cell(pred), True)
+    assert co["label"] == "predecessor" and co["cb3_tokens_equal_ca1"] is True
+    slot = dict(base, CB3=7, CB_CA_pres=7, CB_A_pres=7)                      # every CB with slot 3 present differs
+    assert m.cb_order_class(_cb_cell(slot), True)["label"] == "slot3_presence"
+    assert m.cb_order_class(_cb_cell(dict(base, CB3=9)), True)["label"] == "other"
+    c = _cb_cell(base)
+    del c["order_probe"]["CB_CA_abs"]
+    assert m.cb_order_class(c, True)["label"] == "INVALID"
+
+
+def test_v4_gpu_clause_needs_two_nonzero_vram_samples_and_graphs_disabled():
+    assert m.gpu_clause_problems({"device": "cpu"}) == []
+    good = {"device": "gpu", "residency": {"kfd_vram_bytes_samples": [5 << 30, 5 << 30], "hip_graphs": "disabled"}}
+    assert m.gpu_clause_problems(good) == []
+    assert m.gpu_clause_problems({"device": "gpu"})
+    assert m.gpu_clause_problems({"device": "gpu", "residency": {"kfd_vram_bytes_samples": [5 << 30, 0],
+                                                                 "hip_graphs": "disabled"}})
+    assert m.gpu_clause_problems({"device": "gpu", "residency": {"kfd_vram_bytes_samples": [1, 1],
+                                                                 "hip_graphs": "enabled"}})
+
+
+def test_v4_gpu_cells_carry_own_pid_vram_samples_and_unproven_residency_is_invalid(tmp_path, monkeypatch):
+    vram = {"v": 48 << 30}
+    monkeypatch.setattr(m, "kfd_pids", lambda: {4242: vram["v"]})
+    ctx = make_ctx(tmp_path, None, argv=V4_ARGV + ["--device", "gpu", "--cpu-list", "184-191"])
+
+    class _Srv(FakeSrv):
+        class proc:
+            pid = 4242
+        readback = {"hip_graphs": "disabled"}
+    for cfg, cl in (("default_specoff", FakeClientSpecOff()), ("default", FakeClient())):
+        ctx.client = cl
+        if cfg == "default":
+            vram["v"] = 0          # the drafter-on server holds no VRAM: residency not proven
+        pl = m.Plan(ctx, cfg, ctx.results, False)
+        pl.srv = _Srv()
+        for st in pl.build():
+            if st.fn and ("sources" in st.desc or "cell g" in st.desc):
+                st.fn()
+    c = ctx.results["default_specoff"]["g0-S2-N64"]
+    assert c["residency"]["own_pid"] == 4242 and c["residency"]["kfd_vram_bytes_samples"] == [48 << 30] * 2
+    ana = m.analyze_results(ctx.results, set(), [64], False, "v4")
+    assert ana["configs"]["default_specoff"]["A"]["verdict"] == "PASS"
+    assert ana["configs"]["default"]["A"]["verdict"] == "INCONCLUSIVE"
+    assert ana["cells"]["default:g0-S2-N64"]["A"]["gpu_clause"]
+
+
+def test_v4_dry_run_gpu_plan_and_refusals(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(m.Server, "start", lambda self: None)
+    ps = make_prompt_set(tmp_path / "ps.jsonl")
+    base = ["run", "--out", str(tmp_path / "o"), "--cpu-list", "184-191", "--fork-bin", str(fake_bin(tmp_path)),
+            "--prompt-set", str(ps), "--device", "gpu", "--drafter", "dflash2", "--numa-membind", "3",
+            "--argv-file", str(m.HERE / "argv.gpu-27b-dflash2.txt"), "--dry-run"]
+    assert m.main(base + V4_ARGV + ["--draft-debug"]) == 0
+    out = capsys.readouterr().out
+    assert "rules=v4" in out and "--- launch default_specoff" in out and "--- launch default:" in out
+    assert out.count("cell g") == 12 and "speculation OFF: drafter flags removed" in out and "'-md'" in out
+    assert "--draft-debug: -lv 4" in out and "CB_A_abs" in out and "PREFLIGHT: inputs PASS" in out
+    assert out.index("--- launch default_specoff") < out.index("--- launch default:")
+    m.main(base + ["--rules", "v4", "--reduced", "--only-cells", "g0-S2"])
+    assert "rules v4 cells are predeclared" in capsys.readouterr().out
+    m.main(base + ["--rules", "v3", "--reduced", "--only-cells", "g0-S2"])
+    assert "--only-cells is a rules v4 option" in capsys.readouterr().out
+    m.main(base + ["--rules", "v4", "--only-cells", V4_CELLS])
+    assert "rules v4 (KPF-13.1b) runs on the --reduced preset" in capsys.readouterr().out
+
+
+def test_spec_off_server_strips_the_drafter_and_debug_log(tmp_path):
+    ctx = make_ctx(tmp_path, FakeClient(), argv=["--device", "gpu", "--cpu-list", "184-191", "--draft-debug"])
+    ctx.gate_argv, _ = m.load_argv_file(m.HERE / "argv.gpu-27b-dflash2.txt")
+    off = m.Server(ctx, "default_specoff", Path("/x/llama-server"))
+    assert "-md" not in off.argv and "-lv" not in off.argv and m.spec_off_problems(off.argv) == []
+    on = m.Server(ctx, "default", Path("/x/llama-server"))
+    assert "-md" in on.argv and on.argv[-2:] == ["-lv", "4"]
+
+
+def test_log_window_reads_only_appended_bytes_and_bisects_by_time(tmp_path):
+    ctx = make_ctx(tmp_path, FakeClient())
+    srv = m.Server(ctx, "default", Path("/x/llama-server"))
+    srv.log.parent.mkdir(parents=True, exist_ok=True)
+    fl = "slot fork: src = 3 (idle), kind = checkpoint, n_fork_tokens = 2048, task.n_tokens = 2050, t = 1.5 ms"
+    srv.log.write_text(f"10.0 a\n20.0 {fl}\n30.0 c\n")
+    assert srv.lines_between(19.8, 20.1) == [fl]
+    assert srv.fork_lines_between(19.8, 20.1)[0]["n_fork_tokens"] == 2048
+    with open(srv.log, "a") as fh:
+        fh.write("40.0 seq_id 1, draft candidate   0, pos   0:  777 (0.9) 'x'\n41.0 partial-no-newline")
+    assert srv.lines_between(39.9, 40.2) == ["seq_id 1, draft candidate   0, pos   0:  777 (0.9) 'x'"]
+    assert m.parse_first_draft(srv.lines_between(39.9, 40.2)) == [777]
+    assert len(srv.log_lines()) == 4 and srv.lines_between(100, 200) == []

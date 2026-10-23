@@ -50,6 +50,18 @@ WHAT IT DOES NOT MEASURE (recorded in every record)
     cell where even the informational cold-twin column is expected to agree bit-for-bit. Suffix index = position in
     --suffix-lens, so the default 1,128,2 keeps S=1 and S=128 on the same suffixes as the v1 runs.
 
+KPF-13.1b (rules v4, 2026-10-23, `--rules v4 --reduced --only-cells ...`): resolve the `investigate` outcome of the
+  DFlash2 GPU leg (v3 run /mnt/raid0/llm/tmp/f8-launchers-20261023/kpf13-1-reduced: 4 deterministic near-tie token
+  divergences, A g0/g1/g3-S2 and B g2-S1, no acceptance drop; control CB3 alone not reproducible). TWO launches of the
+  same image + argv + shim: `default_specoff` (the argv minus every drafter flag: target only) FIRST, then `default`
+  (drafter on, `--draft-debug` when the binary logs draft candidates). Per cell the v3 order plus an ORDER PROBE that
+  places CB controls after an A fork and after a CA, with the restore source (slot 3) present and erased:
+    W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 CA3 CB3 | A3 [erase 3] CB_A_abs [regen 3] A4 CB_A_pres CA4 CB_CA_pres [erase 3] CA5
+    CB_CA_abs [regen 3] | W2
+  A is judged against CA1..CA3, B against the controls of B's own condition (after an A fork, slot 3 erased): CB1, CB2,
+  CB_A_abs. Spec-off: A == CA ==> the target restore is clean and the v3 divergences are on the draft path; A != CA ==>
+  target-restore defect. RULES_V4 carries the GPU clause and the decisions.
+
 PREDECLARED RULES: RULES below is written to <out>/rules.json and run_meta.json with its sha256 BEFORE the first
 launch, and every verdict is a pure function of the stored cells (`analyze` recomputes it).
 
@@ -66,6 +78,7 @@ shape epyc.kpf.run.v1) are vendored minimally from scripts/benchmark/kpf18/kpf18
 from __future__ import annotations
 
 import argparse
+import bisect
 import hashlib
 import json
 import math
@@ -114,6 +127,9 @@ CONFIGS = {
              "knob": [b"--slot-fork-min-tokens", b"LLAMA_KPF_MUTATE", b"dft_partial_noop"], "plain_only": True},
     "full": {"label": "restore_dft_full", "mutate": None, "extra": ["--slot-fork-dft-full"], "arms": ("A",),
              "knob": [b"--slot-fork-min-tokens", b"--slot-fork-dft-full"], "plain_only": True},
+    # KPF-13.1b (rules v4): the default launch with speculation OFF (argv minus every drafter flag)
+    "default_specoff": {"label": "restore_default_spec_off", "mutate": None, "extra": [], "arms": ("A", "B"),
+                        "knob": [b"--slot-fork-min-tokens"], "plain_only": False, "spec_off": True},
 }
 
 N_GEN = 64
@@ -254,7 +270,84 @@ RULES_V3["decisions"]["decision_grade"] = ("true iff every judged held-out cell 
                                            "otherwise every other decision reads NOT_DECISION_GRADE"
                                            % MIN_CONTROL_REPEATS_V3)
 
-RULES_BY_VERSION = {"v2": RULES, "v3": RULES_V3}
+# Rules v4 (2026-10-23, handoff row KPF-13.1b): v3 has no GPU clause, and its `investigate` outcome cannot say whether the
+# 4 deterministic near-tie divergences of the DFlash2 GPU leg are a target-restore defect or a draft-path effect (DFlash2
+# drafts differ after a restore because the per-seq selector RNG is not carried; different drafts give different verify
+# batch shapes, which can move GPU target numerics across a near-tie). v4 adds the speculation-OFF discriminator, the
+# CB3 order probe and the GPU clause. v3 and its verdicts are not changed.
+V4_TARGET_CELLS = {"g0-S2": "A", "g1-S2": "A", "g3-S2": "A", "g2-S1": "B"}
+V4_CHECK_CELLS = ["g2-S2", "g3-S1"]
+V4_V3_FIRST_DIVERGENCE = {"g0-S2": 2, "g1-S2": 24, "g3-S2": 38, "g2-S1": 48}
+V4_GPU_NEAR_TIE_BAND = 0.031567   # measured twin-vs-control band of the v3 GPU run (VERDICT.json near_tie_band)
+V4_PROBE_KEYS = ("A3", "CB_A_abs", "A4", "CB_A_pres", "CA4", "CB_CA_pres", "CA5", "CB_CA_abs")
+V4_CB_CLASSES = {"A_abs": ("CB1", "CB2", "CB_A_abs"), "A_pres": ("CB_A_pres",), "CA_pres": ("CB3", "CB_CA_pres"),
+                 "CA_abs": ("CB_CA_abs",)}
+RULES_V4 = json.loads(json.dumps(RULES_V3))
+RULES_V4.update({
+    "schema": "epyc.kpf13.rules.v4",
+    "task": ("KPF-13.1b: resolve the `investigate` outcome of the KPF-13.1 DFlash2 GPU leg (rules v3 sha 7466b774..., "
+             "/mnt/raid0/llm/tmp/f8-launchers-20261023/kpf13-1-reduced/VERDICT.json): decide whether the 4 deterministic "
+             "near-tie divergences come from the target-side restore or from the draft path"),
+    "supersedes": ("nothing: rules v3 and its verdicts stand. v4 is a new predeclaration for a new run (v3 has no GPU "
+                   "clause and cannot locate a near-tie divergence)"),
+    "cells": {"target": V4_TARGET_CELLS, "check": V4_CHECK_CELLS, "v3_first_divergence": V4_V3_FIRST_DIVERGENCE,
+              "note": ("the 4 v3-failing cells (the arm that failed) plus 2 v3-passing cells as a check (S=2 and S=1, "
+                       "both arms PASS in v3); N 64, T 2048, groups/suffixes of the reduced preset")},
+    "launches": ("ONE driver run, two server launches of the same image, argv file and launch shim, in this order: "
+                 "default_specoff (the argv file minus every drafter flag: -md, -ngld, --spec-type, --spec-draft-n-max, "
+                 "--device-draft; the read-back refuses a /proc cmdline that still carries one) then default (drafter "
+                 "on; with --draft-debug, -lv 4 and the first draft block parsed, if the binary logs draft candidates)"),
+    "order": ("W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 CA3 CB3 (the v3 order, so the v3 conditions recur) then the ORDER PROBE "
+              "A3 [erase slot 3] CB_A_abs [regen slot 3] A4 CB_A_pres CA4 CB_CA_pres [erase slot 3] CA5 CB_CA_abs "
+              "[regen slot 3], then W2"),
+    "judged_controls": ("A: CA1, CA2, CA3. B: the controls of B's own condition (preceded by an A fork, restore source "
+                        "slot 3 erased, as B1/B2 run): CB1, CB2, CB_A_abs. CB3 (after CA3, slot 3 present) is NOT a judged "
+                        "control in v4; it and the other probe controls feed cb_order_effect only"),
+    "spec_off_judge": ("tokens only: an arm run must equal its judged controls on all 64 tokens; every run must report "
+                       "no speculation (draft_n 0 or absent, else INVALID: the drafter is still on); the judged controls "
+                       "must be token-identical among themselves (else INVALID)"),
+    "spec_on_judge": ("the v3 cell judge (tokens: agreement >= the smallest pairwise control agreement; acceptance within "
+                      "[min - spread, max + spread], spread pooled over this launch's judged controls) with the "
+                      "near-tie label at the fixed GPU band %g (the v3 GPU run's measured band)" % V4_GPU_NEAR_TIE_BAND),
+    "gpu_clause": [
+        "residency: every GPU cell carries two own-pid KFD VRAM samples taken DURING the cell (after A1 and after the "
+        "last request); a GPU cell with a missing or zero sample is INVALID (log text never proves residency)",
+        "HIP graphs: the server's /proc environ is read back; v4 requires graphs DISABLED (GGML_CUDA_DISABLE_GRAPHS set), "
+        "the state of the v3 run it is compared with; a GPU cell from a server with graphs enabled is INVALID",
+        "on GPU with the drafter ON, a deterministic token divergence at a near-tie with no acceptance drop is NOT by "
+        "itself a restore failure: the target verifies drafts in batches whose shape follows the draft, so the "
+        "speculation-OFF launch decides the locus (kpf13_1b_locus); with no spec-off result the spec-on outcome stays "
+        "`investigate`",
+        "near-tie band on GPU = %g (fixed, predeclared), never re-derived from this run" % V4_GPU_NEAR_TIE_BAND,
+    ],
+    "decisions_v4": {
+        "kpf13_1b_locus": ("from default_specoff over all 6 cells and both arms: target_restore_defect iff any valid arm "
+                           "run FAILS (the fork differs from token-identical no-fork controls with no drafter loaded); "
+                           "draft_path iff every arm of every cell PASSES; INCONCLUSIVE otherwise"),
+        "spec_on_reproduces_v3": ("from default, per target cell: the target arm FAILS at the v3 first-divergence "
+                                  "position -> yes; FAILS elsewhere -> moved; PASSES -> no. Overall: yes iff 4/4 yes"),
+        "cb_order_effect": ("per launch and cell, over the CB classes A_abs (CB1, CB2, CB_A_abs), A_pres (CB_A_pres), "
+                            "CA_pres (CB3, CB_CA_pres), CA_abs (CB_CA_abs), comparing tokens (spec on: and draft "
+                            "counts): none (all equal) | predecessor (uniform within {after A}, {after CA}, differing "
+                            "across) | slot3_presence (uniform within {slot 3 erased}, {present}, differing across) | "
+                            "other | INVALID. Launch label: none, the one shared label, or mixed"),
+        "first_draft": ("default only, when the first draft block was logged for both A1 and CA1: count of cells "
+                        "where they differ. Diagnostic, never a verdict"),
+        "kpf13_1_dflash2_gpu": ("target_restore_defect -> RESTORE_DEFECT_TARGET_SIDE. draft_path and every spec-on FAIL "
+                                "in default is tokens-only, near-tie at the GPU band and without an acceptance drop -> "
+                                "TARGET_RESTORE_FAITHFUL_DRAFT_PATH_NEAR_TIE. draft_path with a spec-on acceptance drop "
+                                "beyond the spread -> DRAFT_PATH_ACCEPTANCE_DROP (the #30141 trigger question). "
+                                "Otherwise INVESTIGATE"),
+        "kpf19_1_choice_dflash2": ("TARGET_RESTORE_FAITHFUL_DRAFT_PATH_NEAR_TIE -> keep load_dft (full drafter KV through "
+                                   "the fork), no re-prefill: the divergence is the un-carried selector RNG "
+                                   "(restore_does_not_carry), not drafter KV. RESTORE_DEFECT_TARGET_SIDE -> neither "
+                                   "(the defect is not in the drafter). Otherwise undecided"),
+        "decision_grade": "true iff every judged cell carries 3 judged controls per arm in both launches",
+    },
+})
+RULES_V4["decisions"] = dict(RULES_V3["decisions"])
+
+RULES_BY_VERSION = {"v2": RULES, "v3": RULES_V3, "v4": RULES_V4}
 
 
 def rules_for(version: str = "v2") -> dict:
@@ -843,6 +936,174 @@ def cell_id(g: int, S: int, N: int | None) -> str:
     return f"g{g}-S{S}" + (f"-N{N}" if N is not None else "")
 
 
+def gs_of(cell: dict) -> str:
+    return f"g{cell.get('group')}-S{cell.get('suffix_len')}"
+
+
+def v4_judged_cell(c: dict) -> dict:
+    """The kpf13 cell shape with v4's judged controls: CA1..CA3; CB1, CB2 and the probe's CB_A_abs as CB3."""
+    ctl = c.get("controls") or {}
+    pr = c.get("order_probe") or {}
+    judged = {k: ctl[k] for k in ("CA1", "CA2", "CA3") if ctl.get(k)}
+    for i, r in enumerate((ctl.get("CB1"), ctl.get("CB2"), pr.get("CB_A_abs"))):
+        if r:
+            judged[f"CB{i + 1}"] = r
+    return {**c, "controls": judged}
+
+
+def gpu_clause_problems(c: dict) -> list[str]:
+    if c.get("device") != "gpu":
+        return []
+    res = c.get("residency") or {}
+    samples = res.get("kfd_vram_bytes_samples") or []
+    out = []
+    if len(samples) < 2 or any((v or 0) <= 0 for v in samples):
+        out.append(f"GPU residency not proven: own-pid KFD VRAM samples {samples}")
+    if res.get("hip_graphs") != "disabled":
+        out.append(f"HIP graphs {res.get('hip_graphs')!r}: v4 compares graphs-DISABLED runs only")
+    return out
+
+
+def cb_order_class(c: dict, spec_off: bool) -> dict:
+    ctl = c.get("controls") or {}
+    pr = c.get("order_probe") or {}
+    pool = {**ctl, **pr}
+
+    def sig(r):
+        t = tuple((r.get("tokens") or [])[:N_GEN])
+        return t if spec_off else (t, r.get("draft_n"), r.get("draft_n_accepted"))
+    classes: dict[str, list] = {}
+    for name, keys in V4_CB_CLASSES.items():
+        runs = [pool.get(k) for k in keys]
+        if any(r is None or r.get("error") or len(r.get("tokens") or []) < N_GEN for r in runs):
+            return {"label": "INVALID", "reason": f"class {name} incomplete"}
+        classes[name] = [sig(r) for r in runs]
+    allv = [v for vs in classes.values() for v in vs]
+    if all(v == allv[0] for v in allv):
+        return {"label": "none"}
+
+    def split(a: list, b: list) -> bool:
+        return len(set(a)) == 1 and len(set(b)) == 1 and a[0] != b[0]
+    after_a, after_ca = classes["A_abs"] + classes["A_pres"], classes["CA_pres"] + classes["CA_abs"]
+    absent, present = classes["A_abs"] + classes["CA_abs"], classes["A_pres"] + classes["CA_pres"]
+    if split(after_a, after_ca):
+        lab = "predecessor"
+    elif split(absent, present):
+        lab = "slot3_presence"
+    else:
+        lab = "other"
+    cb3_vs_ca1 = None
+    if ctl.get("CB3") and ctl.get("CA1"):
+        cb3_vs_ca1 = (ctl["CB3"].get("tokens") or [])[:N_GEN] == (ctl["CA1"].get("tokens") or [])[:N_GEN]
+    return {"label": lab, "distinct_per_class": {k: len(set(v)) for k, v in classes.items()},
+            "cb3_tokens_equal_ca1": cb3_vs_ca1}
+
+
+def analyze_v4(results: dict) -> dict:
+    """Rules v4 (KPF-13.1b), pure: {config: {cell_id: cell}} -> per-launch verdicts and the v4 decisions."""
+    out: dict = {"rules": "v4", "rules_sha256": rules_sha256("v4"), "configs": {}, "cells": {},
+                 "acceptance_spread": {}, "n_selection": {"N": 64, "n_selected_by_default": None},
+                 "near_tie_band": {"band": V4_GPU_NEAR_TIE_BAND, "fixed": True}, "cb_order_effect": {}}
+    arm_runs: dict = {}
+    grade_ks: list[int] = []
+    for cfg, cells in results.items():
+        spec_off = bool(CONFIGS.get(cfg, {}).get("spec_off"))
+        jc = {cid: v4_judged_cell(c) for cid, c in cells.items() if c.get("ok", True)}
+        sp = acceptance_spread(list(jc.values()), spec_off=spec_off)
+        out["acceptance_spread"][cfg] = sp
+        slack = (0, 0) if spec_off else (sp["spread_dn"], sp["spread_da"])
+        per_arm: dict[str, list] = {"A": [], "B": []}
+        orders: dict[str, int] = {}
+        for cid, c in sorted(jc.items()):
+            T, N, S = c.get("T"), c.get("N"), c.get("suffix_len")
+            gp = gpu_clause_problems(c)
+            rec: dict = {"gs": gs_of(c), "spec_off": spec_off}
+            for arm, runs, exp in (("A", [c["runs"].get("A1"), c["runs"].get("A2")], T),
+                                   ("B", [c["runs"].get("B1"), c["runs"].get("B2")],
+                                    (T - N) if T is not None and N is not None else None)):
+                v = cell_arm_verdict(controls_of(c, arm), runs, exp, kind="control",
+                                     ref_expect=control_expect(T, N, S, arm), band=V4_GPU_NEAR_TIE_BAND, slack=slack,
+                                     spec_off=spec_off, identical_refs=spec_off)
+                if gp:
+                    v = {**v, "verdict": "INVALID", "gpu_clause": gp}
+                rec[arm] = v
+                per_arm[arm].append(v)
+                grade_ks.append(len(controls_of(c, arm)))
+                arm_runs[(cfg, gs_of(c), arm)] = v
+            pr = c.get("order_probe") or {}
+            a1 = c["runs"].get("A1")
+            rec["A_repeats_equal_A1"] = [same_run(pr[k], a1) for k in ("A3", "A4") if pr.get(k) and a1]
+            co = cb_order_class(c, spec_off)
+            rec["cb_order_effect"] = co
+            orders[co["label"]] = orders.get(co["label"], 0) + 1
+            if not spec_off:
+                fa = (a1 or {}).get("first_draft")
+                fc = ((c.get("controls") or {}).get("CA1") or {}).get("first_draft")
+                rec["first_draft_A1_vs_CA1"] = ("unobservable" if not fa or not fc else
+                                                ("equal" if fa == fc else "differ"))
+            out["cells"][f"{cfg}:{cid}"] = rec
+        non_none = sorted(k for k in orders if k != "none")
+        label = ("none" if not non_none else non_none[0] if len(non_none) == 1 else "mixed")
+        out["cb_order_effect"][cfg] = {"label": label, "counts": orders}
+        out["configs"][cfg] = {"A": arm_verdict(per_arm["A"]) if per_arm["A"] else None,
+                               "B": arm_verdict(per_arm["B"]) if per_arm["B"] else None}
+    out["decisions"] = decide_v4(out, arm_runs, bool(grade_ks) and min(grade_ks) >= MIN_CONTROL_REPEATS_V3)
+    return out
+
+
+def decide_v4(ana: dict, arm_runs: dict, grade: bool) -> dict:
+    d: dict = {"decision_grade": grade}
+    so = [v for (cfg, _gs, _a), v in arm_runs.items() if cfg == "default_specoff"]
+    if not so:
+        d["kpf13_1b_locus"] = "NOT_RUN"
+    elif any(v["verdict"] == "FAIL" for v in so):
+        d["kpf13_1b_locus"] = "target_restore_defect"
+    elif all(v["verdict"] == "PASS" for v in so) and len(so) == 2 * (len(V4_TARGET_CELLS) + len(V4_CHECK_CELLS)):
+        d["kpf13_1b_locus"] = "draft_path"
+    else:
+        d["kpf13_1b_locus"] = "INCONCLUSIVE"
+    d["kpf13_1b_locus_failing"] = sorted(f"{gs}:{a}" for (cfg, gs, a), v in arm_runs.items()
+                                         if cfg == "default_specoff" and v["verdict"] == "FAIL")
+    rep_: dict = {}
+    for gs, arm in V4_TARGET_CELLS.items():
+        v = arm_runs.get(("default", gs, arm))
+        if v is None:
+            rep_[gs] = "NOT_RUN"
+            continue
+        pos = sorted({j.get("first_divergence") for j in v.get("runs", []) if j.get("verdict") == "FAIL"} - {None})
+        rep_[gs] = ("no" if v["verdict"] == "PASS" else
+                    "yes" if v["verdict"] == "FAIL" and pos == [V4_V3_FIRST_DIVERGENCE[gs]] else
+                    "moved" if v["verdict"] == "FAIL" else v["verdict"])
+    d["spec_on_reproduces_v3"] = {"per_cell": rep_, "overall": "yes" if all(x == "yes" for x in rep_.values()) else
+                                  "no" if all(x == "no" for x in rep_.values()) else "partial"}
+    d["cb_order_effect"] = {cfg: v["label"] for cfg, v in ana.get("cb_order_effect", {}).items()}
+    fd = [c.get("first_draft_A1_vs_CA1") for k, c in ana.get("cells", {}).items() if k.startswith("default:")]
+    d["first_draft_A1_vs_CA1"] = {"differ": fd.count("differ"), "equal": fd.count("equal"),
+                                  "unobservable": fd.count("unobservable")}
+    on = [v for (cfg, _gs, _a), v in arm_runs.items() if cfg == "default"]
+    on_fail_runs = [j for v in on for j in v.get("runs", []) if j.get("verdict") == "FAIL"]
+    if d["kpf13_1b_locus"] == "target_restore_defect":
+        g = "RESTORE_DEFECT_TARGET_SIDE"
+    elif d["kpf13_1b_locus"] == "draft_path" and on:
+        if any(j.get("acceptance_drop") for j in on_fail_runs):
+            g = "DRAFT_PATH_ACCEPTANCE_DROP"
+        elif all(j.get("accept_ok") and j.get("first_divergence_near_tie") for j in on_fail_runs) and \
+                not any(v["verdict"] == "INVALID" for v in on):
+            g = "TARGET_RESTORE_FAITHFUL_DRAFT_PATH_NEAR_TIE"
+        else:
+            g = "INVESTIGATE"
+    else:
+        g = "INVESTIGATE" if d["kpf13_1b_locus"] == "draft_path" else "INCONCLUSIVE"
+    d["kpf13_1_dflash2_gpu"] = g
+    d["kpf19_1_choice_dflash2"] = (
+        "keep load_dft (full drafter KV through the fork), no re-prefill" if g == "TARGET_RESTORE_FAITHFUL_DRAFT_PATH_NEAR_TIE"
+        else "neither: the defect is target-side" if g == "RESTORE_DEFECT_TARGET_SIDE" else "undecided")
+    if not grade:
+        for k in ("kpf13_1b_locus", "kpf13_1_dflash2_gpu", "kpf19_1_choice_dflash2"):
+            d[k] = "NOT_DECISION_GRADE"
+    return d
+
+
 def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plain_drafter: bool = True,
                     rules: str = "v2") -> dict:
     """results: {config: {cell_id: cell}} where cell = {"group","suffix_len","N","T","twins":{"W1","W2"},
@@ -850,6 +1111,8 @@ def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plai
     controls (RULES v2); the cold twins (inherited through `twins_from` across the N sweep) give the informational
     `*_vs_twin` column. Non-default launches judge A against their own controls, and their own W1 against the DEFAULT
     launch's twins of the same (group, suffix_len) as the launch-variance check."""
+    if rules == "v4":
+        return analyze_v4(results)
     dflt = results.get("default", {})
 
     def twins_of(cell: dict, cells: dict) -> list[dict]:
@@ -1284,11 +1547,40 @@ class Server:
                 fh.write(b"%.3f " % time.time() + line)
                 fh.flush()
 
-    def log_lines(self) -> list[str]:
+    def _log_refresh(self) -> None:
+        """Read only the bytes appended since the last call (a -lv 4 log grows to many MB; every request reads it)."""
+        if not hasattr(self, "_log_cache"):
+            self._log_cache, self._log_ts, self._log_off = [], [], 0
         try:
-            return self.log.read_text(errors="replace").splitlines()
+            with open(self.log, "rb") as fh:
+                fh.seek(self._log_off)
+                data = fh.read()
         except OSError:
-            return []
+            return
+        cut = data.rfind(b"\n") + 1
+        if not cut:
+            return
+        last = self._log_ts[-1] if self._log_ts else 0.0
+        for ln in data[:cut].decode(errors="replace").splitlines():
+            try:
+                last = float(ln.partition(" ")[0])
+            except ValueError:
+                pass
+            self._log_cache.append(ln)
+            self._log_ts.append(last)
+        self._log_off += cut
+
+    def log_lines(self) -> list[str]:
+        self._log_refresh()
+        return list(getattr(self, "_log_cache", []))
+
+    def _window(self, t0: float, t1: float):
+        self._log_refresh()
+        ts = getattr(self, "_log_ts", [])
+        i = bisect.bisect_left(ts, t0 - 0.5)
+        while i < len(ts) and ts[i] <= t1 + 0.5:
+            yield self._log_cache[i]
+            i += 1
 
     def read_back(self) -> dict:
         txt = "\n".join(self.log_lines())
@@ -1357,7 +1649,7 @@ class Server:
 
     def fork_lines_between(self, t0: float, t1: float) -> list[dict]:
         out = []
-        for ln in self.log_lines():
+        for ln in self._window(t0, t1):
             ts, _, rest = ln.partition(" ")
             try:
                 t = float(ts)
@@ -1372,7 +1664,7 @@ class Server:
 
     def lines_between(self, t0: float, t1: float) -> list[str]:
         out = []
-        for ln in self.log_lines():
+        for ln in self._window(t0, t1):
             ts, _, rest = ln.partition(" ")
             try:
                 t = float(ts)
@@ -1509,6 +1801,8 @@ class Plan:
                                                               or not (g in a.dev_groups and has_b))]
                     if self.pending_only and done:
                         continue
+                    if a.only_cells and (g, S) not in a.only_cells:
+                        continue
                     todo.append((g, S, N))
         if not todo:
             return []
@@ -1539,6 +1833,10 @@ class Plan:
                     est += (2 + extra) * (self.est_req(T - n_est, 0) + self.est_req(n_est + S))  # CB: seed T-N, then P
                 est += (18 + 6 * extra if has_b else 9 + 3 * extra) * ctx.rates.req
                 more = "".join(f" CA{k}" + (f" CB{k}" if has_b else "") for k in range(3, a.control_repeats + 1))
+                if a.rules == "v4" and has_b:   # the order probe: 2 A children, 4 CB and 2 CA controls, 2 regens
+                    est += 2 * self.est_req(S) + 4 * (self.est_req(T - n_est, 0) + self.est_req(n_est + S))
+                    est += 2 * (ca_seed + self.est_req(S)) + 2 * self.est_req(n_est, 0) + 16 * ctx.rates.req
+                    more += " | A3 CB_A_abs A4 CB_A_pres CA4 CB_CA_pres CA5 CB_CA_abs |"
                 steps.append(Step(f"[{self.cfg_name}] cell g{g} S={S} N={N}: "
                                   + (f"W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2{more} W2" if has_b else f"W1 CA1 A1 CA2 A2{more}"),
                                   est, lambda g=g, S=S, N=N: self._cell(g, S, N)))
@@ -1625,7 +1923,18 @@ class Plan:
         cell = {"cell": cid, "group": g, "suffix_len": S, "N": N, "T": T, "config": self.cfg_name,
                 "prompt_sha256": sha256_json(P), "runs": {}, "twins": {}, "controls": {}, "ok": False,
                 "start_utc": now_iso(), "rules_schema": rules_for(ctx.args.rules)["schema"],
-                "control_repeats": ctx.args.control_repeats}
+                "control_repeats": ctx.args.control_repeats, "device": ctx.args.device,
+                "spec_off": bool(self.cfg.get("spec_off"))}
+
+        def residency_sample() -> None:
+            """Own-pid KFD VRAM sampled DURING the cell (rules v4 GPU clause; never log text)."""
+            pid = getattr(getattr(self.srv, "proc", None), "pid", None)
+            if ctx.args.device != "gpu" or pid is None:
+                return
+            r = cell.setdefault("residency", {"own_pid": pid, "kfd_vram_bytes_samples": [], "sampled_utc": [],
+                                              "hip_graphs": (getattr(self.srv, "readback", None) or {}).get("hip_graphs")})
+            r["kfd_vram_bytes_samples"].append(kfd_pids().get(pid, 0))
+            r["sampled_utc"].append(now_iso())
         # twins are N-independent: reuse the first N's twins for the same (g, S) in the default launch
         reuse = None
         if has_b:
@@ -1667,6 +1976,7 @@ class Plan:
         if has_b:
             cell["controls"]["CA1"] = control("CA1", ca_seeds)
             cell["runs"]["A1"] = child("A1")                      # restore: source 3 (trunk, T) is the longest candidate
+            residency_sample()
             self.erase((3,))                                      # B must fork from slot 0 (trunk[:T-N]) only
             cell["controls"]["CB1"] = control("CB1", cb_seeds)
             cell["runs"]["B1"] = child("B1")
@@ -1680,6 +1990,20 @@ class Plan:
             for k in range(3, ctx.args.control_repeats + 1):     # rules v3: K >= 3 same-shape control repeats
                 cell["controls"][f"CA{k}"] = control(f"CA{k}", ca_seeds)
                 cell["controls"][f"CB{k}"] = control(f"CB{k}", cb_seeds)
+            if ctx.args.rules == "v4":                             # rules v4 ORDER PROBE (KPF-13.1b, the CB3 effect)
+                pr = cell["order_probe"] = {}
+                pr["A3"] = child("A3")                            # an A fork, restore source present
+                self.erase((3,))
+                pr["CB_A_abs"] = control("CB_A_abs", cb_seeds)   # after A, slot 3 erased (= CB1/CB2's condition)
+                self._regen_source3(g, N)
+                pr["A4"] = child("A4")
+                pr["CB_A_pres"] = control("CB_A_pres", cb_seeds)  # after A, slot 3 present
+                pr["CA4"] = control("CA4", ca_seeds)
+                pr["CB_CA_pres"] = control("CB_CA_pres", cb_seeds)  # after CA, slot 3 present (= CB3's condition)
+                self.erase((3,))
+                pr["CA5"] = control("CA5", ca_seeds)
+                pr["CB_CA_abs"] = control("CB_CA_abs", cb_seeds)  # after CA, slot 3 erased
+                self._regen_source3(g, N)
             if not reuse:
                 cell["twins"]["W2"] = twin("W2")
         else:
@@ -1689,6 +2013,7 @@ class Plan:
             cell["runs"]["A2"] = child("A2")
             for k in range(3, ctx.args.control_repeats + 1):
                 cell["controls"][f"CA{k}"] = control(f"CA{k}", ca_seeds)
+        residency_sample()
         # fork designed positions (validated again by the judge; recorded here for the rows)
         cell["expect"] = {"A": T, "B": (T - N) if has_b else None,
                           "CA": control_expect(T, N, S, "A"), "CB": control_expect(T, N, S, "B") if has_b else None}
@@ -1706,9 +2031,12 @@ class Plan:
         ctx, srv = self.ctx, self.srv
         a = ctx.args
         cells = dict(self.results)
-        ana = analyze_results({self.cfg_name: cells, **({"default": ctx.results.get("default", {})}
-                                                        if self.cfg_name != "default" else {})},
-                              set(a.dev_groups), a.n_list, a.drafter == "plain-mtp", a.rules)
+        if a.rules == "v4":
+            ana = analyze_v4({k: dict(v) for k, v in ctx.results.items()})
+        else:
+            ana = analyze_results({self.cfg_name: cells, **({"default": ctx.results.get("default", {})}
+                                                            if self.cfg_name != "default" else {})},
+                                  set(a.dev_groups), a.n_list, a.drafter == "plain-mtp", a.rules)
         sums = [r for c in cells.values() for r in c.get("runs", {}).values()]
         rec = {
             "schema": SCHEMA, "kpf_task": TASK, "run_id": f"kpf13-{self.cfg_name}-{utc_tag()}",
@@ -1741,7 +2069,11 @@ class Plan:
             "start_utc": ctx.start_utc, "end_utc": now_iso(), "host": ctx.host,
             "rules": a.rules, "rules_sha256": rules_sha256(a.rules), "control_repeats": a.control_repeats,
             "restore_does_not_carry": RULES["restore_does_not_carry"],
-            "first_draft_observable": a.draft_debug,
+            "first_draft_observable": a.draft_debug and not self.cfg.get("spec_off"),
+            "spec_off": bool(self.cfg.get("spec_off")),
+            "drafter_flags_removed": getattr(srv, "drafter_removed", None) if srv else None,
+            "cb_order_effect": (ana.get("cb_order_effect") or {}).get(self.cfg_name),
+            "only_cells": [f"g{g}-S{S}" for g, S in a.only_cells] or None,
             "residency": {"linkage": srv.linkage if srv else None, "stop": srv.stop_rec if srv else None,
                           "device": a.device, "cpu_list": a.cpu_list},
             "cells_dir": str(ctx.out / "cells" / self.cfg_name), "rows": str(self.rows.path),
@@ -1837,12 +2169,30 @@ def preflight(args, ps: PromptSet | None, gate_argv: list[str]) -> tuple[list[st
         probs.append("dev and eval groups overlap (N must be chosen on held-out prompts)")
     if args.control_repeats < 2:
         probs.append(f"--control-repeats {args.control_repeats} < 2")
-    if args.rules == "v3" and args.control_repeats < MIN_CONTROL_REPEATS_V3:
+    if args.rules in ("v3", "v4") and args.control_repeats < MIN_CONTROL_REPEATS_V3:
         probs.append(f"rules v3 need --control-repeats >= {MIN_CONTROL_REPEATS_V3} (got {args.control_repeats})")
     if args.with_skip and args.drafter != "plain-mtp":
         probs.append("--with-skip is plain-drafter only (an SWA drafter always keeps load_dft; 13.1a is NOT_MEASURED)")
     if args.numa_membind is not None and args.device != "gpu":
         probs.append("--numa-membind is the GPU launch prefix only")
+    if args.rules == "v4":
+        if not args.reduced:
+            probs.append("rules v4 (KPF-13.1b) runs on the --reduced preset")
+        want = {(int(k.split("-")[0][1:]), int(k.split("-")[1][1:])) for k in list(V4_TARGET_CELLS) + V4_CHECK_CELLS}
+        if set(args.only_cells) != want:
+            probs.append(f"rules v4 cells are predeclared: --only-cells {','.join(sorted(V4_TARGET_CELLS) + V4_CHECK_CELLS)}")
+        if args.with_skip:
+            probs.append("rules v4 runs default_specoff + default only (no --with-skip)")
+    elif args.only_cells:
+        probs.append("--only-cells is a rules v4 option")
+    for g, S in args.only_cells:
+        if g not in args.dev_groups + args.eval_groups or S not in args.suffix_lens:
+            probs.append(f"--only-cells g{g}-S{S} is not a cell of this run")
+    if any(CONFIGS.get(c, {}).get("spec_off") for c in args.configs):
+        off, removed = strip_drafter(gate_argv)
+        probs += spec_off_problems(off)
+        if "-md" not in removed and "--model-draft" not in removed:
+            probs.append("speculation OFF: the argv file carries no -md to remove")
     if not args.eval_groups:
         probs.append("no eval groups")
     return probs, notes
@@ -1908,9 +2258,14 @@ def parse_args(argv=None):
     ap.add_argument("--numa-membind", type=int, default=None,
                     help="GPU: prefix numactl --membind=N -- (the production :8083 launch prefix uses 3)")
     ap.add_argument("--verdict-out", default=None, help="analyze: write the verdict here instead of <out>/verdict.json")
+    ap.add_argument("--only-cells", default="",
+                    help="rules v4: comma list of gG-SS cells (the predeclared KPF-13.1b set g0-S2,g1-S2,g2-S1,g3-S2,"
+                         "g2-S2,g3-S1)")
     args = ap.parse_args(argv)
     if args.control_repeats is None:
-        args.control_repeats = MIN_CONTROL_REPEATS_V3 if args.rules == "v3" else 2
+        args.control_repeats = MIN_CONTROL_REPEATS_V3 if args.rules in ("v3", "v4") else 2
+    args.only_cells = [(int(x.strip().split("-")[0][1:]), int(x.strip().split("-")[1][1:]))
+                       for x in args.only_cells.split(",") if x.strip()]
     args.configs = [c.strip() for c in args.configs.split(",") if c.strip()]
     args.suffix_lens = [int(x) for x in args.suffix_lens.split(",") if x.strip()]
     args.n_list = [int(x) for x in args.n_list.split(",") if x.strip()]
@@ -1922,6 +2277,8 @@ def parse_args(argv=None):
         args.suffix_lens = [1, 128, 2]
         if args.with_skip:
             args.configs = ["default", "skip"]
+        if args.rules == "v4":
+            args.configs = ["default_specoff", "default"]   # the discriminator first
     return args
 
 
@@ -1963,6 +2320,10 @@ def print_plan(ctx: Ctx, plans: list[tuple[str, list[Step]]], probs: list[str], 
         s = sum(x.est_s for x in steps)
         total += s
         print(f"--- launch {cfg}: {len(steps)} steps, est {fmt_s(s)}")
+        if CONFIGS.get(cfg, {}).get("spec_off"):
+            print(f"   speculation OFF: drafter flags removed {strip_drafter(ctx.gate_argv)[1]}")
+        elif ctx.args.draft_debug:
+            print("   --draft-debug: -lv 4, first draft block parsed per request")
         for st in steps:
             print(f"   [{fmt_s(st.est_s):>7}] {st.desc}")
     q = ctx.args.cpu_list and cpu_threads(ctx.args.cpu_list)
