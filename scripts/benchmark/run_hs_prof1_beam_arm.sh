@@ -49,6 +49,10 @@ CLOUD_JUDGE="${CLOUD_JUDGE:-sonnet-low}"
 JUDGE_WORKERS="${JUDGE_WORKERS:-2}"
 JUDGE_MODEL="${JUDGE_MODEL:-gemma-4-26B-A4B-it-ORIG-Q8_0}"
 ARMS=(pref_current admission)
+# SCOPE (2026-10-23 fix): run_benchmark.py with no --model iterates EVERY registry role (64) and, with no --suite, every suite that role maps to; with
+# --existing-server-port the same resident server answers each, so a 2-arm reader phase became ~64 mislabelled roles x 80 items. Pin ONE reader role + the beam suite.
+READER_ROLE="${READER_ROLE:-qwen36_35b_a3b_mtp_q8_local}"
+READER_SUITE="${READER_SUITE:-beam}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$OUT_DIR"
 
@@ -75,7 +79,7 @@ if [[ "$PHASE" == "reader" ]]; then
     prove_port "$READER_PORT" "$READER_PID"            # again per arm: the server must still be ours
     BEAM_CONTEXT_MODE=profile BEAM_PROFILE_SNAPSHOTS="$OUT_DIR/snapshots_${arm}.json" BEAM_PROFILE_ARM="$arm" \
     BEAM_ABILITIES=preference_following,instruction_following \
-    "$PY" run_benchmark.py --suite beam --server-mode --existing-server-port "$READER_PORT" \
+    "$PY" run_benchmark.py --model "$READER_ROLE" --suite "$READER_SUITE" --server-mode --existing-server-port "$READER_PORT" \
       --skip-moe-reduction --skip-speed-tests --new-run 2>&1 | tee "$OUT_DIR/arm_${arm}.log"
     run_id="$(sed -nE 's/^New run: (.+)$/\1/p' "$OUT_DIR/arm_${arm}.log" | head -1)"
     [[ -n "$run_id" ]] || { echo "could not read the run id from arm_${arm}.log" >&2; exit 5; }
@@ -141,6 +145,10 @@ if _rb.canonical_preflight_skip_reason(type("A", (), {"skip_preflight": False, "
     sys.exit("preflight: run_benchmark would run the CPU canonical preflight with --existing-server-port")
 print(f"preflight ok: py={sys.executable} pyarrow={pyarrow.__version__} questions={n} conversations={len(ad._transcripts)} tree={here}")
 PYEOF
+  # scope proof (no server): the dry-run must enumerate exactly ONE role and ONE suite
+  scope="$(EPYC_ORCH_ROOT="$EPYC_ORCH_ROOT" BEAM_ABILITIES=preference_following,instruction_following "$PY" run_benchmark.py --model "$READER_ROLE" --suite "$READER_SUITE" --server-mode --existing-server-port "${READER_PORT:-18977}" --skip-moe-reduction --skip-speed-tests --dry-run 2>&1 || true)"
+  grep -q ' 1 roles ' <<<"$scope" && grep -q '(1 configs × 1 suites)' <<<"$scope" || { echo "BLOCKED: reader scope is not exactly 1 role x 1 suite (role=$READER_ROLE suite=$READER_SUITE):" >&2; echo "$scope" | tail -8 >&2; exit 5; }
+  echo "$scope" | grep -E 'tests pending' >&2
   EPYC_ORCH_ROOT="$EPYC_ORCH_ROOT" "$PY" -c 'import sys; sys.argv=["run_benchmark.py","--help"]; sys.path.insert(0,"."); import run_benchmark' >/dev/null 2>&1 \
     || { echo "BLOCKED: run_benchmark.py not importable under PY=$PY" >&2; exit 5; }
 elif [[ "$PHASE" == "judge" ]]; then
