@@ -41,6 +41,10 @@ case "$HELP_TXT" in
 esac
 
 export LD_LIBRARY_PATH="$BUILD/bin"
+# GPS-PIN-2: ROCr widens every thread past the taskset below unless this is 0.
+export HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0
+PIN_CPUS=184-191
+AFFINITY_CLI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/kernel_rnd/autokernel/loop/launch_affinity.py"
 
 SRV_PID=""
 cleanup() {
@@ -56,13 +60,19 @@ trap cleanup EXIT
 
 start_server() {  # start_server <arm> <extra flags...>
     local arm="$1"; shift
-    taskset -c 184-191 "$BUILD/bin/llama-server" \
+    taskset -c "$PIN_CPUS" "$BUILD/bin/llama-server" \
         -m "$TARGET" -np 1 -c 4096 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 \
         --device ROCm0 -ngl 99 -fa on --host 127.0.0.1 --port $PORT --metrics --slots \
         "$@" > "$OUT/server-$arm.stdout" 2> "$OUT/server-$arm.stderr" &
     SRV_PID=$!
     for _ in $(seq 1 120); do
-        curl -sf "http://127.0.0.1:$PORT/health" > /dev/null 2>&1 && return 0
+        if curl -sf "http://127.0.0.1:$PORT/health" > /dev/null 2>&1; then
+            # Layer 2: re-pin strays of our own child; any residual escape refuses the arm.
+            /usr/bin/python3 "$AFFINITY_CLI" --enforce "$SRV_PID" "$PIN_CPUS" --json \
+                > "$OUT/affinity-$arm.json" \
+                || { echo "REFUSE($arm): tasks escape taskset $PIN_CPUS — see $OUT/affinity-$arm.json" >&2; return 6; }
+            return 0
+        fi
         kill -0 "$SRV_PID" 2>/dev/null || { echo "REFUSE($arm): server died during load — see $OUT/server-$arm.stderr" >&2; return 3; }
         sleep 2
     done

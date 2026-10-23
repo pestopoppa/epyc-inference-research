@@ -36,6 +36,7 @@ WT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(WT / "scripts/kernel_rnd"))
 sys.path.insert(0, str(WT / "scripts/benchmark"))
 from autokernel.loop import claim, residency  # noqa: E402
+from autokernel.loop import launch_affinity as la  # noqa: E402
 import belief_capture  # noqa: E402
 
 ORCH = Path("/workspace/repos/epyc-orchestrator")
@@ -91,30 +92,39 @@ class Server:
         env.pop("HSA_OVERRIDE_GFX_VERSION", None)
         env.pop("GGML_NOHUGEPAGE_PROCESS", None)
         env["LD_LIBRARY_PATH"] = f"{V9}:/opt/rocm/lib"
+        la.apply_pinned_launch_env(env, self.argv)   # layer 1
+        self.affinity = None
         self.sampler = residency.Sampler(interval=1.0).__enter__()
         self.err = self.log.open("ab")
         self.proc = subprocess.Popen(self.argv, stdout=subprocess.DEVNULL, stderr=self.err, env=env)
-        print(f"server pid {self.proc.pid}: {' '.join(self.argv)}", flush=True)
-        deadline = time.time() + 900
-        while True:
-            if self.proc.poll() is not None:
-                raise RuntimeError(f"server exited rc={self.proc.returncode}")
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/health", timeout=3) as r:
-                    if r.status == 200:
-                        break
-            except Exception:
-                pass
-            if time.time() > deadline:
-                raise RuntimeError("server not healthy")
-            time.sleep(3)
-        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/props", timeout=10) as r:
-            self.props = json.loads(r.read())
-        vram = residency.vram_bytes()
-        print(f"  healthy: model {self.props.get('model_path')} VRAM {vram / 2**30:.1f}G "
-              f"template {len(self.props.get('chat_template') or '')}B", flush=True)
-        if vram < 8 * 2**30:
-            raise RuntimeError("not GPU-resident")
+        try:
+            print(f"server pid {self.proc.pid}: {' '.join(self.argv)}", flush=True)
+            deadline = time.time() + 900
+            while True:
+                if self.proc.poll() is not None:
+                    raise RuntimeError(f"server exited rc={self.proc.returncode}")
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/health", timeout=3) as r:
+                        if r.status == 200:
+                            break
+                except Exception:
+                    pass
+                if time.time() > deadline:
+                    raise RuntimeError("server not healthy")
+                time.sleep(3)
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/props", timeout=10) as r:
+                self.props = json.loads(r.read())
+            vram = residency.vram_bytes()
+            print(f"  healthy: model {self.props.get('model_path')} VRAM {vram / 2**30:.1f}G "
+                  f"template {len(self.props.get('chat_template') or '')}B", flush=True)
+            if vram < 8 * 2**30:
+                raise RuntimeError("not GPU-resident")
+            if la.prefix_cpuset(self.argv) is not None:   # layer 2: refuse on any escape
+                self.affinity = la.enforce_pinned_child(
+                    self.proc.pid, la.prefix_cpuset(self.argv), label=f"ev13b server :{self.port}")
+        except BaseException:
+            self.__exit__(*sys.exc_info())   # __exit__ is not run when __enter__ raises
+            raise
         return self
 
     def __exit__(self, *exc):
@@ -129,7 +139,7 @@ class Server:
         self.sampler.__exit__()
         self.record = {"pid": self.proc.pid, "rc": self.proc.returncode, "argv": self.argv,
                        "props_model_path": self.props.get("model_path") if hasattr(self, "props") else None,
-                       "residency": self.sampler.proof}
+                       "residency": self.sampler.proof, "affinity": self.affinity}
         print(f"  stopped pid {self.proc.pid} rc={self.proc.returncode}", flush=True)
         return False
 

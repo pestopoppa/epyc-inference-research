@@ -1212,3 +1212,105 @@ def test_finish_emits_rows_sha256_for_a_run_that_issued_no_request(tmp_path, cpu
     assert isinstance(rec["rows_sha256"], str) and len(rec["rows_sha256"]) == 64
     side = [_json.loads(x) for x in (ctx.out / "belief_measurements.jsonl").read_text().splitlines()]
     assert side[-1]["arm"] == "parity_summary" and side[-1]["rows_sha256"] == rec["rows_sha256"]
+
+
+# ---------------------------------------------------------------- GPS-PIN-2: launch affinity (layer 1 env, layer 2 refuse)
+def _gps_server(tmp_path, prefix, pid=100):
+    args = mk_args(tmp_path, fork_min=1024)
+    ctx = GATE.Ctx(args, filled_prompt_set(), CPU_ARGV, prefix, {})
+    srv = A.server_cls(GATE)(ctx, "gps", Path("/x/llama-server"), 1024, CPU_ARGV)
+    srv.proc = SimpleNamespace(pid=pid)
+    return srv
+
+
+def _gps_proc(tmp_path, masks, ppid):
+    proc = tmp_path / "proc"
+    for tid, mask in masks.items():
+        d = proc / "100" / "task" / str(tid)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "status").write_text(f"Name:\tllama-server\nCpus_allowed_list:\t{mask}\n")
+    (proc / "100" / "stat").write_text(f"100 (llama-server) S {ppid} 1 1 0\n")
+    return proc
+
+
+GPU_PREFIX = ["numactl", "--membind=3", "--", "taskset", "-c", "184-191"]
+
+
+def test_pinned_launch_env_gets_knob_and_it_is_in_the_recorded_identity(tmp_path):
+    srv = _gps_server(tmp_path, GPU_PREFIX)
+    assert srv.env["HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] == "0"
+    assert srv.env_note["set"]["HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] == "0"
+    assert srv.env_note["set"].items() >= GATE.PROD_ENV.items()
+
+
+def test_unpinned_launch_env_is_unchanged(tmp_path):
+    srv = _gps_server(tmp_path, ["numactl", "--membind=3", "--"])
+    assert "HSA_OVERRIDE_CPU_AFFINITY_DEBUG" not in srv.env
+    assert "HSA_OVERRIDE_CPU_AFFINITY_DEBUG" not in srv.env_note["set"]
+
+
+class _AfterLayer2(Exception):
+    """Raised by a stubbed log_text: read_back got past the layer-2 block into the gate read-back."""
+
+
+def _stop_after_layer2(monkeypatch):
+    def stop(self):
+        raise _AfterLayer2()
+    monkeypatch.setattr(GATE.Server, "log_text", stop)
+
+
+def test_read_back_repins_records_then_defers_to_gate(tmp_path, monkeypatch):
+    import os
+    srv = _gps_server(tmp_path, GPU_PREFIX)
+    proc = _gps_proc(tmp_path, {100: "184-191", 101: "0-191"}, ppid=os.getpid())
+    calls = []
+
+    def setter(tid, cpus):
+        calls.append(tid)
+        (proc / "100" / "task" / str(tid) / "status").write_text("Cpus_allowed_list:\t184-191\n")
+
+    orig = A.la.enforce_pinned_child
+    monkeypatch.setattr(A.la, "enforce_pinned_child",
+                        lambda pid, cpus, label="": orig(pid, cpus, label=label, proc_root=proc, setter=setter))
+    _stop_after_layer2(monkeypatch)
+    with pytest.raises(_AfterLayer2):
+        srv.read_back()
+    rec = srv.env_note["launch_affinity"]
+    assert calls == [101] and rec["ok"] is True and rec["escapes_after"] == [] and rec["census"] == {"184-191": 2}
+
+
+def test_read_back_refuses_on_residual_escape(tmp_path, monkeypatch):
+    import os
+    srv = _gps_server(tmp_path, GPU_PREFIX)
+    proc = _gps_proc(tmp_path, {100: "184-191", 101: "0-191"}, ppid=os.getpid())
+    orig = A.la.enforce_pinned_child
+    monkeypatch.setattr(A.la, "enforce_pinned_child",
+                        lambda pid, cpus, label="": orig(pid, cpus, label=label, proc_root=proc, setter=lambda t, c: None))
+    monkeypatch.setattr(GATE.Server, "log_text", lambda self: pytest.fail("must refuse before the gate read-back"))
+    with pytest.raises(GATE.Abort, match="launch affinity"):
+        srv.read_back()
+
+
+def test_plain_gate_server_items_1_to_7_are_covered_too(tmp_path, monkeypatch):
+    """kpf18_gate items 1-7 launch gate.Server directly (not ArmServer): same two layers."""
+    args = mk_args(tmp_path, fork_min=1024)
+    ctx = GATE.Ctx(args, filled_prompt_set(), CPU_ARGV, GPU_PREFIX, {})
+    srv = GATE.Server(ctx, "item1-gps", Path("/x/llama-server"), 1024)
+    assert srv.env["HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] == "0"
+    srv.proc = SimpleNamespace(pid=100)
+    seen = []
+    monkeypatch.setattr(A.la, "enforce_pinned_child",
+                        lambda pid, cpus, label="": seen.append((pid, cpus)) or {"ok": True})
+    _stop_after_layer2(monkeypatch)
+    with pytest.raises(_AfterLayer2):
+        srv.read_back()
+    assert seen == [(100, "184-191")] and srv.env_note["launch_affinity"] == {"ok": True}
+
+
+def test_read_back_unpinned_skips_enforcement(tmp_path, monkeypatch):
+    srv = _gps_server(tmp_path, ["numactl", "--membind=3", "--"])
+    monkeypatch.setattr(A.la, "enforce_pinned_child", lambda *a, **k: pytest.fail("not pinned"))
+    _stop_after_layer2(monkeypatch)
+    with pytest.raises(_AfterLayer2):
+        srv.read_back()
+    assert "launch_affinity" not in srv.env_note

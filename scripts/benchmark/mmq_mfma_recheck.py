@@ -50,6 +50,37 @@ SMALL = Path("/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/"
 BIG = Path("/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf")
 VRAM_SYSFS = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts.kernel_rnd.autokernel.loop import launch_affinity as la  # noqa: E402
+
+PIN_CPUS = "184-191"
+PIN_RECORDS: list[dict] = []  # per-task affinity read of every pinned run (GPS-PIN-2)
+
+
+def run_pinned(argv: list[str], env: dict[str, str], timeout: int, label: str,
+               sink: list[dict] | None = None) -> subprocess.CompletedProcess:
+    """subprocess.run(capture, text) for a `taskset -c` launch, with both pin layers.
+
+    Layer 1: HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0 on the env (ROCr otherwise widens its
+    threads to the whole host). Layer 2: PinWatch re-pins any stray task of this child
+    while it runs and records the read; a residual escape REFUSES the run (D1).
+    """
+    la.apply_pinned_launch_env(env, argv)
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, env=env)
+    with la.PinWatch(proc.pid, PIN_CPUS) as watch:
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise
+    record = {"label": label, **watch.record}
+    (PIN_RECORDS if sink is None else sink).append(record)
+    if not record["ok"]:
+        raise RuntimeError(f"pin REFUSED ({label}): {json.dumps(record)[:400]}")
+    return subprocess.CompletedProcess(argv, proc.returncode, out, err)
+
 
 def read_vram() -> int:
     try:
@@ -68,7 +99,7 @@ def run_bench(build_bin: Path, model: Path, *, pp: int, tg: int, reps: int = 1
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = f"{build_bin}:/opt/rocm/lib"
     env.pop("HSA_OVERRIDE_GFX_VERSION", None)
-    out = subprocess.run(argv, capture_output=True, text=True, timeout=3600, env=env)
+    out = run_pinned(argv, env, 3600, f"mmq_mfma:{build_bin}:pp{pp}tg{tg}")
     if out.returncode != 0:
         raise RuntimeError(f"llama-bench rc={out.returncode}: {out.stderr[-400:]}")
     try:
@@ -144,7 +175,8 @@ def main() -> int:
 
     (args.out / "mmq_mfma_recheck.json").write_text(
         json.dumps({"results": results,
-                    "build_on": str(args.build_on), "build_off": str(args.build_off)},
+                    "build_on": str(args.build_on), "build_off": str(args.build_off),
+                    "pin_records": PIN_RECORDS},
                    indent=2), encoding="utf-8")
     print(f"\nwrote {args.out / 'mmq_mfma_recheck.json'}")
     return 0

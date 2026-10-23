@@ -61,6 +61,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -85,6 +86,13 @@ SCHEMA = "epyc.kpf.run.v1"
 TASK = "KPF-13.1"
 LINKAGE = SCRIPTS / "utils" / "verify_ggml_linkage.sh"
 CLAIM_MOD_DIR = SCRIPTS / "kernel_rnd"
+
+# GPS-PIN-2: launch-affinity helper (layer 1 env knob, layer 2 re-pin + refuse), loaded by file path (standalone driver).
+_LA_SPEC = importlib.util.spec_from_file_location("kpf13_launch_affinity",
+                                                  SCRIPTS / "kernel_rnd" / "autokernel" / "loop" / "launch_affinity.py")
+la = importlib.util.module_from_spec(_LA_SPEC)
+sys.modules[_LA_SPEC.name] = la  # @dataclass in the helper resolves its module through sys.modules
+_LA_SPEC.loader.exec_module(la)
 DEFAULT_BIN = "/mnt/raid0/llm/worktrees/kv-prefix-fork-p1r2-20261020/build-cpu/bin/llama-server"
 DEFAULT_PROMPT_SET = ("/mnt/raid0/llm/tmp/kv-prefix-fork/p1r-20261020/kpf18cpu/run-20261020T163128Z/prompt_set.jsonl")
 DEFAULT_ARGV = HERE / "argv.cpu-35b-mtp.txt"
@@ -958,9 +966,14 @@ class Server:
         env["LD_LIBRARY_PATH"] = ":".join([str(self.bin_dir)] + LDP_TAIL)
         if self.cfg["mutate"]:
             env["LLAMA_KPF_MUTATE"] = self.cfg["mutate"]
-        return env, {"dropped_ambient": sorted(drop), "set": {**PROD_ENV, "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"],
-                                                              **({"LLAMA_KPF_MUTATE": self.cfg["mutate"]}
-                                                                 if self.cfg["mutate"] else {})}}
+        note = {"dropped_ambient": sorted(drop), "set": {**PROD_ENV, "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"],
+                                                         **({"LLAMA_KPF_MUTATE": self.cfg["mutate"]}
+                                                            if self.cfg["mutate"] else {})}}
+        # GPS-PIN-2 layer 1: ROCr widens every thread unless HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0; set on a `taskset -c`
+        # launch only and recorded in the same `env.set` identity as the rest of the launch env.
+        if la.apply_pinned_launch_env(env, self.ctx.prefix):
+            note["set"][la.ROCR_AFFINITY_ENV_KEY] = env[la.ROCR_AFFINITY_ENV_KEY]
+        return env, note
 
     def full_cmd(self) -> list[str]:
         return list(self.ctx.prefix) + self.argv
@@ -1055,9 +1068,17 @@ class Server:
         rb["slot_fork_disabled_line"] = m2.group(0) if m2 else None
         m = LOG_RES["build"].search(txt)
         rb["build_from_launch_log"] = f"{m.group(1)} ({m.group(2)})" if m else None
+        probs = []
+        # GPS-PIN-2 layer 2 (folds the old Cpus_allowed-union subset check): re-pin any task of OUR pid outside the
+        # claimed placement, then require zero per-task escapes (stricter than the union check: it fails on any one task).
+        rb["launch_affinity"] = None
+        if self.ctx.args.cpu_list:
+            try:
+                rb["launch_affinity"] = la.enforce_pinned_child(pid, self.ctx.args.cpu_list, label=self.label)
+            except la.LaunchAffinityError as exc:
+                probs.append(f"launch affinity: {exc}")
         allowed = read_cpus_allowed(pid)
         rb["cpus_allowed"] = allowed
-        probs = []
         if not rb["exe_matches_binary"]:
             probs.append(f"/proc/{pid}/exe = {rb['exe']}, not {self.binary}")
         if not rb["proc_cmdline_tail_matches_argv"]:
@@ -1079,6 +1100,7 @@ class Server:
             probs.append(f"LLAMA_KPF_MUTATE in /proc env is {rb['env_LLAMA_KPF_MUTATE']!r}, config wants {self.cfg['mutate']!r}")
         if self.ctx.args.cpu_list:
             want = parse_cpu_list(self.ctx.args.cpu_list)
+            # kept as a post-condition on the re-pinned read: the record's `cpus_allowed` must itself be inside the claim
             if allowed is None or not set(allowed) <= set(want):
                 probs.append(f"threads allowed on cpus {allowed} outside the claimed {want}")
         rb["problems"] = probs
@@ -1436,7 +1458,7 @@ class Plan:
             "argv": srv.argv if srv else None, "launch_prefix": list(ctx.prefix),
             "argv_readback": {k: srv.readback.get(k) for k in ("exe_matches_binary", "proc_cmdline_tail_matches_argv",
                                                               "port_owned_by_pid", "env_LLAMA_KPF_MUTATE",
-                                                              "cpus_allowed", "slot_fork_mode")} if srv else None,
+                                                              "cpus_allowed", "slot_fork_mode", "launch_affinity")} if srv else None,
             "env": srv.env_note if srv else None,
             "kv_mode_from_launch_log": srv.readback.get("kv_mode_from_launch_log") if srv else None,
             "slot_fork_from_launch_log": srv.readback.get("slot_fork_from_launch_log") if srv else None,

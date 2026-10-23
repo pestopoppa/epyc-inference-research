@@ -49,6 +49,37 @@ MODEL = Path("/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf")
 VRAM_SYSFS = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 VRAM_FLOOR = 8 * 1024**3
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts.kernel_rnd.autokernel.loop import launch_affinity as la  # noqa: E402
+
+PIN_CPUS = "184-191"
+PIN_RECORDS: list[dict] = []  # per-task affinity read of every pinned run (GPS-PIN-2)
+
+
+def run_pinned(argv: list[str], env: dict[str, str], timeout: int, label: str,
+               sink: list[dict] | None = None) -> subprocess.CompletedProcess:
+    """subprocess.run(capture, text) for a `taskset -c` launch, with both pin layers.
+
+    Layer 1: HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0 on the env (ROCr otherwise widens its
+    threads to the whole host). Layer 2: PinWatch re-pins any stray task of this child
+    while it runs and records the read; a residual escape REFUSES the run (D1).
+    """
+    la.apply_pinned_launch_env(env, argv)
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, env=env)
+    with la.PinWatch(proc.pid, PIN_CPUS) as watch:
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise
+    record = {"label": label, **watch.record}
+    (PIN_RECORDS if sink is None else sink).append(record)
+    if not record["ok"]:
+        raise RuntimeError(f"pin REFUSED ({label}): {json.dumps(record)[:400]}")
+    return subprocess.CompletedProcess(argv, proc.returncode, out, err)
+
 
 def read_vram() -> int:
     try:
@@ -67,7 +98,7 @@ def bench(build_bin: Path, *, pp: int, tg: int, env_extra: dict[str, str] | None
     env["LD_LIBRARY_PATH"] = f"{build_bin}:/opt/rocm/lib"
     env.pop("HSA_OVERRIDE_GFX_VERSION", None)
     env.update(env_extra or {})
-    out = subprocess.run(argv, capture_output=True, text=True, timeout=3600, env=env)
+    out = run_pinned(argv, env, 3600, f"champion_anchor:{build_bin.name}:pp{pp}tg{tg}")
     if out.returncode != 0:
         raise RuntimeError(f"llama-bench rc={out.returncode}: {out.stderr[-300:]}")
     rows = json.loads(out.stdout)
@@ -145,6 +176,7 @@ def main() -> int:
 
     payload = {"results": results, "moe_spec": moe_rows,
                "anchor_bin": str(args.anchor_bin), "champion_bin": str(args.champion_bin),
+               "pin_records": PIN_RECORDS,
                "note": "T1/T2-EQUIVALENT MEASUREMENTS, not formal campaign tier events"}
     (args.out / "champion_anchor_validation.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8")

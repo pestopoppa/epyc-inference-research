@@ -22,10 +22,21 @@ value, the checkpoint set that existed before the request, errors). Decision-rul
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import statistics
+import sys
 import threading
+from pathlib import Path
 from typing import Callable
+
+# GPS-PIN-2: the launch-affinity helper (layer 1 env knob, layer 2 post-health re-pin + refuse). Loaded by file path:
+# this module runs standalone with only its own directory on sys.path.
+_LA_PATH = Path(__file__).resolve().parents[2] / "kernel_rnd" / "autokernel" / "loop" / "launch_affinity.py"
+_la_spec = importlib.util.spec_from_file_location("kpf18_launch_affinity", _LA_PATH)
+la = importlib.util.module_from_spec(_la_spec)
+sys.modules[_la_spec.name] = la  # @dataclass in the helper resolves its module through sys.modules
+_la_spec.loader.exec_module(la)
 
 ARM_ITEMS = (181, 182, 183, 184)
 ARM_CMDS = {"kpf181": [181], "kpf182": [182], "kpf183": [183], "kpf18arms": [181, 182, 183], "kpf18s1": [184]}

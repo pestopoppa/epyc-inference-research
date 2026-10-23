@@ -36,6 +36,10 @@ fi
 HOST_CPUS="${OCC1_HOST_CPUS:-184-191}"   # GPU host threads = SMT siblings
 
 export LD_LIBRARY_PATH="${BIN_DIR}:/opt/rocm/lib"
+# GPS-PIN-2: without this ROCr widens every thread it creates past the taskset below.
+# After health, the caller verifies the placement: run_occ1.py run --server-pid does it
+# (re-pin strays, refuse on any escape), or `launch_affinity.py --enforce $PID ${HOST_CPUS}`.
+export HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0
 RESEARCH="$(cd "$(dirname "$0")/../../.." && pwd)"
 "${RESEARCH}/scripts/utils/verify_ggml_linkage.sh" "${BIN_DIR}/llama-server" "${BIN_DIR}" >&2
 

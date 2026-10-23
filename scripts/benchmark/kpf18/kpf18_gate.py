@@ -802,7 +802,15 @@ class Server:
         env = {k: v for k, v in os.environ.items() if k not in drop}
         env.update(PROD_ENV)
         env["LD_LIBRARY_PATH"] = ":".join([str(self.bin_dir)] + LDP_TAIL)
-        return env, {"dropped_ambient": sorted(drop), "set": {**PROD_ENV, "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"]}}
+        note = {"dropped_ambient": sorted(drop), "set": {**PROD_ENV, "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"]}}
+        # Layer 1 (GPS-PIN-2): ROCr widens every thread unless HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0. Applied on a
+        # `taskset -c` launch only and written into note["set"] (the record's `env`), so record == launched env.
+        try:
+            if ARMS.la.apply_pinned_launch_env(env, self.ctx.prefix):
+                note["set"][ARMS.la.ROCR_AFFINITY_ENV_KEY] = env[ARMS.la.ROCR_AFFINITY_ENV_KEY]
+        except ARMS.la.LaunchAffinityError:
+            pass  # malformed `taskset` prefix: construction stays plan-time safe; read_back() refuses the launch
+        return env, note
 
     def full_cmd(self) -> list[str]:
         return list(self.ctx.prefix) + self.argv
@@ -879,6 +887,14 @@ class Server:
             return ""
 
     def read_back(self) -> dict:
+        # Layer 2 (GPS-PIN-2), right after /health: re-pin any task of OUR pid outside the placement; refuse the
+        # launch (Abort, teardown unchanged) on a residual escape (D1). Recorded as the run record's env.launch_affinity.
+        try:
+            cpus = ARMS.la.prefix_cpuset(self.ctx.prefix)
+            if cpus is not None:
+                self.env_note["launch_affinity"] = ARMS.la.enforce_pinned_child(self.proc.pid, cpus, label=self.label)
+        except ARMS.la.LaunchAffinityError as exc:
+            raise Abort(f"launch affinity: {exc}")
         txt = self.log_text()
         rb: dict = {"pid": self.proc.pid}
         try:

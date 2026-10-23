@@ -293,6 +293,37 @@ def server_identity(url: str) -> dict:
             "modalities": props.get("modalities"), "total_slots": props.get("total_slots")}
 
 
+def _load_launch_affinity():
+    from importlib import util
+    path = Path(__file__).resolve().parents[2] / "kernel_rnd/autokernel/loop/launch_affinity.py"
+    spec = util.spec_from_file_location("launch_affinity_gps", path)
+    mod = util.module_from_spec(spec)
+    sys.modules[spec.name] = mod   # @dataclass resolves cls.__module__ here
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def enforce_reader_affinity(args, out: Path, la=None) -> dict:
+    """GPS-PIN-2 layer 2 for the reader the caller launched with launch_reader.sh
+    (`exec taskset`, so --server-pid IS the server). Re-pins strays and REFUSES (SystemExit)
+    on any residual escape. The server's parent is the runner shell, not this process, so
+    that parent is the launcher (override: --server-launcher-pid). Record -> affinity.json."""
+    la = la or _load_launch_affinity()
+    pid = getattr(args, "server_pid", None)
+    cpus = getattr(args, "host_cpus", None) or os.environ.get("OCC1_HOST_CPUS", "184-191")
+    if pid is None:
+        rec = {"ok": None, "skipped": "no --server-pid: placement NOT verified"}
+    else:
+        launcher = getattr(args, "server_launcher_pid", None) or la.parent_pid(pid)
+        try:
+            rec = la.enforce_pinned_child(pid, cpus, label="occ1 reader", launcher_pid=launcher)
+        except la.LaunchAffinityError as exc:
+            (out / "affinity.json").write_text(json.dumps({"pid": pid, "ok": False, "refused": str(exc)}, indent=1))
+            raise SystemExit(f"reader affinity refused (D1): {exc}")
+    (out / "affinity.json").write_text(json.dumps(rec, indent=1))
+    return rec
+
+
 def cmd_run(args, post=http_json, ident=server_identity) -> int:
     out = Path(args.out)
     plan_path = out / "plan.json"
@@ -325,6 +356,8 @@ def cmd_run(args, post=http_json, ident=server_identity) -> int:
         raise SystemExit("server identity check failed: " + "; ".join(problems))
     (out / "server_identity.json").write_text(
         json.dumps({**identity, "url": args.url, "problems": problems}, indent=1))
+
+    enforce_reader_affinity(args, out)
 
     chunk_text = {c.index: c.text for c in load_fixture(args)[0]}
     rec_path = out / "records.jsonl"
@@ -624,6 +657,10 @@ def main(argv: list[str] | None = None) -> int:
                           f"from {VRAM_SYSFS})")
     gpu.add_argument("--server-pid", type=int, default=None,
                      help="llama-server PID; must hold a KFD context in >= 2 samples")
+    gpu.add_argument("--host-cpus", default=None,
+                     help="reader taskset cpu list to enforce (default $OCC1_HOST_CPUS or 184-191)")
+    gpu.add_argument("--server-launcher-pid", type=int, default=None,
+                     help="pid that spawned the reader (default: the reader's parent)")
     gpu.add_argument("--min-vram-rise-gib", type=float, default=MIN_VRAM_RISE_GIB)
     gpu.add_argument("--residency-interval", type=float, default=2.0, help="background sample period, s")
     belief = ap.add_argument_group("belief kernel (SC85)", "report writes belief_measurements.jsonl "

@@ -44,6 +44,37 @@ SURFACE_SHAPES = {  # bench.SURFACES, pinned here for the frozen-build invocatio
     "dec-b8": (512, 0, 8),
 }
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts.kernel_rnd.autokernel.loop import launch_affinity as la  # noqa: E402
+
+PIN_CPUS = "184-191"
+PIN_RECORDS: list[dict] = []  # per-task affinity read of every pinned run (GPS-PIN-2)
+
+
+def run_pinned(argv: list[str], env: dict[str, str], timeout: int, label: str,
+               sink: list[dict] | None = None) -> subprocess.CompletedProcess:
+    """subprocess.run(capture, text) for a `taskset -c` launch, with both pin layers.
+
+    Layer 1: HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0 on the env (ROCr otherwise widens its
+    threads to the whole host). Layer 2: PinWatch re-pins any stray task of this child
+    while it runs and records the read; a residual escape REFUSES the run (D1).
+    """
+    la.apply_pinned_launch_env(env, argv)
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, env=env)
+    with la.PinWatch(proc.pid, PIN_CPUS) as watch:
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise
+    record = {"label": label, **watch.record}
+    (PIN_RECORDS if sink is None else sink).append(record)
+    if not record["ok"]:
+        raise RuntimeError(f"pin REFUSED ({label}): {json.dumps(record)[:400]}")
+    return subprocess.CompletedProcess(argv, proc.returncode, out, err)
+
 
 def _lane_modules(lane_root: Path):
     """Import claim + hotspots from the lane tree (post-merge code at run time)."""
@@ -133,7 +164,8 @@ def cmd_rocprof(args: argparse.Namespace) -> int:
 
 # ----------------------------------------------------------------------- smoke
 def _bench_once(binary: Path, model: Path, *, pp: int, tg: int,
-                ubatch: int | None, timeout_s: int) -> float:
+                ubatch: int | None, timeout_s: int,
+                sink: list[dict] | None = None) -> float:
     """champion_anchor_validation.py bench pattern, verbatim shape."""
     argv = ["taskset", "-c", "184-191", "numactl", "--interleave=all",
             str(binary), "-m", str(model),
@@ -144,8 +176,7 @@ def _bench_once(binary: Path, model: Path, *, pp: int, tg: int,
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = f"{binary.parent}:/opt/rocm/lib"
     env.pop("HSA_OVERRIDE_GFX_VERSION", None)
-    done = subprocess.run(argv, capture_output=True, text=True,
-                          timeout=timeout_s, env=env)
+    done = run_pinned(argv, env, timeout_s, f"smoke:pp{pp}tg{tg}ub{ubatch}", sink)
     if done.returncode != 0:
         raise RuntimeError(f"llama-bench rc={done.returncode}: {done.stderr[-300:]}")
     rows = json.loads(done.stdout)
@@ -165,15 +196,16 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         print(f"claim held on {receipt['device_id']}")
         for label, pp, tg, ubatch in (("tg128", 0, 128, None),
                                       ("dec-b4", 512, 0, 4)):
+            recs: list[dict] = []
             try:
                 tok_s = _bench_once(binary, model, pp=pp, tg=tg, ubatch=ubatch,
-                                    timeout_s=args.timeout_s)
+                                    timeout_s=args.timeout_s, sink=recs)
                 sane = tok_s > 1.0
-                results[label] = {"tok_s": tok_s, "sane": sane}
+                results[label] = {"tok_s": tok_s, "sane": sane, "pin_records": recs}
                 print(f"  {label}: {tok_s:.2f} tok/s ({'sane' if sane else 'NOT SANE'})")
                 ok = ok and sane
             except Exception as exc:  # noqa: BLE001 — smoke records, never raises out
-                results[label] = {"error": str(exc)}
+                results[label] = {"error": str(exc), "pin_records": recs}
                 print(f"  {label}: FAILED {exc}")
                 ok = False
     out.parent.mkdir(parents=True, exist_ok=True)
