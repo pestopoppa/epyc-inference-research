@@ -123,9 +123,14 @@ def one(port, meta, body, timeout):
         return dict(meta, ok=False, t0=t0, t1=time.time(), error=repr(e)[:300])
 
 
+ABORT_AFTER = 8               # consecutive failed requests => the server is gone (VRAM guard, crash): stop, exit rc 75, the job restarts it
+EXIT_SERVER_GONE = 75
+
+
 class Sink:
     def __init__(self, path):
         self.path, self.lock, self.done = path, threading.Lock(), set()
+        self.consec_fail = 0
         if os.path.exists(path):
             for line in open(path):
                 try:
@@ -140,6 +145,13 @@ class Sink:
             f.write(json.dumps(rec) + "\n")
             if rec.get("ok"):
                 self.done.add(rec["key"])
+                self.consec_fail = 0
+            else:
+                self.consec_fail += 1
+
+    @property
+    def server_gone(self):
+        return self.consec_fail >= ABORT_AFTER
 
 
 def run_batch(port, sink, items, deadline, conc=4):
@@ -149,7 +161,7 @@ def run_batch(port, sink, items, deadline, conc=4):
 
     def work(it):
         key, meta, body = it
-        if time.time() > deadline:
+        if time.time() > deadline or sink.server_gone:
             return
         sink.put(dict(one(port, meta, body, min(300, max(30, deadline - time.time()))), key=key))
 
@@ -162,7 +174,7 @@ def run_batch(port, sink, items, deadline, conc=4):
 def run_probe(port, sink, deadline):
     """Seeded request alone (idle server) vs inside a batch of 4 (3 distinct fillers), both RNG modes, paired by seed."""
     for i in range(PROBE_SEEDS):
-        if time.time() > deadline:
+        if time.time() > deadline or sink.server_gone:
             return
         s = SEED_BASE_PROBE + i
         for rng in RNGS:
@@ -199,6 +211,9 @@ def drive(port, out, deadline, dry=False):
     t_probe = time.time()
     run_probe(port, sink, deadline)
     print(f"probe done {time.time() - t_probe:.0f}s", flush=True)
+    if sink.server_gone:
+        print("SERVER GONE during the probe", flush=True)
+        return EXIT_SERVER_GONE
     for blk, reqs in schedule():
         # one block ~2-3 min; do not start a block that cannot finish
         if deadline - time.time() < 240:
@@ -207,6 +222,10 @@ def drive(port, out, deadline, dry=False):
         t0 = time.time()
         run_batch(port, sink, [(k, m, b) for k, m, b in reqs], deadline)
         print(f"block {blk} done {time.time() - t0:.0f}s ok-total={len(sink.done)}", flush=True)
+        if sink.server_gone:
+            print(f"SERVER GONE in block {blk}", flush=True)
+            return EXIT_SERVER_GONE
+    print(f"COMPLETE ok-total={len(sink.done)}" if all(k in sink.done for _, r in schedule() for k, _, _ in r) else "CUT at the deadline", flush=True)
     return 0
 
 

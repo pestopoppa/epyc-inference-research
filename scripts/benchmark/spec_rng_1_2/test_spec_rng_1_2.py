@@ -299,3 +299,22 @@ def test_sink_resume_skips_done(tmp_path):
     sink.put({"key": "b", "ok": False})
     sink2 = S.Sink(str(tmp_path / "r.jsonl"))
     assert sink2.done == {"a"}                          # failed requests are retried on resume
+
+
+def test_server_gone_after_consecutive_failures(tmp_path):
+    sink = S.Sink(str(tmp_path / "r.jsonl"))
+    for i in range(S.ABORT_AFTER - 1):
+        sink.put({"key": f"k{i}", "ok": False})
+    assert not sink.server_gone
+    sink.put({"key": "ok", "ok": True})
+    assert not sink.server_gone                         # a success resets the run
+    for i in range(S.ABORT_AFTER):
+        sink.put({"key": f"f{i}", "ok": False})
+    assert sink.server_gone
+
+
+def test_drive_against_dead_port_exits_75(tmp_path, monkeypatch):
+    # no server on the port: probe requests fail ABORT_AFTER times in a row -> rc 75 (the job restarts the server)
+    monkeypatch.setattr(S, "one", lambda port, meta, body, timeout: dict(meta, ok=False, t0=0, t1=0, error="refused"))
+    import time as _t
+    assert S.drive(1, str(tmp_path), _t.time() + 3600) == S.EXIT_SERVER_GONE
