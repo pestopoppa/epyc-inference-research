@@ -292,12 +292,35 @@ def gpu_side(sess: str, rows: list[dict]) -> dict:
             for m, d in out.items()}
 
 
+def _file_sha256(path: str) -> str | None:
+    try:
+        with open(path, "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def analyzer_identity(sess: str, seed: int) -> dict:
+    """Who produced this analysis, from which inputs (VB-GPU-CPU-NOISE-WIRE write side).
+
+    The belief-kernel reader (epyc-root ``scripts/vidya/adapters/gpu_cpu_noise.py``) re-derives the
+    deterministic numbers from ``reps.jsonl``; these digests let it also prove the analysis was
+    computed over the same bytes and by which analyzer, which cannot be recovered afterwards.
+    """
+    me = os.path.realpath(__file__)
+    return {"path": me, "sha256": _file_sha256(me), "seed": seed, "n_boot": N_BOOT,
+            "scipy": _st is not None, "numpy": np.__version__,
+            "reps_jsonl_sha256": _file_sha256(os.path.join(sess, "reps.jsonl")),
+            "run_record_sha256": _file_sha256(os.path.join(sess, "RUN_RECORD.json"))}
+
+
 def analyze(sess: str, include_invalid: bool = False, seed: int = 20261021) -> dict:
     rows = load(os.path.join(sess, "reps.jsonl"))
     rng = np.random.default_rng(seed)
     rep = {"session": os.path.basename(sess.rstrip("/")), "n_rows": len(rows),
            "n_hash_bad": sum(1 for r in rows if not r["_hash_ok"]), "include_invalid": include_invalid,
-           "classes": CLASSES, "ak_floor_sd_pct": AK_FLOOR_SD_PCT, "metrics": {}}
+           "classes": CLASSES, "ak_floor_sd_pct": AK_FLOOR_SD_PCT, "metrics": {},
+           "analyzer": analyzer_identity(sess, seed)}
     meas = [r for r in rows if r.get("phase") == "measure"]
     rep["valid_frac"] = {c: (round(sum(1 for r in meas if r["cond"] == c and r.get("valid")) /
                                    max(1, sum(1 for r in meas if r["cond"] == c)), 3))
