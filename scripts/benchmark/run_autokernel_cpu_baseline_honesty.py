@@ -92,12 +92,7 @@ def run_arm(*, binary: Path, model: Path, arm: tuple, args: argparse.Namespace,
         raise RuntimeError(
             f"AK-BH-3 arm {arm_id} recorded flash_attn={row.get('flash_attn')!r}, "
             f"expected {expected_flash_attention}")
-    required_true = (
-        "autokernel_hardened", "autokernel_output_invariant",
-        "autokernel_hybrid_ab_complete", "autokernel_thread_set_stable",
-        "autokernel_escape_checks_complete",
-    )
-    if any(row.get(field) is not True for field in required_true):
+    if microbench.incomplete_hardening_flags(row):
         raise RuntimeError(f"AK-BH-3 arm {arm_id} has an incomplete hardening receipt")
     samples = row.get("samples_ns")
     if not isinstance(samples, list) or len(samples) != args.repetitions:

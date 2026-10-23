@@ -43,6 +43,16 @@ def test_parse_bench_jsonl_against_real_llama_bench_output():
     assert res["tg"]["n_gen"] == real[1]["n_gen"]
 
 
+def test_parse_bench_jsonl_flags_unrequested_hardened_rows():
+    rows = [{"n_prompt": 0, "n_gen": 128, "avg_ts": 16.7, "samples_ts": [16.6], "autokernel_hardened": True},
+            {"n_prompt": 512, "n_gen": 0, "avg_ts": 87.9, "samples_ts": [87.8], "autokernel_hardened": False}]
+    res = D.parse_bench_jsonl("\n".join(json.dumps(r) for r in rows))
+    assert res["tg"]["unrequested_hardened"] is True
+    assert res["pp"]["unrequested_hardened"] is False
+    legacy = D.parse_bench_jsonl(json.dumps({"n_prompt": 0, "n_gen": 128, "samples_ts": [1.0]}))
+    assert legacy["tg"]["autokernel_hardened"] is None and legacy["tg"]["unrequested_hardened"] is False
+
+
 def test_gpu_server_argv_matches_receipt_shape():
     q3 = D.gpu_server_argv("q3", 18961)
     n1 = D.gpu_server_argv("n1", 18961)

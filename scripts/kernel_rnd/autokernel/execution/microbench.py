@@ -1506,6 +1506,10 @@ class BenchRow:
     samples_ts: tuple
     samples_ns: tuple
     autokernel_hardened: bool = False
+    #: True iff the row JSON carried the `autokernel_hardened` key at all. A row
+    #: without it (every pre-RVP-C6-8 build, and markdown-derived data) says
+    #: nothing about its protocol: see `hardened_state`.
+    autokernel_hardened_reported: bool = False
     autokernel_output_invariant: bool = False
     autokernel_hybrid_ab_complete: bool = False
     autokernel_input_working_set_bytes: int = 0
@@ -1523,6 +1527,23 @@ class BenchRow:
     @property
     def metric_samples(self) -> tuple:
         return self.samples_ts
+
+    @property
+    def hardened_state(self) -> str:
+        """`hardened`, `ordinary` or `unknown` -- what the ROW attests, not what argv asked.
+
+        LBH (2026-10): llama-bench left `autokernel_harden` uninitialised, so about
+        half of processes ran the hardened protocol WITHOUT being asked. The row's
+        own flag is the only truth. A row that omits the flag is `unknown` unless
+        it carries hardened-only receipt fields, which prove it ran hardened.
+        """
+        if self.autokernel_hardened:
+            return "hardened"
+        if (self.autokernel_input_hashes or self.autokernel_output_hashes
+                or self.autokernel_input_working_set_bytes > 0
+                or self.autokernel_output_invariant):
+            return "hardened"
+        return "ordinary" if self.autokernel_hardened_reported else "unknown"
 
     def to_dict(self) -> dict:
         return {"build_commit": self.build_commit, "n_prompt": self.n_prompt,
@@ -1711,6 +1732,7 @@ def parse_llama_bench_json(text: str) -> tuple:
             samples_ts=tuple(values),
             samples_ns=samples_ns,
             autokernel_hardened=_as_bool(entry.get("autokernel_hardened", False)),
+            autokernel_hardened_reported="autokernel_hardened" in entry,
             autokernel_output_invariant=_as_bool(
                 entry.get("autokernel_output_invariant", False)),
             autokernel_hybrid_ab_complete=_as_bool(
@@ -1760,6 +1782,23 @@ def _address_pairs(value: str, *, label: str, reps: int) -> tuple:
     if len(set(flattened)) != len(flattened):
         raise ValueError(f"{label} reuses an address across repetitions")
     return tuple(flattened)
+
+
+#: The five boolean attestations a hardened receipt must carry. ONE tuple, so the
+#: GPU/CPU scripts that read raw row dicts cannot drift from `_check_autokernel_hardening`.
+HARDENED_RECEIPT_FLAGS = (
+    "autokernel_hardened", "autokernel_output_invariant",
+    "autokernel_hybrid_ab_complete", "autokernel_thread_set_stable",
+    "autokernel_escape_checks_complete")
+
+
+def incomplete_hardening_flags(row: Mapping[str, Any]) -> tuple:
+    """Names in `HARDENED_RECEIPT_FLAGS` that a raw row dict does not set to exactly True.
+
+    A MISSING key counts as incomplete (fail-closed): these callers always request
+    hardening, so absence is never acceptable.
+    """
+    return tuple(name for name in HARDENED_RECEIPT_FLAGS if row.get(name) is not True)
 
 
 def _check_autokernel_hardening(row: BenchRow, *, reps: int,
@@ -1975,7 +2014,20 @@ class LlamaBenchExpectation:
             expected_build_commit=expected_build_commit,
         )
 
-    def check_row(self, row: BenchRow) -> schemas.Check:
+    def check_row(self, row: BenchRow, *, strict_unknown: bool = False) -> schemas.Check:
+        """Compare a result row with the argv that produced it.
+
+        Hardening is checked in BOTH directions. Requested (`--autokernel-harden`)
+        -> the row must attest the full receipt. NOT requested -> a row that
+        attests hardened is REJECTED: that is the LBH unrequested-hardened defect
+        (uninitialised `autokernel_harden`), and its numbers are a different
+        protocol (fresh contexts, second-execution samples) than the recipe names.
+
+        A row that omits the flag has an UNKNOWN protocol. Default
+        (`strict_unknown=False`): accepted with a note, so pre-fix archives stay
+        loadable; consumers that gate a NEW claim pass `strict_unknown=True` and
+        get COULD_NOT_CHECK (falsy, never a soft pass).
+        """
         if not isinstance(row, BenchRow):
             raise TypeError("check_row takes a BenchRow")
         reasons: list = []
@@ -2003,9 +2055,21 @@ class LlamaBenchExpectation:
                 f"argv requested -r {self.reps} but the row carries "
                 f"{len(row.samples_ts)} samples; a short sample vector means repetitions "
                 f"were dropped, and the rep count is a constitutional floor")
+        unknown_note = False
         if self.autokernel_seed is not None:
             reasons.extend(_check_autokernel_hardening(
                 row, reps=self.reps, n_gpu_layers=self.n_gpu_layers))
+        else:
+            state = row.hardened_state
+            if state == "hardened":
+                reasons.append(
+                    "argv did NOT request --autokernel-harden but the result row attests "
+                    "the hardened protocol (autokernel_hardened=true or hardened receipt "
+                    "fields present): llama-bench ran an unrequested protocol "
+                    "(uninitialised autokernel_harden, LBH), so this number is not the "
+                    "ordinary-protocol measurement the recipe names")
+            elif state == "unknown":
+                unknown_note = True
         if self.model_filename and row.model_filename != self.model_filename:
             reasons.append(f"argv named -m {self.model_filename!r} but the row reports "
                            f"model_filename={row.model_filename!r}")
@@ -2017,7 +2081,16 @@ class LlamaBenchExpectation:
                     f"{self.expected_build_commit!r} but the row reports "
                     f"{row.build_commit!r} ({why}); the binary that ran is not the one "
                     f"the arm names, so the anchor is not the anchor")
-        return schemas.Check(schemas.FAIL, tuple(reasons)) if reasons else schemas.Check(
+        if reasons:
+            return schemas.Check(schemas.FAIL, tuple(reasons))
+        if unknown_note:
+            note = ("the row does not record autokernel_hardened, so whether it ran the "
+                    "ordinary or the hardened protocol is UNKNOWN")
+            if strict_unknown:
+                return schemas.Check(schemas.COULD_NOT_CHECK, (note,))
+            return schemas.Check(schemas.PASS, (
+                "the result row agrees with the argv that produced it; " + note,))
+        return schemas.Check(
             schemas.PASS, ("the result row agrees with the argv that produced it",))
 
     def to_dict(self) -> dict:

@@ -311,7 +311,12 @@ def parse_bench_jsonl(text: str) -> dict:
                     "samples_ts": d.get("samples_ts"), "samples_ns": d.get("samples_ns"),
                     "n_prompt": d.get("n_prompt"), "n_gen": d.get("n_gen"),
                     "build_commit": d.get("build_commit"), "test_time": d.get("test_time"),
-                    "n_threads": d.get("n_threads")}
+                    "n_threads": d.get("n_threads"),
+                    # LBH-3: this driver never passes --autokernel-harden, so a row that
+                    # attests hardened ran an UNREQUESTED protocol (uninitialised
+                    # autokernel_harden in llama-bench). None = the build did not report.
+                    "autokernel_hardened": d.get("autokernel_hardened"),
+                    "unrequested_hardened": d.get("autokernel_hardened") is True}
     return res
 
 
@@ -976,6 +981,8 @@ class Driver:
                "cond": cond, "block": block, "run": run, "idx": idx, "start": utc(t0), "end": utc(t1),
                "wall_s": round(wall, 2), "rc": rc, "timed_out": timed_out,
                "pp": res.get("pp"), "tg": res.get("tg"),
+               "unrequested_hardened": any(
+                   (res.get(k) or {}).get("unrequested_hardened") for k in ("pp", "tg", "mixed")),
                "placement_proof": place_path,
                "placement_rc": place_rc,
                "gpu": smry, "foreign_cores": foreign_cores,

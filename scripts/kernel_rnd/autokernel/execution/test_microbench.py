@@ -945,6 +945,78 @@ class TestOutputIsCheckedAgainstTheRecipe(unittest.TestCase):
         self.assertEqual(anchored.check_row(row).outcome, schemas.PASS)
 
 
+class TestUnrequestedHardeningIsRefused(unittest.TestCase):
+    """LBH-3: llama-bench's uninitialised autokernel_harden ran hardened unasked."""
+
+    def setUp(self):
+        import dataclasses
+        binding = BindingFixture(self)
+        command = build_command(binding.candidate)
+        self.requested = M.LlamaBenchExpectation.from_command(command)
+        self.ordinary = dataclasses.replace(self.requested, autokernel_seed=None)
+
+    def _row(self, *, hardened_key="keep", strip_receipt=False):
+        rows = json.loads(read_fixture(CANONICAL))
+        row = rows[0]
+        if strip_receipt:
+            for key in [k for k in row if k.startswith("autokernel_")]:
+                del row[key]
+        if hardened_key is None:
+            row.pop("autokernel_hardened", None)
+        elif hardened_key != "keep":
+            row["autokernel_hardened"] = hardened_key
+        return M.parse_llama_bench_json(json.dumps(rows))[0]
+
+    def test_hardened_row_when_not_requested_fails(self):
+        row = self._row()
+        self.assertEqual(row.hardened_state, "hardened")
+        check = self.ordinary.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("did NOT request", " ".join(check.reasons))
+
+    def test_receipt_fields_prove_hardened_even_when_the_flag_is_dropped(self):
+        row = self._row(hardened_key=None)
+        self.assertFalse(row.autokernel_hardened_reported)
+        self.assertEqual(row.hardened_state, "hardened")
+        self.assertEqual(self.ordinary.check_row(row).outcome, schemas.FAIL)
+
+    def test_explicit_false_unrequested_passes(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        for key in [k for k in rows[0] if k.startswith("autokernel_")]:
+            del rows[0][key]
+        rows[0]["autokernel_hardened"] = False
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        self.assertEqual(row.hardened_state, "ordinary")
+        check = self.ordinary.check_row(row)
+        self.assertEqual(check.outcome, schemas.PASS)
+        self.assertNotIn("UNKNOWN", " ".join(check.reasons))
+
+    def test_missing_key_is_unknown_loadable_by_default(self):
+        row = self._row(strip_receipt=True)
+        self.assertEqual(row.hardened_state, "unknown")
+        check = self.ordinary.check_row(row)
+        self.assertEqual(check.outcome, schemas.PASS)
+        self.assertIn("UNKNOWN", " ".join(check.reasons))
+
+    def test_missing_key_is_could_not_check_when_strict(self):
+        row = self._row(strip_receipt=True)
+        check = self.ordinary.check_row(row, strict_unknown=True)
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+        self.assertFalse(check.passed)
+
+    def test_requested_path_unchanged(self):
+        self.assertEqual(self.requested.check_row(self._row()).outcome, schemas.PASS)
+        self.assertEqual(
+            self.requested.check_row(self._row(strip_receipt=True)).outcome, schemas.FAIL)
+
+    def test_incomplete_hardening_flags_is_fail_closed_on_missing_keys(self):
+        full = {k: True for k in M.HARDENED_RECEIPT_FLAGS}
+        self.assertEqual(M.incomplete_hardening_flags(full), ())
+        self.assertEqual(M.incomplete_hardening_flags({}), M.HARDENED_RECEIPT_FLAGS)
+        partial = dict(full, autokernel_hardened="true")
+        self.assertEqual(M.incomplete_hardening_flags(partial), ("autokernel_hardened",))
+
+
 # =============================================================================
 # 5. Requirement 5 — honest failure
 # =============================================================================

@@ -28,7 +28,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.kernel_rnd.autokernel import schemas, storage
 from scripts.kernel_rnd.autokernel.execution import (
-    cpu_region_claim, device_sampler, inference_window)
+    cpu_region_claim, device_sampler, inference_window, microbench)
 from scripts.kernel_rnd.autokernel.resource import device_claim
 from scripts.benchmark import autokernel_gpu_discovery_beliefs as gpu_beliefs
 from scripts.benchmark import autokernel_progression
@@ -1158,12 +1158,7 @@ def _validate_timed_output_semantics(row: Mapping[str, Any], *, repetitions: int
     if (isinstance(tokens_per_repetition, bool)
             or not isinstance(tokens_per_repetition, int) or tokens_per_repetition <= 0):
         raise RuntimeError("timed-output semantics require a positive token count")
-    required_true = (
-        "autokernel_hardened", "autokernel_output_invariant",
-        "autokernel_hybrid_ab_complete", "autokernel_thread_set_stable",
-        "autokernel_escape_checks_complete",
-    )
-    if any(row.get(field) is not True for field in required_true):
+    if microbench.incomplete_hardening_flags(row):
         raise RuntimeError("governed instrument semantic-integrity flags are incomplete")
     working_set = row.get("autokernel_input_working_set_bytes")
     if isinstance(working_set, bool) or not isinstance(working_set, int) or working_set <= 0:
@@ -1316,11 +1311,7 @@ def _validate_cross_arm_timed_outputs(anchor: Mapping[str, Any],
 def _validate_graphs_on_output_semantics(
         row: Mapping[str, Any], *, repetitions: int, seed: int) -> dict[str, Any]:
     """Prove graphs-on native timing inspected every hardened output."""
-    required_true = (
-        "autokernel_hardened", "autokernel_output_invariant",
-        "autokernel_hybrid_ab_complete", "autokernel_thread_set_stable",
-        "autokernel_escape_checks_complete")
-    if any(row.get(field) is not True for field in required_true):
+    if microbench.incomplete_hardening_flags(row):
         raise RuntimeError("graphs-on output-integrity flags are incomplete")
     input_hashes = _split_exact(
         row.get("autokernel_input_hashes"), field="input hashes",

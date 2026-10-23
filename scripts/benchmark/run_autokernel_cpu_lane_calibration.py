@@ -194,13 +194,9 @@ def collect_wave(*, binary: Path, model: Path, depth: int, candidate: tuple,
         row = rows[0]
         if row.get("backends") != "CPU" or len(row.get("samples_ns", ())) != args.repetitions:
             raise RuntimeError(f"{item.lane.lane_id}/{candidate[0]} has incomplete samples")
-        for field in (
-                "autokernel_hardened", "autokernel_output_invariant",
-                "autokernel_hybrid_ab_complete", "autokernel_thread_set_stable",
-                "autokernel_escape_checks_complete"):
-            if row.get(field) is not True:
-                raise RuntimeError(
-                    f"{item.lane.lane_id}/{candidate[0]} failed hardening field {field}")
+        for field in microbench.incomplete_hardening_flags(row):
+            raise RuntimeError(
+                f"{item.lane.lane_id}/{candidate[0]} failed hardening field {field}")
         power_check, power = microbench.derive_package_power_attestation(
             item.open_state, item.close_state)
         results.append({

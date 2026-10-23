@@ -18,7 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.kernel_rnd.autokernel import storage
-from scripts.kernel_rnd.autokernel.execution import device_sampler
+from scripts.kernel_rnd.autokernel.execution import device_sampler, microbench
 from scripts.kernel_rnd.autokernel.resource import device_claim
 
 
@@ -142,11 +142,7 @@ def run_arm(*, arm_id: str, variant: dict, flash_attention: str, model: Path,
         raise RuntimeError(f"factorial arm {arm_id} did not run on the MI210 ROCm backend")
     if row.get("flash_attn") != (1 if flash_attention == "on" else 0):
         raise RuntimeError(f"factorial arm {arm_id} did not preserve the explicit -fa setting")
-    required_true = (
-        "autokernel_hardened", "autokernel_output_invariant",
-        "autokernel_hybrid_ab_complete", "autokernel_thread_set_stable",
-        "autokernel_escape_checks_complete")
-    if any(row.get(field) is not True for field in required_true):
+    if microbench.incomplete_hardening_flags(row):
         raise RuntimeError(f"factorial arm {arm_id} has an incomplete hardening receipt")
     samples = row.get("samples_ns")
     if not isinstance(samples, list) or len(samples) != args.repetitions:
