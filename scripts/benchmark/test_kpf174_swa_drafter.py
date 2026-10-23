@@ -334,3 +334,65 @@ def test_honest_runs_two_groups_and_the_other_launches_one():
     a = m.parse_args(["run", "--out", "/x"])
     assert m.groups_of(a, "honest") == [1, 2] and m.groups_of(a, "mut_partial_noop") == [1]
     assert a.launches == ["honest", "mut_partial_noop", "flag_on", "mut_no_transfer"]
+
+
+# ---------------------------------------------------------------- mock execution: main() end to end on a fake server
+def _fake_server_factory(clients, seen):
+    class FakeServer:
+        def __init__(self, ctx, cfg_name, binary):
+            self.ctx, self.cfg_name, self.label = ctx, cfg_name, f"{cfg_name}-fake"
+            self.argv, self.readback, self.env_note = [str(binary), "--fake"], {}, {}
+            self.linkage, self.stop_rec, self.proc = {"pass": True}, {}, None
+
+        def start(self):
+            # rules and run metadata are on disk BEFORE the first launch
+            assert (self.ctx.out / "rules.json").exists() and (self.ctx.out / "run_meta.json").exists()
+            seen.append(self.cfg_name)
+            self.ctx.client = clients[self.cfg_name]
+
+        def stop(self):
+            self.stop_rec = {"verified_dead": True}
+    return FakeServer
+
+
+def test_main_executes_every_launch_and_resumes_without_a_load(tmp_path, monkeypatch, capsys):
+    clients = {"kpf174_honest": FakeClientWithSlots(), "kpf174_mut_partial_noop": FakeClientWithSlots(defect=[2148, 4096]),
+               "kpf174_flag_on": FakeClientWithSlots(), "kpf174_mut_no_transfer": FakeClientWithSlots(defect=GEO["c"])}
+    seen: list[str] = []
+    monkeypatch.setattr(k13, "Server", _fake_server_factory(clients, seen))
+    monkeypatch.setattr(k13, "port_listening", lambda p: False)
+    monkeypatch.setenv("KPF13_REGION", "184-191")
+    ps = make_prompts(tmp_path / "ps.jsonl")
+    argv = ["run", "--out", str(tmp_path / "o"), "--cpu-list", "184-191", "--fork-bin", str(fake_bin(tmp_path)),
+            "--prompt-set", str(ps), "--prior-191a", "", "--deadline-s", "3600", "--no-device-claim", "test",
+            "--card", str(tmp_path / "nocard"), "--numa-membind", "3"]
+    assert m.main(argv) == 0
+    assert seen == ["kpf174_honest", "kpf174_mut_partial_noop", "kpf174_flag_on", "kpf174_mut_no_transfer"]
+    v = json.loads((tmp_path / "o" / "verdict.json").read_text())
+    assert v["decisions"]["kpf17_4"] == "PASS" and v["decisions"]["kpf19_1a"] == "PASS"
+    recs = list((tmp_path / "o" / "records").glob("*.json"))
+    assert len(recs) == 4 and len((tmp_path / "o" / "belief_measurements.jsonl").read_text().splitlines()) == 4
+    rules = json.loads((tmp_path / "o" / "rules.json").read_text())
+    assert rules["rules_sha256"] == m.rules_sha256() and rules["cell_judge_rules_sha256_kpf13_v3"] == k13.rules_sha256("v3")
+    assert len(list((tmp_path / "o" / "cells" / "honest").glob("*.json"))) == 6
+    # a second window with --resume loads nothing: every cell is stored
+    seen.clear()
+    assert m.main(argv + ["--resume"]) == 0 and seen == []
+    out = capsys.readouterr().out
+    assert "all cells stored, skipped (resume)" in out
+    # this row's own record now serves as the 19.1a prior for a later run (e.g. the KPF-18 S1 sweep)
+    recs_191a = [json.loads(p.read_text()) for p in recs]
+    assert any(r["decisions"]["kpf19_1a"] == "PASS" and "19.1a" in r["kpf_task"] for r in recs_191a)
+
+
+def test_main_drains_on_the_stop_file_before_a_launch(tmp_path, monkeypatch):
+    seen: list[str] = []
+    monkeypatch.setattr(k13, "Server", _fake_server_factory({"kpf174_honest": FakeClientWithSlots()}, seen))
+    monkeypatch.setattr(k13, "port_listening", lambda p: False)
+    monkeypatch.setenv("KPF13_REGION", "184-191")
+    stop = tmp_path / "STOP"
+    stop.write_text("")
+    rc = m.main(["run", "--out", str(tmp_path / "o"), "--cpu-list", "184-191", "--fork-bin", str(fake_bin(tmp_path)),
+                 "--prompt-set", str(make_prompts(tmp_path / "ps.jsonl")), "--prior-191a", "", "--deadline-s", "3600",
+                 "--no-device-claim", "test", "--card", str(tmp_path / "nocard"), "--stop-file", str(stop)])
+    assert rc == 5 and seen == []

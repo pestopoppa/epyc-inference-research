@@ -355,7 +355,8 @@ class Runner:
         self.srv.start()
         self.vram_file = self.ctx.out / "vram" / f"{self.srv.label}.txt"
         self.vram_file.parent.mkdir(parents=True, exist_ok=True)
-        threading.Thread(target=self._vram_loop, daemon=True).start()
+        if getattr(self.srv, "proc", None) is not None:   # 1 Hz own-pid KFD VRAM sampler (the record's residency proof)
+            threading.Thread(target=self._vram_loop, daemon=True).start()
 
     def _vram_loop(self) -> None:
         pid = self.srv.proc.pid
