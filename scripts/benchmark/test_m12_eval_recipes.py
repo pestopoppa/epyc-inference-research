@@ -38,8 +38,8 @@ def test_readers_give_every_slot_196k_and_checkpoints(name, np_, model):
     assert _flag(argv, "-m").endswith(model)
     assert _flag(argv, "--device") == "ROCm0" and _flag(argv, "-ngl") == "99"
     assert argv[:3] == ["taskset", "-c", "184-191"]
-    assert argv[3] == "/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server"
-    assert spec["env"]["LD_LIBRARY_PATH"] == "/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin"
+    assert argv[3] == "/mnt/raid0/llm/kernels/builds/gpu-20261021-49550eda5-c-nemotron/bin/llama-server"
+    assert spec["env"]["LD_LIBRARY_PATH"] == "/mnt/raid0/llm/kernels/builds/gpu-20261021-49550eda5-c-nemotron/bin"
 
 
 @pytest.mark.parametrize("variant, canonical", [
