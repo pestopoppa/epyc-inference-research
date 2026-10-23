@@ -79,6 +79,18 @@ def read_vram() -> int:
         return -1
 
 
+def _load_launch_affinity():
+    """The research launch-affinity helper, by file path (this driver runs standalone)."""
+    import importlib.util
+    path = (Path(__file__).resolve().parents[1]
+            / "kernel_rnd/autokernel/loop/launch_affinity.py")
+    spec = importlib.util.spec_from_file_location("launch_affinity_gps", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod   # @dataclass resolves cls.__module__ here
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def arm_argv(build_bin: Path, arm: str, ctx: int,
              pin_host_cores: str | None = None) -> list[str]:
     # Optional because the 2026-08-28 originals ran UNPINNED (every arm equally).
@@ -171,14 +183,25 @@ def run_arm(build_bin: Path, out: Path, arm: str, prompts: list[dict],
     env["LD_LIBRARY_PATH"] = f"{build_bin}:/opt/rocm/lib"
     env["GGML_CUDA_LOG_MMVQ_ROUTE"] = "1"   # every arm, per DF2-6 second consequence
     env.pop("HSA_OVERRIDE_GFX_VERSION", None)
+    la = _load_launch_affinity()
+    la.apply_pinned_launch_env(env, argv)   # layer 1: ROCr must not widen taskset
 
     records = []
+    affinity = None
     with log.open("wb") as errf:
         # DF2-6c-ii: a FRESH process per arm.
         proc = subprocess.Popen(argv, stdout=errf, stderr=subprocess.STDOUT,
                                 env=env, cwd=str(build_bin.parent.parent))
         try:
             wait_ready(proc, log)
+            if pin_host_cores:   # layer 2: re-pin strays, refuse on any residual escape
+                try:
+                    affinity = la.enforce_pinned_child(proc.pid, pin_host_cores,
+                                                       label=f"df2 arm {arm}")
+                except la.LaunchAffinityError as exc:
+                    raise ArmRefused(f"{arm}: {exc}") from exc
+                (arm_dir / "affinity.json").write_text(json.dumps(affinity, indent=2),
+                                                       encoding="utf-8")
             vram = read_vram()
             if vram < VRAM_RESIDENT_FLOOR:
                 raise ArmRefused(
@@ -202,7 +225,7 @@ def run_arm(build_bin: Path, out: Path, arm: str, prompts: list[dict],
     text = log.read_text(errors="replace")
     (arm_dir / "records.json").write_text(json.dumps(records, indent=2), encoding="utf-8")
     return {
-        "arm": arm, "records": records, "vram_bytes": vram,
+        "arm": arm, "records": records, "vram_bytes": vram, "affinity": affinity,
         "mmvq_route_lines": text.count("GGML_CUDA_MUL_MAT_ROUTE"),
     }
 
