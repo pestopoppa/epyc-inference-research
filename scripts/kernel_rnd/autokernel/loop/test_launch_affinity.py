@@ -109,3 +109,84 @@ def test_every_canonical_gpu_serving_recipe_pins():
         la.parse_cpu_list(recipe.cpu_list)
         checked += 1
     assert checked >= 1
+
+
+# --- GPS-PIN-2 (2026-10-23): the driver API one-off research GPU drivers use ---------------
+
+def test_prefix_cpuset_and_layer1_env():
+    env = {la.ROCR_AFFINITY_ENV_KEY: "1"}
+    assert la.prefix_cpuset(["taskset", "-c", LANE, "numactl", "x"]) == LANE
+    assert la.apply_pinned_launch_env(env, ["taskset", "-c", LANE, "llama-server"])
+    assert env[la.ROCR_AFFINITY_ENV_KEY] == "0"  # an inherited "1" would re-open the escape
+    bare: dict = {}
+    assert not la.apply_pinned_launch_env(bare, ["llama-server"]) and bare == {}
+    with pytest.raises(la.LaunchAffinityError):
+        la.prefix_cpuset(["taskset", "-p", "1"])
+
+
+def test_enforce_repins_records_and_refuses(tmp_path):
+    masks = {100 + i: LANE for i in range(196)}
+    masks[107] = "0-191"
+    proc = _proc(tmp_path, 100, masks, ppid=55)
+    (proc / "100" / "environ").write_bytes(b"A=1\0HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0\0")
+    calls: list = []
+    rec = la.enforce_pinned_child(100, LANE, proc_root=proc, setter=_setter(proc, 100, calls),
+                                  launcher_pid=55)
+    assert rec["ok"] and calls == [107] and rec["census"] == {LANE: 196}
+    assert rec["env_knob"] == "0"
+    with pytest.raises(la.LaunchAffinityError, match="not a child"):
+        la.enforce_pinned_child(100, LANE, proc_root=proc, setter=_setter(proc, 100, []),
+                                launcher_pid=56)
+
+    def eperm(tid, cpus):
+        raise OSError(errno.EPERM, "nope")
+
+    _task(proc, 100, 300, "0-191")
+    with pytest.raises(la.LaunchAffinityError, match="escape"):
+        la.enforce_pinned_child(100, LANE, proc_root=proc, setter=eperm, launcher_pid=55)
+
+
+def test_pin_watch_repins_while_running_and_refuses_when_it_cannot(tmp_path):
+    proc = _proc(tmp_path, 100, {100: LANE, 101: "0-191"}, ppid=55)
+    calls: list = []
+    w = la.PinWatch(100, LANE, proc_root=proc, setter=_setter(proc, 100, calls), launcher_pid=55)
+    w.poll()
+    _task(proc, 100, 102, "0-191")  # a thread created mid-run
+    w.poll()
+    assert calls == [101, 102] and w.record["ok"] and w.record["polls"] == 2
+    assert w.record["census"] == {LANE: 3}
+
+    stranger = la.PinWatch(100, LANE, proc_root=proc, setter=_setter(proc, 100, []), launcher_pid=9)
+    with stranger:
+        pass
+    assert not stranger.record["ok"] and stranger.record["polls"] == 0
+
+    def eperm(tid, cpus):
+        raise OSError(errno.EPERM, "nope")
+
+    _task(proc, 100, 103, "0-191")
+    bad = la.PinWatch(100, LANE, proc_root=proc, setter=eperm, launcher_pid=55)
+    bad.poll()
+    assert not bad.record["ok"] and bad.record["escapes_after"]
+
+
+def test_pin_watch_thread_polls_and_stops(tmp_path):
+    proc = _proc(tmp_path, 100, {100: LANE}, ppid=55)
+    with la.PinWatch(100, LANE, interval_s=0.01, proc_root=proc, setter=lambda *a: None,
+                     launcher_pid=55) as w:
+        import time
+        deadline = time.monotonic() + 5
+        while w.polls < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+    assert w.record["ok"] and w._thread is not None and not w._thread.is_alive()
+
+
+def test_cli_enforce_and_check(tmp_path, capsys):
+    import json
+    proc = _proc(tmp_path, 100, {100: LANE, 101: LANE}, ppid=55)
+    assert la.main(["--check", "100", LANE, "--json", "--proc-root", str(proc)]) == 0
+    assert json.loads(capsys.readouterr().out)["census"] == {LANE: 2}
+    # --enforce refuses a pid the caller did not spawn (launcher 56 != ppid 55)
+    assert la.main(["--enforce", "100", LANE, "--launcher-pid", "56", "--json",
+                    "--proc-root", str(proc)]) == 1
+    assert "not a child" in json.loads(capsys.readouterr().out)["refused"]
