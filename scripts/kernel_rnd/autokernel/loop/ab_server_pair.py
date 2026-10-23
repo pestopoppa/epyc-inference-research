@@ -10,6 +10,11 @@ driver ``run_paired_serving_ab.py``) is inside a confirmed window. Proofs, all r
                      (``ldd`` cannot see dlopened ``libggml-hip.so``); for ``--device gpu`` libggml-hip must be
                      mapped; a CPU arm must NOT map it
   * identity         ``/props`` n_ctx / total_slots echoed; ``/metrics`` answers (``--metrics`` is forced on)
+  * affinity         every arm, CPU or GPU, is ``taskset -c <cpu_list>`` with ``HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0``
+                     (layer 1); after health every task of the spawned pid is re-pinned into ``cpu_list`` and the
+                     arm is REFUSED on a residual escape (layer 2; ``launch_affinity.enforce_pinned_child``,
+                     operator D1 2026-10-22). A GPU arm used to be unpinned (GPS-PIN-2, 2026-10-23); its host
+                     threads go on the canonical GPU host CPUs, e.g. 184-191.
   * teardown         SIGTERM the arm's captured group, then SIGKILL, then ``kill -0`` verification; never a
                      name-pattern kill
 
@@ -27,6 +32,8 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import launch_affinity as la
+
 DENY_PORTS = frozenset({8000, 8070, 8071, 8072, 8080, 8081, 8082, 8083, 8090, 8100, 8180, 8181, 8182, 8199})
 
 
@@ -37,7 +44,7 @@ class ArmSpec:
     port: int
     model: Path
     device: str = "cpu"             # cpu | gpu
-    cpu_list: str | None = None     # taskset list; required for cpu
+    cpu_list: str | None = None     # taskset list; required (GPU arm: its host threads, e.g. 184-191)
     ctx: int = 4096
     np: int = 2
     threads: int = 8
@@ -67,8 +74,9 @@ def check_specs(a: ArmSpec, b: ArmSpec) -> None:
             raise PairError(f"arm {s.name}: {s.build_dir}/llama-server missing")
         if not s.model.exists():
             raise PairError(f"arm {s.name}: model {s.model} missing")
-        if s.device == "cpu" and not s.cpu_list:
-            raise PairError(f"arm {s.name}: cpu arm needs an explicit cpu_list")
+        if not s.cpu_list:
+            raise PairError(f"arm {s.name}: {s.device} arm needs an explicit cpu_list"
+                            + (" (GPU host threads, e.g. 184-191)" if s.device == "gpu" else ""))
         if s.device not in ("cpu", "gpu"):
             raise PairError(f"arm {s.name}: device {s.device!r}")
     if a.port == b.port:
@@ -80,15 +88,15 @@ def check_specs(a: ArmSpec, b: ArmSpec) -> None:
 def argv_for(s: ArmSpec) -> list[str]:
     argv = [str(s.build_dir / "llama-server"), "-m", str(s.model), "--host", "127.0.0.1", "--port", str(s.port),
             "-c", str(s.ctx), "-np", str(s.np), "-t", str(s.threads), "--metrics", "--no-webui", *s.extra_args]
-    if s.device == "cpu":
-        argv = ["taskset", "-c", s.cpu_list, *argv, "-ngl", "0"]
-    return argv
+    argv = ["taskset", "-c", s.cpu_list, *argv]
+    return [*argv, "-ngl", "0"] if s.device == "cpu" else argv
 
 
 def env_for(s: ArmSpec) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if k != "LD_LIBRARY_PATH"}
     env["LD_LIBRARY_PATH"] = str(s.build_dir)            # ONLY this arm's own libs
     env.update(s.env)
+    la.apply_pinned_launch_env(env, argv_for(s))         # layer 1, after s.env: a pinned arm never opts out
     return env
 
 
@@ -160,6 +168,10 @@ class ServerPair:
         s, pid = self.specs[arm], self._taskset_child(self.procs[arm].pid)
         owner = listening_pid(s.port)
         link = maps_linkage(pid, s.build_dir, s.device)
+        try:
+            affinity = la.enforce_pinned_child(pid, s.cpu_list, label=f"arm {arm}")
+        except la.LaunchAffinityError as exc:
+            affinity = {"ok": False, "refused": str(exc), "census": la.census(pid)}
         props = {}
         try:
             p = _get_json(self.url(arm) + "/props")
@@ -172,8 +184,8 @@ class ServerPair:
         except Exception:
             metrics_ok = False
         return {"arm": arm, "port": s.port, "spawned_pid": pid, "port_owner_pid": owner, "port_owned": owner == pid,
-                "linkage": link, "props": props, "metrics_ok": metrics_ok,
-                "ok": owner == pid and link["ok"] and metrics_ok}
+                "linkage": link, "affinity": affinity, "props": props, "metrics_ok": metrics_ok,
+                "ok": owner == pid and link["ok"] and metrics_ok and affinity["ok"]}
 
     def stop(self) -> dict:
         res = {}

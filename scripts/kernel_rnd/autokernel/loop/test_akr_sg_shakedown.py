@@ -111,3 +111,43 @@ def test_start_failure_still_tears_down_and_proves_dead(tmp_path):
     with pytest.raises(ab.PairError, match="proof failed"):
         pair.start(ready_timeout_s=30)
     assert pair.procs == {} and ab.listening_pid(ports[0]) is None and ab.listening_pid(ports[1]) is None
+
+
+# --- GPS-PIN-2 (2026-10-23): the GPU arm is pinned and affinity-enforced like the CPU arm ---
+
+def test_gpu_arm_is_pinned_with_the_rocr_knob(tmp_path, monkeypatch):
+    monkeypatch.setenv("HSA_OVERRIDE_CPU_AFFINITY_DEBUG", "1")
+    s = _spec(tmp_path, "A", 9511, "184-191")
+    s.device, s.env = "gpu", {"HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "1"}
+    argv = ab.argv_for(s)
+    assert argv[:3] == ["taskset", "-c", "184-191"] and "-ngl" not in argv
+    assert ab.env_for(s)["HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] == "0"   # neither ambient nor spec opts out
+    assert ab.env_for(_spec(tmp_path, "B", 9512, "4-7"))["HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] == "0"
+    bad = _spec(tmp_path, "A", 9511, None)
+    bad.device = "gpu"
+    with pytest.raises(ab.PairError, match="gpu arm needs an explicit cpu_list"):
+        ab.check_specs(bad, _spec(tmp_path, "B", 9512, "4-7"))
+
+
+def test_prove_refuses_an_affinity_escape(tmp_path, monkeypatch):
+    a, b = _spec(tmp_path, "A", 9511), _spec(tmp_path, "B", 9512, "4-7")
+    pair = ab.ServerPair(a, b, tmp_path / "logs")
+    pair.procs["A"] = type("P", (), {"pid": 4242})()
+    monkeypatch.setattr(ab, "listening_pid", lambda port: 4242)
+    monkeypatch.setattr(ab, "maps_linkage", lambda *x: {"ok": True})
+    monkeypatch.setattr(ab, "_get_json", lambda url: {"total_slots": 2})
+    monkeypatch.setattr(ab.urllib.request, "urlopen",
+                        lambda *x, **k: type("R", (), {"read": lambda self, n: b""})())
+    seen = []
+
+    def escape(pid, cpus, label):
+        seen.append((pid, cpus))
+        raise ab.la.LaunchAffinityError("tasks escape 0-3 after re-pin")
+
+    monkeypatch.setattr(ab.la, "enforce_pinned_child", escape)
+    monkeypatch.setattr(ab.la, "census", lambda pid: {"0-191": 1})
+    proof = pair.prove("A")
+    assert seen == [(4242, "0-3")] and proof["ok"] is False
+    assert proof["affinity"]["refused"].startswith("tasks escape")
+    monkeypatch.setattr(ab.la, "enforce_pinned_child", lambda pid, cpus, label: {"ok": True})
+    assert pair.prove("A")["ok"] is True

@@ -6,6 +6,9 @@
       --model /mnt/raid0/llm/models/<small>.gguf --device cpu --cpu-list-a 0-7 --cpu-list-b 96-103 \\
       --port-a 9511 --port-b 9512 --pairs 8 --aa-pairs 8 --np 2 --out-dir RUN_DIR
 
+A ``--device gpu`` run needs ``--cpu-list-a/-b`` too (the arms' host threads, e.g. 184-191; refused if
+unset): every arm is pinned and affinity-enforced by ``ab_server_pair`` (GPS-PIN-2).
+
 Shakedown semantics: A and B may be the SAME build (an A/A shakedown: the record must come out valid with an
 effect inside its own floor, ``decisive`` false). What is being shaken down is the RECORD PIPELINE on a live
 endpoint: launch, port-ownership and linkage proof, closed-round load, self-check, pairing, floor, /metrics
