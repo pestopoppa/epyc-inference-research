@@ -64,8 +64,9 @@ BENCH_CANONICAL = os.path.join(CODE_ROOT, "scripts/benchmark/bench_canonical.sh"
 VERIFY_LINKAGE = os.path.join(CODE_ROOT, "scripts/utils/verify_ggml_linkage.sh")
 CPU_MODEL = "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"
 BENCH_ARGS = ["-p", "512", "-n", "128", "-r", "3"]
-GPU_BUILD = "/mnt/raid0/llm/kernels/builds/gpu-20261021-49550eda5-c-nemotron"   # champion 49550eda5 (CH-26), build 10411
-GPU_EXPECT_BUILD = "b10411-49550eda5"
+# Default for NEW sessions only: prereg'd sessions pin their own build (W2 used b10345-dd3d9721c from its pinned worktree).
+GPU_BUILD = "/mnt/raid0/llm/kernels/builds/gpu-20261023-141e4bcf5-lbh"   # champion 141e4bcf5, build 10412
+GPU_EXPECT_BUILD = "b10412-141e4bcf5"
 GPU_MODEL = "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf"
 GPU_DRAFT = "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf"
 GPU_TEMPLATE = "/mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja"
