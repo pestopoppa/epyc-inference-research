@@ -219,13 +219,26 @@ def test_trace_retriever_finds_the_right_chapters(tmp_path):
 
 @trace_only
 def test_trace_retriever_ranks_by_bm25_not_recency(tmp_path):
-    """navigation.search_records returns ts-desc; top_k=1 must still pick the best match."""
+    """top_k=1 must pick the best bm25 match, not the latest chapter (pre-2026-09-16 navigation was ts-desc)."""
     from tulving_trace_retriever import TraceFTSChapterRetriever
     book = ("Chapter 1\n\nkites kites kites kites kites at the pier.\n\n"
             "Chapter 2\n\nA quiet day.\n\n"
             "Chapter 3\n\nOne kite, briefly, among many other unrelated words here.\n")
     retriever = TraceFTSChapterRetriever(book, db_dir=tmp_path)
     assert retriever.search("kites", top_k=1)[0][0] == 1
+
+
+@trace_only
+def test_trace_retriever_breaks_score_ties_by_lowest_chapter(tmp_path):
+    """CME-TRV-DOC: the full-candidate-set query is kept so ties resolve to the LOWEST chapters.
+
+    navigation's own bm25 tie-break is ts_utc DESC (highest chapter first); with limit=top_k the
+    retriever would return [10, 11, 12] here, which would change already-scored runs.
+    """
+    from tulving_trace_retriever import TraceFTSChapterRetriever
+    book = "\n\n".join(f"Chapter {i}\n\nalpha beta gamma delta" for i in range(1, 13)) + "\n"
+    retriever = TraceFTSChapterRetriever(book, db_dir=tmp_path)
+    assert [c for c, _ in retriever.search("alpha beta", top_k=3)] == [1, 2, 3]
 
 
 @trace_only

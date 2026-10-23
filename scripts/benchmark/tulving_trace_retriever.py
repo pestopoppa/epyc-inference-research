@@ -12,12 +12,18 @@ Offline by construction. It opens no socket, loads no model, calls no embedding
 service, and never touches the production trace DB (``data/trace/events.sqlite``).
 The store is a throwaway file under ``db_dir``.
 
-Ranking. ``navigation.search_records`` delegates to ``src.trace.query.query``. That
-function's docstring says "rank by bm25", but its SQL orders every result by
-``ts_utc DESC`` (checked 2026-09-16). A ``limit`` below the match count would
-therefore keep the LATEST chapters, not the most relevant ones. So this retriever
-asks navigation for EVERY matching chapter (``limit`` = chapter count), which is the
-candidate set, and orders those candidates by FTS5 ``bm25()`` over the same store. The
+Ranking. ``navigation.search_records`` delegates to ``src.trace.query.query``. Since
+2026-09-16 that function ranks text searches by FTS5 ``bm25()`` BEFORE ``LIMIT`` by default
+(``order="relevance"``). Before that date it silently ordered by ``ts_utc DESC``, which kept
+the LATEST chapters under a small ``limit``, not the most relevant ones. The old
+"ask for every match" workaround is therefore no longer needed for correctness, but it is
+kept on purpose: this retriever still asks navigation for EVERY matching chapter
+(``limit`` = chapter count) and ranks those candidates itself by FTS5 ``bm25()`` over the
+same store, ties broken by lowest chapter number. Reasons: (1) ``query`` breaks bm25 ties by
+``ts_utc DESC`` (highest chapter first), so ``limit=top_k`` changes WHICH tied chapters come
+back (12 identical chapters, top_k=3: [1, 2, 3] here, [10, 11, 12] with ``limit=top_k``),
+which would make already-scored runs incomparable; (2) it does not depend on the checkout
+at ``EPYC_ORCHESTRATOR_ROOT`` being newer than 2026-09-16. The
 top-k passages are returned in book order, because the task is episodic and chapter
 order is information the model needs for the chronological questions.
 """
