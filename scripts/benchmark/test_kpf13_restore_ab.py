@@ -659,3 +659,149 @@ def test_threads_override_and_stop_file_flags_parse(tmp_path):
     ctx = make_ctx(tmp_path, FakeClient(), argv=["--threads", "24"])
     srv = m.Server(ctx, "default", Path("/x/llama-server"))
     assert srv.argv[srv.argv.index("-t") + 1] == "24" and srv.argv[srv.argv.index("-tb") + 1] == "24"
+
+
+# ---------------------------------------------------------------- rules v3 (2026-10-23): K >= 3 controls, measured spread
+def test_rules_v3_is_declared_hashed_and_distinct_from_v2():
+    assert m.RULES["schema"] == "epyc.kpf13.rules.v2" and m.rules_sha256() == m.rules_sha256("v2")
+    assert m.RULES_V3["schema"] == "epyc.kpf13.rules.v3"
+    assert m.rules_sha256("v3") != m.rules_sha256("v2") and len(m.rules_sha256("v3")) == 64
+    for k in ("acceptance_spread", "min_control_repeats", "supersedes", "cell_pass", "decisions", "order"):
+        assert k in m.RULES_V3, k
+    assert "e0e6e528" in m.RULES_V3["supersedes"] and "decision_grade" in m.RULES_V3["decisions"]
+    assert "CA3 CB3" in m.RULES_V3["order"] and "spread" in m.RULES_V3["cell_pass"]["acceptance"]
+    json.dumps(m.RULES_V3)
+
+
+def test_controls_of_returns_every_repeat_in_order():
+    c = {"controls": {"CA2": ctl(dn=2), "CA10": ctl(dn=10), "CA1": ctl(dn=1), "CB1": ctl(dn=5), "CA3": ctl(dn=3)}}
+    assert [r["draft_n"] for r in m.controls_of(c, "A")] == [1, 2, 3, 10]
+    assert [r["draft_n"] for r in m.controls_of(c, "B")] == [5]
+
+
+def test_spread_is_pooled_from_controls_only():
+    cells = [{"cell": "g0", "T": 2048, "N": 64, "suffix_len": 1,
+              "controls": {"CA1": ctl(dn=87, da=40), "CA2": ctl(dn=91, da=39), "CA3": ctl(dn=89, da=40),
+                           "CB1": ctl(cache=1984, prompt_n=65, dn=81, da=42),
+                           "CB2": ctl(cache=1984, prompt_n=65, dn=81, da=42),
+                           "CB3": ctl(cache=1984, prompt_n=65, dn=81, da=42)},
+              "runs": {"A1": run(dn=200, da=1)}},   # an arm run never widens the spread
+             {"cell": "g1", "T": 2048, "N": 64, "suffix_len": 1,
+              "controls": {"CA1": ctl(dn=77, da=43), "CA2": ctl(dn=77, da=43), "CA3": ctl(dn=78, da=41)}}]
+    sp = m.acceptance_spread(cells)
+    assert sp["spread_dn"] == 4 and sp["spread_da"] == 2 and sp["min_k"] == 3 and sp["n_pooled"] == 3
+
+
+def test_v3_slack_turns_a_v2_zero_width_failure_into_a_pass_but_keeps_real_drops():
+    refs = [ctl(dn=127, da=31), ctl(dn=127, da=31), ctl(dn=127, da=31)]
+    x = run(dn=123, da=32, fork=2048)
+    assert m.judge_run(refs, x, 2048, kind="control", ref_expect=CA_EXP)["verdict"] == "FAIL"         # v2: zero width
+    j = m.judge_run(refs, x, 2048, kind="control", ref_expect=CA_EXP, slack=(4, 1))
+    assert j["verdict"] == "PASS" and j["accept_interval"] == {"draft_n": [123, 131], "draft_n_accepted": [30, 32]}
+    drop = m.judge_run(refs, run(dn=127, da=28, fork=2048), 2048, kind="control", ref_expect=CA_EXP, slack=(4, 1))
+    assert drop["verdict"] == "FAIL" and drop["acceptance_drop"] is True
+
+
+def test_token_rule_with_k_controls_uses_the_smallest_pairwise_agreement():
+    base = list(range(N))
+    c2 = base[:]
+    c2[30] = 999
+    refs = [ctl(tokens=base), ctl(tokens=base), ctl(tokens=c2)]
+    x = base[:]
+    x[40] = 999   # agrees with control 1 for 40 >= 30 positions
+    assert m.judge_run(refs, run(tokens=x, fork=2048), 2048, kind="control", ref_expect=CA_EXP)["tokens_ok"] is True
+    y = base[:]
+    y[10] = 999
+    assert m.judge_run(refs, run(tokens=y, fork=2048), 2048, kind="control", ref_expect=CA_EXP)["tokens_ok"] is False
+
+
+def run_v3(tmp_path, client, k=3):
+    ctx = make_ctx(tmp_path, client, argv=["--rules", "v3", "--control-repeats", str(k)])
+    pl = m.Plan(ctx, "default", ctx.results, False)
+    pl.srv = FakeSrv()
+    for st in pl.build():
+        if st.fn and ("sources" in st.desc or "cell g" in st.desc):
+            st.fn()
+    return ctx, pl
+
+
+def test_v3_cell_order_runs_k_controls_per_arm(tmp_path):
+    ctx, pl = run_v3(tmp_path, FakeClient(), k=4)
+    cid = [k for k, c in ctx.results["default"].items() if c["group"] == 0 and c["suffix_len"] == 1][0]
+    rows = [json.loads(x) for x in (tmp_path / "out" / "rows" / "default.jsonl").read_text().splitlines()]
+    arms = [r["arm"] for r in rows if r.get("cell") == cid and "_seed" not in r["arm"]]
+    assert arms == ["W1", "CA1", "A1", "CB1", "B1", "CA2", "A2", "CB2", "B2", "CA3", "CB3", "CA4", "CB4", "W2"]
+    c = ctx.results["default"][cid]
+    assert c["control_repeats"] == 4 and c["rules_schema"] == "epyc.kpf13.rules.v3"
+    for k in ("CA3", "CA4"):
+        assert c["controls"][k]["cache_n"] == 2048 and c["controls"][k]["n_fork_tokens"] == 0
+    for k in ("CB3", "CB4"):
+        assert c["controls"][k]["cache_n"] == 2048 - c["N"]
+
+
+def test_v3_analysis_is_decision_grade_with_three_controls(tmp_path):
+    ctx, pl = run_v3(tmp_path, FakeClient(penalty=2048))
+    ana = m.analyze_results(ctx.results, {0}, [64, 512], True, "v3")
+    assert ana["rules"] == "v3" and ana["rules_sha256"] == m.rules_sha256("v3")
+    assert ana["acceptance_spread"]["default"]["spread_dn"] == 0 and ana["min_controls_per_judged_arm"] == 3
+    d = ana["decisions"]
+    assert d["decision_grade"] is True and d["trigger_port_30141"] is True     # 20 -> 17 accepted: a real drop
+
+
+def test_v3_rejudge_of_two_control_cells_is_not_decision_grade(tmp_path):
+    ctx, pl = run_default(tmp_path, FakeClient())        # v2-shaped cells: 2 controls per arm
+    ana = m.analyze_results(ctx.results, {0}, [64, 512], True, "v3")
+    assert ana["configs"]["default"]["A"]["verdict"] == "PASS"
+    d = ana["decisions"]
+    assert d["decision_grade"] is False and d["restore_faithful"] == "NOT_DECISION_GRADE"
+    assert d["restore_verdict"] == "PASS"
+    v2 = m.analyze_results(ctx.results, {0}, [64, 512])
+    assert "decision_grade" not in v2["decisions"] and v2["rules"] == "v2"
+
+
+def test_v3_flags_and_refusals_parse(tmp_path):
+    a = m.parse_args(["run", "--out", str(tmp_path), "--rules", "v3"])
+    assert a.control_repeats == 3
+    assert m.parse_args(["run", "--out", str(tmp_path)]).control_repeats == 2
+    ps = make_prompt_set(tmp_path / "ps.jsonl")
+    bad = m.parse_args(["run", "--out", str(tmp_path / "o"), "--cpu-list", "184-191", "--rules", "v3",
+                        "--control-repeats", "2", "--drafter", "dflash2", "--reduced", "--with-skip",
+                        "--numa-membind", "3", "--prompt-set", str(ps), "--fork-bin", str(fake_bin(tmp_path))])
+    probs, _ = m.preflight(bad, m.PromptSet(ps, bad.trunk_tokens, bad.suffix_lens), [])
+    j = "\n".join(probs)
+    assert "rules v3 need --control-repeats >= 3" in j and "--with-skip is plain-drafter only" in j
+    assert "--numa-membind is the GPU launch prefix only" in j
+
+
+def test_reduced_with_skip_adds_the_13_1a_launch(tmp_path):
+    a = m.parse_args(["run", "--out", str(tmp_path), "--reduced", "--with-skip", "--rules", "v3"])
+    assert a.configs == ["default", "skip"] and a.eval_groups == [0, 1, 2, 3]
+
+
+def test_gpu_prefix_is_numactl_then_taskset(tmp_path):
+    ctx = make_ctx(tmp_path, FakeClient(), argv=["--device", "gpu", "--numa-membind", "3", "--cpu-list", "184-191"])
+    assert ctx.prefix == ["numactl", "--membind=3", "--", "taskset", "-c", "184-191"]
+    srv = m.Server(ctx, "default", Path("/x/llama-server"))
+    assert "-tb" not in srv.argv and srv.full_cmd()[:6] == ctx.prefix
+
+
+def test_shipped_gpu_dflash2_argv_file_is_valid():
+    argv, comments = m.load_argv_file(m.HERE / "argv.gpu-27b-dflash2.txt")
+    assert m.argv_problems(argv, "dflash2", "gpu") == []
+    assert m.flag_val(argv, ("--spec-type",)) == "draft-dflash" and m.flag_val(argv, ("--spec-draft-n-max",)) == "7"
+    assert m.flag_val(argv, ("-md",)).endswith("Qwen3.8-27B-DFlash2-Q8_0.gguf")
+    assert m.flag_val(argv, ("-m",)).endswith("Qwen3.8-27B-Q8_0.gguf") and "--no-cache-idle-slots" in argv
+    assert m.flag_val(argv, ("--device",)) == "ROCm0" and "--slot-save-path" not in argv and comments
+
+
+def test_dry_run_v3_gpu_dflash2_plan(tmp_path, capsys, monkeypatch):
+    started = []
+    monkeypatch.setattr(m.Server, "start", lambda self: started.append(1))
+    ps = make_prompt_set(tmp_path / "ps.jsonl")
+    rc = m.main(["run", "--out", str(tmp_path / "o"), "--cpu-list", "184-191", "--fork-bin", str(fake_bin(tmp_path)),
+                 "--prompt-set", str(ps), "--reduced", "--rules", "v3", "--device", "gpu", "--drafter", "dflash2",
+                 "--numa-membind", "3", "--argv-file", str(m.HERE / "argv.gpu-27b-dflash2.txt"), "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0 and not started
+    assert "rules=v3" in out and "controls/arm=3" in out and out.count("cell g") == 12
+    assert "CB2 B2 CA3 CB3 W2" in out and "numactl --membind=3 -- taskset -c 184-191" in out

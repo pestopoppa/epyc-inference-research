@@ -1,0 +1,32 @@
+# KPF-13.1 GPU argv, DFlash2 SWA drafter (Qwen3.8-27B-Q8_0 + Qwen3.8-27B-DFlash2-Q8_0), 2026-10-23 workspace-f8.
+# Derived from the KPF-18 gate argv /mnt/raid0/llm/tmp/overnight-20261020/argv.8083-gate.txt, itself the production :8083
+# argv of logs/server_launches/8083.json (launch f2e6796c, argv_sha256 4ea2aa0d...; the canonical 27B recipe: ALWAYS the
+# DFlash2 drafter, --spec-type draft-dflash --spec-draft-n-max 7) with -ub 2048 -> -b 512 -ub 512 and --no-cache-idle-slots.
+# Changes vs that gate argv: removed --slot-save-path (the driver sets its own); --cache-ram 65536 -> 8192 MiB (the
+# 2k-token trunks need < 2 GiB of prompt cache; bounds the host-RAM admission, 48 GiB row budget).
+# The driver adds: --port, --metrics, --slot-save-path, --slot-fork-min-tokens. -t 8 stays (GPU host threads 184-191;
+# the driver sets -t/-tb only on CPU). Launch prefix (driver --numa-membind 3 --cpu-list 184-191):
+# numactl --membind=3 -- taskset -c 184-191, as production.
+-m /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+--host 127.0.0.1
+-np 4
+-c 393216
+-t 8
+-b 512
+-ub 512
+--flash-attn on
+--jinja
+-ctk q8_0
+-ctv q8_0
+--kv-unified
+--no-mmap
+-ngl all
+--cache-ram 8192
+--chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja
+-md /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+-ngld 99
+--spec-type draft-dflash
+--spec-draft-n-max 7
+--device ROCm0
+--device-draft ROCm0
+--no-cache-idle-slots

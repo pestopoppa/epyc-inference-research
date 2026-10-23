@@ -2,8 +2,14 @@
 """KPF-13.1 / KPF-13.1a driver: drafter state at a cross-slot prefix fork, restore vs recompute A/B.
 
 Handoff: handoffs/active/kv-prefix-fork-and-paged-attention.md (RTG-58), rows KPF-13.1 and KPF-13.1a.
-Written 2026-10-21; rules v2 (no-fork cache-hit controls, S=2 cell, measured near-tie band) 2026-10-22.
+Written 2026-10-21; rules v2 (no-fork cache-hit controls, S=2 cell, measured near-tie band) 2026-10-22; rules v3
+(--rules v3: K >= 3 same-shape controls per arm per cell, acceptance interval widened by the MEASURED control spread;
+--with-skip runs the 13.1a launch inside --reduced; --numa-membind adds the production GPU launch prefix) 2026-10-23.
 Class: correctness (token identity and draft counts, not timing).
+
+GPU DFlash2 arm (KPF-13.1 reduced, FILLERS kpf13-1-reduced): --device gpu --drafter dflash2 --argv-file
+argv.gpu-27b-dflash2.txt --prompt-set <the 27B-tokenized KPF-18 prompt set> --reduced --rules v3 --numa-membind 3
+--cpu-list 184-191 on the P1 GPU fork image gpu-20261020-a1f0c8cf9 (launcher: f8-launchers-20261023/kpf13-1-reduced).
 
 WHAT IT MEASURES
   For each (prompt group g, suffix length S) cell, on ONE llama-server (the P1 fork build, a plain-KV MTP drafter or
@@ -202,8 +208,61 @@ RULES = {
 }
 
 
-def rules_sha256() -> str:
-    return sha256_json(RULES)
+MIN_CONTROL_REPEATS_V3 = 3
+
+# Rules v3 (2026-10-23, handoff row "KPF-13.1 rules v3"): v2 took the acceptance interval from the controls' own [min,max]
+# with only two controls per arm, so a cell whose two controls agreed had a ZERO-width interval while the same drafter
+# moves by a few draft tokens between identical requests (v2 run 2026-10-22: CA1 (87,40) vs CA2 (91,39) on g0-S1, W1 (91,40)
+# vs W2 (83,42) on g3-S1, A1 (127,31) vs A2 (123,32) on g1-S128). All 7 v2 failures were acceptance-only, 1-4 draft tokens
+# off. v3 runs >= 3 same-shape controls per arm per cell and widens the interval by the MEASURED run-to-run spread.
+RULES_V3 = json.loads(json.dumps(RULES))
+RULES_V3.update({
+    "schema": "epyc.kpf13.rules.v3",
+    "supersedes": ("rules v2 (sha e0e6e5282e1d7babc0a50f2c4e4725b4a63a27bf7f7528cf686052691d8cd734): acceptance interval "
+                   "= [min, max] of only 2 same-shape controls, zero width whenever they agreed. The v2 reduced run "
+                   "(2026-10-22, /mnt/raid0/llm/tmp/kpf13-reduced-v2/run) passed tokens on every attempt and failed 7 "
+                   "runs on acceptance alone by 1-4 draft tokens; the same run shows identical requests moving by up to "
+                   "8 draft tokens (twins W1/W2 on g3-S1), so a zero-width interval measures the drafter's own "
+                   "run-to-run noise, not fork state"),
+    "control": RULES["control"] + (". Rules v3: K >= %d controls per arm per cell (CA1..CAK, CB1..CBK), each a fresh "
+                                   "re-seed of slot 2 with the arm's partition" % MIN_CONTROL_REPEATS_V3),
+    "order": ("W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 CA3 CB3 .. CAK CBK W2 (A = restore, B = recompute over the last N tokens, "
+              "each right after its control; the extra control repeats follow B2); skip/full: W1 CA1 A1 CA2 A2 CA3 .. CAK"),
+    "acceptance_spread": ("the drafter's MEASURED run-to-run spread on the same shape, computed from controls only "
+                          "(never from arm runs), before any arm is judged: spread_dn = max over every valid cell of "
+                          "the launch being judged and over both arms of (max - min) of draft_n across that cell's K "
+                          "controls of that arm; spread_da the same for draft_n_accepted. Pooled across cells and arms. "
+                          "A cell is valid for the pool when every control passes `cell_invalid_if`"),
+    "cell_pass": {
+        "tokens": RULES["cell_pass"]["tokens"] + (" (with K controls: X must agree with some control for at least the "
+                                                  "smallest pairwise agreement among the K controls)"),
+        "acceptance": ("draft_n of X lies in [min - spread_dn, max + spread_dn] and draft_n_accepted of X lies in "
+                       "[min - spread_da, max + spread_da], min/max over its own cell's K controls for the same arm"),
+        "both_required": True,
+    },
+    "min_control_repeats": ("K >= %d. A judged cell with fewer controls is still judged with the same formula, but the "
+                            "verdict carries decision_grade = false and decide() takes no decision from it (every "
+                            "decision reads NOT_DECISION_GRADE); this is how stored v2 cells (K = 2) are re-judged "
+                            "offline: informational only" % MIN_CONTROL_REPEATS_V3),
+})
+RULES_V3["decisions"] = dict(RULES["decisions"])
+RULES_V3["decisions"]["trigger_port_30141"] = (
+    "arm A verdict FAIL (against CA) with at least one cell where draft_n_accepted of X is BELOW min - spread_da of its "
+    "controls (an acceptance drop beyond the measured run-to-run spread). A token divergence without such a drop is "
+    "reported as `investigate`, not as the trigger")
+RULES_V3["decisions"]["decision_grade"] = ("true iff every judged held-out cell carries >= %d controls per judged arm; "
+                                           "otherwise every other decision reads NOT_DECISION_GRADE"
+                                           % MIN_CONTROL_REPEATS_V3)
+
+RULES_BY_VERSION = {"v2": RULES, "v3": RULES_V3}
+
+
+def rules_for(version: str = "v2") -> dict:
+    return RULES_BY_VERSION[version]
+
+
+def rules_sha256(version: str = "v2") -> str:
+    return sha256_json(rules_for(version))
 
 
 # ---------------------------------------------------------------- small utils
@@ -461,9 +520,10 @@ def ref_problems(refs: list[dict], kind: str, ref_expect: dict | None, n: int = 
 
 
 def judge_run(refs: list[dict], x: dict, expect_fork: int | None, n: int = N_GEN, *, kind: str = "twin",
-              ref_expect: dict | None = None, band: float | None = None) -> dict:
+              ref_expect: dict | None = None, band: float | None = None, slack: tuple[int, int] = (0, 0)) -> dict:
     """One arm run against the references of its cell (its controls, or the informational twins). Returns
-    {verdict: PASS|FAIL|INVALID, reasons, ...}. `band` labels a first divergence as a near-tie (never a verdict)."""
+    {verdict: PASS|FAIL|INVALID, reasons, ...}. `band` labels a first divergence as a near-tie (never a verdict).
+    `slack` = (spread_dn, spread_da): rules v3 widen the acceptance interval by the measured control spread (v2: 0, 0)."""
     reasons: list[str] = []
     invalid = ref_problems(refs, kind, ref_expect, n)
     if x is None:
@@ -476,19 +536,23 @@ def judge_run(refs: list[dict], x: dict, expect_fork: int | None, n: int = N_GEN
     if invalid:
         return {"verdict": "INVALID", "reasons": invalid, "invalid": invalid, "basis": kind}
     ref_tokens = [w["tokens"][:n] for w in refs]
-    ref_agree = prefix_len(ref_tokens[0], ref_tokens[1], n) if len(ref_tokens) >= 2 else n
+    # the smallest pairwise agreement among the references (2 references: exactly the v2 rule)
+    ref_agree = min((prefix_len(ref_tokens[i], ref_tokens[j], n) for i in range(len(ref_tokens))
+                     for j in range(i + 1, len(ref_tokens))), default=n)
     best = max(prefix_len(x["tokens"], t, n) for t in ref_tokens)
     tokens_ok = best >= ref_agree
     if not tokens_ok:
         reasons.append(f"tokens: best {kind} prefix {best} < required {ref_agree}")
     dn = [w["draft_n"] for w in refs]
     da = [w.get("draft_n_accepted") or 0 for w in refs]
+    s_dn, s_da = int(slack[0] or 0), int(slack[1] or 0)
+    lo_dn, hi_dn, lo_da, hi_da = min(dn) - s_dn, max(dn) + s_dn, min(da) - s_da, max(da) + s_da
     x_dn, x_da = x.get("draft_n") or 0, x.get("draft_n_accepted") or 0
-    acc_ok = min(dn) <= x_dn <= max(dn) and min(da) <= x_da <= max(da)
-    acc_drop = x_da < min(da)
+    acc_ok = lo_dn <= x_dn <= hi_dn and lo_da <= x_da <= hi_da
+    acc_drop = x_da < lo_da
     if not acc_ok:
-        reasons.append(f"acceptance: draft_n {x_dn} not in [{min(dn)},{max(dn)}] or accepted {x_da} not in "
-                       f"[{min(da)},{max(da)}]")
+        reasons.append(f"acceptance: draft_n {x_dn} not in [{lo_dn},{hi_dn}] or accepted {x_da} not in "
+                       f"[{lo_da},{hi_da}]")
     near_tie, gap_at = None, None
     if not tokens_ok:
         gaps = x.get("gaps") or []
@@ -496,6 +560,7 @@ def judge_run(refs: list[dict], x: dict, expect_fork: int | None, n: int = N_GEN
         near_tie = bool(gap_at is not None and gap_at < (NEAR_TIE_FLOOR if band is None else band))
     return {"verdict": "PASS" if tokens_ok and acc_ok else "FAIL", "reasons": reasons, "tokens_ok": tokens_ok,
             "accept_ok": acc_ok, "acceptance_drop": acc_drop, "ref_agree": ref_agree, "twin_agree": ref_agree,
+            "n_refs": len(refs), "accept_interval": {"draft_n": [lo_dn, hi_dn], "draft_n_accepted": [lo_da, hi_da]},
             "prefix_best": best, "first_divergence_gap": gap_at, "first_divergence_near_tie": near_tie,
             "near_tie_band": NEAR_TIE_FLOOR if band is None else band, "basis": kind}
 
@@ -506,8 +571,9 @@ def same_run(a: dict, b: dict, n: int = N_GEN) -> bool:
 
 
 def cell_arm_verdict(refs: list[dict], runs: list[dict], expect_fork: int | None, *, kind: str = "twin",
-                     ref_expect: dict | None = None, band: float | None = None) -> dict:
-    js = [judge_run(refs, r, expect_fork, kind=kind, ref_expect=ref_expect, band=band) for r in runs if r is not None]
+                     ref_expect: dict | None = None, band: float | None = None, slack: tuple[int, int] = (0, 0)) -> dict:
+    js = [judge_run(refs, r, expect_fork, kind=kind, ref_expect=ref_expect, band=band, slack=slack)
+          for r in runs if r is not None]
     kinds = [j["verdict"] for j in js]
     v = "FAIL" if "FAIL" in kinds else ("INVALID" if "INVALID" in kinds or not kinds else "PASS")
     return {"verdict": v, "runs": js, "acceptance_drop": any(j.get("acceptance_drop") for j in js), "basis": kind}
@@ -526,8 +592,35 @@ def control_expect(T: int | None, N: int | None, S: int | None, arm: str) -> dic
 
 
 def controls_of(cell: dict, arm: str) -> list[dict]:
+    """Every same-shape control of `arm` in the cell, in repeat order (C{arm}1, C{arm}2, ... C{arm}K)."""
     c = cell.get("controls") or {}
-    return [r for r in (c.get(f"C{arm}1"), c.get(f"C{arm}2")) if r]
+    keys = sorted((k for k in c if re.fullmatch(rf"C{arm}\d+", k)), key=lambda k: int(k[2:]))
+    return [c[k] for k in keys if c[k]]
+
+
+def acceptance_spread(cells: list[dict]) -> dict:
+    """RULES_V3['acceptance_spread']: pooled (max - min) of draft_n / draft_n_accepted across each valid cell's K
+    same-shape controls, over both arms. Controls only; an arm run never widens its own interval."""
+    s_dn = s_da = 0
+    per: list[dict] = []
+    min_k = None
+    for c in cells:
+        for arm in ("A", "B"):
+            refs = controls_of(c, arm)
+            if not refs:
+                continue
+            exp = control_expect(c.get("T"), c.get("N"), c.get("suffix_len"), arm)
+            if arm == "B" and exp is None:
+                continue
+            if ref_problems(refs, "control", exp):
+                continue
+            dn = [r["draft_n"] for r in refs]
+            da = [r.get("draft_n_accepted") or 0 for r in refs]
+            per.append({"cell": c.get("cell"), "arm": arm, "k": len(refs), "dn": [min(dn), max(dn)],
+                        "da": [min(da), max(da)]})
+            s_dn, s_da = max(s_dn, max(dn) - min(dn)), max(s_da, max(da) - min(da))
+            min_k = len(refs) if min_k is None else min(min_k, len(refs))
+    return {"spread_dn": s_dn, "spread_da": s_da, "n_pooled": len(per), "min_k": min_k, "per_cell": per}
 
 
 def near_tie_band(cells: list[dict], floor: float = NEAR_TIE_FLOOR, q: float = NEAR_TIE_QUANTILE) -> dict:
@@ -608,6 +701,13 @@ def decide(summary: dict) -> dict:
             out[key] = "YES"
         else:
             out[key] = "INCONCLUSIVE"
+    grade = summary.get("decision_grade")  # rules v3 only (v2: absent, output unchanged)
+    if grade is not None:
+        if not grade:
+            for k in list(out):
+                if k not in ("restore_verdict", "recompute_verdict"):
+                    out[k] = "NOT_DECISION_GRADE"
+        out["decision_grade"] = bool(grade)
     return out
 
 
@@ -616,7 +716,8 @@ def cell_id(g: int, S: int, N: int | None) -> str:
     return f"g{g}-S{S}" + (f"-N{N}" if N is not None else "")
 
 
-def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plain_drafter: bool = True) -> dict:
+def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plain_drafter: bool = True,
+                    rules: str = "v2") -> dict:
     """results: {config: {cell_id: cell}} where cell = {"group","suffix_len","N","T","twins":{"W1","W2"},
     "controls":{"CA1","CA2","CB1","CB2"},"runs":{"A1","B1","A2","B2"},"ok"}. Arms are judged against their OWN cell's
     controls (RULES v2); the cold twins (inherited through `twins_from` across the N sweep) give the informational
@@ -637,11 +738,25 @@ def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plai
     band_rec = near_tie_band(band_cells)
     band = band_rec["band"]
 
+    # rules v3: the acceptance slack is the measured control spread of the launch being judged (computed per config,
+    # from controls only, before any arm is judged)
+    spreads: dict[str, dict] = {}
+    if rules == "v3":
+        for cfg, cells in results.items():
+            spreads[cfg] = acceptance_spread([c for c in cells.values() if c.get("ok", True)])
+    cur_slack = {"v": (0, 0)}
+
     def arm_v(c: dict, arm: str, runs: list, exp_fork):
         return cell_arm_verdict(controls_of(c, arm), runs, exp_fork, kind="control",
-                                ref_expect=control_expect(c.get("T"), c.get("N"), c.get("suffix_len"), arm), band=band)
+                                ref_expect=control_expect(c.get("T"), c.get("N"), c.get("suffix_len"), arm), band=band,
+                                slack=cur_slack["v"])
+
+    def set_slack(cfg: str) -> None:
+        sp = spreads.get(cfg)
+        cur_slack["v"] = (sp["spread_dn"], sp["spread_da"]) if sp else (0, 0)
 
     # N selection on DEV cells (B arm against CB, default launch)
+    set_slack("default")
     dev_b: dict[int, list[dict]] = {}
     for c in dflt.values():
         if c.get("group") in dev_groups and c.get("N") is not None and c.get("ok", True):
@@ -656,7 +771,9 @@ def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plai
 
     out: dict = {"n_selection": sel, "near_tie_band": band_rec, "configs": {}, "cells": {}}
     summary: dict = {"plain_drafter": plain_drafter}
+    grade_ks: list[int] = []
     for cfg, cells in results.items():
+        set_slack(cfg)
         per_arm: dict[str, list[dict]] = {"A": [], "B": []}
         per_arm_twin: dict[str, list[dict]] = {"A": [], "B": []}
         eq_default: list[bool] = []
@@ -701,6 +818,9 @@ def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plai
                     eq_default.append(rec["A_equals_default_A"])
             out["cells"][f"{cfg}:{cid}"] = rec
             if not is_dev:
+                grade_ks.append(len(controls_of(c, "A")))
+                if "B" in rec:
+                    grade_ks.append(len(controls_of(c, "B")))
                 per_arm["A"].append(a_v)
                 per_arm_twin["A"].append(a_tw)
                 if "B" in rec and (sel["N"] is None or c.get("N") == sel["N"]):
@@ -713,8 +833,13 @@ def analyze_results(results: dict, dev_groups: set[int], n_list: list[int], plai
                                                 "B": arm_verdict(per_arm_twin["B"]) if per_arm_twin["B"] else None}}
         summary[cfg] = {"A": av, "B": bv,
                         "equal_to_default_A": None if cfg == "default" or not eq_default else all(eq_default)}
+    if rules == "v3":
+        summary["decision_grade"] = bool(grade_ks) and min(grade_ks) >= MIN_CONTROL_REPEATS_V3
+        out["acceptance_spread"] = spreads
+        out["min_controls_per_judged_arm"] = min(grade_ks) if grade_ks else None
     out["decisions"] = decide(summary)
-    out["rules_sha256"] = rules_sha256()
+    out["rules"] = rules
+    out["rules_sha256"] = rules_sha256(rules)
     return out
 
 
@@ -906,6 +1031,9 @@ class Ctx:
         self.t0 = time.time()
         self.rates = Rates(args.prefill_tok_s, args.decode_tok_s, args.load_s)
         self.prefix = ["taskset", "-c", args.cpu_list] if args.cpu_list else []
+        if getattr(args, "numa_membind", None) is not None:
+            # production :8083 launch prefix (logs/server_launches/8083.json): numactl --membind=3 -- taskset -c 184-191
+            self.prefix = ["numactl", f"--membind={args.numa_membind}", "--"] + self.prefix
         self.bins_sha: dict[str, str | None] = {}
 
     def bin_sha(self, p: Path) -> str | None:
@@ -1263,13 +1391,16 @@ class Plan:
                 # controls (RULES v2): CA re-seeds the trunk the way the restore source was built, then P (S remainder)
                 ca_seed = (self.est_req(T - n_est, 0) + self.est_req(n_est, 0)) if self._ca_two_hop() else self.est_req(T, 0)
                 est += 2 * (ca_seed + self.est_req(S))
+                extra = max(0, a.control_repeats - 2)                                  # rules v3 repeats
+                est += extra * (ca_seed + self.est_req(S))
                 if has_b:
                     est += 2 * self.est_req(n_est + S) + 2 * self.est_req(n_est, 0)
-                    est += 2 * (self.est_req(T - n_est, 0) + self.est_req(n_est + S))      # CB: seed T-N, then P
-                est += (18 if has_b else 9) * ctx.rates.req
+                    est += (2 + extra) * (self.est_req(T - n_est, 0) + self.est_req(n_est + S))  # CB: seed T-N, then P
+                est += (18 + 6 * extra if has_b else 9 + 3 * extra) * ctx.rates.req
+                more = "".join(f" CA{k}" + (f" CB{k}" if has_b else "") for k in range(3, a.control_repeats + 1))
                 steps.append(Step(f"[{self.cfg_name}] cell g{g} S={S} N={N}: "
-                                  + ("W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2 W2" if has_b else "W1 CA1 A1 CA2 A2"), est,
-                                  lambda g=g, S=S, N=N: self._cell(g, S, N)))
+                                  + (f"W1 CA1 A1 CB1 B1 CA2 A2 CB2 B2{more} W2" if has_b else f"W1 CA1 A1 CA2 A2{more}"),
+                                  est, lambda g=g, S=S, N=N: self._cell(g, S, N)))
         steps.append(Step(f"[{self.cfg_name}] SIGTERM own pid, verify dead, write record", ctx.rates.stop, self._stop))
         return steps
 
@@ -1297,13 +1428,16 @@ class Plan:
         if self.state["N"] is None:
             dflt = self.ctx.results.get("default", {})
             devb: dict[int, list[dict]] = {}
-            for cid, c in dflt.items():
-                if c.get("group") in a.dev_groups and c.get("N") is not None and c.get("ok"):
-                    # RULES v2: B is judged against its no-fork control CB (same partition), not the cold twin
-                    devb.setdefault(c["N"], []).append(
-                        cell_arm_verdict(controls_of(c, "B"), [c["runs"].get("B1"), c["runs"].get("B2")],
-                                         c["T"] - c["N"], kind="control",
-                                         ref_expect=control_expect(c["T"], c["N"], c.get("suffix_len"), "B")))
+            dev_cells = [c for c in dflt.values()
+                         if c.get("group") in a.dev_groups and c.get("N") is not None and c.get("ok")]
+            sp = acceptance_spread(dev_cells) if a.rules == "v3" else None
+            slack = (sp["spread_dn"], sp["spread_da"]) if sp else (0, 0)
+            for c in dev_cells:
+                # RULES v2/v3: B is judged against its no-fork control CB (same partition), not the cold twin
+                devb.setdefault(c["N"], []).append(
+                    cell_arm_verdict(controls_of(c, "B"), [c["runs"].get("B1"), c["runs"].get("B2")],
+                                     c["T"] - c["N"], kind="control",
+                                     ref_expect=control_expect(c["T"], c["N"], c.get("suffix_len"), "B"), slack=slack))
             sel = select_n(devb, a.n_list)
             self.state["N"], self.state["n_sel"] = sel["N"], sel
             print(f"[kpf13] N selected on DEV: {sel}", flush=True)
@@ -1349,7 +1483,8 @@ class Plan:
         meta = {"phase": "cell", "cell": cid, "group": g, "S": S, "N": N, "config": self.cfg_name}
         cell = {"cell": cid, "group": g, "suffix_len": S, "N": N, "T": T, "config": self.cfg_name,
                 "prompt_sha256": sha256_json(P), "runs": {}, "twins": {}, "controls": {}, "ok": False,
-                "start_utc": now_iso(), "rules_schema": RULES["schema"]}
+                "start_utc": now_iso(), "rules_schema": rules_for(ctx.args.rules)["schema"],
+                "control_repeats": ctx.args.control_repeats}
         # twins are N-independent: reuse the first N's twins for the same (g, S) in the default launch
         reuse = None
         if has_b:
@@ -1401,6 +1536,9 @@ class Plan:
             cell["controls"]["CB2"] = control("CB2", cb_seeds)
             cell["runs"]["B2"] = child("B2")
             self._regen_source3(g, N)
+            for k in range(3, ctx.args.control_repeats + 1):     # rules v3: K >= 3 same-shape control repeats
+                cell["controls"][f"CA{k}"] = control(f"CA{k}", ca_seeds)
+                cell["controls"][f"CB{k}"] = control(f"CB{k}", cb_seeds)
             if not reuse:
                 cell["twins"]["W2"] = twin("W2")
         else:
@@ -1408,6 +1546,8 @@ class Plan:
             cell["runs"]["A1"] = child("A1")
             cell["controls"]["CA2"] = control("CA2", ca_seeds)
             cell["runs"]["A2"] = child("A2")
+            for k in range(3, ctx.args.control_repeats + 1):
+                cell["controls"][f"CA{k}"] = control(f"CA{k}", ca_seeds)
         # fork designed positions (validated again by the judge; recorded here for the rows)
         cell["expect"] = {"A": T, "B": (T - N) if has_b else None,
                           "CA": control_expect(T, N, S, "A"), "CB": control_expect(T, N, S, "B") if has_b else None}
@@ -1427,7 +1567,7 @@ class Plan:
         cells = dict(self.results)
         ana = analyze_results({self.cfg_name: cells, **({"default": ctx.results.get("default", {})}
                                                         if self.cfg_name != "default" else {})},
-                              set(a.dev_groups), a.n_list)
+                              set(a.dev_groups), a.n_list, a.drafter == "plain-mtp", a.rules)
         sums = [r for c in cells.values() for r in c.get("runs", {}).values()]
         rec = {
             "schema": SCHEMA, "kpf_task": TASK, "run_id": f"kpf13-{self.cfg_name}-{utc_tag()}",
@@ -1444,10 +1584,13 @@ class Plan:
             "drafter": a.drafter, "dflash2": a.drafter == "dflash2",
             "spec_type_from_argv": flag_val(ctx.gate_argv, ("--spec-type",)),
             "n_predict": N_GEN, "seed": SEED,
-            "equivalence": {"counts_basis": "per cell (rules v2): tokens identical to the arm's no-fork cache-hit "
-                                            "control (same batch partition), draft_n and draft_n_accepted inside the "
-                                            "controls' range; the cold-twin column is informational; see rules_sha256",
+            "equivalence": {"counts_basis": f"per cell (rules {a.rules}): tokens identical to the arm's no-fork "
+                                            "cache-hit control (same batch partition), draft_n and draft_n_accepted "
+                                            "inside the controls' range" + (" widened by the measured control spread "
+                                            f"(K = {a.control_repeats} controls per arm)" if a.rules == "v3" else "")
+                                            + "; the cold-twin column is informational; see rules_sha256",
                             "near_tie_band": ana.get("near_tie_band"),
+                            "acceptance_spread": (ana.get("acceptance_spread") or {}).get(self.cfg_name),
                             "configs": ana["configs"].get(self.cfg_name), "n_selection": ana["n_selection"],
                             "decisions": ana["decisions"]},
             "ttft_ms": [r["prompt_ms"] for r in sums if r and r.get("prompt_ms") is not None],
@@ -1457,7 +1600,8 @@ class Plan:
             "fork_op_ms": [r["fork_op_ms"] for r in sums if r and r.get("fork_op_ms") is not None],
             "window_id": a.window_id, "gpu_window_id": a.gpu_window_id,
             "start_utc": ctx.start_utc, "end_utc": now_iso(), "host": ctx.host,
-            "rules_sha256": rules_sha256(), "restore_does_not_carry": RULES["restore_does_not_carry"],
+            "rules": a.rules, "rules_sha256": rules_sha256(a.rules), "control_repeats": a.control_repeats,
+            "restore_does_not_carry": RULES["restore_does_not_carry"],
             "first_draft_observable": a.draft_debug,
             "residency": {"linkage": srv.linkage if srv else None, "stop": srv.stop_rec if srv else None,
                           "device": a.device, "cpu_list": a.cpu_list},
@@ -1552,6 +1696,14 @@ def preflight(args, ps: PromptSet | None, gate_argv: list[str]) -> tuple[list[st
         probs.append(f"T-N = {args.trunk_tokens - max(args.n_list)} < --fork-min {args.fork_min}: the recompute fork would not be taken")
     if set(args.dev_groups) & set(args.eval_groups):
         probs.append("dev and eval groups overlap (N must be chosen on held-out prompts)")
+    if args.control_repeats < 2:
+        probs.append(f"--control-repeats {args.control_repeats} < 2")
+    if args.rules == "v3" and args.control_repeats < MIN_CONTROL_REPEATS_V3:
+        probs.append(f"rules v3 need --control-repeats >= {MIN_CONTROL_REPEATS_V3} (got {args.control_repeats})")
+    if args.with_skip and args.drafter != "plain-mtp":
+        probs.append("--with-skip is plain-drafter only (an SWA drafter always keeps load_dft; 13.1a is NOT_MEASURED)")
+    if args.numa_membind is not None and args.device != "gpu":
+        probs.append("--numa-membind is the GPU launch prefix only")
     if not args.eval_groups:
         probs.append("no eval groups")
     return probs, notes
@@ -1606,7 +1758,20 @@ def parse_args(argv=None):
     ap.add_argument("--prefill-tok-s", type=float, default=30.0, help="estimate only")
     ap.add_argument("--decode-tok-s", type=float, default=3.5, help="estimate only")
     ap.add_argument("--load-s", type=float, default=240.0, help="estimate only: server load")
+    ap.add_argument("--rules", choices=sorted(RULES_BY_VERSION), default="v2",
+                    help="predeclared rule set: v2 (2 controls, interval = their [min,max]) or v3 (K >= 3 controls, "
+                         "interval widened by the measured control spread; 2026-10-23)")
+    ap.add_argument("--control-repeats", type=int, default=None,
+                    help="same-shape controls per arm per cell (default: 2 under v2, 3 under v3; v3 refuses < 3)")
+    ap.add_argument("--with-skip", action="store_true",
+                    help="with --reduced on a plain drafter: also run the 13.1a `skip` launch (LLAMA_KPF_MUTATE="
+                         "dft_partial_noop) on the same 12 held-out cells, so KPF-13.1a is decidable")
+    ap.add_argument("--numa-membind", type=int, default=None,
+                    help="GPU: prefix numactl --membind=N -- (the production :8083 launch prefix uses 3)")
+    ap.add_argument("--verdict-out", default=None, help="analyze: write the verdict here instead of <out>/verdict.json")
     args = ap.parse_args(argv)
+    if args.control_repeats is None:
+        args.control_repeats = MIN_CONTROL_REPEATS_V3 if args.rules == "v3" else 2
     args.configs = [c.strip() for c in args.configs.split(",") if c.strip()]
     args.suffix_lens = [int(x) for x in args.suffix_lens.split(",") if x.strip()]
     args.n_list = [int(x) for x in args.n_list.split(",") if x.strip()]
@@ -1616,6 +1781,8 @@ def parse_args(argv=None):
         # 8 held-out prompts: every group is held out because N is a single pre-declared value (nothing is tuned on them)
         args.configs, args.dev_groups, args.eval_groups, args.n_list = ["default"], [], [0, 1, 2, 3], [64]
         args.suffix_lens = [1, 128, 2]
+        if args.with_skip:
+            args.configs = ["default", "skip"]
     return args
 
 
@@ -1636,10 +1803,12 @@ def cmd_analyze(args) -> int:
     if not results:
         print(f"no cells under {out / 'cells'}")
         return 2
-    ana = analyze_results(results, set(args.dev_groups), args.n_list, args.drafter == "plain-mtp")
-    write_json(out / "verdict.json", ana)
+    ana = analyze_results(results, set(args.dev_groups), args.n_list, args.drafter == "plain-mtp", args.rules)
+    write_json(Path(args.verdict_out) if args.verdict_out else out / "verdict.json", ana)
     print(json.dumps({"configs": ana["configs"], "n_selection": ana["n_selection"], "decisions": ana["decisions"],
-                      "near_tie_band": ana["near_tie_band"], "rules_sha256": ana["rules_sha256"]}, indent=1))
+                      "near_tie_band": ana["near_tie_band"], "rules": ana["rules"], "rules_sha256": ana["rules_sha256"],
+                      "acceptance_spread": {k: {kk: v[kk] for kk in ("spread_dn", "spread_da", "n_pooled", "min_k")}
+                                            for k, v in (ana.get("acceptance_spread") or {}).items()}}, indent=1))
     return 0
 
 
@@ -1647,7 +1816,7 @@ def print_plan(ctx: Ctx, plans: list[tuple[str, list[Step]]], probs: list[str], 
     total = 0.0
     print("=" * 100)
     print(f"KPF-13.1 restore-vs-recompute A/B   device={ctx.args.device}  drafter={ctx.args.drafter}  "
-          f"rules_sha256={rules_sha256()[:16]}")
+          f"rules={ctx.args.rules} rules_sha256={rules_sha256(ctx.args.rules)[:16]} controls/arm={ctx.args.control_repeats}")
     print(f"rates (estimate only): prefill {ctx.rates.pf} tok/s, decode {ctx.rates.dec} tok/s, load {ctx.rates.load:.0f}s")
     for n in notes:
         print(f"  note: {n}")
@@ -1658,6 +1827,8 @@ def print_plan(ctx: Ctx, plans: list[tuple[str, list[Step]]], probs: list[str], 
         for st in steps:
             print(f"   [{fmt_s(st.est_s):>7}] {st.desc}")
     q = ctx.args.cpu_list and cpu_threads(ctx.args.cpu_list)
+    if ctx.prefix:
+        print(f"launch prefix: {shlex.join(ctx.prefix)}")
     print(f"TOTAL est {fmt_s(total)} wall ({total / 3600:.2f} h); hard-deadline reserve {STOP_RESERVE_S:.0f}s per step; "
           f"estimate is {'~3x-pessimistic-calibrated' if ctx.args.device == 'cpu' else 'GPU rates unverified'}"
           + (f"; one claimed region of {q} cpus => ~{total / 3600:.2f} Q-h" if q else ""))
@@ -1720,10 +1891,12 @@ def main(argv=None) -> int:
         return 2
 
     out.mkdir(parents=True, exist_ok=True)
-    write_json(out / "rules.json", {"rules": RULES, "rules_sha256": rules_sha256()})
+    write_json(out / "rules.json", {"rules": rules_for(args.rules), "rules_version": args.rules,
+                                     "rules_sha256": rules_sha256(args.rules)})
     write_json(out / "run_meta.json", {
         "args": vars(args), "estimate_s": total, "started": now_iso(), "notes": notes,
-        "rules_sha256": rules_sha256(), "rules_declared_before_first_launch": True,
+        "rules": args.rules, "rules_sha256": rules_sha256(args.rules), "control_repeats": args.control_repeats,
+        "rules_declared_before_first_launch": True, "launch_prefix": list(ctx.prefix),
         "deadline_utc": args.deadline_utc, "deadline_epoch": deadline.epoch,
         "region_lock": {"KPF13_REGION": os.environ.get("KPF13_REGION"), "skipped": args.no_region_lock},
         "device_claim": args.no_device_claim or ("mi210_0" if args.device == "gpu" else "n/a (cpu)"),
