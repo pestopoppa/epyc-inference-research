@@ -45,7 +45,7 @@ import urllib.request
 import urllib.error
 
 from . import (headline_admissibility, hip_launch_proof, kernel_coverage, launch_affinity,
-               loadgen_selfcheck, lifecycle_observation, procguard, residency, status)
+               loadgen_selfcheck, lifecycle_observation, procguard, ram_admit, residency, status)
 from . import native_server_response as server_response
 from .serving_server_owner import (ServerOwnershipRefused, ServerPortOwner,
                                    require_free_port)
@@ -1065,6 +1065,9 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             observe("phase", "load")
             coverage_sink = kernel_coverage.open_launch_sink(recipe, build_dir)
             require_free_port(port)
+            # DS41-W8d: DS41-class launches need RAM admission BEFORE Popen. Pre-launch
+            # check only: argv/env and every recipe identity are untouched.
+            ram_admit.guard_launch(argv)
             srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                    stderr=(subprocess.DEVNULL if coverage_sink is None
                                            else coverage_sink.handle),
@@ -1295,6 +1298,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     srv.kill()
                     srv.wait(10)
                     teardown = "killed"
+    except ram_admit.RamAdmissionRefused as exc:
+        # Pre-launch refusal: nothing was measured, so it is a ServerDied-class
+        # instrument failure (like the port refusal), never a candidate regression.
+        serving_exception = ServerDied(f"DS41 RAM admission refused: {exc}")
+        failure = f"ServerDied: {serving_exception}"
+        raise serving_exception from exc
     except ServerOwnershipRefused as exc:
         serving_exception = ServerDied(f"serving endpoint ownership refused: {exc}")
         failure = f"ServerDied: {serving_exception}"

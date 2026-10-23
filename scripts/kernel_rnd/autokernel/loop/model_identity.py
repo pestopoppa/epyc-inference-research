@@ -37,6 +37,8 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Callable, Sequence
 
+from . import ram_admit
+
 #: How many frozen requests each arm serves. Two already exercise every weight the
 #: graph reads (each token reads all of them); more only lengthens the gate.
 DEFAULT_REQUESTS = 2
@@ -93,6 +95,7 @@ def serve(recipe, requests: Sequence[tuple[str, bytes]], *,
     Returns [(prompt_id, digest, preview, full)], `full` = {"content", "tokens"} (the
     divergence receipt's raw material). Raises on any launch/request failure."""
     recipe.validate_launch(recipe.template, recipe.build_dir, recipe.port)
+    ram_admit.guard_launch(recipe.argv)  # DS41-W8d: pre-Popen RAM admission
     server = subprocess.Popen(list(recipe.argv), env=dict(recipe.launch_env),
                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL, start_new_session=True)

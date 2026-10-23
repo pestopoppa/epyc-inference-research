@@ -30,6 +30,8 @@ import urllib.error
 import urllib.request
 from typing import Any, Callable, Mapping, Sequence
 
+from . import ram_admit
+
 SCHEMA = "epyc.autokernel.capacity_probe.v1"
 SEQUENCE = "mixed:nmax0-alternation+varying-batch"
 DEFAULT_CYCLES = 4
@@ -119,6 +121,7 @@ def run(*, argv: Sequence[str], env: Mapping[str, str], port: int,
     proc = None
     with sampler:
         try:
+            ram_admit.guard_launch(argv)  # DS41-W8d: pre-Popen RAM admission
             proc = popen(list(argv), env=dict(env), stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
             sampler.watch_pid(proc.pid)

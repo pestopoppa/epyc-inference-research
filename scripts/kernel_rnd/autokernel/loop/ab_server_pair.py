@@ -136,6 +136,8 @@ class ServerPair:
                 raise PairError(f"arm {arm}: port {s.port} is already listening (not ours)")
         try:
             for arm, s in self.specs.items():
+                from . import ram_admit  # local import: keeps this module's import block unchanged
+                ram_admit.guard_launch(argv_for(s))  # DS41-W8d: pre-Popen RAM admission
                 self.procs[arm] = subprocess.Popen(argv_for(s), env=env_for(s), stdout=open(self.log_dir / f"{arm}.log", "ab"),
                                                    stderr=subprocess.STDOUT, start_new_session=True)
             deadline = time.time() + ready_timeout_s
