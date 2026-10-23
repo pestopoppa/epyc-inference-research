@@ -1,0 +1,204 @@
+{
+ "results_dir": "/mnt/raid0/llm/tmp/roi-prep-20261023/INF-72-RT1/results",
+ "domains": {
+  "code": {
+   "shards": {
+    "bulk": 8,
+    "decode": 1
+   },
+   "rows": 265119,
+   "layers": 48,
+   "n_experts": [
+    512
+   ],
+   "top_k": [
+    10
+   ],
+   "windows": 512,
+   "window_range": [
+    0,
+    511
+   ],
+   "prefill_rows_per_window": [
+    512
+   ],
+   "decode_rows": 2975,
+   "decode_windows": 24,
+   "decode_rows_per_decode_window": [
+    31,
+    128
+   ],
+   "ir_sample_layers": [
+    {
+     "layer": 0,
+     "ir_prefill": 0.084546,
+     "ir_decode": 0.063731
+    },
+    {
+     "layer": 8,
+     "ir_prefill": 0.370839,
+     "ir_decode": 0.346151
+    },
+    {
+     "layer": 16,
+     "ir_prefill": 0.399941,
+     "ir_decode": 0.373815
+    },
+    {
+     "layer": 24,
+     "ir_prefill": 0.354563,
+     "ir_decode": 0.343832
+    },
+    {
+     "layer": 32,
+     "ir_prefill": 0.420233,
+     "ir_decode": 0.393412
+    },
+    {
+     "layer": 40,
+     "ir_prefill": 0.446189,
+     "ir_decode": 0.451496
+    },
+    {
+     "layer": 47,
+     "ir_prefill": 0.333151,
+     "ir_decode": 0.315126
+    }
+   ],
+   "max_abs_ir_diff_vs_tool": 4.951076321146886e-07
+  },
+  "prose": {
+   "shards": {
+    "bulk": 8,
+    "decode": 1
+   },
+   "rows": 264517,
+   "layers": 48,
+   "n_experts": [
+    512
+   ],
+   "top_k": [
+    10
+   ],
+   "windows": 512,
+   "window_range": [
+    0,
+    511
+   ],
+   "prefill_rows_per_window": [
+    512
+   ],
+   "decode_rows": 2373,
+   "decode_windows": 24,
+   "decode_rows_per_decode_window": [
+    16,
+    128
+   ],
+   "ir_sample_layers": [
+    {
+     "layer": 0,
+     "ir_prefill": 0.08864,
+     "ir_decode": 0.081711
+    },
+    {
+     "layer": 8,
+     "ir_prefill": 0.425452,
+     "ir_decode": 0.409397
+    },
+    {
+     "layer": 16,
+     "ir_prefill": 0.532266,
+     "ir_decode": 0.516561
+    },
+    {
+     "layer": 24,
+     "ir_prefill": 0.38636,
+     "ir_decode": 0.378382
+    },
+    {
+     "layer": 32,
+     "ir_prefill": 0.524651,
+     "ir_decode": 0.502781
+    },
+    {
+     "layer": 40,
+     "ir_prefill": 0.540988,
+     "ir_decode": 0.516351
+    },
+    {
+     "layer": 47,
+     "ir_prefill": 0.315419,
+     "ir_decode": 0.318205
+    }
+   ],
+   "max_abs_ir_diff_vs_tool": 4.804305282490873e-07
+  },
+  "reasoning": {
+   "shards": {
+    "bulk": 8,
+    "decode": 1
+   },
+   "rows": 264987,
+   "layers": 48,
+   "n_experts": [
+    512
+   ],
+   "top_k": [
+    10
+   ],
+   "windows": 512,
+   "window_range": [
+    0,
+    511
+   ],
+   "prefill_rows_per_window": [
+    512
+   ],
+   "decode_rows": 2843,
+   "decode_windows": 24,
+   "decode_rows_per_decode_window": [
+    7,
+    128
+   ],
+   "ir_sample_layers": [
+    {
+     "layer": 0,
+     "ir_prefill": 0.069748,
+     "ir_decode": 0.060042
+    },
+    {
+     "layer": 8,
+     "ir_prefill": 0.418136,
+     "ir_decode": 0.395709
+    },
+    {
+     "layer": 16,
+     "ir_prefill": 0.398408,
+     "ir_decode": 0.397151
+    },
+    {
+     "layer": 24,
+     "ir_prefill": 0.340841,
+     "ir_decode": 0.333064
+    },
+    {
+     "layer": 32,
+     "ir_prefill": 0.397889,
+     "ir_decode": 0.415055
+    },
+    {
+     "layer": 40,
+     "ir_prefill": 0.477109,
+     "ir_decode": 0.512311
+    },
+    {
+     "layer": 47,
+     "ir_prefill": 0.279189,
+     "ir_decode": 0.27267
+    }
+   ],
+   "max_abs_ir_diff_vs_tool": 4.980430528545021e-07
+  }
+ },
+ "problems": []
+}
