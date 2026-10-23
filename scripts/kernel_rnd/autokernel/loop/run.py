@@ -514,6 +514,30 @@ def _advance_superseded_continuation(args, resumed: dict, *,
     return advanced
 
 
+def _verify_cor_build(path, worktree, commit: str, *, experimental: bool,
+                      allow_unverified: bool) -> None:
+    """The champion-of-record arm must be EXACTLY `commit`'s build (never an ancestor).
+
+    CH-27 (2026-10-23): with --floor-registry a kernel-STORE image is admissible as that arm. It
+    carries no provenance.json and no IDENTITY.json (the store is immutable), so its exactness is
+    attested by its VERSION.txt commit resolving to `commit`; everything else goes through
+    `serial_run.verify_exact_anchor` unchanged."""
+    from . import serial_run
+    if _FLOOR_REGISTRY is not None and floor_registry.is_store_build(path):
+        try:
+            short, _ = floor_registry._version_info(Path(path))
+            named = serial_run.full_commit(worktree, short)
+        except (floor_registry.FloorRegistryError, serial_run.SerialRefused, ValueError) as exc:
+            raise champion.StartupRefused(f"REFUSED: store COR build {path}: {exc}") from exc
+        if named != serial_run.full_commit(worktree, commit):
+            raise champion.StartupRefused(
+                f"REFUSED: store COR build {path} is {named[:12]}, not the champion of record "
+                f"{commit[:12]} (exact arm required)")
+        return
+    serial_run.verify_exact_anchor(path, worktree, commit, experimental=experimental,
+                                   allow_unverified=allow_unverified)
+
+
 def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: bool,
                                     epoch: str, measurement_epoch: str,
                                     actor_config, carry=None) -> None:
@@ -560,10 +584,9 @@ def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: b
                     f"{peek.champion_of_record[:12]} differs from current anchor "
                     f"{anchor_commit[:12]}; supply its original --cor-build or "
                     "--resume-run, never relabel the tip build")
-            serial_run.verify_exact_anchor(args.cor_build, args.worktree,
-                                           peek.champion_of_record,
-                                           experimental=experimental,
-                                           allow_unverified=args.allow_unverified_anchor)
+            _verify_cor_build(args.cor_build, args.worktree, peek.champion_of_record,
+                              experimental=experimental,
+                              allow_unverified=args.allow_unverified_anchor)
             print(f"cor       (dry) champion of record {peek.champion_of_record[:12]} = "
                   f"{args.cor_build} — exact build identity verified; tip "
                   f"{anchor_commit[:12]} = {args.anchor_build}")
@@ -3235,17 +3258,23 @@ def main(argv: list[str] | None = None) -> int:
         # champion head, checked right below, still before any claim.
         store_anchor = (_FLOOR_REGISTRY is not None
                         and floor_registry.is_store_build(args.anchor_build))
+        # CH-27 (2026-10-23): an experimental CPU serving lane's hand-built anchor proves itself
+        # with an in-build IDENTITY.json receipt; a store image never carries one (the store is
+        # immutable), so that receipt check refused every store anchor on an experimental lane.
+        # The store attestation below replaces it; the receipt's clean-source rule is kept here.
         verified_head = champion.verify_startup(
             worktree=args.worktree, branch=args.champion_branch,
             anchor_build=args.anchor_build,
             allow_unverified_anchor=args.allow_unverified_anchor or store_anchor,
-            experimental_identity=experimental and not source_authoring)
+            experimental_identity=experimental and not source_authoring and not store_anchor)
         if store_anchor:
             try:
                 attested = floor_registry.store_build_commit_is_descendant(
                     args.anchor_build, args.worktree, verified_head)
             except floor_registry.FloorRegistryError as refusal:
                 parser.error(f"REFUSED store anchor: {refusal}")
+            if experimental and _git(args.worktree, "status", "--porcelain"):
+                parser.error("REFUSED store anchor: experimental source worktree is not clean")
             print(f"anchor    store build {args.anchor_build} attested: commit {attested[:12]} "
                   f"descends from champion head {verified_head[:12]}")
     if direct_launch is not None and not args.dry_run:
@@ -4348,7 +4377,7 @@ def main(argv: list[str] | None = None) -> int:
                 out=args.out, scheduler_selection=scheduler_selection,
                 target=selected_identity)
         _verify_before_claim(
-            lambda: serial_run.verify_exact_anchor(
+            lambda: _verify_cor_build(
                 cor_build[0], args.worktree, cor_commit[0],
                 experimental=experimental,
                 allow_unverified=args.allow_unverified_anchor),
@@ -7708,13 +7737,29 @@ def main(argv: list[str] | None = None) -> int:
                 # the decode floor above. Without this they calibrate lazily inside the
                 # first keep's A/B of a search window. Both are idempotent: an existing
                 # slot+identity receipt and an existing floor are reopened, not re-measured.
+                # CH-27 (2026-10-23): a floor window only reopens a floor sealed on THIS
+                # anchor (require_anchor), consults the execution-equivalence registry when
+                # --floor-registry is on, and plans the registry entry for what it calibrates.
                 publish("running", step="CPU long-context surface: slot + matched floor calibration")
                 long_arm = _cpu_arm(longctx_surface.launch_for(direct_launch), anchor_build[0])
                 with cpu_measurement_window():
                     long_launch = longctx_surface.ensure_slot(long_arm)
+                long_requests = longctx_surface.spec.requests(long_arm.template)
+                long_lookup = long_written = None
+                if _FLOOR_REGISTRY is not None and args.serving_instrument == serving.MATCHED_INSTRUMENT:
+                    def long_lookup():
+                        return _registry_floor_reading(long_arm.template, long_arm,
+                                                       frozen_requests=long_requests,
+                                                       pairs=args.serving_pairs)
+
+                    def long_written(path, row):
+                        _registry_register(long_arm.template, long_arm, row, written=path,
+                                           frozen_requests=long_requests,
+                                           pairs=args.serving_pairs)
                 long_reading = longctx_surface.ensure_floor(
                     long_arm, long_launch, pairs=args.serving_pairs,
-                    calibrate=measured_serving_calibrate)
+                    calibrate=measured_serving_calibrate, require_anchor=True,
+                    lookup=long_lookup, on_written=long_written)
                 print(f"longctx   floor {long_reading.floor_pct}% at {long_reading.path}")
             if args.heldout_calibration_only or args.serving_calibration_only:
                 pooled = pool.PoolResult(outcomes=[], wall_seconds=time.time() - started)

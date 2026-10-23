@@ -251,12 +251,90 @@ def test_surface_compare_calibrates_the_target_floor_once_then_gates(tmp_path, m
     assert len(launches) == 1 + 48 + 10
     assert row["recipe"] == anchor.template.name and row["decisive"] is True
     assert row["longctx"]["passed"] is True and row["longctx"]["prefill_floor_pct"] > 0
-    assert list(surface.floor_store.glob("serving-floor.*.json"))
+    # CH-27: sealed under the anchor's execution digest, never the flat per-target file
+    assert list(surface.anchor_floor_store(anchor).glob("serving-floor.*.json"))
+    assert not list(surface.floor_store.glob("serving-floor.*.json"))
     launches.clear()
     prefill["candidate"] = 70.0
     row = surface.compare(anchor, candidate, pairs=5, log=lambda *_: None)
     assert len(launches) == 10                      # slot and floor reused
     assert row["longctx"]["passed"] is False and row["longctx"]["prefill_regressed"] is True
+
+
+def test_floor_window_never_reopens_a_floor_measured_on_another_anchor(tmp_path, monkeypatch):
+    """CH-27 (2026-10-23): the flat per-target floor is keyed by recipe + requests only. A
+    calibration window (`require_anchor=True`) must calibrate on ITS anchor, seal the floor under
+    that anchor's execution digest, consult `lookup` first and hand the sealed file to
+    `on_written`; the keep path (`require_anchor=False`) still falls back to the flat floor."""
+    spec = _spec(tmp_path)
+    surface = longctx.Surface(spec, store=tmp_path / "store")
+    from .test_resolved_recipe import _artifact
+
+    def arm(name, digit):
+        build = tmp_path / name
+        artifacts = _artifacts(_template(), build=build)
+        artifacts["executable"] = _artifact("executable", str(build / "bin" / "llama-server"), digit)
+        return surface.launch_for(_launch(build, artifacts=artifacts))
+
+    old, new = arm("old-anchor", "e"), arm("new-anchor", "f")
+    assert old.execution_digest != new.execution_digest
+    calls = []
+
+    def calibrate(recipe, build, *, samples, resolved_recipe, **kwargs):
+        calls.append(Path(build).name)
+        return {"marker": Path(build).name}
+
+    def write_floor(store, recipe, row, **kwargs):
+        Path(store).mkdir(parents=True, exist_ok=True)
+        path = Path(store) / "serving-floor.fixture.json"
+        path.write_text(json.dumps(row), encoding="utf-8")
+        return path
+
+    def load_floor(store, recipe, **kwargs):
+        path = Path(store) / "serving-floor.fixture.json"
+        if not path.is_file():
+            return serving.FloorReading(None, "absent", path, {})
+        row = json.loads(path.read_text(encoding="utf-8"))
+        return serving.FloorReading(1.0, "verified", path, row)
+
+    monkeypatch.setattr(serving, "write_floor", write_floor)
+    monkeypatch.setattr(serving, "load_floor", load_floor)
+    monkeypatch.setattr(longctx, "prefill_floor_pct", lambda row, pairs: 1.0)
+    # a legacy flat floor measured on the OLD anchor
+    write_floor(surface.floor_store, None,
+                {"marker": "old", "baseline_resolved_recipe": {"execution_digest": old.execution_digest}})
+    launch = SimpleNamespace()
+    # keep path: legacy flat floor is still honoured (behaviour unchanged)
+    assert surface.ensure_floor(new, launch, pairs=5, calibrate=calibrate,
+                                log=lambda *_: None).row["marker"] == "old"
+    assert calls == []
+    # lookup (registry) hit wins over calibration
+    hit = serving.FloorReading(2.0, "registered", tmp_path / "reg.json", {"marker": "reg"})
+    assert surface.ensure_floor(new, launch, pairs=5, calibrate=calibrate, log=lambda *_: None,
+                                require_anchor=True, lookup=lambda: hit) is hit
+    assert calls == []
+    # floor window: calibrates on the new anchor, seals it under that anchor, plans registration
+    written = []
+
+    def stamped(recipe, build, **kwargs):
+        calls.append(Path(build).name)
+        return {"marker": "new", "baseline_resolved_recipe": {"execution_digest": new.execution_digest}}
+
+    reading = surface.ensure_floor(new, launch, pairs=5, calibrate=stamped, log=lambda *_: None,
+                                   require_anchor=True, lookup=lambda: None,
+                                   on_written=lambda path, row: written.append((path, row["marker"])))
+    assert calls == ["new-anchor"] and reading.row["marker"] == "new"
+    assert written == [(surface.anchor_floor_store(new) / "serving-floor.fixture.json", "new")]
+    # reopened afterwards on both paths, with no further calibration
+    for require in (True, False):
+        assert surface.ensure_floor(new, launch, pairs=5, calibrate=stamped, log=lambda *_: None,
+                                    require_anchor=require).row["marker"] == "new"
+    assert calls == ["new-anchor"]
+    # a file under the anchor's directory that was measured elsewhere is refused, never used
+    write_floor(surface.anchor_floor_store(old), None,
+                {"marker": "x", "baseline_resolved_recipe": {"execution_digest": new.execution_digest}})
+    with pytest.raises(longctx.LongCtxRefused):
+        surface.ensure_floor(old, launch, pairs=5, calibrate=stamped, log=lambda *_: None)
 
 
 def test_attention_routes_are_selected_by_route_name():

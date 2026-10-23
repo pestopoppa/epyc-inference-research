@@ -64,3 +64,32 @@ def test_calibration_only_also_calibrates_an_opted_in_longctx_surface():
     assert "longctx_surface.launch_for(direct_launch), anchor_build[0]" in seg
     assert "with cpu_measurement_window():\n                    long_launch = longctx_surface.ensure_slot(long_arm)" in seg
     assert "calibrate=measured_serving_calibrate" in seg
+    # CH-27: a floor window never reopens a floor measured on another anchor, and the
+    # long-context floor goes through the execution-equivalence registry like the serving one
+    assert "require_anchor=True" in seg
+    assert "_registry_floor_reading(long_arm.template, long_arm" in seg
+    assert "_registry_register(long_arm.template, long_arm, row, written=path" in seg
+
+
+def test_store_anchor_is_admitted_on_an_experimental_lane():
+    """CH-27 (2026-10-23): a kernel-store image (--floor-registry, no provenance.json, no
+    IDENTITY.json -- the store is immutable) must be admissible as the anchor of an experimental
+    CPU serving lane. The in-build IDENTITY receipt check is skipped for it; the store attestation
+    (commit ancestor-or-equal of the champion head) and the clean-source rule still apply."""
+    start = RUN.index("        store_anchor = (_FLOOR_REGISTRY is not None")
+    seg = RUN[start:RUN.index("    if direct_launch is not None and not args.dry_run:", start)]
+    assert "experimental_identity=experimental and not source_authoring and not store_anchor" in seg
+    assert "floor_registry.store_build_commit_is_descendant(" in seg
+    assert 'if experimental and _git(args.worktree, "status", "--porcelain"):' in seg
+
+
+def test_store_image_is_admitted_as_the_exact_champion_of_record_build():
+    """CH-27: a plain champion advance keeps the store's COR; with --floor-registry its kernel-
+    store image (no provenance/IDENTITY receipt) is the exact COR arm iff VERSION.txt names
+    exactly that commit. Both the dry-run and the live verification go through the helper."""
+    helper = RUN[RUN.index("def _verify_cor_build("):RUN.index("def _dry_run_accumulator_and_resume(")]
+    assert "floor_registry.is_store_build(path)" in helper
+    assert "named != serial_run.full_commit(worktree, commit)" in helper
+    assert "serial_run.verify_exact_anchor(path, worktree, commit" in helper
+    assert RUN.count("_verify_cor_build(") == 3          # definition + dry + live
+    assert "serial_run.verify_exact_anchor(args.cor_build" not in RUN

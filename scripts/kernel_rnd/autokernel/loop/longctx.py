@@ -760,28 +760,62 @@ class Surface:
         for path in stale[SLOTS_RETAINED - 1:]:
             path.unlink(missing_ok=True)
 
+    def anchor_floor_store(self, anchor_arm) -> Path:
+        """Where a floor calibrated ON `anchor_arm`'s exact executable+DSOs lives (CH-27,
+        2026-10-23): `<floors>/anchors/<execution_digest[:16]>/`. The flat `<floors>/` file is
+        keyed by recipe name + request digest only, so a new anchor silently reopened a floor
+        measured on another build (Q38FN: the 2026-10-07 e0cf2062 suspect 64k floor was still
+        the bar on the dd3d9721c anchor and would have been on 141e4bcf5)."""
+        return self.floor_store / "anchors" / anchor_arm.execution_digest[:16]
+
     def ensure_floor(self, anchor_arm, launch: SurfaceLaunch, *, pairs: int,
-                     calibrate: Callable | None = None, log=print) -> serving.FloorReading:
-        """The per-target matched floor; calibrated once (24 A/A pairs) when absent."""
+                     calibrate: Callable | None = None, log=print,
+                     require_anchor: bool = False, lookup: Callable | None = None,
+                     on_written: Callable | None = None) -> serving.FloorReading:
+        """The per-target matched floor; calibrated once per anchor (24 A/A pairs) when absent.
+
+        Order: (1) a floor sealed on THIS anchor's execution digest (`anchor_floor_store`);
+        (2) `lookup()` -- e.g. the execution-equivalence floor registry -- returning a
+        FloorReading or None; (3) unless `require_anchor`, the legacy flat per-target floor
+        (pre-CH-27 behaviour: measured on whichever anchor wrote it); (4) calibrate on the
+        anchor, seal into `anchor_floor_store`, then `on_written(path, row)` (registry plan).
+        A floor-calibration window passes `require_anchor=True` so it never reopens a floor
+        measured on another build."""
         template = anchor_arm.template
         requests = self.spec.requests(template)
         mode = {"instrument": serving.MATCHED_INSTRUMENT, "pairs": pairs}
-        reading = serving.load_floor(self.floor_store, template, frozen_requests=requests,
-                                     **mode)
+        own_store = self.anchor_floor_store(anchor_arm)
+        reading = serving.load_floor(own_store, template, frozen_requests=requests, **mode)
         if reading.floor_pct is not None:
+            baseline = (reading.row.get("baseline_resolved_recipe") or {}).get("execution_digest")
+            if baseline != anchor_arm.execution_digest:
+                raise LongCtxRefused(f"{reading.path} is filed under anchor "
+                                     f"{anchor_arm.execution_digest[:16]} but was measured on "
+                                     f"{str(baseline)[:16]}")
             return reading
-        log(f"longctx   calibrating the per-target floor for {template.name}: "
-            f"{serving.MATCHED_CALIBRATION_PAIRS} matched A/A pairs (one-time)")
+        if lookup is not None:
+            registered = lookup()
+            if registered is not None and registered.floor_pct is not None:
+                return registered
+        if not require_anchor:
+            reading = serving.load_floor(self.floor_store, template, frozen_requests=requests,
+                                         **mode)
+            if reading.floor_pct is not None:
+                return reading
+        log(f"longctx   calibrating the per-target floor for {template.name} on anchor "
+            f"{anchor_arm.execution_digest[:16]}: {serving.MATCHED_CALIBRATION_PAIRS} matched "
+            f"A/A pairs (one-time per anchor)")
         row = (calibrate or serving.calibrate_floor)(
             template, Path(anchor_arm.build_dir), samples=serving.MATCHED_CALIBRATION_PAIRS,
             port=anchor_arm.port, resolved_recipe=anchor_arm, frozen_requests=requests,
             longctx=launch, **mode)
         if prefill_floor_pct(row, pairs) is None:
             raise LongCtxRefused("calibration launches carry no prefill-at-depth samples")
-        serving.write_floor(self.floor_store, template, row, unit=serving.CALIBRATION_UNIT,
-                            frozen_requests=requests, **mode)
-        return serving.load_floor(self.floor_store, template, frozen_requests=requests,
-                                  **mode)
+        written = serving.write_floor(own_store, template, row, unit=serving.CALIBRATION_UNIT,
+                                      frozen_requests=requests, **mode)
+        if on_written is not None:
+            on_written(Path(written), row)
+        return serving.load_floor(own_store, template, frozen_requests=requests, **mode)
 
     def compare(self, anchor_arm, candidate_arm, *, pairs: int, measure: Callable | None = None,
                 compare: Callable | None = None, calibrate: Callable | None = None,

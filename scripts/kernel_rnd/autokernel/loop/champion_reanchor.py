@@ -214,6 +214,25 @@ def find_store_build(champion: dict, worktree: Path | str, builds_root: Path | s
                                  reference_build=reference_build)["match"]
 
 
+def find_exact_store_build(commit: str, worktree: Path | str,
+                           builds_root: Path | str = DEFAULT_BUILDS_ROOT) -> str | None:
+    """Newest kernel-store `cpu-*` image built from EXACTLY `commit` (VERSION.txt), or None.
+
+    CH-27 (2026-10-23): on a plain advance (no new anchor epoch) run.py restores the campaign's
+    champion_of_record and refuses to start unless `--cor-build` names that commit's exact build;
+    the champion's tree-equivalent image is not enough there (exact arm, never an ancestor)."""
+    for build in sorted(Path(builds_root).glob("cpu-*"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if _image_defect(build) is not None:
+            continue
+        try:
+            short, _ = fr._version_info(build)
+            if _resolve(Path(worktree), short) == commit:
+                return str(build)
+        except fr.FloorRegistryError:
+            continue
+    return None
+
+
 def store_floor_identity(store: Path | str) -> dict | None:
     """Identity (recipe_hash, request_digest, model_sha, frame_digest, pairs) of the NEWEST matched
     floor this campaign has on disk -- the condition it would recalibrate."""
@@ -268,13 +287,16 @@ def launch_paths(*, anchor_build: str, run_argv_additions: list[str], floor_acti
     owner = dict(owners[alias], anchor_build=str(anchor_build))
     if launch.get("rebound_launch"):
         owner["launch"] = str(launch["rebound_launch"])
+    if "--cor-build" in run_argv_additions:
+        owner["cor_build"] = run_argv_additions[run_argv_additions.index("--cor-build") + 1]
     if floor_action == "reuse":
         owner.pop("calibrate_serving", None)
     elif floor_action == "calibrate":
         owner["calibrate_serving"] = max(24, int(owner.get("calibrate_serving") or 0))
     patched = out_dir / "owned-targets.reanchor.json"
     fr._write_atomic(patched, {**owners, alias: owner})
-    flags = [a for a in _drop_pair(run_argv_additions, "--anchor-build")]  # anchor travels via the owner map
+    # anchor (and COR) travel via the owner map
+    flags = _drop_pair(_drop_pair(run_argv_additions, "--anchor-build"), "--cor-build")
     common = []
     if launch.get("common_args"):
         common = json.loads(Path(launch["common_args"]).read_text(encoding="utf-8"))
@@ -363,6 +385,16 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
         out["blockers"].append("store refuses the anchor for a non-ancestry reason (corrupt journal, "
                                "symlinked store, ...): " + out["anchor_preflight"]["reason"])
         return out
+    cor_full = found["campaign"].get("cor_full")
+    if not out["anchor_preflight"]["needs_new_anchor_epoch"] and cor_full and cor_full != champion["commit"]:
+        # Plain advance: the store keeps its champion_of_record and run.py refuses without that
+        # commit's exact build ("supply its original --cor-build"). Name its store image here.
+        out["cor_build"] = find_exact_store_build(cor_full, worktree, builds_root)
+        if out["cor_build"] is None:
+            out["blockers"].append(f"plain advance keeps champion_of_record {cor_full[:12]}, but no kernel-"
+                                   f"store cpu-* image built from exactly that commit exists under "
+                                   f"{builds_root} (run.py needs it as --cor-build)")
+            return out
     identity = floor_identity or store_floor_identity(store)
     if identity is None:
         out["blockers"].append("no floor identity: the campaign has no matched floor on disk; pass "
@@ -398,7 +430,7 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
     out["run_argv_additions"] = _run_argv(equivalence["build_dir"], champion["commit"], registry.master,
                                           numerics_epoch, require_grade, co_tenancy,
                                           needs_epoch=out["anchor_preflight"]["needs_new_anchor_epoch"],
-                                          role=role)
+                                          role=role, cor_build=out.get("cor_build"))
     if allow_stale_upstream:
         out["run_argv_additions"].append("--floor-allow-stale-upstream")
     out["actionable"] = True
@@ -413,10 +445,13 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
 
 
 def _run_argv(build: str, champion_commit: str, master, numerics_epoch: str, grade: str,
-              co_tenancy: str, *, needs_epoch: bool, role: str | None = None) -> list[str]:
+              co_tenancy: str, *, needs_epoch: bool, role: str | None = None,
+              cor_build: str | None = None) -> list[str]:
     argv = ["--anchor-build", str(build)]
     if needs_epoch:
         argv += ["--new-anchor-epoch", champion_commit]
+    if cor_build:
+        argv += ["--cor-build", str(cor_build)]
     return argv + ["--floor-registry", str(master), "--floor-registry-role", str(role or "ROLE"),
                    "--floor-numerics-epoch", numerics_epoch,
                    "--floor-require-grade", grade, "--floor-co-tenancy", co_tenancy]
@@ -467,6 +502,7 @@ def apply(store: Path | str, worktree: Path | str, *, master: Path | str, relaun
             "launch_paths": paths,
             "previous_champion_of_record": campaign.get("cor_full"),
             "champion": champion, "anchor_build": planned["anchor_build"],
+            "cor_build": planned.get("cor_build"),
             "equivalence_key": planned["equivalence_key"], "anchor_preflight": planned["anchor_preflight"],
             "floor_action": decision["action"], "floor": {k: v for k, v in decision.items() if k != "claim"},
             "calibrate_serving_pairs": 24 if decision["action"] == "calibrate" else None,

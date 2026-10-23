@@ -197,3 +197,31 @@ def test_loop_toplevel_invocation_is_refused_with_supported_forms(capsys):
     assert cr._invocation_ok("autokernel.loop") and cr._invocation_ok("kernel_rnd.autokernel.loop")
     assert "autokernel.loop.champion_reanchor" in cr.SUPPORTED_INVOCATION
     assert "SUPPORTED INVOCATION" in cr.__doc__
+
+
+PLAIN = {"refuses": False, "reason": "tip advanced to the anchor", "kind": "other",
+         "needs_new_anchor_epoch": False, "blocking": False}
+
+
+def test_plain_advance_names_the_exact_store_image_of_the_kept_champion_of_record(world, monkeypatch):
+    """CH-27 (2026-10-23, Q38FN dd3d9721c -> 141e4bcf5): a plain advance keeps the store's
+    champion_of_record, and run.py refuses without that commit's EXACT build as --cor-build. The
+    plan names its store image (or blocks), and the relaunch paths carry it as owner cor_build."""
+    monkeypatch.setattr(cr, "_would_refuse", lambda *a, **k: dict(PLAIN))
+    advance(world)
+    store_build_for_champion(world)
+    seed_floor(world, None)
+    kw = dict(master=master_in(world["tmp"]), role=ROLE, claims_root=world["tmp"] / "claims",
+              branch=BRANCH, builds_root=world["builds"], numerics_epoch="n1")
+    blocked = cr.plan(world["store"], world["repo"], **kw)
+    assert not blocked["actionable"] and "--cor-build" in blocked["blockers"][0]
+    old_image = build(world["builds"].parent, world["repo"], "builds/cpu-old", world["old"])
+    p = cr.plan(world["store"], world["repo"], **kw)
+    assert p["actionable"] and p["cor_build"] == str(old_image)
+    add = p["run_argv_additions"]
+    assert "--new-anchor-epoch" not in add
+    assert add[add.index("--cor-build") + 1] == str(old_image)
+    assert cr.find_exact_store_build(world["old"], world["repo"], world["builds"]) == str(old_image)
+    # ancestry refusal (new epoch) => the COR is re-based, no --cor-build
+    monkeypatch.setattr(cr, "_would_refuse", lambda *a, **k: dict(PREFLIGHT))
+    assert "--cor-build" not in cr.plan(world["store"], world["repo"], **kw)["run_argv_additions"]
