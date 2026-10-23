@@ -341,6 +341,16 @@ class Runner:
 
     # -- server
     def start(self) -> None:
+        a = self.ctx.args
+        if a.device == "gpu":
+            # the previous launch's own server was verified dead; give the driver a moment to return its VRAM before
+            # the kpf13 launch check (card VRAM used <= --vram-free-max-gib) refuses
+            t0 = time.time()
+            while time.time() - t0 < 90:
+                used = k13.card_vram_used(Path(a.card))
+                if used is None or used <= a.vram_free_max_gib * k13.GIB:
+                    break
+                time.sleep(3)
         self.srv = k13.Server(self.ctx, f"kpf174_{self.launch}", Path(self.ctx.args.fork_bin))
         self.srv.start()
         self.vram_file = self.ctx.out / "vram" / f"{self.srv.label}.txt"
@@ -404,8 +414,9 @@ class Runner:
 
         self.erase(0, 1, 2, 3)
         seed(0, L, "source", meta)
+        slot0 = [x for x in self.ctx.client.slots() if x.get("id") == 0]
         src_ckpts = [{k: ck.get(k) for k in ("n_tokens", "pos_min", "pos_max", "pinned", "size_mib")}
-                     for ck in (self.ctx.client.slots()[0].get("checkpoints") or [])]
+                     for ck in ((slot0[0] if slot0 else {}).get("checkpoints") or [])]
         for c in sorted(cs, reverse=True):
             if (self.results.get(cell_id(g, c)) or {}).get("ok"):
                 continue
