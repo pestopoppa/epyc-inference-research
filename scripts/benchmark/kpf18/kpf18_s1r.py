@@ -543,8 +543,13 @@ def _step_close(env, R, result: dict) -> None:
 
 
 def _need(env, est_s: float) -> None:
+    """Step boundary: the gate's own checks, the launcher STOP file (env KPF18_S1R_STOPFILE: a started step is finished,
+    no new one starts), and the remaining budget against this step's estimate."""
     ctx = env.ctx
     ctx.check_boundary()
+    sf = os.environ.get("KPF18_S1R_STOPFILE")
+    if sf and os.path.exists(sf):
+        raise env.gate.Abort(f"STOP file {sf} present: no new step")
     left = ctx.args.budget_min * 60 - (time.time() - ctx.t0)
     want = est_s * ctx.args.s1r_budget_factor
     if left < want:

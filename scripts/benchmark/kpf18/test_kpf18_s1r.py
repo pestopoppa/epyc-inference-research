@@ -508,6 +508,16 @@ def test_budget_guard_refuses_a_step_that_does_not_fit(tmp_path):
         S._need(env, 600.0)
 
 
+def test_stop_file_refuses_a_new_step(tmp_path, monkeypatch):
+    ctx, env = mk_run_env(tmp_path)
+    stop = tmp_path / "STOP"
+    monkeypatch.setenv("KPF18_S1R_STOPFILE", str(stop))
+    S._need(env, 1.0)
+    stop.write_text("")
+    with pytest.raises(GATE.Abort, match="STOP file"):
+        S._need(env, 1.0)
+
+
 def test_verdict_takes_the_latest_finished_record_and_ignores_unfinished(tmp_path):
     out = tmp_path / "o"
     (out / "records").mkdir(parents=True)
