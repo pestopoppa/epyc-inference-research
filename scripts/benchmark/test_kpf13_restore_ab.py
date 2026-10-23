@@ -805,3 +805,45 @@ def test_dry_run_v3_gpu_dflash2_plan(tmp_path, capsys, monkeypatch):
     assert rc == 0 and not started
     assert "rules=v3" in out and "controls/arm=3" in out and out.count("cell g") == 12
     assert "CB2 B2 CA3 CB3 W2" in out and "numactl --membind=3 -- taskset -c 184-191" in out
+
+
+# --- launch read-back thread-affinity judge (ROCm runtime helper thread exemption, GPU only) ---
+_ONLINE = list(range(192))
+_CLAIM = list(range(184, 192))
+
+
+def _threads(n_full: int = 0, extra: dict | None = None) -> dict:
+    t = {100 + i: [184] for i in range(5)}
+    t.update({200 + i: [185 + i] for i in range(7)})
+    t.update({300 + i: list(_ONLINE) for i in range(n_full)})
+    t.update(extra or {})
+    return t
+
+
+def test_affinity_gpu_one_full_mask_thread_passes_and_is_recorded():
+    j = m.judge_thread_affinity(_threads(1), _CLAIM, "gpu", _ONLINE)
+    assert j["problem"] is None
+    assert j["runtime_threads_unpinned"] == [300]
+    assert set(j["allowed"]) <= set(_CLAIM)
+
+
+def test_affinity_gpu_three_full_mask_threads_abort():
+    j = m.judge_thread_affinity(_threads(3), _CLAIM, "gpu", _ONLINE)
+    assert j["problem"] and "outside" not in j["problem"] and "3 threads" in j["problem"]
+
+
+def test_affinity_gpu_partial_out_of_claim_thread_aborts():
+    j = m.judge_thread_affinity(_threads(1, {999: [0, 1, 2]}), _CLAIM, "gpu", _ONLINE)
+    assert j["problem"] and "outside the claimed" in j["problem"]
+
+
+def test_affinity_cpu_full_mask_thread_aborts():
+    j = m.judge_thread_affinity(_threads(1), _CLAIM, "cpu", _ONLINE)
+    assert j["problem"] and "outside the claimed" in j["problem"]
+    assert j["runtime_threads_unpinned"] == []
+
+
+def test_affinity_per_thread_reader_and_union_agree(tmp_path, monkeypatch):
+    per = m.read_cpus_allowed_per_thread(os.getpid())
+    assert per and os.getpid() in per
+    assert m.read_cpus_allowed(os.getpid()) == sorted({c for v in per.values() for c in v})

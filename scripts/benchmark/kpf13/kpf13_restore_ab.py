@@ -410,21 +410,64 @@ def read_proc_env(pid: int) -> dict[str, str]:
     return dict(x.split("=", 1) for x in raw.split("\0") if "=" in x)
 
 
-def read_cpus_allowed(pid: int) -> list[int] | None:
-    """Union of Cpus_allowed_list over ALL threads of `pid`. The main thread alone is not enough: OMP_PROC_BIND=spread
-    re-pins it to one place (job kpf13 2026-10-22: [24, 120] for a 48-cpu claim)."""
-    cpus: set[int] = set()
+def read_cpus_allowed_per_thread(pid: int) -> dict[int, list[int]] | None:
+    """tid -> sorted Cpus_allowed_list for every thread of `pid` (None if /proc/<pid>/task is unreadable/empty)."""
+    out: dict[int, list[int]] = {}
     try:
         for t in Path(f"/proc/{pid}/task").iterdir():
             try:
                 for ln in (t / "status").read_text().splitlines():
                     if ln.startswith("Cpus_allowed_list:"):
-                        cpus.update(parse_cpu_list(ln.split(":", 1)[1].strip()))
+                        out[int(t.name)] = sorted(parse_cpu_list(ln.split(":", 1)[1].strip()))
             except (OSError, ValueError):
                 continue
     except OSError:
         return None
-    return sorted(cpus) or None
+    return out or None
+
+
+def read_cpus_allowed(pid: int) -> list[int] | None:
+    """Union of Cpus_allowed_list over ALL threads of `pid`. The main thread alone is not enough: OMP_PROC_BIND=spread
+    re-pins it to one place (job kpf13 2026-10-22: [24, 120] for a 48-cpu claim)."""
+    per = read_cpus_allowed_per_thread(pid)
+    if per is None:
+        return None
+    return sorted({c for cpus in per.values() for c in cpus}) or None
+
+
+def read_online_cpus() -> list[int] | None:
+    try:
+        return sorted(parse_cpu_list(Path("/sys/devices/system/cpu/online").read_text().strip()))
+    except (OSError, ValueError):
+        return None
+
+
+# GPU only: the ROCm runtime starts ONE helper thread (tid = pid+13 on a live server) that resets its own affinity to
+# every online CPU, so a pinned GPU server always shows exactly one full-mask thread (job kpf13-1/kpf17-4 2026-10-23,
+# taskset -c 184-191: 195 threads on 184, one each on 185-191, one on 0-191). Exempt at most this many; more aborts.
+MAX_GPU_RUNTIME_UNPINNED_THREADS = 2
+
+
+def judge_thread_affinity(per_thread: dict[int, list[int]] | None, want: list[int], device: str,
+                          online: list[int] | None) -> dict:
+    """Per-thread claim check. Returns {allowed (union of NON-exempt threads), runtime_threads_unpinned (exempt tids),
+    problem (str | None)}. Exemption: device == "gpu" only, thread allowed set == ALL online CPUs, at most
+    MAX_GPU_RUNTIME_UNPINNED_THREADS of them. Every other thread must be inside `want`; CPU runs exempt nothing."""
+    if not per_thread:
+        return {"allowed": None, "runtime_threads_unpinned": [],
+                "problem": f"threads allowed on cpus None outside the claimed {want}"}
+    exempt: list[int] = []
+    if device == "gpu" and online:
+        exempt = sorted(t for t, c in per_thread.items() if c == sorted(online))
+    problem = None
+    if len(exempt) > MAX_GPU_RUNTIME_UNPINNED_THREADS:
+        problem = (f"{len(exempt)} threads (tids {exempt}) have a full-online-cpu mask; at most "
+                   f"{MAX_GPU_RUNTIME_UNPINNED_THREADS} ROCm runtime threads are exempt")
+        exempt = []
+    rest = sorted({c for t, cpus in per_thread.items() if t not in exempt for c in cpus})
+    if problem is None and not set(rest) <= set(want):
+        problem = f"threads allowed on cpus {rest} outside the claimed {want}"
+    return {"allowed": rest or None, "runtime_threads_unpinned": exempt, "problem": problem}
 
 
 def bytes_contain_any_lib(binary: Path, needle: bytes) -> bool:
@@ -1183,6 +1226,7 @@ class Server:
         rb["slot_fork_disabled_line"] = m2.group(0) if m2 else None
         m = LOG_RES["build"].search(txt)
         rb["build_from_launch_log"] = f"{m.group(1)} ({m.group(2)})" if m else None
+        per_thread = read_cpus_allowed_per_thread(pid)
         allowed = read_cpus_allowed(pid)
         rb["cpus_allowed"] = allowed
         probs = []
@@ -1207,8 +1251,12 @@ class Server:
             probs.append(f"LLAMA_KPF_MUTATE in /proc env is {rb['env_LLAMA_KPF_MUTATE']!r}, config wants {self.cfg['mutate']!r}")
         if self.ctx.args.cpu_list:
             want = parse_cpu_list(self.ctx.args.cpu_list)
-            if allowed is None or not set(allowed) <= set(want):
-                probs.append(f"threads allowed on cpus {allowed} outside the claimed {want}")
+            j = judge_thread_affinity(per_thread, want, self.ctx.args.device, read_online_cpus())
+            rb["cpus_allowed_non_exempt"] = j["allowed"]
+            rb["runtime_threads_unpinned"] = j["runtime_threads_unpinned"]
+            rb["runtime_threads_unpinned_count"] = len(j["runtime_threads_unpinned"])
+            if j["problem"]:
+                probs.append(j["problem"])
         rb["problems"] = probs
         if probs:
             raise Abort(f"launch read-back failed for {self.label}: " + "; ".join(probs))
