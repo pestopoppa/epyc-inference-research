@@ -1119,3 +1119,91 @@ def test_log_window_reads_only_appended_bytes_and_bisects_by_time(tmp_path):
     assert srv.lines_between(39.9, 40.2) == ["seq_id 1, draft candidate   0, pos   0:  777 (0.9) 'x'"]
     assert m.parse_first_draft(srv.lines_between(39.9, 40.2)) == [777]
     assert len(srv.log_lines()) == 4 and srv.lines_between(100, 200) == []
+
+
+# ---------------------------------------------------------------- KPF-13.1b fix (2026-10-23): own-teardown VRAM drain before launch
+class _Reached(Exception):
+    pass
+
+
+def _drain_server(tmp_path, monkeypatch, readings):
+    """A GPU Server whose start() runs its real pre-launch path against an injected card reader and a fake clock; the
+    linkage step (the first thing after the empty-card checks) raises _Reached, so reaching it proves the checks passed."""
+    ctx = make_ctx(tmp_path, FakeClient(), argv=["--device", "gpu", "--cpu-list", "184-191"])
+    srv = m.Server(ctx, "default", Path("/x/llama-server"))
+    seq = list(readings)
+    reads, sleeps, now = [], [], [0.0]
+
+    def reader(card):
+        v = seq.pop(0) if len(seq) > 1 else seq[0]
+        reads.append(v)
+        return v
+
+    def fake_sleep(s):
+        sleeps.append(s)
+        now[0] += s
+    orig = m.wait_card_vram_drained
+    monkeypatch.setattr(m, "wait_card_vram_drained",
+                        lambda *a, **k: orig(*a, **{**k, "sleep": fake_sleep, "clock": lambda: now[0]}))
+    monkeypatch.setattr(m, "card_vram_used", reader)
+    monkeypatch.setattr(m, "port_listening", lambda p: False)
+    monkeypatch.setattr(m, "kfd_pids", lambda: {})
+    monkeypatch.setattr(m, "bytes_contain_any_lib", lambda b, n: True)
+
+    def reached(self):
+        raise _Reached()
+    monkeypatch.setattr(m.Server, "run_linkage", reached)
+    return srv, reads, sleeps
+
+
+def test_vram_drain_wait_proceeds_when_the_card_drains_at_the_third_poll(tmp_path, monkeypatch, capsys):
+    G = m.GIB
+    srv, reads, sleeps = _drain_server(tmp_path, monkeypatch, [int(38.34 * G), int(20 * G), int(0.5 * G)])
+    with pytest.raises(_Reached):       # past the empty-card checks: the launch would proceed
+        srv.start()
+    w = srv.vram_drain
+    assert w["drained"] is True and w["polls"] == 3 and sleeps == [2.0, 2.0] and w["waited_s"] == 4.0
+    assert w["first_bytes"] == int(38.34 * G) and w["final_bytes"] == int(0.5 * G)
+    out = capsys.readouterr().out
+    assert "card VRAM drain wait before launch" in out and "38.34 GiB" in out and "0.50 GiB" in out
+    assert "drained" in out and "NOT drained" not in out
+
+
+def test_vram_drain_wait_never_drains_aborts_after_the_timeout(tmp_path, monkeypatch, capsys):
+    srv, reads, sleeps = _drain_server(tmp_path, monkeypatch, [int(38.34 * m.GIB)])
+    with pytest.raises(m.Abort, match=r"card VRAM used 38\.34 GiB before launch \(> 2\.0\)"):
+        srv.start()
+    w = srv.vram_drain
+    assert w["drained"] is False and sum(sleeps) == m.VRAM_DRAIN_TIMEOUT_S == 120.0
+    assert set(sleeps) == {m.VRAM_DRAIN_POLL_S} and w["polls"] == 61 and w["waited_s"] == 120.0
+    assert "NOT drained" in capsys.readouterr().out
+
+
+def test_vram_drain_no_wait_when_the_card_is_already_empty(tmp_path, monkeypatch, capsys):
+    srv, reads, sleeps = _drain_server(tmp_path, monkeypatch, [int(0.3 * m.GIB)])
+    with pytest.raises(_Reached):
+        srv.start()
+    assert sleeps == [] and srv.vram_drain["polls"] == 1 and "(no drain wait)" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- KPF-13.1b fix: decision_grade as predeclared (both launches)
+def test_v4_decision_grade_needs_judged_controls_in_both_launches(tmp_path):
+    ctx = run_v4(tmp_path, {"default_specoff": FakeClientSpecOff(drift_on_fork_len=2048), "default": FakeClient()})
+    full = m.analyze_v4(ctx.results)["decisions"]
+    assert full["decision_grade"] is True and full["kpf13_1b_locus"] == "target_restore_defect"
+    assert "provisional" not in full and "decision_grade_missing" not in full
+    # the 2026-10-23 run: default_specoff stored, the drafter-on launch never ran
+    d = m.analyze_v4({"default_specoff": ctx.results["default_specoff"]})["decisions"]
+    assert d["decision_grade"] is False
+    for k in ("kpf13_1b_locus", "kpf13_1_dflash2_gpu", "kpf19_1_choice_dflash2"):
+        assert d[k] == "NOT_DECISION_GRADE", k
+    assert d["provisional"]["kpf13_1b_locus"] == "target_restore_defect"
+    assert d["provisional"]["kpf13_1_dflash2_gpu"] == "RESTORE_DEFECT_TARGET_SIDE"
+    assert d["decision_grade_missing"] == ["default: launch has no judged cell"]
+    assert set(d["spec_on_reproduces_v3"]["per_cell"].values()) == {"NOT_RUN"}
+    # a drafter-on launch that drained after five of the six cells is not decision grade either
+    part = dict(ctx.results["default"])
+    part.pop(next(k for k in part if k.startswith("g3-S1")))
+    d = m.analyze_v4({"default_specoff": ctx.results["default_specoff"], "default": part})["decisions"]
+    assert d["decision_grade"] is False and d["kpf13_1b_locus"] == "NOT_DECISION_GRADE"
+    assert d["decision_grade_missing"] == ["default:g3-S1:A: no judged cell", "default:g3-S1:B: no judged cell"]

@@ -472,16 +472,9 @@ class Runner:
 
     # -- server
     def start(self) -> None:
-        a = self.ctx.args
-        if a.device == "gpu":
-            # the previous launch's own server was verified dead; give the driver a moment to return its VRAM before
-            # the kpf13 launch check (card VRAM used <= --vram-free-max-gib) refuses
-            t0 = time.time()
-            while time.time() - t0 < 90:
-                used = k13.card_vram_used(Path(a.card))
-                if used is None or used <= a.vram_free_max_gib * k13.GIB:
-                    break
-                time.sleep(3)
+        # GPU: the previous launch's own server was verified dead, but KFD returns its VRAM with a lag. k13.Server.start
+        # waits (bounded, --vram-drain-timeout-s, logged with the drained value) for the card to drain before its
+        # empty-card check; this replaced an unlogged 90 s / 3 s loop here (KPF-13.1b VRAM-drain fix, 2026-10-23).
         self.srv = k13.Server(self.ctx, f"kpf174_{self.launch}", Path(self.ctx.args.fork_bin))
         self.srv.start()
         self.vram_file = self.ctx.out / "vram" / f"{self.srv.label}.txt"
@@ -681,6 +674,8 @@ def parse_args(argv=None):
     ap.add_argument("--load-timeout-s", type=float, default=900.0)
     ap.add_argument("--card", default=str(k13.DEFAULT_CARD))
     ap.add_argument("--vram-free-max-gib", type=float, default=2.0)
+    ap.add_argument("--vram-drain-timeout-s", type=float, default=k13.VRAM_DRAIN_TIMEOUT_S)
+    ap.add_argument("--vram-drain-poll-s", type=float, default=k13.VRAM_DRAIN_POLL_S)
     ap.add_argument("--no-region-lock", default=None, metavar="REASON")
     ap.add_argument("--no-device-claim", default=None, metavar="REASON")
     ap.add_argument("--prefill-tok-s", type=float, default=500.0,

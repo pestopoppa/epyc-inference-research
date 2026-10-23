@@ -635,6 +635,32 @@ def card_vram_used(card: Path) -> int | None:
         return None
 
 
+VRAM_DRAIN_TIMEOUT_S = 120.0
+VRAM_DRAIN_POLL_S = 2.0
+
+
+def wait_card_vram_drained(card: Path, max_bytes: float, timeout_s: float = VRAM_DRAIN_TIMEOUT_S,
+                           poll_s: float = VRAM_DRAIN_POLL_S, *, sleep=None, clock=None) -> dict:
+    """Poll card VRAM until it is <= max_bytes, at most timeout_s (every poll_s). KFD returns a dead process's VRAM
+    some time after the pid is gone: KPF-13.1b (2026-10-23) read 38.34 GiB used 1 s after OUR OWN spec-off server was
+    verified dead and aborted the drafter-on launch. The empty-card check that follows is unchanged; it simply reads the
+    drained value. Returns {drained, first_bytes, final_bytes, polls, waited_s} (None bytes = card unreadable)."""
+    sleep, clock = sleep or time.sleep, clock or time.monotonic
+    t0 = clock()
+    used = card_vram_used(card)
+    first, polls = used, 1
+    while used is not None and used > max_bytes and clock() - t0 < timeout_s:
+        sleep(poll_s)
+        used = card_vram_used(card)
+        polls += 1
+    return {"drained": used is None or used <= max_bytes, "first_bytes": first, "final_bytes": used, "polls": polls,
+            "waited_s": round(clock() - t0, 1)}
+
+
+def _gib(b: int | None) -> str:
+    return "unreadable" if b is None else f"{b / GIB:.2f} GiB"
+
+
 # ---------------------------------------------------------------- speculation OFF (KPF-13.1b / KPF-17.4b discriminator)
 # A speculation-OFF launch is the SAME argv file minus every drafter flag ("no -md"): the target alone, so a fork-vs-control
 # token difference that survives it is target-side (restore) and one that vanishes is on the draft path. flag -> arity.
@@ -1006,6 +1032,7 @@ def analyze_v4(results: dict) -> dict:
                  "near_tie_band": {"band": V4_GPU_NEAR_TIE_BAND, "fixed": True}, "cb_order_effect": {}}
     arm_runs: dict = {}
     grade_ks: list[int] = []
+    judged_k: dict = {}   # (launch, cell gs, arm) -> number of judged controls
     for cfg, cells in results.items():
         spec_off = bool(CONFIGS.get(cfg, {}).get("spec_off"))
         jc = {cid: v4_judged_cell(c) for cid, c in cells.items() if c.get("ok", True)}
@@ -1029,6 +1056,7 @@ def analyze_v4(results: dict) -> dict:
                 rec[arm] = v
                 per_arm[arm].append(v)
                 grade_ks.append(len(controls_of(c, arm)))
+                judged_k[(cfg, gs_of(c), arm)] = len(controls_of(c, arm))
                 arm_runs[(cfg, gs_of(c), arm)] = v
             pr = c.get("order_probe") or {}
             a1 = c["runs"].get("A1")
@@ -1047,8 +1075,33 @@ def analyze_v4(results: dict) -> dict:
         out["cb_order_effect"][cfg] = {"label": label, "counts": orders}
         out["configs"][cfg] = {"A": arm_verdict(per_arm["A"]) if per_arm["A"] else None,
                                "B": arm_verdict(per_arm["B"]) if per_arm["B"] else None}
-    out["decisions"] = decide_v4(out, arm_runs, bool(grade_ks) and min(grade_ks) >= MIN_CONTROL_REPEATS_V3)
+    missing = v4_grade_missing(judged_k)
+    out["decisions"] = decide_v4(out, arm_runs, bool(grade_ks) and min(grade_ks) >= MIN_CONTROL_REPEATS_V3
+                                 and not missing)
+    if missing:
+        out["decisions"]["decision_grade_missing"] = missing
     return out
+
+
+V4_LAUNCHES = ("default_specoff", "default")
+
+
+def v4_grade_missing(judged_k: dict) -> list[str]:
+    """The predeclared decision_grade (PREDECLARATION.md, rules v4): 3 judged controls per arm per cell in BOTH launches.
+    Lists what lacks them: a launch that never ran, a cell that is missing or not ok, an arm with fewer controls."""
+    miss: list[str] = []
+    for cfg in V4_LAUNCHES:
+        if not any(k[0] == cfg for k in judged_k):
+            miss.append(f"{cfg}: launch has no judged cell")
+            continue
+        for gs in list(V4_TARGET_CELLS) + V4_CHECK_CELLS:
+            for arm in ("A", "B"):
+                k = judged_k.get((cfg, gs, arm))
+                if k is None:
+                    miss.append(f"{cfg}:{gs}:{arm}: no judged cell")
+                elif k < MIN_CONTROL_REPEATS_V3:
+                    miss.append(f"{cfg}:{gs}:{arm}: {k} judged controls < {MIN_CONTROL_REPEATS_V3}")
+    return miss
 
 
 def decide_v4(ana: dict, arm_runs: dict, grade: bool) -> dict:
@@ -1099,7 +1152,11 @@ def decide_v4(ana: dict, arm_runs: dict, grade: bool) -> dict:
         "keep load_dft (full drafter KV through the fork), no re-prefill" if g == "TARGET_RESTORE_FAITHFUL_DRAFT_PATH_NEAR_TIE"
         else "neither: the defect is target-side" if g == "RESTORE_DEFECT_TARGET_SIDE" else "undecided")
     if not grade:
+        # the predeclared text: without decision_grade these three read NOT_DECISION_GRADE; the value the stored cells
+        # would give is kept under `provisional` (never a decision)
+        d["provisional"] = {}
         for k in ("kpf13_1b_locus", "kpf13_1_dflash2_gpu", "kpf19_1_choice_dflash2"):
+            d["provisional"][k] = d[k]
             d[k] = "NOT_DECISION_GRADE"
     return d
 
@@ -1502,6 +1559,19 @@ class Server:
         if ctx.args.device == "gpu":
             if port_listening(8083):
                 raise Abort("production :8083 is listening: its owner must stop it via orchestrator_stack.py first")
+            # our own previous server (this driver's last launch, or the previous phase's driver) is verified dead, but
+            # KFD releases its VRAM with a lag: wait for the card to drain before the empty-card checks below refuse
+            w = wait_card_vram_drained(Path(ctx.args.card), ctx.args.vram_free_max_gib * GIB,
+                                       getattr(ctx.args, "vram_drain_timeout_s", VRAM_DRAIN_TIMEOUT_S),
+                                       getattr(ctx.args, "vram_drain_poll_s", VRAM_DRAIN_POLL_S))
+            self.vram_drain = w
+            if w["polls"] > 1:
+                print(f"[kpf13] card VRAM drain wait before launch {self.label}: {_gib(w['first_bytes'])} used at first "
+                      f"read -> {_gib(w['final_bytes'])} after {w['waited_s']:.1f} s / {w['polls']} polls "
+                      f"({'drained' if w['drained'] else 'NOT drained'}; limit {ctx.args.vram_free_max_gib} GiB)",
+                      flush=True)
+            else:
+                print(f"[kpf13] card VRAM before launch {self.label}: {_gib(w['final_bytes'])} (no drain wait)", flush=True)
             foreign = {p: v for p, v in kfd_pids().items() if v > 0}
             if foreign:
                 raise Abort(f"foreign KFD processes hold VRAM: {foreign}")
@@ -2242,6 +2312,10 @@ def parse_args(argv=None):
     ap.add_argument("--load-timeout-s", type=float, default=900.0)
     ap.add_argument("--card", default=str(DEFAULT_CARD))
     ap.add_argument("--vram-free-max-gib", type=float, default=2.0)
+    ap.add_argument("--vram-drain-timeout-s", type=float, default=VRAM_DRAIN_TIMEOUT_S,
+                    help="GPU: before a launch, wait up to this long for card VRAM to drain below --vram-free-max-gib "
+                         "(KFD release lag after our own previous server died)")
+    ap.add_argument("--vram-drain-poll-s", type=float, default=VRAM_DRAIN_POLL_S)
     ap.add_argument("--no-region-lock", default=None, metavar="REASON", help="CPU: skip the region-lock proof (recorded)")
     ap.add_argument("--no-device-claim", default=None, metavar="REASON", help="GPU: skip the mi210_0 claim (recorded)")
     ap.add_argument("--prefill-tok-s", type=float, default=30.0, help="estimate only")
