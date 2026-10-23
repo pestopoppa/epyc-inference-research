@@ -25,6 +25,11 @@ What this module does instead (no opcode allow-lists, no pattern matching on ins
      AMDGPU kernel descriptors (symbol `*.kd`, 64 bytes) compared with the entry-offset field (bytes 16..24) masked.
   6. Function set (names) must be equal on both sides.
 
+PATH NORMALISATION (v4): a candidate built with the CH-28d prefix-map recipe carries `ggml/src/x.cu` where the baseline carries
+`<root>/ggml/src/x.cu`.  Both forms are one "build-root path" (REL_RX / ROOT_RX) and normalise to `<ROOT>/ggml/src/x.cu`; only a
+string that is equal after that normalisation is explained, so a real path/name change still fails.  Such a pair reports
+`path_touched` and the lib is classified EXPLAINED-PATH by libcmp.
+
 When both trees were built with a path-independent __FILE__ (prefix-map recipe) every function is IDENTICAL and the
 result is `exact`.  Equal-length roots likewise produce zero PATH-DEPENDENT functions.
 """
@@ -38,6 +43,8 @@ import tempfile
 BUNDLE_MAGIC = b'__CLANG_OFFLOAD_BUNDLE__'
 ROCM_LLVM = os.environ.get('ROCM_LLVM_BIN', '/opt/rocm/llvm/bin')
 ROOT_RX = re.compile(rb'^(/.*?)/(ggml|src|common|tools|include|vendor|examples)/')
+# a source path from a build with `-ffile-prefix-map=<root>=.`: no root left, `ggml/src/x.cu` (clang) or `./ggml/src/x.cu` (gcc)
+REL_RX = re.compile(rb'^(?:\./)?((?:ggml|src|common|tools|include|vendor|examples)/[\w./+\-]*\.(?:cu|cuh|hip|c|cc|cpp|h|hpp))$')
 LABEL = re.compile(r'^([0-9a-f]{16}) <(.*)>:$')
 INSN_ADDR = re.compile(r'//\s*([0-9A-F]{12}):')
 
@@ -105,11 +112,14 @@ class CodeObject:
         self.ro_addr, self.ro_off, self.ro = a, o, data[o:o + s]
         self.syms = _symbols(self.path)
         ents = [e for e in self.ro.split(b'\0') if len(e) >= 4 and all(32 <= c < 127 for c in e)]
-        self.paths = [e for e in ents if ROOT_RX.match(e)]
+        self.paths = [e for e in ents if ROOT_RX.match(e) or REL_RX.match(e)]
         self.root = build_root(self.paths)
         self.funcs = self._funcs()
 
     def _norm_str(self, s):
+        m = REL_RX.match(s)
+        if m:
+            return b'<ROOT>/' + m.group(1)
         return s.replace(self.root, b'<ROOT>') if self.root else s
 
     def _target_token(self, addr):
@@ -119,7 +129,7 @@ class CodeObject:
         e = self.ro.find(b'\0', i)
         s = self.ro[i:e if e >= 0 else len(self.ro)]
         if len(s) >= 4 and all(32 <= c < 127 for c in s):
-            return 'S:' + self._norm_str(s).decode(), ('P' if ROOT_RX.match(s) else 'S')
+            return 'S:' + self._norm_str(s).decode(), ('P' if (ROOT_RX.match(s) or REL_RX.match(s)) else 'S')
         return 'D:' + hashlib.sha1(self.ro[i:i + 16]).hexdigest()[:12], 'D'
 
     def _funcs(self):
@@ -185,7 +195,7 @@ class CodeObject:
 
 def compare_object(a: CodeObject, b: CodeObject):
     """-> dict(identical, path_dependent, other, rodata_ok, notes[list])"""
-    res = dict(identical=0, path_dependent=0, other=[], rodata_ok=True, notes=[])
+    res = dict(identical=0, path_dependent=0, other=[], rodata_ok=True, notes=[], path_touched=False)
     if set(a.funcs) != set(b.funcs):
         res['other'].append('function set differs: ' + str(sorted(set(a.funcs) ^ set(b.funcs))[:4]))
         return res
@@ -206,6 +216,8 @@ def compare_object(a: CodeObject, b: CodeObject):
     if a.rodata_entries() != b.rodata_entries():
         res['rodata_ok'] = False
         res['notes'].append('.rodata strings differ modulo build root')
+    elif a.paths != b.paths:
+        res['path_touched'] = True   # raw path strings differ (other root / prefix-mapped) but are equal modulo root
     return res
 
 
@@ -225,13 +237,19 @@ def _pair(args):
 
 def compare_fatbins(blob_a, blob_b, jobs=None):
     """-> (ok, summary_line, detail_lines).  Bundles are compared in parallel (llvm-objdump dominates)."""
+    return compare_fatbins_ex(blob_a, blob_b, jobs)[:3]
+
+
+def compare_fatbins_ex(blob_a, blob_b, jobs=None):
+    """-> (ok, summary_line, detail_lines, path_touched)  path_touched: some pair differed only in build-root path spelling."""
     from concurrent.futures import ThreadPoolExecutor
     oa, ob = device_objects(blob_a), device_objects(blob_b)
     if len(oa) != len(ob):
-        return False, f'.hip_fatbin: {len(oa)} vs {len(ob)} device bundles', []
+        return False, f'.hip_fatbin: {len(oa)} vs {len(ob)} device bundles', [], False
     d = tempfile.mkdtemp(prefix='fold_gate_hip_', dir=os.environ.get('FOLD_GATE_TMP'))
     n_exact = n_pd_obj = pd_funcs = 0
     bad = []
+    touched = False
     try:
         with ThreadPoolExecutor(jobs or min(8, os.cpu_count() or 2)) as ex:
             results = list(ex.map(_pair, [(k, x, y, d) for k, (x, y) in enumerate(zip(oa, ob))]))
@@ -245,12 +263,14 @@ def compare_fatbins(blob_a, blob_b, jobs=None):
             elif r['path_dependent']:
                 n_pd_obj += 1
                 pd_funcs += r['path_dependent']
+                touched = True
             else:
                 n_exact += 1
+                touched = touched or r['path_touched']
     finally:
         import shutil
         shutil.rmtree(d, ignore_errors=True)
     mode = 'exact' if not n_pd_obj and not bad else 'path-dependent-codegen'
     line = (f'.hip_fatbin: {len(oa)} gfx code objects: {n_exact} identical (resolved-operand disassembly, rodata, kernel descriptors), '
             f'{n_pd_obj} differ only in {pd_funcs} path-length-dependent function(s) (mode={mode}), {len(bad)} other')
-    return (not bad), line, bad[:6]
+    return (not bad), line, bad[:6], touched or bool(n_pd_obj)

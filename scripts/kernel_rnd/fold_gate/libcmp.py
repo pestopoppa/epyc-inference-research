@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """libcmp.py BASE_LIB NEW_LIB -> one verdict line on stdout + detail lines (prefixed '    ').
        [--ui-source-identical]
-Verdicts: SAME | EXPLAINED | EXPLAINED-UI | UNEXPLAINED | CODE-DIFF.   Read-only on both inputs.
+Verdicts: SAME | EXPLAINED | EXPLAINED-PATH | EXPLAINED-UI | UNEXPLAINED | CODE-DIFF.   Read-only on both inputs.
 
 --ui-source-identical : the caller PROVED `git diff <base> <cand> -- tools/ui tools/server` is empty (fold_gate.py does).
   Only then may a CODE-DIFF confined to the web-UI static initialiser be classified EXPLAINED-UI (class 4 below).
 
-Classification (fold gate v3; v2 = CH-28 2026-10-23):
+Classification (fold gate v4; v3 = CH-28 2026-10-23, v4 = C3 path-prefix normalisation):
   1. sha256 identical                                   -> SAME
   2. executable sections (.init .plt* .text .fini ...): normalised disassembly must be identical
      (addresses, rip displacements, branch/call targets stripped; opcodes and immediates kept).
@@ -20,6 +20,15 @@ Classification (fold gate v3; v2 = CH-28 2026-10-23):
          NUL padding the remaining bytes must be IDENTICAL.
      .hip_fatbin -> hipdev.py: deterministic device-code check (no opcode allow-list; see that module)
      Anything else                                                             -> UNEXPLAINED
+  3b. PATH NORMALISATION (v4).  The two images may have been built from different source roots, and one of them may have
+     used `-ffile-prefix-map=<src>=.` / `-fmacro-prefix-map` (CH-28d recipe) while the other did not.  Each side's roots are
+     read from ITS OWN image (CMakeCache.txt CMAKE_HOME_DIRECTORY / CMAKE_CACHEFILE_DIR and the prefix-map flags in
+     CMAKE_{C,CXX,HIP}_FLAGS; BUILD.log is the fallback) and every string is canonicalised before comparison:
+     `<abs src root>/x` becomes `./x` (the spelling `-ffile-prefix-map=<src>=.` gives gcc; clang's `x` is rewritten to `./x` on a
+     prefix-mapped image, for source-file paths only); `<abs build root>` and the mapped `.build` both become `<BLD>`.
+     Only strings that are EQUAL after canonicalisation are explained; a real string change stays UNEXPLAINED.  Build-info is the
+     short sha / build number each image reports (VERSION.txt, common/build-info.cpp) plus the --base/--cand commits.
+     A lib whose only differences needed this normalisation is EXPLAINED-PATH (a pass, counted separately).
   4. EXPLAINED-UI (needs --ui-source-identical): the ONLY differing function(s) are the `_GLOBAL__sub_I_ui.cpp`
      static initialiser, every differing instruction is a `movq $imm,<rip-rel>` immediate (the gzip sizes of the embedded
      assets), and the rest of the lib passes classes 2-3 except that .rodata may differ (it holds the gzip bytes of the
@@ -34,6 +43,120 @@ LAYOUT = re.compile(r'^\.(rela\..*|rel\..*|dynsym|dynstr|symtab|strtab|shstrtab|
                     r'got|got\.plt|dynamic|init_array|fini_array|data\.rel\.ro|data|bss|tbss|tdata|gnu\.hash|gnu\.version|gnu\.version_r|hash)$')
 FREE = re.compile(r'^(\.note\.gnu\.build-id|\.comment|\.debug_.*|\.gnu_debuglink)$')
 EXEC_FLAG = 'X'
+PBOUND = rb'(?<![\w.\-/])'          # a path starts here: not preceded by a path character
+
+
+class ImageInfo:
+    """Build roots and build-info of ONE image.  known=False -> nothing could be read (legacy static TOKENS apply)."""
+
+    def __init__(self, src_root=None, build_root=None, maps=(), tokens=(), known=False):
+        self.src_root, self.build_root, self.maps, self.tokens, self.known = src_root, build_root, list(maps), set(tokens), known
+
+
+def _find_up(path, name, depth=3):
+    d = os.path.dirname(os.path.abspath(path)) if not os.path.isdir(path) else os.path.abspath(path)
+    for _ in range(depth + 1):
+        c = os.path.join(d, name)
+        if os.path.isfile(c):
+            return c
+        d = os.path.dirname(d)
+    return None
+
+
+def _read(p, limit=4 << 20):
+    try:
+        with open(p, 'r', errors='replace') as f:
+            return f.read(limit)
+    except OSError:
+        return ''
+
+
+def image_info(path, commits=()):
+    """path = a lib or the image's bin/ (or image) dir.  -> ImageInfo.  Read-only."""
+    src = bld = None
+    maps, toks = [], set()
+    cache = _find_up(path, 'CMakeCache.txt')
+    flags = ''
+    if cache:
+        txt = _read(cache)
+        m = re.search(r'^CMAKE_HOME_DIRECTORY:\w+=(.+)$', txt, re.M)
+        src = m.group(1).strip() if m else None
+        m = re.search(r'^CMAKE_CACHEFILE_DIR:\w+=(.+)$', txt, re.M)
+        bld = m.group(1).strip() if m else os.path.dirname(cache)
+        flags = '\n'.join(re.findall(r'^CMAKE_\w*_FLAGS:\w+=(.*)$', txt, re.M))
+        root = os.path.dirname(cache)
+    else:
+        root = None
+    log = _find_up(path, 'BUILD.log')
+    if log:
+        blog = _read(log, 1 << 20)
+        flags += '\n' + blog
+        if not src:   # fallback: a prefix-map whose source side is not the build dir names the source root
+            for a, _b in re.findall(r'-f(?:file|macro)-prefix-map=(\S+?)=(\S*)', blog):
+                if '/builds/' not in a and a != bld:
+                    src = a
+                    break
+    for a, b in re.findall(r'-f(?:file|macro)-prefix-map=(\S+?)=(\S*)', flags):
+        if (a, b) not in maps:
+            maps.append((a, b))
+    for fn in ('VERSION.txt', os.path.join('common', 'build-info.cpp')):
+        t = _read(os.path.join(root, fn)) if root else ''
+        for num, sha in re.findall(r'version:\s*(\d+)\s*\(([0-9a-f]{7,40})\)', t):
+            toks.update((num, sha))
+        for sha in re.findall(r'LLAMA_COMMIT\s*=\s*"([0-9a-f]{7,40})"', t):
+            toks.add(sha)
+        for num in re.findall(r'LLAMA_BUILD_NUMBER\s*=\s*(\d+)', t):
+            toks.add(num)
+    for c in commits:
+        if c:
+            toks.update({c, c[:7], c[:9]})
+    return ImageInfo(src, bld, maps, toks, known=bool(src or bld or maps))
+
+
+SRC_REL = re.compile(PBOUND + rb'(?:ggml|src|common|tools|include|vendor|examples)/[\w./+\-]*\.(?:cu|cuh|hip|c|cc|cpp|h|hpp)(?![\w])')
+
+
+def make_canon(info):
+    """-> canon(bytes)->bytes for one image's strings.  Canonical form: source root -> `./` (what a `-ffile-prefix-map=<src>=.`
+    build emits, so strings that are the same on both sides are never touched), build root -> `<BLD>`.  Rules are derived
+    from THIS image's own roots only, so an unmapped legitimate `./x` string is left alone on both sides."""
+    rules = []   # (compiled regex, replacement)
+    abs_ = []
+    if info.src_root:
+        abs_.append((info.src_root, 'S'))
+    if info.build_root:
+        abs_.append((info.build_root, 'B'))
+    for root, role in sorted(abs_, key=lambda t: -len(t[0])):
+        r = root.rstrip('/').encode()
+        if role == 'S':
+            rules.append((re.compile(PBOUND + re.escape(r) + rb'/'), b'./'))
+            rules.append((re.compile(PBOUND + re.escape(r) + rb'(?![\w\-.])'), b'.'))
+        else:
+            rules.append((re.compile(PBOUND + re.escape(r) + rb'(?![\w\-.])'), b'<BLD>'))
+    src_mapped = False
+    for a, b in info.maps:
+        role = 'S' if a.rstrip('/') == (info.src_root or '').rstrip('/') else 'B' if a.rstrip('/') == (info.build_root or '').rstrip('/') else None
+        if role is None or not b:
+            continue
+        if role == 'S':
+            src_mapped = True      # gcc: `./x` already canonical.  clang drops the `./`: restore it for source-file paths
+        else:
+            rules.append((re.compile(PBOUND + re.escape(b.rstrip('/').encode()) + rb'(?![\w\-.])'), b'<BLD>'))
+    if src_mapped:
+        rules.append((SRC_REL, lambda m: b'./' + m.group()))
+
+    def canon(x):
+        for rx, rep in rules:
+            x = rx.sub(rep, x)
+        return x
+    return canon
+
+
+def _token_rx(infos):
+    toks = set().union(*(i.tokens for i in infos)) if infos else set()
+    if not toks:
+        return None
+    return re.compile(b'|'.join(re.escape(t.encode()) for t in sorted(toks, key=len, reverse=True)))
 
 
 def sh(cmd):
@@ -127,10 +250,12 @@ def mask_jt(x, plo, phi):
     return a.tobytes() + x[n4:]
 
 
-def rodata_verdict(xb, xn, sb):
-    """-> (unexplained_strings, residual_equal, n_dropped_strings, (len_b, len_n))
-    mask table words, then: printable runs (>=4) present on one side only must all be build-info (TOKENS); delete them, drop NULs
-    (alignment padding), residual must be identical.
+def rodata_verdict(xb, xn, sb, ctx=None):
+    """-> (unexplained_strings, residual_equal, n_dropped_strings, (len_b, len_n), n_path_normalised, pool_reordered)
+    mask table words, then: printable runs (>=4) are canonicalised per side (path roots, see make_canon); canonical strings present
+    on one side only must all be build-info (tokens); delete them and every run whose canonical form was touched by path
+    normalisation, drop NULs (alignment padding), residual must be identical.
+    ctx = (ImageInfo base, ImageInfo new) or None.  With no readable image info the legacy static TOKENS apply.
     LIMITATION (named): a real edit of an int32 constant inside the masked ranges (large negative ints) is masked too; the primary
     evidence for 'no semantic change' is the identical normalised disassembly of all executable sections + source-diff scope."""
     ro = sb['.rodata']
@@ -140,24 +265,48 @@ def rodata_verdict(xb, xn, sb):
     if plo < (1 << 20):
         plo = phi = None
     xb, xn = mask_jt(xb, plo, phi), mask_jt(xn, plo, phi)
-    cb, cn = collections.Counter(PR.findall(xb)), collections.Counter(PR.findall(xn))
+    ib, inn = ctx if ctx else (ImageInfo(), ImageInfo())
+    canon_b, canon_n = make_canon(ib), make_canon(inn)
+    tokrx = _token_rx([ib, inn]) if (ib.known or inn.known) else TOKENS
+    rb_runs, rn_runs = PR.findall(xb), PR.findall(xn)
+    cb, cn = collections.Counter(canon_b(r) for r in rb_runs), collections.Counter(canon_n(r) for r in rn_runs)
+    touched = {canon_b(r) for r in rb_runs if canon_b(r) != r} | {canon_n(r) for r in rn_runs if canon_n(r) != r}
     only_b, only_n = cb - cn, cn - cb
-    unexplained = [s for s in list((only_b + only_n).keys()) if not TOKENS.search(s)]
-    if unexplained:
-        return unexplained, False, len(only_b) + len(only_n), (0, 0)
-    drop = set(only_b) | set(only_n)
-    if drop:
-        rx = re.compile(b'|'.join(re.escape(s) for s in sorted(drop, key=len, reverse=True)))
-        rb, rn = rx.sub(b'', xb).replace(b'\x00', b''), rx.sub(b'', xn).replace(b'\x00', b'')
+    if ib.known or inn.known:
+        # strict: a one-sided string is build-info only if it matches a one-sided string of the other image once the tokens of
+        # BOTH images' own build-info are blanked ("built dcc853b55 #10413" ~ "built 141e4bcf5 #10412", never "built deadbeef0")
+        bi = lambda t: tokrx.sub(b'<BI>', t) if tokrx else t
+        mb, mn = collections.Counter(), collections.Counter()
+        for t, c in only_b.items():
+            mb[bi(t)] += c
+        for t, c in only_n.items():
+            mn[bi(t)] += c
+        bad_forms = set(((mb - mn) + (mn - mb)).keys())
+        unexplained = [t for t in list((only_b + only_n).keys()) if bi(t) in bad_forms]
     else:
-        rb, rn = xb.replace(b'\x00', b''), xn.replace(b'\x00', b'')
-    return unexplained, rb == rn, len(drop), (len(rb), len(rn))
+        unexplained = [t for t in list((only_b + only_n).keys()) if not (tokrx and tokrx.search(t))]
+    path_norm = sum(1 for t in touched if t in (cb & cn))   # path-differing strings that normalisation proved equal
+    if unexplained:
+        return unexplained, False, len(only_b) + len(only_n), (0, 0), path_norm, False
+    drop = set(only_b) | set(only_n) | touched
+
+    def strip(x, canon):
+        return PR.sub(lambda m: b'' if canon(m.group()) in drop else m.group(), x).replace(b'\x00', b'')
+    rb, rn = strip(xb, canon_b), strip(xn, canon_n)
+    if rb == rn:
+        return unexplained, True, len(drop), (len(rb), len(rn)), path_norm, False
+
+    def chunks(x):   # non-string bytes between printable runs, as a multiset: invariant under a re-ordered merged string pool
+        return collections.Counter(c for c in PR.sub(b'\x00', x).split(b'\x00') if c)
+    # ld merges .rodata.str* through a hash table: when string contents change (shorter paths) the pool is emitted in a different
+    # ORDER.  Equal strings (checked above) in another order are layout, so fall back to an order-free comparison of the rest.
+    return unexplained, chunks(xb) == chunks(xn), len(drop), (len(rb), len(rn)), path_norm, True
 
 
 # ---------------------------------------------------------------- HIP device code (.hip_fatbin) -> hipdev.py
 def hip_verdict(b, n, sb, sn):
-    ok, line, bad = hipdev.compare_fatbins(sec_bytes(b, sb['.hip_fatbin']), sec_bytes(n, sn['.hip_fatbin']))
-    return ok, [line] + bad
+    ok, line, bad, ptouched = hipdev.compare_fatbins_ex(sec_bytes(b, sb['.hip_fatbin']), sec_bytes(n, sn['.hip_fatbin']))
+    return ok, [line] + bad, ptouched
 
 
 UI_FUNC = re.compile(r'^_GLOBAL__sub_I_ui\.cpp$')
@@ -181,8 +330,10 @@ def names_modulo_cuid(x):
     return sorted(re.sub(rb'__hip_cuid_[0-9a-f]+', b'__hip_cuid_X', t) for t in x.split(b'\0'))
 
 
-def classify(b, n, ui_source_identical=False):
-    """-> (verdict, [detail lines])"""
+def classify(b, n, ui_source_identical=False, ctx=None):
+    """-> (verdict, [detail lines]).  ctx = (ImageInfo base, ImageInfo new); None -> read from the lib paths' own image dirs."""
+    if ctx is None:
+        ctx = (image_info(b), image_info(n))
     if hashlib.sha256(open(b, 'rb').read()).digest() == hashlib.sha256(open(n, 'rb').read()).digest():
         return 'SAME', []
     sb, sn = sections(b), sections(n)
@@ -195,6 +346,7 @@ def classify(b, n, ui_source_identical=False):
         cdet = ['only the web-UI static initialiser differs (movq immediates = gzip sizes of embedded assets); '
                 'tools/ui + tools/server source diff is empty']
     bad, notes = [], []
+    path_used = False
     for k in sorted(sb):
         if EXEC_FLAG in sb[k]['flags']:
             continue
@@ -207,16 +359,20 @@ def classify(b, n, ui_source_identical=False):
             if ui:
                 notes.append(".rodata: differs (embedded UI asset bytes; accepted under EXPLAINED-UI)")
                 continue
-            un, resid_eq, nstr, rl = rodata_verdict(xb, xn, sb)
+            un, resid_eq, nstr, rl, npath, reord = rodata_verdict(xb, xn, sb, ctx)
             if un:
                 bad.append(f".rodata: {len(un)} non-build-info string(s) differ, e.g. {[s[:60] for s in un[:3]]}")
             elif not resid_eq:
                 bad.append(f".rodata: non-string residual differs after removing {nstr} build-info string(s) (residual len {rl[0]} vs {rl[1]})")
             else:
-                notes.append(f".rodata: only {nstr} build-info string(s) differ; residual identical")
+                notes.append(f".rodata: only {nstr} build-info/path string(s) differ; residual identical"
+                             + (f" ({npath} equal after build-root normalisation)" if npath else "")
+                             + ("; string pool re-ordered by the linker, non-string bytes equal as a multiset" if reord else ""))
+                path_used = path_used or npath > 0
         elif k == '.hip_fatbin':
-            ok, det = hip_verdict(b, n, sb, sn)
+            ok, det, ptouched = hip_verdict(b, n, sb, sn)
             (notes if ok else bad).extend(det)
+            path_used = path_used or (ok and ptouched)
         elif k in ('.dynstr', '.strtab') and len(xb) != len(xn) and names_modulo_cuid(xb) == names_modulo_cuid(xn):
             notes.append(f"{k}: size {len(xb)}->{len(xn)} only through __hip_cuid_<hash> symbol names (hash printed without leading zeros)")
         elif LAYOUT.match(k):
@@ -230,7 +386,7 @@ def classify(b, n, ui_source_identical=False):
         return 'CODE-DIFF', cdet + bad + ['note ' + x for x in notes]
     if bad:
         return 'UNEXPLAINED', cdet + bad + ['note ' + x for x in notes] if ui else bad + ['note ' + x for x in notes]
-    return ('EXPLAINED-UI' if ui else 'EXPLAINED'), (cdet if ui else []) + ['note ' + x for x in notes]
+    return ('EXPLAINED-UI' if ui else 'EXPLAINED-PATH' if path_used else 'EXPLAINED'), (cdet if ui else []) + ['note ' + x for x in notes]
 
 
 def main(argv=None):

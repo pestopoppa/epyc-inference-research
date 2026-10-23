@@ -5,8 +5,10 @@ usage: fold_gate.py --base-image DIR --new-image DIR [--src-repo DIR --base-comm
                     [--expected-changed libllama-bench-impl.so ...] [--ui-path tools/ui --ui-path tools/server]
 exit 0 = PASS, 1 = FAIL.  Read-only on both image dirs.
 
-Per library (matched by soname stem, so 10411 -> 10412 maps): SAME | EXPLAINED | EXPLAINED-UI | EXPECTED | CODE-DIFF |
-UNEXPLAINED | MISSING | EXTRA.  EXPECTED = a lib named by --expected-changed whose code differs (the fold's own change).
+Per library (matched by soname stem, so 10411 -> 10412 maps): SAME | EXPLAINED | EXPLAINED-PATH | EXPLAINED-UI | EXPECTED |
+CODE-DIFF | UNEXPLAINED | MISSING | EXTRA.  EXPLAINED-PATH = identical code, differences only in strings that are equal once each
+image's own build/source root (absolute or `-ffile-prefix-map`ped, read from its CMakeCache.txt) is normalised, build-info and layout.
+EXPECTED = a lib named by --expected-changed whose code differs (the fold's own change).
 EXPLAINED-UI is allowed only when `git diff <base> <cand> -- <ui paths>` in --src-repo is EMPTY (proved here, not assumed).
 """
 import argparse
@@ -47,7 +49,12 @@ def ui_source_identical(repo, base, cand, paths):
 def run(a, out=print):
     ui_ok, ui_msg = ui_source_identical(a.src_repo, a.base_commit, a.cand_commit, a.ui_path)
     out(f'ui-source: {ui_msg}')
-    cnt = dict(same=0, explained=0, ui=0, expected=0, bad=0)
+    cnt = dict(same=0, explained=0, path=0, ui=0, expected=0, bad=0)
+    commits = [c for c in (a.base_commit, a.cand_commit) if c]
+    ib, inn = libcmp.image_info(a.base_image, commits), libcmp.image_info(a.new_image, commits)
+    for tag, i in (('base', ib), ('new', inn)):
+        out(f'image-roots {tag}: src={i.src_root} build={i.build_root} prefix-maps={len(i.maps)} build-info={sorted(i.tokens)[:4]}'
+            + ('' if i.known else '  (UNREADABLE: legacy static tokens, no path normalisation)'))
     nstem = {stem(f): f for f in libs(a.new_image)}
     for f in libs(a.base_image):
         st = stem(f)
@@ -56,14 +63,14 @@ def run(a, out=print):
             out(f'  MISSING     {f} (no lib with stem {st} in new image)'); cnt['bad'] += 1; continue
         if f != nf:
             out(f'  (map) {f} -> {nf}')
-        v, det = libcmp.classify(os.path.join(a.base_image, f), os.path.join(a.new_image, nf), ui_ok)
+        v, det = libcmp.classify(os.path.join(a.base_image, f), os.path.join(a.new_image, nf), ui_ok, (ib, inn))
         if v == 'SAME':
             cnt['same'] += 1; continue
         if v == 'CODE-DIFF' and st in a.expected_changed:
             out(f'  EXPECTED    {nf}  code differs (this fold changes it)'); cnt['expected'] += 1; continue
-        if v in ('EXPLAINED', 'EXPLAINED-UI'):
+        if v in ('EXPLAINED', 'EXPLAINED-PATH', 'EXPLAINED-UI'):
             out(f'  {v:<11} {nf}')
-            cnt['ui' if v == 'EXPLAINED-UI' else 'explained'] += 1
+            cnt[{'EXPLAINED-UI': 'ui', 'EXPLAINED-PATH': 'path'}.get(v, 'explained')] += 1
             for l in det:
                 out('      ' + l)
         else:
@@ -84,7 +91,7 @@ def run(a, out=print):
             out(f'  SYMLINK-DIFF {ln}: {bt} vs {nt}'); cnt['bad'] += 1
         elif not os.path.exists(os.path.join(a.new_image, nt)):
             out(f'  SYMLINK-DANGLING {ln} -> {nt}'); cnt['bad'] += 1
-    out(f"(b) byte-identical={cnt['same']} explained={cnt['explained']} explained-ui={cnt['ui']} expected={cnt['expected']} "
+    out(f"(b) byte-identical={cnt['same']} explained={cnt['explained']} explained-path={cnt['path']} explained-ui={cnt['ui']} expected={cnt['expected']} "
         f"unexplained/code-diff/missing={cnt['bad']}")
     out('(b) PASS' if cnt['bad'] == 0 else '(b) FAIL')
     return cnt['bad'] == 0

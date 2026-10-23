@@ -161,14 +161,15 @@ __global__ void k(const char** o, long* n) { ndc(o, n); n[1] = n[2] * %d; }
 '''
 
 
-def hip_build(tmp, root, mult=3):
+def hip_build(tmp, root, mult=3, prefix_map=False):
     d = tmp / root / 'ggml' / 'src'
     d.mkdir(parents=True)
     f = d / 'k.hip'
     f.write_text(HIP % mult)
     out = tmp / f'{root}.co'
     env = {**os.environ, 'TMPDIR': str(tmp)}
-    subprocess.run([CLANG, '-x', 'hip', '--offload-arch=gfx90a', '--cuda-device-only', '-nogpulib', '-O2', '-c', str(f), '-o', str(out)],
+    pm = [f'-ffile-prefix-map={tmp / root}=.', f'-fmacro-prefix-map={tmp / root}=.'] if prefix_map else []
+    subprocess.run([CLANG, '-x', 'hip', '--offload-arch=gfx90a', '--cuda-device-only', '-nogpulib', '-O2', *pm, '-c', str(f), '-o', str(out)],
                    check=True, capture_output=True, env=env)
     return out.read_bytes()
 
@@ -192,3 +193,121 @@ def test_hip_real_device_code_change_fails(tmp_path):
     a, b = hip_build(tmp_path, 'aa', 3), hip_build(tmp_path, 'bbbbbbbbbbbbbbbb', 5)
     ok, line, bad = hipdev.compare_fatbins(a, b)
     assert not ok and bad, line
+
+
+@needs_hip
+def test_hip_prefix_mapped_vs_absolute_path_is_explained_by_path(tmp_path):
+    a, b = hip_build(tmp_path, 'aaaa'), hip_build(tmp_path, 'bbbbbbbbbbbbbbbb', prefix_map=True)
+    ok, line, bad, touched = hipdev.compare_fatbins_ex(a, b)
+    assert ok and touched, (line, bad)
+    c = hip_build(tmp_path, 'cccccccccccccccc', 5, prefix_map=True)
+    ok, line, bad, _ = hipdev.compare_fatbins_ex(a, c)
+    assert not ok and bad, line      # a real kernel change is still refused
+
+
+# ------------------------------------------------------------------ v4: path-prefix normalisation (C3 fold, 2026-10-23)
+PATH_SRC = r'''
+const char *where(void) { return __FILE__; }
+const char *msg(void) { return "%MSG%"; }
+const char tag[] = "%TAG%";
+long work(long x) { return x * 3 + 1; }
+'''
+
+
+def make_image(tmp, name, msg='hello world', tag='commit 141e4bcf5', mapped=False, src_name='x.c', version=None):
+    """A fake store image <tmp>/<name>/{CMakeCache.txt,VERSION.txt,bin/libfix.so} built from <tmp>/<name>-src/src/<src_name>.
+    mapped=True builds with the CH-28d recipe (-ffile-prefix-map/-fmacro-prefix-map=<srcroot>=.)."""
+    img, src = tmp / name, tmp / (name + '-src')
+    (img / 'bin').mkdir(parents=True)
+    (src / 'src').mkdir(parents=True)
+    f = src / 'src' / src_name
+    f.write_text(PATH_SRC.replace('%MSG%', msg).replace('%TAG%', tag))
+    flags = f'-ffile-prefix-map={src}=. -fmacro-prefix-map={src}=.' if mapped else ''
+    (img / 'CMakeCache.txt').write_text(f'CMAKE_HOME_DIRECTORY:INTERNAL={src}\nCMAKE_CACHEFILE_DIR:INTERNAL={img}\n'
+                                        f'CMAKE_C_FLAGS:STRING={flags}\nCMAKE_CXX_FLAGS:STRING={flags}\n')
+    if version:
+        (img / 'VERSION.txt').write_text(f'version: {version[0]} ({version[1]}) built with GNU 15.2.0\n')
+    subprocess.run([GCC, '-O1', '-shared', '-fPIC', *flags.split(), str(f), '-o', str(img / 'bin' / 'libfix.so')], check=True)
+    return str(img / 'bin' / 'libfix.so')
+
+
+@needs_gcc
+def test_prefix_mapped_vs_absolute_build_is_explained_by_path(tmp_path):
+    a = make_image(tmp_path, 'base', mapped=False)
+    b = make_image(tmp_path, 'newer', mapped=True)
+    # sanity: without path normalisation this pair IS unexplained (this is what the C3 gate hit)
+    legacy = libcmp.classify(a, b, ctx=(libcmp.ImageInfo(), libcmp.ImageInfo()))
+    assert legacy[0] == 'UNEXPLAINED', legacy
+    v, det = libcmp.classify(a, b)           # image roots read from each image's own CMakeCache.txt
+    assert v == 'EXPLAINED-PATH', det
+    assert any('equal after build-root normalisation' in l for l in det)
+
+
+@needs_gcc
+def test_image_info_reads_roots_and_prefix_maps(tmp_path):
+    b = make_image(tmp_path, 'newer', mapped=True, version=(10413, 'dcc853b55'))
+    i = libcmp.image_info(os.path.dirname(b))
+    assert i.src_root == str(tmp_path / 'newer-src') and i.build_root == str(tmp_path / 'newer')
+    assert (str(tmp_path / 'newer-src'), '.') in i.maps and {'10413', 'dcc853b55'} <= i.tokens
+    assert not libcmp.image_info(str(tmp_path)).known
+
+
+@needs_gcc
+def test_real_string_change_stays_unexplained_despite_path_normalisation(tmp_path):
+    a = make_image(tmp_path, 'base', mapped=False, msg='hello world')
+    b = make_image(tmp_path, 'newer', mapped=True, msg='goodbye now')
+    v, det = libcmp.classify(a, b)
+    assert v == 'UNEXPLAINED' and any('non-build-info' in l for l in det), (v, det)
+
+
+@needs_gcc
+def test_different_source_file_name_stays_unexplained(tmp_path):
+    a = make_image(tmp_path, 'base', mapped=False, src_name='x.c')
+    b = make_image(tmp_path, 'newer', mapped=True, src_name='y.c')    # `./src/y.c` != `<root>/src/x.c`
+    assert libcmp.classify(a, b)[0] == 'UNEXPLAINED'
+
+
+@needs_gcc
+def test_code_change_is_still_code_diff_with_path_normalisation(tmp_path):
+    a = make_image(tmp_path, 'base', mapped=False)
+    b = make_image(tmp_path, 'newer', mapped=True)
+    src = tmp_path / 'newer-src' / 'src' / 'x.c'
+    src.write_text(src.read_text().replace('x * 3', 'x * 9'))
+    subprocess.run([GCC, '-O1', '-shared', '-fPIC', f'-ffile-prefix-map={tmp_path / "newer-src"}=.', str(src), '-o', b], check=True)
+    assert libcmp.classify(a, b)[0] == 'CODE-DIFF'
+
+
+@needs_gcc
+def test_each_images_own_commit_and_build_number_are_build_info(tmp_path):
+    a = make_image(tmp_path, 'base', mapped=False, tag='built 141e4bcf5 #10412', version=(10412, '141e4bcf5'))
+    b = make_image(tmp_path, 'newer', mapped=True, tag='built dcc853b55 #10413', version=(10413, 'dcc853b55'))
+    v, det = libcmp.classify(a, b)
+    assert v == 'EXPLAINED-PATH', det
+    c = make_image(tmp_path, 'other', mapped=True, tag='built deadbeef0 #10413', version=(10413, 'dcc853b55'))
+    assert libcmp.classify(a, c)[0] == 'UNEXPLAINED'      # a sha neither image reports is not build-info
+
+
+def test_canon_leaves_unmapped_dot_slash_strings_alone():
+    root = '/w/ch28'
+    base = libcmp.make_canon(libcmp.ImageInfo(src_root=root, build_root='/w/b', known=True))
+    new = libcmp.make_canon(libcmp.ImageInfo(src_root='/w/c3', build_root='/w/b3', maps=[('/w/c3', '.'), ('/w/b3', '.build')], known=True))
+    assert base(b'/w/ch28/ggml/src/ggml.c') == new(b'./ggml/src/ggml.c') == b'./ggml/src/ggml.c'
+    assert new(b'ggml/src/ggml-cuda/clamp.cu') == b'./ggml/src/ggml-cuda/clamp.cu'      # clang drops the ./
+    assert base(b'/w/b/CMakeFiles/x') == new(b'.build/CMakeFiles/x') == b'<BLD>/CMakeFiles/x'
+    assert new(b'./u7zq') == b'./u7zq' and base(b'./u7zq') == b'./u7zq'                 # binary garbage / legit ./x: untouched
+    assert base(b'/w/ch28x/ggml/a.c') == b'/w/ch28x/ggml/a.c'                            # root boundary respected
+
+
+@needs_gcc
+def test_driver_reports_explained_path_and_passes(tmp_path):
+    ba, nb = tmp_path / 'b', tmp_path / 'n'
+    a = make_image(ba, 'base', mapped=False)
+    b = make_image(nb, 'new', mapped=True)
+    lines = []
+    ns = fold_gate.argparse.Namespace(base_image=os.path.dirname(a), new_image=os.path.dirname(b), src_repo=None, base_commit=None,
+                                      cand_commit=None, expected_changed=[], ui_path=['tools/ui'])
+    # the driver only looks at lib*.so names matching ggml|llama|mtmd
+    for d in (os.path.dirname(a), os.path.dirname(b)):
+        os.rename(os.path.join(d, 'libfix.so'), os.path.join(d, 'libllama-fix.so'))
+    assert fold_gate.run(ns, lines.append), lines
+    assert any('EXPLAINED-PATH' in l for l in lines) and any('explained-path=1' in l for l in lines)
