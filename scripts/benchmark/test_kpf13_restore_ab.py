@@ -659,3 +659,74 @@ def test_threads_override_and_stop_file_flags_parse(tmp_path):
     ctx = make_ctx(tmp_path, FakeClient(), argv=["--threads", "24"])
     srv = m.Server(ctx, "default", Path("/x/llama-server"))
     assert srv.argv[srv.argv.index("-t") + 1] == "24" and srv.argv[srv.argv.index("-tb") + 1] == "24"
+
+
+# ---------------------------------------------------------------- GPS-PIN-2: launch affinity
+def _gps_proc(tmp_path, masks, ppid, pid=100):
+    proc = tmp_path / "proc"
+    for tid, mask in masks.items():
+        d = proc / str(pid) / "task" / str(tid)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "status").write_text(f"Name:\tllama-server\nCpus_allowed_list:\t{mask}\n")
+    (proc / str(pid) / "stat").write_text(f"{pid} (llama-server) S {ppid} 1 1 0\n")
+    return proc
+
+
+def test_taskset_launch_env_has_the_rocr_knob_in_the_recorded_identity(tmp_path):
+    ctx = make_ctx(tmp_path, FakeClient(), argv=[])
+    ctx.prefix = ["taskset", "-c", "184-191"]
+    srv = m.Server(ctx, "default", Path("/x/llama-server"))
+    assert srv.env["HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] == "0"
+    assert srv.env_note["set"]["HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] == "0"
+
+
+def test_unpinned_launch_env_is_unchanged(tmp_path):
+    ctx = make_ctx(tmp_path, FakeClient(), argv=[])
+    ctx.prefix = []
+    srv = m.Server(ctx, "default", Path("/x/llama-server"))
+    assert "HSA_OVERRIDE_CPU_AFFINITY_DEBUG" not in srv.env
+    assert "HSA_OVERRIDE_CPU_AFFINITY_DEBUG" not in srv.env_note["set"]
+
+
+def _read_back_srv(tmp_path, monkeypatch, enforce):
+    ctx = make_ctx(tmp_path, FakeClient(), argv=[])
+    ctx.args.cpu_list = "184-191"
+    ctx.prefix = ["taskset", "-c", "184-191"]
+    srv = m.Server(ctx, "default", Path("/x/llama-server"))
+    srv.proc = type("P", (), {"pid": os.getpid()})()
+    monkeypatch.setattr(m.la, "enforce_pinned_child", enforce)
+    monkeypatch.setattr(m, "pid_owns_port", lambda *a: True)
+    monkeypatch.setattr(m, "read_cpus_allowed", lambda pid: [184, 185])
+    return srv
+
+
+def test_read_back_records_the_affinity_census_and_asserts_the_claim(tmp_path, monkeypatch):
+    rec = {"ok": True, "repinned": [{"tid": 7}], "escapes_after": [], "census": {"184-191": 3}}
+    seen = []
+    srv = _read_back_srv(tmp_path, monkeypatch, lambda pid, cpus, label="": seen.append((pid, cpus)) or rec)
+    with pytest.raises(m.Abort) as ei:      # own pid's exe/cmdline are not the fake binary: other problems still reported
+        srv.read_back()
+    assert seen == [(os.getpid(), "184-191")] and "launch affinity" not in str(ei.value)
+
+
+def test_read_back_aborts_on_a_residual_escape(tmp_path, monkeypatch):
+    def refuse(pid, cpus, label=""):
+        raise m.la.LaunchAffinityError("tasks escape 184-191 after re-pin: [{'tid': 9}]")
+    srv = _read_back_srv(tmp_path, monkeypatch, refuse)
+    with pytest.raises(m.Abort, match="launch affinity: tasks escape"):
+        srv.read_back()
+
+
+def test_real_helper_repins_a_stray_task_and_refuses_when_it_cannot(tmp_path):
+    proc = _gps_proc(tmp_path, {100: "184-191", 101: "0-191"}, ppid=55)
+    calls = []
+
+    def setter(tid, cpus):
+        calls.append(tid)
+        (proc / "100" / "task" / str(tid) / "status").write_text("Cpus_allowed_list:\t184-191\n")
+
+    rec = m.la.enforce_pinned_child(100, "184-191", proc_root=proc, setter=setter, launcher_pid=55)
+    assert calls == [101] and rec["ok"] and rec["census"] == {"184-191": 2}
+    stuck = _gps_proc(tmp_path / "b", {100: "184-191", 101: "0-191"}, ppid=55)
+    with pytest.raises(m.la.LaunchAffinityError):
+        m.la.enforce_pinned_child(100, "184-191", proc_root=stuck, setter=lambda t, c: None, launcher_pid=55)
