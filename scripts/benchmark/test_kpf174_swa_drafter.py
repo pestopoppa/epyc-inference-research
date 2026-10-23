@@ -396,3 +396,25 @@ def test_main_drains_on_the_stop_file_before_a_launch(tmp_path, monkeypatch):
                  "--prompt-set", str(make_prompts(tmp_path / "ps.jsonl")), "--prior-191a", "", "--deadline-s", "3600",
                  "--no-device-claim", "test", "--card", str(tmp_path / "nocard"), "--stop-file", str(stop)])
     assert rc == 5 and seen == []
+
+
+# ---------------------------------------------------------------- KPF-GL2 (2026-10-23): the kpf174 record keeps the affinity read-back
+def test_gl2_kpf174_record_keeps_the_affinity_readback(tmp_path):
+    a, ctx = make_ctx(tmp_path)
+    ps = m.Prompts(Path(a.prompt_set))
+    rn = m.Runner(ctx, GEO, ps, "honest", {})
+
+    class _Srv:
+        argv, env_note, linkage, stop_rec = ["/x/llama-server"], {}, {"pass": True}, {"verified_dead": True}
+        readback = {"exe_matches_binary": True, "cpus_allowed": list(range(184, 192)),
+                    "cpus_allowed_non_exempt": list(range(184, 192)), "runtime_threads_unpinned": [4242],
+                    "runtime_threads_unpinned_count": 1, "env_GGML_CUDA_DISABLE_GRAPHS": "1",
+                    "env_HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0", "hip_graphs": "disabled", "problems": []}
+    rn.srv = _Srv()
+    rec = rn.finish_record({"launches": {}, "decisions": {}})
+    ar = rec["argv_readback"]
+    assert set(ar) == set(k13.READBACK_RECORD_KEYS)
+    assert ar["runtime_threads_unpinned"] == [4242] and ar["runtime_threads_unpinned_count"] == 1
+    assert ar["cpus_allowed_non_exempt"] == list(range(184, 192)) and ar["hip_graphs"] == "disabled"
+    on_disk = json.loads(next((ctx.out / "records").glob("kpf174-honest-*.json")).read_text())
+    assert on_disk["argv_readback"]["runtime_threads_unpinned_count"] == 1

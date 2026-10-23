@@ -442,6 +442,30 @@ def read_online_cpus() -> list[int] | None:
         return None
 
 
+# KPF-GL2 (2026-10-23): the launch read-back keys every per-launch record keeps (kpf13 and kpf174 records). The affinity
+# keys (cpus_allowed_non_exempt, runtime_threads_unpinned, runtime_threads_unpinned_count) were computed but DROPPED by
+# the 922113ff7 projection, so the GPS-PIN-1 knob (HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0: count 0) could not be proved from
+# any record. hip_graphs is read from the server's own /proc environ (ggml-cuda common.cuh: getenv != nullptr disables).
+READBACK_RECORD_KEYS = ("exe_matches_binary", "proc_cmdline_tail_matches_argv", "port_owned_by_pid", "env_LLAMA_KPF_MUTATE",
+                        "cpus_allowed", "slot_fork_mode", "cpus_allowed_non_exempt", "runtime_threads_unpinned",
+                        "runtime_threads_unpinned_count", "env_GGML_CUDA_DISABLE_GRAPHS",
+                        "env_HSA_OVERRIDE_CPU_AFFINITY_DEBUG", "hip_graphs")
+
+
+def readback_record(rb: dict | None) -> dict | None:
+    """The record projection of a launch read-back (READBACK_RECORD_KEYS; a key the read-back lacks is kept as None)."""
+    if rb is None:
+        return None
+    return {k: rb.get(k) for k in READBACK_RECORD_KEYS}
+
+
+def hip_graphs_state(env: dict, device: str) -> str:
+    """HIP graphs state of a launched server from its /proc environ: ggml disables graphs iff the variable is SET."""
+    if device != "gpu":
+        return "n/a (cpu)"
+    return "disabled" if "GGML_CUDA_DISABLE_GRAPHS" in env else "enabled"
+
+
 # GPU only: the ROCm runtime starts ONE helper thread (tid = pid+13 on a live server) that resets its own affinity to
 # every online CPU, so a pinned GPU server always shows exactly one full-mask thread (job kpf13-1/kpf17-4 2026-10-23,
 # taskset -c 184-191: 195 threads on 184, one each on 185-191, one on 0-191). Exempt at most this many; more aborts.
@@ -1217,6 +1241,9 @@ class Server:
         rb["port_owned_by_pid"] = pid_owns_port(pid, self.ctx.args.port)
         env = read_proc_env(pid)
         rb["env_LLAMA_KPF_MUTATE"] = env.get("LLAMA_KPF_MUTATE")
+        rb["env_GGML_CUDA_DISABLE_GRAPHS"] = env.get("GGML_CUDA_DISABLE_GRAPHS")
+        rb["env_HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] = env.get("HSA_OVERRIDE_CPU_AFFINITY_DEBUG")
+        rb["hip_graphs"] = hip_graphs_state(env, self.ctx.args.device)
         m = LOG_RES["kv_unified"].search(txt)
         rb["kv_mode_from_launch_log"] = m.group(0) if m else None
         m = LOG_RES["fork_enabled"].search(txt)
@@ -1622,9 +1649,7 @@ class Plan:
             "arm": self.cfg["label"], "binary": str(a.fork_bin), "binary_sha256": ctx.bin_sha(Path(a.fork_bin)),
             "build_from_launch_log": srv.readback.get("build_from_launch_log") if srv else None,
             "argv": srv.argv if srv else None, "launch_prefix": list(ctx.prefix),
-            "argv_readback": {k: srv.readback.get(k) for k in ("exe_matches_binary", "proc_cmdline_tail_matches_argv",
-                                                              "port_owned_by_pid", "env_LLAMA_KPF_MUTATE",
-                                                              "cpus_allowed", "slot_fork_mode")} if srv else None,
+            "argv_readback": readback_record(srv.readback) if srv else None,
             "env": srv.env_note if srv else None,
             "kv_mode_from_launch_log": srv.readback.get("kv_mode_from_launch_log") if srv else None,
             "slot_fork_from_launch_log": srv.readback.get("slot_fork_from_launch_log") if srv else None,

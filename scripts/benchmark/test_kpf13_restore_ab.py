@@ -847,3 +847,66 @@ def test_affinity_per_thread_reader_and_union_agree(tmp_path, monkeypatch):
     per = m.read_cpus_allowed_per_thread(os.getpid())
     assert per and os.getpid() in per
     assert m.read_cpus_allowed(os.getpid()) == sorted({c for v in per.values() for c in v})
+
+
+# ---------------------------------------------------------------- KPF-GL2 (2026-10-23): the affinity read-back reaches the record
+def _own_process_server(tmp_path, monkeypatch, env, per_thread):
+    """A Server whose 'server process' is this pytest process (real /proc exe + cmdline), with the per-thread affinity,
+    online cpus, /proc environ and port ownership injected: read_back() runs its real code path."""
+    import sys
+    ctx = make_ctx(tmp_path, FakeClient(), argv=["--device", "gpu", "--cpu-list", "184-191", "--numa-membind", "3"])
+    srv = m.Server(ctx, "default", Path(sys.executable))
+    me = os.getpid()
+    cmd = [x for x in Path(f"/proc/{me}/cmdline").read_bytes().decode().split("\0") if x]
+    srv.argv = cmd[-1:]
+
+    class _P:
+        pid = me
+    srv.proc = _P()
+    srv.log.parent.mkdir(parents=True, exist_ok=True)
+    srv.log.write_text("1.0 llama_context: kv_unified = true\n"
+                       "1.0 cross-slot prefix fork enabled: mode = checkpoint, min tokens = 1024, cache_idle_slots = 0\n")
+    monkeypatch.setattr(m, "pid_owns_port", lambda pid, port: True)
+    monkeypatch.setattr(m, "read_cpus_allowed_per_thread", lambda pid: per_thread)
+    monkeypatch.setattr(m, "read_online_cpus", lambda: list(_ONLINE))
+    monkeypatch.setattr(m, "read_proc_env", lambda pid: dict(env))
+    return ctx, srv
+
+
+def test_gl2_gpu_readback_with_one_exempt_thread_round_trips_into_the_record(tmp_path, monkeypatch):
+    ctx, srv = _own_process_server(tmp_path, monkeypatch,
+                                   {"GGML_CUDA_DISABLE_GRAPHS": "1", "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0"}, _threads(1))
+    rb = srv.read_back()
+    srv.readback = rb
+    assert rb["problems"] == [] and rb["runtime_threads_unpinned"] == [300] and rb["runtime_threads_unpinned_count"] == 1
+    pl = m.Plan(ctx, "default", ctx.results, False)
+    pl.srv = srv
+    pl.finish_record()
+    rec = json.loads(next((ctx.out / "records").glob("kpf13-default-*.json")).read_text())
+    ar = rec["argv_readback"]
+    for k in m.READBACK_RECORD_KEYS:
+        assert k in ar, k
+    assert ar["runtime_threads_unpinned"] == [300] and ar["runtime_threads_unpinned_count"] == 1
+    assert ar["cpus_allowed_non_exempt"] and set(ar["cpus_allowed_non_exempt"]) <= set(_CLAIM)
+    assert ar["hip_graphs"] == "disabled" and ar["env_GGML_CUDA_DISABLE_GRAPHS"] == "1"
+    assert ar["env_HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] == "0"
+    # the belief-measurements line carries the same projection
+    line = json.loads((ctx.out / "belief_measurements.jsonl").read_text().splitlines()[-1])
+    assert line["argv_readback"]["runtime_threads_unpinned_count"] == 1
+
+
+def test_gl2_knob_held_records_count_zero_and_graphs_on_is_visible(tmp_path, monkeypatch):
+    ctx, srv = _own_process_server(tmp_path, monkeypatch, {}, _threads(0))
+    rb = srv.read_back()
+    assert rb["runtime_threads_unpinned_count"] == 0 and rb["runtime_threads_unpinned"] == []
+    assert rb["hip_graphs"] == "enabled" and rb["env_GGML_CUDA_DISABLE_GRAPHS"] is None
+    proj = m.readback_record(rb)
+    assert proj["runtime_threads_unpinned_count"] == 0 and proj["hip_graphs"] == "enabled"
+    assert m.readback_record(None) is None and m.readback_record({})["runtime_threads_unpinned_count"] is None
+
+
+def test_gl2_hip_graphs_state_is_presence_of_the_variable():
+    assert m.hip_graphs_state({"GGML_CUDA_DISABLE_GRAPHS": "1"}, "gpu") == "disabled"
+    assert m.hip_graphs_state({"GGML_CUDA_DISABLE_GRAPHS": "0"}, "gpu") == "disabled"   # ggml: getenv != nullptr
+    assert m.hip_graphs_state({}, "gpu") == "enabled"
+    assert m.hip_graphs_state({"GGML_CUDA_DISABLE_GRAPHS": "1"}, "cpu") == "n/a (cpu)"
