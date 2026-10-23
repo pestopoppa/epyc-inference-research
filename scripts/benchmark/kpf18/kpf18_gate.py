@@ -55,6 +55,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kpf18_arms as ARMS  # noqa: E402  KPF-18.1/.2/.3 arms: pure helpers + step builders (they take this module as `gate`)
+import kpf18_s1r as S1R  # noqa: E402  item 185 (kpf18s1r, KPF-18-S1 remainder): registers its builder, preflight and rules into ARMS
 
 HERE = Path(__file__).resolve().parent
 SCHEMA = "epyc.kpf.run.v1"
@@ -1998,9 +1999,9 @@ def print_plan(ctx: Ctx, items: list[int], steps_by_item: dict[int, list[Step]],
     return total
 
 
-# ---------------------------------------------------------------- resume (arms 181-184 only; items 1-7 never skip a body step)
+# ---------------------------------------------------------------- resume (arms 181-185 only; items 1-7 never skip a body step)
 _TS_RE = re.compile(r"\d{8}T\d{6}Z")
-_ARM_STEP_RE = re.compile(r"^18[1-4][ .]")
+_ARM_STEP_RE = re.compile(r"^18[1-5][ .]")  # 185 = kpf18s1r
 
 
 def step_key(it: int, idx: int, desc: str) -> str:
@@ -2077,6 +2078,7 @@ def main() -> int:
                          "unfinished block, the arm steps (181-184) that finished (markers under <out>/done/). A step that was "
                          "running when the earlier run ended is run again.")
     ARMS.add_arguments(ap)
+    S1R.add_arguments(ap)
     args = ap.parse_args()
     if args.cpu:
         set_cpu_spec()
