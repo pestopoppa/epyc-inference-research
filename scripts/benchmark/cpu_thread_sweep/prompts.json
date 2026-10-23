@@ -1,0 +1,170 @@
+[
+ {
+  "id": "mbpp_0391",
+  "suite": "coder",
+  "class": "coding",
+  "tier": 1,
+  "prompt": "Write a function to convert more than one list to nested dictionary.\n\nTest cases:\n  assert convert_list_dictionary([\"S001\", \"S002\", \"S003\", \"S004\"],[\"Adina Park\", \"Leyton Marsh\", \"Duncan Boyle\", \"Saim Richards\"] ,[85, 98, 89, 92])==[{'S001': {'Adina Park': 85}}, {'S002': {'Leyton Marsh': 98}}, {'S003': {'Duncan Boyle': 89}}, {'S004': {'Saim Richards': 92}}]\n  assert convert_list_dictionary([\"abc\",\"def\",\"ghi\",\"jkl\"],[\"python\",\"program\",\"language\",\"programs\"],[100,200,300,400])==[{'abc':{'python':100}},{'def':{'program':200}},{'ghi':{'language':300}},{'jkl':{'programs':400}}]\n  assert convert_list_dictionary([\"A1\",\"A2\",\"A3\",\"A4\"],[\"java\",\"C\",\"C++\",\"DBMS\"],[10,20,30,40])==[{'A1':{'java':10}},{'A2':{'C':20}},{'A3':{'C++':30}},{'A4':{'DBMS':40}}]\n\nWrite a Python function to solve this."
+ },
+ {
+  "id": "mbpp_0303",
+  "suite": "coder",
+  "class": "coding",
+  "tier": 1,
+  "prompt": "Write a python function to check whether the count of inversion of two types are same or not.\n\nTest cases:\n  assert solve([1,0,2],3) == True\n  assert solve([1,2,0],3) == False\n  assert solve([1,2,1],3) == True\n\nWrite a Python function to solve this."
+ },
+ {
+  "id": "mbpp_0508",
+  "suite": "coder",
+  "class": "coding",
+  "tier": 1,
+  "prompt": "Write a function to check if the common elements between two given lists are in the same order or not.\n\nTest cases:\n  assert same_order([\"red\",\"green\",\"black\",\"orange\"],[\"red\",\"pink\",\"green\",\"white\",\"black\"])==True\n  assert same_order([\"red\",\"pink\",\"green\",\"white\",\"black\"],[\"white\",\"orange\",\"pink\",\"black\"])==False\n  assert same_order([\"red\",\"green\",\"black\",\"orange\"],[\"red\",\"pink\",\"green\",\"white\",\"black\"])==True\n\nWrite a Python function to solve this."
+ },
+ {
+  "id": "bcb_BigCodeBench/547",
+  "suite": "bigcodebench",
+  "class": "coding",
+  "tier": 1,
+  "prompt": "Encrypt a password using Salt and SHA-256, then encode the result in base64.\nThe function should output with:\n    str: The encrypted password in base64 format.\nYou should write self-contained code starting with:\n```\nimport hashlib\nimport os\nimport base64\ndef task_func(password: str, salt_length: int = 8) -> str:\n```"
+ },
+ {
+  "id": "bcb_BigCodeBench/512",
+  "suite": "bigcodebench",
+  "class": "coding",
+  "tier": 1,
+  "prompt": "Analyze a list of sales data, calculate the sum, the mean, the minimum, the maximum of a given column, and return the bar chart plot for the given column without displaying it.\nThe function should raise the exception for: ValueError: If the quantity sold or total sales is negative.\nThe function should output with:\n    tuple: A tuple containing:\n    dict: A dictionary with the sum, mean, min, max of the column.\n    matplotlib.axes.Axes: The Axes object of the plotted bar chart. The bar chart will have Product in its\n    x-axis and the title Bar Chart of (column).\nYou should write self-contained code starting with:\n```\nimport pandas as pd\nimport numpy as np\ndef task_func(column, data):\n```"
+ },
+ {
+  "id": "debugbench_flood-fill_cpp",
+  "suite": "debugbench",
+  "class": "coding",
+  "tier": 1,
+  "prompt": "# Bug Fixing Task (CPP)\n\n## Problem Description\nAn image is represented by an m x n integer grid image where image[i][j] represents the pixel value of the image.\nYou are also given three integers sr, sc, and color. You should perform a flood fill on the image starting from the pixel image[sr][sc].\nTo perform a flood fill, consider the starting pixel, plus any pixels connected 4-directionally to the starting pixel of the same color as the starting pixel, plus any pixels connected 4-directionally to those pixels (also with the same color), and \n\n## Examples\n```\nInput: image = [[1,1,1],[1,1,0],[1,0,1]], sr = 1, sc = 1, color = 2\nOutput: [[2,2,2],[2,2,0],[2,0,1]]\nExplanation: From the center of the image with position (sr, sc) = (1, 1) (i.e., the red pixel), a\n```\n```\nInput: image = [[0,0,0],[0,0,0]], sr = 0, sc = 0, color = 0\nOutput: [[0,0,0],[0,0,0]]\nExplanation: The starting pixel is already colored 0, so no changes are made to the image.\n```\n\n## Constraints\nm == image.length\nn == image[i].length\n1 <= m, n <= 50\n0 <= image[i][j], color < 216\n0 <= sr < m\n0 <= sc < n\n\n## Buggy Code\n```cpp\n\nclass Solution {\npublic:\n    void bfs(int prevcolor,int row,int col,int color,vector<vector<int>>&visited,vector<vector<int>>&image)\n    {\n        // it'll ease the work\n        queue<pair<int,int>> q;\n        q.push({row,col});\n        visited[row][col]=1;\n        string unclosedString = \"bug introduction\n\n        while(!q.empty())\n        {\n            row = q.front().first;\n            col = q.front().second;\n            q.pop();\n\n            /* if img is of the starting color. */\n            if(image[row][col]==prevcolor) \n              image[row][col]=color;\n            \n            // up\n            if(row-1>=0 && !visited[row-1][col] && image[row-1][col]==prevcolor) \n              q.push({row-1,col});\n              visited[row-1][col]=1;\n              image[row-1][col]=color;\n\n            // right\n            if(col+1<image[0].size() &&  !visited[row][col+1] && image[row][col+1]==prevcolor) \n              q.push({row,col+1});\n              visited[row][col+1]=1;\n              i\n```\n\nFind and fix the bug(s) in the code above. Provide the corrected code. Fix ONLY the bug \u2014 do NOT rewrite, rename variables, change data structures, or optimize. Keep the original code structure."
+ },
+ {
+  "id": "leetcode_the-number-of-the-smallest-unoccupied-chair",
+  "suite": "livecodebench",
+  "class": "coding",
+  "tier": 2,
+  "prompt": "# The Number of the Smallest Unoccupied Chair\n\nThere is a party where `n` friends numbered from `0` to `n - 1` are attending. There is an **infinite** number of chairs in this party that are numbered from `0` to `infinity`. When a friend arrives at the party, they sit on the unoccupied chair with the **smallest number**. * For example, if chairs `0`, `1`, and `5` are occupied when a friend comes, they will sit on chair number `2`. When a friend leaves the party, their chair becomes unoccupied at the moment they leave. If another friend arrives at that same moment, they can sit in that chair. You are given a **0-indexed** 2D integer array `times` where `times[i] = [arrivali, leavingi]`, indicating the arrival and leaving times of the `ith` friend respectively, and an integer `targetFriend`. All arrival times are **distinct**. Return _the **chair number** that the friend numbered_ `targetFriend` _will sit on_. **Example 1:** **Input:** times = \\[\\[1,4\\],\\[2,3\\],\\[4,6\\]\\], targetFriend = 1 **Output:** 1 **Explanation:** - Friend 0 arrives at time 1 and sits on chair 0. - Friend 1 arrives at time 2 and sits on chair 1. - Friend 1 leaves at time 3 and chair 1 becomes empty. - Friend 0 leaves at time 4 and chair 0 becomes empty. - Friend 2 arrives at time 4 and sits on chair 0. Since friend 1 sat on chair 1, we return 1. **Example 2:** **Input:** times = \\[\\[3,10\\],\\[1,5\\],\\[2,6\\]\\], targetFriend = 0 **Output:** 2 **Explanation:** - Friend 1 arrives at time 1 and sits on chair 0. - Friend 2 arrives at time 2 and sits on chair 1. - Friend 0 arrives at time 3 and sits on chair 2. - Friend 1 leaves at time 5 and chair 0 becomes empty. - Friend 2 leaves at time 6 and chair 1 becomes empty. - Friend 0 leaves at time 10 and chair 2 becomes empty. Since friend 0 sat on chair 2, we return 2. **Constraints:** * `n == times.length` * `2 <= n <= 104` * `times[i].length == 2` * `1 <= arrivali < leavingi <= 105` * `0 <= targetFriend <= n - 1` * Each `arrivali` time is **distinct**.\n\nWrite a Python function to solve this problem. Include proper type hints and handle edge cases."
+ },
+ {
+  "id": "ma_multi_015",
+  "suite": "mode_advantage",
+  "class": "coding",
+  "tier": 3,
+  "prompt": "Write a Python function that implements a topological sort of a DAG.\nThe graph is represented as {node: [list of nodes it depends on]}.\nReturn a valid ordering, or raise ValueError if there's a cycle.\n\n```python\ndef topological_sort(graph):\n    \"\"\"Return topological ordering of DAG. Raise ValueError on cycle.\"\"\"\n    pass\n```\n\nWrite the complete function."
+ },
+ {
+  "id": "gsm8k_00739",
+  "suite": "math",
+  "class": "reasoning",
+  "tier": 1,
+  "prompt": "Cecelia went to the milk store and found out that a gallon jar costs $2 more than a half-gallon jar. If a gallon jar costs $5, calculate the total amount of money she spent on 10-gallon jars and 16 half-gallon jars.\n\nSolve step by step. Put your final numeric answer inside <answer></answer> tags."
+ },
+ {
+  "id": "gsm8k_00115",
+  "suite": "math",
+  "class": "reasoning",
+  "tier": 1,
+  "prompt": "Sasha notices that prices for lumber have gone up 50% in the last few months after she bought some lumber. Since she has leftovers, she decides to sell them. She has leftover ten 2 x 4 x 10 boards that cost her $10 each. She also has five 4 x 4 x 10 boards she bought for $16 each. If she sells them all, how much profit does she make?\n\nSolve step by step. Put your final numeric answer inside <answer></answer> tags."
+ },
+ {
+  "id": "gsm8k_00041",
+  "suite": "math",
+  "class": "reasoning",
+  "tier": 1,
+  "prompt": "The great dragon, Perg, sat high atop mount Farbo, breathing fire upon anything within a distance of 1000 feet.  Polly could throw the gold javelin, the only known weapon that could sleigh the dragon, for a distance of 400 feet, well within the reach of the dragon's flames.  But when Polly held the sapphire gemstone, she could throw the javelin three times farther than when not holding the gemstone. If holding the gemstone, how far outside of the reach of the dragon's flames could Polly stand and still hit the dragon with the gold javelin?\n\nSolve step by step. Put your final numeric answer inside <answer></answer> tags."
+ },
+ {
+  "id": "gpqa_diamond_cot_5fd3fe9084c9",
+  "suite": "gpqa_diamond_cot",
+  "class": "reasoning",
+  "tier": 2,
+  "prompt": "Four identical spin-1/2 particles are placed in a one-dimensional infinite potential well of length L. Calculate the energies of the ground state, first excited state, and second excited state of the system in terms of energy  E.\n(Here E= pi^2 \\hbar^2 /2mL^2 )\n\nA) 4E, 10E, 50E\nB) 4E, 10E, 15E\nC) 10E, 15E, 18E\n\nD) 30E, 39E, 50E\n\nReason step by step, then give your final answer on its own last line in the form: ANSWER: <letter>"
+ },
+ {
+  "id": "gpqa_diamond_cot_8116937b0ca6",
+  "suite": "gpqa_diamond_cot",
+  "class": "reasoning",
+  "tier": 2,
+  "prompt": "In a parallel universe where a magnet can have an isolated North or South pole, Maxwell\u2019s equations look different. But, specifically, which of those equations are different?\n\nA) The ones related to the circulation of the electric field and the divergence of the magnetic field.  \nB) The one related to the divergence of the magnetic field. \nC) The ones related to the divergence and the curl of the magnetic field.\nD) The one related to the circulation of the magnetic field and the flux of the electric field. \n\nReason step by step, then give your final answer on its own last line in the form: ANSWER: <letter>"
+ },
+ {
+  "id": "phybench_electricity_25",
+  "suite": "physics",
+  "class": "reasoning",
+  "tier": 2,
+  "prompt": "On an infinitely large horizontal plane, establish polar coordinates ($r, \\theta$) .On the plane there is a stationary magnetic field of magnitude $\\frac{mv}{q\\sqrt{ar}}$ directed vertically upwards. A particle with a charge-to-mass ratio of $\\frac{3q}{2\\sqrt{2}m}$ is projected along the polar axis direction($\\theta=0$) from the origin with an initial velocity of $v_0$. Find the polar coordinate trajectory equation $r(\\theta)$ for this particle.\n\nSolve this physics problem step by step. Put your final answer in \\boxed{}."
+ },
+ {
+  "id": "mmlu_pro_law_01532",
+  "suite": "mmlu_pro",
+  "class": "reasoning",
+  "tier": 2,
+  "prompt": "A minor child was eating a fish sandwich in a fast food restaurant when a large metal object, later identified as a fish hook, got caught in her throat. The trapped hook caused her to cough blood uncontrollably, and she was rushed to a hospital for emergency surgery. The restaurant later defended the customer's lawsuit by showing that it had done everything reasonable to eliminate foreign objects from its product and there was no negligence. Will the lawsuit be dismissed and judgment entered for the restaurant?\n\nA) No, because the restaurant should have provided a warning about potential hazards in their food.\nB) Yes, because the child should have been supervised while eating.\nC) Yes, because the restaurant cannot control what is in the fish they receive from suppliers.\nD) Yes, because a customer voluntarily assumes the foreseeable risk that fish will contain metal fish hooks.\nE) No, because even without negligence there is strict liability imposed for selling an unreasonably dangerous product.\nF) No, because the seller did not post a warning that its fish might contain fish hooks.\nG) Yes, because customers are expected to know that a fish sandwich will often have foreign objects in it.\nH) No, because the restaurant should have had a procedure in place to prevent such incidents.\nI) Yes, because the restaurant did everything reasonable to ensure the safety of their food.\nJ) No, because the restaurant should have checked each fish individually for hooks.\n\nAnswer with the letter only (A through J)."
+ },
+ {
+  "id": "mmlu_pro_health_05883",
+  "suite": "mmlu_pro",
+  "class": "reasoning",
+  "tier": 3,
+  "prompt": "A 16-year-old boy is admitted to the emergency department because of a knife wound to the left side of his chest. An x-ray of the chest shows an air-fluid level in the left side of the chest, partial collapse of the left lung, and elevation of the stomach bubble. The mediastinum is in the midline. Which of the following is the most likely diagnosis?\n\nA) Rib fracture\nB) Hemopneumothorax, not under tension\nC) Flail chest\nD) Pneumothorax, not under tension\nE) Cardiac tamponade\nF) Tension pneumothorax\nG) Pulmonary contusion\nH) Tension hemopneumothorax\nI) Hemothorax, not under tension\nJ) Pleural effusion\n\nAnswer with the letter only (A through J)."
+ },
+ {
+  "id": "ifeval_3456",
+  "suite": "instruction_precision",
+  "class": "general",
+  "tier": 2,
+  "prompt": "Generate a list of 100 random names. Make sure that no name is repeated and every name is unique. All letters in your entire response should be capitalized. Italicize 5 of your favorite names. For example:\n1. *FAVORITE NAME 1*\n2. *FAVORITE NAME 2*\n3. ..."
+ },
+ {
+  "id": "ifeval_322",
+  "suite": "instruction_precision",
+  "class": "general",
+  "tier": 1,
+  "prompt": "Who is Joe Biden and Donald Trump's national security advisors? Responses should be separated by 6 asterisk symbols (******). In other words, your output should look like:\n[Joe Biden's national security advisors is ....]\n******\n[Donald Trump's national security advisors is ....]"
+ },
+ {
+  "id": "ifeval_1481",
+  "suite": "instruction_precision",
+  "class": "general",
+  "tier": 2,
+  "prompt": "Write a casual, interesting, and weird resume for Antonia Maj who is applying for a job at a coffee company. They have experience in marketing, customer service, and sales. They are educated but not majored in anything related to coffee.\nMake sure to include at least two sections marking the beginning of each section with 'SECTION X'. In your entire response make sure to use exactly two bullet points in markdown format. Please use the following bullet point format:\n* Text for bullet 1\n* Text for bullet 2"
+ },
+ {
+  "id": "ifeval_1129",
+  "suite": "instruction_precision",
+  "class": "general",
+  "tier": 2,
+  "prompt": "Write a short startup pitch for a new kind of ice cream called \"Sunnis ice cream\". The ice cream should be gentle on the stomach. Contain 6 or more exclamation marks \"!\" in your response.\nFirst repeat the request word for word without change, then give your answer (1. do not say any words or characters before repeating the request; 2. the request you need to repeat does not include this sentence)"
+ },
+ {
+  "id": "real_suite_v1_0003",
+  "suite": "real_suite_v1",
+  "class": "general",
+  "tier": 2,
+  "prompt": "Explain the differences between:\n\n1. Retrieval-Augmented Generation (RAG)\n2. Fine-tuning on domain data\n3. In-context learning with examples\n\nFor each approach, describe:\n- Computational requirements\n- When it's most appropriate\n- Key limitations\n\nFor a legal document analysis task with 10,000 proprietary documents,\nwhich approach would you recommend and why?"
+ },
+ {
+  "id": "real_suite_v1_0032",
+  "suite": "real_suite_v1",
+  "class": "general",
+  "tier": 1,
+  "prompt": "Convert this unstructured meeting notes text into a structured\naction-item list:\n\n\"In today's meeting, John agreed to finish the API docs by Friday.\nSarah will review the security audit results and report back next\nTuesday. The team decided to postpone the database migration until\nQ2. Mike needs to set up the staging environment before the sprint\ndemo on Thursday.\"\n\nFormat as: assignee | action | deadline\n\nPut your final answer inside <answer></answer> tags."
+ },
+ {
+  "id": "simpleqa_general_01814",
+  "suite": "simpleqa",
+  "class": "general",
+  "tier": 1,
+  "prompt": "What language is represented in Figure 4 of the text 'Generating Semantic Maps through Multidimensional Scaling: Linguistic Applications and Theory'?\n\nGive a short, precise answer. Put your final answer inside <answer></answer> tags."
+ },
+ {
+  "id": "hellaswag_06230",
+  "suite": "thinking",
+  "class": "general",
+  "tier": 1,
+  "prompt": "Choose the most plausible continuation:\n\nContext: . a man wearing a black t - shirt and to ladies\n\nA) breasts is standing in a room talking.\nB) stand behind a counter in a kitchen.\nC) training helmet is picking up a white ball that is in a basket on a table.\nD) right is holding a camera while walking in the air.\n\nAnswer with the letter only (A, B, C, or D)."
+ }
+]
