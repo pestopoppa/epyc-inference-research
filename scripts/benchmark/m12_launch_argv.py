@@ -15,7 +15,7 @@ Usage::
 
     python scripts/benchmark/m12_launch_argv.py \\
         artifacts/serving-recipes/eval/qwen3.6-35b-a3b-q8-gpu-mtp-longctx196k-np4.json \\
-        --port 8199 [--build /mnt/raid0/llm/kernels/builds/gpu-20261021-49550eda5-c-nemotron] [--json]
+        --port 8199 [--build /mnt/raid0/llm/kernels/builds/gpu-20261023-141e4bcf5-lbh] [--json]
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ for entry in (REPO / "scripts" / "kernel_rnd", REPO / "scripts", REPO):
 from scripts.kernel_rnd.autokernel.loop.serving import Recipe  # noqa: E402
 
 #: The autokernel champion the M-12 window runs on (MEMORY: champion is current).
-DEFAULT_BUILD = Path("/mnt/raid0/llm/kernels/builds/gpu-20261021-49550eda5-c-nemotron")
+DEFAULT_BUILD = Path("/mnt/raid0/llm/kernels/builds/gpu-20261023-141e4bcf5-lbh")
 
 
 def per_slot_ctx(recipe: Recipe) -> int:
