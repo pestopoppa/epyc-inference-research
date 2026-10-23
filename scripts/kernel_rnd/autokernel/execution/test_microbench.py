@@ -1326,6 +1326,22 @@ class TestRunnerEndToEnd(unittest.TestCase):
             self.assertEqual(len(block.anchor_samples), FIXTURE_REPS)
             self.assertEqual(len(block.candidate_samples), FIXTURE_REPS)
 
+    def test_unit_agreement_check_is_strict_about_unknown_protocol(self):
+        """LBH-3.1: a row that omits autokernel_hardened must not soft-pass a new verdict."""
+        from unittest import mock
+        seen = []
+        original = M.LlamaBenchExpectation.check_row
+
+        def spy(self_, row, **kw):
+            seen.append(kw)
+            return original(self_, row, **kw)
+
+        with mock.patch.object(M.LlamaBenchExpectation, "check_row", spy):
+            run = self._runner().run(make_plan(self.binding, blocks=1))
+        self.assertTrue(run.complete, run.refusals)
+        self.assertTrue(seen)
+        self.assertTrue(all(kw.get("strict_unknown") is True for kw in seen), seen)
+
     def test_completed_prefix_resumes_at_the_next_block_without_replay(self):
         plan = make_plan(self.binding, blocks=4)
         first = self._runner().run(plan)

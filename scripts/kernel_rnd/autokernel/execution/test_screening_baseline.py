@@ -141,3 +141,30 @@ class ScreeningBaselineBankTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScreeningInvokeStrictUnknownTest(unittest.TestCase):
+    """LBH-3.1: the screening frame check must treat an unknown protocol as unchecked."""
+
+    def _run(self, hardened_key):
+        row = {"build_commit": "abc", "model_filename": "m.gguf", "n_prompt": 0,
+               "n_gen": 8, "n_depth": 0, "samples_ts": [10.0, 10.0, 10.0],
+               "samples_ns": [1, 1, 1], "avg_ts": 10.0, "n_threads": 4}
+        row.update(hardened_key)
+        spawner = mock.Mock()
+        spawner.run.return_value = mock.Mock(timed_out=False, returncode=0,
+                                             stdout=json.dumps([row]))
+        command = mock.Mock(argv=["llama-bench"], env={})
+        with mock.patch.object(bank.microbench, "assemble_env",
+                               return_value=mock.Mock(env={})), \
+             mock.patch.object(bank.microbench.LlamaBenchExpectation, "from_command") as fc:
+            expectation = fc.return_value
+            expectation.check_row.return_value = bank.schemas.Check(
+                bank.schemas.PASS, ("ok",))
+            bank.invoke_command(command=command, spawner=spawner)
+            return expectation.check_row
+
+    def test_check_row_is_called_with_strict_unknown(self):
+        check_row = self._run({})
+        check_row.assert_called_once()
+        self.assertIs(check_row.call_args.kwargs.get("strict_unknown"), True)

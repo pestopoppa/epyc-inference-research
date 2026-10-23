@@ -4386,7 +4386,7 @@ class MicrobenchRunner:
                         f"exactly one (n_prompt, n_gen) point per invocation.")
                 elif rows:
                     row = rows[0]
-                    agreement = unit_expectations[arm].check_row(row)
+                    agreement = unit_expectations[arm].check_row(row, strict_unknown=True)
                     inv_checks.append(("output_matches_recipe", agreement))
                     if agreement.outcome != schemas.PASS:
                         refusals.append(f"block {block_plan.block_index} position "

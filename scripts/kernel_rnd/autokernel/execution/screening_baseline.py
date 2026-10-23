@@ -199,7 +199,7 @@ def invoke_command(*, command: recipes.ConstructedCommand, spawner: microbench.S
     rows = microbench.parse_llama_bench_json(spawned.stdout)
     if len(rows) != 1:
         raise BaselineBankError("screening invocation must emit exactly one result row")
-    check = microbench.LlamaBenchExpectation.from_command(command).check_row(rows[0])
+    check = microbench.LlamaBenchExpectation.from_command(command).check_row(rows[0], strict_unknown=True)
     if check.outcome != schemas.PASS:
         raise BaselineBankError("screening command/result frame mismatch: " + "; ".join(check.reasons))
     values = rows[0].metric_samples
