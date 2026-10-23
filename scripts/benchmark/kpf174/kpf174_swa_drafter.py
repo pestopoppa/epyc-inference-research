@@ -35,6 +35,15 @@ WHAT IT RUNS (one window, up to four launches of the SAME binary and argv; every
   swa_cells = n_swa * n_parallel + n_ubatch (8704 at n_swa 2048, -np 4, -ub 512). L > swa_cells + c2 so c1/c2 are pruned
   from the source's live drafter cache when the children fork.
 
+KPF-17.4b (2026-10-23, rules v2 = RULES_V2, `--rules v2`): localize the deterministic c1-junction divergence of the
+  2026-10-23 GPU run (g1/g2 at c = n_swa + 100 = 2148; honest, flag_on and both mutants diverge identically, so the drafter
+  window is not the cause). Two launches, each its own driver invocation and out dir:
+    sweep           speculation ON, `--junctions 2049,2148,2560,3072,4096`: every junction is a cell AND a build point
+                    (the source is built trunk[:2049], trunk[:2148], ..., trunk[:L]); where does the failure start?
+    honest_specoff  speculation OFF (the argv file minus every drafter flag: no -md), the ORIGINAL geometry
+                    (`--junctions 2148 --build-junctions 2148,4096,10240`): X != C there = a target-restore defect at c1,
+                    independent of the drafter. Spec-off cells are tokens only and need token-identical controls.
+
 RULES: RULES below (sha256 recorded in rules.json and run_meta.json BEFORE the first launch). Verdicts are a pure function
 of the stored cells (`analyze`). The per-cell judgement is the KPF-13.1 rules-v3 judge (kpf13_restore_ab.judge_run with
 the measured control spread). PROCESS DISCIPLINE is the KPF-13.1 driver's (own child by captured PID, port ownership by
@@ -84,7 +93,14 @@ LAUNCHES = {
     "mut_partial_noop": {"label": "kpf174_mut_dft_partial_noop", "mutate": "dft_partial_noop", "extra": [],
                          "arms": ("A",), "knob": [b"--slot-fork-min-tokens", b"LLAMA_KPF_MUTATE", b"dft_partial_noop"],
                          "plain_only": False, "role": "mutant", "task": "17.4"},
+    # KPF-17.4b (rules v2)
+    "sweep": {"label": "kpf174b_junction_sweep", "mutate": None, "extra": [], "arms": ("A",),
+              "knob": [b"--slot-fork-min-tokens"], "plain_only": False, "role": "honest", "task": "17.4b"},
+    "honest_specoff": {"label": "kpf174b_c1_spec_off", "mutate": None, "extra": [], "arms": ("A",),
+                       "knob": [b"--slot-fork-min-tokens"], "plain_only": False, "role": "honest", "task": "17.4b",
+                       "spec_off": True},
 }
+LAUNCHES_174B = ("sweep", "honest_specoff")
 for _k, _v in LAUNCHES.items():
     k13.CONFIGS.setdefault(f"kpf174_{_k}", _v)
 LAUNCHES_191A = ("flag_on", "mut_no_transfer")
@@ -148,18 +164,75 @@ RULES = {
 }
 
 
-def rules_sha256() -> str:
-    return k13.sha256_json(RULES)
+RULES_V2 = json.loads(json.dumps(RULES))
+RULES_V2.update({
+    "schema": "epyc.kpf174.rules.v2",
+    "task": ("KPF-17.4b: localize the deterministic c1-junction divergence of the 2026-10-23 GPU run (kpf174 rules v1 sha "
+             "26b04e19..., /mnt/raid0/llm/tmp/f8-launchers-20261023/kpf17-4-19-1a-27b-dflash2/VERDICT.json: honest FAIL "
+             "at g1-c2148 token 36 gap 0.164 and g2-c2148 token 39 gap 0.493; c 4096 and 10240 PASS). It decides where "
+             "the failure lives; it re-judges nothing and decides neither KPF-17.4 nor KPF-19.1a"),
+    "supersedes": "nothing: v1 and its verdicts stand; v2 adds two launches and their decisions",
+    "launches_v2": {
+        "sweep": ("speculation ON, honest (no mutation, flag off), --junctions 2049,2148,2560,3072,4096: every junction "
+                  "is a cell and a build point (source = trunk[:2049], trunk[:2148], trunk[:2560], trunk[:3072], "
+                  "trunk[:4096], trunk[:L]); same cell protocol and judge as v1 (spec-on, K controls, measured spread)"),
+        "honest_specoff": ("speculation OFF: the SAME argv file with every drafter flag removed (-md, -ngld, --spec-type, "
+                           "--spec-draft-n-max, --device-draft; the read-back refuses a /proc cmdline that still carries "
+                           "one), the ORIGINAL v1 geometry (cells at c = 2148 only, build points 2148, 4096, 10240, L), "
+                           "groups 1 and 2, the same cell protocol"),
+    },
+    "spec_off_judge": ("tokens only: X1, X2 must equal the controls on all 64 tokens. Every run must report draft_n 0 or "
+                       "none (else INVALID: the drafter is still on). The K controls must be token-identical among "
+                       "themselves (else INVALID: the target alone is not deterministic on this device, and no token "
+                       "comparison can locate a restore defect). The cell_invalid_if partition/fork/pin checks apply"),
+    "decisions_v2": {
+        "c1_locus": ("from honest_specoff over its c = 2148 cells: target_restore_defect iff at least one valid cell "
+                     "FAILS (a fork child differs from token-identical no-fork controls with no drafter loaded); "
+                     "drafter_on_only iff every cell PASSES (the c1 divergence needs the drafter: verify-batch shape or "
+                     "drafter state, not the target restore); INCONCLUSIVE otherwise"),
+        "junction_onset": ("from sweep: per group the junctions that FAIL and PASS; failing_junctions = the union; "
+                           "first_failing_junction = the smallest; pattern = none_fail | ubatch_misaligned_only (every "
+                           "failing c has c mod n_ubatch != 0 and every passing c has c mod n_ubatch == 0) | "
+                           "first_build_point_only (the only failing c is the first build point, 2049) | other. "
+                           "Descriptive: a pattern is a lead for the next probe, not a cause"),
+        "sweep_2148": ("the sweep's c = 2148 cells: FAIL means the c1 divergence does not need 2148 to be the source's "
+                       "first build request (in the sweep 2049 is); PASS means it does"),
+        "not_decided_here": "kpf17_4, kpf19_1a and pinned_junction_on_swa_drafter_allowed keep their v1 verdicts",
+    },
+})
+RULES_BY_VERSION = {"v1": RULES, "v2": RULES_V2}
+
+
+def rules_sha256(version: str = "v1") -> str:
+    return k13.sha256_json(RULES_BY_VERSION[version])
 
 
 # ---------------------------------------------------------------- geometry
-def junctions(n_swa: int, n_parallel: int, n_ubatch: int) -> dict:
+def junctions(n_swa: int, n_parallel: int, n_ubatch: int, cells: list[int] | None = None,
+              build: list[int] | None = None) -> dict:
+    """Default (v1): cells = build points = [c1, c2, c3]. KPF-17.4b: `cells` overrides the junctions judged, `build` the
+    source's build points (default: the cells; must contain every cell junction). L never moves."""
     swa_cells = n_swa * n_parallel + n_ubatch
     c1, c2 = n_swa + 100, 2 * n_swa
     c3 = ((swa_cells + 1536) // 512) * 512          # above the SWA cache bound, on a ubatch multiple (10240 at 2048/4/512)
     L = c3 + 4096                                    # 14336: c1, c2 < L - swa_cells (pruned), c3 >= L - swa_cells (live)
-    return {"c": [c1, c2, c3], "L": L, "swa_cells": swa_cells, "n_swa": n_swa,
-            "pruned": {c: c < L - swa_cells for c in (c1, c2, c3)}}
+    cs = sorted(set(cells)) if cells else [c1, c2, c3]
+    bp = sorted(set(build)) if build else list(cs)
+    geo = {"c": cs, "L": L, "swa_cells": swa_cells, "n_swa": n_swa,
+           "pruned": {c: c < L - swa_cells for c in cs}}
+    if cells or build:
+        geo.update(build=bp, n_ubatch=n_ubatch)
+    return geo
+
+
+def geometry_problems(geo: dict) -> list[str]:
+    p = []
+    bp = geo.get("build", geo["c"])
+    if not set(geo["c"]) <= set(bp):
+        p.append(f"cell junctions {geo['c']} are not all build points {bp} (each junction must be a pinned prompt end)")
+    if max(bp) >= geo["L"]:
+        p.append(f"build point {max(bp)} >= L {geo['L']}")
+    return p
 
 
 # ---------------------------------------------------------------- judging (pure)
@@ -170,13 +243,14 @@ def cell_as_k13(cell: dict) -> dict:
             "runs": {f"A{i + 1}": r for i, r in enumerate(cell.get("arms") or [])}}
 
 
-def judge_cell(cell: dict, slack: tuple[int, int]) -> dict:
+def judge_cell(cell: dict, slack: tuple[int, int], spec_off: bool = False) -> dict:
     kc = cell_as_k13(cell)
     refs = k13.controls_of(kc, "A")
     exp = {"cache_n": cell["c"], "prompt_n": cell["S"]}
     js = []
     for x in cell.get("arms") or []:
-        j = k13.judge_run(refs, x, cell["c"], kind="control", ref_expect=exp, slack=slack)
+        j = k13.judge_run(refs, x, cell["c"], kind="control", ref_expect=exp, slack=slack, spec_off=spec_off,
+                          identical_refs=spec_off)
         if j["verdict"] != "INVALID" and x.get("fork_src_slot") not in (0, None):
             j = {**j, "verdict": "INVALID", "invalid": [f"fork_src_slot {x.get('fork_src_slot')} != 0"]}
         js.append(j)
@@ -189,11 +263,13 @@ def judge_cell(cell: dict, slack: tuple[int, int]) -> dict:
     else:
         v = "FAIL" if "FAIL" in kinds else ("INVALID" if "INVALID" in kinds or not kinds else "PASS")
     fresh = cell.get("fresh")
-    a_vs_fresh = (k13.cell_arm_verdict([fresh], cell.get("arms") or [], cell["c"], kind="twin")["verdict"]
-                  if fresh else None)
+    a_vs_fresh = (k13.cell_arm_verdict([fresh], cell.get("arms") or [], cell["c"], kind="twin",
+                                       spec_off=spec_off)["verdict"] if fresh else None)
     loss = [(x.get("prompt_n") or 0) - cell["S"] for x in cell.get("arms") or [] if x]
     taken = [x.get("n_fork_tokens") == cell["c"] for x in cell.get("arms") or [] if x]
-    return {"verdict": v, "runs": js, "n_controls": len(refs), "pinned_checkpoint_present": bool(pinned),
+    return {"verdict": v, "runs": js, "n_controls": len(refs), "pinned_checkpoint_present": bool(pinned), "spec_off": spec_off,
+            "first_divergence": min((j["first_divergence"] for j in js if j.get("first_divergence") is not None),
+                                    default=None),
             "acceptance_drop": any(j.get("acceptance_drop") for j in js), "A_vs_fresh": a_vs_fresh,
             "kpf17_4a": {"fork_taken": taken, "loss_tokens": loss}}
 
@@ -243,18 +319,70 @@ def decide(lv: dict, prior_191a: dict | None = None) -> dict:
     return out
 
 
-def analyze(results: dict, geo: dict, prior_191a: dict | None = None) -> dict:
+def decide_174b(cells_by_launch: dict, n_ubatch: int, build: list[int] | None) -> dict:
+    """RULES_V2['decisions_v2'] (pure). cells_by_launch: {launch: [(c, group, verdict), ...]}."""
+    out: dict = {}
+    so = cells_by_launch.get("honest_specoff")
+    if so is None:
+        out["c1_locus"] = "NOT_RUN"
+    else:
+        vs = [v for c, _g, v in so if c == 2148]
+        if any(v == "FAIL" for v in vs):
+            out["c1_locus"] = "target_restore_defect"
+        elif vs and all(v == "PASS" for v in vs):
+            out["c1_locus"] = "drafter_on_only"
+        else:
+            out["c1_locus"] = "INCONCLUSIVE"
+    sw = cells_by_launch.get("sweep")
+    if sw is None:
+        out["junction_onset"] = "NOT_RUN"
+        out["sweep_2148"] = "NOT_RUN"
+        return out
+    per_group: dict = {}
+    for c, g, v in sw:
+        per_group.setdefault(g, {"fail": [], "pass": [], "other": []})[
+            "fail" if v == "FAIL" else "pass" if v == "PASS" else "other"].append(c)
+    for d in per_group.values():
+        for k in d:
+            d[k] = sorted(d[k])
+    failing = sorted({c for c, _g, v in sw if v == "FAIL"})
+    passing = sorted({c for c, _g, v in sw if v == "PASS"} - set(failing))
+    if not failing:
+        pattern = "none_fail"
+    elif all(c % n_ubatch for c in failing) and not any(c % n_ubatch for c in passing):
+        pattern = "ubatch_misaligned_only"
+    elif build and failing == [min(build)]:
+        pattern = "first_build_point_only"
+    else:
+        pattern = "other"
+    out["junction_onset"] = {"per_group": {str(g): d for g, d in sorted(per_group.items())},
+                             "failing_junctions": failing, "passing_junctions": passing,
+                             "first_failing_junction": failing[0] if failing else None, "pattern": pattern,
+                             "n_ubatch": n_ubatch}
+    v2148 = [v for c, _g, v in sw if c == 2148]
+    out["sweep_2148"] = ("FAIL" if "FAIL" in v2148 else "PASS" if v2148 and all(v == "PASS" for v in v2148)
+                         else "INCONCLUSIVE" if v2148 else "NOT_RUN")
+    out["not_decided_here"] = RULES_V2["decisions_v2"]["not_decided_here"]
+    return out
+
+
+def analyze(results: dict, geo: dict, prior_191a: dict | None = None, rules: str = "v1") -> dict:
     """results: {launch: {cell_id: cell}} -> verdicts (pure)."""
-    out: dict = {"launches": {}, "cells": {}, "spread": {}, "kpf17_4a": [], "rules_sha256": rules_sha256()}
+    out: dict = {"launches": {}, "cells": {}, "spread": {}, "kpf17_4a": [], "rules_sha256": rules_sha256(rules),
+                 "rules": rules}
     lv: dict = {}
+    per174b: dict = {}
     for launch, cells in results.items():
+        spec_off = bool(LAUNCHES.get(launch, {}).get("spec_off"))
         valid = [cell_as_k13(c) for c in cells.values() if c.get("ok")]
-        sp = k13.acceptance_spread(valid)
+        sp = k13.acceptance_spread(valid, spec_off=spec_off)
         out["spread"][launch] = {k: sp[k] for k in ("spread_dn", "spread_da", "n_pooled", "min_k")}
         slack = (sp["spread_dn"], sp["spread_da"])
         judged, scope = [], []
         for cid, c in sorted(cells.items()):
-            j = judge_cell(c, slack)
+            j = judge_cell(c, slack, spec_off=spec_off)
+            if launch in LAUNCHES_174B:
+                per174b.setdefault(launch, []).append((c["c"], c["group"], j["verdict"]))
             out["cells"][f"{launch}:{cid}"] = {"group": c["group"], "c": c["c"], "pruned": c.get("pruned"), **j}
             judged.append(j)
             scope.append(bool(c.get("pruned")) if launch == "mut_partial_noop" else True)
@@ -264,7 +392,10 @@ def analyze(results: dict, geo: dict, prior_191a: dict | None = None) -> dict:
         role = LAUNCHES[launch]["role"]
         lv[launch] = launch_verdict(role, judged, scope)
     out["launches"] = lv
-    out["decisions"] = decide(lv, prior_191a)
+    if rules == "v2":
+        out["decisions"] = decide_174b(per174b, int(geo.get("n_ubatch") or 512), geo.get("build"))
+    else:
+        out["decisions"] = decide(lv, prior_191a)
     return out
 
 
@@ -404,7 +535,7 @@ class Runner:
         trunk = self.ps.trunks[g][:L]
         suf = self.ps.suffixes[g][:S]
         meta = {"group": g}
-        build = cs + [L]   # the build sequence: every junction is a pinned prompt END of one request
+        build = list(geo.get("build", cs)) + [L]   # the build sequence: every build point is a pinned prompt END
 
         def seed(slot: int, upto: int, tag: str, m: dict) -> None:
             for x in build:
@@ -427,7 +558,8 @@ class Runner:
             cell = {"cell": cell_id(g, c), "group": g, "c": c, "S": S, "L": L, "pruned": geo["pruned"][c],
                     "launch": self.launch, "source_checkpoints": src_ckpts, "prompt_sha256": k13.sha256_json(P),
                     "arms": [], "controls": [], "fresh": None, "ok": False, "start_utc": k13.now_iso(),
-                    "rules_sha256": rules_sha256()}
+                    "rules_sha256": rules_sha256(self.ctx.args.rules), "build": build,
+                    "spec_off": bool(LAUNCHES[self.launch].get("spec_off"))}
 
             def control(i: int) -> dict:
                 self.erase(2)
@@ -476,7 +608,9 @@ class Runner:
             "vram_own_pid_peak_bytes": vmax, "vram_nonzero_samples": vn, "vram_file": str(self.vram_file),
             "prompt_set": str(self.ps.path), "prompt_set_sha256": self.ps.sha256, "geometry": self.geo,
             "suffix_tokens": a.suffix_tokens, "groups": groups_of(a, self.launch), "control_repeats": a.control_repeats,
-            "n_predict": N_GEN, "seed": SEED, "rules_sha256": rules_sha256(),
+            "n_predict": N_GEN, "seed": SEED, "rules": a.rules, "rules_sha256": rules_sha256(a.rules),
+            "spec_off": bool(LAUNCHES[self.launch].get("spec_off")),
+            "drafter_flags_removed": getattr(srv, "drafter_removed", None) if srv else None,
             "launch_verdict": (ana.get("launches") or {}).get(self.launch), "spread": (ana.get("spread") or {}).get(self.launch),
             "decisions": ana.get("decisions"), "window_id": a.window_id, "device": a.device, "cpu_list": a.cpu_list,
             "start_utc": ctx.start_utc, "end_utc": k13.now_iso(), "host": ctx.host,
@@ -485,14 +619,14 @@ class Runner:
             "instrument_class": "serving", "category": "CANDIDATE",
             "grading_note": "deterministic conformance + mutation; counts, not a pass word; projects under VB-KVU-PF",
         }
-        rec["record_sha256"] = k13.sha256_json(rec)
+        rec = k13.seal_record(rec)   # VB-KVU-PF.5: hash the read-back form (geometry.pruned has int keys)
         k13.write_json(ctx.out / "records" / f"{rec['run_id']}.json", rec)
         k13.Jsonl(ctx.out / "belief_measurements.jsonl").add(rec)
         return rec
 
 
 def groups_of(a, launch: str) -> list[int]:
-    return a.groups if launch == "honest" else a.other_groups
+    return a.groups if launch in ("honest",) + LAUNCHES_174B else a.other_groups
 
 
 def cell_id(g: int, c: int) -> str:
@@ -522,6 +656,14 @@ def parse_args(argv=None):
     ap.add_argument("--control-repeats", type=int, default=MIN_CONTROLS)
     ap.add_argument("--suffix-tokens", type=int, default=64)
     ap.add_argument("--n-swa", type=int, default=2048, help="the drafter's sliding_window (DFlash2 GGUF: 2048)")
+    ap.add_argument("--rules", choices=sorted(RULES_BY_VERSION), default="v1",
+                    help="v1 = KPF-17.4/17.4a/19.1a (2026-10-23 run); v2 = KPF-17.4b localization (sweep, honest_specoff)")
+    ap.add_argument("--junctions", default="",
+                    help="KPF-17.4b: comma list of cell junctions (default: the v1 geometry c1,c2,c3); each is also a "
+                         "build point unless --build-junctions says otherwise")
+    ap.add_argument("--build-junctions", default="",
+                    help="KPF-17.4b: comma list of the source's build points (default: --junctions); must contain every "
+                         "cell junction. The original c1 geometry is --junctions 2148 --build-junctions 2148,4096,10240")
     ap.add_argument("--prior-191a", default=DEFAULT_PRIOR_191A,
                     help="comma list of record globs; a complete KPF-19.1a there skips flag_on + mut_no_transfer")
     ap.add_argument("--device", choices=["gpu", "cpu"], default="gpu")
@@ -551,6 +693,8 @@ def parse_args(argv=None):
     a.other_groups = [int(x) for x in a.other_groups.split(",") if x.strip()]
     a.launches = [x.strip() for x in a.launches.split(",") if x.strip()]
     a.prior_191a = [x for x in (a.prior_191a or "").split(",") if x.strip()]
+    a.junctions = [int(x) for x in a.junctions.split(",") if x.strip()]
+    a.build_junctions = [int(x) for x in a.build_junctions.split(",") if x.strip()]
     a.draft_debug = False
     return a
 
@@ -580,8 +724,25 @@ def preflight(a, ps: Prompts | None, gate_argv: list[str], geo: dict) -> list[st
     for ln in a.launches:
         if ln not in LAUNCHES:
             p.append(f"unknown launch {ln!r}")
-    if "honest" not in a.launches:
-        p.append("the honest launch is required (every decision reads it)")
+    v2 = [x for x in a.launches if x in LAUNCHES_174B]
+    if a.rules == "v2":
+        if not v2 or len(v2) != len(a.launches):
+            p.append(f"rules v2 (KPF-17.4b) runs only the launches {list(LAUNCHES_174B)} (got {a.launches})")
+        if "honest_specoff" in a.launches and geo["c"] != [2148]:
+            p.append(f"honest_specoff is the c1 cell only: --junctions 2148 (got {geo['c']})")
+    else:
+        if v2:
+            p.append(f"launches {v2} are KPF-17.4b: --rules v2")
+        if "honest" not in a.launches:
+            p.append("the honest launch is required (every decision reads it)")
+        if a.junctions or a.build_junctions:
+            p.append("--junctions / --build-junctions are KPF-17.4b options: --rules v2")
+    p += geometry_problems(geo)
+    if any(LAUNCHES.get(x, {}).get("spec_off") for x in a.launches):
+        off, removed = k13.strip_drafter(gate_argv)
+        p += k13.spec_off_problems(off)
+        if "-md" not in removed and "--model-draft" not in removed:
+            p.append("speculation OFF: the argv file carries no -md to remove (not the DFlash2 profile?)")
     if a.control_repeats < MIN_CONTROLS:
         p.append(f"--control-repeats {a.control_repeats} < {MIN_CONTROLS}")
     if a.fork_min >= min(geo["c"]):
@@ -616,15 +777,15 @@ def main(argv=None) -> int:
     a = parse_args(argv)
     gate_argv, comments = k13.load_argv_file(Path(a.argv_file))
     ub, npar = argv_ub_np(gate_argv)
-    geo = junctions(a.n_swa, npar, ub)
+    geo = junctions(a.n_swa, npar, ub, a.junctions or None, a.build_junctions or None)
     out = Path(a.out)
-    prior = find_prior_191a(a.prior_191a)
+    prior = find_prior_191a(a.prior_191a) if a.rules == "v1" else None
     if a.cmd == "analyze":
         res = load_results(out)
         if not res:
             print(f"no cells under {out / 'cells'}")
             return 2
-        ana = analyze(res, geo, prior)
+        ana = analyze(res, geo, prior, a.rules)
         k13.write_json(out / "verdict.json", ana)
         print(json.dumps({k: ana[k] for k in ("launches", "decisions", "spread", "kpf17_4a")}, indent=1))
         return 0
@@ -651,10 +812,14 @@ def main(argv=None) -> int:
     pending = {ln: Runner(ctx, geo, ps, ln, results).pending(groups_of(a, ln)) if ps else [] for ln in launches}
     est = estimate(a, geo, launches, pending)
     print("=" * 100)
-    print(f"KPF-17.4/17.4a/19.1a SWA-drafter fork run  device={a.device}  rules_sha256={rules_sha256()[:16]}  "
-          f"controls/cell={a.control_repeats}")
+    print(f"KPF-17.4/17.4a/19.1a SWA-drafter fork run  device={a.device}  rules={a.rules} "
+          f"rules_sha256={rules_sha256(a.rules)[:16]}  controls/cell={a.control_repeats}")
     print(f"geometry: n_swa {geo['n_swa']}, -np {npar}, -ub {ub} -> swa_cells {geo['swa_cells']}; L {geo['L']}; "
-          f"junctions {geo['c']} (pruned in source: {geo['pruned']}); S {a.suffix_tokens}; groups {a.groups}")
+          f"junctions {geo['c']} (pruned in source: {geo['pruned']}); build points {geo.get('build', geo['c'])} + L; "
+          f"S {a.suffix_tokens}; groups {a.groups}")
+    for ln in a.launches:
+        if LAUNCHES.get(ln, {}).get("spec_off"):
+            print(f"launch {ln}: speculation OFF, drafter flags removed: {k13.strip_drafter(gate_argv)[1]}")
     if prior:
         print(f"KPF-19.1a PRIOR found ({prior}): skipping {list(LAUNCHES_191A)}")
     for ln in launches:
@@ -678,10 +843,12 @@ def main(argv=None) -> int:
         print("REFUSED (preflight).")
         return 2
     out.mkdir(parents=True, exist_ok=True)
-    k13.write_json(out / "rules.json", {"rules": RULES, "rules_sha256": rules_sha256(),
+    k13.write_json(out / "rules.json", {"rules": RULES_BY_VERSION[a.rules], "rules_version": a.rules,
+                                        "rules_sha256": rules_sha256(a.rules),
                                         "cell_judge_rules_sha256_kpf13_v3": k13.rules_sha256("v3")})
     k13.write_json(out / "run_meta.json", {
-        "args": vars(a), "estimate_s": est, "started": k13.now_iso(), "rules_sha256": rules_sha256(),
+        "args": vars(a), "estimate_s": est, "started": k13.now_iso(), "rules": a.rules,
+        "rules_sha256": rules_sha256(a.rules),
         "rules_declared_before_first_launch": True, "geometry": geo, "launches": launches, "prior_191a": prior,
         "argv_file": a.argv_file, "argv_file_sha256": k13.sha256_file(Path(a.argv_file)), "argv_comments": comments,
         "prompt_set_sha256": ps.sha256, "launch_prefix": list(ctx.prefix),
@@ -741,7 +908,7 @@ def main(argv=None) -> int:
             finally:
                 r.stop()
                 try:
-                    r.finish_record(analyze(load_results(out), geo, prior))
+                    r.finish_record(analyze(load_results(out), geo, prior, a.rules))
                 except Exception as exc:  # noqa: BLE001
                     print(f"[kpf174] record for {ln} failed: {exc}", flush=True)
     except k13.Abort as exc:
@@ -761,7 +928,7 @@ def main(argv=None) -> int:
         try:
             res = load_results(out)
             if res:
-                ana = analyze(res, geo, prior)
+                ana = analyze(res, geo, prior, a.rules)
                 k13.write_json(out / "verdict.json", ana)
                 print("[kpf174] verdict: " + json.dumps(ana["decisions"]), flush=True)
         except Exception as exc:  # noqa: BLE001

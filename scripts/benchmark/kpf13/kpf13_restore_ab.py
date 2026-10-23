@@ -289,6 +289,16 @@ def sha256_json(obj) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
 
 
+def seal_record(rec: dict) -> dict:
+    """VB-KVU-PF.5 (2026-10-23): the record as it will be READ (a JSON round trip: int dict keys become strings and sort
+    as strings, non-JSON values become str) plus record_sha256 over exactly that form, so a reader re-derives it with
+    sha256(json.dumps(body, sort_keys=True, separators=(",", ":"))) (scripts/vidya/adapters/kv_prefix_fork.py). Hashing
+    the in-memory dict broke this for kpf174, whose geometry.pruned has int keys."""
+    body = json.loads(json.dumps({k: v for k, v in rec.items() if k != "record_sha256"}, default=str))
+    body["record_sha256"] = sha256_json(body)
+    return body
+
+
 def write_json(path: Path, obj) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -532,6 +542,37 @@ def card_vram_used(card: Path) -> int | None:
         return None
 
 
+# ---------------------------------------------------------------- speculation OFF (KPF-13.1b / KPF-17.4b discriminator)
+# A speculation-OFF launch is the SAME argv file minus every drafter flag ("no -md"): the target alone, so a fork-vs-control
+# token difference that survives it is target-side (restore) and one that vanishes is on the draft path. flag -> arity.
+DRAFTER_FLAGS = {"-md": 1, "--model-draft": 1, "-ngld": 1, "--gpu-layers-draft": 1, "--n-gpu-layers-draft": 1,
+                 "--spec-type": 1, "--spec-draft-n-max": 1, "--spec-draft-n-min": 1, "--draft-max": 1, "--draft-min": 1,
+                 "--draft": 1, "--draft-n": 1, "--draft-p-min": 1, "--device-draft": 1, "-devd": 1, "-cd": 1,
+                 "--ctx-size-draft": 1, "-ctkd": 1, "--cache-type-k-draft": 1, "-ctvd": 1, "--cache-type-v-draft": 1,
+                 "-td": 1, "--threads-draft": 1, "-tbd": 1, "--threads-batch-draft": 1}
+_DRAFTER_SHORT = ("-md", "-ngld", "-devd", "-cd", "-ctkd", "-ctvd", "-td", "-tbd")
+
+
+def strip_drafter(argv: list[str]) -> tuple[list[str], list[str]]:
+    """(argv without any drafter flag, the removed tokens)."""
+    out, removed, i = [], [], 0
+    while i < len(argv):
+        f = argv[i]
+        if f in DRAFTER_FLAGS:
+            k = 1 + DRAFTER_FLAGS[f]
+            removed += argv[i:i + k]
+            i += k
+            continue
+        out.append(f)
+        i += 1
+    return out, removed
+
+
+def spec_off_problems(argv: list[str]) -> list[str]:
+    left = [a for a in argv if a.startswith("-") and ("draft" in a or a.startswith("--spec") or a in _DRAFTER_SHORT)]
+    return [f"speculation-OFF argv still carries drafter flag(s) {left}"] if left else []
+
+
 # ---------------------------------------------------------------- judging (pure; the unit tests exercise exactly these)
 def top_probs(entry: dict) -> dict[int, float]:
     top = entry.get("top_logprobs") or entry.get("top_probs") or []
@@ -563,8 +604,10 @@ def prefix_len(a: list[int], b: list[int], n: int) -> int:
     return k
 
 
-def ref_problems(refs: list[dict], kind: str, ref_expect: dict | None, n: int = N_GEN) -> list[str]:
-    """Why a reference set (controls or twins) cannot judge anything. kind: "control" | "twin"."""
+def ref_problems(refs: list[dict], kind: str, ref_expect: dict | None, n: int = N_GEN, *,
+                 spec_off: bool = False) -> list[str]:
+    """Why a reference set (controls or twins) cannot judge anything. kind: "control" | "twin". spec_off (KPF-13.1b /
+    17.4b discriminator launch, no drafter): a reference must report NO speculation (draft_n 0 or absent) instead."""
     out: list[str] = []
     if not refs:
         return [f"no {kind}"]
@@ -572,7 +615,10 @@ def ref_problems(refs: list[dict], kind: str, ref_expect: dict | None, n: int = 
         tag = f"{kind}{i + 1}"
         if w.get("error") or len(w.get("tokens") or []) < n:
             out.append(f"{tag} short or failed ({len(w.get('tokens') or [])} tokens)")
-        if not w.get("draft_n"):
+        if spec_off:
+            if w.get("draft_n"):
+                out.append(f"{tag} draft_n {w.get('draft_n')!r} in a speculation-OFF launch (the drafter is still on)")
+        elif not w.get("draft_n"):
             out.append(f"{tag} draft_n {w.get('draft_n')!r}: speculation inactive (vacuous)")
         if kind == "twin":
             if w.get("cache_n") not in (0, None) or w.get("n_fork_tokens") not in (0, None):
@@ -587,12 +633,16 @@ def ref_problems(refs: list[dict], kind: str, ref_expect: dict | None, n: int = 
 
 
 def judge_run(refs: list[dict], x: dict, expect_fork: int | None, n: int = N_GEN, *, kind: str = "twin",
-              ref_expect: dict | None = None, band: float | None = None, slack: tuple[int, int] = (0, 0)) -> dict:
+              ref_expect: dict | None = None, band: float | None = None, slack: tuple[int, int] = (0, 0),
+              spec_off: bool = False, identical_refs: bool = False) -> dict:
     """One arm run against the references of its cell (its controls, or the informational twins). Returns
     {verdict: PASS|FAIL|INVALID, reasons, ...}. `band` labels a first divergence as a near-tie (never a verdict).
-    `slack` = (spread_dn, spread_da): rules v3 widen the acceptance interval by the measured control spread (v2: 0, 0)."""
+    `slack` = (spread_dn, spread_da): rules v3 widen the acceptance interval by the measured control spread (v2: 0, 0).
+    `spec_off` (no drafter): tokens only, every run must report no speculation, no acceptance check. `identical_refs`
+    (rules v4 GPU clause, spec-off): the references must agree on all n tokens, else the cell is INVALID (the device is
+    not deterministic without the drafter, so no token comparison can locate a defect)."""
     reasons: list[str] = []
-    invalid = ref_problems(refs, kind, ref_expect, n)
+    invalid = ref_problems(refs, kind, ref_expect, n, spec_off=spec_off)
     if x is None:
         invalid.append("run missing")
         x = {}
@@ -600,6 +650,13 @@ def judge_run(refs: list[dict], x: dict, expect_fork: int | None, n: int = N_GEN
         invalid.append(f"run short or failed ({len(x.get('tokens') or [])} tokens)")
     if expect_fork is not None and x.get("n_fork_tokens") != expect_fork:
         invalid.append(f"n_fork_tokens {x.get('n_fork_tokens')} != designed {expect_fork}")
+    if spec_off and x.get("draft_n"):
+        invalid.append(f"run draft_n {x.get('draft_n')!r} in a speculation-OFF launch")
+    if not invalid and identical_refs and len(refs) > 1:
+        rt = [w["tokens"][:n] for w in refs]
+        if any(t != rt[0] for t in rt[1:]):
+            invalid.append(f"{kind}s not token-identical over {n} tokens (rules v4 GPU clause: nondeterministic "
+                           "without the drafter)")
     if invalid:
         return {"verdict": "INVALID", "reasons": invalid, "invalid": invalid, "basis": kind}
     ref_tokens = [w["tokens"][:n] for w in refs]
@@ -610,13 +667,13 @@ def judge_run(refs: list[dict], x: dict, expect_fork: int | None, n: int = N_GEN
     tokens_ok = best >= ref_agree
     if not tokens_ok:
         reasons.append(f"tokens: best {kind} prefix {best} < required {ref_agree}")
-    dn = [w["draft_n"] for w in refs]
+    dn = [w.get("draft_n") or 0 for w in refs]
     da = [w.get("draft_n_accepted") or 0 for w in refs]
     s_dn, s_da = int(slack[0] or 0), int(slack[1] or 0)
     lo_dn, hi_dn, lo_da, hi_da = min(dn) - s_dn, max(dn) + s_dn, min(da) - s_da, max(da) + s_da
     x_dn, x_da = x.get("draft_n") or 0, x.get("draft_n_accepted") or 0
-    acc_ok = lo_dn <= x_dn <= hi_dn and lo_da <= x_da <= hi_da
-    acc_drop = x_da < lo_da
+    acc_ok = spec_off or (lo_dn <= x_dn <= hi_dn and lo_da <= x_da <= hi_da)
+    acc_drop = (not spec_off) and x_da < lo_da
     if not acc_ok:
         reasons.append(f"acceptance: draft_n {x_dn} not in [{lo_dn},{hi_dn}] or accepted {x_da} not in "
                        f"[{lo_da},{hi_da}]")
@@ -629,7 +686,8 @@ def judge_run(refs: list[dict], x: dict, expect_fork: int | None, n: int = N_GEN
             "accept_ok": acc_ok, "acceptance_drop": acc_drop, "ref_agree": ref_agree, "twin_agree": ref_agree,
             "n_refs": len(refs), "accept_interval": {"draft_n": [lo_dn, hi_dn], "draft_n_accepted": [lo_da, hi_da]},
             "prefix_best": best, "first_divergence_gap": gap_at, "first_divergence_near_tie": near_tie,
-            "near_tie_band": NEAR_TIE_FLOOR if band is None else band, "basis": kind}
+            "near_tie_band": NEAR_TIE_FLOOR if band is None else band, "basis": kind, "spec_off": spec_off,
+            "first_divergence": None if tokens_ok else best}
 
 
 def same_run(a: dict, b: dict, n: int = N_GEN) -> bool:
@@ -638,8 +696,10 @@ def same_run(a: dict, b: dict, n: int = N_GEN) -> bool:
 
 
 def cell_arm_verdict(refs: list[dict], runs: list[dict], expect_fork: int | None, *, kind: str = "twin",
-                     ref_expect: dict | None = None, band: float | None = None, slack: tuple[int, int] = (0, 0)) -> dict:
-    js = [judge_run(refs, r, expect_fork, kind=kind, ref_expect=ref_expect, band=band, slack=slack)
+                     ref_expect: dict | None = None, band: float | None = None, slack: tuple[int, int] = (0, 0),
+                     spec_off: bool = False, identical_refs: bool = False) -> dict:
+    js = [judge_run(refs, r, expect_fork, kind=kind, ref_expect=ref_expect, band=band, slack=slack, spec_off=spec_off,
+                    identical_refs=identical_refs)
           for r in runs if r is not None]
     kinds = [j["verdict"] for j in js]
     v = "FAIL" if "FAIL" in kinds else ("INVALID" if "INVALID" in kinds or not kinds else "PASS")
@@ -665,7 +725,7 @@ def controls_of(cell: dict, arm: str) -> list[dict]:
     return [c[k] for k in keys if c[k]]
 
 
-def acceptance_spread(cells: list[dict]) -> dict:
+def acceptance_spread(cells: list[dict], spec_off: bool = False) -> dict:
     """RULES_V3['acceptance_spread']: pooled (max - min) of draft_n / draft_n_accepted across each valid cell's K
     same-shape controls, over both arms. Controls only; an arm run never widens its own interval."""
     s_dn = s_da = 0
@@ -679,9 +739,9 @@ def acceptance_spread(cells: list[dict]) -> dict:
             exp = control_expect(c.get("T"), c.get("N"), c.get("suffix_len"), arm)
             if arm == "B" and exp is None:
                 continue
-            if ref_problems(refs, "control", exp):
+            if ref_problems(refs, "control", exp, spec_off=spec_off):
                 continue
-            dn = [r["draft_n"] for r in refs]
+            dn = [r.get("draft_n") or 0 for r in refs]
             da = [r.get("draft_n_accepted") or 0 for r in refs]
             per.append({"cell": c.get("cell"), "arm": arm, "k": len(refs), "dn": [min(dn), max(dn)],
                         "da": [min(da), max(da)]})
@@ -1130,6 +1190,7 @@ class Server:
         self.linkage: dict = {}
         self.stop_rec: dict = {}
         self.t_start = self.t_stop = None
+        self.drafter_removed: list[str] = []
         self.argv = self.build_argv()
         self.env, self.env_note = self.build_env()
 
@@ -1142,7 +1203,9 @@ class Server:
             a = set_flag(a, ("-tb", "--threads-batch"), n)
         a += ["--port", str(self.ctx.args.port), "--metrics", "--slot-fork-min-tokens", str(self.ctx.args.fork_min)]
         a += self.cfg["extra"]
-        if self.ctx.args.draft_debug:
+        if self.cfg.get("spec_off"):
+            a, self.drafter_removed = strip_drafter(a)
+        elif self.ctx.args.draft_debug:
             a += ["-lv", "4"]
         return [str(self.binary)] + a
 
@@ -1284,6 +1347,9 @@ class Server:
             rb["runtime_threads_unpinned_count"] = len(j["runtime_threads_unpinned"])
             if j["problem"]:
                 probs.append(j["problem"])
+        rb["spec_off"] = bool(self.cfg.get("spec_off"))
+        if rb["spec_off"]:
+            probs += spec_off_problems(cmd)
         rb["problems"] = probs
         if probs:
             raise Abort(f"launch read-back failed for {self.label}: " + "; ".join(probs))
@@ -1684,7 +1750,7 @@ class Plan:
             "grading_note": "n per cell as listed, no codified protocol cited: an OBSERVATION; projects under "
                             "VB-KVU-PF and grades Judged/Located through claim_tuple.grade(). Counts, not a pass word.",
         }
-        rec["record_sha256"] = sha256_json(rec)
+        rec = seal_record(rec)
         write_json(ctx.out / "records" / f"{rec['run_id']}.json", rec)
         Jsonl(ctx.out / "belief_measurements.jsonl").add(rec)
         print(f"[kpf13] record {rec['run_id']} ({self.cfg_name}): " + json.dumps(ana["configs"].get(self.cfg_name)),
