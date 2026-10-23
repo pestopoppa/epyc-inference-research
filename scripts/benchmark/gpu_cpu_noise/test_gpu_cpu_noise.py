@@ -108,6 +108,20 @@ def test_analysis_recovers_null(tmp_path):
         assert r["decision_table"][c]["AK"] == "SHAREABLE", r["decision_table"][c]
 
 
+def test_analysis_records_analyzer_identity_and_input_digests(tmp_path):
+    """VB-GPU-CPU-NOISE-WIRE: the belief-kernel reader binds the analysis to its input bytes and analyzer."""
+    import hashlib
+    sess = _synth(tmp_path, {})
+    (tmp_path / "sess" / "RUN_RECORD.json").write_text('{"schema": "x"}')
+    ident = A.analyze(sess)["analyzer"]
+    reps = (tmp_path / "sess" / "reps.jsonl").read_bytes()
+    assert ident["reps_jsonl_sha256"] == hashlib.sha256(reps).hexdigest()
+    assert ident["run_record_sha256"] == hashlib.sha256(b'{"schema": "x"}').hexdigest()
+    me = os.path.realpath(A.__file__)
+    assert ident["path"] == me and ident["sha256"] == hashlib.sha256(open(me, "rb").read()).hexdigest()
+    assert ident["seed"] == 20261021 and ident["n_boot"] == A.N_BOOT
+
+
 def test_analysis_detects_bias_and_noise(tmp_path):
     sess = _synth(tmp_path, {"G2": (-0.05, 1.0), "G3": (0.0, 3.0), "G1": (0.0, 1.0)})
     r = A.analyze(sess)
