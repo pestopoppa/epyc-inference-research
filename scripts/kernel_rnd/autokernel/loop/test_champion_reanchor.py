@@ -152,3 +152,48 @@ def test_no_store_build_for_the_champion_blocks(world):
     out = cr.plan(world["store"], world["repo"], master=master_in(world["tmp"]), role=ROLE, branch=BRANCH,
                   builds_root=world["builds"])
     assert not out["actionable"] and "store" in out["blockers"][0]
+
+
+def test_rejected_tree_matching_image_is_named_with_its_reason(world):
+    advance(world)
+    b = store_build_for_champion(world)
+    (b / "PROVENANCE.md").unlink()
+    out = cr.plan(world["store"], world["repo"], master=master_in(world["tmp"]), role=ROLE, branch=BRANCH,
+                  builds_root=world["builds"])
+    assert not out["actionable"]
+    msg = out["blockers"][0]
+    assert "cpu-new" in msg and "missing PROVENANCE.md" in msg and "REJECTED" in msg
+    assert "build and store it first" not in msg
+    assert out["rejected_builds"][0]["build"] == str(b)
+
+
+def test_in_tree_provenance_json_image_is_rejected_by_name(world):
+    advance(world)
+    b = store_build_for_champion(world)
+    (b / "provenance.json").write_text("{}")
+    diag = cr.diagnose_store_builds(
+        fr.champion_state(world["repo"], BRANCH), world["repo"], world["builds"])
+    assert diag["match"] is None and "provenance.json" in diag["rejected"][0]["reason"]
+
+
+def test_other_tree_image_is_not_blamed_and_message_stays_build_it(world):
+    old_build = build(world["tmp"], world["repo"], "builds/cpu-old", world["old"])
+    (old_build / "PROVENANCE.md").unlink()
+    advance(world)
+    out = cr.plan(world["store"], world["repo"], master=master_in(world["tmp"]), role=ROLE, branch=BRANCH,
+                  builds_root=world["builds"])
+    assert "build and store it first" in out["blockers"][0] and "rejected_builds" not in out
+
+
+def test_good_image_still_found_and_find_store_build_unchanged(world):
+    advance(world)
+    b = store_build_for_champion(world)
+    eq = cr.find_store_build(fr.champion_state(world["repo"], BRANCH), world["repo"], world["builds"])
+    assert eq is not None and eq["build_dir"] == str(b)
+
+
+def test_loop_toplevel_invocation_is_refused_with_supported_forms(capsys):
+    assert cr._invocation_ok("loop") is False and cr._invocation_ok(None) is False
+    assert cr._invocation_ok("autokernel.loop") and cr._invocation_ok("kernel_rnd.autokernel.loop")
+    assert "autokernel.loop.champion_reanchor" in cr.SUPPORTED_INVOCATION
+    assert "SUPPORTED INVOCATION" in cr.__doc__

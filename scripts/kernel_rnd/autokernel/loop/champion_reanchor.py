@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """AKX-AUTO-6: detect a CHAMPION ADVANCE, re-anchor, relaunch, and recalibrate AT MOST ONCE.
 
+SUPPORTED INVOCATION: run from scripts/kernel_rnd, or as `kernel_rnd.autokernel.loop.champion_reanchor`
+from scripts/. NOT `-m loop.champion_reanchor` from autokernel/: that makes `loop` top-level, the `..`
+imports of plan/apply fail, and main() refuses it with a message.
+
     python3 -m autokernel.loop.champion_reanchor detect --store S --worktree W
     python3 -m autokernel.loop.champion_reanchor plan   --store S --worktree W --registry R [...]
     python3 -m autokernel.loop.champion_reanchor apply  --store S --worktree W --registry R \
@@ -152,28 +156,62 @@ def detect(store: Path | str, worktree: Path | str, branch: str = fr.DEFAULT_CHA
     return result
 
 
-def find_store_build(champion: dict, worktree: Path | str, builds_root: Path | str = DEFAULT_BUILDS_ROOT,
-                     *, reference_build: Path | str | None = None) -> dict | None:
-    """Newest kernel-store `cpu-*` build whose equivalence tree hash is the champion's (and, when a
-    reference build is given, whose CMake recipe digest equals the reference's)."""
+def _image_defect(build: Path) -> str | None:
+    """Why `build` is not a kernel-store image (None when it is one). Mirrors `fr.is_store_build`."""
+    missing = [n for n in ("VERSION.txt", "SHA256SUMS", "PROVENANCE.md") if not (build / n).is_file()]
+    if missing:
+        return "missing " + ", ".join(missing)
+    if (build / "provenance.json").exists():
+        return "has provenance.json (an in-tree build, not a store image)"
+    return None
+
+
+def diagnose_store_builds(champion: dict, worktree: Path | str,
+                          builds_root: Path | str = DEFAULT_BUILDS_ROOT, *,
+                          reference_build: Path | str | None = None) -> dict:
+    """`{match, rejected, other}`. `match` is the newest acceptable build's equivalence record (or None).
+    `rejected` lists every `cpu-*` image that carries the champion's SOURCE TREE yet was refused, as
+    `{build, commit, reason}` -- so a blocker can name the image that is one defect away from usable
+    instead of saying none exists. Images with another tree (or no readable commit) are only counted."""
     reference = None
     if reference_build is not None:
         reference = fr.equivalence_for_build(reference_build, source_repo=worktree)["cmake_recipe_digest"]
-    found = []
+    rejected: list[dict] = []
+    other = 0
+    match = None
     for build in sorted(Path(builds_root).glob("cpu-*"), key=lambda p: p.stat().st_mtime, reverse=True):
-        if not fr.is_store_build(build):
-            continue
+        defect = _image_defect(build)
         try:
-            eq = fr.equivalence_for_build(build, source_repo=worktree)
+            if defect is not None:
+                # tree identity needs only VERSION.txt's commit; no recipe/SHA256SUMS required
+                commit, _ = fr._version_info(build)
+                full = fr._git(Path(worktree), "rev-parse", "--verify", f"{commit}^{{commit}}")
+                tree, eq = fr.source_tree_hash(worktree, full), None
+            else:
+                eq = fr.equivalence_for_build(build, source_repo=worktree)
+                tree, full = eq["source_tree_hash"], eq["commit"]
         except fr.FloorRegistryError:
-            continue  # commit not in this repo, or an unkeyable build: not a candidate
-        if eq["source_tree_hash"] != champion["source_tree_hash"]:
+            other += 1  # commit not in this repo, or an unkeyable build: not a candidate
             continue
-        if reference is not None and eq["cmake_recipe_digest"] != reference:
-            continue
-        found.append(eq)
-        break
-    return found[0] if found else None
+        if tree != champion["source_tree_hash"]:
+            other += 1
+        elif defect is not None:
+            rejected.append({"build": str(build), "commit": full, "reason": defect})
+        elif reference is not None and eq["cmake_recipe_digest"] != reference:
+            rejected.append({"build": str(build), "commit": full,
+                             "reason": "CMake recipe digest differs from the reference build's"})
+        elif match is None:
+            match = eq
+    return {"match": match, "rejected": rejected, "other": other}
+
+
+def find_store_build(champion: dict, worktree: Path | str, builds_root: Path | str = DEFAULT_BUILDS_ROOT,
+                     *, reference_build: Path | str | None = None) -> dict | None:
+    """Newest kernel-store `cpu-*` build whose equivalence tree hash is the champion's (and, when a
+    reference build is given, whose CMake recipe digest equals the reference's). See
+    `diagnose_store_builds` for the tree-matching images that were rejected, and why."""
+    return diagnose_store_builds(champion, worktree, builds_root,
+                                 reference_build=reference_build)["match"]
 
 
 def store_floor_identity(store: Path | str) -> dict | None:
@@ -299,10 +337,20 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
         out["blockers"].append(f"state {found['state']}: " + "; ".join(found["reasons"]))
         return out
     champion = found["champion"]
-    equivalence = find_store_build(champion, worktree, builds_root, reference_build=reference_build)
+    diag = diagnose_store_builds(champion, worktree, builds_root, reference_build=reference_build)
+    equivalence = diag["match"]
     if equivalence is None:
-        out["blockers"].append(f"no kernel-store cpu-* build has the champion's source tree "
-                               f"({champion['commit'][:12]}) under {builds_root}: build and store it first")
+        msg = (f"no usable kernel-store cpu-* build has the champion's source tree "
+               f"({champion['commit'][:12]}) under {builds_root}")
+        if diag["rejected"]:
+            msg += ("; tree-matching image(s) REJECTED: "
+                    + "; ".join(f"{r['build']} (commit {r['commit'][:12]}): {r['reason']}"
+                                for r in diag["rejected"])
+                    + " -- repair the image, do not rebuild")
+            out["rejected_builds"] = diag["rejected"]
+        else:
+            msg += ": build and store it first"
+        out["blockers"].append(msg)
         return out
     out["anchor_build"] = equivalence["build_dir"]
     out["equivalence_key"] = equivalence["equivalence_key"]
@@ -442,7 +490,22 @@ def apply(store: Path | str, worktree: Path | str, *, master: Path | str, relaun
     return planned
 
 
+SUPPORTED_INVOCATION = ("from scripts/kernel_rnd:  python -m autokernel.loop.champion_reanchor ...   or   "
+                        "from scripts/:  python -m kernel_rnd.autokernel.loop.champion_reanchor ...")
+
+
+def _invocation_ok(package: str | None) -> bool:
+    """`plan`/`apply` import `..journal`, which needs `loop` to live inside the `autokernel` package.
+    `python -m loop.champion_reanchor` (cwd = autokernel/) makes `loop` top-level, so detect works but
+    plan/apply die with an opaque relative-import error -- refuse that up front."""
+    return bool(package) and package.count(".") >= 1
+
+
 def main(argv: list[str] | None = None) -> int:
+    if not _invocation_ok(__package__):
+        sys.stderr.write("champion_reanchor: unsupported invocation (`loop` is a top-level package, so "
+                         "`..` imports fail). Supported: " + SUPPORTED_INVOCATION + "\n")
+        return 2
     p = argparse.ArgumentParser(prog="champion_reanchor", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("cmd", choices=("detect", "plan", "apply"))
