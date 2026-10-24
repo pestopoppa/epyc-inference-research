@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import threading
+import time
 from types import SimpleNamespace
 from unittest import mock
 
@@ -177,6 +179,88 @@ def test_a_member_check_is_refused_while_the_tail_holds_the_shared_fence(tmp_pat
             with ak_check.sandbox_slot(ak_check.check_fence_dir(
                     tmp_path / "scratch" / "tree", {ak_check.ENV_FENCE: str(shared)})):
                 pass
+
+
+def test_two_worker_bestof_members_share_the_scheduler_fence(tmp_path, monkeypatch):
+    monkeypatch.delenv(ak_check.ENV_FENCE, raising=False)
+    members = [tmp_path / "scratch" / f"lane{index}" / "member"
+               for index in range(2)]
+    workers = [pipeline.Worker(f"lane{index}", tmp_path / "workers" / f"lane{index}",
+                               tmp_path / "builds" / f"lane{index}") for index in range(2)]
+    common = dict(workers=workers, make_planner=None, make_critic=None, build_context=dict,
+                  make_gate=None, make_measure=None, record=lambda _o: None, iterations=2,
+                  reset=lambda _w: "0" * 40, commit=lambda *_a: "0" * 40,
+                  author_sandbox=True)
+
+    def fake_run_pool(**_kwargs):
+        shared = Path(os.environ[ak_check.ENV_FENCE])
+        member_fences = [ak_check.check_fence_dir(member) for member in members]
+        assert member_fences == [shared, shared]
+        assert all(ak_check.fence_dir(member) != shared for member in members)
+
+        check_a, check_b = (ak_check.sandbox_slot(fence) for fence in member_fences)
+        check_a.__enter__()
+        try:
+            check_b.__enter__()
+        except BaseException:
+            check_a.__exit__(None, None, None)
+            raise
+        held = {"a": True, "b": True}
+
+        tail_entered, release_tail = threading.Event(), threading.Event()
+        waiting_on_member_slots, released_a, waiting_after_a = (
+            threading.Event(), threading.Event(), threading.Event())
+        tail_errors = []
+
+        def note_wait(_seconds):
+            waiting_on_member_slots.set()
+            if released_a.is_set():
+                waiting_after_a.set()
+            time.sleep(0.005)
+
+        def tail():
+            try:
+                with ak_check.tail_fence([shared], wait_s=2, poll_s=0.005,
+                                         sleep=note_wait):
+                    tail_entered.set()
+                    if not release_tail.wait(2):
+                        raise AssertionError("test did not release the held tail")
+            except BaseException as exc:  # surface worker-thread failures in the test
+                tail_errors.append(exc)
+
+        worker = threading.Thread(target=tail)
+        worker.start()
+        try:
+            assert waiting_on_member_slots.wait(1), "tail did not wait on the members' held slots"
+            assert not tail_entered.is_set(), "tail entered while both members held slots"
+            check_a.__exit__(None, None, None)
+            held["a"] = False
+            released_a.set()
+            assert waiting_after_a.wait(1), "tail stopped waiting before member B released its slot"
+            assert not tail_entered.is_set(), "tail entered while member B still held a slot"
+            check_b.__exit__(None, None, None)
+            held["b"] = False
+            assert tail_entered.wait(1), "tail did not enter after both member checks released"
+
+            for member in members:
+                with pytest.raises(ak_check.Refused):
+                    with ak_check.sandbox_slot(ak_check.check_fence_dir(member)):
+                        pass
+        finally:
+            release_tail.set()
+            if held["a"]:
+                check_a.__exit__(None, None, None)
+            if held["b"]:
+                check_b.__exit__(None, None, None)
+            worker.join(timeout=2)
+            if worker.is_alive():
+                raise AssertionError("tail test thread did not finish")
+        assert not tail_errors, f"tail thread failed: {tail_errors!r}"
+        return []
+
+    with mock.patch.object(pool.pipeline, "run_pool", fake_run_pool):
+        pool.drive(**common)
+    assert ak_check.ENV_FENCE not in os.environ
 
 
 # ------------------------------------------------------------------ the CPU window
