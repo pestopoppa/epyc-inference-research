@@ -500,6 +500,10 @@ runtime_defaults:
   # fingerprint-ledger entry WARNS; true = the registry validator errors at `start` and the launcher
   # REFUSES. A pin that is present and WRONG is refused in both modes. Env vars
   # REGISTRY_ARTIFACT_PINS_STRICT / REGISTRY_TEMPLATE_PINS_STRICT (1/0) override these. Flip via stack-change.
+  # SEC-ART-1.1 (2026-10-24): the VALIDATOR's missing hf_repo/hf_revision/sha256 check on the compiled
+  # lineup is strict by DEFAULT regardless of pins_strict (every lineup role is pinned); pins_strict
+  # now governs only the launcher's fingerprint-ledger refusal (SEC-ART-2), which stays false until the
+  # registration run. REGISTRY_ARTIFACT_PINS_STRICT=0 is the explicit opt-out for both.
   artifact_integrity:
     pins_strict: false
     template_pins_strict: false
@@ -3274,8 +3278,10 @@ roles:
       # context to satisfy the rule would defeat the rule. Whoever re-derives these
       # (T10 — the bands are IQ2_M and must be re-taken on Q4_K_M) must record the
       # prompt length at the same time.
-      baseline_tps: 10.12  # context length NOT RECORDED — see T8 note above
-      optimized_tps: 10.12  # context length NOT RECORDED; default-expert live policy; old MoE4 6.29 t/s row is historical only
+      # (2026-10-24: the duplicate `baseline_tps: 10.12` / `optimized_tps: 10.12` keys that stood here were
+      # removed -- YAML kept only the later nulls below, so the loaded value is unchanged, and a strict
+      # duplicate-key loader refused the file. Both figures survive in the provenance note and
+      # previous_model_record.)
       # ⚠ 2026-09-22 MODEL AND DEVICE SWAP. EVERY FIGURE IN THIS BLOCK IS A Qwen3-Next-80B
       # CPU MEASUREMENT AND NONE OF IT TRANSFERS to a dense Qwen3.8-27B on an MI210. They are
       # nulled rather than carried: q_scorer.registry_baseline_tps_by_role and the router read
@@ -6989,6 +6995,13 @@ roles:
     model:
       name: Qwen2.5-0.5B
       path: QuantFactory/Qwen2.5-0.5B-GGUF/Qwen2.5-0.5B.Q8_0.gguf
+      # SEC-ART-1.1 (2026-10-24): size-match to the HF LFS entry at the resolved commit (no GGUF hashed;
+      # register_gguf_fingerprints.py confirms by full hash). QuantFactory is not an allowlisted
+      # re-quantizer -> community; drafter, not tool-bearing, so no SEC-ART-3 review record is required.
+      uploader_class: community
+      hf_repo: QuantFactory/Qwen2.5-0.5B-GGUF
+      hf_revision: 808e875628eb5b8d1e30728425039f4067b6ae16
+      sha256: f8ff0bcbf1899d4b98278fd28dfb2e5a06f3cbb6176f86538809057184bafa88
       quant: Q8_0
       size_gb: 0.5
       architecture: dense
@@ -8185,6 +8198,13 @@ roles:
     model:
       name: Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0
       path: /mnt/raid0/llm/models/Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0.gguf
+      # SEC-ART-1.1 (2026-10-24): size-match to the HF LFS entry at the resolved commit (no GGUF hashed;
+      # register_gguf_fingerprints.py confirms by full hash). jukofyork is not an allowlisted
+      # re-quantizer -> community; drafter, not tool-bearing, so no SEC-ART-3 review record is required.
+      uploader_class: community
+      hf_repo: jukofyork/Qwen3-Coder-Instruct-DRAFT-0.75B-GGUF
+      hf_revision: 07e59a562b865181360f93ca2087ceaa097dc949
+      sha256: b8471644cfd8f7721c49b97043b173245b230d306f3d149d7d3d235b58c83b53
       quant: Q4_0
       size_gb: 0.45
       architecture: dense
