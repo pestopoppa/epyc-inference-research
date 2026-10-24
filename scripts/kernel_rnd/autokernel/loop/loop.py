@@ -1981,7 +1981,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # happens under the lock), so it must be caught around the `with`, not
             # around the call that builds it.
             try:
-                with tail_session():
+                with (tail_session(hypothesis=hypothesis)
+                      if getattr(tail_session, "accepts_hypothesis", False)
+                      else tail_session()):
                     if reserve_candidate is not None and hypothesis.runtime_pair is None:
                         try:
                             reserve_candidate(hypothesis, paths)

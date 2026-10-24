@@ -2282,6 +2282,23 @@ def _render_gpu_serving_profile(observation: Mapping[str, Any], *, limit: int = 
                  f"HIP proof {observation.get('hip_proof')}; primary window "
                  f"`{observation.get('primary_window')}`. Occupancy is an ESTIMATE "
                  "(waves/SIMD from VGPR+AGPR, SGPR and LDS), not a counter.")
+    weighted = observation.get("launch_weighted") or {}
+    if weighted.get("status") == "observed":
+        # AKX-ALL-29.2a: what to attack first, summed over windows; ranking only.
+        lines.append(f"### Launch-weighted kernel order — launches/token x mean time at "
+                     f"shape, summed over {', '.join(weighted.get('windows') or [])}")
+        lines.append("Ranks which kernel to attack and which candidate is timed first; a "
+                     "keep still needs a measured end-to-end win.")
+        lines.append("| ns/token | kernel | per window (launches/token x mean µs) |")
+        lines.append("|---|---|---|")
+        for row in (weighted.get("kernels") or [])[:limit]:
+            cells = "; ".join(
+                f"{w}: {c.get('launches_per_token')} x {c.get('mean_us')}"
+                for w, c in (row.get("by_window") or {}).items())
+            lines.append(f"| {row['weighted_ns_per_token']} | `{row['kernel']}` | {cells} |")
+    elif weighted:
+        lines.append(f"Launch-weighted kernel order unavailable ({weighted.get('reason')}); "
+                     "the primary window's device-time order is used.")
     for name, window in (observation.get("windows") or {}).items():
         status = window.get("status")
         if status != "observed":

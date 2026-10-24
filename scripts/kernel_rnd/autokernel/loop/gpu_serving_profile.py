@@ -27,6 +27,15 @@ loop:
   Occupancy is a gfx90a estimate (VGPR/AGPR unified file, SGPR file, LDS), labelled so.
 * **One anchor launch per anchor change**, cached under the store by anchor commit,
   launch execution digest and request digest (`cache_key`).
+* **Launch-weighted kernel order (AKX-ALL-29.2a, operator ruling 2026-10-20)**: each
+  window records the tokens it processed (prefill: prompt tokens; decode: decoded
+  tokens apportioned to the window at each request's own rate), so every kernel row
+  carries `launches_per_token` and `ns_per_token` = launches per token x mean time at
+  that window's shape. `launch_weighted` sums `ns_per_token` over the observed windows;
+  it ORDERS the kernels the planner is shown (`hotspot_rows`) and the candidates the
+  serialized tail times first (`kernel_weight`). It never gates: a keep still needs a
+  measured end-to-end win. A profile without token counts (older cache) falls back to
+  the primary window's device-time order, labelled so.
 * **Windows**: `prefill`, `short_decode`, `concurrent_decode` from the target's own
   frozen requests; `long_decode` and `prefill_at_depth` through `LongContextHook`, the
   seam for the long-context surface (a separate branch builds it). A window that
@@ -504,7 +513,7 @@ def kernel_resources(library: Path, *, demangle: Callable[[Sequence[str]], list[
 
 
 def kernel_table(rows: Sequence[Dispatch], resources: Mapping[str, Mapping], *,
-                 limit: int = TABLE_ROWS) -> list[dict]:
+                 limit: int = TABLE_ROWS, tokens: float | None = None) -> list[dict]:
     grouped: dict[str, list[Dispatch]] = {}
     for row in rows:
         grouped.setdefault(normalize_name(row.name), []).append(row)
@@ -526,7 +535,10 @@ def kernel_table(rows: Sequence[Dispatch], resources: Mapping[str, Mapping], *,
             "scratch_bytes": scratch, "lds_bytes": lds, "workgroup": workgroup,
             "waves_per_simd_est": occ["waves_per_simd"] if res else None,
             "occupancy_limiter": occ["limiter"] if res else None,
-            "resources": "code_object" if res else "absent"})
+            "resources": "code_object" if res else "absent",
+            # AKX-ALL-29.2a: launches per token x mean time at this window's shape.
+            "launches_per_token": (round(len(items) / tokens, 4) if tokens else None),
+            "ns_per_token": (round(ns / tokens, 1) if tokens else None)})
     table.sort(key=lambda item: -item["total_ns"])
     return table[:limit]
 
@@ -541,11 +553,14 @@ def analyze(rows: Sequence[Dispatch], marks: Sequence[Mapping], windows: Mapping
     for name, span in windows.items():
         picked = cut(rows, clock["offset_ns"], span["start"], span["end"])
         length_ns = max(1, int((span["end"] - span["start"]) * 1e9))
+        tokens = span.get("tokens")
+        tokens = float(tokens) if isinstance(tokens, (int, float)) and tokens > 0 else None
         out[name] = {"status": "observed" if picked else "empty",
                      "window_s": round(length_ns / 1e9, 3), "dispatches": len(picked),
                      "kernel_ns": sum(r.end - r.start for r in picked),
                      "busy_fraction": round(_busy_ns(picked) / length_ns, 4),
-                     "kernels": kernel_table(picked, resources)}
+                     "tokens": round(tokens, 2) if tokens else None,
+                     "kernels": kernel_table(picked, resources, tokens=tokens)}
     return {"clock": clock, "windows": out}
 
 
@@ -560,7 +575,8 @@ def _mark(marks: list, name: str, **extra) -> dict:
 
 def _stream(url: str, body: bytes, timeout_s: float) -> dict:
     """POST a streaming completion; return {sent, first, done} wall times + error."""
-    times: dict[str, Any] = {"sent": time.time(), "first": None, "done": None, "error": None}
+    times: dict[str, Any] = {"sent": time.time(), "first": None, "done": None, "error": None,
+                             "tokens_predicted": None, "tokens_evaluated": None}
     request = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=timeout_s) as response:
@@ -575,6 +591,13 @@ def _stream(url: str, body: bytes, timeout_s: float) -> dict:
                 if times["first"] is None and event.get("content") and "prompt_progress" not in event:
                     times["first"] = time.time()
                 if event.get("stop"):
+                    # AKX-ALL-29.2a: the server's own counts (final event, else timings).
+                    timings = event.get("timings") or {}
+                    for key, alt in (("tokens_predicted", "predicted_n"),
+                                     ("tokens_evaluated", "prompt_n")):
+                        value = event.get(key, timings.get(alt))
+                        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                            times[key] = value
                     break
     except (OSError, ValueError, urllib.error.URLError) as exc:
         times["error"] = f"{type(exc).__name__}: {exc}"[:256]
@@ -616,12 +639,37 @@ def _window_span(plan: WindowPlan, results: Sequence[Mapping]) -> dict | None:
     if any(r.get("error") for r in results):
         return None
     if plan.kind == "prefill":
-        return {"start": min(r["sent"] for r in results), "end": max(r["done"] for r in results)}
+        span = {"start": min(r["sent"] for r in results), "end": max(r["done"] for r in results)}
+        return {**span, "tokens": _prefill_tokens(results)}
     firsts = [r["first"] for r in results]
     if None in firsts:
         return None
     start, end = max(firsts), min(r["done"] for r in results)
-    return {"start": start, "end": end} if end > start else None
+    if end <= start:
+        return None
+    return {"start": start, "end": end, "tokens": _decode_tokens(results, start, end)}
+
+
+def _prefill_tokens(results: Sequence[Mapping]) -> int | None:
+    """Prompt tokens the window processed; None unless EVERY request reported its count."""
+    counts = [r.get("tokens_evaluated") for r in results]
+    if not counts or any(not isinstance(c, int) or c <= 0 for c in counts):
+        return None
+    return sum(counts)
+
+
+def _decode_tokens(results: Sequence[Mapping], start: float, end: float) -> float | None:
+    """Decoded tokens inside [start, end]: each request's tokens after its first, spread
+    uniformly over its own first->done interval and clipped to the window (one request:
+    the whole interval). None unless every request reported its count."""
+    total = 0.0
+    for r in results:
+        predicted, first, done = r.get("tokens_predicted"), r.get("first"), r.get("done")
+        if not isinstance(predicted, int) or first is None or done is None or done <= first:
+            return None
+        overlap = max(0.0, min(end, done) - max(start, first))
+        total += max(0, predicted - 1) * overlap / (done - first)
+    return round(total, 2) if total > 0 else None
 
 
 def run(*, command_argv: Sequence[str], launch_env: Mapping[str, str], port: int,
@@ -764,13 +812,93 @@ def observation(body: Mapping, *, record: Path | str, np: int,
             "primary_window": primary, "clock": (body.get("clock") or {}).get("method"),
             "hip_proof": (body.get("hip_proof") or {}).get("status"),
             "occupancy": "gfx90a estimate from code-object VGPR/AGPR/SGPR/LDS",
-            "windows": {n: windows[n] for n in WINDOWS}}
+            "windows": {n: windows[n] for n in WINDOWS},
+            "launch_weighted": launch_weighted({n: windows[n] for n in WINDOWS})}
+
+
+def launch_weighted(windows: Mapping[str, Mapping], *,
+                    demand: Mapping[str, float] | None = None) -> dict:
+    """AKX-ALL-29.2a: kernels ordered by sum over windows of `ns_per_token` (= launches
+    per token x mean time at that window's shape), each window weighted by `demand`
+    (default 1.0 per observed window with a token count).
+
+    Only observed windows WITH a token count contribute; a window table is truncated at
+    `TABLE_ROWS`, so a kernel outside a window's top rows contributes 0 there (a lower
+    bound). `status` is "unavailable" when no window has tokens. Ranking input only: it
+    never gates a keep (operator ruling 2026-10-20)."""
+    used, scores, per = [], {}, {}
+    for name, window in windows.items():
+        if (window or {}).get("status") != "observed" or not window.get("tokens"):
+            continue
+        weight = 1.0 if demand is None else float(demand.get(name, 0.0))
+        if weight <= 0:
+            continue
+        used.append(name)
+        for row in window.get("kernels") or ():
+            if row.get("ns_per_token") is None:
+                continue
+            kernel = row["kernel"]
+            scores[kernel] = scores.get(kernel, 0.0) + weight * float(row["ns_per_token"])
+            per.setdefault(kernel, {})[name] = {
+                "ns_per_token": row["ns_per_token"],
+                "launches_per_token": row.get("launches_per_token"),
+                "mean_us": row.get("mean_us"), "calls": row.get("calls"),
+                "total_ns": row.get("total_ns")}
+    if not used:
+        return {"status": "unavailable", "reason": "no observed window carries a token count",
+                "windows": [], "kernels": []}
+    ranked = sorted(scores, key=lambda k: (-scores[k], k))
+    return {"status": "observed", "windows": used,
+            "demand": dict(demand) if demand is not None else {name: 1.0 for name in used},
+            "kernels": [{"kernel": k, "weighted_ns_per_token": round(scores[k], 1),
+                         "by_window": per[k]} for k in ranked]}
+
+
+def _kernel_matches(kernel: str, symbol: str) -> bool:
+    """`symbol` names this kernel: equal to its base name (text before the template),
+    or an identifier inside its template arguments (a device function passed as one)."""
+    import re
+    symbol = (symbol or "").strip().split("::")[-1]
+    if not symbol:
+        return False
+    base = kernel.split("<", 1)[0].strip()
+    if base == symbol:
+        return True
+    return symbol in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", kernel.partition("<")[2])
+
+
+def kernel_weight(view: Mapping | None, target_symbol: str | None) -> float | None:
+    """The launch-weighted ns/token of the kernels `target_symbol` names, summed; None
+    when the view has no launch-weighted table or no kernel matches. The serialized tail
+    times candidates in descending order of this value (AKX-ALL-29.2a)."""
+    table = (view or {}).get("launch_weighted") or {}
+    if table.get("status") != "observed" or not target_symbol:
+        return None
+    hits = [row["weighted_ns_per_token"] for row in table.get("kernels") or ()
+            if _kernel_matches(row["kernel"], target_symbol)]
+    return round(sum(hits), 1) if hits else None
 
 
 def hotspot_rows(view: Mapping) -> list:
-    """`hotspots.Hotspot` rows for the planner's kernel table, from the primary window."""
+    """`hotspots.Hotspot` rows for the planner's kernel table.
+
+    AKX-ALL-29.2a: ordered by the launch-weighted score when the view has one, with each
+    kernel's calls, device ns and device-time share summed over the windows that score
+    used. Without token counts: the primary window's rows in device-time order, as before."""
     from .hotspots import Hotspot
-    window = (view.get("windows") or {}).get(view.get("primary_window")) or {}
+    table = view.get("launch_weighted") or {}
+    windows = view.get("windows") or {}
+    if table.get("status") == "observed":
+        used = table.get("windows") or []
+        total = sum(int((windows.get(name) or {}).get("kernel_ns") or 0) for name in used) or 1
+        rows = []
+        for row in (table.get("kernels") or ())[:TABLE_ROWS]:
+            ns = sum(int(cell.get("total_ns") or 0) for cell in row["by_window"].values())
+            calls = sum(int(cell.get("calls") or 0) for cell in row["by_window"].values())
+            rows.append(Hotspot(signature=row["kernel"], total_duration_ns=ns, calls=calls,
+                                share_of_device_time=round(ns / total, 6)))
+        return rows
+    window = windows.get(view.get("primary_window")) or {}
     return [Hotspot(signature=row["kernel"], total_duration_ns=int(row["total_ns"]),
                     calls=int(row["calls"]), share_of_device_time=float(row["share"]))
             for row in window.get("kernels") or ()]
@@ -779,6 +907,7 @@ def hotspot_rows(view: Mapping) -> list:
 __all__ = ["GPU_HOST_CPU_LIST", "GPU_HOST_PREFIX", "LONG_CONTEXT_WINDOWS", "LongContextHook",
            "ProfileFailed", "SCHEMA", "WINDOWS", "WindowPlan", "analyze", "cache_key",
            "cached", "choose_clock", "code_object_kernels", "cut", "hotspot_rows",
-           "kernel_resources", "kernel_table", "normalize_name", "observation", "occupancy",
+           "kernel_resources", "kernel_table", "kernel_weight", "launch_weighted",
+           "normalize_name", "observation", "occupancy",
            "parse_trace", "plan_windows", "primary_window", "profile_command",
            "request_digest", "retain", "run"]

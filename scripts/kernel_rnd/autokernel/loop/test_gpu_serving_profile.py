@@ -387,3 +387,132 @@ def test_planner_prompt_renders_windows_registers_and_skips():
     absent = "\n".join(actors._render_gpu_serving_profile({"status": "unavailable",
                                                             "reason": "no rocprofv3"}))
     assert "unavailable: no rocprofv3" in absent
+
+
+# ------------------------------------------------------------------ AKX-ALL-29.2a
+
+def _window(tokens, kernels):
+    """kernels: [(name, calls, total_ns)] -> an observed window as `analyze` writes it."""
+    rows = [{"kernel": k, "calls": c, "total_ns": ns, "share": 0.0,
+             "mean_us": round(ns / c / 1e3, 3),
+             "launches_per_token": round(c / tokens, 4) if tokens else None,
+             "ns_per_token": round(ns / tokens, 1) if tokens else None}
+            for k, c, ns in kernels]
+    return {"status": "observed", "tokens": tokens, "kernel_ns": sum(ns for _k, _c, ns in kernels),
+            "kernels": rows}
+
+
+def test_window_spans_count_tokens_from_the_servers_own_counts():
+    prefill = gsp.WindowPlan("prefill", (b"{}", b"{}"), "prefill")
+    span = gsp._window_span(prefill, [
+        {"sent": 1.0, "first": 1.2, "done": 1.5, "tokens_evaluated": 100, "tokens_predicted": 1},
+        {"sent": 1.1, "first": 1.3, "done": 1.6, "tokens_evaluated": 60, "tokens_predicted": 1}])
+    assert span == {"start": 1.0, "end": 1.6, "tokens": 160}
+    decode = gsp.WindowPlan("short_decode", (b"{}",), "decode")
+    span = gsp._window_span(decode, [{"sent": 0.0, "first": 1.0, "done": 3.0,
+                                      "tokens_predicted": 101, "tokens_evaluated": 5}])
+    assert span["tokens"] == 100.0                     # tokens after the first, whole interval
+    concurrent = gsp.WindowPlan("concurrent_decode", (b"{}", b"{}"), "decode")
+    span = gsp._window_span(concurrent, [
+        {"sent": 0, "first": 1.0, "done": 5.0, "tokens_predicted": 41},   # 10 tok/s
+        {"sent": 0, "first": 2.0, "done": 4.0, "tokens_predicted": 21}])  # 10 tok/s
+    assert (span["start"], span["end"]) == (2.0, 4.0)
+    assert span["tokens"] == 40.0                      # 2 s of each request at 10 tok/s
+    # A request without its count leaves the window's tokens unknown, never guessed.
+    span = gsp._window_span(decode, [{"sent": 0, "first": 1.0, "done": 2.0}])
+    assert span["tokens"] is None
+
+
+def test_analyze_writes_launches_per_token_and_ns_per_token():
+    wall, offset = 1_700_000_000.0, -1_699_000_000.0 * 1e9
+    marks = _marks(wall, offset)
+
+    def ns(t):
+        return int((wall + t) * 1e9 + offset)
+    rows = [("void warm<1>(int)", ns(10.5), ns(10.6)), ("void warm<1>(int)", ns(11.0), ns(11.2)),
+            ("void k<1>(int)", ns(20.0), ns(20.002)), ("void k<1>(int)", ns(20.1), ns(20.102))]
+    result = gsp.analyze(gsp.parse_trace(_trace_csv(rows)), marks,
+                         {"short_decode": {"start": wall + 19.9, "end": wall + 21, "tokens": 4}}, {})
+    row = result["windows"]["short_decode"]["kernels"][0]
+    assert result["windows"]["short_decode"]["tokens"] == 4
+    assert row["launches_per_token"] == 0.5
+    assert row["ns_per_token"] == pytest.approx(row["total_ns"] / 4, abs=1)
+    untimed = gsp.analyze(gsp.parse_trace(_trace_csv(rows)), marks,
+                          {"short_decode": {"start": wall + 19.9, "end": wall + 21}}, {})
+    assert untimed["windows"]["short_decode"]["kernels"][0]["ns_per_token"] is None
+
+
+def test_launch_weighting_promotes_a_kernel_heavy_outside_the_primary_window():
+    """Primary-window share order would attack `decode_gemv` first; summed per-token cost
+    over both windows says `prefill_gemm` costs more per token served."""
+    windows = {"short_decode": _window(100, [("decode_gemv", 200, 6_000_000),
+                                             ("prefill_gemm", 10, 1_000_000)]),
+               "prefill": _window(50, [("prefill_gemm", 20, 4_000_000),
+                                       ("decode_gemv", 5, 100_000)]),
+               "long_decode": {"status": "skipped", "reason": "no surface"}}
+    table = gsp.launch_weighted(windows)
+    assert table["status"] == "observed" and table["windows"] == ["short_decode", "prefill"]
+    assert [k["kernel"] for k in table["kernels"]] == ["prefill_gemm", "decode_gemv"]
+    assert table["kernels"][0]["weighted_ns_per_token"] == 10_000 + 80_000
+    view = {"windows": windows, "primary_window": "short_decode", "launch_weighted": table}
+    rows = gsp.hotspot_rows(view)
+    assert [r.signature for r in rows] == ["prefill_gemm", "decode_gemv"]
+    assert rows[0].calls == 30 and rows[0].total_duration_ns == 5_000_000
+    # Demand weights move the order (prefill weighted out entirely).
+    only_decode = gsp.launch_weighted(windows, demand={"short_decode": 1.0})
+    assert [k["kernel"] for k in only_decode["kernels"]] == ["decode_gemv", "prefill_gemm"]
+
+
+def test_without_token_counts_the_primary_window_order_is_kept_and_labelled():
+    windows = {"short_decode": _window(None, [("a", 2, 900), ("b", 1, 100)])}
+    table = gsp.launch_weighted(windows)
+    assert table["status"] == "unavailable" and table["kernels"] == []
+    view = {"windows": windows, "primary_window": "short_decode", "launch_weighted": table}
+    assert [r.signature for r in gsp.hotspot_rows(view)] == ["a", "b"]
+    assert gsp.kernel_weight(view, "a") is None
+    from . import actors
+    obs = gsp.observation({"key": "k", "windows": windows}, record="/p", np=1, skipped={})
+    text = "\n".join(actors._render_gpu_serving_profile(obs))
+    assert "Launch-weighted kernel order unavailable" in text
+
+
+def test_kernel_weight_matches_the_target_symbol_to_kernel_names():
+    windows = {"short_decode": _window(10, [
+        ("mul_mat_q<(ggml_type)8, 16, false>", 100, 50_000),
+        ("mul_mat_q_stream_k_fixup<(ggml_type)8, 16, false>", 100, 10_000),
+        ("cpy_scalar<&(void cpy_1_scalar<float, float>(char const*, char*))>", 10, 2_000)])}
+    view = {"launch_weighted": gsp.launch_weighted(windows)}
+    assert gsp.kernel_weight(view, "mul_mat_q") == 5_000.0          # not the fixup kernel
+    assert gsp.kernel_weight(view, "mul_mat_q_stream_k_fixup") == 1_000.0
+    assert gsp.kernel_weight(view, "cpy_1_scalar") == 200.0         # template-argument name
+    assert gsp.kernel_weight(view, "ggml_cuda::mul_mat_q") == 5_000.0
+    assert gsp.kernel_weight(view, "vec_dot_q4_K_q8_1") is None     # inlined: no kernel
+    assert gsp.kernel_weight(None, "mul_mat_q") is None
+
+
+def test_the_planner_prompt_shows_the_launch_weighted_order():
+    from . import actors
+    windows = {"short_decode": _window(100, [("decode_gemv", 200, 6_000_000)]),
+               "prefill": _window(50, [("prefill_gemm", 20, 4_000_000)])}
+    obs = gsp.observation({"key": "k", "windows": windows}, record="/p", np=1, skipped={})
+    text = "\n".join(actors._render_gpu_serving_profile(obs))
+    assert "Launch-weighted kernel order" in text
+    assert text.index("`prefill_gemm`") < text.index("`decode_gemv`")
+    assert "keep still needs a measured end-to-end win" in text
+
+
+def test_run_py_records_a_candidate_profile_after_timing_and_orders_the_tail():
+    """Wiring of the 29.2 ruling inside `run.main` (a closure; asserted on source):
+    the GPU direct-launch measure times FIRST, then records the candidate profile beside
+    the comparison; the pool is handed the launch-weighted tail priority; the keep gate
+    code path (`commit_pooled`) is not touched by either."""
+    source = (Path(__file__).parent / "run.py").read_text()
+    body = source[source.index("            if direct_launch:\n                compared = cpu_compare("):]
+    body = body[:body.index("return compared")]
+    assert body.index("cpu_compare(") < body.index("record_candidate_serving_profile(")
+    assert "if not cpu_launch:" in body
+    helper = source[source.index("    def record_candidate_serving_profile("):]
+    helper = helper[:helper.index("    def ensure_source_floor(")]
+    assert 'row["candidate_serving_profile"]' in helper
+    assert "raise" not in helper.replace("raise loop", "")   # never refuses the comparison
+    assert '"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(' in source
