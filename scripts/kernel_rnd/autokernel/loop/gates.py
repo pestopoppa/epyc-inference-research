@@ -190,7 +190,24 @@ class Verdict:
 def compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
              jobs: int, cpu_list: str | None, targets: tuple = DEFAULT_TARGETS,
              cmake: str = "cmake", env: dict | None = None) -> Verdict:
-    """Configure and build. A compile failure is cheap, automatic planner feedback."""
+    """Configure and build. A compile failure is cheap, automatic planner feedback.
+
+    AK-HR-3b: the wall seconds land on the current trial's `build` stage (observe-only;
+    a no-op outside a trial), wherever the build is called from -- inside `run_all` on
+    the CPU gate, or ahead of the quiet window on the GPU gate."""
+    from . import history_fields
+    import time as _time
+    started = _time.monotonic()
+    try:
+        return _compiles(source_root, build_dir, cmake_defines=cmake_defines, jobs=jobs,
+                         cpu_list=cpu_list, targets=targets, cmake=cmake, env=env)
+    finally:
+        history_fields.note_build(_time.monotonic() - started)
+
+
+def _compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
+              jobs: int, cpu_list: str | None, targets: tuple = DEFAULT_TARGETS,
+              cmake: str = "cmake", env: dict | None = None) -> Verdict:
     prefix = ("taskset", "-c", cpu_list) if cpu_list else ()
     configure = [*prefix, cmake, "-S", str(source_root), "-B", str(build_dir),
                  "-DCMAKE_BUILD_TYPE=Release",
@@ -2985,6 +3002,8 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
     for check in checks:
         started = _time.monotonic()
         verdict = check()
+        # Build verdicts are timed by `compiles` itself (so the GPU gate's out-of-chain
+        # build is counted too); every other check is correctness.
         history_fields.note_check(getattr(verdict, "gate", None), _time.monotonic() - started)
         collected.append(verdict)
         if not verdict.passed:

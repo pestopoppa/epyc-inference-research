@@ -51,37 +51,62 @@ class TrialFields(unittest.TestCase):
         self.assertIsNotNone(snap["stage_seconds"]["gate"])
         self.assertIsNotNone(snap["stage_seconds"]["measure"])
 
+    @staticmethod
+    def _fake_build(seconds, returncode=0):
+        from types import SimpleNamespace
+        import time as _time
+
+        def run(*_a, **_k):
+            _time.sleep(seconds / 2)
+            return SimpleNamespace(returncode=returncode, stdout="", stderr="")
+        return run
+
+    def _compile(self, seconds, returncode=0):
+        from unittest import mock
+        from autokernel.loop import gates
+        with mock.patch.object(gates.subprocess, "run", side_effect=self._fake_build(seconds, returncode)):
+            return gates.compiles("/src", "/build", cmake_defines=(), jobs=1, cpu_list=None)
+
     def test_run_all_splits_build_and_correctness_inside_the_gate(self):
-        """AK-HR-3b: run_all files each check by its verdict's gate name."""
+        """AK-HR-3b: `compiles` times the build; run_all times every other check."""
         from autokernel.loop import gates
         import time as _time
 
-        def check(name, seconds, passed=True):
+        def check(name, seconds):
             def run():
                 _time.sleep(seconds)
-                return gates.Verdict(name, passed)
+                return gates.Verdict(name, True)
             return run
         with history_fields.trial_scope() as trial:
-            passed, _ = history_fields.timed("gate", gates.run_all)(
-                check("compile", 0.02), check("op_correctness", 0.03),
+            passed, verdicts = history_fields.timed("gate", gates.run_all)(
+                lambda: self._compile(0.04), check("op_correctness", 0.03),
                 check("cpu_route_reference", 0.01))
             snap = trial.snapshot()["stage_seconds"]
         self.assertTrue(passed)
-        self.assertGreaterEqual(snap["build"], 0.02)
+        self.assertEqual(verdicts[0], gates.Verdict("compile", True))
+        self.assertGreaterEqual(snap["build"], 0.04)
         self.assertGreaterEqual(snap["correctness"], 0.04)
-        self.assertLess(snap["build"], snap["correctness"])
+        self.assertLess(snap["correctness"], 0.04 + 0.04)          # the build is not counted twice
         self.assertLessEqual(snap["build"] + snap["correctness"], snap["gate"] + 0.002)
+
+    def test_a_build_outside_run_all_is_still_build_time(self):
+        """The GPU gate calls its build before the quiet window, outside run_all."""
+        with history_fields.trial_scope() as trial:
+            verdict = self._compile(0.02, returncode=1)
+            snap = trial.snapshot()["stage_seconds"]
+        self.assertEqual(verdict.gate, "configure")
+        self.assertGreaterEqual(snap["build"], 0.01)
+        self.assertIsNone(snap["correctness"])
 
     def test_a_failed_build_leaves_correctness_null_and_no_trial_is_a_noop(self):
         from autokernel.loop import gates
         with history_fields.trial_scope() as trial:
-            gates.run_all(lambda: gates.Verdict("configure", False, "cmake configure failed"),
+            gates.run_all(lambda: self._compile(0.0, returncode=1),
                           lambda: gates.Verdict("op_correctness", True))
             snap = trial.snapshot()["stage_seconds"]
         self.assertIsNotNone(snap["build"])
         self.assertIsNone(snap["correctness"])          # short-circuited: never ran
-        self.assertEqual(gates.run_all(lambda: gates.Verdict("compile", True)),
-                         (True, [gates.Verdict("compile", True)]))   # outside a trial
+        self.assertEqual(self._compile(0.0).gate, "compile")       # outside a trial: no-op
 
     def test_a_runtime_arm_gate_has_correctness_but_no_build(self):
         from autokernel.loop import gates
