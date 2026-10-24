@@ -3040,14 +3040,31 @@ def _supersession_note(row: Mapping[str, Any], sup: Mapping[str, Mapping[str, An
 
 
 #: The statuses each diminishing-returns trigger in `render_context` counts as a resolved
-#: failure of a family (unchanged by the keep-order fix: this set is the pre-extraction
-#: behaviour, `abstained` included).
+#: failure of a family. DECISION 2026-10-24 (AK-HR-2 follow-up; review
+#: /mnt/raid0/llm/tmp/ak-trigger-review-20261024/MEMO.md):
+#:
+#: * `abstained` is NOT counted. An abstention forms no hypothesis (`Outcome.hypothesis`
+#:   is None): the planner only names what it looked at and declined, and AK-HR-2 classes
+#:   it as a harness-class event, as `_SUPERSEDABLE_STATUSES` already does ("declined ...
+#:   without a scientific verdict"). Search-stopping practice agrees: an attempt that
+#:   yields no observation does not count toward patience. Note the abstentions are
+#:   reasoned planner verdicts (about 99% of 356), not harness noise, and 95% name no
+#:   target, so this is a semantic ruling, not a cleanup. Replayed over the closed history
+#:   (recency recall, 40-row window): Q38FN, one family and one give-up episode move (11
+#:   near-identical "already implemented" abstentions counted as one distinct failed
+#:   idea; the family later produced a keep anyway), about 1.5 extra same-family attempts
+#:   per campaign of that kind; DS41, no effect.
+#: * `refused_at_formation` IS still counted. It is a pre-build verdict on a FORMED idea:
+#:   a structural repeat of an answered row (`do_not_repeat`) or a refused premise, and
+#:   AK-HR-2 uses it as the lower bound of the repeat-null rate, not as a harness event.
+#:   Re-proposing an answered region under new names is exactly what both blocks exist
+#:   to break. Replay: it supplied the third row of 20 of DS41's 88 exhaustion firings
+#:   and of 468/2167 exhaustion and 1224/3039 stagnation firings in loop-memory.
 FAMILY_EXHAUSTION_STATUSES = frozenset({
     "measured_null", "regression", "refused_at_formation", "authoring_refused",
-    "screened_out", "hypothesis_retired", "abstained"})
+    "screened_out", "hypothesis_retired"})
 FAMILY_STAGNATION_STATUSES = frozenset({
-    "measured_null", "regression", "refused_at_formation", "runtime_refused",
-    "abstained"})
+    "measured_null", "regression", "refused_at_formation", "runtime_refused"})
 FAMILY_RESET_STATUSES = frozenset({"kept", "keep_candidate"})
 
 

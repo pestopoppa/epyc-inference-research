@@ -417,20 +417,54 @@ class PlannerContract(unittest.TestCase):
         self.assertIsNone(got.mechanism_id)
         self.assertIsNone(got.target_surface)
 
-    def test_abstentions_count_toward_the_family_level_escape(self):
-        """DS41 audit fix 2: "abstained" was missing from the terminal/stagnating
-        status sets, so K consecutive "already implemented" abstentions never tripped
-        the DIMINISHING-RETURNS ESCAPE -- even before fix 1, because an unidentified
-        abstention has no family either. Both together make this fire."""
+    def test_abstentions_do_not_count_toward_either_escape(self):
+        """REVERSES DS41 audit fix 2 (decision 2026-10-24, `actors.FAMILY_*_STATUSES`; review MEMO.md in ak-trigger-review-20261024).
+        Fix 2 added "abstained" so K "already implemented" abstentions tripped the
+        escape. An abstention forms no hypothesis: it is a harness event (AK-HR-2), not a
+        resolved failure of the mechanism it names, and counting it scored the planner's own
+        refusals as failures of the mechanism it named. Abstentions still render in the history sections."""
         rows = [
             {"status": "abstained", "mechanism_id": f"akm-barrier-{name}",
              "statement": "change the OpenMP barrier implementation",
+             "target_surface": "ggml/src/ggml-cpu/ggml-cpu.c",
+             "target_symbol": "ggml_barrier",
              "refusal_reason": "already implemented"}
             for name in ("spin", "yield", "tree")
         ]
         text = actors.render_context({"prior_experiments": rows})
+        self.assertNotIn("DIMINISHING-RETURNS ESCAPE", text)
+        self.assertNotIn("Family-level diminishing returns", text)
+        self.assertIn("akm-barrier-spin", text)
+        self.assertEqual(actors.diminishing_returns_triggers(rows), ({}, {}))
+
+    def test_abstentions_neither_count_nor_reset_beside_measured_failures(self):
+        """Q38FN replay shape: two measured nulls and a declined idea on one symbol."""
+        base = {"target_surface": "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",
+                "target_symbol": "ggml_iqk_try_mul_mat_id"}
+        rows = [{**base, "status": "abstained", "mechanism_id": "akm-mmid-reuse"},
+                {**base, "status": "measured_null", "mechanism_id": "akm-mmid-a"},
+                {**base, "status": "measured_null", "mechanism_id": "akm-mmid-b"}]
+        self.assertEqual(actors.diminishing_returns_triggers(rows)[1], {})
+        rows.append({**base, "status": "measured_null", "mechanism_id": "akm-mmid-c"})
+        stagnant = actors.diminishing_returns_triggers(rows)[1]
+        self.assertEqual([r["mechanism_id"] for r in stagnant[(base["target_surface"],
+                                                                base["target_symbol"])]],
+                         ["akm-mmid-a", "akm-mmid-b", "akm-mmid-c"])
+
+    def test_formation_refusals_still_count_toward_both_escapes(self):
+        """`refused_at_formation` is a verdict on a FORMED idea (a structural repeat of an
+        answered row, or a refused premise): renamed re-proposals are what the blocks
+        exist to break, so it stays a resolved failure."""
+        rows = [{"status": "refused_at_formation", "mechanism_id": f"akm-barrier-{name}",
+                 "statement": "change the OpenMP barrier implementation",
+                 "target_surface": "ggml/src/ggml-cpu/ggml-cpu.c",
+                 "target_symbol": "ggml_barrier"} for name in ("spin", "yield", "tree")]
+        exhausted, stagnant = actors.diminishing_returns_triggers(rows)
+        self.assertIn("synchronization/barrier", exhausted)
+        self.assertIn(("ggml/src/ggml-cpu/ggml-cpu.c", "ggml_barrier"), stagnant)
+        text = actors.render_context({"prior_experiments": rows})
         self.assertIn("DIMINISHING-RETURNS ESCAPE", text)
-        self.assertIn("synchronization/barrier", text)
+        self.assertIn("Family-level diminishing returns", text)
 
     def test_ranked_recall_order_does_not_let_an_old_keep_hide_newer_failures(self):
         """Ranked recall (default since 2026-10-20) puts merit-5 `kept` rows first; the
