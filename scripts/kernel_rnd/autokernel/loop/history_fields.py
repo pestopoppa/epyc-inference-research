@@ -38,10 +38,10 @@ from typing import Any, Callable, Iterator, Mapping
 #: Stages whose seconds a trial records. `planner`, `critic` and `author` are the actor
 #: calls' wall time (`actors._record_metrics`); `gate` and `measure` wrap the callables
 #: `loop.iterate` is handed. AK-HR-3b (2026-10-24): `build` and `correctness` split the
-#: injected gate. `gates.run_all` times every check it runs and files it by the verdict's
-#: gate name (`BUILD_VERDICT_GATES` -> `build`, any other verdict -> `correctness`); the
-#: GPU gate's build, which runs before its quiet window outside `run_all`, is wrapped in
-#: `timed("build", ...)`. So `build + correctness <= gate`: the remainder is the gate's own
+#: injected gate. `gates.compiles` times every build (`note_build`), wherever it runs --
+#: inside `run_all` on the CPU gate or before the quiet window on the GPU gate; `run_all`
+#: times every other check it runs as `correctness` (`note_check` skips a build verdict,
+#: already counted). So `build + correctness <= gate`: the remainder is the gate's own
 #: scope analysis (git diffs, route admission) and window waits outside the checks. A
 #: GPU correctness check's own reentrant quiet-window wait is inside `correctness`. A
 #: stage that did not run is `null`, never zero (a runtime arm has no `build`).
@@ -155,13 +155,20 @@ def note_call(role: str | None, wall_s: Any, failure_class: str | None,
 
 
 def note_check(verdict_gate: Any, seconds: Any) -> None:
-    """Called by `gates.run_all` after each check: its seconds, filed as `build` when the
-    verdict is a build verdict, else `correctness`. No-op without a trial."""
+    """Called by `gates.run_all` after each check: a non-build verdict's seconds are
+    `correctness`; a build verdict is skipped (`gates.compiles` already recorded it via
+    `note_build`). No-op without a trial."""
     trial = current()
-    if trial is None:
+    if trial is None or verdict_gate in BUILD_VERDICT_GATES:
         return
-    stage = "build" if verdict_gate in BUILD_VERDICT_GATES else "correctness"
-    trial.add_seconds(stage, seconds)
+    trial.add_seconds("correctness", seconds)
+
+
+def note_build(seconds: Any) -> None:
+    """Called by `gates.compiles`: the build's wall seconds. No-op without a trial."""
+    trial = current()
+    if trial is not None:
+        trial.add_seconds("build", seconds)
 
 
 def metrics_fields() -> dict[str, Any]:
