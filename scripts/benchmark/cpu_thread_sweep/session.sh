@@ -33,6 +33,7 @@ ROOT=$(cd "$HERE/../../.." && pwd)                       # the checkout this fil
 LABEL=${1:?label}; THREADS=${2:?threads}; CPUS=${3:?cpu-list}
 CHAMP=${CHAMP:?CHAMP (build bin dir) required}; OUT=${OUT:?OUT (runs dir) required}
 PY=${PY:-/usr/bin/python3 -E -s}
+. "$HERE/affinity_lib.sh"
 LIB="$PY $HERE/sweep_lib.py"
 PORT=${PORT:-18499}; CTX=${CTX:-8192}; EVICT_GIB=${EVICT_GIB:-40}; TRIES=${TRIES:-3}
 EXPECT_VERSION=${EXPECT_VERSION:-"10412 (141e4bcf5)"}; NO_KNOBS=${NO_KNOBS:-1}
@@ -132,8 +133,9 @@ for try in $(seq 1 "$TRIES"); do
     grep -qx "$kv" "$OUT/$LABEL.environ" || { say "FATAL live environ lacks $kv"; die 68; }
   done
   # live affinity: the mask the kernel enforces, not the one we asked for
-  AFF=$(awk '/^Cpus_allowed_list:/{print $2}' "/proc/$SPID/status")
-  [ "$AFF" = "$CPUS" ] || { say "FATAL live Cpus_allowed_list=$AFF != $CPUS"; die 68; }
+  # (main-thread mask alone is wrong under OMP_PROC_BIND=spread: master binds to place 0 -- see affinity_lib.sh)
+  AFFMSG=$(aff_check "$SPID" "$CPUS") || { say "FATAL live affinity violation: $AFFMSG (expected within $CPUS)"; die 68; }
+  say "live affinity OK: $AFFMSG"
   # CHAMP-2 THP shim: THP_enabled 0 = PR_SET_THP_DISABLE in force. Fail closed, once per launch.
   THPEN=$(awk '/^THP_enabled:/{print $2}' "/proc/$SPID/status" 2>/dev/null)
   say "THP_enabled=$THPEN (0 = shim ON)"

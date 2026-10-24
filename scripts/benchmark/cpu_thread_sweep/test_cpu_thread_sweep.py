@@ -434,9 +434,45 @@ class TestClient:
 # shell, provenance
 # ---------------------------------------------------------------------------
 class TestShellAndProvenance:
-    @pytest.mark.parametrize("script", ["session.sh", "run_sweep.sh"])
+    @pytest.mark.parametrize("script", ["session.sh", "run_sweep.sh", "affinity_lib.sh"])
     def test_bash_syntax(self, script):
         assert subprocess.run(["bash", "-n", str(HERE / script)], capture_output=True).returncode == 0
+
+    @staticmethod
+    def _fake_proc(root, pid, proc_mask, thread_masks):
+        d = root / str(pid)
+        d.mkdir(parents=True)
+        (d / "status").write_text(f"Name:\tx\nCpus_allowed_list:\t{proc_mask}\n")
+        for i, m in enumerate(thread_masks):
+            t = d / "task" / str(pid + i)
+            t.mkdir(parents=True)
+            (t / "status").write_text(f"Name:\tx\nCpus_allowed_list:\t{m}\n")
+
+    def _aff(self, root, pid, want):
+        r = subprocess.run(["bash", "-c", f'. "{HERE}/affinity_lib.sh"; PROC_ROOT="{root}" aff_check {pid} {want}'],
+                           capture_output=True, text=True)
+        return r.returncode, r.stdout
+
+    def test_affinity_main_thread_on_place0_is_ok(self, tmp_path):
+        # the 2026-10-24 false rc=68: spread/cores binds the master to cpu 0, workers cover the rest
+        self._fake_proc(tmp_path, 100, "0-95", ["0", "1", "2", "95"])
+        assert self._aff(tmp_path, 100, "0-95")[0] == 0
+
+    def test_affinity_missing_taskset_fails(self, tmp_path):
+        self._fake_proc(tmp_path, 101, "0-191", ["0-191", "0-191"])
+        assert self._aff(tmp_path, 101, "0-95")[0] == 1
+
+    def test_affinity_one_thread_escaping_fails(self, tmp_path):
+        self._fake_proc(tmp_path, 102, "0-95", ["0", "1", "96"])
+        assert self._aff(tmp_path, 102, "0-95")[0] == 1
+
+    def test_affinity_no_threads_is_not_a_pass(self, tmp_path):
+        self._fake_proc(tmp_path, 103, "0-95", [])
+        assert self._aff(tmp_path, 103, "0-95")[0] == 2
+
+    def test_affinity_subset_arm_mask(self, tmp_path):
+        self._fake_proc(tmp_path, 104, "0-47", ["0", "8-9", "47"])
+        assert self._aff(tmp_path, 104, "0-47")[0] == 0
 
     def test_driver_dry_run_prints_the_rotated_plan_and_launches_nothing(self, tmp_path):
         env = dict(os.environ, CHAMP=BIN, OUT=str(tmp_path))
