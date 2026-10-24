@@ -41,7 +41,7 @@ OBSERVATION_STATES = frozenset({
     "invalid_instrument", "bounded_null", "positive",
 })
 DIMENSIONS = frozenset({"threads", "cpu_list", "numa_policy", "env", "batch", "ubatch",
-                        "load_threads"})
+                        "load_threads", "threads_batch"})
 
 
 class PlanningRefused(ValueError):
@@ -149,7 +149,8 @@ class RuntimeDimension:
         _canonical(self.candidate)
         if self.anchor == self.candidate:
             raise PlanningRefused("runtime dimension is an exact no-op")
-        if self.kind in {"threads", "batch", "ubatch"}:
+        if self.kind in {"threads", "batch", "ubatch", "threads_batch"}:
+            # threads_batch (AKX-ALL-13a): the effective `-tb`, decoupled from `-t`.
             for value in (self.anchor, self.candidate):
                 if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                     raise PlanningRefused(f"{self.kind} values must be positive integers")
@@ -208,6 +209,8 @@ def _mutate_template(template: serving.Recipe, dimension: RuntimeDimension,
                      value: Any) -> serving.Recipe:
     if dimension.kind in {"threads", "batch", "ubatch"}:
         return replace(template, **{dimension.kind: value})
+    if dimension.kind == "threads_batch":
+        return replace(template, threads_batch=value)   # == threads normalises to None
     if dimension.kind == "cpu_list":
         return replace(template, cpu_list=value)
     if dimension.kind == "numa_policy":
@@ -249,10 +252,16 @@ def _resolve_variant(anchor: ResolvedRecipe | CanonicalResolvedRecipe,
         if dimension.kind in {"threads", "batch", "ubatch"}:
             flag = {"threads": "-t", "batch": "-b", "ubatch": "-ub"}[dimension.kind]
             command = _replace_flag(command, flag, str(value))
-            # The accepted canonical grammar binds background threads to serving
-            # threads; changing only -t would manufacture an invalid mixed setting.
-            if dimension.kind == "threads" and "-tb" in command:
+            # A `-tb` that FOLLOWS `-t` (no declared threads_batch) moves with it; a
+            # decoupled one (AKX-ALL-13a) is its own dimension and stays put.
+            if dimension.kind == "threads" and "-tb" in command \
+                    and anchor.template.threads_batch is None:
                 command = _replace_flag(command, "-tb", str(value))
+        elif dimension.kind == "threads_batch":
+            if "-tb" in command:
+                command = _replace_flag(command, "-tb", str(value))
+            else:
+                command = tuple(command) + ("-tb", str(value))
         elif dimension.kind == "cpu_list":
             if len(prefix) >= 3 and prefix[-3:-1] == ("taskset", "-c"):
                 prefix = prefix[:-1] + (value,)

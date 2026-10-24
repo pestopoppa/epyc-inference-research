@@ -3889,7 +3889,7 @@ def main(argv: list[str] | None = None) -> int:
                                                 "runtime treatment requires the owned serving route and no patch")]
                 allowed_env = runtime_env_keys
                 if pair.dimension.kind not in {"threads", "cpu_list", "numa_policy",
-                                               "load_threads", "env"} \
+                                               "load_threads", "env", "threads_batch"} \
                         or (pair.dimension.kind == "env"
                             and pair.dimension.candidate["key"] not in allowed_env):
                     return False, [gates.Verdict("runtime_treatment", False,

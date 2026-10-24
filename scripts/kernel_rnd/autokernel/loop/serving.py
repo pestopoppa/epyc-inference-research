@@ -340,6 +340,13 @@ class Recipe:
     #: equivalent recipes have one serialized identity. Kept last to preserve the legacy
     #: positional constructor shape for every pre-existing field.
     explicit_unsets: tuple[str, ...] = ()
+    #: AKX-ALL-13a: `-tb` (`--threads-batch`: the prompt-processing / batched-verify team)
+    #: when it DIFFERS from `threads`. None = `-tb` follows `-t`, the historical launch; a
+    #: value equal to `threads` is normalised to None, so every existing recipe keeps its
+    #: serialization and hash (and its floors). Kept after `explicit_unsets` for the
+    #: positional constructor. The 2026-10-20 Q38FN depth sweep: `-tb 96` lifts shallow
+    #: prefill +21-29% with decode unchanged.
+    threads_batch: int | None = None
 
     def __post_init__(self) -> None:
         for key, value in (self.env or {}).items():
@@ -377,6 +384,12 @@ class Recipe:
             raise RecipeError(
                 f"recipe env keys cannot be both set and explicitly unset: {conflict}")
         object.__setattr__(self, "explicit_unsets", unsets)
+        if self.threads_batch is not None:
+            if isinstance(self.threads_batch, bool) or not isinstance(self.threads_batch, int) \
+                    or self.threads_batch <= 0:
+                raise RecipeError("threads_batch must be a positive integer or null")
+            if self.threads_batch == self.threads:
+                object.__setattr__(self, "threads_batch", None)
         # Resolve the readback declaration NOW, so an uncovered env state fails at
         # construction (including through `with_env`) rather than mid-measurement.
         self.readback_expectations()
@@ -421,7 +434,14 @@ class Recipe:
         # hashes remain byte-for-byte identical, so old floors are not reinterpreted.
         if self.explicit_unsets:
             out["explicit_unsets"] = list(self.explicit_unsets)
+        if self.threads_batch is not None:
+            out["threads_batch"] = self.threads_batch
         return out
+
+    @property
+    def effective_threads_batch(self) -> int:
+        """The `-tb` the server is launched with."""
+        return self.threads if self.threads_batch is None else self.threads_batch
 
     @property
     def recipe_hash(self) -> str:
@@ -526,7 +546,7 @@ class Recipe:
         argv = ["taskset", "-c", self.cpu_list] if self.cpu_list else []
         argv += [str(Path(build_dir) / "bin" / "llama-server"),
                 "-m", self.model, "-np", str(self.np), "-c", str(self.ctx),
-                "-t", str(self.threads), "-tb", str(self.threads),
+                "-t", str(self.threads), "-tb", str(self.effective_threads_batch),
                 "-b", str(self.batch), "-ub", str(self.ubatch),
                 "-ctk", self.ctk, "-ctv", self.ctv, "--device", self.device,
                 "-ngl", str(self.ngl), "-fa", self.fa,
@@ -563,7 +583,8 @@ class Recipe:
         envs = " env=" + ",".join(env_states) if env_states else " env=none"
         rb = self.readback_expectations()
         rbs = " readback=" + ",".join(f"{f}={v}" for f, v in rb) if rb else ""
-        return (f"{self.name} [np{self.np} {sd} {self.metric}{pin}{envs}{rbs} "
+        tb = f" tb={self.threads_batch}" if self.threads_batch is not None else ""
+        return (f"{self.name} [np{self.np} {sd} {self.metric}{pin}{tb}{envs}{rbs} "
                 f"#{self.recipe_hash[:12]}]")
 
 
