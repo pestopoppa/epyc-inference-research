@@ -1005,10 +1005,17 @@ def emit_request_row(row_fields, a, la, srv, facts, loadavg, wave):
     wr = dict(prompt_n=row_fields.get("prompt_n"), n_prompt_tokens_cache=row_fields.get("cache_n"), n_fork_tokens=None)
     row = M.finalize_row(base, a, la, srv, facts, loadavg, wave=wave, wave_rec=wr)
     row["validation_problems"] = M.validate_row(row)
+    row["row_sha256"] = M.row_hash(row)    # finalize_row hashed BEFORE validation_problems existed; rehash so the stored hash covers the row as written
     return row
 
 
 def append_jsonl(path, row):
+    """Append one JSONL row.  A KVU-12.1 decision row (schema == SCHEMA) is self-hashed (`row_sha256`, the same convention as the
+    request rows: M.row_hash over the row minus the hash, computed on the JSON round-trip so a reader re-derives it exactly), so the
+    decide inputs are attested.  Schema-less rows (tests, ad-hoc) are written unchanged.  Existing cells.jsonl files are never rewritten."""
+    if isinstance(row, dict) and row.get("schema") == SCHEMA:
+        row = json.loads(json.dumps(row, default=str)); row.pop("row_sha256", None)
+        row["row_sha256"] = M.row_hash(row)
     with open(path, "a") as f:
         f.write(json.dumps(row, default=str) + "\n")
 
