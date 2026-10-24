@@ -1895,9 +1895,17 @@ def refuse_uncalibrated_keep(surface: str, calibrated: bool, comparison) -> None
             else "comparison is not decisive"))
 
 
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(repo), *args],
-                          capture_output=True, text=True, timeout=600).stdout.strip()
+class GitError(RuntimeError):
+    """A git command exited non-zero."""
+
+
+def _git(repo: Path, *args: str, check: bool = True) -> str:
+    # C1-05: an unchecked failure read as "" -- a rollback that never ran, a clean tree.
+    done = subprocess.run(["git", "-C", str(repo), *args],
+                          capture_output=True, text=True, timeout=600)
+    if check and done.returncode != 0:
+        raise GitError(f"git -C {repo} {' '.join(args)}: {done.stderr.strip()[:400]}")
+    return done.stdout.strip()
 
 
 def _check_new_anchor_epoch_binding(requested: str | None, anchor_commit: str, *,
@@ -3371,7 +3379,7 @@ def main(argv: list[str] | None = None) -> int:
     anchor_commit = _git(args.worktree, "rev-parse", "HEAD")
     new_anchor_epoch_error = _check_new_anchor_epoch_binding(
         args.new_anchor_epoch, anchor_commit,
-        resolve=lambda ref: _git(args.worktree, "rev-parse", ref))
+        resolve=lambda ref: _git(args.worktree, "rev-parse", ref, check=False))
     if new_anchor_epoch_error is not None:
         parser.error(new_anchor_epoch_error)
     # A carried runtime selection (a previous launch ADOPTED a runtime recipe) is a
@@ -5142,7 +5150,7 @@ def main(argv: list[str] | None = None) -> int:
         exception -- `production.refresh` turns it into a skipped refresh (the panel
         reads SUPERSEDED, naming why), and the run carries on.
         """
-        head = _git(production.BASELINE_TREE, "rev-parse", "HEAD")
+        head = _git(production.BASELINE_TREE, "rev-parse", "HEAD", check=False)
         if head != commit:
             return gates.Verdict("baseline-tree", False,
                                  f"{production.BASELINE_TREE} is at {head[:12]}, not "
@@ -5350,10 +5358,10 @@ def main(argv: list[str] | None = None) -> int:
             return
         try:
             _accumulate_after_keep(mechanism_id)
-        except loop.InteractionRegression:
-            # This is a scientific disposition after a completed rollback, not a
-            # bookkeeping failure. Let iterate record it instead of returning the
-            # now-orphaned candidate commit as a keep.
+        except (loop.InteractionRegression, loop.RunAborted):
+            # A scientific disposition after a completed rollback (or a rollback that
+            # failed), not a bookkeeping failure. Let iterate record it instead of
+            # returning the now-orphaned candidate commit as a keep.
             raise
         except Exception as exc:  # the keep is already committed AND promoted: a
             # bookkeeping failure here must be LOUD, never a silent un-record (the
@@ -5458,7 +5466,14 @@ def main(argv: list[str] | None = None) -> int:
                 # The just-created commit remains in Git as evidence, but it must not
                 # remain the working champion. Restore the prior accumulator source,
                 # rebuild it into a fresh owned anchor slot, and recheck that slot.
-                _git(args.worktree, "reset", "--hard", previous_tip)
+                try:
+                    _git(args.worktree, "reset", "--hard", previous_tip)
+                    if _git(args.worktree, "rev-parse", "HEAD") != previous_tip:
+                        raise GitError("HEAD did not reach the prior tip")
+                except GitError as exc:
+                    # C1-05: never rebuild and re-measure a tree the rollback did not reach.
+                    raise loop.RunAborted(f"interaction-regression rollback to "
+                                          f"{previous_tip[:12]} failed: {exc}") from exc
                 if original_source_keeps and original_source_keeps[-1].get("kept_commit") == head:
                     original_source_keeps.pop()
                 promote_anchor()
@@ -5777,11 +5792,10 @@ def main(argv: list[str] | None = None) -> int:
                 return {"result": "held_unavailable", "judged": judged, "reason": str(exc)}
             culprit = suspects[lo]
             subject = _git(args.worktree, "log", "-1", "--format=%s", culprit)
-            done = subprocess.run(["git", "-C", str(args.worktree), "revert", "--no-edit",
-                                   culprit], capture_output=True, text=True)
-            if done.returncode != 0:
-                subprocess.run(["git", "-C", str(args.worktree), "revert", "--abort"],
-                               capture_output=True, text=True)
+            try:
+                _git(args.worktree, "revert", "--no-edit", culprit)
+            except GitError:
+                _git(args.worktree, "revert", "--abort", check=False)
                 return {"result": "revert_conflict", "culprit": culprit, "judged": judged}
             new_tip = _git(args.worktree, "rev-parse", "HEAD")
             mechanism = subject.split(":", 1)[0].strip()
@@ -5793,6 +5807,8 @@ def main(argv: list[str] | None = None) -> int:
             promote_anchor()
             return {"result": "evicted", "culprit": culprit, "mechanism_id": mechanism,
                     "new_tip": new_tip, "judged": judged}
+        except GitError as exc:   # git could not read the bundle: evidence unavailable
+            return {"result": "held_unavailable", "reason": str(exc)}
         except Exception as exc:  # noqa: BLE001 -- a failed bisect leaves the plain hold
             return {"result": "error", "reason": f"{type(exc).__name__}: {exc}"}
 
@@ -5953,7 +5969,7 @@ def main(argv: list[str] | None = None) -> int:
             noise_floor_pct=floor, model=str(args.model),
             outcomes=[o.to_attempt() for o in outcomes],
             iterations_planned=args.iterations, step=step,
-            champion_head=_git(args.worktree, "rev-parse", "HEAD"),
+            champion_head=_git(args.worktree, "rev-parse", "HEAD", check=False),
             **({"target": selected_identity} if selected_identity is not None else {}),
             **({"batch": {"output_dir": str(args.out.resolve()), "pid": os.getpid()}}
                if args.out is not None else {}),
