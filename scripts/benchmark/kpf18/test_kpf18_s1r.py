@@ -33,7 +33,7 @@ def test_registered_as_item_185_with_resume_regex():
     assert set(A.RULES[185]) == {"common", "tail", "item2", "long", "kpf191a", "hsf"}
     assert A.rules_sha256([185]) and A.rules_sha256([185]) != A.rules_sha256([184])
     assert GATE._ARM_STEP_RE.match("185 (4) A_tailonly tail512 g0") and GATE._ARM_STEP_RE.match("184 item-3")
-    assert not GATE._ARM_STEP_RE.match("186 x")
+    assert not GATE._ARM_STEP_RE.match("187 x")  # 186 = kpf18r3 (KPF-18-S1.R3)
 
 
 def mk_args(tmp_path, **over):
