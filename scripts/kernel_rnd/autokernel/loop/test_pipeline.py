@@ -1734,3 +1734,94 @@ class AStopAbandonsFormationAtTheNextStageBoundary(unittest.TestCase):
                         f"got {[o.status for o in outcomes]}")
         self.assertEqual(len(recorded), len(outcomes),
                          "abandonments must be recorded like any other outcome")
+
+
+class TheTailTimesTheHeaviestKernelFirst(unittest.TestCase):
+    """AKX-ALL-29.2a: with a priority, waiting candidates are admitted in descending
+    launch-weighted order; unscored ones after them in arrival order."""
+
+    @staticmethod
+    def _hyp(mechanism, symbol):
+        return loop.Hypothesis(mechanism_id=mechanism, statement="s", falsifier="f",
+                               target_surface="ggml/src/ggml-cuda/mmq.cu",
+                               target_symbol=symbol)
+
+    def _order(self, weights, arrivals):
+        tail = pipeline.SerializedTail(lambda: _sha(0), priority=lambda h: weights.get(
+            h.target_symbol))
+        admitted, release = [], threading.Event()
+
+        def holder():
+            with tail.session(_sha(0), hypothesis=self._hyp("holder", "none")):
+                release.wait(10)
+
+        def waiter(hypothesis):
+            with tail.session(_sha(0), hypothesis=hypothesis):
+                admitted.append(hypothesis.mechanism_id)
+
+        threads = [threading.Thread(target=holder)]
+        threads[0].start()
+        deadline = time.monotonic() + 5
+        while not tail._admitted and time.monotonic() < deadline:
+            time.sleep(0.005)
+        for index, (mechanism, symbol) in enumerate(arrivals):
+            thread = threading.Thread(target=waiter, args=(self._hyp(mechanism, symbol),))
+            threads.append(thread)
+            thread.start()
+            while len(tail._waiting) < index + 1 and time.monotonic() < deadline:
+                time.sleep(0.005)
+        release.set()
+        for thread in threads:
+            thread.join(10)
+        return admitted, tail
+
+    def test_admission_follows_the_launch_weighted_estimate(self):
+        admitted, tail = self._order(
+            {"mul_mat_q": 900.0, "mul_mat_vec_q": 50.0, "quantize_q8_1": 300.0},
+            [("light", "mul_mat_vec_q"), ("unscored-1", "vec_dot_q4_K"),
+             ("heavy", "mul_mat_q"), ("unscored-2", "nothing"), ("middle", "quantize_q8_1")])
+        self.assertEqual(admitted, ["heavy", "middle", "light", "unscored-1", "unscored-2"])
+        heavy = next(row for row in tail.admission_log if row["mechanism_id"] == "heavy")
+        self.assertEqual(heavy["launch_weighted_ns_per_token"], 900.0)
+
+    def test_a_failing_priority_is_arrival_order_not_a_failed_attempt(self):
+        def boom(_h):
+            raise RuntimeError("no profile")
+        tail = pipeline.SerializedTail(lambda: _sha(0), priority=boom)
+        with tail.session(_sha(0), hypothesis=self._hyp("a", "x")):
+            pass
+        self.assertIsNone(tail.admission_log[0]["launch_weighted_ns_per_token"])
+
+    def test_a_superseded_candidate_releases_admission(self):
+        tail = pipeline.SerializedTail(lambda: _sha(1), priority=lambda h: 1.0)
+        with self.assertRaises(pipeline.Superseded):
+            with tail.session(_sha(0), hypothesis=self._hyp("stale", "x")):
+                pass
+        with tail.session(_sha(1), hypothesis=self._hyp("fresh", "x")):
+            pass                      # would deadlock if admission had leaked
+        self.assertFalse(tail._admitted)
+
+    def test_iterate_hands_the_hypothesis_to_a_priority_aware_tail(self):
+        from contextlib import nullcontext
+        from autokernel.loop.test_loop import _Critic, _Planner, _comparison
+        seen, bare = [], []
+
+        class Session:
+            accepts_hypothesis = True
+
+            def __call__(self, hypothesis=None):
+                seen.append(getattr(hypothesis, "mechanism_id", None))
+                return nullcontext()
+
+        def plain():
+            bare.append(True)
+            return nullcontext()
+        for tail_session in (Session(), plain):
+            outcome = loop.iterate(
+                planner=_Planner([self._hyp("akm-heavy", "mul_mat_q")]), critic=_Critic([], []),
+                context={}, measure=lambda h, p: _comparison(0.05, floor=1.0),
+                gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
+                commit=lambda h, p, c: "abc1234", tail_session=tail_session)
+            self.assertEqual(outcome.status, "kept")
+        self.assertEqual(seen, ["akm-heavy"])
+        self.assertEqual(bare, [True])        # a plain callable is still called bare

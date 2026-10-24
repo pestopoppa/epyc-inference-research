@@ -101,6 +101,7 @@ from . import cpu_window
 from . import cpu_repack_cases
 from . import resume as resume_mod
 from . import bestof
+from . import gpu_serving_profile as gpu_serving_profile_mod
 
 
 @dataclass(frozen=True)
@@ -4384,7 +4385,10 @@ def main(argv: list[str] | None = None) -> int:
                 # surface becomes its no-regression gate at keep (commit_pooled).
                 return longctx_compare(worker.build_dir)
             if direct_launch:
-                return cpu_compare(anchor_build[0], worker.build_dir)
+                compared = cpu_compare(anchor_build[0], worker.build_dir)
+                if not cpu_launch:
+                    record_candidate_serving_profile(compared, worker, hypothesis)
+                return compared
             # AKX-ALL-29.3: a HIP candidate whose gfx90a kernel bodies equal the
             # anchor's is not timed. None (hash unavailable, bodies differ, CPU
             # recipe) falls through to the normal measurement unchanged.
@@ -4403,6 +4407,48 @@ def main(argv: list[str] | None = None) -> int:
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
                 surface=args.surface, ubatch=ubatch, calibrated=calibrated)
         return measure
+
+    def record_candidate_serving_profile(compared, worker, hypothesis) -> None:
+        """AKX-ALL-29.2 cheapest recording rule: the FIRST time a GPU candidate reaches
+        timing, re-run the AKX-ALL-16 serving profile on ITS build over the same windows
+        and store the record beside its experiment row (`comparison.candidate_serving_profile`).
+
+        Cached by the candidate diff, so a re-timed identical candidate reuses its profile.
+        Runs AFTER the A/B so it cannot perturb it; a failure is recorded and never
+        refuses or changes the comparison (the keep gate is unchanged)."""
+        row = getattr(compared, "row", None)
+        if not isinstance(row, dict):
+            return
+        from . import gpu_serving_profile as gsp
+        try:
+            diff = archive._git(worker.worktree, "diff", "HEAD")
+            identity = ("candidate:" + str(current_anchor_commit[0]) + ":"
+                        + hashlib.sha256(diff.encode()).hexdigest())
+            with cpu_measurement_window():
+                view, _rows = hotspots.serving_profile(
+                    _cpu_arm(direct_launch, worker.build_dir), frozen_requests,
+                    store=args.store, anchor_commit=identity,
+                    long_context=gpu_long_context_hook[0])
+        except loop.MeasurementInvalid as exc:
+            row["candidate_serving_profile"] = {"status": "measurement_invalid",
+                                                "reason": str(exc)[:512]}
+            return
+        except (hotspots.ProfileFailed, OSError, ValueError, RuntimeError, ImportError,
+                subprocess.SubprocessError) as exc:
+            row["candidate_serving_profile"] = {"status": "unavailable",
+                                                "reason": f"{type(exc).__name__}: {exc}"[:512]}
+            return
+        table = view.get("launch_weighted") or {}
+        row["candidate_serving_profile"] = {
+            "status": "observed", "record": view.get("record"), "key": view.get("key"),
+            "cached": view.get("cached"), "candidate_identity": identity,
+            "launch_weighted_status": table.get("status"),
+            "target_weight_ns_per_token": gsp.kernel_weight(view, hypothesis.target_symbol),
+            "anchor_target_weight_ns_per_token": gsp.kernel_weight(
+                gpu_profile_observation, hypothesis.target_symbol),
+            "top_kernels": [{"kernel": k["kernel"],
+                             "weighted_ns_per_token": k["weighted_ns_per_token"]}
+                            for k in (table.get("kernels") or [])[:8]]}
 
     def ensure_source_floor(anchor_recipe, a_build) -> None:
         nonlocal floor, floor_request_digest, floor_record, calibrated
@@ -6869,6 +6915,11 @@ def main(argv: list[str] | None = None) -> int:
             **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled,
+            # AKX-ALL-29.2a: a GPU serving run times waiting candidates in descending
+            # launch-weighted order of the anchor profile's kernel they target.
+            **({"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(
+                    gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
+               if direct_launch and not cpu_launch else {}),
             **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}))
 
     claim_started = None

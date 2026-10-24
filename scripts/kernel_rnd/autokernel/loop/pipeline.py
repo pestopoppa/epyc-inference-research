@@ -168,9 +168,22 @@ class SerializedTail:
 
     def __init__(self, champion_head: Callable[[], str],
                  lock: threading.Lock | None = None,
-                 fence: Callable[[], Any] | None = None) -> None:
+                 fence: Callable[[], Any] | None = None,
+                 priority: Callable[[Any], float | None] | None = None) -> None:
         self._lock = lock or threading.Lock()
         self._champion_head = champion_head
+        #: AKX-ALL-29.2a: `priority(hypothesis)` -> launch-weighted ns/token of the kernel
+        #: the candidate targets (`gpu_serving_profile.kernel_weight`), or None. Given, the
+        #: waiting candidates enter the tail (build, oracle, TIMING, commit) highest
+        #: estimate first, unscored ones after them, ties and unscored in arrival order.
+        #: It orders timing only; nothing about any verdict or the keep gate changes.
+        #: None: the historical plain lock, byte for byte.
+        self._priority = priority
+        self._admission = threading.Condition()
+        self._waiting: list[tuple[float, int]] = []
+        self._arrivals = 0
+        self._admitted = False
+        self.admission_log: list[dict] = []
         #: A cross-PROCESS guard held for each session (`ak_check.tail_fence`): the
         #: thread lock above is invisible to an author's `ak-check` subprocess.
         self._fence = fence
@@ -187,15 +200,58 @@ class SerializedTail:
                 f"{current[:12]} before it could be measured — NOT refuted, and not "
                 f"a failure of the science: reconsider it against the new champion")
 
+    def _admit(self, hypothesis: Any) -> None:
+        """Block until this candidate is the best-ranked waiter and the tail is free."""
+        import heapq
+        try:
+            score = self._priority(hypothesis) if hypothesis is not None else None
+        except Exception:       # noqa: BLE001 -- an ordering hint never fails an attempt
+            score = None
+        with self._admission:
+            self._arrivals += 1
+            key = (-float(score) if isinstance(score, (int, float)) and score > 0 else 0.0,
+                   self._arrivals)
+            heapq.heappush(self._waiting, key)
+            while self._admitted or self._waiting[0] != key:
+                self._admission.wait()
+            heapq.heappop(self._waiting)
+            self._admitted = True
+            self.admission_log.append({
+                "mechanism_id": getattr(hypothesis, "mechanism_id", None),
+                "target_symbol": getattr(hypothesis, "target_symbol", None),
+                "launch_weighted_ns_per_token": score if key[0] else None,
+                "arrival": key[1], "waiting_behind": len(self._waiting)})
+
+    def _release_admission(self) -> None:
+        with self._admission:
+            self._admitted = False
+            self._admission.notify_all()
+
     @contextmanager
-    def session(self, base_head: str, clock=None):
+    def session(self, base_head: str, clock=None, *, hypothesis: Any = None):
         """Hold the tail for ONE candidate attempt: build, oracle, A/B and commit.
 
         Three separate acquisitions let a peer's keep land between them and turn an
         already-measured candidate into a stale one -- probed at 4 lanes, 20 A/B runs
         executed and 5 recorded a comparison. Held for the attempt, released between
         patch rounds so authoring never serializes.
+
+        With a `priority` (AKX-ALL-29.2a) the waiting candidates are admitted in
+        launch-weighted order; see `__init__`.
         """
+        if self._priority is None:
+            with self._session(base_head, clock):
+                yield
+            return
+        self._admit(hypothesis)
+        try:
+            with self._session(base_head, clock):
+                yield
+        finally:
+            self._release_admission()
+
+    @contextmanager
+    def _session(self, base_head: str, clock=None):
         import time as _time
         clock = clock or _time.monotonic
         with self._lock:
@@ -209,6 +265,19 @@ class SerializedTail:
                         yield
             finally:
                 self.tail_seconds += clock() - started
+
+class _TailSession:
+    """`tail_session` for `loop.iterate`: called with the candidate's hypothesis, so a
+    priority-ordered tail (AKX-ALL-29.2a) can rank it. `accepts_hypothesis` tells
+    `iterate` it may pass one; a plain callable (`nullcontext`) is called bare."""
+    accepts_hypothesis = True
+
+    def __init__(self, tail: SerializedTail, base: str) -> None:
+        self._tail, self._base = tail, base
+
+    def __call__(self, hypothesis: Any = None):
+        return self._tail.session(self._base, hypothesis=hypothesis)
+
 
 def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_context,
              make_gate, make_measure, commit, champion_head: Callable[[], str],
@@ -414,7 +483,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
-                    tail_session=lambda _b=base: tail.session(_b),
+                    tail_session=_TailSession(tail, base),
                     should_abandon=should_stop, record_reschedule=record_reschedule,
                     accumulate_valid_positive=accumulate_valid_positive,
                     # Per-hypothesis authoring budget across iterations (loop.py).

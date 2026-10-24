@@ -335,7 +335,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           make_author_panel=None,
           reserve_candidate=None, record_abandoned=None,
           next_resume=None, author_sandbox: bool = False,
-          cpu_window=None) -> PoolResult:
+          cpu_window=None, tail_priority=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
     Everything device-shaped is still injected; this only binds the git side and the
@@ -365,7 +365,10 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
         fence_env = ak_check.shared_fence_env(fences)
     if cpu_window is not None:
         fence = cpu_window.wrap_fence(fence)
-    tail = pipeline.SerializedTail(lambda: champion_head(champion_tree, branch), fence=fence)
+    # AKX-ALL-29.2a: `tail_priority(hypothesis)` orders which waiting candidate is timed
+    # next (launch-weighted kernel estimate); None keeps the plain lock.
+    tail = pipeline.SerializedTail(lambda: champion_head(champion_tree, branch), fence=fence,
+                                   priority=tail_priority)
 
     def step(worker_name: str, label: str) -> None:
         clock.note(worker_name, label)
