@@ -70,6 +70,16 @@ CONTENTION = "campaign_process_contention"
 DEFAULT_GRACE_S = 5.0
 KILL_WAIT_S = 5.0
 ENVIRON_READ_BYTES = 256 * 1024
+#: `/proc/<pid>/stat` states of a task that will never run user code again.
+DEAD_STATES = frozenset({"Z", "X"})
+#: PF_EXITING in `/proc/<pid>/stat` field 9: do_exit() has begun. Between this flag and
+#: the zombie state the task still reads as `R`/`D` but its mm is gone, so its
+#: `/proc/<pid>/environ` (and soon its directory) refuses with EACCES/ENOENT.
+PF_EXITING = 0x4
+#: How long a census waits for an EXITING task to finish dying before calling it
+#: unreadable (AK test flake 2026-10-24: a co-running host's exiting same-uid
+#: processes made one census in ~70 report an error and refused a clean call).
+EXIT_SETTLE_S = 0.5
 DELETED_SUFFIX = " (deleted)"
 #: Shared services an actor CLI may start as a side effect and other sessions then
 #: use: never swept, never flagged (the managed codex app-server daemon outlives every
@@ -134,6 +144,18 @@ def read_stat(proc_root: Path, pid: int) -> tuple[int, int, str, int, int] | Non
         fields = tail.split()
         return (int(fields[1]), int(fields[19]), fields[0], int(fields[11]) + int(fields[12]),
                 int(fields[4]))
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def read_flags(proc_root: Path, pid: int) -> int | None:
+    """The kernel task flags (`/proc/<pid>/stat` field 9), or None."""
+    try:
+        text = (Path(proc_root) / str(pid) / "stat").read_text(errors="replace")
+        head, sep, tail = text.rpartition(") ")
+        if not sep or head.split(" (", 1)[0].strip() != str(pid):
+            return None
+        return int(tail.split()[6])
     except (OSError, ValueError, IndexError):
         return None
 
@@ -251,8 +273,10 @@ class Guard:
                  never_sweep: Iterable[str] = NEVER_SWEEP_EXE_PREFIXES,
                  identity: tuple[int, int] | None = None,
                  uid: int | None = None,
-                 terminate: Callable[[list[Proc], Callable[[Proc], bool]], dict] | None = None):
+                 terminate: Callable[[list[Proc], Callable[[Proc], bool]], dict] | None = None,
+                 exit_settle_s: float = EXIT_SETTLE_S):
         self.proc_root = Path(proc_root)
+        self.exit_settle_s = float(exit_settle_s)
         self.store = os.path.realpath(str(store)) if store is not None else None
         roots = [os.path.realpath(str(r)) for r in scratch_roots]
         if self.store is not None:
@@ -280,7 +304,30 @@ class Guard:
 
     def _alive(self, pid: int, start: int) -> bool:
         stat = read_stat(self.proc_root, pid)
-        return stat is not None and stat[1] == start and stat[2] != "Z"
+        return stat is not None and stat[1] == start and stat[2] not in DEAD_STATES
+
+    def _died(self, pid: int, start: int | None) -> bool:
+        """True only on PROOF that the task `pid` (born at `start`, when known) is dead:
+        its /proc entry is gone, its PID was recycled, or it is a zombie/dead task. A task
+        that is merely EXITING (PF_EXITING) is waited on for `exit_settle_s`; a live task
+        that is not exiting returns False at once, so an unreadable live process stays a
+        census error (fail-closed) and costs no wait."""
+        deadline = time.monotonic() + self.exit_settle_s
+        while True:
+            stat = read_stat(self.proc_root, pid)
+            if stat is None:
+                if not (self.proc_root / str(pid)).exists():
+                    return True
+            elif (start is not None and stat[1] != start) or stat[2] in DEAD_STATES:
+                return True
+            else:
+                flags = read_flags(self.proc_root, pid)
+                if flags is None or not flags & PF_EXITING:
+                    if (self.proc_root / str(pid)).exists():
+                        return False
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.005)
 
     def _exempt(self, proc: Proc) -> bool:
         exe = _strip_deleted(proc.exe) or ""
@@ -501,14 +548,16 @@ class Guard:
             proc = read_proc(self.proc_root, pid)
             root = self.proc_root / name
             if proc is None:
-                if root.exists():
+                if root.exists() and not self._died(pid, None):
                     errors.append(f"unreadable scope process identity: {pid}")
                 continue
             table[pid] = proc
-            if proc.state == "Z" or proc.pid == self.pid:
+            if proc.state in DEAD_STATES or proc.pid == self.pid:
                 continue
             if proc.uid is None:
-                errors.append(f"unknown scope process uid: {pid}")
+                # The directory vanished between the stat read and os.stat: an exit race.
+                if not self._died(pid, proc.start_ticks):
+                    errors.append(f"unknown scope process uid: {pid}")
                 continue
             if proc.uid != self.uid:
                 continue
@@ -528,9 +577,13 @@ class Guard:
                 scope = next((item[len(prefix):].decode("ascii", errors="replace")
                               for item in raw.split(b"\0") if item.startswith(prefix)), None)
             except OSError as exc:
-                # A disappearing process is dead, an unreadable live one is unknown.
+                # A disappearing process is dead, an unreadable live one is unknown. An
+                # EXITING task (mm released, still `R`) refuses environ with EACCES for a
+                # few ms before it turns zombie: wait for that proof, never assume it.
+                if self._died(pid, proc.start_ticks):
+                    continue
                 current = read_stat(self.proc_root, pid)
-                if current is not None and current[1] == proc.start_ticks and current[2] != "Z":
+                if current is not None and current[1] == proc.start_ticks and current[2] not in DEAD_STATES:
                     errors.append(f"unreadable scope provenance: {pid}: {type(exc).__name__}")
                 elif root.exists() and current is None:
                     errors.append(f"unreadable scope identity after provenance failure: {pid}")
@@ -545,10 +598,13 @@ class Guard:
         for identity, original in captured.items():
             current = read_proc(self.proc_root, original.pid)
             if current is None:
-                if (self.proc_root / str(original.pid)).exists():
+                if ((self.proc_root / str(original.pid)).exists()
+                        and not self._died(original.pid, original.start_ticks)):
                     errors.append(f"unreadable captured scope identity: {original.pid}")
                 continue
-            if current.identity != identity or current.state == "Z":
+            if current.identity != identity or current.state in DEAD_STATES:
+                continue
+            if current.uid is None and self._died(original.pid, original.start_ticks):
                 continue
             if current.uid is None or current.uid != self.uid:
                 errors.append(f"unproved captured scope uid: {original.pid}")

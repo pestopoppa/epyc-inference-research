@@ -453,3 +453,110 @@ def test_fixture_fake_exits_when_its_parent_is_gone(tmp_path):
         assert _gone(pid), "a fixture fake outlived the process that started it"
     finally:
         _kill_own(pid)
+
+
+# -- census exit races (AK test flake 2026-10-24) -----------------------------------------
+# `test_gates.TheToolRunnerNeverTreatsAFailureAsOutput` failed 1 run in 6 under CPU co-run
+# with `ScratchRefused: child cleanup uncertain`. Root cause: `scope_state` examines EVERY
+# same-uid process born after the owner; an unrelated one that is EXITING (PF_EXITING set,
+# mm released, still state `R`) refuses `/proc/<pid>/environ` with EACCES for a few ms, and
+# one whose directory vanishes between the stat read and os.stat has no uid. Either made the
+# census report an error, `_wait_child_cleanup` then marked the call refused for good, and a
+# clean call raised. Measured on this host (2026-10-24, 4 `true` churn threads, 15 s): 14,545
+# environ EACCES on live-looking `R` children, every one gone at a 5 ms re-read, and every
+# one still present carrying PF_EXITING.
+
+def _set_flags(fake: FakeProc, pid: int, flags: int) -> None:
+    path = fake.root / str(pid) / "stat"
+    fields = path.read_text().split()
+    fields[8] = str(flags)               # field 9: task flags
+    path.write_text(" ".join(fields) + "\n")
+
+
+def _unreadable_environ(fake: FakeProc, pid: int) -> None:
+    env = fake.root / str(pid) / "environ"
+    env.unlink()
+    env.mkdir()                          # open() raises IsADirectoryError, even as root
+
+
+def _census_guard(tmp_path, **kwargs):
+    fake = FakeProc(tmp_path / "proc")
+    guard = procguard.Guard(proc_root=fake.root, identity=(100, 5000),
+                            terminate=lambda targets, _sel: {"terminated": [], "killed": [],
+                                                              "survivors": []}, **kwargs)
+    fake.add(1, ppid=0, start=1)
+    fake.add(100, ppid=1, start=5000)
+    return guard, fake
+
+
+def test_an_exiting_unrelated_process_is_not_a_census_error(tmp_path):
+    import shutil
+    import threading
+    guard, fake = _census_guard(tmp_path)
+    token = guard.new_scope()
+    fake.add(400, start=6000, state="R")             # born after the owner: provenance read
+    _set_flags(fake, 400, procguard.PF_EXITING)
+    _unreadable_environ(fake, 400)
+    timer = threading.Timer(0.05, shutil.rmtree, args=(fake.root / "400",))
+    timer.start()
+    try:
+        state = guard.scope_state(token)
+    finally:
+        timer.join()
+    assert state["census_errors"] == []
+    assert state["census_verified"] is True
+
+
+def test_a_vanished_process_directory_is_not_an_unknown_uid(tmp_path, monkeypatch):
+    guard, fake = _census_guard(tmp_path)
+    token = guard.new_scope()
+    fake.add(401, start=6000)
+    real_read_proc = procguard.read_proc
+
+    def racing_read_proc(proc_root, pid, cache=None):
+        proc = real_read_proc(proc_root, pid, cache)
+        if pid == 401 and proc is not None:
+            import shutil
+            shutil.rmtree(fake.root / "401")          # exits between stat and os.stat
+            return procguard.Proc(*[getattr(proc, f) for f in
+                                    ("pid", "ppid", "start_ticks", "state", "cpu_ticks",
+                                     "tty")], None, None, None, None)
+        return proc
+
+    monkeypatch.setattr(procguard, "read_proc", racing_read_proc)
+    state = guard.scope_state(token)
+    assert state["census_errors"] == []
+
+
+def test_an_unreadable_live_process_stays_a_census_error_without_waiting(tmp_path):
+    """Fail-closed is unchanged: only PROOF of death clears an unreadable process."""
+    guard, fake = _census_guard(tmp_path, exit_settle_s=5.0)
+    token = guard.new_scope()
+    fake.add(402, start=6000, state="S")             # live, not exiting, unreadable
+    _unreadable_environ(fake, 402)
+    started = time.monotonic()
+    state = guard.scope_state(token)
+    assert time.monotonic() - started < 1.0, "a non-exiting process must not be waited on"
+    assert state["census_verified"] is False
+    assert any("unreadable scope provenance: 402" in e for e in state["census_errors"])
+
+
+def test_an_exiting_process_that_never_dies_is_still_an_error(tmp_path):
+    guard, fake = _census_guard(tmp_path, exit_settle_s=0.05)
+    token = guard.new_scope()
+    fake.add(403, start=6000, state="R")
+    _set_flags(fake, 403, procguard.PF_EXITING)
+    _unreadable_environ(fake, 403)
+    state = guard.scope_state(token)
+    assert state["census_verified"] is False
+    assert any("unreadable scope provenance: 403" in e for e in state["census_errors"])
+
+
+def test_a_dead_task_state_is_never_a_captured_survivor(tmp_path):
+    guard, fake = _census_guard(tmp_path)
+    token = guard.new_scope()
+    fake.add(404, start=6000, state="S", scope=token)
+    assert [row["pid"] for row in guard.scope_state(token)["survivors"]] == [404]
+    fake.add(404, start=6000, state="X", scope=token)   # TASK_DEAD: never runs again
+    state = guard.scope_state(token)
+    assert state["survivors"] == [] and state["census_verified"] is True
