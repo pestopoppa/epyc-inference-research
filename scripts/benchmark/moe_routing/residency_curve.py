@@ -163,7 +163,7 @@ def analyse(results_dir, domains, ks, ref_experts: int, gate_k: int = 53) -> dic
             rows[ph]["workloads_lt_0.23_worst_case"] = [B for B in domains if rows[ph][B]["cross_domain_worst"] < 0.23]
         v["by_k"][str(k)] = rows
     out["rt7_verdict"] = v
-    return out
+    return tio.stamp(out, list(data.values()), "residency_curve")
 
 
 def to_markdown(r: dict, title: str) -> str:
@@ -205,6 +205,7 @@ def main(argv=None) -> int:
     ap.add_argument("--ks", default="39,53,63")
     ap.add_argument("--ref-experts", type=int, default=384)
     ap.add_argument("--title", default="RT-7 residency hit-rate curve")
+    ap.add_argument("--beliefs", action="store_true", help="also write the belief-kernel sidecar next to the outputs (needs EPYC_ROOT)")
     a = ap.parse_args(argv)
     doms = [d for d in a.domains.split(",") if d] or sorted(tio.discover(a.results_dir))
     r = analyse(a.results_dir, doms, [int(x) for x in a.ks.split(",")], a.ref_experts)
@@ -214,7 +215,7 @@ def main(argv=None) -> int:
     md = to_markdown(r, a.title)
     (out / "residency_curve.md").write_text(md)
     print(md)
-    return 0
+    return tio.emit_beliefs(out, "moe_routing/residency_curve.py") if a.beliefs else 0
 
 
 if __name__ == "__main__":

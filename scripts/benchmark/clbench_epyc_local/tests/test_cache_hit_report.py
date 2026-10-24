@@ -50,3 +50,61 @@ def test_missing_counter_and_wrong_counts_are_invalid_not_zero():
     assert M.analyse([t])["verdict"] == "INVALID"
     assert M.analyse([trace([(100, 10, 0)], hands=4)], expect_hands=5)["verdict"] == "INVALID"
     assert M.analyse([], expect_runs=3)["verdict"] == "INVALID"
+
+
+# --- VB-CLBENCH-CACHE-WIRE: --belief-out emit (writer lives in epyc-root, EPYC_ROOT) ---------------------------
+
+import os  # noqa: E402
+
+import pytest  # noqa: E402
+
+_ROOT = os.environ.get("EPYC_ROOT", "")
+_IDENT = ["--served-model", "Qwen3.6-35B-A3B-Q4_K_M", "--recipe", "cme7-poker-smoke", "--np", "1", "--ctx", "65536",
+          "--slots", "1", "--kernel-build", "10303"]
+
+
+def _traces(tmp_path, calls):
+    d = tmp_path / "traces"
+    d.mkdir()
+    (d / "run_0000.json").write_text(json.dumps(trace(calls)))
+    return d
+
+
+def test_belief_out_requires_identity_flags_and_out(tmp_path, capsys):
+    d = _traces(tmp_path, [(100, 50, 0), (200, 50, 100)])
+    with pytest.raises(SystemExit) as e:
+        M.main([str(d), "--belief-out", str(tmp_path / "b"), "--out", str(tmp_path / "r.json")])
+    assert e.value.code == 2 and "--served-model" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        M.main([str(d), "--belief-out", str(tmp_path / "b"), *_IDENT])  # no --out
+
+
+def test_no_flag_stays_stdlib_only(tmp_path, capsys):
+    d = _traces(tmp_path, [(100, 50, 0), (200, 50, 100)])
+    sys.modules.pop("belief_capture", None)
+    assert M.main([str(d)]) == 0 and "belief_capture" not in sys.modules
+
+
+@pytest.mark.skipif(not _ROOT, reason="EPYC_ROOT not set")
+def test_belief_out_writes_sidecar(tmp_path):
+    d = _traces(tmp_path, [(100, 50, 0), (200, 50, 100), (300, 50, 200)])
+    rc = M.main([str(d), "--out", str(tmp_path / "r.json"), "--belief-out", str(tmp_path / "b"), *_IDENT])
+    assert rc == 0
+    side = tmp_path / "b" / "clbench_cache_hit.beliefs.jsonl"
+    rows = [json.loads(l) for l in side.read_text().splitlines()]
+    assert len(rows) == 5 and {r["extra"]["identity"]["research_sha"] for r in rows} and rows[0]["protocol_id"] == ""
+
+
+def test_capture_failure_exit_code_still_writes_out(tmp_path, monkeypatch):
+    d = _traces(tmp_path, [(100, 50, 0), (200, 50, 100)])
+    monkeypatch.delenv("EPYC_ROOT", raising=False)
+    out = tmp_path / "r.json"
+    rc = M.main([str(d), "--out", str(out), "--belief-out", str(tmp_path / "b"), *_IDENT])
+    assert rc == 3 and json.loads(out.read_text())["schema"] == "epyc.clbench_cache_hit.v1"
+    assert not (tmp_path / "b" / "clbench_cache_hit.beliefs.jsonl").exists()
+
+
+def test_driver_failure_code_is_not_masked_by_capture_failure(tmp_path, monkeypatch):
+    d = _traces(tmp_path, [(100, 50, 0), (200, 10, 20)])  # MISS -> rc 1
+    monkeypatch.delenv("EPYC_ROOT", raising=False)
+    assert M.main([str(d), "--out", str(tmp_path / "r.json"), "--belief-out", str(tmp_path / "b"), *_IDENT]) == 1

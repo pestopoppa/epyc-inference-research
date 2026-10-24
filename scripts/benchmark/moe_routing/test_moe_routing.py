@@ -50,7 +50,11 @@ def write_shard(root: Path, domain: str, part: str, first_window: int, windows, 
            "ids": {"dtype": "int16", "shape_note": "x", "sha256": tio.sha256_file(d / "routing_trace.ids.i16")},
            "rows_sha256": tio.sha256_file(d / "routing_trace.rows.bin")}
     (d / "routing_trace.json").write_text(json.dumps(man))
-    (d / "routing_trace.provenance.json").write_text(json.dumps({"domain": domain, "first_window": first_window}))
+    (d / "routing_trace.provenance.json").write_text(json.dumps({
+        "domain": domain, "first_window": first_window, "n_windows": len(windows), "model_path": "/models/synth/synth.gguf",
+        "corpus_sha256": "c" * 64, "tokens_sha256": "d" * 64, "corpus_tokens": 1234, "llama_build_info": "b1-abcdef012",
+        "tool_format": "moe-trace-1", "decode_tokens_per_window": n_dec if part == "decode" else 0, "batch_size": n_pre,
+        "hazard_guard": {"checks": 4, "sub_chance_checks": 0, "cv_min": 1.1, "cv_max": 2.2, "fatal": 0}}))
     # tool-side IR the independent way (python loops)
     eor = {"layers": []}
     for l in range(L):
@@ -344,3 +348,84 @@ def test_random_dispatch_is_stateless_and_never_beats_least_loaded_in_expectatio
     assert ideal.mean() == pytest.approx(1.0)                # 3 + 3
     assert rnd.mean() > ideal.mean() + 0.1                   # 6 coin flips are rarely 3/3
     assert (rnd >= 1.0 - 1e-9).all()
+
+
+# ------------------------------------------------------------------ VB-MOE-ROUTING-WIRE: analysis provenance emit
+def _roundtrip_ok(doc):
+    assert doc["content_sha256"] == tio.content_sha256(doc)
+    assert doc["content_sha256"] == tio.content_sha256({k: v for k, v in doc.items() if k != "content_sha256"})
+    assert doc["provenance_schema"] == tio.PROVENANCE_SCHEMA and doc["input_traces"]
+
+
+def test_content_sha256_cross_repo_parity_vector():
+    """The same vector is pinned by epyc-root tests/vidya/test_moe_routing.py: writer and reader share one canonical form."""
+    doc = {"b": [1, 2.5, {"z": None, "a": "x\u00e9"}], "a": True, "content_sha256": "ignored"}
+    assert tio.canonical_json({k: v for k, v in doc.items() if k != "content_sha256"}) == '{"a":true,"b":[1,2.5,{"a":"x\u00e9","z":null}]}'
+    assert tio.content_sha256(doc) == "5b555c920437a1117a4716709b68a2738e27a27c8550461ba8af16d55cb31ca4"
+
+
+def test_shard_provenance_records_hashes_scope_and_guard(uniform_root):
+    shards = tio.discover(uniform_root)["uni"]
+    rec = tio.shard_provenance(shards["decode"][0])
+    man = json.loads((Path(shards["decode"][0]) / "routing_trace.json").read_text())
+    assert rec["ids_sha256"] == man["ids"]["sha256"] and rec["rows_sha256"] == man["rows_sha256"] and rec["hashes_verified"] is True
+    assert (rec["domain"], rec["part"], rec["arch"], rec["chunk_size"]) == ("uni", "decode", "synth", 8)
+    assert rec["model_path"] == "/models/synth/synth.gguf" and rec["corpus_sha256"] == "c" * 64
+    assert rec["hazard_guard"]["checks"] == 4 and rec["verified_marker"] is True and rec["quarantined"] is False
+    assert rec["windows_prefill"] == 4 and rec["windows_decode"] == 4 and rec["rows_decode"] == 16 and rec["rows_prefill"] == 32
+    assert tio.shard_provenance(shards["bulk"][0])["windows_decode"] == 0
+
+
+def test_shard_provenance_flags_a_tampered_shard(tmp_path, capsys):
+    d = write_shard(tmp_path, "x", "bulk", 0, [0, 1])
+    (d / "routing_trace.ids.i16").write_bytes(b"\0" * (d / "routing_trace.ids.i16").stat().st_size)
+    assert tio.shard_provenance(d)["hashes_verified"] is False
+    assert "WARNING" in capsys.readouterr().err
+
+
+def test_every_analysis_emits_input_traces_and_a_self_excluding_content_hash(tmp_path):
+    write_shard(tmp_path, "a", "decode", 0, list(range(24)), probs=skewed_probs(4, 0.8), seed=1, n_dec=32)
+    write_shard(tmp_path, "a", "bulk", 24, list(range(488)), probs=skewed_probs(4, 0.8), seed=2)
+    write_shard(tmp_path, "b", "bulk", 0, list(range(60)), seed=3)
+    sk_ = sk.analyse(tmp_path, ["a", "b"], gate=0.6)
+    rc_ = rc.analyse(tmp_path, ["a", "b"], [2, 4], 32)
+    lr_ = lr.analyse(tmp_path, ["a", "b"], 4, [0, 1], 7, skip_coact=True)
+    pr_same = pr.replay_domain((str(tmp_path), "a", [4], 0.25, "same", 1.65, 0, 3))
+    pr_cross = pr.replay_domain((str(tmp_path), "a", [4], 0.25, "cross", 1.65, 0, 3))
+    for doc, kind in ((sk_, "skew_report"), (rc_, "residency_curve"), (lr_, "locality_report"), (pr_same, "placement_replay"), (pr_cross, "placement_replay")):
+        _roundtrip_ok(doc)
+        assert doc["analysis_kind"] == kind
+        # a JSON round trip (what lands on disk and what the reader hashes) keeps the digest
+        again = json.loads(json.dumps(doc, indent=1))
+        assert tio.content_sha256(again) == doc["content_sha256"]
+        # changing any number invalidates it
+        again["input_traces"][0]["rows"] += 1
+        assert tio.content_sha256(again) != doc["content_sha256"]
+    assert {r["domain"] for r in sk_["input_traces"]} == {"a", "b"} and len(sk_["input_traces"]) == 3
+    assert {r["domain"] for r in pr_same["input_traces"]} == {"a"}          # same-domain calibration reads only its own shards
+    assert {r["domain"] for r in pr_cross["input_traces"]} == {"a", "b"}   # cross-domain calibration lists the calibration domain
+    assert all(len(r["ids_sha256"]) == 64 and r["hashes_verified"] for r in sk_["input_traces"])
+
+
+def test_stamp_keeps_existing_keys_unchanged(tmp_path):
+    write_shard(tmp_path, "u", "bulk", 0, list(range(40)), seed=3)
+    r = sk.analyse(tmp_path, ["u"], gate=0.6)
+    added = {"analysis_kind", "provenance_schema", "input_traces", "content_sha256"}
+    assert set(r) >= added and list(r)[-1] == "content_sha256"
+    assert set(r) - added == {"arch", "n_experts", "top_k", "layers", "domains", "overlap", "gate", "rt5_verdict"}
+
+
+def test_beliefs_flag_writes_the_root_sidecar_and_scripts_run_without_it(tmp_path, monkeypatch):
+    import os
+    root = os.environ.get("EPYC_ROOT", "")
+    if not root or not (Path(root) / "scripts/vidya/adapters/moe_routing.py").is_file():
+        pytest.skip("EPYC_ROOT does not name an epyc-root checkout with the moe_routing capture writer")
+    write_shard(tmp_path / "tr", "u", "decode", 0, list(range(4)), seed=1, n_dec=4)
+    write_shard(tmp_path / "tr", "u", "bulk", 4, list(range(40)), seed=2, probs=skewed_probs(2, 0.9))
+    out = tmp_path / "out"
+    assert sk.main([str(tmp_path / "tr"), "--out", str(out)]) == 0
+    assert not (out / "moe_routing.beliefs.jsonl").exists()                  # runnable without the flag
+    assert sk.main([str(tmp_path / "tr"), "--out", str(out), "--beliefs"]) == 0
+    rows = [json.loads(x) for x in (out / "moe_routing.beliefs.jsonl").read_text().splitlines()]
+    assert rows and {r["metric"] for r in rows} <= {"moe_skew_top10_share_heldout", "moe_skew_top25_share_heldout"}
+    assert {r["extra"]["scope"]["model_file"] for r in rows} == {"synth.gguf"}

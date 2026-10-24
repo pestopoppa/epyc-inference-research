@@ -1,0 +1,16 @@
+Testing 1 devices
+
+Backend 1/1: CPU
+  Device description: AMD EPYC 9655 96-Core Processor
+  Device memory: 1160617 MB (1160617 MB free)
+
+  SSM_SCAN(type=f32,d_state=16,head_dim=1,n_head=1024,n_group=1,n_seq_tokens=32,n_seqs=4,xbc_overlap=0,K=1): [1;32mOK[0m
+  SSM_SCAN(type=f32,d_state=128,head_dim=64,n_head=16,n_group=2,n_seq_tokens=32,n_seqs=4,xbc_overlap=0,K=1): [1;32mOK[0m
+  SSM_SCAN(type=f32,d_state=256,head_dim=64,n_head=8,n_group=2,n_seq_tokens=32,n_seqs=4,xbc_overlap=0,K=1): [1;32mOK[0m
+  SSM_SCAN(type=f32,d_state=128,head_dim=128,n_head=4,n_group=4,n_seq_tokens=16,n_seqs=2,xbc_overlap=1,K=1): [1;32mOK[0m
+  SSM_SCAN(type=f32,d_state=128,head_dim=64,n_head=16,n_group=2,n_seq_tokens=4,n_seqs=2,xbc_overlap=0,K=4): [1;32mOK[0m
+  SSM_SCAN(type=f32,d_state=128,head_dim=64,n_head=16,n_group=2,n_seq_tokens=8,n_seqs=2,xbc_overlap=0,K=3): [1;32mOK[0m
+  6/6 tests passed
+  Backend CPU: [1;32mOK[0m
+1/1 backends passed
+[1;32mOK[0m

@@ -408,7 +408,7 @@ def replay_domain(args: tuple) -> dict:
                                "best_idealized_dispatch_max_over_mean": idealized[bi], "ratio_idealized_dispatch": baseline / idealized[bi], "best_bound": bb, "best_bound_max_over_mean": bound[bb],
                                "ratio_bound": baseline / bound[bb], "ratio_measured_contiguous": res["arms"]["contiguous"]["max_over_mean"] / practical[bp]}
             out["configs"][key] = res
-    return out
+    return tio.stamp(out, [t, *others], "placement_replay")
 
 
 def to_markdown(rs: list, title: str, baseline: float) -> str:
@@ -466,6 +466,7 @@ def main(argv=None) -> int:
     ap.add_argument("--procs", type=int, default=2)
     ap.add_argument("--seed", type=int, default=3)
     ap.add_argument("--title", default="RT-6 offline expert-placement replay")
+    ap.add_argument("--beliefs", action="store_true", help="also write the belief-kernel sidecar next to the outputs (needs EPYC_ROOT)")
     a = ap.parse_args(argv)
     doms = [d for d in a.domains.split(",") if d] or sorted(tio.discover(a.results_dir))
     bins = [int(x) for x in a.bins.split(",")]
@@ -481,7 +482,7 @@ def main(argv=None) -> int:
     md = to_markdown(rs, a.title + f" (calibration: {a.calib}-domain)", a.baseline_ratio)
     (out / f"placement_replay_{a.calib}.md").write_text(md)
     print(md)
-    return 0
+    return tio.emit_beliefs(out, "moe_routing/placement_replay.py") if a.beliefs else 0
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 """CME-7 post-run check: did the local server reuse the append-only prefix? (stdlib only; reads traces, no model)
 
   python3 -I cache_hit_report.py <traces_dir> [--min-hit 0.95] [--expect-runs 3 --expect-hands 5] [--out report.json]
+  [--belief-out DIR --served-model M --recipe R --np N --ctx C --slots S --kernel-build B]  (needs EPYC_ROOT)
 
 CME-5 sizing rule (predeclared 2026-10-21, queue-builders-3): the acceptance number is NOT cached/input over all
 calls, because the first call of every run is cold by construction and early prompts are mostly new suffix, so a
@@ -26,7 +27,9 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -95,13 +98,69 @@ def main(argv=None) -> int:
     ap.add_argument("--expect-runs", type=int)
     ap.add_argument("--expect-hands", type=int)
     ap.add_argument("--out")
+    ap.add_argument("--belief-out", metavar="DIR", help="also write the belief sidecar clbench_cache_hit.beliefs.jsonl "
+                    "into DIR (needs EPYC_ROOT, --out and the identity flags below; a capture failure exits "
+                    "belief_capture.EXIT_CAPTURE_FAILED but --out is still written)")
+    ap.add_argument("--run-id", help="belief row run id (default: digest of the trace file list)")
+    ident = ap.add_argument_group("belief identity (required with --belief-out; nothing is guessed)")
+    ident.add_argument("--served-model")
+    ident.add_argument("--recipe")
+    ident.add_argument("--np", type=int)
+    ident.add_argument("--ctx", type=int)
+    ident.add_argument("--slots", type=int)
+    ident.add_argument("--kernel-build")
     a = ap.parse_args(argv)
+    if a.belief_out:
+        missing = [f"--{k.replace('_', '-')}" for k in ("served_model", "recipe", "np", "ctx", "slots", "kernel_build")
+                   if getattr(a, k) in (None, "")]
+        if not a.out:
+            missing.append("--out (the sidecar attests the written report)")
+        if missing:
+            ap.error("--belief-out requires " + ", ".join(missing))
     files = sorted(glob.glob(str(Path(a.traces_dir) / "run_*.json")))
     rep = analyse([json.load(open(f)) for f in files], a.min_hit, a.expect_runs, a.expect_hands, a.basis)
     rep["trace_files"] = files
     text = json.dumps(rep, indent=1)
     (Path(a.out).write_text(text + "\n") if a.out else print(text))
-    return {"PASS": 0, "MISS": 1, "INVALID": 2}[rep["verdict"]]
+    rc = {"PASS": 0, "MISS": 1, "INVALID": 2}[rep["verdict"]]
+    if not a.belief_out:
+        return rc
+    return _emit_belief(a, rep, files, rc)
+
+
+def research_sha() -> str:
+    """HEAD of the repo holding THIS script; refuses (raises) when it cannot be read."""
+    here = Path(__file__).resolve().parent
+    try:
+        out = subprocess.run(["git", "-C", str(here), "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+                             timeout=30).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(f"cannot read the research SHA from git ({exc})") from exc
+    if len(out) != 40:
+        raise RuntimeError(f"git rev-parse HEAD returned {out!r}")
+    return out
+
+
+def _emit_belief(a, rep: dict, files: list[str], rc: int) -> int:
+    """Belief sidecar via the epyc-root writer (EPYC_ROOT). Imported only here: the script stays stdlib-only without the flag."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import belief_capture  # noqa: E402
+
+    log = belief_capture.CaptureLog()
+
+    def go():
+        cap = belief_capture.load_capture("clbench_cache_hit")
+        identity = {"served_model": a.served_model, "recipe": a.recipe, "np": a.np, "ctx": a.ctx, "slots": a.slots,
+                    "kernel_build": a.kernel_build, "research_sha": research_sha(), "basis": rep["basis"]}
+        run_id = a.run_id or "clbench-" + hashlib.sha256("\n".join(files).encode()).hexdigest()[:16]
+        Path(a.belief_out).mkdir(parents=True, exist_ok=True)
+        return cap.write_belief_measurements(a.belief_out, run_id=run_id, producer="cache_hit_report.py",
+                                             report_path=a.out, identity=identity)
+
+    side = log.run("clbench_cache_hit", go)
+    if "clbench_cache_hit" in log.written:
+        print(f"belief sidecar: {side}", file=sys.stderr)
+    return log.exit_code(rc)
 
 
 if __name__ == "__main__":

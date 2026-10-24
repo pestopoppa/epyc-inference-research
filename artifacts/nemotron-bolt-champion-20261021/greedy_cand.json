@@ -1,0 +1,61 @@
+{
+ "bin": "/mnt/raid0/llm/kernels/builds/cpu-20261021-59c1b915f-nemotron/bin/llama-server",
+ "argv": [
+  "/mnt/raid0/llm/kernels/builds/cpu-20261021-59c1b915f-nemotron/bin/llama-server",
+  "-m",
+  "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "--host",
+  "127.0.0.1",
+  "--port",
+  "18992",
+  "-np",
+  "1",
+  "-c",
+  "4096",
+  "-t",
+  "24",
+  "-ub",
+  "2048",
+  "--flash-attn",
+  "on",
+  "-ctk",
+  "q8_0",
+  "-ctv",
+  "q8_0",
+  "--no-mmap",
+  "--spec-type",
+  "draft-mtp",
+  "--spec-draft-n-max",
+  "4",
+  "--device",
+  "none",
+  "--device-draft",
+  "none",
+  "--no-kv-unified"
+ ],
+ "pid": 2824422,
+ "outputs": [
+  {
+   "prompt": "Write a detailed explanation of how a hash table handles collisions, with examples in Python.",
+   "content": "\n\n<think>\nHere's a thinking process:\n\n1.  **Understand User Request:**\n   - **Topic:** Hash table collision handling\n   - **Requirements:** Detailed explanation, examples in Python\n   - **Key Concepts to Cover:** What is a hash table, what is a collision, why collisions happen, collision resolution strategies (chaining, open addressing with linear/quadratic/probing, double hashing), pros/cons of each, Python examples, practical considerations.\n\n2.  **Deconstruct the Topic:**\n   - **Hash Table Basics:** Array-based data structure, uses hash function to map keys to indices.\n   - **Collision:** When two different keys hash to the same index.\n   - **Why Collisions Happen:** Finite array size, hash function limitations, pigeonhole principle.\n   - **Collision Resolution Strategies:**\n     - *Separate Chaining:* Each bucket holds a list/linked list of entries.\n     - *Open Addressing:* Find another slot in the table.\n       - Linear Probing\n       - Quadratic Probing\n       - Double Hashing\n   - **Python Examples:** Implement each strategy clearly.\n   - **Performance/Trade-offs:** Time complexity, load factor, cache",
+   "tokens_predicted": 256,
+   "draft_n": 302,
+   "draft_n_accepted": 179
+  },
+  {
+   "prompt": "List the first twenty prime numbers and explain the sieve of Eratosthenes step by step.",
+   "content": "\n\nThe first twenty prime numbers are: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71.\n\nThe sieve of Eratosthenes is an ancient algorithm used to find all prime numbers up to a specified integer. Here\u2019s how it works step by step:\n\n1. **Create a list of consecutive integers from 2 to \\( n \\)**: Start with the list of numbers from 2 to the maximum number you want to check for primality. For example, if you want to find primes up to 50, your list would be: 2, 3, 4, 5, ..., 50.\n\n2. **Initialize the first prime number**: The smallest prime number is 2. Mark 2 as a prime number.\n\n3. **Eliminate multiples of the current prime**: Starting from 2, eliminate all multiples of 2 (excluding 2 itself) from the list. These multiples",
+   "tokens_predicted": 256,
+   "draft_n": 257,
+   "draft_n_accepted": 190
+  },
+  {
+   "prompt": "Summarize the causes of the French Revolution in a numbered list, then discuss its legacy.",
+   "content": "\n\n<think>\n\n</think>\n\nThe French Revolution (1789\u20131799) was a pivotal event in world history that fundamentally transformed the political and social landscape of France and Europe. Below is a summary of its primary causes, followed by a discussion of its enduring legacy.\n\n### Causes of the French Revolution\n\n1. **Social Inequality and the Estate System**  \n   French society was divided into three estates. The First Estate (clergy) and Second Estate (nobility) enjoyed significant privileges, including tax exemptions, while the Third Estate (commoners, including peasants, urban workers, and the bourgeoisie) bore the entire tax burden despite having little political power. This deep resentment fueled demands for equality.\n\n2. **Financial Crisis and Debt**  \n   France was bankrupt due to costly wars (including support for the American Revolution), extravagant spending by the monarchy (particularly under Louis XVI and Marie Antoinette), and an inefficient tax system. The state could no longer service its debt, leading to calls for fiscal reform and greater transparency.\n\n3. **Enlightenment Ideas**  \n   Philosophers such as Voltaire, Rousseau, and Montesquieu promoted ideas of liberty, equality, popular sovereignty, and separation of powers. These intellectual currents challenged",
+   "tokens_predicted": 256,
+   "draft_n": 317,
+   "draft_n_accepted": 174
+  }
+ ],
+ "server_dead": true
+}

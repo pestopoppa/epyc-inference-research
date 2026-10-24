@@ -216,7 +216,7 @@ def analyse(results_dir, domains, gate: float, fracs=(0.10, 0.25)) -> dict:
         v[f"{ph}_workloads_meeting_gate_by_layer_mean"] = met
         v[f"{ph}_gate_met"] = len(met) >= 2
     out["rt5_verdict"] = v
-    return out
+    return tio.stamp(out, list(data.values()), "skew_report")
 
 
 def to_markdown(r: dict, title: str) -> str:
@@ -256,6 +256,7 @@ def main(argv=None) -> int:
     ap.add_argument("--domains", default="")
     ap.add_argument("--gate", type=float, default=0.60)
     ap.add_argument("--title", default="RT-5 expert-skew report")
+    ap.add_argument("--beliefs", action="store_true", help="also write the belief-kernel sidecar next to the outputs (needs EPYC_ROOT)")
     a = ap.parse_args(argv)
     doms = [d for d in a.domains.split(",") if d] or sorted(tio.discover(a.results_dir))
     r = analyse(a.results_dir, doms, a.gate)
@@ -265,7 +266,7 @@ def main(argv=None) -> int:
     md = to_markdown(r, a.title)
     (out / "skew_report.md").write_text(md)
     print(md)
-    return 0
+    return tio.emit_beliefs(out, "moe_routing/skew_report.py") if a.beliefs else 0
 
 
 if __name__ == "__main__":
