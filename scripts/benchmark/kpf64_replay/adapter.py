@@ -44,6 +44,11 @@ OPENCODE_RO_DBS = opencode_ro.OPENCODE_RO_DBS     # default opencode sources: bo
 CHARS_PER_TOKEN = 4  # study's estimate; real token counts come from the server at replay time
 STORES = ("claude", "codex", "opencode")
 SPAWN_TOOLS = ("Task", "Agent")          # Claude Code tool_use names that launch a sub-agent
+# KPF-64.3 prompt cap, TOKEN based (amendment 3): a replayed prompt must fit ONE slot (ctx_total / np). Measured min over the
+# 397 A-D requests is 2.62 chars/token (codex-04); codex-00 ran 2.90 and still hit 66,982 tok > 65,536 at 200k chars.
+SLOT_CTX = 65536                         # 262144 / np4: ctx and np are part of the measured config, never changed
+SLOT_CHARS_PER_TOKEN = 2.5               # conservative (below the measured 2.62 minimum)
+SLOT_TOKEN_MARGIN = 1024                 # slack for prompt-template tags, tokenisation at joins, live output drift
 HEAD_BLOCK = 1024                        # chars; granularity of the cross-session-head bound (~256 tok)
 #: Provider-usage conventions. `exclusive`: input_tokens excludes cache read/write (Anthropic);
 #: `inclusive`: input_tokens already includes cached tokens (OpenAI/Codex).
@@ -433,11 +438,31 @@ def session_stats(turns):
             "ideal_share": (ic / pc) if pc else 0.0}
 
 
-def truncate(turns, max_chars, max_requests):
-    """Keep leading requests whose prompt fits max_chars (prefix structure preserved)."""
+def prompt_char_cap(max_chars=200_000, slot_ctx=SLOT_CTX, n_predict=128, cpt=SLOT_CHARS_PER_TOKEN,
+                    margin=SLOT_TOKEN_MARGIN):
+    """Char cap that guarantees (at `cpt` chars/token) prompt + n_predict + margin <= slot_ctx; never above max_chars."""
+    return min(int(max_chars), int((slot_ctx - n_predict - margin) * cpt))
+
+
+def tokenize_counter(url, timeout=60):
+    """Exact token counter via the server's /tokenize (caller supplies a running server; the adapter never starts one)."""
+    import urllib.request
+
+    def count(text):
+        req = urllib.request.Request(url.rstrip("/") + "/tokenize", json.dumps({"content": text}).encode(),
+                                     {"Content-Type": "application/json"})
+        return len(json.load(urllib.request.urlopen(req, timeout=timeout))["tokens"])
+    return count
+
+
+def truncate(turns, max_chars, max_requests, max_tokens=None, count_tokens=None):
+    """Keep leading requests whose prompt fits max_chars (prefix structure preserved). With `count_tokens`
+    (a callable, e.g. tokenize_counter) and `max_tokens`, a request is also dropped when its exact token count exceeds it."""
     out = []
     for k, prompt, _ in iter_prompts(turns):
         if len(prompt) > max_chars or len(out) >= max_requests:
+            break
+        if count_tokens is not None and max_tokens is not None and count_tokens(prompt) > max_tokens:
             break
         out.append(turns[k])
     return out
@@ -673,7 +698,8 @@ def quotas(n, stores):
 
 def sample_sessions(home, n=20, seed=64, stores=STORES, min_requests=10,
                     max_prompt_chars=200_000, max_requests=200, allow_empty_store=False,
-                    mode="flat", min_children=2, min_child_requests=3, max_children=8, opencode_dbs=None):
+                    mode="flat", min_children=2, min_child_requests=3, max_children=8, opencode_dbs=None,
+                    max_prompt_tokens=None, count_tokens=None):
     """Deterministic. Per store: candidates sorted, shuffled with Random(f'{seed}:{store}'); the first
     `quota` sessions passing the filters (after truncation) are taken. A store that cannot fill its
     quota hands the shortfall to the others (round-robin, fixed order).
@@ -709,7 +735,7 @@ def sample_sessions(home, n=20, seed=64, stores=STORES, min_requests=10,
         for cand in pools[s]:
             try:
                 full = load_turns(cand)
-                turns = truncate(full, max_prompt_chars, max_requests)
+                turns = truncate(full, max_prompt_chars, max_requests, max_prompt_tokens, count_tokens)
                 if mode == "flat":
                     if len(turns) >= min_requests:
                         picked.append((s, cand, turns, session_stats(turns),
@@ -719,7 +745,7 @@ def sample_sessions(home, n=20, seed=64, stores=STORES, min_requests=10,
                     continue
                 kids = []
                 for k in children_of(cand, full):
-                    kt = truncate(k["turns"], max_prompt_chars, max_requests)
+                    kt = truncate(k["turns"], max_prompt_chars, max_requests, max_prompt_tokens, count_tokens)
                     if len(kt) >= min_child_requests and k["parent_turn"] is not None:
                         kids.append({**k, "turns": kt})
                 kids = sorted(kids, key=lambda k: k["parent_turn"])[:max_children]
@@ -935,6 +961,70 @@ def build_manifest(picked, params):
             "child_links": links}
 
 
+def recap_dir(src, dst, max_chars, max_requests=200, min_requests=10, min_children=2, min_child_requests=3):
+    """Re-truncate an ALREADY WRITTEN sessions dir to a (token-derived) char cap, never touching the source.
+    The sample is frozen text from a live pool, so a new cap must be applied to the frozen files, not by redrawing.
+    Children left with < min_child_requests are dropped; a parent left with < min_children children is dropped with
+    them. Manifest rows are recomputed (stats, cross-head bound, provider share) and a `recap` record is added."""
+    src, dst = Path(src), Path(dst)
+    man = json.loads((src / "manifest.json").read_text())
+    dst.mkdir(parents=True, exist_ok=True)
+    recs = {}
+    for r in man["sessions"]:
+        d = json.loads((src / f"{r['id']}.json").read_text())
+        d["turns"] = truncate(d["turns"], max_chars, max_requests)
+        recs[r["id"]] = d
+    dropped = []
+    for r in man["sessions"]:
+        if r.get("parent") and len(recs[r["id"]]["turns"]) < min_child_requests:
+            dropped.append(r["id"])
+    keep_children = {}
+    for r in man["sessions"]:
+        if r.get("parent") and r["id"] not in dropped:
+            keep_children.setdefault(r["parent"], []).append(r["id"])
+    for r in man["sessions"]:
+        if r.get("parent"):
+            continue
+        kids = keep_children.get(r["id"], [])
+        if r.get("children") and len(kids) < min_children:
+            dropped += [r["id"]] + kids
+            keep_children.pop(r["id"], None)
+        elif not r.get("children") and len(recs[r["id"]]["turns"]) < min_requests:
+            dropped.append(r["id"])
+    dropped = set(dropped)
+    head, rows = HeadIndex(), []
+    for r in man["sessions"]:
+        if r["id"] in dropped:
+            continue
+        turns = recs[r["id"]]["turns"]
+        prof = ideal_profile(turns)
+        union = cross = 0
+        for (k, prompt, _prev), (plen, within) in zip(iter_prompts(turns), prof):
+            c = min(head.match_and_add(prompt, r["id"]), plen)
+            cross += c
+            union += max(within, c)
+        pc = sum(p for p, _ in prof)
+        row = {**r, **session_stats(turns), "ideal_cross_only_chars": cross, "ideal_union_chars": union,
+               "ideal_share_cross_head": (union / pc) if pc else 0.0, "provider": provider_share(turns)}
+        if not r.get("parent"):
+            row["children"] = len(keep_children.get(r["id"], [])) if r.get("children") else r.get("children", 0)
+        rows.append(row)
+        rec = dict(recs[r["id"]])
+        if not r.get("parent") and rec.get("children"):
+            keep = set(keep_children.get(r["id"], []))
+            rec["children"] = [c for c in rec["children"] if c["id"] in keep]
+        (dst / f"{r['id']}.json").write_text(json.dumps(rec))
+    if not rows:
+        raise ZeroSessionsError("recap left zero sessions")
+    top = [x for x in rows if not x.get("parent")]
+    out = {**man, "sessions": rows, "totals": totals(top),
+           "recap": {"from": str(src), "max_prompt_chars": max_chars, "dropped": sorted(dropped),
+                     "requests_before": man["totals"].get("requests"), "requests_after": sum(x["requests"] for x in rows)}}
+    out["params"] = {**man.get("params", {}), "recap_max_prompt_chars": max_chars}
+    (dst / "manifest.json").write_text(json.dumps(out, indent=1))
+    return out
+
+
 def write_sessions(picked, out_dir, manifest):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -964,7 +1054,18 @@ def main(argv=None):
     ap.add_argument("--stores", default=None,
                     help="default: all stores in flat mode; families mode drops codex (no parent links, always childless)")
     ap.add_argument("--min-requests", type=int, default=10)
-    ap.add_argument("--max-prompt-chars", type=int, default=200_000, help="~50k tokens; must fit one slot's ctx")
+    ap.add_argument("--max-prompt-chars", type=int, default=200_000,
+                    help="upper char cap; the effective cap is min(this, token cap): (slot_ctx - n_predict - margin) * "
+                         "chars_per_token, so no prompt can exceed one slot (amendment 3)")
+    ap.add_argument("--slot-ctx", type=int, default=SLOT_CTX, help="per-slot context = ctx_total / np (never change ctx or np)")
+    ap.add_argument("--chars-per-token", type=float, default=SLOT_CHARS_PER_TOKEN)
+    ap.add_argument("--token-margin", type=int, default=SLOT_TOKEN_MARGIN)
+    ap.add_argument("--n-predict", type=int, default=128)
+    ap.add_argument("--no-token-cap", action="store_true", help="legacy: char cap only (reproduces the pre-amendment-3 draw)")
+    ap.add_argument("--tokenize-url", default=None,
+                    help="optional running llama-server base URL: also enforce the cap with exact /tokenize counts")
+    ap.add_argument("--recap", default=None, metavar="SRC_DIR",
+                    help="re-truncate an existing sessions dir to the effective cap into --out (no redraw, no sampling)")
     ap.add_argument("--max-requests", type=int, default=200)
     ap.add_argument("--history", choices=("reference", "live"), default="reference",
                     help="recorded in the manifest; the driver regenerates outputs when 'live'")
@@ -986,10 +1087,24 @@ def main(argv=None):
         return 0
     if not a.out:
         ap.error("--out is required unless --fanout-store")
+    if not a.no_token_cap:
+        a.max_prompt_chars = prompt_char_cap(a.max_prompt_chars, a.slot_ctx, a.n_predict, a.chars_per_token, a.token_margin)
+    counter = tokenize_counter(a.tokenize_url) if a.tokenize_url else None
+    a.max_prompt_tokens = (a.slot_ctx - a.n_predict - a.token_margin) if counter else None
+    if a.recap:
+        try:
+            r = recap_dir(a.recap, a.out, a.max_prompt_chars, a.max_requests, a.min_requests, a.min_children,
+                          a.min_child_requests)
+        except ZeroSessionsError as e:
+            sys.stderr.write(f"adapter: FAILED (zero sessions): {e}\n")
+            return 4
+        print(json.dumps(r["recap"]))
+        return 0
     try:
         picked = sample_sessions(a.home, a.n, a.seed, stores, a.min_requests, a.max_prompt_chars,
                                  a.max_requests, a.allow_empty_store, a.mode, a.min_children,
-                                 a.min_child_requests, a.max_children, a.opencode_db)
+                                 a.min_child_requests, a.max_children, a.opencode_db,
+                                 max_prompt_tokens=a.max_prompt_tokens, count_tokens=counter)
     except ZeroSessionsError as e:
         sys.stderr.write(f"adapter: FAILED (zero sessions): {e}\n")
         return 4

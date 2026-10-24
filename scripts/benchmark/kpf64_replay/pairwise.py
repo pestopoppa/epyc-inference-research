@@ -40,7 +40,10 @@ def _sum_sessions(a, b):
     return {i: {k: a[i][k] + b[i][k] for k in a[i]} for i in a if i in b}
 
 
-def pairwise(sess_by_arm, B=analysis.BOOT_B, seed=analysis.BOOT_SEED, min_pp=analysis.MIN_EFFECT_PP):
+DEFAULT_PAIRS = (("C", "B"), ("D", "B"), ("D", "C"), ("B", "A"), ("C", "A"), ("D", "A"))
+
+
+def pairwise(sess_by_arm, B=analysis.BOOT_B, seed=analysis.BOOT_SEED, min_pp=analysis.MIN_EFFECT_PP, pairs=DEFAULT_PAIRS):
     """sess_by_arm: {'p1-A': per_session dict, ...}. Returns contrast tables (gap_pp and uncached/request)."""
     ids, boot = analysis.bootstrap(sess_by_arm, B, seed)
     out = {"paired_sessions": len(ids), "bootstrap_B": B, "seed": seed, "contrasts": {}}
@@ -52,7 +55,7 @@ def pairwise(sess_by_arm, B=analysis.BOOT_B, seed=analysis.BOOT_SEED, min_pp=ana
                 [a - b for a, b in zip(boot[x]["uncached"], boot[y]["uncached"])], float("inf"))}
     for p in sorted({n.split("-")[0] for n in sess_by_arm}):
         have = {n.split("-", 1)[1] for n in sess_by_arm if n.startswith(p + "-")}
-        for x, y in (("C", "B"), ("D", "B"), ("D", "C"), ("B", "A"), ("C", "A"), ("D", "A")):
+        for x, y in pairs:
             if x in have and y in have:
                 con(f"{p}: {x}-{y}", f"{p}-{x}", f"{p}-{y}")
     return out
@@ -247,6 +250,8 @@ def to_markdown(res):
             L += ["", f"### {arm} breakdown", "", f"- by k bucket: {s['by_k_bucket']}", f"- by store: {s['by_store']}",
                   f"- by request kind (pre tag): {s['by_tag']}", f"- class x kind: {s['by_class_x_tag']}",
                   f"- partial misses whose cache stop is within 1000 chars of a message join: {s['partial_with_join_within_1k_chars']} of {s['partial_total']}"]
+    if "p1-A" not in res["misses"]:
+        return "\n".join(L) + "\n"
     L += ["", "Reading: on B/C/D about 92-96% of the 'inferred misses' are the estimator class and the slot-bounded gap is ~0 "
           "(slightly negative: the cache occasionally holds a few tokens more than previous total + predicted_n, so the bound is "
           "not exact). The residual 0.35 pp is therefore an artefact of the char-proportional ideal estimate, not a cache failure; "
@@ -255,14 +260,17 @@ def to_markdown(res):
     return "\n".join(L) + "\n"
 
 
-def run(results_dir, sessions_dir, B=analysis.BOOT_B, seed=analysis.BOOT_SEED, passes=("pass1", "pass2"), arms=("A", "B", "C", "D")):
+def run(results_dir, sessions_dir, B=analysis.BOOT_B, seed=analysis.BOOT_SEED, passes=("pass1", "pass2"), arms=("A", "B", "C", "D"),
+        pairs=DEFAULT_PAIRS):
+    """Arm dirs are `<results_dir>/<pass>-<arm>/replay`; `pairs` = ((x, y), ...) contrasts x-y. With a single pass the
+    pass-pooled section is skipped (KPF-64.3 E/F runs one pass)."""
     results_dir = Path(results_dir)
     names = {f"p{p[-1]}-{a}": results_dir / f"{p}-{a}" for p in passes for a in arms}
     data = {n: analysis.load_arm(d / "replay") for n, d in names.items()}
     bad = set().union(*[set(m["excluded_sessions"]) for _, m in data.values()])
     sess = {n: analysis.per_session([r for r in rs if r["session"] not in bad]) for n, (rs, _) in data.items()}
-    out = pairwise(sess, B, seed)
-    pc, pmet = pooled_contrasts(sess, B, seed)
+    out = pairwise(sess, B, seed, pairs=pairs)
+    pc, pmet = pooled_contrasts(sess, B, seed) if len(passes) > 1 else ({}, {})
     out.update({"min_effect_pp": analysis.MIN_EFFECT_PP, "pooled_contrasts": pc,
                 "pooled_metrics": {k: {m: v[m] for m in ("realised_share", "ideal_share", "gap_pp", "uncached_per_request", "n")} for k, v in pmet.items()},
                 "excluded": {n: excluded_record(d) for n, d in names.items() if data[n][1]["excluded_sessions"]},
@@ -289,8 +297,13 @@ def main(argv=None):
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--boot", type=int, default=analysis.BOOT_B)
+    ap.add_argument("--passes", default="pass1,pass2", help="comma list of result-dir pass prefixes")
+    ap.add_argument("--arms", default="A,B,C,D", help="comma list of arm dir suffixes (<pass>-<arm>)")
+    ap.add_argument("--pairs", default=None, help="comma list of contrasts X-Y (arm suffixes), default the A-D set; "
+                                                  "e.g. E-EB,E-D for the KPF-64.3 flat group")
     a = ap.parse_args(argv)
-    res = run(a.results, a.sessions, a.boot)
+    pairs = DEFAULT_PAIRS if a.pairs is None else tuple(tuple(x.split("-", 1)) for x in a.pairs.split(","))
+    res = run(a.results, a.sessions, a.boot, passes=tuple(a.passes.split(",")), arms=tuple(a.arms.split(",")), pairs=pairs)
     Path(a.out_json).write_text(json.dumps(res, indent=1))
     md = to_markdown(res)
     Path(a.out_md).write_text(md)

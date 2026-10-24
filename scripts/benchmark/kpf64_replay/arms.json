@@ -67,6 +67,38 @@
         "60"
       ],
       "followup": true
+    },
+    "EB": {
+      "label": "ckpt-on cache-ram=0, sessions>slots (8 active over 4 slots); B-config twin of E",
+      "ctx_checkpoints": 32,
+      "cache_ram_mib": 0,
+      "sessions_mode": "flat",
+      "driver_args": [
+        "--active",
+        "8",
+        "--think-scale",
+        "0.1",
+        "--think-cap-s",
+        "60"
+      ],
+      "followup": true
+    },
+    "FB": {
+      "label": "ckpt-on cache-ram=0, sub-agent bursts; B-config twin of F",
+      "ctx_checkpoints": 32,
+      "cache_ram_mib": 0,
+      "sessions_mode": "families",
+      "driver_args": [
+        "--children",
+        "bursts",
+        "--parent-during-burst",
+        "pause",
+        "--think-scale",
+        "0.1",
+        "--think-cap-s",
+        "60"
+      ],
+      "followup": true
     }
   }
 }

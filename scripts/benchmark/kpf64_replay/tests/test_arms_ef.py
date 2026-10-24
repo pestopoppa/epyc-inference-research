@@ -55,3 +55,11 @@ def test_driver_warns_when_think_scale_has_no_gaps(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "no turn carries gap_s" in r.stderr
     assert json.loads((tmp_path / "o" / "run_meta.json").read_text())["turns_with_gap_s"] == 0
+
+
+def test_b_config_twins_differ_only_in_cache_ram():
+    for tw, base in (("EB", "E"), ("FB", "F")):
+        a, b = ARMS[tw], ARMS[base]
+        assert (a["ctx_checkpoints"], a["cache_ram_mib"]) == (32, 0)
+        assert {k: v for k, v in a.items() if k not in ("label", "cache_ram_mib")} == \
+               {k: v for k, v in b.items() if k not in ("label", "cache_ram_mib")}

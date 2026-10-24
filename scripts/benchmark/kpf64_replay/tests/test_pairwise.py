@@ -99,3 +99,22 @@ def test_belief_emit_per_arm_windows_and_cli(tmp_path):
         raise AssertionError("missing arm window must raise")
     except ValueError:
         pass
+
+
+def test_single_pass_custom_pairs_for_ef_group(tmp_path):
+    """KPF-64.3: one pass, arms E/EB (+ the A-D reference D), contrasts E-EB and E-D, a session that errors in the
+    reference leaves every arm (paired exclusion, codex-00 style), no pooled section."""
+    ids = ["s0", "s1", "s2", "s3"]
+    for arm, c in (("E", 95), ("EB", 90), ("D", 95)):
+        rows = []
+        for s in ids:
+            rows += [req(s, 0, 100, 0, 0), req(s, 1, 200, c, 100)]
+        if arm == "D":
+            rows.append({**req("s3", 2, 300, 0, 0), "error": "HTTPError: HTTP Error 400: Bad Request"})
+        mk(tmp_path, f"pass1-{arm}", rows)
+    sd = sess_dir(tmp_path, ids, 2)
+    res = pairwise.run(tmp_path, sd, B=50, passes=("pass1",), arms=("E", "EB", "D"), pairs=(("E", "EB"), ("E", "D")))
+    assert set(res["contrasts"]) == {"p1: E-EB", "p1: E-D"}
+    assert res["excluded_sessions"] == ["s3"] and res["paired_sessions"] == 3
+    assert res["pooled_contrasts"] == {}
+    assert "pooled" not in pairwise.to_markdown(res).split("## Excluded")[0].lower().replace("pass-pooled", "")
