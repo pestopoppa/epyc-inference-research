@@ -1007,7 +1007,7 @@ server_mode:
       template_diff: data/template_reviews/frontdoor.diff
       upstream_ref: Qwen/Qwen3.6-35B-A3B
       upstream_revision: 995ad96eacd98c81ed38be0c5b274b04031597b0
-      template_diff_reviewed: generated 2026-10-21 by the SEC-ART-5 lane (diff upstream -> served); human review sign-off pending
+      template_diff_reviewed: "SIGNED reviewed_by=\"Daniele\" reviewed_on=2026-10-24 diff=data/template_reviews/frontdoor.diff diff_sha256=98b0d55c261f388bf11b919be59e0ce2eb7971f89117d716414fa136388715df upstream_sha256_12=e84f32a23fdd served_sha256_12=1443ea9ab4bb review_digest_sha256=50c357749c54064da46aa8f9a0e49f9fd0d63f4cb08924469d8a6767b29e2516 gate=RATIFY-SEC-ART-POST-B-20261023"
       base: froggeric v22.3 minus inline-tag scan plus Sharp terseness
       evidence: 'CT-1b A/B artifacts: /workspace/artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/.
         E-7: frontdoor''s calibration stamps are voided by the template axis and must re-measure.'
@@ -1265,7 +1265,7 @@ server_mode:
       template_diff: data/template_reviews/worker_vision.diff
       upstream_ref: Qwen/Qwen3-VL-30B-A3B-Instruct
       upstream_revision: 9c4b90e1e4ba969fd3b5378b57d966d725f1b86c
-      template_diff_reviewed: generated 2026-10-21 by the SEC-ART-5 lane (diff upstream -> served); human review sign-off pending
+      template_diff_reviewed: "SIGNED reviewed_by=\"Daniele\" reviewed_on=2026-10-24 diff=data/template_reviews/worker_vision.diff diff_sha256=05bdf611f26c4ad4af4a966400c697eb527ed5acb6d03fd01595d3101ea12bac upstream_sha256_12=3636d0f0bd6b served_sha256_12=3636d0f0bd6b review_digest_sha256=50c357749c54064da46aa8f9a0e49f9fd0d63f4cb08924469d8a6767b29e2516 gate=RATIFY-SEC-ART-POST-B-20261023"
     # 2026-08-02: was 1. Single GPU_HOST_LANE instance, so there is no per-shape
     # split — the flat scalar IS the declaration and `slots_by_shape` is absent.
     slots: 1
@@ -1792,7 +1792,7 @@ server_mode:
       template_diff: data/template_reviews/architect_critic.diff
       upstream_ref: Qwen/Qwen3.8-27B
       upstream_revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
-      template_diff_reviewed: generated 2026-10-21 by the SEC-ART-5 lane (diff upstream -> served); human review sign-off pending
+      template_diff_reviewed: "SIGNED reviewed_by=\"Daniele\" reviewed_on=2026-10-24 diff=data/template_reviews/architect_critic.diff diff_sha256=cfdc36542b761d30ece2d0c65fc33be67cbbf776b833cb39a0b7b251162d6cbc upstream_sha256_12=c3cf9e34abf4 served_sha256_12=1443ea9ab4bb review_digest_sha256=50c357749c54064da46aa8f9a0e49f9fd0d63f4cb08924469d8a6767b29e2516 gate=RATIFY-SEC-ART-POST-B-20261023"
       base: froggeric v22.3 minus inline-tag scan plus Sharp terseness
       evidence: 'CT-1b A/B artifacts: /workspace/artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/
         (measured on Qwen3.6-35B-A3B; UNMEASURED on this role''s Qwen3.8-27B). E-7: this role''s
@@ -2012,7 +2012,7 @@ server_mode:
       template_diff: data/template_reviews/architect_general.diff
       upstream_ref: Qwen/Qwen3.8-Flash-Next
       upstream_revision: de4b8e4d43b917e7706784d8bb445c9af86a3540
-      template_diff_reviewed: generated 2026-10-21 by the SEC-ART-5 lane (diff upstream -> served); human review sign-off pending
+      template_diff_reviewed: "SIGNED reviewed_by=\"Daniele\" reviewed_on=2026-10-24 diff=data/template_reviews/architect_general.diff diff_sha256=3f80812a214ada4967559cdc49edd473063d7b6cafc98ce2d936c5e9bd1659cd upstream_sha256_12=c3cf9e34abf4 served_sha256_12=12827f24b742 review_digest_sha256=50c357749c54064da46aa8f9a0e49f9fd0d63f4cb08924469d8a6767b29e2516 gate=RATIFY-SEC-ART-POST-B-20261023"
     # ⚠ NO `shared_with`. An earlier draft merged ingest_long_context onto this process.
     # OPERATOR RULING C2 WITHDREW IT: this role's single full instance on 0-95 holds ALL FOUR
     # CPU region locks while it runs, and ingest_long_context is ROUTINE traffic (Stage 1 of
