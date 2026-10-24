@@ -893,5 +893,22 @@ class Fix5PhaseGateRun(unittest.TestCase):
         self.assertEqual(rc, 0); self.assertEqual(len(calls), 1)         # its own failed cell is retried, not gated
 
 
+class CellRowHash(unittest.TestCase):
+    """VB-KVU-CPU write side: decision rows in cells.jsonl carry a self-hash with the request-row convention."""
+    def test_schema_rows_are_self_hashed_and_rederivable(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / K.CELLS_FILE
+            K.append_jsonl(p, dict(schema=K.SCHEMA, cell_key="m|dense|ckpt|8k|w0|bX", result="OK", ckpt_mib_each=[1.5, 2.0], extra=Path("/x")))
+            K.append_jsonl(p, dict(schema=K.SCHEMA, cell_key="m|dense|ckpt|8k|w1|bX", result="ERRORS", row_sha256="stale"))
+            K.append_jsonl(p, dict(cell_key="schemaless", result="OK"))
+            rows = [json.loads(l) for l in p.read_text().splitlines()]
+        for r in rows[:2]:
+            self.assertEqual(r["row_sha256"], K.M.row_hash(r))
+        self.assertNotEqual(rows[1]["row_sha256"], "stale")
+        self.assertNotIn("row_sha256", rows[2])
+        rows[0]["result"] = "TAMPERED"
+        self.assertNotEqual(rows[0]["row_sha256"], K.M.row_hash(rows[0]))
+
+
 if __name__ == "__main__":
     unittest.main()
