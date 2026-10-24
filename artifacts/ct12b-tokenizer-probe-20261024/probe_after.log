@@ -1,0 +1,12 @@
+[ok ] deepseek41  DS41-1017 full (antirez MXFP4 shard 1): loadable=True control spellings tested=21 OPEN=0 closed=21 text-marker-OPEN=3
+[ok ] deepseek41  DS41-1017 DSpark drafter (deepseek-ai): loadable=True control spellings tested=21 OPEN=0 closed=21 text-marker-OPEN=3
+[ok ] deepseek41  DS41-1017 DSpark Q8_0 (unsloth): loadable=False control spellings tested=66 OPEN=3 closed=63 text-marker-OPEN=0
+[ok ] gemma4      gemma-4-31B-it Q4_K_M: loadable=True control spellings tested=18 OPEN=0 closed=18 text-marker-OPEN=0
+[ok ] gemma4      gemma-4-31B-it assistant Q8_0: loadable=False control spellings tested=24 OPEN=0 closed=24 text-marker-OPEN=0
+[ok ] llama3      Llama-3.2-1B-Instruct f16: loadable=True control spellings tested=10 OPEN=0 closed=10 text-marker-OPEN=0
+[ok ] nemotron    Nemotron-Labs-Diffusion-14B Q8_0: loadable=True control spellings tested=14 OPEN=0 closed=14 text-marker-OPEN=0
+[ok ] embedder    bge-m3 Q8_0: loadable=True control spellings tested=4 OPEN=0 closed=4 text-marker-OPEN=0
+[ok ] embedder    bge-large-en-v1.5 f16: loadable=True control spellings tested=5 OPEN=0 closed=5 text-marker-OPEN=0
+[ok ] embedder    granite-embedding-97m Q8_0: loadable=True control spellings tested=8 OPEN=0 closed=8 text-marker-OPEN=0
+[ok ] embedder    multilingual-e5-base Q8_0: loadable=True control spellings tested=4 OPEN=0 closed=4 text-marker-OPEN=0
+[ok ] speech-tts  qwen-talker-0.6b-base Q8_0: loadable=False control spellings tested=33 OPEN=6 closed=27 text-marker-OPEN=0
