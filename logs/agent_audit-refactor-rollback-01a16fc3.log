@@ -1,0 +1,7 @@
+{"ts":"2026-10-24T21:26:11+00:00","session":"ses_20261024_212611_1079595","level":"INFO","cat":"SESSION_START","msg":"C1-05 rollback integrity approved closeout","details":"new_session=ses_20261024_212611_1079595"}
+{"ts":"2026-10-24T21:26:11+00:00","session":"ses_20261024_212611_1079595","level":"INFO","cat":"TASK_START","msg":"Complete C1-05 rollback execution-fault handling","details":"Main reviewed narrow LOW-risk catch; shared HIGH-risk helper unchanged"}
+{"ts":"2026-10-24T21:26:11+00:00","session":"ses_20261024_212611_1079595","level":"INFO","cat":"CMD_RESULT","msg":"Pre-fix WIP rollback regression","details":"exit=1; 5 failed; 8 passed; expected red regression"}
+{"ts":"2026-10-24T21:26:11+00:00","session":"ses_20261024_212611_1079595","level":"INFO","cat":"CMD_RESULT","msg":"Fixed rollback regression","details":"exit=0; 13 passed in 0.65s"}
+{"ts":"2026-10-24T21:26:11+00:00","session":"ses_20261024_212611_1079595","level":"INFO","cat":"CMD_RESULT","msg":"Targeted ten-file loop tests","details":"exit=0; 401 passed; 23 subtests passed in 16.04s; physical CPU claim held"}
+{"ts":"2026-10-24T21:26:11+00:00","session":"ses_20261024_212611_1079595","level":"INFO","cat":"TASK_END","msg":"Complete C1-05 rollback execution-fault handling","details":"outcome=success"}
+{"ts":"2026-10-24T21:26:11+00:00","session":"ses_20261024_212611_1079595","level":"INFO","cat":"SESSION_END","msg":"Session complete","details":"Commit 62c68ad99; review branch only; AutoKernel launch hold and deliberate re-pin remain"}
