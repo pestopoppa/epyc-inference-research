@@ -13,9 +13,9 @@ from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from akx_lb3_attribution import rule  # noqa: E402
+    from akx_lb3_attribution import beliefs, rule  # noqa: E402
 else:
-    from . import rule
+    from . import beliefs, rule
 
 
 def load(prefix: str):
@@ -49,6 +49,8 @@ def main(argv=None) -> int:
     ap.add_argument("--m-report")
     ap.add_argument("--steps", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--predeclaration", help="the frozen rule file; with it the belief sidecar is written beside --out")
+    ap.add_argument("--run-id", default="akx-lb3-2-attribution")
     a = ap.parse_args(argv)
     res = dict(item="akx-lb3-2-attribution", class_="correctness (within-process ratios; G/M cross-arm overhead gate)",
                gating=one(a.g, a.m, a.steps))
@@ -56,9 +58,12 @@ def main(argv=None) -> int:
     if a.g_report and a.m_report and load(a.g_report) and load(a.m_report):
         res["reported_t96"] = one(a.g_report, a.m_report, a.steps)
     Path(a.out).write_text(json.dumps(res, indent=1))
+    side = None
+    if a.predeclaration:
+        side = beliefs.write_sidecar(a.out, a.predeclaration, run_id=a.run_id)
     g = res["gating"]
     print(json.dumps(dict(verdict=res["verdict"], max_F_N2to5=g.get("max_F_N2to5"), max_S_N2to5=g.get("max_S_N2to5"),
-                          seed_class=g.get("seed_class"))))
+                          seed_class=g.get("seed_class"), beliefs_sidecar=str(side) if side else None)))
     return 0
 
 

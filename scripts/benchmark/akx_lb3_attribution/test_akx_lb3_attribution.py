@@ -383,3 +383,65 @@ def test_analyze_cli_round_trip(tmp_path):
     pm = json.loads((tmp_path / "M-t48.profile.json").read_text())
     assert pm["rows"][1]["share"]["fa"] == pytest.approx(900 / 3700, abs=1e-5)
     assert pm["top_depth_growing_nodes"]["2"][0]["cls"] == "fa"
+
+
+# ------------------------------------------------------------------------------------------- belief sidecar (VB-AKX-LB32-WRITE)
+def _verdict_file(tmp_path, fa_hi, t96_fa=None):
+    import json
+    gating = rule.decide(*_grid(fa_hi))
+    res = dict(item="akx-lb3-2-attribution", gating=gating, verdict=gating["verdict"])
+    if t96_fa is not None:
+        res["reported_t96"] = rule.decide(*_grid(t96_fa))
+    vp = tmp_path / "VERDICT.json"
+    vp.write_text(json.dumps(res, indent=1))           # JSON round trip: cell keys become strings, as on disk
+    pp = tmp_path / "PREDECLARATION.md"
+    pp.write_text("# frozen rule\n")
+    return vp, pp
+
+
+def test_sidecar_rows_from_a_fixture_verdict(tmp_path):
+    import hashlib
+    import json
+    from akx_lb3_attribution import beliefs
+    vp, pp = _verdict_file(tmp_path, 0.06, t96_fa=0.07)
+    side = beliefs.write_sidecar(vp, pp, run_id="t", emitted_at="2026-10-24T12:00:00Z")
+    rows = [json.loads(l) for l in side.read_text().splitlines()]
+    cells = [r for r in rows if r["extra"]["kind"] == "cell"]
+    verd = [r for r in rows if r["extra"]["kind"] == "verdict"]
+    assert len(cells) == 12 and len(verd) == 1                     # 6 N x (t48 gating + t96 reported)
+    assert {(r["extra"]["threads"], r["extra"]["n_prompt"]) for r in cells} == {(t, n) for t in (48, 96) for n in rule.NS}
+    v = verd[0]
+    assert v["extra"]["verdict"] == "SPLIT_UNRESOLVED" and v["extra"]["seed_class"] == "node:mask_build"
+    assert v["value"] == pytest.approx(0.06) and v["reps"] == 10
+    pre = hashlib.sha256(pp.read_bytes()).hexdigest()
+    for r in rows:
+        assert r["extra"]["predeclaration_sha256"] == pre
+        assert r["results_sha256"] == hashlib.sha256(vp.read_bytes()).hexdigest()
+        assert r["protocol_id"] == "" and r["schema"] == beliefs.CAPTURE_SCHEMA
+        assert r["row_sha256"] == beliefs.content_hash({k: x for k, x in r.items() if k != "row_sha256"})
+    assert len({r["measurement_id"] for r in rows}) == len(rows)
+    c = next(r for r in cells if r["extra"]["threads"] == 48 and r["extra"]["n_prompt"] == 3)
+    assert c["value"] == pytest.approx(0.06) and c["extra"]["gating"] is True and c["extra"]["S_depth_share"] == 0.5
+
+
+def test_invalid_run_emits_zero_rows_and_removes_a_stale_sidecar(tmp_path):
+    from akx_lb3_attribution import beliefs
+    vp, pp = _verdict_file(tmp_path, 0.12)
+    assert beliefs.write_sidecar(vp, pp, run_id="t") is not None
+    import json
+    g, m, roll = _grid(0.12, overhead=0.08)
+    vp.write_text(json.dumps(dict(gating=rule.decide(g, m, roll), verdict="INVALID")))
+    assert beliefs.write_sidecar(vp, pp, run_id="t") is None
+    assert not (tmp_path / beliefs.SIDECAR_NAME).exists()
+
+
+def test_invalid_t96_report_keeps_only_t48_cells(tmp_path):
+    import json
+    from akx_lb3_attribution import beliefs
+    vp, pp = _verdict_file(tmp_path, 0.12)
+    d = json.loads(vp.read_text())
+    g, m, roll = _grid(0.12, reps=6)
+    d["reported_t96"] = rule.decide(g, m, roll)
+    vp.write_text(json.dumps(d))
+    rows = [json.loads(l) for l in beliefs.write_sidecar(vp, pp, run_id="t").read_text().splitlines()]
+    assert {r["extra"]["threads"] for r in rows} == {48} and len(rows) == 7
