@@ -1,0 +1,12 @@
+llama-bench: benchmark 1/12: starting
+llama-bench: benchmark 1/12: warmup prompt run
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2560)
+llama-bench: benchmark 1/12: depth run 1/10
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)
+llama-bench: benchmark 1/12: prompt run 1/10
+llama-bench: benchmark 1/12: depth run 2/10 (cached)
+llama-bench: benchmark 1/12: prompt run 2/10
+llama-bench: benchmark 1/12: depth run 3/10 (cached)

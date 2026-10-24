@@ -1,0 +1,24 @@
+llama-bench: benchmark 9/12: starting
+llama-bench: benchmark 9/12: warmup prompt run
+llama-bench: benchmark 9/12: depth run 1/10 (cached)
+llama-bench: benchmark 9/12: prompt run 1/10
+llama-bench: benchmark 9/12: depth run 2/10 (cached)
+llama-bench: benchmark 9/12: prompt run 2/10
+llama-bench: benchmark 9/12: depth run 3/10 (cached)
+llama-bench: benchmark 9/12: prompt run 3/10
+llama-bench: benchmark 9/12: depth run 4/10 (cached)
+llama-bench: benchmark 9/12: prompt run 4/10
+llama-bench: benchmark 9/12: depth run 5/10 (cached)
+llama-bench: benchmark 9/12: prompt run 5/10
+llama-bench: benchmark 9/12: depth run 6/10 (cached)
+llama-bench: benchmark 9/12: prompt run 6/10
+llama-bench: benchmark 9/12: depth run 7/10 (cached)
+llama-bench: benchmark 9/12: prompt run 7/10
+llama-bench: benchmark 9/12: depth run 8/10 (cached)
+llama-bench: benchmark 9/12: prompt run 8/10
+llama-bench: benchmark 9/12: depth run 9/10 (cached)
+llama-bench: benchmark 9/12: prompt run 9/10
+llama-bench: benchmark 9/12: depth run 10/10 (cached)
+llama-bench: benchmark 9/12: prompt run 10/10
+llama-bench: benchmark 10/12: starting
+llama-bench: benchmark 10/12: warmup prompt run
