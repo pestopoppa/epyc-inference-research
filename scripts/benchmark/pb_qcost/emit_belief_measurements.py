@@ -484,6 +484,7 @@ def write_rows(rows: list[dict], out: Path, *, overwrite: bool = False) -> Path:
     with os.fdopen(fd, "w") as fh:
         for row in rows:
             fh.write(canonical(row) + "\n")
+    os.chmod(tmp, 0o644)
     os.replace(tmp, out)
     return out
 
