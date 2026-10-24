@@ -1,0 +1,52 @@
+{
+ "advance_eligible_strata": [
+  "human_recorded"
+ ],
+ "counts": {
+  "clips": 820,
+  "defective_clips": 0,
+  "pairs": 410,
+  "parent_pairs": 82
+ },
+ "excluded_families": {
+  "CTX_BC": "tail fixed by the continuing assistant's natural end"
+ },
+ "families": [
+  "CUT_IC",
+  "CUT_WAIT"
+ ],
+ "files": {
+  "manifest/clips.jsonl": "01802b779b1def053c5e747d3901db0c0bc2201d5501ac3ee4a8a102c3f98ec3",
+  "manifest/natural_control.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "manifest/pairs.jsonl": "c144f606768a8d9b81458e430f6c716cd0abf9fe29a1818aa182d89ece5081c3",
+  "qa/qa_tail_gates_report.json": "c8e4867e6e236d2011b3f1089d669d968ba529a1830709da7acd56be89002ddd"
+ },
+ "instrument_version": "tt-tail-1",
+ "natural_control": {
+  "fill_procedure": "append rows to the v2 human_recorded.jsonl per HUMAN_SLOT.md, then rebuild this stratum: filled rows are carried unchanged (their own tails), tagged stratum=human_recorded",
+  "human_recorded_jsonl_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "n": 0,
+  "reason": "CS-4 sets 2/5 are not recorded; manifest/human_recorded.jsonl has 0 rows. Nothing here is natural speech.",
+  "slot": "natural_control",
+  "source": "CS-4:set5 human-recorded clips (v2 manifest/human_recorded.jsonl)",
+  "status": "declared-empty"
+ },
+ "parent_corpus": "turn-taking-cs45-v1",
+ "parent_corpus_json_sha256": "c784e3b033c5f51f7189d7c58fbd5c313d3802bfb59b1492a882a7c97541be25",
+ "ranking_only": true,
+ "room_tone": {
+  "frame_ceiling_dbfs": -40.0,
+  "kind": "synthesized (not a recording)",
+  "rms_dbfs": -55.0,
+  "tol_db": 1.5
+ },
+ "stratum": "synthesized",
+ "stratum_id": "turn-taking-cs45-1-tail-v1",
+ "tails_s": [
+  0.3,
+  0.6,
+  1.0,
+  3.0,
+  4.0
+ ]
+}
