@@ -416,6 +416,54 @@ def test_protocol_detects_position_bookkeeping_from_the_server_log(tmp_path, mon
     assert all("non-consecutive" in x for ev in d["position_evidence"].values() for x in ev)
 
 
+# ---------------------------------------------------------------- VB-KPF174C-ARM: the record's count block (writer only)
+def test_rules_sha_is_still_the_predeclared_one():
+    # the launch_verdict block is a record field, not a rule: the predeclared rules sha must not move
+    assert m.rules_sha256() == "b871d9a05396536bd6c342f21a1b2be1775e441783b7a0b418581249cdaf6233"
+
+
+def test_launch_verdict_counts_pairs_from_decide():
+    lps = [-0.1] * N
+    lps[0] = -0.1 - 1e-5
+    d = decide_for({"a": {}, "b": {}})
+    lv = m.launch_verdict(d)
+    assert (lv["attempts"], lv["pass"], lv["fail"], lv["invalid"]) == (6, 6, 0, 0) and lv["verdict"] == "none_reproduced"
+    d = decide_for({"a": {"Ks": [run_(lps=lps, cache_n=600) for _ in range(2)]}, "b": {}})
+    lv = m.launch_verdict(d)
+    assert (lv["attempts"], lv["pass"], lv["fail"], lv["invalid"]) == (6, 5, 1, 0) and lv["verdict"] == "recurrent"
+    # an invalid cell (one VRAM sample): its 3 pairs are invalid attempts, never passes
+    bad = full_cell()
+    bad["vram_own_pid_bytes"] = [5]
+    cells = {"a": m.judge_cell({**full_cell(), "cell": "a"}), "b": m.judge_cell({**bad, "cell": "b"})}
+    lv = m.launch_verdict(m.decide(cells, ["a", "b"]))
+    assert (lv["attempts"], lv["pass"], lv["fail"], lv["invalid"]) == (6, 3, 0, 3) and lv["verdict"] == "undetermined"
+    # a planned cell never attempted is not an attempt; an interrupted attempt is (3 invalid pairs)
+    cells = {"a": m.judge_cell({**full_cell(), "cell": "a"})}
+    d = m.decide(cells, ["a", "b"])
+    assert m.launch_verdict(d)["attempts"] == 3 and m.launch_verdict(d)["pairs_planned"] == 6
+    lv = m.launch_verdict(d, cells_interrupted=1)
+    assert (lv["attempts"], lv["pass"], lv["invalid"], lv["cells_interrupted"]) == (6, 3, 3, 1)
+    for lv in (m.launch_verdict(decide_for({"a": {}})), lv):
+        assert lv["pass"] + lv["fail"] + lv["invalid"] == lv["attempts"] and lv["out_of_scope"] == 0
+
+
+def test_launch_verdict_of_the_fake_runs(tmp_path, monkeypatch):
+    _, ana, _ = run_cells(tmp_path, LayoutFake(defect={"recurrent"}), monkeypatch)
+    lv = m.launch_verdict(ana["decisions"])
+    assert (lv["attempts"], lv["pass"], lv["fail"], lv["invalid"], lv["verdict"]) == (12, 0, 12, 0, "recurrent")
+
+
+def test_interrupted_attempts_counts_every_started_cell_that_stored_nothing(tmp_path):
+    rows = tmp_path / "rows.jsonl"
+    start = lambda g: json.dumps({"arm": "source_600", "group": g, "c": 600})  # noqa: E731
+    other = json.dumps({"arm": "Ks1_seed_600", "group": 1, "c": 600})
+    rows.write_text("\n".join([start(1), other, start(1), start(2), "not json"]) + "\n")
+    # g1-c600: 2 starts, stored -> 1 interrupted; g2-c600: 1 start, not stored -> 1 interrupted
+    assert m.interrupted_attempts(rows, {"g1-c600"}, 600) == 2
+    assert m.interrupted_attempts(rows, {"g1-c600", "g2-c600"}, 600) == 1
+    assert m.interrupted_attempts(tmp_path / "none.jsonl", set(), 600) == 0
+
+
 def test_layout_blind_numerics_reproduce_nothing(tmp_path, monkeypatch):
     _, ana, _ = run_cells(tmp_path, LayoutFake(layout_sensitive=False), monkeypatch)
     d = ana["decisions"]
@@ -511,6 +559,10 @@ def test_main_end_to_end_writes_rules_first_then_cells_verdict_and_one_record(tm
     rec = json.loads(recs[0].read_text())
     assert rec["kpf_task"] == "KPF-17.4c" and rec["spec_off"] and rec["decisions"]["locus"] == "none_reproduced"
     assert rec["target_n_swa_from_log"] == [0]
+    lv = rec["launch_verdict"]                                         # VB-KPF174C-ARM: the belief-kernel count block
+    assert (lv["attempts"], lv["pass"], lv["fail"], lv["invalid"], lv["out_of_scope"]) == (12, 12, 0, 0, 0)
+    assert lv["verdict"] == "none_reproduced" and lv["pairs_planned"] == 12 and lv["cells_interrupted"] == 0
+    assert lv["explains_174b"] == "control_layout_numerics" and lv["decision_grade"] is True
     body = {k: v for k, v in rec.items() if k != "record_sha256"}
     assert rec["record_sha256"] == k13.sha256_json(body)
     # resume: every cell stored -> no load

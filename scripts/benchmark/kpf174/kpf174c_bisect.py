@@ -436,6 +436,25 @@ def decide(judged: dict[str, dict], planned: list[str]) -> dict:
             "not_decided_here": RULES["decisions"]["not_decided_here"]}
 
 
+def launch_verdict(decisions: dict, cells_interrupted: int = 0) -> dict:
+    """VB-KPF174C-ARM: the record's count block, derived mechanically from `decide()`'s own output (no new rule).
+
+    Unit = one layout-matched pair (Xc~Cmask, Xe~C0, Ks~C0) of an ATTEMPTED cell, so pass + fail + invalid == attempts:
+    attempts = len(MATCHED) x (cells attempted + cells interrupted); pass = judged bit-identical pairs; fail = judged
+    differing pairs; invalid = the rest (pairs of an invalid cell, of an unstable or short group, or of an interrupted
+    cell). Planned cells never attempted are not attempts. verdict = the predeclared `locus` word, verbatim."""
+    m = decisions.get("matched") or {}
+    passed = sum(len((m.get(k) or {}).get("identical") or []) for k in MATCHED)
+    failed = sum(len((m.get(k) or {}).get("differs") or []) for k in MATCHED)
+    attempts = len(MATCHED) * (int(decisions.get("cells_attempted") or 0) + int(cells_interrupted or 0))
+    return {"verdict": decisions.get("locus"), "attempts": attempts, "pass": passed, "fail": failed,
+            "invalid": attempts - passed - failed, "out_of_scope": 0,
+            "unit": f"layout-matched pairs ({', '.join(MATCHED)}) per attempted cell",
+            "pairs_planned": len(MATCHED) * int(decisions.get("cells_planned") or 0),
+            "cells_attempted": int(decisions.get("cells_attempted") or 0), "cells_interrupted": int(cells_interrupted or 0),
+            "decision_grade": decisions.get("decision_grade"), "explains_174b": decisions.get("explains_174b")}
+
+
 def analyze(results: dict[str, dict], planned: list[str], n: int = N_GEN) -> dict:
     judged = {cid: judge_cell(c, n) for cid, c in sorted(results.items())}
     return {"rules_sha256": rules_sha256(), "rules": RULES["schema"], "cells": judged, "decisions": decide(judged, planned)}
@@ -656,12 +675,7 @@ class Runner:
                 if len(parts) >= 2 and parts[1].isdigit():
                     vmax, vn = max(vmax, int(parts[1])), vn + (int(parts[1]) > 0)
         rows = self.rows.path
-        partial = 0
-        if rows.exists():
-            done = set(self.results)
-            seen = {cell_id(r.get("group"), r.get("c")) for r in map(json.loads, rows.read_text().splitlines())
-                    if r.get("group") is not None}
-            partial = len(seen - done)
+        partial = interrupted_attempts(rows, set(self.results), self.geo["build"][0])
         rec = {
             "schema": SCHEMA, "kpf_task": TASK, "launch": LAUNCH, "launch_task": "17.4c",
             "run_id": f"kpf174c-{LAUNCH}-{k13.utc_tag()}", "arm": k13.CONFIGS[CONFIG_NAME]["label"],
@@ -677,6 +691,7 @@ class Runner:
             "suffix_tokens": a.suffix_tokens, "groups": a.groups, "n_predict": N_GEN, "seed": SEED,
             "rules": RULES["schema"], "rules_sha256": rules_sha256(), "spec_off": True,
             "decisions": ana.get("decisions"), "cells_interrupted": partial,
+            "launch_verdict": launch_verdict(ana.get("decisions") or {}, partial),
             "window_id": a.window_id, "device": a.device, "cpu_list": a.cpu_list,
             "start_utc": ctx.start_utc, "end_utc": k13.now_iso(), "host": ctx.host,
             "cells_dir": str(ctx.out / "cells" / LAUNCH), "rows": str(rows),
@@ -688,6 +703,24 @@ class Runner:
         k13.write_json(ctx.out / "records" / f"{rec['run_id']}.json", rec)
         k13.Jsonl(ctx.out / "belief_measurements.jsonl").add(rec)
         return rec
+
+
+def interrupted_attempts(rows_path: Path, stored: set[str], first_build: int) -> int:
+    """Cell attempts that started but never stored a cell (all attempts counted, never judged): every attempt of a cell
+    starts with exactly one `source_<first build point>` request (phase S), so a cell with k starts in rows/ holds k - 1
+    interrupted attempts if it is stored and k if it is not."""
+    if not rows_path.exists():
+        return 0
+    starts: dict[str, int] = {}
+    for ln in rows_path.read_text().splitlines():
+        try:
+            r = json.loads(ln)
+        except ValueError:
+            continue
+        if r.get("arm") == f"source_{first_build}" and r.get("group") is not None:
+            cid = cell_id(r["group"], r["c"])
+            starts[cid] = starts.get(cid, 0) + 1
+    return sum(n - (1 if cid in stored else 0) for cid, n in starts.items())
 
 
 def load_results(out: Path) -> dict:
