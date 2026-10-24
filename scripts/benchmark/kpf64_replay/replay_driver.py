@@ -407,6 +407,11 @@ def main(argv=None):
         ids = [i for i in ids if next(m for m in man["sessions"] if m["id"] == i).get("replayable", True)]
     if not ids:
         raise SystemExit("replay_driver: refusing: zero replayable sessions selected (children=off skips anchor-only parents)")
+    gap_turns = sum(1 for i in ids for t in json.loads((Path(a.sessions) / f"{i}.json").read_text())["turns"]
+                    if t.get("gap_s") is not None)
+    if a.think_scale and not gap_turns:
+        sys.stderr.write("replay_driver: WARNING: --think-scale is set but no turn carries gap_s (sessions dir written "
+                         "by the pre-amendment adapter): think waits are 0 for this arm\n")
     rp = Replay(a, base)
     snap = threading.Thread(target=rp.snapshots, daemon=True)
     snap.start()
@@ -430,7 +435,7 @@ def main(argv=None):
         "wall_s": time.time() - t0, "events": events, "infer_tol_tokens": a.infer_tol_tokens,
         "dry_run": a.dry_run, "oversubscribed": a.active > a.slots, "children": a.children,
         "parent_during_burst": a.parent_during_burst, "think_scale": a.think_scale,
-        "think_cap_s": a.think_cap_s, "peak_inflight_requests": rp.peak.get("inflight", 0),
+        "think_cap_s": a.think_cap_s, "turns_with_gap_s": gap_turns, "peak_inflight_requests": rp.peak.get("inflight", 0),
         "peak_active_lineages": rp.peak.get("sessions", 0), "bursts": len(rp.bursts),
         "burst_sizes": [len(b["children"]) for b in rp.bursts]}, indent=1))
     print(json.dumps({"arm": a.arm, "requests": len(load_done(rp.req_path)), "events": events["observed_eviction_events"]}))

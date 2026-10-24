@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import sys
 from collections import defaultdict
@@ -217,13 +218,18 @@ def to_markdown(res):
 def belief_measurements(res, served_pin, window, control_arm=None):
     """One chunk_kv `prefix_hit_share` measurement per arm: value = realised_tokens / ideal_tokens
     (both integers ride in the row; the strict reader re-derives it). served_pin needs
-    role/model/kernel_ref; window needs window_id/region_lock_claim/start_utc/end_utc."""
+    role/model/kernel_ref; window needs window_id/region_lock_claim/start_utc/end_utc, either one dict for all
+    arms or {arm_name: dict} (arms of one run can span several grant windows)."""
     ctl = control_arm or res["baseline"]
     out = []
+    per_arm = bool(window) and "window_id" not in window      # {arm: window} when arms ran in different windows
     for n, a in sorted(res["arms"].items()):
+        win = window.get(n) if per_arm else window
+        if not win:
+            raise ValueError(f"no window record for arm {n!r}; never invent one")
         out.append({"kind": "prefix_hit_share", "source_program": "KPF-64",
                     "subject": f"role={served_pin.get('role')} arm={n}",
-                    "served_pin": dict(served_pin), "window": dict(window), "is_control": n == ctl,
+                    "served_pin": dict(served_pin), "window": dict(win), "is_control": n == ctl,
                     "realised_tokens": int(a["cache"]), "ideal_tokens": int(a["ideal"])})
     return out
 
@@ -233,7 +239,11 @@ def write_belief_measurements(out_dir, *, run_id, producer, results_path, res, s
     """Emit chunk_kv.beliefs.jsonl via the root adapter (import it from scripts/vidya/adapters on
     sys.path, or pass the module). results_path is the analysis JSON the rows hash."""
     if chunk_kv is None:
+        root = os.environ.get("VIDYA_ROOT", "/workspace/scripts/vidya")
+        if root not in sys.path:
+            sys.path.insert(0, root)
         from adapters import chunk_kv  # type: ignore  # noqa: needs <root>/scripts/vidya on sys.path
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
     return chunk_kv.write_belief_measurements(
         out_dir, run_id=run_id, producer=producer, results_path=results_path,
         measurements=belief_measurements(res, served_pin, window, control_arm))
@@ -247,13 +257,30 @@ def main(argv=None):
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--boot", type=int, default=BOOT_B)
     ap.add_argument("--manifest", default=None, help="adapter manifest.json for the recorded-transcript reference")
+    ap.add_argument("--belief-out", default=None,
+                    help="dir to receive chunk_kv.beliefs.jsonl (VB-KVCHUNK-WRITE); needs the three --belief-* args below. "
+                         "Writes ONLY there, never a ledger.")
+    ap.add_argument("--belief-pin", default=None, help="served pin JSON {role,model,kernel_ref} or @file")
+    ap.add_argument("--belief-window", default=None,
+                    help="window JSON {window_id,region_lock_claim,start_utc,end_utc} or {arm: that}, or @file")
+    ap.add_argument("--belief-run-id", default=None)
+    ap.add_argument("--belief-control", default=None, help="arm flagged as control (default: the baseline)")
     a = ap.parse_args(argv)
+    if a.belief_out and not (a.belief_pin and a.belief_window and a.belief_run_id):
+        ap.error("--belief-out needs --belief-pin, --belief-window and --belief-run-id (no placeholders are invented)")
     arms = dict(x.split("=", 1) for x in a.arm)
     res = analyse(arms, a.baseline, a.boot, manifest=a.manifest)
     Path(a.out_json).write_text(json.dumps(res, indent=1))
     md = to_markdown(res)
     Path(a.out_md).write_text(md)
     print(md)
+    if a.belief_out:
+        def _j(v):
+            return json.loads(Path(v[1:]).read_text()) if v.startswith("@") else json.loads(v)
+        sidecar = write_belief_measurements(
+            a.belief_out, run_id=a.belief_run_id, producer="kpf64_replay/analysis.py", results_path=a.out_json,
+            res=res, served_pin=_j(a.belief_pin), window=_j(a.belief_window), control_arm=a.belief_control)
+        print(f"belief sidecar: {sidecar}")
     return 0
 
 

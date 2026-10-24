@@ -374,6 +374,12 @@ def items_to_turns(items):
     return turns
 
 
+def default_stores(mode):
+    """Stores sampled when --stores is not given. Codex transcripts carry no parent links, so a families sample
+    from them is always empty and the zero-session guard would abort the whole run (KPF-64.3 readiness)."""
+    return tuple(x for x in STORES if x != "codex") if mode == "families" else STORES
+
+
 def common_prefix_len(a: str, b: str) -> int:
     if b.startswith(a):
         return len(a)
@@ -955,7 +961,8 @@ def main(argv=None):
                          + ", ".join(OPENCODE_RO_DBS.values()) + ". Live stores are refused.")
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--seed", type=int, default=64)
-    ap.add_argument("--stores", default=",".join(STORES))
+    ap.add_argument("--stores", default=None,
+                    help="default: all stores in flat mode; families mode drops codex (no parent links, always childless)")
     ap.add_argument("--min-requests", type=int, default=10)
     ap.add_argument("--max-prompt-chars", type=int, default=200_000, help="~50k tokens; must fit one slot's ctx")
     ap.add_argument("--max-requests", type=int, default=200)
@@ -972,7 +979,8 @@ def main(argv=None):
     ap.add_argument("--fanout-store", action="store_true",
                     help="print STORE-WIDE fan-out stats (timestamps only, no text) and exit; no --out needed")
     a = ap.parse_args(argv)
-    stores = tuple(a.stores.split(","))
+    stores = default_stores(a.mode) if a.stores is None else tuple(a.stores.split(","))
+    a.stores = ",".join(stores)
     if a.fanout_store:
         print(json.dumps(store_fanout(a.home, stores, opencode_dbs=a.opencode_db), indent=1))
         return 0
