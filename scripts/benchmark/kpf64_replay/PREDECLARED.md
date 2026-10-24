@@ -188,3 +188,67 @@ window cannot complete a live arm; arms are atomic, so live runs need windows of
 non-zero rc fails the arm cleanly. The preflight is one 16-token chat request on slot 0 before any replay prompt; it shares no
 prefix with replay prompts and is identical across arms. The replay body itself stays raw `/completion`, where no chat-template
 kwarg exists, so no per-request `enable_thinking` is sent there.
+
+---
+
+# Amendment 3 (KPF-64.3 E/F follow-up arms, KPF-LB2.2 recalibration, token-derived prompt cap, session-set rule; written BEFORE any E/F arm ran)
+
+Nothing in the A-D design, N=20, seed 64, or the A-D decision rule changes. No E/F request has been issued; every number below is
+measured from the stored A-D results (`/mnt/raid0/llm/tmp/qb2-kpf64/`) and the sessions dirs on disk. Lane commit with the code:
+`3441e8a5c` (adapter token cap and `--recap`, arms EB/FB, `pairwise.py --passes/--arms/--pairs`). Job:
+`/mnt/raid0/llm/tmp/fillers-3c4ca599/jobs/kpf64ef_job.sh`, row `s5-kpf64-ef`.
+
+## 1. Prompt cap is now token-derived (fixes the codex-00 exclusion)
+The A-D cap was 200,000 chars "~50k tokens", but the per-slot context is 262144/np4 = 65,536 tokens. `codex-00` (2.90 chars/token)
+reached 66,982 tokens at request 9 and returned HTTP 400 in all 8 A-D runs, so it is the one session excluded from every A-D arm
+(`ANALYSIS_PAIRWISE.md`, excluded record). The lowest density measured over the 397 A-D requests is 2.62 chars/token (codex-04).
+Rule from now on: effective char cap = min(`--max-prompt-chars`, (slot_ctx - n_predict - margin) x chars_per_token) with slot_ctx 65,536,
+n_predict 128, margin 1,024 and a conservative 2.5 chars/token = **160,960 chars**; optionally enforced with exact counts from a
+running server's `/tokenize` (`adapter.py --tokenize-url`). `ctx` and `np` are NOT changed (they are the measured config).
+The A-D sessions dir is frozen and not re-capped (that would change the measured requests); the new cap applies to every sample drawn
+or re-truncated from now on (`adapter.py --recap SRC --out DST` re-truncates a frozen dir, never touching the source).
+
+## 2. Session-set rule for E/F versus A-D
+This is the paired-exclusion rule of "Exclusions" above applied across the follow-up arms: a session excluded from any arm is excluded
+from ALL arms compared with it. Therefore:
+- **E and EB replay the frozen flat dir (`sessions/`) minus every session that errored in A-D** (`codex-00`; the list is read from
+  `ANALYSIS_PAIRWISE.json` `excluded_sessions`, not typed), via the driver `--only` list. The E/EB vs A-D contrasts (E-D, EB-B) are paired on the
+  same 19 sessions; codex-00 also never consumes a slot in E, which would otherwise spend 8 requests of slot time on a session that is
+  discarded. The mismatch (A-D 20 drawn, 19 analysed) is recorded here, not hidden.
+- **F and FB use a different sample (families), so they are NEVER compared against A-D**; they are paired only with each other (F-FB). Under
+  the new cap no F prompt can exceed one slot, so no F session is expected to be excluded; if one errors it leaves both F and FB.
+
+## 3. Findings that set the E/F knobs (measured)
+1. The frozen flat sessions dir has no think gaps (400 of 400 turns lack `gap_s`), so `--think-scale/--think-cap-s` are inert for E. E runs
+   back-to-back and is labelled as such (`--think-scale 0` is passed by the job; the arms.json E entry keeps its original flags, which the job's
+   later flag overrides).
+2. Recorded gaps are tiny (families sample, 2,126 gaps: median 0.008 s, p90 1.4 s, max 29,905 s idle human time). Compressing buys nothing, so F runs
+   at **`--think-scale 1.0`** with the cap unchanged at 60 s (it binds on under 1 percent of gaps). Fidelity is free.
+3. Families mode aborted by default because the default stores included codex (no parent links); families mode now defaults to claude,opencode.
+4. The PREDECLARED `--n 20` families sample is 2,271 requests, about 7.5M uncached tokens, ~89,000 s (25 h) per arm: no window holds it.
+
+## 4. Amended E/F arms (contrasts against the matching config; labelled follow-ups, not part of the A-D decision rule)
+| arm | server | sessions dir | driver args (arms.json plus job override) | question |
+|---|---|---|---|---|
+| E | D config (32 ckpts, cache-ram 32768) | frozen flat dir minus A-D excluded | `--active 8 --think-scale 0 --only <19 ids>` | sessions > slots: 8 lineages over 4 slots |
+| EB | B config (32 ckpts, cache-ram 0) | same | same | tier effect under E load (E-EB) |
+| F | D config | `sessions-families-n4-cap161k` | `--children bursts --parent-during-burst pause --think-scale 1.0 --think-cap-s 60` | burst fan-out, parent paused |
+| FB | B config | same | same | tier effect under F load (F-FB) |
+`sessions-families-n4-cap161k` = the frozen `sessions-families-n4-cap170k` (adapter `--mode families --n 4 --seed 64 --stores claude,opencode`, the pool
+is live so it cannot be redrawn) re-truncated by `--recap` to 160,960 chars: 4 parents, 22 children (4 of 26 dropped below 3 requests), **442
+requests, ~935k uncached tokens** (the harness estimator, which reproduced A-D's 971k). `--max-children 8`, `--children bursts`,
+`--parent-during-burst pause`, seed 64 unchanged. Contrasts reported: E-EB, E-D, EB-B (flat group, one bootstrap draw, B=2000, seed 6464) and F-FB
+(families group). Real effect = CI excludes 0 AND |mean gap diff| > 0.5 pp, as above.
+
+## 5. Time (CPU, 24 threads, one quarter; measured D = 11,598 s / 12,914 s for 398 requests, ~11.9 s per 1k uncached tokens)
+| arm | basis | est wall | min window (x1.15, arms atomic) |
+|---|---|---|---|
+| E, EB | same uncached tokens as D, prefill-bound, plus re-prefill if lineages evict | 12-16 ks | 18,400 s |
+| F, FB | 935k uncached tok x 11.9 s/1k plus ~400 s of waits | ~11.6 ks | 13,400 s |
+The job skips an arm whose minimum window does not fit the grant and tries the next, so a 3.7 h grant still runs F/FB. Total ~47-55 ks (13-15 h).
+
+## 6. Acceptance
+Child share of requests > 0 in F, peak lineages > 4 in E and F (manifest and realised), `turns_with_gap_s` > 0 in F (proves the waits ran), gap
+tables versus the within-session and cross-head bounds, the slot-bounded gap (`pairwise.tight_gap`) beside the driver-ideal gap because the
+driver ideal is char-proportional and overshoots by ~0.4 pp in A-D, the excluded-session record for every arm, and server eviction counts.
+Belief rows go to `/mnt/raid0/llm/tmp/qb2-kpf64/belief-ef/{flat,fam}` only (`analysis.py --belief-out`, per-arm windows from each arm's `window.json`).
