@@ -2979,9 +2979,13 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
     left behind. A gate that runs after the gate before it refused is not a gate, even
     when nobody reads its answer.
     """
+    from . import history_fields     # AK-HR-3b: observe-only build/correctness seconds
+    import time as _time
     collected: list[Verdict] = []
     for check in checks:
+        started = _time.monotonic()
         verdict = check()
+        history_fields.note_check(getattr(verdict, "gate", None), _time.monotonic() - started)
         collected.append(verdict)
         if not verdict.passed:
             return False, collected

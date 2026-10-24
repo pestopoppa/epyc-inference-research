@@ -37,10 +37,17 @@ from typing import Any, Callable, Iterator, Mapping
 
 #: Stages whose seconds a trial records. `planner`, `critic` and `author` are the actor
 #: calls' wall time (`actors._record_metrics`); `gate` and `measure` wrap the callables
-#: `loop.iterate` is handed. Build and correctness checks run inside those callables and
-#: are not separable at this layer, so there is no `build` or `correctness` key: a stage
-#: that did not run (or cannot be separated) is `null`, never zero.
-STAGES = ("planner", "critic", "author", "gate", "measure")
+#: `loop.iterate` is handed. AK-HR-3b (2026-10-24): `build` and `correctness` split the
+#: injected gate. `gates.run_all` times every check it runs and files it by the verdict's
+#: gate name (`BUILD_VERDICT_GATES` -> `build`, any other verdict -> `correctness`); the
+#: GPU gate's build, which runs before its quiet window outside `run_all`, is wrapped in
+#: `timed("build", ...)`. So `build + correctness <= gate`: the remainder is the gate's own
+#: scope analysis (git diffs, route admission) and window waits outside the checks. A
+#: GPU correctness check's own reentrant quiet-window wait is inside `correctness`. A
+#: stage that did not run is `null`, never zero (a runtime arm has no `build`).
+STAGES = ("planner", "critic", "author", "gate", "build", "correctness", "measure")
+#: `gates.compiles` verdict names: a check returning one of these is build time.
+BUILD_VERDICT_GATES = frozenset({"configure", "compile"})
 
 #: The payload keys `Outcome.to_attempt` adds (all nullable) when a trial was observed.
 ATTEMPT_KEYS = ("trial_id", "failure_class", "stage_seconds", "trial_tokens",
@@ -145,6 +152,16 @@ def note_call(role: str | None, wall_s: Any, failure_class: str | None,
     if totals:
         # The same decoded+prompt axis AK-HR-1(c) counted (`actor_metrics.TOTAL_FIELDS`).
         trial.add_tokens(totals.get("decoded_tokens"), totals.get("prompt_tokens"))
+
+
+def note_check(verdict_gate: Any, seconds: Any) -> None:
+    """Called by `gates.run_all` after each check: its seconds, filed as `build` when the
+    verdict is a build verdict, else `correctness`. No-op without a trial."""
+    trial = current()
+    if trial is None:
+        return
+    stage = "build" if verdict_gate in BUILD_VERDICT_GATES else "correctness"
+    trial.add_seconds(stage, seconds)
 
 
 def metrics_fields() -> dict[str, Any]:

@@ -4207,7 +4207,9 @@ def main(argv: list[str] | None = None) -> int:
             # Build owns only its narrow CPU claim. Every GPU correctness /
             # dispatch invocation owns quiet separately, including anchor fallback.
             if not cpu_launch:
-                compiled = checks.pop(0)()
+                # AK-HR-3b: this build runs outside run_all, so it is timed here.
+                from . import history_fields
+                compiled = history_fields.timed("build", checks.pop(0))()
                 if not compiled.passed:
                     return False, [compiled]
                 with cpu_measurement_window():

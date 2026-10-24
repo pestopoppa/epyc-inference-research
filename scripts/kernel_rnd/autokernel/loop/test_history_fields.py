@@ -51,6 +51,46 @@ class TrialFields(unittest.TestCase):
         self.assertIsNotNone(snap["stage_seconds"]["gate"])
         self.assertIsNotNone(snap["stage_seconds"]["measure"])
 
+    def test_run_all_splits_build_and_correctness_inside_the_gate(self):
+        """AK-HR-3b: run_all files each check by its verdict's gate name."""
+        from autokernel.loop import gates
+        import time as _time
+
+        def check(name, seconds, passed=True):
+            def run():
+                _time.sleep(seconds)
+                return gates.Verdict(name, passed)
+            return run
+        with history_fields.trial_scope() as trial:
+            passed, _ = history_fields.timed("gate", gates.run_all)(
+                check("compile", 0.02), check("op_correctness", 0.03),
+                check("cpu_route_reference", 0.01))
+            snap = trial.snapshot()["stage_seconds"]
+        self.assertTrue(passed)
+        self.assertGreaterEqual(snap["build"], 0.02)
+        self.assertGreaterEqual(snap["correctness"], 0.04)
+        self.assertLess(snap["build"], snap["correctness"])
+        self.assertLessEqual(snap["build"] + snap["correctness"], snap["gate"] + 0.002)
+
+    def test_a_failed_build_leaves_correctness_null_and_no_trial_is_a_noop(self):
+        from autokernel.loop import gates
+        with history_fields.trial_scope() as trial:
+            gates.run_all(lambda: gates.Verdict("configure", False, "cmake configure failed"),
+                          lambda: gates.Verdict("op_correctness", True))
+            snap = trial.snapshot()["stage_seconds"]
+        self.assertIsNotNone(snap["build"])
+        self.assertIsNone(snap["correctness"])          # short-circuited: never ran
+        self.assertEqual(gates.run_all(lambda: gates.Verdict("compile", True)),
+                         (True, [gates.Verdict("compile", True)]))   # outside a trial
+
+    def test_a_runtime_arm_gate_has_correctness_but_no_build(self):
+        from autokernel.loop import gates
+        with history_fields.trial_scope() as trial:
+            gates.run_all(lambda: gates.Verdict("op_correctness", True))
+            snap = trial.snapshot()["stage_seconds"]
+        self.assertIsNone(snap["build"])
+        self.assertIsNotNone(snap["correctness"])
+
     def test_family_bucket_reuses_the_existing_four_family_helper(self):
         row = {"mechanism_id": "akm-prefetch-next-row", "statement": "x"}
         self.assertEqual(history_fields.family_bucket(row), actors._mechanism_family(row))
