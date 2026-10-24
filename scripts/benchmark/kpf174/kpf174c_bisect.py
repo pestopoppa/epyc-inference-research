@@ -468,6 +468,7 @@ class Runner:
         self.vram_file = None
         self._vstop = threading.Event()
         self.shadow: dict[int, list[int]] = {}
+        self.n_swa_log: list[int] = []
 
     @property
     def rows(self):
@@ -490,6 +491,8 @@ class Runner:
             if rb.get("env_HSA_OVERRIDE_CPU_AFFINITY_DEBUG") != "0":
                 raise k13.Abort(f"HSA_OVERRIDE_CPU_AFFINITY_DEBUG {rb.get('env_HSA_OVERRIDE_CPU_AFFINITY_DEBUG')!r} in "
                                 "the server environ (want '0', the shim's GPS-PIN-1 knob)")
+        lines = self.srv.log_lines() if hasattr(self.srv, "log_lines") else []
+        self.n_swa_log = sorted({int(x.group(1)) for x in (re.search(r"\bn_swa\s*=\s*(\d+)", ln) for ln in lines) if x})
         self.vram_file = self.ctx.out / "vram" / f"{getattr(self.srv, 'label', LAUNCH)}.txt"
         self.vram_file.parent.mkdir(parents=True, exist_ok=True)
         if getattr(self.srv, "proc", None) is not None:   # 1 Hz own-pid KFD VRAM sampler
@@ -668,6 +671,7 @@ class Runner:
             "env": getattr(srv, "env_note", None), "linkage": getattr(srv, "linkage", None),
             "stop": getattr(srv, "stop_rec", None),
             "drafter_flags_removed": getattr(srv, "drafter_removed", None),
+            "target_n_swa_from_log": self.n_swa_log,
             "vram_own_pid_peak_bytes": vmax, "vram_nonzero_samples": vn, "vram_file": str(self.vram_file),
             "prompt_set": str(self.ps.path), "prompt_set_sha256": self.ps.sha256, "geometry": self.geo,
             "suffix_tokens": a.suffix_tokens, "groups": a.groups, "n_predict": N_GEN, "seed": SEED,

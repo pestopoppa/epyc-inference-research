@@ -485,6 +485,9 @@ def _fake_server_factory(client, seen):
         def lines_between(self, t0, t1):
             return [ln for t, ln in client.lines if t0 - 0.5 <= t <= t1 + 0.5]
 
+        def log_lines(self):
+            return ["print_info: n_swa            = 0"]
+
         def stop(self):
             self.stop_rec = {"verified_dead": True}
     return FakeServer
@@ -507,6 +510,7 @@ def test_main_end_to_end_writes_rules_first_then_cells_verdict_and_one_record(tm
     assert len(recs) == 1 and len(list((out / "cells" / m.LAUNCH).glob("*.json"))) == 4
     rec = json.loads(recs[0].read_text())
     assert rec["kpf_task"] == "KPF-17.4c" and rec["spec_off"] and rec["decisions"]["locus"] == "none_reproduced"
+    assert rec["target_n_swa_from_log"] == [0]
     body = {k: v for k, v in rec.items() if k != "record_sha256"}
     assert rec["record_sha256"] == k13.sha256_json(body)
     # resume: every cell stored -> no load
