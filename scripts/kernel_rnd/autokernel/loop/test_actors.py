@@ -432,6 +432,34 @@ class PlannerContract(unittest.TestCase):
         self.assertIn("DIMINISHING-RETURNS ESCAPE", text)
         self.assertIn("synchronization/barrier", text)
 
+    def test_ranked_recall_order_does_not_let_an_old_keep_hide_newer_failures(self):
+        """Ranked recall (default since 2026-10-20) puts merit-5 `kept` rows first; the
+        keep reset must follow recorded_at, not list position."""
+        base = {"target_surface": "ggml/src/ggml-cpu/arch/x86/quants.c",
+                "target_symbol": "ggml_vec_dot_q8_0_q8_0"}
+        kept = {**base, "status": "kept", "mechanism_id": "akm-q8_0-kept",
+                "recorded_at": "2026-10-01T00:00:00Z"}
+        newer = [{**base, "status": "measured_null", "mechanism_id": f"akm-q8_0-{n}",
+                  "recorded_at": f"2026-10-0{2 + i}T00:00:00Z"}
+                 for i, n in enumerate(("a", "b", "c"))]
+        exhausted, stagnant = actors.diminishing_returns_triggers([kept, *newer])
+        self.assertIn("local quant/dot kernel", exhausted)
+        self.assertIn((base["target_surface"], base["target_symbol"]), stagnant)
+        # A keep NEWER than the failures still resets, whatever the list order.
+        newest_keep = {**kept, "recorded_at": "2026-10-09T00:00:00Z"}
+        self.assertEqual(actors.diminishing_returns_triggers([*newer, newest_keep]), ({}, {}))
+
+    def test_ranked_order_does_not_count_failures_older_than_the_keep(self):
+        """The other direction of the same bug: under merit order an older null that
+        ranks above a newer keep must NOT count toward the family."""
+        older = [{"status": "measured_null", "mechanism_id": f"akm-x-{i}",
+                  "target_surface": "a.c", "target_symbol": "f",
+                  "recorded_at": f"2026-10-0{i}T00:00:00Z"} for i in (1, 2, 3)]
+        keep = {"status": "kept", "mechanism_id": "akm-k", "target_surface": "a.c",
+                "target_symbol": "f", "recorded_at": "2026-10-05T00:00:00Z"}
+        _, stagnant = actors.diminishing_returns_triggers([*older, keep])  # merit order
+        self.assertNotIn(("a.c", "f"), stagnant)
+
     def test_a_current_epoch_keep_outside_the_recency_window_is_still_shown(self):
         """DS41 audit fix 3: recall's recency window (and render's newest-12 slice)
         used to be the only view -- a kept row older than either was simply gone."""
