@@ -958,6 +958,14 @@ server_mode:
     # launcher has no per-instance serving flags, so the :8080/:8180 halves get it too (host RAM
     # cap, allocated on demand; 3 x 32 GiB worst case against ~840 GiB available).
     cache_ram: 32768
+    # ── 2026-10-24 (RATIFY-CTXCKPT-HYBRID-20261024, operator-signed): --ctx-checkpoints 32 DECLARED ──
+    # HYBRID model (GGUF ssm.* + full_attention_interval 4; llm_arch_is_hybrid in v10). Context
+    # checkpoints are its ONLY partial-restore point: without them any prefix divergence forces a
+    # full re-prefill (KPF-64.4: checkpoints off lose 3.9 pp prefix-hit share, ~1,400 uncached
+    # tok/req; root docs/design/ufh14-b4-prefix-cache-policy-20261003.md §3.7). 32 == the v10
+    # llama-server default (common/common.h:633), so behaviour is unchanged; it is declared so a
+    # kernel-default change cannot silently change production. NEVER 0 on a hybrid role.
+    ctx_checkpoints: 32
     serving_shape:
       n_ctx: 262144
       slots_by_shape: {full: 4, half: 1}   # 262144/4 = 65536 per slot on the full,
@@ -1456,6 +1464,14 @@ server_mode:
     # next turn re-prefills. The orchestrator's prefix credit models that loss path
     # (src/scheduling/prefix_history.py, "Idle-slot purge").
     cache_idle_slots: false
+    # ── 2026-10-24 (RATIFY-CTXCKPT-HYBRID-20261024, operator-signed): --ctx-checkpoints 32 DECLARED ──
+    # HYBRID model (GGUF ssm.* + full_attention_interval 4; llm_arch_is_hybrid in v10). Context
+    # checkpoints are its ONLY partial-restore point: without them any prefix divergence forces a
+    # full re-prefill (KPF-64.4: checkpoints off lose 3.9 pp prefix-hit share, ~1,400 uncached
+    # tok/req; root docs/design/ufh14-b4-prefix-cache-policy-20261003.md §3.7). 32 == the v10
+    # llama-server default (common/common.h:633), so behaviour is unchanged; it is declared so a
+    # kernel-default change cannot silently change production. NEVER 0 on a hybrid role.
+    ctx_checkpoints: 32
     serving_shape:
       # ── THE GPU CAP, RECOMPUTED 2026-09-22 ON A CORRECTED KV RATE ───────────────
       # ⚠ THE OLD BANNER'S ARITHMETIC WAS WRONG IN ITS INPUT, NOT IN ITS METHOD, AND
@@ -1930,6 +1946,14 @@ server_mode:
     # llama-server --cache-ram (MiB), operator-approved range 16384-32768 (2026-09-24); upper end
     # taken. Default 8192.
     cache_ram: 32768
+    # ── 2026-10-24 (RATIFY-CTXCKPT-HYBRID-20261024, operator-signed): --ctx-checkpoints 32 DECLARED ──
+    # HYBRID model (GGUF ssm.* + full_attention_interval 4; llm_arch_is_hybrid in v10). Context
+    # checkpoints are its ONLY partial-restore point: without them any prefix divergence forces a
+    # full re-prefill (KPF-64.4: checkpoints off lose 3.9 pp prefix-hit share, ~1,400 uncached
+    # tok/req; root docs/design/ufh14-b4-prefix-cache-policy-20261003.md §3.7). 32 == the v10
+    # llama-server default (common/common.h:633), so behaviour is unchanged; it is declared so a
+    # kernel-default change cannot silently change production. NEVER 0 on a hybrid role.
+    ctx_checkpoints: 32
     serving_shape:
       n_ctx: 262144
       # ONE INSTANCE, ONE CLASS. `slots_by_shape` is written out rather than left to the
