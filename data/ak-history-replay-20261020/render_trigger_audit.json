@@ -1,0 +1,157 @@
+{
+ "campaigns": {
+  "ak-27b-gpu-verify-20261004": {
+   "abstained_rows": 0,
+   "arms": {
+    "no_abstained": {
+     "calls": 13,
+     "exhaustion_block_fires": 0,
+     "exhaustion_families": 0,
+     "stagnation_block_fires": 0,
+     "stagnation_families": 0
+    },
+    "no_abstained_no_refused_at_formation": {
+     "calls": 13,
+     "exhaustion_block_fires": 0,
+     "exhaustion_families": 0,
+     "stagnation_block_fires": 0,
+     "stagnation_families": 0
+    },
+    "pre_decision": {
+     "calls": 13,
+     "exhaustion_block_fires": 0,
+     "exhaustion_families": 0,
+     "stagnation_block_fires": 0,
+     "stagnation_families": 0
+    }
+   },
+   "family_firings_only_with": {
+    "exhaustion_families_needing_abstained": 0,
+    "exhaustion_families_needing_refused_at_formation": 0,
+    "stagnation_families_needing_abstained": 0,
+    "stagnation_families_needing_refused_at_formation": 0
+   },
+   "identity": {},
+   "refused_at_formation_rows": 0,
+   "rows": 13
+  },
+  "ak-ds41-cpu-decode-20260923": {
+   "abstained_rows": 326,
+   "arms": {
+    "no_abstained": {
+     "calls": 841,
+     "exhaustion_block_fires": 60,
+     "exhaustion_families": 88,
+     "stagnation_block_fires": 77,
+     "stagnation_families": 77
+    },
+    "no_abstained_no_refused_at_formation": {
+     "calls": 841,
+     "exhaustion_block_fires": 57,
+     "exhaustion_families": 68,
+     "stagnation_block_fires": 77,
+     "stagnation_families": 77
+    },
+    "pre_decision": {
+     "calls": 841,
+     "exhaustion_block_fires": 60,
+     "exhaustion_families": 88,
+     "stagnation_block_fires": 77,
+     "stagnation_families": 77
+    }
+   },
+   "family_firings_only_with": {
+    "exhaustion_families_needing_abstained": 0,
+    "exhaustion_families_needing_refused_at_formation": 20,
+    "stagnation_families_needing_abstained": 0,
+    "stagnation_families_needing_refused_at_formation": 0
+   },
+   "identity": {
+    "abstained:mechanism:surface_symbol": 3,
+    "abstained:no_mechanism:no_target": 323,
+    "refused_at_formation:mechanism:surface_symbol": 6
+   },
+   "refused_at_formation_rows": 6,
+   "rows": 841
+  },
+  "ak-q38fn-cpu-decode-20261003": {
+   "abstained_rows": 30,
+   "arms": {
+    "no_abstained": {
+     "calls": 335,
+     "exhaustion_block_fires": 27,
+     "exhaustion_families": 27,
+     "stagnation_block_fires": 40,
+     "stagnation_families": 40
+    },
+    "no_abstained_no_refused_at_formation": {
+     "calls": 335,
+     "exhaustion_block_fires": 27,
+     "exhaustion_families": 27,
+     "stagnation_block_fires": 40,
+     "stagnation_families": 40
+    },
+    "pre_decision": {
+     "calls": 335,
+     "exhaustion_block_fires": 27,
+     "exhaustion_families": 27,
+     "stagnation_block_fires": 66,
+     "stagnation_families": 66
+    }
+   },
+   "family_firings_only_with": {
+    "exhaustion_families_needing_abstained": 0,
+    "exhaustion_families_needing_refused_at_formation": 0,
+    "stagnation_families_needing_abstained": 26,
+    "stagnation_families_needing_refused_at_formation": 0
+   },
+   "identity": {
+    "abstained:mechanism:surface_symbol": 15,
+    "abstained:no_mechanism:no_target": 15
+   },
+   "refused_at_formation_rows": 0,
+   "rows": 335
+  },
+  "loop-memory": {
+   "abstained_rows": 0,
+   "arms": {
+    "no_abstained": {
+     "calls": 2397,
+     "exhaustion_block_fires": 1845,
+     "exhaustion_families": 2167,
+     "stagnation_block_fires": 1555,
+     "stagnation_families": 3039
+    },
+    "no_abstained_no_refused_at_formation": {
+     "calls": 2397,
+     "exhaustion_block_fires": 1607,
+     "exhaustion_families": 1699,
+     "stagnation_block_fires": 1089,
+     "stagnation_families": 1815
+    },
+    "pre_decision": {
+     "calls": 2397,
+     "exhaustion_block_fires": 1845,
+     "exhaustion_families": 2167,
+     "stagnation_block_fires": 1555,
+     "stagnation_families": 3039
+    }
+   },
+   "family_firings_only_with": {
+    "exhaustion_families_needing_abstained": 0,
+    "exhaustion_families_needing_refused_at_formation": 468,
+    "stagnation_families_needing_abstained": 0,
+    "stagnation_families_needing_refused_at_formation": 1224
+   },
+   "identity": {
+    "refused_at_formation:mechanism:surface_symbol": 361,
+    "refused_at_formation:no_mechanism:no_target": 9
+   },
+   "refused_at_formation_rows": 370,
+   "rows": 2397
+  }
+ },
+ "recall": "recency (pre-2026-10-20 default)",
+ "schema": "epyc.autokernel.render_trigger_audit.v1",
+ "window": 40
+}

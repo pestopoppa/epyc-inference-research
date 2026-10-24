@@ -417,20 +417,71 @@ class PlannerContract(unittest.TestCase):
         self.assertIsNone(got.mechanism_id)
         self.assertIsNone(got.target_surface)
 
-    def test_abstentions_count_toward_the_family_level_escape(self):
-        """DS41 audit fix 2: "abstained" was missing from the terminal/stagnating
-        status sets, so K consecutive "already implemented" abstentions never tripped
-        the DIMINISHING-RETURNS ESCAPE -- even before fix 1, because an unidentified
-        abstention has no family either. Both together make this fire."""
+    def test_abstentions_do_not_count_toward_either_escape(self):
+        """REVERSES DS41 audit fix 2 (decision 2026-10-24, `actors.FAMILY_*_STATUSES`).
+        Fix 2 added "abstained" so K "already implemented" abstentions tripped the
+        escape. An abstention forms no hypothesis: it is a harness event (AK-HR-2), not a
+        resolved failure of the mechanism it names, and counting it fed the escape with
+        the planner's own refusals. Abstentions still render in the history sections."""
         rows = [
             {"status": "abstained", "mechanism_id": f"akm-barrier-{name}",
              "statement": "change the OpenMP barrier implementation",
+             "target_surface": "ggml/src/ggml-cpu/ggml-cpu.c",
+             "target_symbol": "ggml_barrier",
              "refusal_reason": "already implemented"}
             for name in ("spin", "yield", "tree")
         ]
         text = actors.render_context({"prior_experiments": rows})
+        self.assertNotIn("DIMINISHING-RETURNS ESCAPE", text)
+        self.assertNotIn("Family-level diminishing returns", text)
+        self.assertIn("akm-barrier-spin", text)
+        self.assertEqual(actors.diminishing_returns_triggers(rows), ({}, {}))
+
+    def test_abstentions_neither_count_nor_reset_beside_measured_failures(self):
+        """Q38FN replay shape: two measured nulls and a declined idea on one symbol."""
+        base = {"target_surface": "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",
+                "target_symbol": "ggml_iqk_try_mul_mat_id"}
+        rows = [{**base, "status": "abstained", "mechanism_id": "akm-mmid-reuse"},
+                {**base, "status": "measured_null", "mechanism_id": "akm-mmid-a"},
+                {**base, "status": "measured_null", "mechanism_id": "akm-mmid-b"}]
+        self.assertEqual(actors.diminishing_returns_triggers(rows)[1], {})
+        rows.append({**base, "status": "measured_null", "mechanism_id": "akm-mmid-c"})
+        stagnant = actors.diminishing_returns_triggers(rows)[1]
+        self.assertEqual([r["mechanism_id"] for r in stagnant[(base["target_surface"],
+                                                                base["target_symbol"])]],
+                         ["akm-mmid-a", "akm-mmid-b", "akm-mmid-c"])
+
+    def test_formation_refusals_still_count_toward_both_escapes(self):
+        """`refused_at_formation` is a verdict on a FORMED idea (a structural repeat of an
+        answered row, or a refused premise): renamed re-proposals are what the blocks
+        exist to break, so it stays a resolved failure."""
+        rows = [{"status": "refused_at_formation", "mechanism_id": f"akm-barrier-{name}",
+                 "statement": "change the OpenMP barrier implementation",
+                 "target_surface": "ggml/src/ggml-cpu/ggml-cpu.c",
+                 "target_symbol": "ggml_barrier"} for name in ("spin", "yield", "tree")]
+        exhausted, stagnant = actors.diminishing_returns_triggers(rows)
+        self.assertIn("synchronization/barrier", exhausted)
+        self.assertIn(("ggml/src/ggml-cpu/ggml-cpu.c", "ggml_barrier"), stagnant)
+        text = actors.render_context({"prior_experiments": rows})
         self.assertIn("DIMINISHING-RETURNS ESCAPE", text)
-        self.assertIn("synchronization/barrier", text)
+        self.assertIn("Family-level diminishing returns", text)
+
+    def test_ranked_recall_order_does_not_let_an_old_keep_hide_newer_failures(self):
+        """Ranked recall (default since 2026-10-20) puts merit-5 `kept` rows first; the
+        keep reset must follow recorded_at, not list position."""
+        base = {"target_surface": "ggml/src/ggml-cpu/arch/x86/quants.c",
+                "target_symbol": "ggml_vec_dot_q8_0_q8_0"}
+        kept = {**base, "status": "kept", "mechanism_id": "akm-q8_0-kept",
+                "recorded_at": "2026-10-01T00:00:00Z"}
+        newer = [{**base, "status": "measured_null", "mechanism_id": f"akm-q8_0-{n}",
+                  "recorded_at": f"2026-10-0{2 + i}T00:00:00Z"}
+                 for i, n in enumerate(("a", "b", "c"))]
+        exhausted, stagnant = actors.diminishing_returns_triggers([kept, *newer])
+        self.assertIn("local quant/dot kernel", exhausted)
+        self.assertIn((base["target_surface"], base["target_symbol"]), stagnant)
+        # A keep NEWER than the failures still resets, whatever the list order.
+        newest_keep = {**kept, "recorded_at": "2026-10-09T00:00:00Z"}
+        self.assertEqual(actors.diminishing_returns_triggers([*newer, newest_keep]), ({}, {}))
 
     def test_a_current_epoch_keep_outside_the_recency_window_is_still_shown(self):
         """DS41 audit fix 3: recall's recency window (and render's newest-12 slice)

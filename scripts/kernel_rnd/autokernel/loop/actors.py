@@ -2685,21 +2685,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
     # formed against source that keep has since changed. Without the reset, the
     # "local quant/dot kernel" family (any `q8_0`/`q8-` text) stayed exhausted
     # straight through the dense Q8_0 keeps it had just produced.
-    exhausted: dict[str, list[Mapping[str, Any]]] = {}
-    terminal = {"measured_null", "regression", "refused_at_formation", "authoring_refused",
-                "screened_out", "hypothesis_retired", "abstained"}
-    kept_families: set[str] = set()
-    for row in prior:
-        family = _mechanism_family(row)
-        if not family or family in kept_families:
-            continue
-        status = row.get("status")
-        if status in {"kept", "keep_candidate"}:
-            kept_families.add(family)
-        elif status in terminal:
-            exhausted.setdefault(family, []).append(row)
-    exhausted = {family: rows for family, rows in exhausted.items()
-                 if len(rows) >= 3}
+    exhausted, stagnant = diminishing_returns_triggers(prior)
     if exhausted:
         lines.append("\n## DIMINISHING-RETURNS ESCAPE — mandatory for this turn")
         # DS41-C76: this block used to order that the next hypothesis "MUST target one
@@ -2735,37 +2721,6 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
     # host-owned family identity.  Detect a run of distinct null/refused ideas in
     # that family without reading effect magnitudes (especially stale ones).  A
     # keep resets the run because it changed the source the later ideas see.
-    stagnating_statuses = {"measured_null", "regression", "refused_at_formation",
-                           "runtime_refused", "abstained"}
-    successful_statuses = {"kept", "keep_candidate"}
-    family_rows: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
-    closed_families: set[tuple[str, str]] = set()
-    for row in prior:
-        surface, symbol = row.get("target_surface"), row.get("target_symbol")
-        if not isinstance(surface, str) or not surface \
-                or not isinstance(symbol, str) or not symbol:
-            continue
-        family = (surface, symbol)
-        if family in closed_families:
-            continue
-        status = row.get("status")
-        if status in successful_statuses:
-            # Recall is newest-first.  Older outcomes precede the source-changing
-            # keep and cannot establish stagnation against its successor.
-            closed_families.add(family)
-        elif status in stagnating_statuses:
-            family_rows.setdefault(family, []).append(row)
-    stagnant = {}
-    for family, rows in family_rows.items():
-        distinct = []
-        seen = set()
-        for row in rows:
-            mechanism = row.get("mechanism_id")
-            if isinstance(mechanism, str) and mechanism and mechanism not in seen:
-                seen.add(mechanism)
-                distinct.append(row)
-        if len(distinct) >= 3:
-            stagnant[family] = distinct
     if stagnant:
         lines.append("## Family-level diminishing returns — abstraction escape required")
         lines.append("These are attempt/outcome facts only; no stale or cross-epoch magnitude "
@@ -3065,6 +3020,102 @@ def _supersession_note(row: Mapping[str, Any], sup: Mapping[str, Mapping[str, An
         return ""
     return (f" [SUPERSEDED by {str(newer.get('attempt_id'))[:12]}: {newer.get('status')} "
             f"{newer.get('recorded_at') or ''} — the route is open; the original record is kept]")
+
+
+#: The statuses each diminishing-returns trigger in `render_context` counts as a resolved
+#: failure of a family. DECISION 2026-10-24 (AK-HR-2 follow-up; record in the AK handoff):
+#:
+#: * `abstained` is NOT counted. An abstention forms no hypothesis (`Outcome.hypothesis`
+#:   is None); the planner only names what it looked at and declined. Counting it scored
+#:   the loop's refusal to propose as evidence against the mechanism it named -- the
+#:   feedback loop behind DS41-C76 (rows 134-143: both lanes abstained on every turn) --
+#:   and AK-HR-2 classes it as a harness event, like `_SUPERSEDABLE_STATUSES` already
+#:   does ("declined ... without a scientific verdict"). Replayed over the closed history
+#:   (recency recall, 40-row window): in Q38FN 26 of the 66 stagnation-block firings
+#:   existed only because of abstained rows; in DS41 none (323 of its 326 abstentions
+#:   carry no mechanism, surface or symbol, so neither trigger could see them).
+#: * `refused_at_formation` IS still counted. It is a pre-build verdict on a FORMED idea:
+#:   a structural repeat of an answered row (`do_not_repeat`) or a refused premise, and
+#:   AK-HR-2 uses it as the lower bound of the repeat-null rate, not as a harness event.
+#:   Re-proposing an answered region under new names is exactly what both blocks exist
+#:   to break. Replay: it supplied the third row of 20 of DS41's 88 exhaustion firings
+#:   and of 468/2167 exhaustion and 1224/3039 stagnation firings in loop-memory.
+FAMILY_EXHAUSTION_STATUSES = frozenset({
+    "measured_null", "regression", "refused_at_formation", "authoring_refused",
+    "screened_out", "hypothesis_retired"})
+FAMILY_STAGNATION_STATUSES = frozenset({
+    "measured_null", "regression", "refused_at_formation", "runtime_refused"})
+FAMILY_RESET_STATUSES = frozenset({"kept", "keep_candidate"})
+
+
+def _newest_first(prior: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """`prior` in recorded_at order, newest first (stable; undated rows last).
+
+    Both triggers reset a family at its newest keep, which needs time order. Recency
+    recall already is; RANKED recall (`--rank-prior-experiments`, the default since
+    2026-10-20) is an order of merit that puts every `kept` row (merit 5.0) ahead of the
+    newer failures of its family, so without this a family with any keep in the pool
+    could never trigger again."""
+    dated = [row for row in prior if isinstance(row.get("recorded_at"), str)
+             and row.get("recorded_at")]
+    undated = [row for row in prior if not (isinstance(row.get("recorded_at"), str)
+                                            and row.get("recorded_at"))]
+    return sorted(dated, key=lambda row: row["recorded_at"], reverse=True) + undated
+
+
+def diminishing_returns_triggers(
+        prior: Sequence[Mapping[str, Any]], *,
+        exhaustion_statuses: frozenset[str] = FAMILY_EXHAUSTION_STATUSES,
+        stagnation_statuses: frozenset[str] = FAMILY_STAGNATION_STATUSES,
+) -> tuple[dict[str, list[Mapping[str, Any]]], dict[tuple[str, str], list[Mapping[str, Any]]]]:
+    """(`exhausted`, `stagnant`): the families each `render_context` escape block names.
+
+    `exhausted`: keyword family (`_mechanism_family`) -> its >= 3 resolved failures newer
+    than the family's newest keep. `stagnant`: (target_surface, target_symbol) -> >= 3
+    rows with DISTINCT mechanism ids newer than that family's newest keep. Attempt and
+    outcome facts only; no magnitude is read. Pure."""
+    rows = _newest_first(prior)
+    exhausted: dict[str, list[Mapping[str, Any]]] = {}
+    kept_families: set[str] = set()
+    for row in rows:
+        family = _mechanism_family(row)
+        if not family or family in kept_families:
+            continue
+        status = row.get("status")
+        if status in FAMILY_RESET_STATUSES:
+            kept_families.add(family)
+        elif status in exhaustion_statuses:
+            exhausted.setdefault(family, []).append(row)
+    exhausted = {family: found for family, found in exhausted.items() if len(found) >= 3}
+
+    family_rows: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    closed_families: set[tuple[str, str]] = set()
+    for row in rows:
+        surface, symbol = row.get("target_surface"), row.get("target_symbol")
+        if not isinstance(surface, str) or not surface \
+                or not isinstance(symbol, str) or not symbol:
+            continue
+        family = (surface, symbol)
+        if family in closed_families:
+            continue
+        status = row.get("status")
+        if status in FAMILY_RESET_STATUSES:
+            # Older outcomes precede the source-changing keep and cannot establish
+            # stagnation against its successor.
+            closed_families.add(family)
+        elif status in stagnation_statuses:
+            family_rows.setdefault(family, []).append(row)
+    stagnant: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for family, found in family_rows.items():
+        distinct, seen = [], set()
+        for row in found:
+            mechanism = row.get("mechanism_id")
+            if isinstance(mechanism, str) and mechanism and mechanism not in seen:
+                seen.add(mechanism)
+                distinct.append(row)
+        if len(distinct) >= 3:
+            stagnant[family] = distinct
+    return exhausted, stagnant
 
 
 def _mechanism_family(row: Mapping[str, Any]) -> str | None:
