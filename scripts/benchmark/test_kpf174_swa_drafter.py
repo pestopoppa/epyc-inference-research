@@ -660,3 +660,56 @@ def test_vbkvupf5_reseal_script_writes_a_new_file_and_keeps_the_original(tmp_pat
     src2 = tmp_path / "t.jsonl"
     src2.write_text(json.dumps(tampered) + "\n")
     assert rs.main([str(src2)]) == 2 and not src2.with_name("t.resealed-vbkvupf5.jsonl").exists()
+
+
+# ---------------------------------------------------------------- KPF-19.1a / 17.4 CPU leg (2026-10-24, workspace-f8)
+CPU_ARGV_FILE = k13.HERE / "argv.cpu-27b-dflash2.txt"
+
+
+def test_cpu_argv_is_the_gpu_argv_on_cpu():
+    gpu, _ = k13.load_argv_file(ARGV_FILE)
+    cpu, _ = k13.load_argv_file(CPU_ARGV_FILE)
+    assert k13.argv_problems(cpu, "dflash2", "cpu") == []
+    assert k13.argv_problems(gpu, "dflash2", "cpu")          # the GPU argv carries -t: refused on CPU
+    exp = list(gpu)
+    for f in ("-t", "-ngl", "-ngld"):
+        i = exp.index(f)
+        del exp[i:i + 2]
+    exp = k13.set_flag(exp, ("--device",), "none")
+    exp = k13.set_flag(exp, ("--device-draft",), "none")
+    assert cpu == exp                                          # same flags, same order: only the listed changes
+    for f in ("-m", "-md", "-np", "-c", "-b", "-ub", "-ctk", "-ctv", "--cache-ram", "--spec-type", "--spec-draft-n-max",
+              "--chat-template-file"):
+        assert k13.flag_val(cpu, (f,)) == k13.flag_val(gpu, (f,)), f
+    assert "ROCm0" not in cpu and "-ngl" not in cpu and "-ngld" not in cpu
+
+
+def test_cpu_server_argv_sets_threads_from_the_claim_and_spec_off_drops_the_draft_device(tmp_path):
+    a, ctx = make_ctx(tmp_path, ["--device", "cpu", "--threads", "24"])
+    ctx.gate_argv, _ = k13.load_argv_file(CPU_ARGV_FILE)
+    assert ctx.prefix == ["taskset", "-c", "184-191"]          # no numactl on CPU unless --numa-membind is given
+    on = k13.Server(ctx, "kpf174_honest", Path("/x/llama-server"))
+    assert k13.flag_val(on.argv, ("-t",)) == "24" and k13.flag_val(on.argv, ("-tb",)) == "24"
+    assert k13.flag_val(on.argv, ("--device",)) == "none" and "-md" in on.argv
+    off = k13.Server(ctx, "kpf174_honest_specoff", Path("/x/llama-server"))
+    assert "-md" not in off.argv and "--device-draft" not in off.argv and k13.spec_off_problems(off.argv) == []
+    assert k13.flag_val(off.argv, ("--device",)) == "none"
+
+
+def test_cpu_dry_run_plans_the_191a_leg_and_the_c1_spec_off_cell(tmp_path, capsys):
+    ps = make_prompts(tmp_path / "ps.jsonl")
+    base = ["run", "--device", "cpu", "--cpu-list", "48-71,144-167", "--threads", "24", "--fork-bin",
+            str(fake_bin(tmp_path)), "--prompt-set", str(ps), "--argv-file", str(CPU_ARGV_FILE), "--prior-191a", "",
+            "--prefill-tok-s", "27", "--decode-tok-s", "6", "--load-s", "120", "--dry-run"]
+    rc = m.main(base + ["--out", str(tmp_path / "v1")])
+    out = capsys.readouterr().out
+    assert rc == 0 and not (tmp_path / "v1").exists()
+    assert "device=cpu" in out and "PREFLIGHT: inputs PASS" in out and "rules=v1" in out
+    assert "launch prefix: taskset -c 48-71,144-167" in out and "numactl" not in out
+    for ln in ("honest", "flag_on", "mut_no_transfer", "mut_partial_noop"):
+        assert f"--- launch {ln} " in out
+    rc = m.main(base + ["--out", str(tmp_path / "v2"), "--rules", "v2", "--launches", "honest_specoff",
+                        "--junctions", "2148", "--build-junctions", "2148,4096,10240"])
+    out = capsys.readouterr().out
+    assert rc == 0 and "PREFLIGHT: inputs PASS" in out and "'-md'" in out and "'--device-draft'" in out
+    assert "2 pending cells" in out

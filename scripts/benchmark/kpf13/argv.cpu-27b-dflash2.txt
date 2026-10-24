@@ -1,0 +1,28 @@
+# KPF-19.1a / KPF-17.4 CPU leg argv (Qwen3.8-27B-Q8_0 + Qwen3.8-27B-DFlash2-Q8_0 SWA drafter), 2026-10-24 workspace-f8.
+# = argv.gpu-27b-dflash2.txt (the 2026-10-23 GPU run's argv) moved to the CPU, so a CPU result separates device numerics
+# from fork state at the SAME geometry (-np 4, -b/-ub 512, -c 393216, q8_0 KV, --kv-unified, --no-cache-idle-slots,
+# --cache-ram 8192, DFlash2 draft-dflash n-max 7, same chat template).
+# Changes vs the GPU argv, and nothing else (test_kpf174_swa_drafter.py::test_cpu_argv_is_the_gpu_argv_on_cpu):
+#   removed -t 8 (on CPU the driver sets -t/-tb from --cpu-list and refuses them here), -ngl all, -ngld 99;
+#   --device ROCm0 -> --device none, --device-draft ROCm0 -> --device-draft none.
+# Launch prefix (driver --cpu-list = the granted quarter, no --numa-membind on CPU): taskset -c <granted quarter>.
+-m /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+--host 127.0.0.1
+-np 4
+-c 393216
+-b 512
+-ub 512
+--flash-attn on
+--jinja
+-ctk q8_0
+-ctv q8_0
+--kv-unified
+--no-mmap
+--cache-ram 8192
+--chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja
+-md /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+--spec-type draft-dflash
+--spec-draft-n-max 7
+--device none
+--device-draft none
+--no-cache-idle-slots
