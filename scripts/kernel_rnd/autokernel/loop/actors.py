@@ -3194,6 +3194,8 @@ def _runtime_pair(treatment, context, mechanism_id):
     kind, candidate = treatment["kind"], treatment["candidate"]
     if kind == "threads":
         value = anchor.template.threads
+    elif kind == "threads_batch":
+        value = anchor.template.effective_threads_batch
     elif kind == "cpu_list":
         value = anchor.template.cpu_list
     elif kind == "load_threads":
@@ -3698,7 +3700,8 @@ class AgentPlanner:
         if context.get("runtime_anchor") is not None:
             prompt += ("\nAlternatively propose ONE runtime treatment of the original serving launch, "
                        "without source edits or rebuilding. Add runtime_treatment={kind: threads|"
-                       "cpu_list|numa_policy|load_threads|env, candidate: <exact value>}. For env, candidate is "
+                       "threads_batch|cpu_list|numa_policy|load_threads|env, candidate: <exact value>}. "
+                       "threads_batch is -tb (prompt processing / batched verify) apart from -t. For env, candidate is "
                        "{key: <one listed runtime_env_keys key>, value: <string or null>}. "
                        "Keep the same model, request bytes, context, sampling and speculation. "
                        "Describe the mechanism and falsifier; target_surface/target_symbol name "

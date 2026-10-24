@@ -922,3 +922,110 @@ def test_pooled_lanes_never_serve_the_same_open_arm_at_once(tmp_path):
     assert lane1.propose(_context(anchor)) == "planner-hypothesis"
     assert lane0.propose(_context(anchor)) == "planner-hypothesis"
     assert shared.serving == {}
+
+
+# ------------------------------------------------------------------ threads_batch (AKX-ALL-13a)
+
+TB = {"arm_id": "threads-batch-96", "kind": "threads_batch", "candidate": 96,
+      "numerics": "bit_exact",
+      "rationale": "-tb drives prefill and MTP verify; -tb 96 lifted shallow prefill +21-29% "
+                   "in the 2026-10-20 depth sweep with decode unchanged"}
+
+
+def test_threads_batch_is_a_single_field_launch_delta_decoupled_from_threads(tmp_path):
+    from . import actors, runtime_identity
+    anchor = _launch(tmp_path / "gen-1")
+    i = list(anchor.command_argv).index("-tb")
+    assert anchor.command_argv[i + 1] == "48" and anchor.template.threads_batch is None
+    context = _context(anchor)
+    pair = actors._runtime_pair(ra.RuntimeArm.from_dict(TB).treatment(), context,
+                                "runtime-arm-threads-batch-96")
+    assert (pair.dimension.anchor, pair.dimension.candidate) == (48, 96)
+    argv = list(pair.candidate.command_argv)
+    assert argv[argv.index("-t") + 1] == "48" and argv[argv.index("-tb") + 1] == "96"
+    assert pair.candidate.template.threads == 48
+    assert pair.candidate.template.threads_batch == 96
+    assert pair.anchor.template.to_dict() == anchor.template.to_dict()   # hash unchanged
+    assert pair.candidate.launch_env == pair.anchor.launch_env
+    assert pair.candidate.capability.supported
+    assert ra.is_declared(pair, _declaration(TB))
+    delta = runtime_identity.treatment_delta(pair.anchor.to_dict(), pair.candidate.to_dict())
+    assert delta == {"argv": {"-tb": ["48", "96"]}}
+    # The candidate round-trips through serialization (it is what a keep would adopt).
+    again = rr.CanonicalResolvedRecipe.from_dict(pair.candidate.to_dict())
+    assert again.template.threads_batch == 96
+    # Adopted: the arm is now a no-op; a threads arm on top leaves the decoupled -tb alone.
+    adopted = {**context, "runtime_anchor": pair.candidate.to_dict()}
+    with pytest.raises(actors.ProviderTransient):
+        actors._runtime_pair(ra.RuntimeArm.from_dict(TB).treatment(), adopted, "again")
+    threads = actors._runtime_pair({"kind": "threads", "candidate": 32}, adopted, "t32")
+    argv = list(threads.candidate.command_argv)
+    assert argv[argv.index("-t") + 1] == "32" and argv[argv.index("-tb") + 1] == "96"
+    with pytest.raises(ra.ArmDeclarationRefused, match="positive int"):
+        _declaration(dict(TB, candidate=0))
+
+
+def test_a_threads_arm_still_moves_a_following_tb(tmp_path):
+    from . import actors
+    anchor = _launch(tmp_path / "gen-1")
+    pair = actors._runtime_pair({"kind": "threads", "candidate": 32}, _context(anchor), "t32")
+    argv = list(pair.candidate.command_argv)
+    assert argv[argv.index("-t") + 1] == "32" and argv[argv.index("-tb") + 1] == "32"
+    assert pair.candidate.template.threads_batch is None
+
+
+def test_canonical_grammar_projects_a_decoupled_tb_and_checks_it(tmp_path):
+    anchor = _launch(tmp_path / "gen-1")
+    command = list(anchor.command_argv)
+    command[command.index("-tb") + 1] = "96"
+    projected = rr.canonical_recipe_projection(name="x", command_argv=command,
+        topology_prefix=anchor.topology_prefix, n_predict=256, temperature=0.0, top_k=1)
+    assert (projected.threads, projected.threads_batch) == (48, 96)
+    same = rr.canonical_recipe_projection(name="x", command_argv=anchor.command_argv,
+        topology_prefix=anchor.topology_prefix, n_predict=256, temperature=0.0, top_k=1)
+    assert same.threads_batch is None and "threads_batch" not in same.to_dict()
+    # A template whose threads_batch disagrees with the frozen command is refused.
+    from dataclasses import replace
+    with pytest.raises(rr.ResolutionError, match="differs from template"):
+        rr.resolve_canonical_launch(
+            replace(anchor.template, threads_batch=64), build_dir=anchor.build_dir,
+            command_argv=command, topology_prefix=anchor.topology_prefix,
+            launch_environment=dict(anchor.launch_env),
+            artifact_identities=_artifacts(anchor.template, build=Path(anchor.build_dir)),
+            backend="cpu", environment_policy=anchor.environment_policy, port=anchor.port,
+            runtime_binary_dir=anchor.runtime_binary_dir,
+            runtime_ld_paths=anchor.runtime_ld_paths, provenance=dict(anchor.provenance))
+
+
+def test_recipe_threads_batch_normalises_and_keeps_legacy_hashes():
+    base = serving.Recipe(name="r", model="/m.gguf", threads=48)
+    assert serving.Recipe(name="r", model="/m.gguf", threads=48, threads_batch=48) == base
+    assert "threads_batch" not in base.to_dict()
+    split = serving.Recipe(name="r", model="/m.gguf", threads=48, threads_batch=96)
+    assert split.recipe_hash != base.recipe_hash
+    again = serving.Recipe.from_dict(split.to_dict())
+    assert (again.threads_batch, again.recipe_hash) == (96, split.recipe_hash)
+    argv = split.server_argv(Path("/b"), 1)
+    assert argv[argv.index("-t") + 1] == "48" and argv[argv.index("-tb") + 1] == "96"
+    assert " tb=96" in split.describe()
+    with pytest.raises(serving.RecipeError, match="threads_batch"):
+        serving.Recipe(name="r", model="/m.gguf", threads=48, threads_batch=0)
+
+
+Q38FN_LAUNCH = Path("/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/inputs/"
+                    "q38fn-cpu-t48-mtp-d4.launch.json")
+
+
+@pytest.mark.skipif(not Q38FN_LAUNCH.exists(), reason="Q38FN campaign inputs not on this host")
+def test_q38fn_t48_tb96_enumerates_against_the_live_launch():
+    """Read-only: `-t 48 -tb 96` on the codified Q38FN launch is a launch-valid -tb delta."""
+    from . import actors
+    launch = rr.CanonicalResolvedRecipe.from_dict(json.loads(Q38FN_LAUNCH.read_text()))
+    context = {"runtime_anchor": launch.to_dict(), "runtime_observation_only": True,
+               "runtime_env_keys": sorted(run._runtime_env_keys(launch, launch))}
+    pair = actors._runtime_pair(ra.RuntimeArm.from_dict(TB).treatment(), context,
+                                "runtime-arm-threads-batch-96")
+    argv = list(pair.candidate.command_argv)
+    assert argv[argv.index("-t") + 1] == "48" and argv[argv.index("-tb") + 1] == "96"
+    assert pair.candidate.capability.supported
+    assert dict(pair.candidate.launch_env) == dict(launch.launch_env)

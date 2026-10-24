@@ -637,8 +637,9 @@ def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
             extra += (flag, str(parsed[flag]))
     if "--no-cache-idle-slots" in parsed:
         extra += ("--no-cache-idle-slots",)
-    if "-tb" in parsed and _canonical_int(parsed, "-tb") != _canonical_int(parsed, "-t"):
-        raise ResolutionError("canonical -tb differs from -t")
+    # AKX-ALL-13a: a `-tb` that differs from `-t` is the template's `threads_batch` (it
+    # used to be refused, which made `-t 48 -tb 96` inexpressible).
+    threads_batch = (_canonical_int(parsed, "-tb") if "-tb" in parsed else None)
     if "--flash-attn" in parsed and "-fa" in parsed:
         raise ResolutionError("canonical command repeats flash-attention through aliases")
     kv_unified = "--kv-unified" in parsed
@@ -648,6 +649,7 @@ def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
         name=_text(name, "canonical recipe name"), model=str(parsed["-m"]),
         device=device, ngl=ngl, spec_decode=spec, np=_canonical_int(parsed, "-np"),
         ctx=_canonical_int(parsed, "-c"), threads=_canonical_int(parsed, "-t"),
+        threads_batch=threads_batch,
         batch=_canonical_int(parsed, "-b", 2048), ubatch=_canonical_int(parsed, "-ub", 512),
         ctk=str(parsed.get("-ctk", "f16")), ctv=str(parsed.get("-ctv", "f16")),
         fa=str(parsed.get("--flash-attn", parsed.get("-fa", "off"))),
@@ -1302,6 +1304,11 @@ def _validate_canonical_consistency(resolved: CanonicalResolvedRecipe,
             raise ResolutionError(f"canonical {flag} differs from template")
     if "-b" in parsed and _canonical_int(parsed, "-b") != template.batch:
         raise ResolutionError("canonical batch differs from template")
+    if "-tb" in parsed:
+        if _canonical_int(parsed, "-tb") != template.effective_threads_batch:
+            raise ResolutionError("canonical -tb differs from template")
+    elif template.threads_batch is not None:
+        raise ResolutionError("template declares threads_batch but the command has no -tb")
     if str(parsed.get("-ctk", "f16")) != template.ctk \
             or str(parsed.get("-ctv", "f16")) != template.ctv:
         raise ResolutionError("canonical KV types differ from template")
