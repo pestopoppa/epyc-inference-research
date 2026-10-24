@@ -153,8 +153,11 @@ class StoreCounters(unittest.TestCase):
                            epoch="E", recorded_at="2026-10-20T00:00:00Z", campaign_id="c")
             (payload,) = sqlite3.connect(root / "experiments.db").execute(
                 "SELECT payload FROM experiments").fetchone()
-            self.assertEqual(json.loads(payload),
-                             {"status": "kept", "mechanism_id": "m", "reason": "r"})
+            stored = json.loads(payload)
+            # Phase 2 belief capture is the only key archive.record adds to such a row.
+            self.assertEqual(stored.pop("belief_capture")["schema"],
+                             "epyc.autokernel.experiment_belief_capture.v1")
+            self.assertEqual(stored, {"status": "kept", "mechanism_id": "m", "reason": "r"})
 
 
 if __name__ == "__main__":

@@ -9,7 +9,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from . import archive, champion, legacy_targets, planned_serving, resolved_recipe, serving
+from . import (archive, belief_context, champion, legacy_targets, planned_serving,
+               resolved_recipe, serving)
 
 
 def build_targets(resolved_path, owned_path, *, target_root, common_path=None, state_root=None):
@@ -34,7 +35,8 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
         raise sr.SerialRefused(f"owned aliases are not enrolled: {sorted(set(owners) - set(aliases))}")
     required = {"worktree", "anchor_build", "branch", "frozen_prompts"}
     optional = {"launch", "store", "cor_build", "calibrate_serving",
-                "heldout_frozen_prompts", "calibrate_heldout", "allow_unverified_anchor"}
+                "heldout_frozen_prompts", "calibrate_heldout", "allow_unverified_anchor",
+                "focus_symbols"}
     for alias, owner in owners.items():
         if not isinstance(owner, dict) or required - owner.keys() or owner.keys() - required - optional:
             raise sr.SerialRefused(f"{alias}: expected ownership fields {sorted(required)} plus {sorted(optional)}")
@@ -55,6 +57,16 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
             raise sr.SerialRefused(f"{alias}: held-out calibration needs heldout_frozen_prompts")
         if type(owner.get("allow_unverified_anchor", False)) is not bool:
             raise sr.SerialRefused(f"{alias}: allow_unverified_anchor must be boolean")
+        if "focus_symbols" in owner:
+            symbols = owner["focus_symbols"]
+            if (not isinstance(symbols, list)
+                    or not 0 < len(symbols) <= belief_context.FOCUS_SYMBOLS_MAX):
+                raise sr.SerialRefused(f"{alias}: focus_symbols must be a list of 1-"
+                                       f"{belief_context.FOCUS_SYMBOLS_MAX} symbol names")
+            try:
+                [belief_context.focus_symbol(symbol) for symbol in symbols]
+            except ValueError as exc:
+                raise sr.SerialRefused(f"{alias}: {exc}") from exc
     common = ["--planner-model", dict(resolved.actors)["planner"],
               "--critic-model", dict(resolved.actors)["critic"]]
     if common_path is not None:
@@ -229,6 +241,11 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
             argv += ["--cpu-calibrate-heldout", str(owner["calibrate_heldout"])]
         if owner.get("allow_unverified_anchor"):
             argv.append("--allow-unverified-anchor")
+        # Belief redesign §7.5: the target's own symbols rank first in the planner's belief
+        # section. Absent => the child argv is byte-identical to before.
+        for symbol in sorted({belief_context.focus_symbol(s)
+                              for s in owner.get("focus_symbols", ())}):
+            argv += ["--belief-focus-symbol", symbol]
         targets.append(argv + common)
     if not targets:
         raise sr.SerialRefused(f"no ready owned executable targets: {skipped}")

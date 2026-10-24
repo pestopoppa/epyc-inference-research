@@ -652,13 +652,21 @@ def _belief_seconds(text: str) -> float:
     return value
 
 
+def _belief_focus_symbol(text: str) -> str:
+    try:
+        return belief_context.focus_symbol(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def _belief_config(args) -> belief_context.BeliefConfig:
     """The planner's belief-reader config, from argv only (no env-only gate)."""
     return belief_context.BeliefConfig(root=args.belief_root_repo, ledger=args.belief_ledger,
                                        known_good=args.belief_known_good,
                                        escalate_after_s=args.belief_escalate_after_s,
                                        reader_timeout_s=args.belief_reader_timeout_s,
-                                       source_roots=(args.store,))
+                                       source_roots=(args.store,),
+                                       focus_symbols=tuple(args.belief_focus_symbol or ()))
 
 
 def _actor_knobs(args) -> dict[str, bool]:
@@ -2111,6 +2119,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="belief reader: the child's deadline (prepare may run the "
                              "incremental ingest); a timeout refuses planning and raises the "
                              "alarm (default: %(default)s)")
+    parser.add_argument("--belief-focus-symbol", action="append", default=None,
+                        type=_belief_focus_symbol, metavar="SYMBOL",
+                        help="belief reader: a kernel symbol this target owns (repeatable; "
+                             "serial_run passes owned-targets.json `focus_symbols`). Claims on "
+                             "these symbols rank first inside their group of the belief section "
+                             "(belief redesign §7.5); a ranking boost, never a filter")
     parser.add_argument("--preseeded-hypotheses", type=Path, default=None,
                         help="degraded mode only: JSONL of not-yet-tested hypotheses (the five "
                              "Hypothesis fields + premises [claim ids] + seeded_against "

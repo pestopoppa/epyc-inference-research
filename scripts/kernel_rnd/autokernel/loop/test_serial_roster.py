@@ -375,6 +375,25 @@ def test_explicit_unverified_anchor_waiver_reaches_existing_owner_only(tmp_path)
         _build(argv)
 
 
+def test_owned_focus_symbols_reach_the_child_as_belief_ranking_only(tmp_path):
+    """Belief redesign §7.5: owned-targets `focus_symbols` -> `--belief-focus-symbol` (sorted,
+    de-duplicated); absent -> the child argv is unchanged; never a resume identity."""
+    _resolved, owners, argv = _inputs(tmp_path, backends=("cpu",))
+    (before,), _skipped, _cpus = _build(argv)
+    assert "--belief-focus-symbol" not in before
+    owners["cpu-0"]["focus_symbols"] = ["mul_mat_q", "ggml_iqk_try_mul_mat_id", "mul_mat_q"]
+    Path(sr.option(argv, "--owned-targets")).write_text(json.dumps(owners))
+    (after,), _skipped, _cpus = _build(argv)
+    pairs = [after[i + 1] for i, arg in enumerate(after) if arg == "--belief-focus-symbol"]
+    assert pairs == ["ggml_iqk_try_mul_mat_id", "mul_mat_q"]
+    assert sr.resume_binding(after) == sr.resume_binding(before)
+    for bad in ("mul_mat_q", [], ["two words"], [""], ["x"] * 65):
+        owners["cpu-0"]["focus_symbols"] = bad
+        Path(sr.option(argv, "--owned-targets")).write_text(json.dumps(owners))
+        with pytest.raises(sr.SerialRefused, match="focus"):
+            _build(argv)
+
+
 def test_actual_target_args_dry_run_refuses_calibration_before_owner(tmp_path, monkeypatch):
     _, _, argv = _inputs(tmp_path, backends=("cpu",))
     targets, _, _ = _build(argv)

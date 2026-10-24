@@ -487,7 +487,10 @@ def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
         added = store.record(_with_trial_counters(store, attempt, epoch),
                              epoch=epoch, recorded_at=recorded_at,
                              campaign_id=campaign_id,
-                             receipt_out=receipts)
+                             receipt_out=receipts,
+                             # Belief redesign Phase 2: the loop's rows are PROSPECTIVE
+                             # beliefs (self-hashed capture), not retrofit reads.
+                             belief_capture=True)
         store.write_markdown(epoch=epoch)
         if added and len(receipts) > first_receipt:
             # DS41-C97: file the runtime treatment this row measured (if any) by WHAT
