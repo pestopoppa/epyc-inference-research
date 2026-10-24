@@ -130,8 +130,10 @@ def coactivation(t: tio.Trace, l: int, rng: np.random.Generator, min_exp: float 
 def analyse(results_dir, domains, lru_windows: int, lru_layers: list, seed: int, skip_coact: bool = False) -> dict:
     rng = np.random.default_rng(seed)
     out: dict = {"domains": {}}
+    traces = []
     for dom in domains:
         t = tio.load_domain(results_dir, dom)
+        traces.append(t)
         L = t.L
         d: dict = {"ir": [], "lru": {}, "coact": []}
         for l in range(L):
@@ -148,7 +150,7 @@ def analyse(results_dir, domains, lru_windows: int, lru_layers: list, seed: int,
                 d["coact"].append(r)
         out["domains"][dom] = d
         out["domains"][dom]["lru_windows"] = int(wins.size)
-    return out
+    return tio.stamp(out, traces, "locality_report")
 
 
 def to_markdown(r: dict, title: str) -> str:
@@ -190,6 +192,7 @@ def main(argv=None) -> int:
     ap.add_argument("--skip-coact", action="store_true")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--title", default="Expert locality report")
+    ap.add_argument("--beliefs", action="store_true", help="also write the belief-kernel sidecar next to the outputs (needs EPYC_ROOT)")
     a = ap.parse_args(argv)
     doms = [d for d in a.domains.split(",") if d] or sorted(tio.discover(a.results_dir))
     r = analyse(a.results_dir, doms, a.lru_windows, [int(x) for x in a.lru_layers.split(",") if x], a.seed, a.skip_coact)
@@ -199,7 +202,7 @@ def main(argv=None) -> int:
     md = to_markdown(r, a.title)
     (out / "locality_report.md").write_text(md)
     print(md)
-    return 0
+    return tio.emit_beliefs(out, "moe_routing/locality_report.py") if a.beliefs else 0
 
 
 if __name__ == "__main__":

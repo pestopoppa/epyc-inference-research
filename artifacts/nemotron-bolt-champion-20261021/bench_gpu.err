@@ -1,0 +1,4 @@
+[region-lock] acquiring gpu-quiet shared + regions ['q3'] as role='bench' (timeout_s=120.0) …
+[region-lock] held gpu-quiet shared + regions ['q3'] after 0.0s wait; running: taskset -c 72-79 env LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261021-59c1b915f-nemotron/bin:/opt/rocm/lib /mnt/raid0/llm/kernels/builds/gpu-20261021-59c1b915f-nemotron/bin/llama-bench -m /mnt/raid0/llm/models/nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB-GGUF/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB.gguf -ngl 99 -fa 1 -p 512 -n 128 -r 3 -t 8 -o md
+ggml_cuda_init: found 1 ROCm devices (Total VRAM: 65520 MiB):
+  Device 0: AMD Instinct MI210, gfx90a:sramecc+:xnack- (0x90a), VMM: no, Wave Size: 64, VRAM: 65520 MiB

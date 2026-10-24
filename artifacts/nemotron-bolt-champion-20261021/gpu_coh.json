@@ -1,0 +1,237 @@
+{
+ "argv": [
+  "/mnt/raid0/llm/kernels/builds/gpu-20261021-59c1b915f-nemotron/bin/llama-server",
+  "-m",
+  "/mnt/raid0/llm/models/nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB-GGUF/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB.gguf",
+  "--host",
+  "127.0.0.1",
+  "--port",
+  "18995",
+  "--batch-size",
+  "2048",
+  "--ubatch-size",
+  "512",
+  "--ctx-size",
+  "98304",
+  "--parallel",
+  "1",
+  "-ngl",
+  "999",
+  "--cache-type-k",
+  "q8_0",
+  "--cache-type-v",
+  "q8_0",
+  "--flash-attn",
+  "on",
+  "--jinja",
+  "-t",
+  "8"
+ ],
+ "pid": 1762428,
+ "outputs": [
+  {
+   "think": true,
+   "prompt": "Explain in a short paragraph why the sky is blue.",
+   "content": "The sky appears blue because of a phenomenon called Rayleigh scattering. Sunlight is made up of all the colors of the rainbow, and as it passes through Earth\u2019s atmosphere, it collides with gas molecules and tiny particles. These particles scatter shorter wavelengths\u2014like violet and blue\u2014much more strongly than longer wavelengths such as red or yellow. Because our eyes are more sensitive to blue than violet, and because the scattered blue light is redirected toward us from every direction, the daytime sky looks blue.",
+   "reasoning_len": 388,
+   "reasoning_head": "The user wants a short paragraph explaining why the sky is blue. I should provide a concise, accurate explanation involving Rayleigh scattering. Key points: sunlight contains all colors, atmosphere scatters shorter wavelengths (blue/violet) more than longer ones, our eyes are more sensitive to blue,",
+   "finish": "stop",
+   "n": 176,
+   "tg_tps": 51.51047140568857,
+   "pp_tps": 63.311031268866124,
+   "rep_loop": false
+  },
+  {
+   "think": true,
+   "prompt": "Write a Python function that returns the n-th Fibonacci number iteratively, then give its complexity.",
+   "content": "Here is an iterative implementation:\n\n```python\ndef fibonacci(n: int) -> int:\n    \"\"\"\n    Returns the n-th Fibonacci number iteratively.\n    \n    Args:\n        n: A non-negative integer. F(0) = 0, F(1) = 1.\n    \n    Returns:\n        The n-th Fibonacci number.\n    \n    Raises:\n        ValueError: If n is negative.\n    \"\"\"\n    if n < 0:\n        raise ValueError(\"n must be a non-negative integer\")\n    \n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a\n```\n\n**Example usage:**\n```python\nprint(fibonacci(0))   # 0\nprint(fibonacci(1))   # 1\nprint(fibonacci(10))  # 55\n```\n\n### Complexity\n\n| Metric | Complexity | Explanation |\n|--------|-----------|-------------|\n| **Time** | **O(n)** | The loop runs exactly `n` times, performing",
+   "reasoning_len": 2424,
+   "reasoning_head": "The user wants a Python function that returns the n-th Fibonacci number iteratively, and then wants to know its complexity.\n\nFirst, I need to write a clean, iterative Fibonacci function. The standard iterative approach uses two variables to keep track of the last two Fibonacci numbers and iterates f",
+   "finish": "length",
+   "n": 1024,
+   "tg_tps": 51.436104579043956,
+   "pp_tps": 43.29185694136048,
+   "rep_loop": false
+  },
+  {
+   "think": true,
+   "prompt": "A train leaves at 3:15 pm and arrives at 6:40 pm. How long is the trip? Answer briefly.",
+   "content": "The trip is **3 hours and 25 minutes**.",
+   "reasoning_len": 344,
+   "reasoning_head": "The user wants to know the duration of a train trip from 3:15 pm to 6:40 pm.\n\nLet me calculate:\nFrom 3:15 pm to 6:15 pm is 3 hours.\nFrom 6:15 pm to 6:40 pm is 25 minutes.\nTotal: 3 hours and 25 minutes.\n\nAlternatively:\n6:40 - 3:15\nHours: 6 - 3 = 3 hours\nMinutes: 40 - 15 = 25 minutes\nTotal: 3 hours 25",
+   "finish": "stop",
+   "n": 151,
+   "tg_tps": 51.83253765239109,
+   "pp_tps": 65.35937032782626,
+   "rep_loop": false
+  },
+  {
+   "think": true,
+   "prompt": "List five countries in South America and their capitals.",
+   "content": "Here are five countries in South America and their capitals:\n\n1. **Brazil** \u2013 Bras\u00edlia\n2. **Argentina** \u2013 Buenos Aires\n3. **Colombia** \u2013 Bogot\u00e1\n4. **Peru** \u2013 Lima\n5. **Chile** \u2013 Santiago",
+   "reasoning_len": 342,
+   "reasoning_head": "The user wants a list of five countries in South America and their capitals. I should provide accurate information. Let me think of five South American countries and their capitals:\n\n1. Brazil - Bras\u00edlia\n2. Argentina - Buenos Aires\n3. Colombia - Bogot\u00e1\n4. Peru - Lima\n5. Chile - Santiago\n\nThese are a",
+   "finish": "stop",
+   "n": 134,
+   "tg_tps": 52.03309615560847,
+   "pp_tps": 108.47484369761159,
+   "rep_loop": false
+  },
+  {
+   "think": false,
+   "prompt": "Explain in a short paragraph why the sky is blue.",
+   "content": "The sky appears blue because of a phenomenon called Rayleigh scattering. Sunlight is made up of all the colors of the rainbow, and as it enters Earth's atmosphere, it collides with gas molecules and particles. Shorter wavelengths of light, such as blue and violet, are scattered more easily in all directions than longer wavelengths like red. Because our eyes are more sensitive to blue light than violet, we perceive the sky as blue.",
+   "reasoning_len": 0,
+   "reasoning_head": "",
+   "finish": "stop",
+   "n": 88,
+   "tg_tps": 52.32000580276427,
+   "pp_tps": 124.09960342083255,
+   "rep_loop": false
+  },
+  {
+   "think": false,
+   "prompt": "Write a Python function that returns the n-th Fibonacci number iteratively, then give its complexity.",
+   "content": "Here is a Python function that computes the n-th Fibonacci number iteratively:\n\n```python\ndef fibonacci(n):\n    if n < 0:\n        raise ValueError(\"n must be a non-negative integer\")\n    if n == 0:\n        return 0\n    if n == 1:\n        return 1\n    \n    a, b = 0, 1\n    for _ in range(2, n + 1):\n        a, b = b, a + b\n    return b\n```\n\n### Complexity\n\n- **Time Complexity:** $O(n)$  \n  The loop runs $n-1$ times, performing a constant amount of work (addition and assignment) in each iteration.\n\n- **Space Complexity:** $O(1)$  \n  Only a fixed number of variables (`a`, `b`, and the loop counter) are used, regardless of the input size.",
+   "reasoning_len": 0,
+   "reasoning_head": "",
+   "finish": "stop",
+   "n": 194,
+   "tg_tps": 51.447968600827416,
+   "pp_tps": 156.29017539790976,
+   "rep_loop": false
+  },
+  {
+   "think": false,
+   "prompt": "A train leaves at 3:15 pm and arrives at 6:40 pm. How long is the trip? Answer briefly.",
+   "content": "The trip is 3 hours and 25 minutes long.",
+   "reasoning_len": 0,
+   "reasoning_head": "",
+   "finish": "stop",
+   "n": 14,
+   "tg_tps": 54.34466160743745,
+   "pp_tps": 186.932484659853,
+   "rep_loop": false
+  },
+  {
+   "think": false,
+   "prompt": "List five countries in South America and their capitals.",
+   "content": "Here are five countries in South America and their capitals:\n\n1. **Brazil** \u2013 Bras\u00edlia\n2. **Argentina** \u2013 Buenos Aires\n3. **Colombia** \u2013 Bogot\u00e1\n4. **Peru** \u2013 Lima\n5. **Chile** \u2013 Santiago",
+   "reasoning_len": 0,
+   "reasoning_head": "",
+   "finish": "stop",
+   "n": 55,
+   "tg_tps": 52.40211285319024,
+   "pp_tps": 121.52480486983036,
+   "rep_loop": false
+  }
+ ],
+ "recipe_timings": [
+  {
+   "cache_n": 0,
+   "prompt_n": 1808,
+   "prompt_ms": 1916.701,
+   "prompt_per_token_ms": 1.0601222345132744,
+   "prompt_per_second": 943.2874506769706,
+   "predicted_n": 256,
+   "predicted_ms": 4989.435,
+   "predicted_per_token_ms": 19.48998046875,
+   "predicted_per_second": 51.3084146802193
+  },
+  {
+   "cache_n": 0,
+   "prompt_n": 1808,
+   "prompt_ms": 1890.458,
+   "prompt_per_token_ms": 1.0456073008849558,
+   "prompt_per_second": 956.3819984363577,
+   "predicted_n": 256,
+   "predicted_ms": 5004.249,
+   "predicted_per_token_ms": 19.54784765625,
+   "predicted_per_second": 51.15652718319972
+  },
+  {
+   "cache_n": 0,
+   "prompt_n": 1808,
+   "prompt_ms": 1917.089,
+   "prompt_per_token_ms": 1.0603368362831858,
+   "prompt_per_second": 943.0965385540266,
+   "predicted_n": 256,
+   "predicted_ms": 4994.779,
+   "predicted_per_token_ms": 19.51085546875,
+   "predicted_per_second": 51.25351892446092
+  }
+ ],
+ "server_dead": true,
+ "vram_samples": [
+  {
+   "t": 1792579157.661421,
+   "vram_used": [
+    351825920
+   ],
+   "srv_pid_in_kfd": true
+  },
+  {
+   "t": 1792579165.3930464,
+   "vram_used": [
+    22872018944
+   ],
+   "srv_pid_in_kfd": true
+  },
+  {
+   "t": 1792579172.0286255,
+   "vram_used": [
+    22871691264
+   ],
+   "srv_pid_in_kfd": true
+  },
+  {
+   "t": 1792579179.6149395,
+   "vram_used": [
+    22871691264
+   ],
+   "srv_pid_in_kfd": true
+  },
+  {
+   "t": 1792579186.866941,
+   "vram_used": [
+    22873800704
+   ],
+   "srv_pid_in_kfd": true
+  },
+  {
+   "t": 1792579193.3820612,
+   "vram_used": [
+    22877650944
+   ],
+   "srv_pid_in_kfd": true
+  },
+  {
+   "t": 1792579199.6935868,
+   "vram_used": [
+    22878846976
+   ],
+   "srv_pid_in_kfd": true
+  },
+  {
+   "t": 1792579206.9444952,
+   "vram_used": [
+    23067029504
+   ],
+   "srv_pid_in_kfd": true
+  },
+  {
+   "t": 1792579213.4009101,
+   "vram_used": [
+    23068958720
+   ],
+   "srv_pid_in_kfd": true
+  },
+  {
+   "t": 1792579220.0349715,
+   "vram_used": [
+    23068958720
+   ],
+   "srv_pid_in_kfd": true
+  }
+ ]
+}

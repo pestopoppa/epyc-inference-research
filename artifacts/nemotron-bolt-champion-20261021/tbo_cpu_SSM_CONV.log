@@ -1,0 +1,55 @@
+Testing 1 devices
+
+Backend 1/1: CPU
+  Device description: AMD EPYC 9655 96-Core Processor
+  Device memory: 1160617 MB (1160617 MB free)
+
+  SSM_CONV(type=f32,ne_a=[3,1024,1,1],ne_b=[3,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[6,1024,1,1],ne_b=[3,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[3,1024,4,1],ne_b=[3,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[66,1024,1,1],ne_b=[3,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[66,1024,4,1],ne_b=[3,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[3,1536,1,1],ne_b=[3,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[6,1536,1,1],ne_b=[3,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[3,1536,4,1],ne_b=[3,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[66,1536,1,1],ne_b=[3,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[66,1536,4,1],ne_b=[3,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[3,2048,1,1],ne_b=[3,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[6,2048,1,1],ne_b=[3,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[3,2048,4,1],ne_b=[3,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[66,2048,1,1],ne_b=[3,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[66,2048,4,1],ne_b=[3,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[4,1024,1,1],ne_b=[4,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[8,1024,1,1],ne_b=[4,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[4,1024,4,1],ne_b=[4,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[67,1024,1,1],ne_b=[4,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[67,1024,4,1],ne_b=[4,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[4,1536,1,1],ne_b=[4,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[8,1536,1,1],ne_b=[4,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[4,1536,4,1],ne_b=[4,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[67,1536,1,1],ne_b=[4,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[67,1536,4,1],ne_b=[4,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[4,2048,1,1],ne_b=[4,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[8,2048,1,1],ne_b=[4,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[4,2048,4,1],ne_b=[4,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[67,2048,1,1],ne_b=[4,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[67,2048,4,1],ne_b=[4,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[9,1024,1,1],ne_b=[9,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[18,1024,1,1],ne_b=[9,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[9,1024,4,1],ne_b=[9,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[72,1024,1,1],ne_b=[9,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[72,1024,4,1],ne_b=[9,1024,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[9,1536,1,1],ne_b=[9,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[18,1536,1,1],ne_b=[9,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[9,1536,4,1],ne_b=[9,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[72,1536,1,1],ne_b=[9,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[72,1536,4,1],ne_b=[9,1536,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[9,2048,1,1],ne_b=[9,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[18,2048,1,1],ne_b=[9,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[9,2048,4,1],ne_b=[9,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[72,2048,1,1],ne_b=[9,2048,1,1]): [1;32mOK[0m
+  SSM_CONV(type=f32,ne_a=[72,2048,4,1],ne_b=[9,2048,1,1]): [1;32mOK[0m
+  45/45 tests passed
+  Backend CPU: [1;32mOK[0m
+1/1 backends passed
+[1;32mOK[0m

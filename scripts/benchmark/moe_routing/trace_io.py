@@ -10,8 +10,10 @@ CPU analysis only: nothing here loads a model.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -158,3 +160,102 @@ def layer_loads(ids_l: np.ndarray, block: np.ndarray, nb: int, E: int) -> np.nda
 def layer_counts(ids_l: np.ndarray, E: int) -> np.ndarray:
     e = ids_l.ravel().astype(np.int64)
     return np.bincount(e[e >= 0], minlength=E)
+
+
+# ---------------------------------------------------------------------------------------- analysis provenance
+# VB-MOE-ROUTING-WIRE (2026-10-24): every analysis JSON carries `input_traces` (one record per input shard) and a
+# `content_sha256`, so the belief-kernel reader (epyc-root scripts/vidya/adapters/moe_routing.py) can bind a number to
+# the exact shards, model, corpus, chunk size and hazard-guard state it was computed from WITHOUT re-opening a shard.
+# An analysis JSON written before this emit (no content_sha256 / input_traces) yields no belief row: nothing is back-filled.
+PROVENANCE_SCHEMA = "epyc.moe.analysis_provenance.v1"
+BELIEFS_SIDECAR_MODULE = "moe_routing"
+#: analysis document -> file names the belief writer scans for in an output dir
+ANALYSIS_FILES = ("skew_report.json", "residency_curve.json", "placement_replay_same.json", "placement_replay_cross.json",
+                  "locality_report.json")
+
+
+def canonical_json(obj) -> str:
+    """The canonical form content_sha256 is taken over: JSON round-tripped (numpy scalars, tuples, int keys normalised),
+    sorted keys, no whitespace, ensure_ascii off. NaN/Infinity keep Python's literal spelling (deterministic)."""
+    return json.dumps(json.loads(json.dumps(obj)), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def content_sha256(doc: dict) -> str:
+    """sha256 of the canonical JSON of the document EXCLUDING the `content_sha256` key itself."""
+    return hashlib.sha256(canonical_json({k: v for k, v in doc.items() if k != "content_sha256"}).encode("utf-8")).hexdigest()
+
+
+@functools.lru_cache(maxsize=None)
+def _sha256_cached(path: str, mtime_ns: int, size: int) -> str:
+    return sha256_file(Path(path))
+
+
+def _file_sha(path: Path) -> str:
+    st = path.stat()
+    return _sha256_cached(str(path), st.st_mtime_ns, st.st_size)
+
+
+def shard_provenance(shard_dir) -> dict:
+    """Provenance record of one shard dir: the manifest-recorded and the RECOMPUTED rows/ids sha256, model file, arch,
+    corpus sha256, chunk size, hazard-guard status, verified / quarantine markers, and the window / row accounting per phase."""
+    d = Path(shard_dir)
+    m = json.loads((d / "routing_trace.json").read_text())
+    prov_p = d / "routing_trace.provenance.json"
+    prov = json.loads(prov_p.read_text()) if prov_p.exists() else {}
+    rows_p, ids_p = d / "routing_trace.rows.bin", d / "routing_trace.ids.i16"
+    rows = np.fromfile(rows_p, dtype=ROW_DTYPE)
+    pre, dec = rows["phase"] == 0, rows["phase"] == 1
+    layers = m["layers"]
+    rec = {
+        "shard": str(d), "part": d.parent.name, "domain": d.parent.parent.name,
+        "arch": m.get("arch"), "model": m.get("model"), "model_path": prov.get("model_path"),
+        "layers": len(layers), "n_experts": sorted({int(l["n_experts"]) for l in layers}), "top_k": sorted({int(l["top_k"]) for l in layers}),
+        "chunk_size": m.get("batch_size"), "corpus_sha256": prov.get("corpus_sha256"), "tokens_sha256": prov.get("tokens_sha256"),
+        "corpus_tokens": prov.get("corpus_tokens"), "llama_build_info": prov.get("llama_build_info"), "tool_format": prov.get("tool_format"),
+        "first_window": prov.get("first_window"), "n_windows": prov.get("n_windows"),
+        "decode_tokens_per_window": prov.get("decode_tokens_per_window"),
+        "rows": int(rows.size), "rows_prefill": int(pre.sum()), "rows_decode": int(dec.sum()),
+        "windows_prefill": int(np.unique(rows["sample_id"][pre]).size), "windows_decode": int(np.unique(rows["sample_id"][dec]).size),
+        "rows_sha256": m.get("rows_sha256"), "ids_sha256": (m.get("ids") or {}).get("sha256"),
+        "hashes_verified": bool(_file_sha(rows_p) == m.get("rows_sha256") and _file_sha(ids_p) == (m.get("ids") or {}).get("sha256")),
+        "verified_marker": (d / "VERIFIED").is_file(), "quarantined": (d / "QUARANTINED").exists(),
+        "hazard_guard": prov.get("hazard_guard"),
+    }
+    if not rec["hashes_verified"]:
+        print(f"WARNING: {d}: recomputed rows/ids sha256 differ from the manifest; recorded as hashes_verified=false "
+              "(the belief reader will yield no row for this analysis)", file=sys.stderr)
+    return rec
+
+
+def input_traces(traces) -> list:
+    """One provenance record per distinct input shard of `traces` (Trace objects), ordered by (domain, shard)."""
+    seen, out = set(), []
+    for t in traces:
+        for s in t.shards:
+            if s not in seen:
+                seen.add(s)
+                out.append(shard_provenance(s))
+    return sorted(out, key=lambda r: (r["domain"], r["shard"]))
+
+
+def stamp(doc: dict, traces, kind: str) -> dict:
+    """Add `analysis_kind`, `provenance_schema`, `input_traces` and (last) `content_sha256` to an analysis document, in place."""
+    doc["analysis_kind"] = kind
+    doc["provenance_schema"] = PROVENANCE_SCHEMA
+    doc["input_traces"] = input_traces(traces)
+    doc.pop("content_sha256", None)
+    doc["content_sha256"] = content_sha256(doc)
+    return doc
+
+
+def emit_beliefs(out_dir, producer: str) -> int:
+    """Optional write-time belief capture (`--beliefs`): project every analysis JSON in `out_dir` into
+    `<out_dir>/moe_routing.beliefs.jsonl` via the epyc-root capture writer named by EPYC_ROOT. Returns an exit code
+    (0, or belief_capture.EXIT_CAPTURE_FAILED); the analysis outputs themselves are already on disk."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import belief_capture  # noqa: PLC0415
+    log = belief_capture.CaptureLog()
+    side = log.run("moe-routing", lambda: belief_capture.load_capture(BELIEFS_SIDECAR_MODULE).write_belief_measurements(
+        out_dir, producer=producer))
+    print(f"belief sidecar: {side}", file=sys.stderr)
+    return log.exit_code(0)
