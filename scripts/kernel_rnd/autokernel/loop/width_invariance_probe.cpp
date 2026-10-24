@@ -14,6 +14,7 @@
 #include "ggml-cpu.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -95,6 +96,7 @@ struct RepOut {
     double max_abs = 0;
     uint32_t b_bits = 0, s_bits = 0;
     bool poison_left = false;
+    int64_t compute_ns = -1;   // AKX-ALL-26b: wall ns of the one graph compute (batched + serial ops), indicative only
 };
 
 static RepOut compare_segs(const std::vector<Seg> & segs) {
@@ -138,14 +140,18 @@ static bool run_cell(Cell & c, int reps, std::vector<RepOut> & res, std::string 
             std::vector<uint8_t> p(ggml_nbytes(t), 0xFF);
             ggml_backend_tensor_set(t, p.data(), 0, p.size());
         }
+        const auto t0 = std::chrono::steady_clock::now();
         if (ggml_backend_graph_compute(g_be, c.gf) != GGML_STATUS_SUCCESS) { err = "graph_compute failed"; return false; }
+        const int64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
         Bufs bufs(c.outs.size());
         for (size_t i = 0; i < c.outs.size(); ++i) {
             bufs[i].resize(ggml_nbytes(c.outs[i]) / 4);
             ggml_backend_tensor_get(c.outs[i], bufs[i].data(), 0, ggml_nbytes(c.outs[i]));
         }
         if (c.tamper) c.tamper(bufs);
-        res.push_back(compare_segs(c.segs(bufs)));
+        RepOut out = compare_segs(c.segs(bufs));
+        out.compute_ns = ns;
+        res.push_back(out);
     }
     return true;
 }
@@ -170,15 +176,15 @@ static void emit_cell(const Meta & m, int k, const std::vector<RepOut> & reps, c
             any_poison |= reps[i].poison_left;
             all_eq &= reps[i].equal;
             any_eq |= reps[i].equal;
-            char b[640];
+            char b[704];
             std::snprintf(b, sizeof b,
-                "%s{\"batched_digest\":\"%s\",\"serial_digest\":\"%s\",\"equal\":%s,\"n_diff\":%lld,\"first_diff\":%s,\"max_abs_diff\":%.9g}",
+                "%s{\"batched_digest\":\"%s\",\"serial_digest\":\"%s\",\"equal\":%s,\"n_diff\":%lld,\"first_diff\":%s,\"max_abs_diff\":%.9g,\"compute_ns\":%lld}",
                 i ? "," : "", hex64(reps[i].bdig).c_str(), hex64(reps[i].sdig).c_str(), reps[i].equal ? "true" : "false",
                 (long long) reps[i].n_diff,
                 reps[i].first_seg < 0 ? "null" :
                     (std::string("{\"seg\":") + std::to_string(reps[i].first_seg) + ",\"elem\":" + std::to_string(reps[i].first_elem) +
                      ",\"batched_bits\":\"" + hex64(reps[i].b_bits).substr(8) + "\",\"serial_bits\":\"" + hex64(reps[i].s_bits).substr(8) + "\"}").c_str(),
-                reps[i].max_abs);
+                reps[i].max_abs, (long long) reps[i].compute_ns);
             reps_json += b;
         }
         if (any_poison) v = "ERR";

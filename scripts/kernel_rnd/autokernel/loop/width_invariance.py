@@ -36,17 +36,44 @@ BLCK = {"Q8_0": 32, "Q4_0": 32, "F16": 1, "F32": 1}  # everything else is 256
 GDN_SHAPES = ["Q38-27B-Hv48-scalar", "A3B-Hv32-scalar", "Q38-27B-Hv48-kda"]
 CTL_SHAPES = ["ctl-positive-width-dependent", "ctl-negative-width-independent", "ctl-bitflip-injection"]
 
+FA_SPLIT_KV_OFF_ROUTE = "cpu[GGML_IQK=1,GGML_FA_SPLIT_KV=0]"
 ROUTES = {
     "cpu": {"GGML_IQK": "1"},
     "cpu-native": {},
     "cpu[GGML_IQK=1,GGML_IQK_Q8_0=1]": {"GGML_IQK": "1", "GGML_IQK_Q8_0": "1"},
     "cpu[GGML_IQK=1,GGML_ROWEXACT_N=9]": {"GGML_IQK": "1", "GGML_ROWEXACT_N": "9"},
+    # AKX-ALL-26b: the CPU flash-attn knob-off column. `SCRUB` removes GGML_FA_SPLIT_KV, so every
+    # AKX-ALL-26 FA cell ran the default (split on). The knob exists for spec-decode row-exactness
+    # (INF-70 be2-fa) and the codified Q38FN launch serves with it at 0.
+    FA_SPLIT_KV_OFF_ROUTE: {"GGML_IQK": "1", "GGML_FA_SPLIT_KV": "0"},
 }
 SCRUB = ["GGML_IQK", "GGML_IQK_Q8_0", "GGML_IQK_DEQUANT", "GGML_ROWEXACT_N", "GGML_FA_SPLIT_KV", "GGML_QSPLIT", "GGML_QSPLIT_MIN"]
 
 
+PLANS = ("full", "fa-split-kv-off")
+
+
+def fa_split_kv_off_plan():
+    """AKX-ALL-26b: FLASH_ATTN_EXT on every FA KV type, default route and knob-off route side by side
+    at 24 and 1 threads, in ONE run dir from ONE probe binary (so verdicts and compute_ns compare), plus
+    the controls so the harness proves it can still see a width-dependent difference."""
+    g = [("cpu", 24, "ctl", "-")]
+    for route in ("cpu", FA_SPLIT_KV_OFF_ROUTE):
+        for nth in (24, 1):
+            g += [(route, nth, "fa", t) for t in FA_TYPES]
+    return g
+
+
+def plan_for(name: str = "full"):
+    if name == "full":
+        return plan()
+    if name == "fa-split-kv-off":
+        return fa_split_kv_off_plan()
+    raise ValueError(f"unknown plan {name!r}; one of {PLANS}")
+
+
 def plan():
-    """(route, nth, op, type) groups."""
+    """(route, nth, op, type) groups (the AKX-ALL-26 grid; unchanged by AKX-ALL-26b)."""
     g = []
     r = "cpu"
     g += [(r, 24, "ctl", "-"), (r, 24, "gdn", "F32")]
@@ -106,7 +133,7 @@ def run_group(args, g, out_dir: Path, log):
 def run(args):
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    groups = plan()
+    groups = plan_for(getattr(args, "plan", "full"))
     if args.only:
         groups = [g for g in groups if args.only in gname(g)]
     with open(out_dir / "run_groups.log", "a") as log:
@@ -116,10 +143,10 @@ def run(args):
 
 
 # ------------------------------------------------------------------------------------------ expected grid
-def expected_cells():
+def expected_cells(plan_name: str = "full"):
     """(route, nth, op, type, shape, mode) keys that a complete run must contain (k=1..9 each)."""
     exp = []
-    for route, nth, op, typ in plan():
+    for route, nth, op, typ in plan_for(plan_name):
         if op == "mm":
             for s in MM_SHAPES:
                 if nth == 1 and s not in MM_SMALL:
@@ -317,8 +344,52 @@ def render_tables(cells):
     return "\n".join(lines)
 
 
+def _median(values):
+    values = sorted(v for v in values if isinstance(v, (int, float)) and v >= 0)
+    if not values:
+        return None
+    mid = len(values) // 2
+    return values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+
+
+def fa_split_kv_off_column(cells):
+    """AKX-ALL-26b: per (KV type, n_kv, nth) the default-route and knob-off cells side by side.
+
+    `f2_clears`: the default route fails first at k=2 and the knob-off route does not fail at all
+    (PASS); None when either side is not a clean PASS/FAIL. `compute_ns_ratio_k*`: median per-rep graph
+    compute ns, knob-off over default, at k = 2 and k = KMAX (the graph holds the batched AND the serial
+    ops, so this is an indicative cost of the knob, measured on a shared host, never a timing claim).
+    Absent compute_ns (a probe built before AKX-ALL-26b) leaves the ratios None."""
+    rows = []
+    keys = sorted({(typ, shape, nth) for (route, nth, op, typ, shape, _m) in cells
+                   if op == "FLASH_ATTN_EXT" and route in ("cpu", FA_SPLIT_KV_OFF_ROUTE)},
+                  key=lambda k: (FA_TYPES.index(k[0]) if k[0] in FA_TYPES else 99,
+                                 int(k[1]) if str(k[1]).isdigit() else 0, -k[2]))
+    for typ, shape, nth in keys:
+        base = cells.get(("cpu", nth, "FLASH_ATTN_EXT", typ, shape, "-"), {})
+        off = cells.get((FA_SPLIT_KV_OFF_ROUTE, nth, "FLASH_ATTN_EXT", typ, shape, "-"), {})
+        b_pat, b_first, b_status = summarize(base) if base else ("", None, "MISSING")
+        o_pat, o_first, o_status = summarize(off) if off else ("", None, "MISSING")
+        clears = None
+        if b_status in ("PASS", "FAIL") and o_status in ("PASS", "FAIL"):
+            clears = b_status == "FAIL" and b_first == 2 and o_status == "PASS"
+        row = {"type": typ, "n_kv": shape, "nth": nth,
+               "default": cell_label(b_status, b_first) if b_status != "MISSING" else "MISSING",
+               "split_kv_off": cell_label(o_status, o_first) if o_status != "MISSING" else "MISSING",
+               "default_pattern": b_pat, "split_kv_off_pattern": o_pat, "f2_clears": clears}
+        for k in (2, KMAX):
+            b_ns = _median([r.get("compute_ns") for r in (base.get(k) or {}).get("reps") or ()])
+            o_ns = _median([r.get("compute_ns") for r in (off.get(k) or {}).get("reps") or ()])
+            row[f"default_compute_ns_k{k}"] = b_ns
+            row[f"split_kv_off_compute_ns_k{k}"] = o_ns
+            row[f"compute_ns_ratio_k{k}"] = (round(o_ns / b_ns, 4) if b_ns and o_ns is not None else None)
+        rows.append(row)
+    return rows
+
+
 def table(args):
     out_dir = Path(args.out_dir)
+    plan_name = getattr(args, "plan", "full")
     cells, headers = load_cells(out_dir)
     # merge every cell into one JSONL (the evidence file)
     merged = out_dir / "cells.jsonl"
@@ -328,7 +399,7 @@ def table(args):
                 f.write(json.dumps(cells[key][k], sort_keys=True) + "\n")
     # expected-grid coverage: missing groups are ERR rows, never omissions
     missing = []
-    for key in expected_cells():
+    for key in expected_cells(plan_name):
         per_k = cells.get(key, {})
         if len(per_k) != KMAX:
             missing.append({"key": list(key), "have_k": sorted(per_k)})
@@ -338,8 +409,9 @@ def table(args):
     n_aa_unclean = sum(1 for p in cells.values() for r in p.values() if r["aa_clean"] is False)
     n_with_reps = sum(1 for p in cells.values() for r in p.values() if r["aa_clean"] is not None)
 
-    frozen_rows = load_frozen(Path(args.frozen))
-    scored = score(frozen_selectors(frozen_rows) + addendum_selectors(), cells)
+    frozen_rows = load_frozen(Path(args.frozen)) if getattr(args, "frozen", None) else []
+    scored = (score(frozen_selectors(frozen_rows) + addendum_selectors(), cells)
+              if plan_name == "full" else [])
     summ = defaultdict(int)
     for s in scored:
         summ[(s["src"], s["result"])] += 1
@@ -358,8 +430,11 @@ def table(args):
         "missing_groups": missing, "nondet_cells": nondet, "err_cells": errs,
         "controls": ctl, "controls_ok": ctl_ok,
         "scoring_counts": {f"{a}/{b}": n for (a, b), n in sorted(summ.items())},
-        "scoring": scored,
+        "scoring": scored, "plan": plan_name,
     }
+    knob_off = fa_split_kv_off_column(cells)
+    if any(row["split_kv_off"] != "MISSING" for row in knob_off):
+        report["fa_split_kv_off"] = knob_off
     (out_dir / "summary.json").write_text(json.dumps(report, indent=1, sort_keys=True))
     md = [f"# AKX-ALL-26 CPU first-fail-k tables", "",
           f"cells={n_cells} groups={len(cells)} A/A-unclean cells={n_aa_unclean}/{n_with_reps} missing groups={len(missing)} err cells={len(errs)}",
@@ -369,6 +444,15 @@ def table(args):
         det = "; ".join(f"{d['shape']}{('/' + d['mode']) if d['mode'] not in (None, '-') else ''}:{d['pattern']}" for d in s["detail"][:12])
         sel = f"{s['route']} nth{s['nth']} {s['op']} {s['type']}" + (f" {s['shape']}" if s.get("shape") else "") + (f" {s['mode']}" if s.get("mode") else "")
         md.append(f"| {s['id']} | {s['src']} | {sel} | {s['pred']} | {s['result']} | {det} |")
+    if report.get("fa_split_kv_off"):
+        md += ["", "## AKX-ALL-26b - CPU flash-attn knob-off column (GGML_FA_SPLIT_KV=0)", "",
+               "compute_ns is the median per-rep wall time of the cell's ONE graph (batched + serial ops) on a "
+               "shared host: an indicative cost, not a timing measurement.", "",
+               "| KV type | n_kv | nth | default | split_kv=0 | F@2 clears | ns ratio k=2 | ns ratio k=9 |",
+               "|---|---|---|---|---|---|---|---|"]
+        for row in report["fa_split_kv_off"]:
+            md.append(f"| {row['type']} | {row['n_kv']} | {row['nth']} | {row['default']} | {row['split_kv_off']} | "
+                      f"{row['f2_clears']} | {row['compute_ns_ratio_k2']} | {row[f'compute_ns_ratio_k{KMAX}']} |")
     (out_dir / "first_fail_tables.md").write_text("\n".join(md) + "\n")
     print(json.dumps({k: v for k, v in report.items() if k not in ("scoring", "missing_groups", "nondet_cells", "err_cells")}, indent=1))
     print("missing groups:", len(missing), "nondet:", len(nondet), "err:", len(errs))
@@ -388,10 +472,15 @@ def main():
     r.add_argument("--out-dir", required=True)
     r.add_argument("--seed", type=int, default=1)
     r.add_argument("--only", default="")
+    r.add_argument("--plan", choices=PLANS, default="full",
+                   help="full = the AKX-ALL-26 grid; fa-split-kv-off = the AKX-ALL-26b knob-off column")
     t = sub.add_parser("table")
     t.add_argument("--out-dir", required=True)
-    t.add_argument("--frozen", required=True)
+    t.add_argument("--frozen", default=None, help="the frozen predicted-fail list (required for --plan full)")
+    t.add_argument("--plan", choices=PLANS, default="full")
     a = ap.parse_args()
+    if a.cmd == "table" and a.plan == "full" and not a.frozen:
+        ap.error("table --plan full needs --frozen")
     return {"build": build, "run": run, "table": table}[a.cmd](a)
 
 
