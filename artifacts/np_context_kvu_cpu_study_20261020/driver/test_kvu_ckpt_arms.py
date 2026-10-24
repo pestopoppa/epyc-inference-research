@@ -519,6 +519,7 @@ class EmitterAndRequests(unittest.TestCase):
                           prompt_n=2100, cache_n=6000, ttft_s=31.2)
             row = K.emit_request_row(fields, a, K._la(launch, K.ARM_DENSE, 40960), srv, facts, [0.5, 0.4, 0.3], 0)
             self.assertEqual(row["validation_problems"], [])
+            self.assertEqual(row["row_sha256"], M.row_hash(row))          # hash covers the row as written (validation_problems included)
             self.assertEqual(row["schema"], M.CAPTURE_SCHEMA)
             self.assertEqual((row["prompt_n"], row["cache_n"], row["policy_arm"], row["np"]), (2100, 6000, "dense", 1))
             self.assertEqual(row["kv_unified_from_log"], "false")

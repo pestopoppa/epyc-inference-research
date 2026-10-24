@@ -1005,6 +1005,7 @@ def emit_request_row(row_fields, a, la, srv, facts, loadavg, wave):
     wr = dict(prompt_n=row_fields.get("prompt_n"), n_prompt_tokens_cache=row_fields.get("cache_n"), n_fork_tokens=None)
     row = M.finalize_row(base, a, la, srv, facts, loadavg, wave=wave, wave_rec=wr)
     row["validation_problems"] = M.validate_row(row)
+    row["row_sha256"] = M.row_hash(row)    # finalize_row hashed BEFORE validation_problems existed; rehash so the stored hash covers the row as written
     return row
 
 
