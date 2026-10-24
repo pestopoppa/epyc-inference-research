@@ -318,3 +318,105 @@ def test_drive_against_dead_port_exits_75(tmp_path, monkeypatch):
     monkeypatch.setattr(S, "one", lambda port, meta, body, timeout: dict(meta, ok=False, t0=0, t1=0, error="refused"))
     import time as _t
     assert S.drive(1, str(tmp_path), _t.time() + 3600) == S.EXIT_SERVER_GONE
+
+
+# ------------------------------------------------------------------------- belief write side (VB-SPEC-RNG-1-2-WIRE)
+import hashlib  # noqa: E402
+import json  # noqa: E402
+from datetime import datetime  # noqa: E402
+
+import pytest  # noqa: E402
+
+RULE = b"# SYNTHETIC predeclaration (test fixture)\n"
+
+
+def _launcher(tmp_path, recs):
+    unit = tmp_path / "spec-rng-1-2-syn"
+    (unit / "out").mkdir(parents=True)
+    (unit / "PREDECLARATION.md").write_bytes(RULE)
+    (unit / "out" / "records.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+    return unit
+
+
+def _iso_utc(s):
+    t = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    return t.utcoffset().total_seconds() == 0 and s.endswith("Z")
+
+
+def test_analyze_writes_rule_sha_timestamp_summary_and_eight_self_hashed_rows(tmp_path):
+    unit = _launcher(tmp_path, S.synthetic_records())
+    rc = S.main(["analyze", "--records", str(unit / "out/records.jsonl"), "--out", str(unit / "out/verdict.json"),
+                 "--summary", str(unit / "VERDICT.json")])
+    assert rc == 0
+    rule = hashlib.sha256(RULE).hexdigest()
+    v = json.loads((unit / "out/verdict.json").read_text())
+    top = json.loads((unit / "VERDICT.json").read_text())
+    assert v["predeclaration_sha256"] == rule == top["predeclaration_sha256"]
+    assert _iso_utc(v["analyzed_at"]) and top["analyzed_at"] == v["analyzed_at"]
+    assert top["records_sha256"] == v["records_sha256"] == hashlib.sha256((unit / "out/records.jsonl").read_bytes()).hexdigest()
+    assert top["verdict_sha256"] == hashlib.sha256((unit / "out/verdict.json").read_bytes()).hexdigest()
+    assert (top["verdict"], top["gates"], top["probe"]) == (v["verdict"], v["gates"], v["probe"])
+    rows = [json.loads(x) for x in (unit / "out" / S.BELIEFS_NAME).read_text().splitlines()]
+    assert [r["component"] for r in rows] == S.COMPONENTS
+    for r in rows:
+        assert r["schema"] == S.BELIEF_SCHEMA and r["content_sha256"] == S.content_sha256(r)
+        assert r["predeclaration_sha256"] == rule and rule in r["decided_proposition"]
+        assert f"run verdict {v['verdict']}" in r["decided_proposition"] and r["verdict"] == "DO-NOT-CARRY"
+        assert r["inputs"] == {"out/records.jsonl": v["records_sha256"], "PREDECLARATION.md": rule}
+        assert r["run_name"] == "spec-rng-1-2-syn" and _iso_utc(r["emitted_at"])
+    by = {r["component"]: r for r in rows}
+    assert by["P3"]["value"] == v["comparisons"]["P3"]["min_p"] and by["P3"]["unit"] == "p"
+    assert by["P3"]["anchor_value"] == v["comparisons"]["P3"]["bonferroni_threshold"]
+    assert by["acceptance_depth7"]["value"] == v["acceptance"]["depth7"]["poskey_mean"]
+    assert by["probe"]["value"] == v["probe"]["net_gain"] and by["probe"]["reps"] == v["probe"]["paired_seeds"]
+    assert by["X0"]["category"] == "BASELINE" and by["P7"]["category"] == "CANDIDATE"
+    tampered = dict(rows[0], value=0.5)
+    assert S.content_sha256(tampered) != rows[0]["content_sha256"]
+
+
+def test_inconclusive_writes_no_rows_and_removes_a_stale_sidecar(tmp_path):
+    unit = _launcher(tmp_path, S.synthetic_records())
+    out = unit / "out/verdict.json"
+    S.finish(str(unit / "out/records.jsonl"), str(out))
+    assert (unit / "out" / S.BELIEFS_NAME).is_file()
+    (unit / "out/records.jsonl").write_text("".join(json.dumps(r) + "\n" for r in S.synthetic_records(n=100)))
+    res, note = S.finish(str(unit / "out/records.jsonl"), str(out))
+    assert res["verdict"] == "INCONCLUSIVE" and "void" in note
+    assert not (unit / "out" / S.BELIEFS_NAME).exists()
+    assert json.loads(out.read_text())["predeclaration_sha256"] == hashlib.sha256(RULE).hexdigest()
+
+
+def test_no_rule_no_rows_and_the_verdict_says_so(tmp_path):
+    recs = tmp_path / "flat" / "records.jsonl"
+    recs.parent.mkdir()
+    recs.write_text("".join(json.dumps(r) + "\n" for r in S.synthetic_records()))
+    res, note = S.finish(str(recs), str(tmp_path / "flat" / "verdict.json"))
+    assert res["predeclaration_sha256"] is None and "no PREDECLARATION.md" in note
+    assert not (tmp_path / "flat" / S.BELIEFS_NAME).exists()
+
+
+def test_no_beliefs_flag_and_explicit_paths(tmp_path):
+    unit = _launcher(tmp_path, S.synthetic_records(bias=0.5))
+    other = tmp_path / "rule.md"
+    other.write_bytes(b"other rule\n")
+    res, _ = S.finish(str(unit / "out/records.jsonl"), str(unit / "out/verdict.json"), predeclaration=str(other),
+                      beliefs=str(tmp_path / "b.jsonl"))
+    rows = [json.loads(x) for x in (tmp_path / "b.jsonl").read_text().splitlines()]
+    assert res["verdict"] == "POSKEY-BIASED" and len(rows) == 8
+    assert rows[0]["predeclaration_sha256"] == hashlib.sha256(b"other rule\n").hexdigest()
+    S.finish(str(unit / "out/records.jsonl"), str(unit / "out/verdict.json"), write_beliefs=False)
+    assert not (unit / "out" / S.BELIEFS_NAME).exists()
+
+
+REAL = "/mnt/raid0/llm/tmp/f8-launchers-20261023/spec-rng-1-2-gpu-run"
+
+
+@pytest.mark.skipif(not os.path.isfile(REAL + "/out/records.jsonl"), reason="the 10-23 GPU run is not on this host")
+def test_real_run_reanalysis_reproduces_the_recorded_verdict(tmp_path):
+    res, note = S.finish(REAL + "/out/records.jsonl", str(tmp_path / "verdict.json"),
+                         predeclaration=REAL + "/PREDECLARATION.md", beliefs=str(tmp_path / "b.jsonl"))
+    old = json.load(open(REAL + "/out/verdict.json"))
+    assert res["verdict"] == old["verdict"] == "DO-NOT-CARRY" and res["records_sha256"] == old["records_sha256"]
+    assert res["predeclaration_sha256"].startswith("0af228a0")
+    rows = [json.loads(x) for x in (tmp_path / "b.jsonl").read_text().splitlines()]
+    assert len(rows) == 8 and {r["run_name"] for r in rows} == {"spec-rng-1-2-gpu-run"}

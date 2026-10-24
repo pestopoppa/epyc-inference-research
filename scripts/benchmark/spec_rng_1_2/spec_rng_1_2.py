@@ -17,7 +17,11 @@ What the runner does (rule written BEFORE any run in the launcher dir's PREDECLA
 
 stdlib only (runs under /usr/bin/python3 and under the orchestrator venv). Subcommands:
   drive   --port P --out DIR --deadline EPOCH [--dry]     run both phases, append DIR/records.jsonl, resumable
-  analyze --records F --out VERDICT.json [--dry-engage]    apply the predeclared rule
+  analyze --records F --out VERDICT.json [--predeclaration P] [--summary VERDICT.json] [--beliefs F | --no-beliefs]
+                                                           apply the predeclared rule; the verdict carries the rule sha256
+                                                           (PREDECLARATION.md) and an ISO-8601 UTC analyzed_at; --summary writes
+                                                           the launcher's top-level VERDICT.json with the same fields; a
+                                                           self-hashed belief_measurements.jsonl is written beside --out
   selftest                                                 analyzer on synthetic data: a null passes, an injected bias fails
   plan                                                     print the plan (arms, N, request bodies) and exit
 """
@@ -28,10 +32,12 @@ import math
 import os
 import random
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 # ----------------------------------------------------------------------------------------------------------------- plan
 K_TOKENS = 12                 # generated tokens per request; indices 1..K-1 are tested (index 0 is the null control)
@@ -449,6 +455,150 @@ def analyze(records, k_tokens=K_TOKENS, alpha=ALPHA):
     return res
 
 
+# ------------------------------------------------------------------------------------------------------- belief write side
+# VB-SPEC-RNG-1-2-WIRE: at the end of each run (`analyze`), one self-hashed row per decided component, mirroring what the
+# epyc-root strict reader `scripts/vidya/adapters/spec_rng_1_2.py` projects (it re-derives every number from records.jsonl and
+# refuses a sidecar that differs). This decides nothing: `claim_tuple.grade()` in epyc-root grades; there is no ladder here.
+BELIEF_SCHEMA = "epyc.spec_rng_1_2.belief_measurement.v1"
+BELIEFS_NAME = "belief_measurements.jsonl"
+PROJECTABLE = ("CARRY", "DO-NOT-CARRY", "POSKEY-BIASED")
+COMPONENTS = [c[0] for c in COMPARISONS] + ["acceptance_depth3", "acceptance_depth7", "probe"]
+
+
+def utc_now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def file_sha256(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
+def content_sha256(row):
+    return hashlib.sha256(canonical({k: v for k, v in row.items() if k != "content_sha256"}).encode()).hexdigest()
+
+
+def _g(x):
+    return f"{x:.4g}"
+
+
+def proposition(component, res, rule_sha):
+    """What the predeclared rule decided for one component, naming the verdict word and the rule digest (the root reader
+    builds the same sentence from its own re-derivation and refuses a row whose sentence differs)."""
+    head = f"SPEC-RNG.1.2 rule PREDECLARATION.md sha256 {rule_sha}, run verdict {res['verdict']}: "
+    if component.startswith("acceptance_depth"):
+        a = res["acceptance"][component.split("_", 1)[1]]
+        body = (f"at draft depth {component[-1]} the per-request acceptance fraction poskey vs stateful has Welch "
+                f"p {_g(a['p'])} {'>=' if a['pass'] else '<'} {ALPHA_ACC} (acceptance "
+                f"{'unchanged' if a['pass'] else 'changed'})")
+    elif component == "probe":
+        p = res["probe"]
+        body = (f"the benefit probe has net_gain {p['net_gain']} of {p['paired_seeds']} paired seeds, one-sided sign "
+                f"p {_g(p['sign_p_one_sided'])}; a gain needs net_gain >= {BENEFIT_MIN_GAIN} and p < {BENEFIT_ALPHA}")
+    else:
+        c = res["comparisons"][component]
+        body = (f"{component} ({c['A']} vs {c['B']}, {c['role']}) has minimum chi-square p {_g(c['min_p'])} over "
+                f"{c['n_tests']} tests {'>=' if c['pass'] else '<'} Bonferroni {ALPHA}/{c['n_tests']} "
+                f"(token distribution {'invariant' if c['pass'] else 'differs'}), index-0 null "
+                f"{'passes' if c['pos0_null_pass'] else 'fails'}")
+    return head + body
+
+
+def belief_rows(res, *, run_name, rule_sha, inputs, verdict_sha, analyzed_at, runner_sha):
+    """Eight rows for a projectable verdict; [] for INCONCLUSIVE (void: a re-grant re-runs it, nothing is decided)."""
+    if res["verdict"] not in PROJECTABLE:
+        return []
+    rows = []
+    for comp in COMPONENTS:
+        if comp.startswith("acceptance_depth"):
+            a = res["acceptance"][comp.split("_", 1)[1]]
+            spec = {"metric": "spec_rng_acceptance_fraction_poskey", "value": a["poskey_mean"], "unit": "fraction",
+                    "reps": min(a["n_poskey"], a["n_stateful"]), "anchor_value": a["stateful_mean"],
+                    "reps_basis": "scored:drafted requests per RNG arm at this depth, smaller arm", "category": "CANDIDATE",
+                    "stats": a}
+        elif comp == "probe":
+            p = res["probe"]
+            spec = {"metric": "spec_rng_probe_net_gain", "value": p["net_gain"], "unit": "seeds", "reps": p["paired_seeds"],
+                    "anchor_value": None, "reps_basis": "scored:paired probe seeds (alone vs batched, both RNG modes)",
+                    "category": "CANDIDATE", "stats": p}
+        else:
+            c = res["comparisons"][comp]
+            ns = [res["n_cell"][f"{arm}/{pi}"] for arm in (c["A"], c["B"]) for pi in range(len(PROMPTS))]
+            spec = {"metric": "spec_rng_chi2_min_p", "value": c["min_p"], "unit": "p", "reps": min(ns),
+                    "anchor_value": c["bonferroni_threshold"],
+                    "reps_basis": "scored:ok requests per (prompt, arm) cell, smallest of the compared cells",
+                    "category": "CANDIDATE" if c["role"] == "primary" else "BASELINE", "stats": c}
+        row = {"schema": BELIEF_SCHEMA, "run_name": run_name, "component": comp, **spec, "metric_direction": "higher_better",
+               "decided_proposition": proposition(comp, res, rule_sha), "verdict": res["verdict"], "reason": res["reason"],
+               "predeclaration_sha256": rule_sha, "records_sha256": res["records_sha256"], "verdict_sha256": verdict_sha,
+               "inputs": inputs, "analyzed_at": analyzed_at, "emitted_at": utc_now(),
+               "runner": {"file": "scripts/benchmark/spec_rng_1_2/spec_rng_1_2.py", "sha256": runner_sha},
+               "claim_class": "INDICATIVE correctness (no throughput value)"}
+        row["content_sha256"] = content_sha256(row)
+        rows.append(row)
+    return rows
+
+
+def _atomic_write(path, text):
+    d = os.path.dirname(os.path.abspath(path))
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=d)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+
+
+def default_predeclaration(records_path):
+    """Launcher layout: <launcher>/out/records.jsonl beside <launcher>/PREDECLARATION.md."""
+    cand = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(records_path))), "PREDECLARATION.md")
+    return cand if os.path.isfile(cand) else None
+
+
+def finish(records_path, out_path, *, predeclaration=None, summary=None, beliefs=None, write_beliefs=True, run_name=None):
+    """`analyze` end to end: verdict.json (+ rule sha + analyzed_at), optional top-level VERDICT.json, belief rows."""
+    res = analyze(load(records_path))
+    res["records_sha256"] = file_sha256(records_path)
+    pre = predeclaration if predeclaration is not None else default_predeclaration(records_path)
+    rule_sha = file_sha256(pre) if pre else None
+    res["predeclaration_sha256"] = rule_sha
+    res["analyzed_at"] = utc_now()
+    runner_sha = file_sha256(os.path.abspath(__file__))
+    res["runner_sha256"] = runner_sha
+    _atomic_write(out_path, json.dumps(res, indent=2))
+    verdict_sha = file_sha256(out_path)
+    if summary:
+        _atomic_write(summary, json.dumps({
+            "verdict": res["verdict"], "reason": res["reason"], "probe": res["probe"], "gates": res["gates"],
+            "predeclaration_sha256": rule_sha, "analyzed_at": res["analyzed_at"], "records_sha256": res["records_sha256"],
+            "verdict_sha256": verdict_sha}, indent=2))
+    note = None
+    if write_beliefs:
+        bpath = beliefs or os.path.join(os.path.dirname(os.path.abspath(out_path)), BELIEFS_NAME)
+        unit = os.path.dirname(os.path.dirname(os.path.abspath(records_path)))
+        rel = os.path.relpath(os.path.abspath(records_path), unit)
+        inputs = {rel: res["records_sha256"]}
+        if pre:
+            inputs[os.path.relpath(os.path.abspath(pre), unit)] = rule_sha
+        rows = belief_rows(res, run_name=run_name or os.path.basename(unit), rule_sha=rule_sha, inputs=inputs,
+                           verdict_sha=verdict_sha, analyzed_at=res["analyzed_at"], runner_sha=runner_sha)
+        if not rule_sha:
+            note = "belief rows NOT written: no PREDECLARATION.md to name the rule (pass --predeclaration)"
+            rows = []
+        elif not rows:
+            note = f"belief rows NOT written: verdict {res['verdict']} is void (nothing decided)"
+        if rows:
+            _atomic_write(bpath, "".join(canonical(r) + "\n" for r in rows))
+            note = f"belief rows: {len(rows)} -> {bpath}"
+        elif os.path.exists(bpath):
+            os.unlink(bpath)   # a sidecar from an earlier analysis describes other records
+    return res, note
+
+
 # ---------------------------------------------------------------------------------------------------------------- self test
 def synthetic_records(bias=0.0, seed=7, n=400, engaged=True):
     """Null data: every arm draws each token from one fixed Zipf-ish law (poskey arms at depth > 0 get `bias` mass moved from the
@@ -494,6 +644,11 @@ def main(argv=None):
     d = sub.add_parser("drive"); d.add_argument("--port", type=int, required=True); d.add_argument("--out", required=True)
     d.add_argument("--deadline", type=float, required=True); d.add_argument("--dry", action="store_true")
     a = sub.add_parser("analyze"); a.add_argument("--records", required=True); a.add_argument("--out", required=True)
+    a.add_argument("--predeclaration", default=None, help="the rule file (default: PREDECLARATION.md one level above --records' dir)")
+    a.add_argument("--summary", default=None, help="also write the launcher's top-level VERDICT.json here")
+    a.add_argument("--beliefs", default=None, help=f"belief rows path (default: {BELIEFS_NAME} beside --out)")
+    a.add_argument("--no-beliefs", action="store_true")
+    a.add_argument("--run-name", default=None, help="run name in the belief rows (default: the launcher dir name)")
     sub.add_parser("selftest")
     sub.add_parser("plan")
     args = ap.parse_args(argv)
@@ -503,10 +658,10 @@ def main(argv=None):
         return drive(0, "/dev/null", 0, True)
     if args.cmd == "selftest":
         return selftest()
-    res = analyze(load(args.records))
-    res["records_sha256"] = hashlib.sha256(open(args.records, "rb").read()).hexdigest()
-    with open(args.out, "w") as f:
-        json.dump(res, f, indent=2)
+    res, note = finish(args.records, args.out, predeclaration=args.predeclaration, summary=args.summary, beliefs=args.beliefs,
+                       write_beliefs=not args.no_beliefs, run_name=args.run_name)
+    if note:
+        print(note, file=sys.stderr)
     print(f"verdict {res['verdict']}: {res['reason']}")
     return 0
 
