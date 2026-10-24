@@ -5470,7 +5470,7 @@ def main(argv: list[str] | None = None) -> int:
                     _git(args.worktree, "reset", "--hard", previous_tip)
                     if _git(args.worktree, "rev-parse", "HEAD") != previous_tip:
                         raise GitError("HEAD did not reach the prior tip")
-                except GitError as exc:
+                except (GitError, subprocess.TimeoutExpired, OSError) as exc:
                     # C1-05: never rebuild and re-measure a tree the rollback did not reach.
                     raise loop.RunAborted(f"interaction-regression rollback to "
                                           f"{previous_tip[:12]} failed: {exc}") from exc
