@@ -27,7 +27,7 @@ def test_registered_as_item_186_with_resume_regex():
     assert set(A.RULES[186]) == {"common", "long6", "item2q"}
     assert A.rules_sha256([186]) and A.rules_sha256([186]) not in (A.rules_sha256([185]), A.rules_sha256([184]))
     assert GATE._ARM_STEP_RE.match("186 (3) long6 x") and GATE._ARM_STEP_RE.match("185 (4) x")
-    assert not GATE._ARM_STEP_RE.match("187 x")
+    assert not GATE._ARM_STEP_RE.match("188 x")    # 187 = kpf18r4
     assert A.ARM_CMDS["kpf18s1r"] == [185]                 # the remainder command is untouched
 
 

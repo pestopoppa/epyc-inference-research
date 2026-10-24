@@ -288,7 +288,7 @@ def test_gate_registers_the_arm_items_and_all_stays_1_to_7():
     for it in A.BUILDERS:
         assert it in GATE.ITEMS
     assert {1, 2, 3, 4, 5, 6, 7} <= set(GATE.ITEMS)
-    assert set(A.ARM_CMDS) == {"kpf181", "kpf182", "kpf183", "kpf18arms", "kpf18s1", "kpf18s1r", "kpf18r3"}  # kpf18s1r: kpf18_s1r.py, kpf18r3: kpf18_r3.py
+    assert set(A.ARM_CMDS) == {"kpf181", "kpf182", "kpf183", "kpf18arms", "kpf18s1", "kpf18s1r", "kpf18r3", "kpf18r4"}  # kpf18s1r: kpf18_s1r.py, kpf18r3: kpf18_r3.py, kpf18r4: kpf18_r4.py
 
 
 # ================================================================ a simulated server (plumbing tests)
@@ -890,7 +890,7 @@ def test_plan_183_cpu_defaults_are_end_checkpoint_and_lane_and_part_4_is_refused
 def test_rules_183_and_the_three_commands_wire_to_three_items():
     assert set(A.RULES[183]) == {"common", "cost", "end", "lane", "long"}
     assert A.ARM_CMDS["kpf18arms"] == [181, 182, 183] and A.ARM_CMDS["kpf18s1"] == [184]
-    assert set(A.BUILDERS) == {181, 182, 183, 184, 185, 186} and set(A.PREFLIGHTS) == {181, 182, 183, 184, 185, 186}  # 185: kpf18_s1r.py, 186: kpf18_r3.py
+    assert set(A.BUILDERS) == {181, 182, 183, 184, 185, 186, 187} and set(A.PREFLIGHTS) == {181, 182, 183, 184, 185, 186, 187}  # 185: kpf18_s1r.py, 186: kpf18_r3.py, 187: kpf18_r4.py
     assert A.rules_for([181, 182, 183]).keys() == {"181", "182", "183"}
 
 
