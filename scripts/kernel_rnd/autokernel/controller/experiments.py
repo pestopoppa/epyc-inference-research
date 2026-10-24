@@ -66,6 +66,8 @@ import sqlite3
 import time
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import experiment_capture
+
 SCHEMA_VERSION = 2
 
 _DDL = """
@@ -438,11 +440,19 @@ class ExperimentStore:
     def record(self, attempt: Mapping[str, Any], *, epoch: str,
                recorded_at: str, campaign_id: str,
                deployment: str | None = None,
-               receipt_out: list[dict[str, Any]] | None = None) -> bool:
+               receipt_out: list[dict[str, Any]] | None = None,
+               belief_capture: bool = False) -> bool:
         """Persist one attempt. Returns False if it was already recorded.
 
         Idempotent on `attempt_id` so a resumed controller re-recording its own
         durable rows cannot inflate the history it will later read back.
+
+        `belief_capture` (belief redesign Phase 2; `loop/archive.record` passes True) seals
+        the row's projected facts into a top-level payload `belief_capture`
+        (`experiment_capture.build`), so ROOT reads the row as PROSPECTIVE, not retrofit. It
+        is added only when the attempt carries no top-level `belief_capture` of its own, and a
+        capture that cannot be built leaves the row exactly as it would be without one (a
+        warning, never a lost row). Default False: every other writer is unchanged.
         """
         attempt_id = _attempt_id(attempt, campaign_id=campaign_id,
                                  recorded_at=recorded_at)
@@ -464,8 +474,17 @@ class ExperimentStore:
             _text(attempt.get("branch_id")),
             _positive_int(attempt.get("width")),
             _positive_int(attempt.get("depth")),
-            json.dumps(_jsonable(attempt), sort_keys=True),
         )
+        payload = _jsonable(attempt)
+        if belief_capture and "belief_capture" not in payload:
+            try:
+                payload["belief_capture"] = experiment_capture.build(
+                    dict(zip(experiment_capture.COLUMNS, row)), payload)
+            except Exception as exc:  # noqa: BLE001 -- the row matters more than its seal
+                import sys
+                print(f"warning: experiments belief_capture not built for {attempt_id}: "
+                      f"{type(exc).__name__}: {exc}"[:400], file=sys.stderr)
+        row = (*row, json.dumps(payload, sort_keys=True))
         cursor = self._connection.execute(
             "INSERT OR IGNORE INTO experiments ("
             "attempt_id,recorded_at,campaign_id,deployment,epoch_sha256,"

@@ -8,6 +8,7 @@ import time
 import pytest
 
 from . import archive, serving, serving_beliefs as beliefs
+from ..controller import experiment_capture
 from .test_resolved_recipe import BUILD, _resolve
 
 
@@ -70,6 +71,8 @@ def test_original_compare_archive_and_atomic_export_bytes(tmp_path, monkeypatch)
     assert native["comparison"] == row
     with sqlite3.connect(tmp_path / "experiments.db") as db:
         retained = json.loads(db.execute("SELECT payload FROM experiments").fetchone()[0])
+    # archive.record seals the row (belief redesign Phase 2); the attempt itself is unchanged.
+    assert retained.pop("belief_capture")["schema"] == experiment_capture.SCHEMA
     assert retained == attempt
     assert not archive.record(tmp_path, attempt, epoch="original-epoch",
                               recorded_at="2026-09-10T01:00:00Z", campaign_id="original-campaign")
@@ -107,7 +110,9 @@ def test_export_fault_preserves_durable_result_and_is_visible(tmp_path, monkeypa
     assert "serving belief export failed after durable archive: OSError: export fault" in capsys.readouterr().err
     assert row == original and len(calls) == 4
     with sqlite3.connect(tmp_path / "experiments.db") as db:
-        assert json.loads(db.execute("SELECT payload FROM experiments").fetchone()[0]) == attempt
+        stored = json.loads(db.execute("SELECT payload FROM experiments").fetchone()[0])
+    assert stored.pop("belief_capture")["schema"] == experiment_capture.SCHEMA
+    assert stored == attempt
 
 
 def test_compact_export_fits_when_pretty_encoding_would_exceed_budget(tmp_path, monkeypatch):

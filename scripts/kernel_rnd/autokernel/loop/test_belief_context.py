@@ -317,11 +317,39 @@ def test_run_argv_has_no_off_and_builds_the_reader_config(tmp_path):
         run._belief_seconds("0")
     args = mock.Mock(belief_root_repo=tmp_path, belief_ledger=tmp_path / "l.jsonl",
                      belief_known_good=tmp_path / "kg.json", belief_escalate_after_s=60.0,
-                     belief_reader_timeout_s=45.0)
+                     belief_reader_timeout_s=45.0, belief_focus_symbol=None)
     config = run._belief_config(args)
     assert (config.root, config.ledger, config.known_good, config.escalate_after_s,
             config.reader_timeout_s) == (tmp_path, tmp_path / "l.jsonl", tmp_path / "kg.json",
                                          60.0, 45.0)
+    assert config.focus_symbols == ()
+    args.belief_focus_symbol = ["mul_mat_q", "ggml_iqk_try_mul_mat_id"]
+    assert run._belief_config(args).focus_symbols == ("mul_mat_q", "ggml_iqk_try_mul_mat_id")
+    assert run._belief_focus_symbol(" mul_mat_q ") == "mul_mat_q"
+    for bad in ("", "two words", "tab\tsym", "x" * 201):
+        with pytest.raises(Exception):
+            run._belief_focus_symbol(bad)
+
+
+def test_focus_symbols_reach_the_root_target_only_when_given(tmp_path):
+    """Belief redesign §7.5: ROOT `Target.focus_symbols` (a ranking boost) is sent sorted and
+    de-duplicated; without focus symbols the target JSON is exactly what it always was."""
+    plain = Child(belief_ready_answer())
+    bc.prepare({"current_regime": GPU_27B_REGIME}, _config(tmp_path), runner=plain)
+    argv = plain.argv("prepare")
+    before = json.loads(argv[argv.index("--target-json") + 1])
+    assert "focus_symbols" not in before
+    child = Child(belief_ready_answer())
+    ready = bc.prepare({"current_regime": GPU_27B_REGIME},
+                       _config(tmp_path, focus_symbols=("mul_mat_q", "launch_mul_mat_q",
+                                                        "mul_mat_q")), runner=child)
+    argv = child.argv("prepare")
+    target = json.loads(argv[argv.index("--target-json") + 1])
+    assert target == {**before, "focus_symbols": ["launch_mul_mat_q", "mul_mat_q"]}
+    assert ready.target["focus_symbols"] == ["launch_mul_mat_q", "mul_mat_q"]
+    with pytest.raises(ValueError, match="focus symbol"):
+        bc.prepare({"current_regime": GPU_27B_REGIME},
+                   _config(tmp_path, focus_symbols=("has space",)), runner=Child(belief_ready_answer()))
 
 
 # --------------------------------------------- (iii) degraded mode in the formation loop

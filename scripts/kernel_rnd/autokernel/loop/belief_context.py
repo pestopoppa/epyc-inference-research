@@ -143,6 +143,20 @@ def _seeded_label(value: Any) -> Any:
 # ------------------------------------------------------------------------------ target
 
 
+#: A focus symbol is one kernel symbol name (an experiments row's `target_symbol`).
+FOCUS_SYMBOLS_MAX = 64
+
+
+def focus_symbol(text: Any) -> str:
+    """One validated focus symbol (`--belief-focus-symbol`, owned-targets `focus_symbols`)."""
+    value = text.strip() if isinstance(text, str) else ""
+    if not 0 < len(value) <= 200 or any(ch.isspace() or ord(ch) < 32 or ch == "\x7f"
+                                        for ch in value):
+        raise ValueError(f"focus symbol must be one symbol name of 1-200 printable "
+                         f"non-space characters: {text!r}")
+    return value
+
+
 def target_from_context(context: Mapping[str, Any]) -> dict[str, Any]:
     """The planner's target, from the `current_regime` block `run.py` already builds. An
     incomplete target is not a refusal: ROOT answers `ready` with empty evidence
@@ -176,6 +190,10 @@ class BeliefConfig:
     #: The loop's own stores: their new serving A/B receipts are ingested by the reader before
     #: each plan (VB-LOOP-SCOPE producer-time ingest), so this loop's latest outcomes are beliefs.
     source_roots: tuple[Path, ...] = ()
+    #: Belief redesign §7.5 (Phase 2): the campaign's owned target symbols (owned-targets.json
+    #: `focus_symbols` -> run.py `--belief-focus-symbol`). ROOT's `Target.focus_symbols` ranks
+    #: claims on these symbols first inside their group; a ranking boost, never a filter.
+    focus_symbols: tuple[str, ...] = ()
     consumer: str = CONSUMER
     python: str = sys.executable
 
@@ -366,6 +384,9 @@ def prepare(context: Mapping[str, Any], config: BeliefConfig | None = None, *,
     `BeliefContextRefused`. Never returns without a verified ledger state."""
     config = config or BeliefConfig()
     target = target_from_context(context)
+    if config.focus_symbols:
+        # Only when given: a loop without focus symbols sends the target it always sent.
+        target["focus_symbols"] = sorted({focus_symbol(s) for s in config.focus_symbols})
     args = ["prepare", "--consumer", config.consumer,
             "--target-json", json.dumps(target, sort_keys=True),
             *config._alarm_args(), *config._known_good_args()]

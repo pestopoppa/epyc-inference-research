@@ -357,6 +357,12 @@ KEEP_POLICY_FLAGS = frozenset({"--keep-dimensions", "--keep-capacity-limit-gib",
                                "--gpu-cpu-region-claim", "--cpu-held-intervals-v2"})
 
 
+#: The belief section's ranking boost (owned-targets `focus_symbols`, belief redesign §7.5):
+#: it reorders what the planner reads, never what is measured, so adding or changing it at a
+#: batch boundary carries the lineage.
+BELIEF_RANKING_FLAGS = frozenset({"--belief-focus-symbol"})
+
+
 def resume_binding(argv) -> dict:
     """Prior-child binding before adding a newly selected runtime recipe.
 
@@ -365,12 +371,14 @@ def resume_binding(argv) -> dict:
     orphaning the source/anchor lineage it continues; so are the pool width and the
     per-lane actor models (`POOL_ACTOR_FLAGS`), the post-keep measurement schedule
     (`MEASUREMENT_SCHEDULE_FLAGS`), the lane -> target binding (`LANE_BINDING_FLAGS`) and
-    the long-context surface (`LONGCTX_SURFACE_FLAGS`) and the keep-dimension / GPU
-    claim policy (`KEEP_POLICY_FLAGS`)."""
+    the long-context surface (`LONGCTX_SURFACE_FLAGS`), the keep-dimension / GPU
+    claim policy (`KEEP_POLICY_FLAGS`) and the belief ranking boost
+    (`BELIEF_RANKING_FLAGS`)."""
     stripped = _without(argv, {"--runtime-recipe-reference", "--runtime-recovery-reference",
                                *RUNTIME_PROTOCOL_FLAGS, *POOL_ACTOR_FLAGS,
                                *MEASUREMENT_SCHEDULE_FLAGS, *LANE_BINDING_FLAGS,
-                               *LONGCTX_SURFACE_FLAGS, *KEEP_POLICY_FLAGS})
+                               *LONGCTX_SURFACE_FLAGS, *KEEP_POLICY_FLAGS,
+                               *BELIEF_RANKING_FLAGS})
     stripped = [item for item in stripped if item not in RUNTIME_PROTOCOL_SWITCHES]
     return input_binding(stripped)
 
