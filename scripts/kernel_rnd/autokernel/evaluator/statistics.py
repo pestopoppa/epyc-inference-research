@@ -77,6 +77,7 @@ import math
 import random
 from dataclasses import dataclass
 from datetime import datetime
+from fractions import Fraction
 from typing import Any, Optional, Sequence
 
 from .. import schemas
@@ -369,8 +370,13 @@ def min_samples_for_quantile(q: float) -> int:
     """
     if isinstance(q, bool) or not isinstance(q, (int, float)) or not 0.0 < q < 1.0:
         raise MaterialError(f"min_samples_for_quantile q must be in (0, 1), got {q!r}")
-    tail = min(q, 1.0 - q)
-    return int(math.ceil(1.0 / tail))
+    # The exact caller-visible decimal value makes .2/.8 complementary while
+    # nextafter values remain off-boundary. Fraction arithmetic is independent
+    # of the process-wide Decimal context and has an exact integer ceiling.
+    q_fraction = Fraction(str(q))
+    tail = min(q_fraction, 1 - q_fraction)
+    reciprocal = 1 / tail
+    return (reciprocal.numerator + reciprocal.denominator - 1) // reciprocal.denominator
 
 
 #: How many offenders a reason string names before it elides. Reporting only,

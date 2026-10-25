@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from decimal import localcontext
 import random
 import sys
 import unittest
@@ -307,6 +308,17 @@ class TestRobustReduction(unittest.TestCase):
         self.assertEqual(st.min_samples_for_quantile(0.95), 20)
         self.assertEqual(st.min_samples_for_quantile(0.99), 100)
         self.assertEqual(st.min_samples_for_quantile(0.5), 2)
+
+    def test_complementary_decimal_quantiles_keep_exact_ceil_boundary(self):
+        self.assertEqual(st.min_samples_for_quantile(0.8), 5)
+        self.assertEqual(st.min_samples_for_quantile(0.2), 5)
+        self.assertEqual(st.min_samples_for_quantile(math.nextafter(0.8, 1.0)), 6)
+        self.assertEqual(st.min_samples_for_quantile(math.nextafter(0.2, 0.0)), 6)
+
+    def test_quantile_ceiling_is_independent_of_decimal_context(self):
+        with localcontext() as context:
+            context.prec = 2
+            self.assertEqual(st.min_samples_for_quantile(0.91), 12)
 
 
 # =============================================================================
