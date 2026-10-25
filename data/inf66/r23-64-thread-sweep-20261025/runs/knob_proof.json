@@ -1,0 +1,23 @@
+{
+ "bindir": "/mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin",
+ "forbidden_present": [],
+ "found": {
+  "GGML_FA_SPLIT_KV": {
+   "libggml-cpu.so.0.16.0": 1
+  },
+  "GGML_FUSED_DECODE_OFF": {
+   "libllama.so.0.0.10412": 1
+  },
+  "GGML_IQK": {
+   "libggml-cpu.so.0.16.0": 5
+  },
+  "GGML_KNOB_FILE": {},
+  "GGML_NOHUGEPAGE_PROCESS": {
+   "libllama-common.so.0.0.10412": 2
+  }
+ },
+ "missing_required": [],
+ "no_knobs": true,
+ "ok": true,
+ "ts": "2026-10-25T21:47:00Z"
+}

@@ -1,0 +1,1 @@
+KNOB PROOF OK {"GGML_IQK": ["libggml-cpu.so.0.16.0"], "GGML_FUSED_DECODE_OFF": ["libllama.so.0.0.10412"], "GGML_FA_SPLIT_KV": ["libggml-cpu.so.0.16.0"], "GGML_NOHUGEPAGE_PROCESS": ["libllama-common.so.0.0.10412"], "GGML_KNOB_FILE": []}

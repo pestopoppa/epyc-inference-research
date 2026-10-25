@@ -1,0 +1,16 @@
+22:01:45 +0s [t48_r3] label=t48_r3 threads=48 cpus=0-95 bin=/mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin ctx=8192 port=18499 version: version: 10412 (141e4bcf5) built with GNU 15.2.0 for Linux x86_64 
+22:01:45 +0s [t48_r3] knob proof: KNOB PROOF OK {"GGML_IQK": ["libggml-cpu.so.0.16.0"], "GGML_FUSED_DECODE_OFF": ["libllama.so.0.0.10412"], "GGML_FA_SPLIT_KV": ["libggml-cpu.so.0.16.0"], "GGML_NOHUGEPAGE_PROCESS": ["libllama-common.so.0.0.10412"], "GGML_KNOB_FILE": []} 
+22:01:45 +0s [t48_r3] argv: taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/llama-server --no-webui -np 1 -c 8192 -t 48 --no-mmap -lv 4 --host 127.0.0.1 --port 18499 -m /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf -fa on -ctk f16 -ctv f16 -md /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.5
+22:01:51 +6s [t48_r3] try 1 evict: DROP    2.595 GiB  /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf numa_evict rc=0 | free/node GiB: 60 41 59 61 
+22:01:51 +6s [t48_r3] try 1 server pid=365467
+22:02:13 +28s [t48_r3] health OK after 22s
+22:02:13 +28s [t48_r3] linkage OK /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libggml-cpu.so.0.16.0
+22:02:13 +28s [t48_r3] live affinity OK: threads=242 union_cpus=48 process_mask=0 within 0-95
+22:02:13 +28s [t48_r3] THP_enabled=0 (0 = shim ON)
+22:02:14 +29s [t48_r3] try 1 placement GiB n0..n3: 22.73 19.93 25.53 22.74
+22:02:14 +29s [t48_r3] PLACEMENT OK
+22:04:03 +138s [t48_r3] arm done in 109s client rc=0  ARM_DONE t48_r3 wall=110s
+22:04:03 +138s [t48_r3] contention: other p50=19.7 max=30.0 | n=10 | CLEAN | heavy={}
+22:04:03 +138s [t48_r3] host: busy_cores p50=39.39 max=40.08 own=48.0 excess=-7.92 | pgpgin=0.0GB pgpgout=0.03GB majf=0 | loadavg_max=64.79 | n=10 | CLEAN
+22:04:09 +144s [t48_r3] server pid 365467 dead (verified)
+22:04:09 +144s [t48_r3] LAUNCH t48_r3 end rc=0 held 144s

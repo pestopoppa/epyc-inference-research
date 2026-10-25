@@ -1,0 +1,16 @@
+21:47:00 +0s [t64_r1] label=t64_r1 threads=64 cpus=0-95 bin=/mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin ctx=8192 port=18499 version: version: 10412 (141e4bcf5) built with GNU 15.2.0 for Linux x86_64 
+21:47:00 +0s [t64_r1] knob proof: KNOB PROOF OK {"GGML_IQK": ["libggml-cpu.so.0.16.0"], "GGML_FUSED_DECODE_OFF": ["libllama.so.0.0.10412"], "GGML_FA_SPLIT_KV": ["libggml-cpu.so.0.16.0"], "GGML_NOHUGEPAGE_PROCESS": ["libllama-common.so.0.0.10412"], "GGML_KNOB_FILE": []} 
+21:47:00 +0s [t64_r1] argv: taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/llama-server --no-webui -np 1 -c 8192 -t 64 --no-mmap -lv 4 --host 127.0.0.1 --port 18499 -m /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf -fa on -ctk f16 -ctv f16 -md /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.5
+21:47:06 +6s [t64_r1] try 1 evict: DROP    2.595 GiB  /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf numa_evict rc=0 | free/node GiB: 60 41 59 61 
+21:47:06 +6s [t64_r1] try 1 server pid=339138
+21:47:28 +28s [t64_r1] health OK after 22s
+21:47:28 +28s [t64_r1] linkage OK /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libggml-cpu.so.0.16.0
+21:47:28 +28s [t64_r1] live affinity OK: threads=258 union_cpus=64 process_mask=0 within 0-95
+21:47:28 +28s [t64_r1] THP_enabled=0 (0 = shim ON)
+21:47:29 +29s [t64_r1] try 1 placement GiB n0..n3: 22.73 19.94 25.52 22.74
+21:47:29 +29s [t64_r1] PLACEMENT OK
+21:49:32 +152s [t64_r1] arm done in 123s client rc=0  ARM_DONE t64_r1 wall=123s
+21:49:32 +152s [t64_r1] contention: other p50=23.4 max=34.9 | n=12 | CLEAN | heavy={}
+21:49:32 +152s [t64_r1] host: busy_cores p50=49.76 max=50.6 own=64.0 excess=-13.4 | pgpgin=0.0GB pgpgout=0.03GB majf=0 | loadavg_max=53.0 | n=12 | CLEAN
+21:49:38 +158s [t64_r1] server pid 339138 dead (verified)
+21:49:38 +158s [t64_r1] LAUNCH t64_r1 end rc=0 held 158s

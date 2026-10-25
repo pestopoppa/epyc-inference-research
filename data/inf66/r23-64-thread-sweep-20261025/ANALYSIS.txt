@@ -1,0 +1,11 @@
+R23-64 CPU decode thread sweep  unit=LAUNCH  control=t48  alpha=0.05 power=0.8  bootstrap=10000 seed=20261023
+floor: sd 0.609%  unit=launch  n=6  (admissible: launch unit)
+
+arm     n  mean t/s      sd    CV%          95% CI (t)        min..max
+t48     6    44.297   0.605   1.37      43.662..44.932   43.70..45.26
+t64     6    37.647   1.025   2.72      36.571..38.723   35.68..38.31
+t96     6    43.464   0.311   0.72      43.138..43.791   43.03..43.93
+
+vs t48 (effect % = arm/control - 1; CI = bootstrap over launches)
+  t64    -15.01%  CI [-17.09, -13.34]%  MDE(observed) 3.41%  MDE(floor) 1.09%  n=6v6  RESOLVED
+  t96     -1.88%  CI [-3.04, -0.82]%  MDE(observed) 1.95%  MDE(floor) 1.09%  n=6v6  UNRESOLVED

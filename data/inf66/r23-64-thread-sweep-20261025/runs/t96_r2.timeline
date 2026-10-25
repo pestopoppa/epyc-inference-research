@@ -1,0 +1,16 @@
+21:54:37 +0s [t96_r2] label=t96_r2 threads=96 cpus=0-95 bin=/mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin ctx=8192 port=18499 version: version: 10412 (141e4bcf5) built with GNU 15.2.0 for Linux x86_64 
+21:54:37 +0s [t96_r2] knob proof: KNOB PROOF OK {"GGML_IQK": ["libggml-cpu.so.0.16.0"], "GGML_FUSED_DECODE_OFF": ["libllama.so.0.0.10412"], "GGML_FA_SPLIT_KV": ["libggml-cpu.so.0.16.0"], "GGML_NOHUGEPAGE_PROCESS": ["libllama-common.so.0.0.10412"], "GGML_KNOB_FILE": []} 
+21:54:37 +0s [t96_r2] argv: taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/llama-server --no-webui -np 1 -c 8192 -t 96 --no-mmap -lv 4 --host 127.0.0.1 --port 18499 -m /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf -fa on -ctk f16 -ctv f16 -md /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.5
+21:54:42 +5s [t96_r2] try 1 evict: DROP    2.595 GiB  /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf numa_evict rc=0 | free/node GiB: 60 41 59 61 
+21:54:42 +5s [t96_r2] try 1 server pid=352748
+21:55:05 +28s [t96_r2] health OK after 22s
+21:55:05 +28s [t96_r2] linkage OK /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libggml-cpu.so.0.16.0
+21:55:05 +28s [t96_r2] live affinity OK: threads=290 union_cpus=96 process_mask=0 within 0-95
+21:55:05 +28s [t96_r2] THP_enabled=0 (0 = shim ON)
+21:55:05 +28s [t96_r2] try 1 placement GiB n0..n3: 22.73 19.82 25.64 22.74
+21:55:05 +28s [t96_r2] PLACEMENT OK
+21:56:54 +137s [t96_r2] arm done in 109s client rc=0  ARM_DONE t96_r2 wall=108s
+21:56:54 +137s [t96_r2] contention: other p50=35.3 max=46.9 | n=10 | CLEAN | heavy={}
+21:56:54 +137s [t96_r2] host: busy_cores p50=95.62 max=95.92 own=96.0 excess=-0.08 | pgpgin=0.0GB pgpgout=0.02GB majf=0 | loadavg_max=88.16 | n=10 | CLEAN
+21:57:00 +143s [t96_r2] server pid 352748 dead (verified)
+21:57:00 +143s [t96_r2] LAUNCH t96_r2 end rc=0 held 143s

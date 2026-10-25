@@ -1,0 +1,25 @@
+01:16:48 +0s [t48_r1] label=t48_r1 threads=48 cpus=0-95 bin=/mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin ctx=8192 port=18499 version: version: 10412 (141e4bcf5) built with GNU 15.2.0 for Linux x86_64 
+01:16:48 +0s [t48_r1] knob proof: KNOB PROOF OK {"GGML_IQK": ["libggml-cpu.so.0.16.0"], "GGML_FUSED_DECODE_OFF": ["libllama.so.0.0.10412"], "GGML_FA_SPLIT_KV": ["libggml-cpu.so.0.16.0"], "GGML_NOHUGEPAGE_PROCESS": ["libllama-common.so.0.0.10412"], "GGML_KNOB_FILE": []} 
+01:16:48 +0s [t48_r1] argv: taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/llama-server --no-webui -np 1 -c 8192 -t 48 --no-mmap -lv 4 --host 127.0.0.1 --port 18499 -m /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf -fa on -ctk f16 -ctv f16 -md /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.5
+01:16:53 +5s [t48_r1] try 1 evict: DROP    2.595 GiB  /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf numa_evict rc=0 | free/node GiB: 93 55 67 106 
+01:16:54 +6s [t48_r1] try 1 server pid=2169360
+01:17:16 +28s [t48_r1] health OK after 22s
+01:17:16 +28s [t48_r1] linkage OK /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libggml-cpu.so.0.16.0
+01:17:16 +28s [t48_r1] FATAL live Cpus_allowed_list=0 != 0-95
+01:17:16 +28s [t48_r1] LAUNCH t48_r1 end rc=68 held 28s
+01:17:21 +33s [t48_r1] server pid 2169360 dead (verified)
+18:39:14 +0s [t48_r1] label=t48_r1 threads=48 cpus=0-95 bin=/mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin ctx=8192 port=18499 version: version: 10412 (141e4bcf5) built with GNU 15.2.0 for Linux x86_64 
+18:39:14 +0s [t48_r1] knob proof: KNOB PROOF OK {"GGML_IQK": ["libggml-cpu.so.0.16.0"], "GGML_FUSED_DECODE_OFF": ["libllama.so.0.0.10412"], "GGML_FA_SPLIT_KV": ["libggml-cpu.so.0.16.0"], "GGML_NOHUGEPAGE_PROCESS": ["libllama-common.so.0.0.10412"], "GGML_KNOB_FILE": []} 
+18:39:14 +0s [t48_r1] argv: taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/llama-server --no-webui -np 1 -c 8192 -t 48 --no-mmap -lv 4 --host 127.0.0.1 --port 18499 -m /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf -fa on -ctk f16 -ctv f16 -md /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.5
+18:39:20 +6s [t48_r1] try 1 evict: DROP    2.595 GiB  /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf numa_evict rc=0 | free/node GiB: 50 51 83 101 
+18:39:20 +6s [t48_r1] try 1 server pid=678290
+18:39:42 +28s [t48_r1] health OK after 22s
+18:39:42 +28s [t48_r1] linkage OK /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libggml-cpu.so.0.16.0
+18:39:42 +28s [t48_r1] live affinity OK: threads=242 union_cpus=48 process_mask=0 within 0-95
+18:39:42 +28s [t48_r1] THP_enabled=0 (0 = shim ON)
+18:39:43 +29s [t48_r1] try 1 placement GiB n0..n3: 22.73 22.73 22.73 22.74
+18:39:43 +29s [t48_r1] PLACEMENT OK
+18:41:30 +136s [t48_r1] arm done in 107s client rc=0  ARM_DONE t48_r1 wall=107s
+18:41:30 +136s [t48_r1] contention: other p50=42.6 max=49.7 | n=10 | CLEAN | heavy={}
+18:41:30 +136s [t48_r1] host: busy_cores p50=39.77 max=40.11 own=48.0 excess=-7.89 | pgpgin=0.0GB pgpgout=0.03GB majf=1 | loadavg_max=37.21 | n=10 | CLEAN
+18:41:35 +141s [t48_r1] server pid 678290 dead (verified)

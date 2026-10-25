@@ -1,0 +1,16 @@
+22:26:24 +0s [t64_r6] label=t64_r6 threads=64 cpus=0-95 bin=/mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin ctx=8192 port=18499 version: version: 10412 (141e4bcf5) built with GNU 15.2.0 for Linux x86_64 
+22:26:24 +0s [t64_r6] knob proof: KNOB PROOF OK {"GGML_IQK": ["libggml-cpu.so.0.16.0"], "GGML_FUSED_DECODE_OFF": ["libllama.so.0.0.10412"], "GGML_FA_SPLIT_KV": ["libggml-cpu.so.0.16.0"], "GGML_NOHUGEPAGE_PROCESS": ["libllama-common.so.0.0.10412"], "GGML_KNOB_FILE": []} 
+22:26:24 +0s [t64_r6] argv: taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/llama-server --no-webui -np 1 -c 8192 -t 64 --no-mmap -lv 4 --host 127.0.0.1 --port 18499 -m /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf -fa on -ctk f16 -ctv f16 -md /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.5
+22:26:30 +6s [t64_r6] try 1 evict: DROP    2.595 GiB  /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf numa_evict rc=0 | free/node GiB: 51 53 59 60 
+22:26:30 +6s [t64_r6] try 1 server pid=428041
+22:26:52 +28s [t64_r6] health OK after 22s
+22:26:52 +28s [t64_r6] linkage OK /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libggml-cpu.so.0.16.0
+22:26:52 +28s [t64_r6] live affinity OK: threads=258 union_cpus=64 process_mask=0 within 0-95
+22:26:52 +28s [t64_r6] THP_enabled=0 (0 = shim ON)
+22:26:53 +29s [t64_r6] try 1 placement GiB n0..n3: 22.73 22.73 22.73 22.74
+22:26:53 +29s [t64_r6] PLACEMENT OK
+22:28:59 +155s [t64_r6] arm done in 126s client rc=0  ARM_DONE t64_r6 wall=127s
+22:28:59 +155s [t64_r6] contention: other p50=82.3 max=175.5 | n=12 | CLEAN | heavy={'find': 100.0, 'codex': 50.7}
+22:28:59 +155s [t64_r6] host: busy_cores p50=48.83 max=50.22 own=64.0 excess=-13.78 | pgpgin=0.04GB pgpgout=0.13GB majf=0 | loadavg_max=51.29 | n=12 | CLEAN
+22:29:05 +161s [t64_r6] server pid 428041 dead (verified)
+22:29:05 +161s [t64_r6] LAUNCH t64_r6 end rc=0 held 161s

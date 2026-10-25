@@ -1,0 +1,20 @@
+binary : /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/llama-server
+expect : libraries under /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin
+
+  OK   libllama-server-impl.so      -> /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libllama-server-impl.so
+  OK   libllama-common.so.0         -> /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libllama-common.so.0
+  OK   libmtmd.so.0                 -> /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libmtmd.so.0
+  OK   libllama.so.0                -> /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libllama.so.0
+  OK   libggml.so.0                 -> /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libggml.so.0
+  OK   libggml-base.so.0            -> /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libggml-base.so.0
+  OK   libggml-cpu.so.0             -> /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin/libggml-cpu.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.

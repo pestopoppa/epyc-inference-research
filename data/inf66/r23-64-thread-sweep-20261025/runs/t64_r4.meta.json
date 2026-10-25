@@ -1,0 +1,18 @@
+{
+ "champ": "/mnt/raid0/llm/kernels/builds/cpu-20261023-141e4bcf5-lbh/bin",
+ "client_rc": "0",
+ "cpus": "0-95",
+ "ctx": "8192",
+ "label": "t64_r4",
+ "live_affinity": "threads=258 union_cpus=64 process_mask=0 within 0-95",
+ "load_s": "29",
+ "mtp_head": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+ "pid": "391731",
+ "placement_load_gib": "22.73 19.93 25.53 22.74",
+ "port": "18499",
+ "started": "2026-10-25T22:09:16Z",
+ "thp_enabled_end": "0",
+ "threads": "64",
+ "trunk": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+ "version": "version: 10412 (141e4bcf5) built with GNU 15.2.0 for Linux x86_64 "
+}
