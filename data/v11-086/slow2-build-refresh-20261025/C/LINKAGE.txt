@@ -1,0 +1,19 @@
+binary : /mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C/bin/llama-bench
+expect : libraries under /mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C
+
+  OK   libllama-bench-impl.so       -> /mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C/bin/libllama-bench-impl.so
+  OK   libllama-common.so.0         -> /mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C/bin/libllama-common.so.0
+  OK   libllama.so.0                -> /mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C/bin/libllama.so.0
+  OK   libggml.so.0                 -> /mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C/bin/libggml.so.0
+  OK   libggml-base.so.0            -> /mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C/bin/libggml-base.so.0
+  OK   libggml-cpu.so.0             -> /mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C/bin/libggml-cpu.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C/bin
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/tmp/codex-ni-v11-086-slow2-20261025/store-candidates-v3/C
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.

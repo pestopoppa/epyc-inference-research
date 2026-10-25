@@ -1,0 +1,28 @@
+--- a/v11_driver_086v2.py
++++ b/v11_driver_086v2.py
+@@ -31,6 +31,7 @@
+
+ sys.path.insert(0, str(Path(__file__).resolve().parent))  # -I drops the script dir from sys.path
+ from fa086v2_integrity import ANSI_RE as _ANSI_RE, parse_tbo_text  # noqa: E402
++from bench_protocol_086 import BenchProtocolError, validate_bench_protocol  # noqa: E402
+
+ HERE = Path(__file__).resolve().parent
+ K = Path("/mnt/raid0/llm/kernels/builds")
+@@ -713,9 +714,15 @@
+         lp = proof.stop()
+     if p.returncode != 0:
+         return {"error": f"llama-bench rc={p.returncode}", "own_lib": lp, "err": err_f.read_text(errors="replace")[-400:]}
+-    rows = parse_bench(out_f.read_text())
++    text = out_f.read_text()
++    try:
++        protocol = validate_bench_protocol(text, ["-m", str(Q38_TRUNK)] + Q38_BENCH_ARGS)
++    except BenchProtocolError as exc:
++        ctx.say(f"bench {tag}: protocol refused: {exc}")
++        return {"error": f"bench protocol refused: {exc}", "own_lib": lp, "argv": argv}
++    rows = parse_bench(text)
+     ctx.say(f"bench {tag}: {len(rows)} cells own_lib={lp['own']} " + " ".join(f"{cell_name(r)}={r['avg_ts']:.2f}" for r in rows))
+-    return {"rows": rows, "own_lib": lp, "argv": argv, "env_extra": env_extra or {}}
++    return {"rows": rows, "protocol": protocol, "own_lib": lp, "argv": argv, "env_extra": env_extra or {}}
+
+ def run_086(ctx: Ctx, dry: bool):
+     C, B = require_c("cpu"), arm_build("086")

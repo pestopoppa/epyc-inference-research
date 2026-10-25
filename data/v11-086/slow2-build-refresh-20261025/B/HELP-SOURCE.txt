@@ -1,0 +1,4 @@
+            if (arg == "-h" || arg == "--help") {
+                print_usage(argc, argv);
+                exit(0);
+            } else if (arg == "-m" || arg == "--model") {

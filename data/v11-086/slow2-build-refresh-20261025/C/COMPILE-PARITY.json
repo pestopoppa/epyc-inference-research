@@ -1,0 +1,89 @@
+{
+  "compile_and_link_parity": [
+    {
+      "target": "llama-bench-impl",
+      "defines": [
+        "-DGGML_BACKEND_SHARED",
+        "-DGGML_SHARED",
+        "-DGGML_USE_CPU",
+        "-DLLAMA_SHARED",
+        "-Dllama_bench_impl_EXPORTS"
+      ],
+      "flags": [
+        "-O3",
+        "-DNDEBUG",
+        "-std=gnu++17",
+        "-fPIC",
+        "-Wmissing-declarations",
+        "-Wmissing-noreturn",
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-Wcast-qual",
+        "-Wno-unused-function",
+        "-Wno-array-bounds",
+        "-Wextra-semi"
+      ],
+      "includes": [
+        "tools/llama-bench",
+        "common",
+        "vendor",
+        "include",
+        "ggml/include"
+      ],
+      "link_dependencies": [
+        "-Wl,-soname,libllama-bench-impl.so",
+        "libllama-common.so.0.0.10404",
+        "libllama.so.0.0.10404",
+        "libggml.so.0.16.0",
+        "libggml-cpu.so.0.16.0",
+        "libggml-base.so.0.16.0",
+        "libllama-common-base.a"
+      ],
+      "pass": true
+    },
+    {
+      "target": "llama-bench",
+      "defines": [
+        "-DGGML_BACKEND_SHARED",
+        "-DGGML_SHARED",
+        "-DGGML_USE_CPU",
+        "-DLLAMA_SHARED"
+      ],
+      "flags": [
+        "-O3",
+        "-DNDEBUG",
+        "-std=gnu++17",
+        "-Wmissing-declarations",
+        "-Wmissing-noreturn",
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-Wcast-qual",
+        "-Wno-unused-function",
+        "-Wno-array-bounds",
+        "-Wextra-semi"
+      ],
+      "includes": [
+        "tools/llama-bench",
+        "common",
+        "vendor",
+        "include",
+        "ggml/include"
+      ],
+      "link_dependencies": [
+        "libllama-bench-impl.so",
+        "libllama-common.so.0.0.10404",
+        "libllama-common-base.a",
+        "libllama.so.0.0.10404",
+        "libggml.so.0.16.0",
+        "libggml-cpu.so.0.16.0",
+        "libggml-base.so.0.16.0"
+      ],
+      "pass": true
+    }
+  ],
+  "cxx_standard": 17,
+  "extensions": true,
+  "compiler": "/usr/bin/g++-15 15.2.0"
+}

@@ -1,0 +1,4 @@
+base_store=/mnt/raid0/llm/kernels/builds/cpu-20261022-8110933ba-fa-vkq
+source_commit=16d24304ffd3e55d00f5ad108459fb96a58e48a7
+fix=141e4bcf5ae023bd3b871edcd32ad493e6c4d58e
+arm=B

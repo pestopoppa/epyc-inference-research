@@ -1,0 +1,12 @@
+bin/libggml-base.so libggml-base.so.0
+bin/libggml-base.so.0 libggml-base.so.0.16.0
+bin/libggml-cpu.so libggml-cpu.so.0
+bin/libggml-cpu.so.0 libggml-cpu.so.0.16.0
+bin/libggml.so libggml.so.0
+bin/libggml.so.0 libggml.so.0.16.0
+bin/libllama-common.so libllama-common.so.0
+bin/libllama-common.so.0 libllama-common.so.0.0.10404
+bin/libllama.so libllama.so.0
+bin/libllama.so.0 libllama.so.0.0.10404
+bin/libmtmd.so libmtmd.so.0
+bin/libmtmd.so.0 libmtmd.so.0.0.10404

@@ -1,0 +1,34 @@
+--- a/job.sh
++++ b/job.sh
+@@ -90,6 +90,22 @@
+   [ -z "$(ps -o pid= -p "$p" 2>/dev/null)" ] && jb_log "pid $p dead (ps-verified)" || jb_log "STILL ALIVE pid $p"
+ }
+ # run_unit ARM BUILD : one bench run under timeout with the probe loop in the FOREGROUND of this script (no background probe to orphan)
++#!/bin/bash
++# Read-only descendants of a captured job PID; never select by global name search.
++lb_pid() {
++    local root=${1:?captured root pid required} p comm children
++    [[ $root =~ ^[0-9]+$ ]] || return 1
++    IFS= read -r comm < "/proc/$root/comm" 2>/dev/null || return 1
++    if [[ $comm == llama-bench ]]; then printf '%s\n' "$root"; return 0; fi
++    # A process may disappear between reads. That is no sample, never a wrapper.
++    for children in /proc/"$root"/task/*/children; do
++        [[ -r $children ]] || continue
++        for p in $(cat "$children" 2>/dev/null); do
++            lb_pid "$p" && return 0
++        done
++    done
++    return 1
++}
+ run_unit() {
+   local arm=$1 b=$2 left tmo cp bp el=0 n=0 t0 perf
+   left=$(jb_left)
+@@ -102,7 +118,7 @@
+   cp=$!; CHILD_PIDS+=("$cp"); jb_register "$cp"
+   sleep 3
+   while [ -n "$(ps -o pid= -p "$cp" 2>/dev/null)" ]; do
+-    bp=$(ps -o pid= --ppid "$cp" 2>/dev/null | head -1 | tr -d ' ')
++    bp=$(lb_pid "$cp") || bp=""
+     el=$(( $(date -u +%s) - t0 ))
+     if [ -n "$bp" ]; then
+       perf=""; if [ "$el" -ge 100 ] && { [ "$n" = 4 ] || { [ "$n" -gt 4 ] && [ $(( (n - 4) % 10 )) = 0 ]; }; }; then perf=--perf; fi   # ~120 s, then every ~300 s

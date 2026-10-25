@@ -1,0 +1,4 @@
+base_store=/mnt/raid0/llm/kernels/builds/cpu-20261020-f0c96dc1f
+source_commit=03791e10b145c8e192879649c86b2a0d42e388c3
+fix=141e4bcf5ae023bd3b871edcd32ad493e6c4d58e
+arm=C
