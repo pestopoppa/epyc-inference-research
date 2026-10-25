@@ -1,0 +1,5 @@
+nemo-gpu-prof (INF-65 NEMO-LILI-2 + NEMO-BOLT-PROF): rocprofv3 kernel traces on the champion GPU store image dcc853b5559bef4e50acf251f4910f7f4e0ba538.
+Pass L = Qwen3.8-27B-Q8_0 + DFlash2 one speculative round vs plain token; pass B = Nemotron-3.5-Bolt IQ2_XXS one decode step per op.
+VERDICT.json = both analyses (observation, no threshold); analysis_{L,B}.json = per-pass tables; raw kernel_trace.csv stays in the job out/ dir (path in RUN_RECORD.json).
+Commit to epyc-inference-research data/nemo-gpu-prof/ by the owning session; the job did no git operation.
+Belief capture: [belief: cc] (see PREDECLARATION.md).

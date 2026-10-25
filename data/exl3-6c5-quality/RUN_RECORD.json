@@ -1,0 +1,29 @@
+{
+ "tree_head": "20192b81da1df690753e0b96295efb4ee2316ffb",
+ "binary_dir": "/mnt/raid0/llm/worktrees/llama-exl3-cpu-20261003/build/bin",
+ "libs": {
+  "libggml-cpu.so.0.16.0": "50343614c4c9b94d634dc50dbe0c715a691f974e19be771a150e860bf4134298",
+  "libggml-base.so.0.16.0": "dc44fe484a2f426ec073d5aacb17dd5ad5791daf80f125da4210d683f19bac2a",
+  "libllama-perplexity-impl.so": "830f9cecaca234376923cb544582a16db2950c0717b2420ca6da7aaadf2351cd",
+  "libllama-completion-impl.so": "5332c59c4d490639319b8d130486376ea36bd6796fcf0d45e7908f9c69032cd4",
+  "llama-perplexity": "21f6a1f5de2a975b829894662eb9f49c5e759be598e804ba2f3ba1d8046d0a63",
+  "llama-completion": "0377258baf7e56612d70ccfff69e32a773d87e3cf365132bb19c9bdd23fefa5d"
+ },
+ "models": {
+  "E": "/mnt/raid0/llm/models/exl3-gguf/Qwen3.8-Flash-Next-EXL3-3.05bpw/model-00001-of-00002.gguf",
+  "U": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
+ },
+ "text_sha256": "bfe9eb16ab9987fb88bde4ea9a30a00f2a45db01dfc14bad78d05325789c4f12",
+ "cpus": "48-71",
+ "steps": [
+  "E_smoke_p1 OK 210 chars",
+  "E_smoke_p2 OK 206 chars",
+  "E_smoke_p3 OK 148 chars",
+  "E_ppl OK PPL = 2.8909 +/- 0.05905",
+  "U_smoke_p1 OK 236 chars",
+  "U_smoke_p2 OK 201 chars",
+  "U_smoke_p3 OK 148 chars",
+  "U_ppl OK PPL = 2.9925 +/- 0.06315"
+ ],
+ "time": "2026-10-25T08:09:24Z"
+}

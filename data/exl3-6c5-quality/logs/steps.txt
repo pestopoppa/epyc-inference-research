@@ -1,0 +1,8 @@
+E_smoke_p1 OK 210 chars
+E_smoke_p2 OK 206 chars
+E_smoke_p3 OK 148 chars
+E_ppl OK PPL = 2.8909 +/- 0.05905
+U_smoke_p1 OK 236 chars
+U_smoke_p2 OK 201 chars
+U_smoke_p3 OK 148 chars
+U_ppl OK PPL = 2.9925 +/- 0.06315

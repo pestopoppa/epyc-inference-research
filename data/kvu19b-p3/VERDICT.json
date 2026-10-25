@@ -1,0 +1,46 @@
+{
+ "schema": "kvu19b-p3.verdict.v1",
+ "rule": {
+  "metric": "llama-batched-bench jsonl speed_tg (t/s), npl 4, npp 16384, ntg 64",
+  "delta": "(mean S_TG kvu - mean S_TG no-kvu) / mean S_TG no-kvu * 100, n = 2 per arm, ABAB",
+  "edge_pct": -5.0,
+  "noise_pct": 3.0
+ },
+ "arm_problems": {},
+ "s_diag_problems": [],
+ "verdict": "COMPLETE",
+ "box_result": "WITHIN_5PCT",
+ "s_tg": {
+  "K1": 56.665813,
+  "N1": 56.447231,
+  "K2": 55.200359,
+  "N2": 56.484283
+ },
+ "s_pp": {
+  "K1": 833.807739,
+  "N1": 831.486389,
+  "K2": 823.136902,
+  "N2": 824.278931
+ },
+ "mean_kvu": 55.933086,
+ "mean_nokvu": 56.465756999999996,
+ "delta_pct": -0.943,
+ "pair_delta_pct": [
+  0.387,
+  -2.273
+ ],
+ "within_arm_spread_pct": {
+  "K": 2.62,
+  "N": 0.066
+ },
+ "v1_reference_pct": -15.23,
+ "pp_delta_pct": 0.071,
+ "decision_edge": "none (indicative timing, block-timing-pairable; the owner ticks the box from box_result)",
+ "diagnostic_seq_rows_off": {
+  "s_tg": 47.024921,
+  "vs_kvu_mean_pct": -15.926,
+  "vs_nokvu_mean_pct": -16.72,
+  "note": "SEQ_ROWS=0 control, one run, no decision"
+ },
+ "predeclaration_sha256": "6b72d2e317793e2c0974b9c7b1ce74da2abf1b508b7ddfc5e06f4ac460ce4476"
+}

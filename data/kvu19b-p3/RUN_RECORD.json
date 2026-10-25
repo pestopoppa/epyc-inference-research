@@ -1,0 +1,789 @@
+{
+ "item": "kvu19b-p3",
+ "time": "2026-10-25T08:19:14Z",
+ "verdict_and_box": "COMPLETE WITHIN_5PCT",
+ "job_rc": 0,
+ "window_id": "kvu19b-p3-20261025T0811Z",
+ "champion_ref": "refs/heads/ak/champion/llama-cpp-ffc1bac82eec",
+ "champion_sha": "dcc853b5559bef4e50acf251f4910f7f4e0ba538",
+ "store": "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3",
+ "llama_batched_bench_sha256": "07c65c29ebe5eb6c5b5a87e15d3fb8b252bad227b7d6af8577bff098e1a48570",
+ "predeclaration_sha256": "6b72d2e317793e2c0974b9c7b1ce74da2abf1b508b7ddfc5e06f4ac460ce4476",
+ "launch_prefix": "env ... HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0 numactl --membind=3 -- taskset -c 184-191",
+ "arms": {
+  "K1": {
+   "argv": [
+    "env",
+    "-u",
+    "GGML_CUDA_DISABLE_GRAPHS",
+    "-u",
+    "GGML_CUDA_FA_SEQ_ROWS",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP_MIN_KV",
+    "-u",
+    "LD_PRELOAD",
+    "-u",
+    "GGML_NOHUGEPAGE_PROCESS",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin:/opt/rocm/lib",
+    "OMP_PROC_BIND=spread",
+    "OMP_PLACES=cores",
+    "OMP_WAIT_POLICY=active",
+    "OMP_DYNAMIC=false",
+    "KMP_BLOCKTIME=10",
+    "GGML_IQK=1",
+    "HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0",
+    "numactl",
+    "--membind=3",
+    "--",
+    "taskset",
+    "-c",
+    "184-191",
+    "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/llama-batched-bench",
+    "-m",
+    "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "-c",
+    "67584",
+    "-b",
+    "2048",
+    "-ub",
+    "2048",
+    "-t",
+    "8",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "--no-mmap",
+    "-dev",
+    "ROCm0",
+    "-kvu",
+    "-npp",
+    "16384",
+    "-ntg",
+    "64",
+    "-npl",
+    "4",
+    "--output-format",
+    "jsonl"
+   ],
+   "pid": 2018295,
+   "wall_s": 89.1,
+   "started_at": "2026-10-25T08:11:35Z",
+   "finished_at": "2026-10-25T08:13:04Z",
+   "rows": [
+    {
+     "n_kv_max": 67584,
+     "n_batch": 2048,
+     "n_ubatch": 2048,
+     "flash_attn": 1,
+     "is_pp_shared": 0,
+     "n_gpu_layers": 99,
+     "n_threads": 8,
+     "n_threads_batch": 8,
+     "pp": 16384,
+     "tg": 64,
+     "pl": 4,
+     "n_kv": 65792,
+     "t_pp": 78.598457,
+     "speed_pp": 833.807739,
+     "t_tg": 4.517715,
+     "speed_tg": 56.665813,
+     "t": 83.116173,
+     "speed": 791.566772
+    }
+   ],
+   "vram": {
+    "n_samples": 90,
+    "peak_used_b": 33211736064,
+    "baseline_used_b": 13094912,
+    "peak_minus_baseline_b": 33198641152,
+    "own_pid_peak_vram_b": 33198391296,
+    "nonzero_samples": 88,
+    "peak_used_gib": 30.93,
+    "own_pid_peak_vram_gib": 30.92
+   },
+   "proofs": [
+    {
+     "t_s": 2.0,
+     "own_pid_vram_b": 27509846016,
+     "cpus": {
+      "threads_checked": 3,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": null,
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    },
+    {
+     "t_s": 62.0,
+     "own_pid_vram_b": 33068318720,
+     "cpus": {
+      "threads_checked": 10,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": null,
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    }
+   ],
+   "hip_dlopen_proof": {
+    "ok": true,
+    "ggml_libs": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-base.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-cpu.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml.so.0.16.0"
+    ],
+    "hip_mapped": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0"
+    ]
+   },
+   "log_scan": {
+    "failed to find a memory slot": 0,
+    "context size has been exceeded": 0,
+    "failed to find free space in the KV cache": 0,
+    "exceeds the available context size": 0,
+    "purging slot": 0,
+    "Unable to restore slot": 0,
+    "saving_idle_slot_lines": 0
+   },
+   "trip": null,
+   "returncode": 0
+  },
+  "K2": {
+   "argv": [
+    "env",
+    "-u",
+    "GGML_CUDA_DISABLE_GRAPHS",
+    "-u",
+    "GGML_CUDA_FA_SEQ_ROWS",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP_MIN_KV",
+    "-u",
+    "LD_PRELOAD",
+    "-u",
+    "GGML_NOHUGEPAGE_PROCESS",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin:/opt/rocm/lib",
+    "OMP_PROC_BIND=spread",
+    "OMP_PLACES=cores",
+    "OMP_WAIT_POLICY=active",
+    "OMP_DYNAMIC=false",
+    "KMP_BLOCKTIME=10",
+    "GGML_IQK=1",
+    "HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0",
+    "numactl",
+    "--membind=3",
+    "--",
+    "taskset",
+    "-c",
+    "184-191",
+    "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/llama-batched-bench",
+    "-m",
+    "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "-c",
+    "67584",
+    "-b",
+    "2048",
+    "-ub",
+    "2048",
+    "-t",
+    "8",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "--no-mmap",
+    "-dev",
+    "ROCm0",
+    "-kvu",
+    "-npp",
+    "16384",
+    "-ntg",
+    "64",
+    "-npl",
+    "4",
+    "--output-format",
+    "jsonl"
+   ],
+   "pid": 2024858,
+   "wall_s": 90.1,
+   "started_at": "2026-10-25T08:14:38Z",
+   "finished_at": "2026-10-25T08:16:08Z",
+   "rows": [
+    {
+     "n_kv_max": 67584,
+     "n_batch": 2048,
+     "n_ubatch": 2048,
+     "flash_attn": 1,
+     "is_pp_shared": 0,
+     "n_gpu_layers": 99,
+     "n_threads": 8,
+     "n_threads_batch": 8,
+     "pp": 16384,
+     "tg": 64,
+     "pl": 4,
+     "n_kv": 65792,
+     "t_pp": 79.617378,
+     "speed_pp": 823.136902,
+     "t_tg": 4.637651,
+     "speed_tg": 55.200359,
+     "t": 84.255028,
+     "speed": 780.867371
+    }
+   ],
+   "vram": {
+    "n_samples": 90,
+    "peak_used_b": 33211727872,
+    "baseline_used_b": 13094912,
+    "peak_minus_baseline_b": 33198632960,
+    "own_pid_peak_vram_b": 33198391296,
+    "nonzero_samples": 89,
+    "peak_used_gib": 30.93,
+    "own_pid_peak_vram_gib": 30.92
+   },
+   "proofs": [
+    {
+     "t_s": 2.0,
+     "own_pid_vram_b": 27509846016,
+     "cpus": {
+      "threads_checked": 3,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": null,
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    },
+    {
+     "t_s": 62.0,
+     "own_pid_vram_b": 33068318720,
+     "cpus": {
+      "threads_checked": 10,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": null,
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    }
+   ],
+   "hip_dlopen_proof": {
+    "ok": true,
+    "ggml_libs": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-base.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-cpu.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml.so.0.16.0"
+    ],
+    "hip_mapped": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0"
+    ]
+   },
+   "log_scan": {
+    "failed to find a memory slot": 0,
+    "context size has been exceeded": 0,
+    "failed to find free space in the KV cache": 0,
+    "exceeds the available context size": 0,
+    "purging slot": 0,
+    "Unable to restore slot": 0,
+    "saving_idle_slot_lines": 0
+   },
+   "trip": null,
+   "returncode": 0
+  },
+  "N1": {
+   "argv": [
+    "env",
+    "-u",
+    "GGML_CUDA_DISABLE_GRAPHS",
+    "-u",
+    "GGML_CUDA_FA_SEQ_ROWS",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP_MIN_KV",
+    "-u",
+    "LD_PRELOAD",
+    "-u",
+    "GGML_NOHUGEPAGE_PROCESS",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin:/opt/rocm/lib",
+    "OMP_PROC_BIND=spread",
+    "OMP_PLACES=cores",
+    "OMP_WAIT_POLICY=active",
+    "OMP_DYNAMIC=false",
+    "KMP_BLOCKTIME=10",
+    "GGML_IQK=1",
+    "HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0",
+    "numactl",
+    "--membind=3",
+    "--",
+    "taskset",
+    "-c",
+    "184-191",
+    "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/llama-batched-bench",
+    "-m",
+    "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "-c",
+    "67584",
+    "-b",
+    "2048",
+    "-ub",
+    "2048",
+    "-t",
+    "8",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "--no-mmap",
+    "-dev",
+    "ROCm0",
+    "-no-kvu",
+    "-npp",
+    "16384",
+    "-ntg",
+    "64",
+    "-npl",
+    "4",
+    "--output-format",
+    "jsonl"
+   ],
+   "pid": 2021037,
+   "wall_s": 89.1,
+   "started_at": "2026-10-25T08:13:06Z",
+   "finished_at": "2026-10-25T08:14:36Z",
+   "rows": [
+    {
+     "n_kv_max": 67584,
+     "n_batch": 2048,
+     "n_ubatch": 2048,
+     "flash_attn": 1,
+     "is_pp_shared": 0,
+     "n_gpu_layers": 99,
+     "n_threads": 8,
+     "n_threads_batch": 8,
+     "pp": 16384,
+     "tg": 64,
+     "pl": 4,
+     "n_kv": 65792,
+     "t_pp": 78.817886,
+     "speed_pp": 831.486389,
+     "t_tg": 4.535209,
+     "speed_tg": 56.447231,
+     "t": 83.353096,
+     "speed": 789.316833
+    }
+   ],
+   "vram": {
+    "n_samples": 89,
+    "peak_used_b": 33211727872,
+    "baseline_used_b": 13094912,
+    "peak_minus_baseline_b": 33198632960,
+    "own_pid_peak_vram_b": 33198391296,
+    "nonzero_samples": 88,
+    "peak_used_gib": 30.93,
+    "own_pid_peak_vram_gib": 30.92
+   },
+   "proofs": [
+    {
+     "t_s": 2.0,
+     "own_pid_vram_b": 27509846016,
+     "cpus": {
+      "threads_checked": 3,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": null,
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    },
+    {
+     "t_s": 62.0,
+     "own_pid_vram_b": 33068318720,
+     "cpus": {
+      "threads_checked": 10,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": null,
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    }
+   ],
+   "hip_dlopen_proof": {
+    "ok": true,
+    "ggml_libs": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-base.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-cpu.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml.so.0.16.0"
+    ],
+    "hip_mapped": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0"
+    ]
+   },
+   "log_scan": {
+    "failed to find a memory slot": 0,
+    "context size has been exceeded": 0,
+    "failed to find free space in the KV cache": 0,
+    "exceeds the available context size": 0,
+    "purging slot": 0,
+    "Unable to restore slot": 0,
+    "saving_idle_slot_lines": 0
+   },
+   "trip": null,
+   "returncode": 0
+  },
+  "N2": {
+   "argv": [
+    "env",
+    "-u",
+    "GGML_CUDA_DISABLE_GRAPHS",
+    "-u",
+    "GGML_CUDA_FA_SEQ_ROWS",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP_MIN_KV",
+    "-u",
+    "LD_PRELOAD",
+    "-u",
+    "GGML_NOHUGEPAGE_PROCESS",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin:/opt/rocm/lib",
+    "OMP_PROC_BIND=spread",
+    "OMP_PLACES=cores",
+    "OMP_WAIT_POLICY=active",
+    "OMP_DYNAMIC=false",
+    "KMP_BLOCKTIME=10",
+    "GGML_IQK=1",
+    "HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0",
+    "numactl",
+    "--membind=3",
+    "--",
+    "taskset",
+    "-c",
+    "184-191",
+    "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/llama-batched-bench",
+    "-m",
+    "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "-c",
+    "67584",
+    "-b",
+    "2048",
+    "-ub",
+    "2048",
+    "-t",
+    "8",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "--no-mmap",
+    "-dev",
+    "ROCm0",
+    "-no-kvu",
+    "-npp",
+    "16384",
+    "-ntg",
+    "64",
+    "-npl",
+    "4",
+    "--output-format",
+    "jsonl"
+   ],
+   "pid": 2028402,
+   "wall_s": 90.1,
+   "started_at": "2026-10-25T08:16:10Z",
+   "finished_at": "2026-10-25T08:17:40Z",
+   "rows": [
+    {
+     "n_kv_max": 67584,
+     "n_batch": 2048,
+     "n_ubatch": 2048,
+     "flash_attn": 1,
+     "is_pp_shared": 0,
+     "n_gpu_layers": 99,
+     "n_threads": 8,
+     "n_threads_batch": 8,
+     "pp": 16384,
+     "tg": 64,
+     "pl": 4,
+     "n_kv": 65792,
+     "t_pp": 79.507065,
+     "speed_pp": 824.278931,
+     "t_tg": 4.532234,
+     "speed_tg": 56.484283,
+     "t": 84.039299,
+     "speed": 782.871826
+    }
+   ],
+   "vram": {
+    "n_samples": 90,
+    "peak_used_b": 33211736064,
+    "baseline_used_b": 13094912,
+    "peak_minus_baseline_b": 33198641152,
+    "own_pid_peak_vram_b": 33198391296,
+    "nonzero_samples": 89,
+    "peak_used_gib": 30.93,
+    "own_pid_peak_vram_gib": 30.92
+   },
+   "proofs": [
+    {
+     "t_s": 2.0,
+     "own_pid_vram_b": 27509846016,
+     "cpus": {
+      "threads_checked": 3,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": null,
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    },
+    {
+     "t_s": 62.0,
+     "own_pid_vram_b": 33068318720,
+     "cpus": {
+      "threads_checked": 10,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": null,
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    }
+   ],
+   "hip_dlopen_proof": {
+    "ok": true,
+    "ggml_libs": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-base.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-cpu.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml.so.0.16.0"
+    ],
+    "hip_mapped": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0"
+    ]
+   },
+   "log_scan": {
+    "failed to find a memory slot": 0,
+    "context size has been exceeded": 0,
+    "failed to find free space in the KV cache": 0,
+    "exceeds the available context size": 0,
+    "purging slot": 0,
+    "Unable to restore slot": 0,
+    "saving_idle_slot_lines": 0
+   },
+   "trip": null,
+   "returncode": 0
+  },
+  "S1": {
+   "argv": [
+    "env",
+    "-u",
+    "GGML_CUDA_DISABLE_GRAPHS",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP",
+    "-u",
+    "GGML_CUDA_FA_MASK_SKIP_MIN_KV",
+    "-u",
+    "LD_PRELOAD",
+    "-u",
+    "GGML_NOHUGEPAGE_PROCESS",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin:/opt/rocm/lib",
+    "OMP_PROC_BIND=spread",
+    "OMP_PLACES=cores",
+    "OMP_WAIT_POLICY=active",
+    "OMP_DYNAMIC=false",
+    "KMP_BLOCKTIME=10",
+    "GGML_IQK=1",
+    "HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0",
+    "GGML_CUDA_FA_SEQ_ROWS=0",
+    "numactl",
+    "--membind=3",
+    "--",
+    "taskset",
+    "-c",
+    "184-191",
+    "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/llama-batched-bench",
+    "-m",
+    "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "-c",
+    "67584",
+    "-b",
+    "2048",
+    "-ub",
+    "2048",
+    "-t",
+    "8",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "--no-mmap",
+    "-dev",
+    "ROCm0",
+    "-kvu",
+    "-npp",
+    "16384",
+    "-ntg",
+    "64",
+    "-npl",
+    "4",
+    "--output-format",
+    "jsonl"
+   ],
+   "pid": 2031129,
+   "wall_s": 92.1,
+   "started_at": "2026-10-25T08:17:42Z",
+   "finished_at": "2026-10-25T08:19:14Z",
+   "rows": [
+    {
+     "n_kv_max": 67584,
+     "n_batch": 2048,
+     "n_ubatch": 2048,
+     "flash_attn": 1,
+     "is_pp_shared": 0,
+     "n_gpu_layers": 99,
+     "n_threads": 8,
+     "n_threads_batch": 8,
+     "pp": 16384,
+     "tg": 64,
+     "pl": 4,
+     "n_kv": 65792,
+     "t_pp": 80.120163,
+     "speed_pp": 817.971375,
+     "t_tg": 5.443922,
+     "speed_tg": 47.024921,
+     "t": 85.564087,
+     "speed": 768.920715
+    }
+   ],
+   "vram": {
+    "n_samples": 92,
+    "peak_used_b": 33211052032,
+    "baseline_used_b": 13094912,
+    "peak_minus_baseline_b": 33197957120,
+    "own_pid_peak_vram_b": 33197703168,
+    "nonzero_samples": 91,
+    "peak_used_gib": 30.93,
+    "own_pid_peak_vram_gib": 30.92
+   },
+   "proofs": [
+    {
+     "t_s": 2.0,
+     "own_pid_vram_b": 27509846016,
+     "cpus": {
+      "threads_checked": 3,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": "0",
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    },
+    {
+     "t_s": 62.0,
+     "own_pid_vram_b": 33068318720,
+     "cpus": {
+      "threads_checked": 10,
+      "threads_outside_184_191": 0,
+      "examples": [],
+      "ok": true
+     },
+     "environ": {
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "GGML_CUDA_FA_SEQ_ROWS": "0",
+      "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+      "graphs": "ON"
+     }
+    }
+   ],
+   "hip_dlopen_proof": {
+    "ok": true,
+    "ggml_libs": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-base.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-cpu.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0",
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml.so.0.16.0"
+    ],
+    "hip_mapped": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20261023-dcc853b55-c3/bin/libggml-hip.so.0.16.0"
+    ]
+   },
+   "log_scan": {
+    "failed to find a memory slot": 0,
+    "context size has been exceeded": 0,
+    "failed to find free space in the KV cache": 0,
+    "exceeds the available context size": 0,
+    "purging slot": 0,
+    "Unable to restore slot": 0,
+    "saving_idle_slot_lines": 0
+   },
+   "trip": null,
+   "returncode": 0
+  }
+ }
+}
