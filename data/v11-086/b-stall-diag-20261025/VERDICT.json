@@ -1,0 +1,28 @@
+{
+ "item": "v11-086-b-stall-diag",
+ "C": {
+  "rc": 0,
+  "elapsed_s": 400,
+  "timed_out": false,
+  "avg_ts": 8.450445
+ },
+ "B": {
+  "rc": 0,
+  "elapsed_s": 1449,
+  "timed_out": false,
+  "avg_ts": 8.916552
+ },
+ "B_probe_tail": {
+  "n": 10,
+  "mean_cores": 0.0,
+  "mean_n_ge80": 0.0,
+  "mean_n_lt5": 1.0,
+  "rss_first_kb": "7276 kB",
+  "rss_last_kb": "7276 kB"
+ },
+ "B_perf_tag": "perf-mixed",
+ "B_kstack_readable": false,
+ "wall_ratio_B_over_C": 3.62,
+ "rate_ratio_C_over_B": 0.95,
+ "verdict": "GRAY-2-5X"
+}

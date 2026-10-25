@@ -1,0 +1,14 @@
+[22:12:02] MemAvailable 1089 GiB (086v2 needs 95 GiB = weights 87.3 + MTP head 2.6 + KV/state ~1 + 4)
+[22:12:02] MemAvailable 1089 GiB (086v2 needs 95 GiB = weights 87.3 + MTP head 2.6 + KV/state ~1 + 4)
+[22:15:24] bench C0: 4 cells own_lib=True pp5=81.83 tg32=32.76 pp5@d32768=56.65 tg32@d32768=17.33
+[23:05:29] own pid 1248158 confirmed dead
+[23:05:29] launch Bunset0: {'error': 'llama-bench rc=-15', 'own_lib': {'n_samples': 601, 'libggml_cpu': ['/mnt/raid0/llm/kernels/builds/cpu-20261022-8110933ba-fa-vkq/bin/libggml-cpu.so.0.16.0'], 'own': True}, 'err': '[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)\n[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2560)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)\n'}
+[23:55:33] own pid 1341933 confirmed dead
+[23:55:33] launch Bauto0: {'error': 'llama-bench rc=-15', 'own_lib': {'n_samples': 601, 'libggml_cpu': ['/mnt/raid0/llm/kernels/builds/cpu-20261022-8110933ba-fa-vkq/bin/libggml-cpu.so.0.16.0'], 'own': True}, 'err': '[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)\n[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2560)\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)\n'}
+[23:55:33] launch Bunset1: {'skipped': 'deadline'}
+[23:55:33] launch Bauto1: {'skipped': 'deadline'}
+[23:55:33] launch C1: {'skipped': 'deadline'}
+[23:55:33] launch Bauto2: {'skipped': 'deadline'}
+[23:55:34] launch C2: {'skipped': 'deadline'}
+[23:55:34] launch Bunset2: {'skipped': 'deadline'}
+[23:59:53] decision=hold
