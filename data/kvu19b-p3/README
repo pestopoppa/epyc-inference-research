@@ -1,0 +1,5 @@
+kvu19b-p3 (RTG-57 KVU-19b-fold-c1-p3): P3 B, Qwen3.8-27B-Q8_0, -kvu vs -no-kvu batched decode, dcc853b5559bef4e50acf251f4910f7f4e0ba538 champion store image.
+VERDICT.json = rule outcome (box_result), RUN_RECORD.json = provenance + per-arm records, <arm>.json = raw arm records (K=-kvu, N=-no-kvu, S=SEQ_ROWS=0 diagnostic).
+Indicative timing, block-timing-pairable, ABAB, graphs ON, MI210 host threads 184-191.
+Commit to epyc-inference-research data/kvu19b-p3/ by the owning session; the job did no git operation.
+Belief capture: [belief: cc] ClaimTuple kvu_batched_decode_vs_nokvu_delta_pct (see PREDECLARATION.md).

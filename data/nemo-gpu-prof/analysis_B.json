@@ -1,0 +1,198 @@
+{
+ "bursts_found": 2,
+ "burst_dispatches": 179633,
+ "gap_threshold_ns": 50000,
+ "decode_step": {
+  "segments_in_modal_class": 358,
+  "dispatches_per_step": 1,
+  "busy_ms_per_step": 0.0105,
+  "span_ms_per_step": 0.0105,
+  "wall_ms_per_step_from_timings": 33.924,
+  "other_segment_classes": [
+   {
+    "dispatches": 1816,
+    "count": 95
+   },
+   {
+    "dispatches": 1950,
+    "count": 1
+   },
+   {
+    "dispatches": 2381,
+    "count": 1
+   }
+  ],
+  "segments": 358,
+  "busy_ms_per_segment": 0.0105,
+  "top_kernels": [
+   {
+    "kernel": "mul_mat_vec_q<(ggml_type)40, 1, true, false, 0, false, false, false>",
+    "ms_per_segment": 0.0053,
+    "calls_per_segment": 0.1,
+    "share_pct": 50.18,
+    "category": "mul_mat_vec"
+   },
+   {
+    "kernel": "rms_norm_f32<1024, true, false, false>",
+    "ms_per_segment": 0.0016,
+    "calls_per_segment": 0.21,
+    "share_pct": 15.13,
+    "category": "norm"
+   },
+   {
+    "kernel": "k_get_rows_float<float, float>",
+    "ms_per_segment": 0.0011,
+    "calls_per_segment": 0.21,
+    "share_pct": 10.13,
+    "category": "copy_convert"
+   },
+   {
+    "kernel": "mul_mat_vec_q<(ggml_type)40, 4, false, false, 0, false, false, false>",
+    "ms_per_segment": 0.0006,
+    "calls_per_segment": 0.0,
+    "share_pct": 5.52,
+    "category": "mul_mat_vec"
+   },
+   {
+    "kernel": "ssm_scan_f32_group<4, 128>",
+    "ms_per_segment": 0.0005,
+    "calls_per_segment": 0.04,
+    "share_pct": 4.83,
+    "category": "ssm_scan"
+   },
+   {
+    "kernel": "k_bin_bcast<&",
+    "ms_per_segment": 0.0003,
+    "calls_per_segment": 0.09,
+    "share_pct": 2.95,
+    "category": "elementwise"
+   },
+   {
+    "kernel": "quantize_q8_1_1d",
+    "ms_per_segment": 0.0003,
+    "calls_per_segment": 0.16,
+    "share_pct": 2.66,
+    "category": "quantize_q8_1"
+   },
+   {
+    "kernel": "cpy_scalar<&",
+    "ms_per_segment": 0.0002,
+    "calls_per_segment": 0.05,
+    "share_pct": 2.15,
+    "category": "copy_convert"
+   },
+   {
+    "kernel": "k_argsort_f32_i32<(ggml_sort_order)1>",
+    "ms_per_segment": 0.0002,
+    "calls_per_segment": 0.01,
+    "share_pct": 1.55,
+    "category": "softmax_topk_sort"
+   },
+   {
+    "kernel": "ssm_conv_f32<true, 128ul, 4ul>",
+    "ms_per_segment": 0.0001,
+    "calls_per_segment": 0.05,
+    "share_pct": 1.31,
+    "category": "ssm_conv"
+   },
+   {
+    "kernel": "concat_cont<unsigned int, 0>",
+    "ms_per_segment": 0.0001,
+    "calls_per_segment": 0.05,
+    "share_pct": 1.27,
+    "category": "elementwise"
+   },
+   {
+    "kernel": "mul_mat_vec_f<float, float, 1, 128, false, false>",
+    "ms_per_segment": 0.0001,
+    "calls_per_segment": 0.01,
+    "share_pct": 0.85,
+    "category": "mul_mat_vec"
+   },
+   {
+    "kernel": "concat_non_cont<unsigned int, 0>",
+    "ms_per_segment": 0.0001,
+    "calls_per_segment": 0.0,
+    "share_pct": 0.48,
+    "category": "elementwise"
+   },
+   {
+    "kernel": "unary_gated_op_kernel<&",
+    "ms_per_segment": 0.0,
+    "calls_per_segment": 0.01,
+    "share_pct": 0.28,
+    "category": "elementwise"
+   },
+   {
+    "kernel": "mul_mat_vec_q<(ggml_type)8, 1, false, true, 0, false, false, true>",
+    "ms_per_segment": 0.0,
+    "calls_per_segment": 0.0,
+    "share_pct": 0.21,
+    "category": "mul_mat_vec"
+   },
+   {
+    "kernel": "unary_op_kernel<&",
+    "ms_per_segment": 0.0,
+    "calls_per_segment": 0.01,
+    "share_pct": 0.17,
+    "category": "elementwise"
+   },
+   {
+    "kernel": "quantize_q8_1",
+    "ms_per_segment": 0.0,
+    "calls_per_segment": 0.0,
+    "share_pct": 0.16,
+    "category": "quantize_q8_1"
+   },
+   {
+    "kernel": "reduce_rows_f32<false>",
+    "ms_per_segment": 0.0,
+    "calls_per_segment": 0.0,
+    "share_pct": 0.08,
+    "category": "other"
+   },
+   {
+    "kernel": "scale_f32",
+    "ms_per_segment": 0.0,
+    "calls_per_segment": 0.0,
+    "share_pct": 0.06,
+    "category": "elementwise"
+   },
+   {
+    "kernel": "op_clamp_kernel<float>",
+    "ms_per_segment": 0.0,
+    "calls_per_segment": 0.0,
+    "share_pct": 0.04,
+    "category": "elementwise"
+   }
+  ],
+  "category_share_pct": {
+   "mul_mat_vec": 56.76,
+   "norm": 15.13,
+   "copy_convert": 12.28,
+   "elementwise": 5.24,
+   "ssm_scan": 4.83,
+   "quantize_q8_1": 2.82,
+   "softmax_topk_sort": 1.55,
+   "ssm_conv": 1.31,
+   "other": 0.08
+  },
+  "category_ms_per_segment": {
+   "mul_mat_vec": 0.006,
+   "norm": 0.0016,
+   "copy_convert": 0.0013,
+   "elementwise": 0.0006,
+   "ssm_scan": 0.0005,
+   "quantize_q8_1": 0.0003,
+   "softmax_topk_sort": 0.0002,
+   "ssm_conv": 0.0001,
+   "other": 0.0
+  }
+ },
+ "verdict": "COMPLETE",
+ "n_kernel_dispatches_total": 276910,
+ "own_pid_peak_vram_gib": 20.83,
+ "graphs": [
+  "ON"
+ ]
+}

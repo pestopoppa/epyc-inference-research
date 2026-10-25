@@ -1,0 +1,5 @@
+what: INF-80 EXL3-6c5 correctness half: load + greedy smoke + PPL (wiki.test.raw c512 x40) of EXL3 3.05bpw vs UD-IQ4_XS on the EXL3 tree build; no speed figure
+when: 2026-10-25T08:09:24Z
+build: experimental/exl3-cpu-20261003 @ 20192b81da1df690753e0b96295efb4ee2316ffb, libggml-cpu sha256 50343614c4c9b94d634dc50dbe0c715a691f974e19be771a150e860bf4134298
+claim: PPL non-inferiority of E vs U only (rule: PREDECLARATION.md sha 216b41105c28d98f0bf3d32cd39a2a67b965aac83b03e60916b03babd8ecb4f7); owner emits epyc.exl3.measurement.v1 rows via evidence.py write()
+belief: scripts/vidya/adapters/exl3.py (cli.py ingest exl3-measurement)

@@ -1,0 +1,28 @@
+0.00.001.768 I llama_completion: llama backend init
+0.00.001.775 I llama_completion: load the model and apply lora adapter, if any
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=21 activation=15 n_as=512)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2560)
+0.09.026.127 I llama_completion: llama threadpool init, n_threads = 24
+0.09.026.208 I 
+0.09.026.303 I system_info: n_threads = 24 (n_threads_batch = 24) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.09.026.310 I 
+0.09.026.397 I sampler seed: 1764549959
+0.09.026.413 I sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
+	top_k = 20, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.09.026.426 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+0.09.026.433 I generate: n_ctx = 262144, n_batch = 2048, n_predict = 48, n_keep = 0
+0.09.026.438 I 
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)
+0.12.909.977 I common_perf_print:    sampling time =      19.97 ms
+0.12.909.991 I common_perf_print:    samplers time =      13.53 ms /    53 tokens
+0.12.910.002 I common_perf_print:        load time =    8531.76 ms
+0.12.910.009 I common_perf_print: prompt eval time =     174.18 ms /     5 tokens (   34.84 ms per token,    28.71 tokens per second)
+0.12.910.016 I common_perf_print:        eval time =    3686.59 ms /    47 runs   (   78.44 ms per token,    12.75 tokens per second)
+0.12.910.023 I common_perf_print:       total time =    3883.88 ms /    52 tokens
+0.12.910.030 I common_perf_print: unaccounted time =       3.15 ms /   0.1 %      (total - sampling - prompt eval - eval) / (total)
+0.12.910.036 I common_perf_print:    graphs reused =         46

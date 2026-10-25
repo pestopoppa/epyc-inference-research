@@ -1,0 +1,40 @@
+{
+ "item": "exl3-6c5-quality",
+ "verdict": "COMPLETE",
+ "time": "2026-10-25T08:09:24Z",
+ "predeclaration_sha256": "216b41105c28d98f0bf3d32cd39a2a67b965aac83b03e60916b03babd8ecb4f7",
+ "smoke": "FAIL",
+ "smoke_detail": {
+  "p1": {
+   "E_chars": 210,
+   "U_chars": 236,
+   "common_prefix_chars": 8,
+   "min": 100
+  },
+  "p2": {
+   "E_chars": 206,
+   "U_chars": 201,
+   "common_prefix_chars": 102,
+   "min": 40
+  },
+  "p3": {
+   "E_chars": 148,
+   "U_chars": 148,
+   "common_prefix_chars": 148,
+   "min": 40
+  }
+ },
+ "ppl": {
+  "E": 2.8909,
+  "E_stderr": 0.05905,
+  "U": 2.9925,
+  "U_stderr": 0.06315,
+  "delta_pct": -3.395,
+  "chunks": 40,
+  "ctx": 512
+ },
+ "ppl_class": "QUALITY_NOT_WORSE",
+ "within_stderr": false,
+ "repro_10_04": "REPRODUCES_10_04",
+ "note": "non-inferiority on PPL only; small gaps between 4-bit-class files are not resolvable as quality (10-04 caveat); no speed figure"
+}
