@@ -1,0 +1,1 @@
+{"verdict": "FAIL", "gates": {"G1_decode": "FAIL", "G2_graphs_reused": "PASS", "G3_restore": "PASS", "G4_mirror_engaged": "PASS"}, "belief_rows": 24}

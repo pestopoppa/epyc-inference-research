@@ -1,0 +1,78 @@
+2026-10-24T13:46:01Z [hsf-5p-microbench] launcher up pid=1376631 class=gpu poll=45s grants=/mnt/raid0/llm/tmp/compute-flags/grants stop=/mnt/raid0/llm/tmp/compute-flags/STOP.f8-hsf-5p-microbench minwin=3000s ports=18385
+2026-10-24T15:35:32Z [hsf-5p-microbench] START regions=mi210_0,184-191 cpus=184-191 threads=8 gpu=1 end=2026-10-24T16:44Z
+[region-lock] --cpu-list '184-191' includes SMT siblings: claiming ['q3'] (their physical cores) instead of the primary-only []; --no-fold-siblings for the legacy mapping
+[region-lock] acquiring gpu-quiet shared + regions ['q3'] as role='build' (timeout_s=4108.0) …
+[region-lock] held gpu-quiet shared + regions ['q3'] after 0.0s wait; running: /bin/bash /mnt/raid0/llm/tmp/fillers-3c4ca599/filler_run9.sh --inner --id hsf-5p-microbench --class gpu --cmd bash /mnt/raid0/llm/tmp/f8-launchers-20261024/hsf-5p/gpu/job.sh --min-window 3000 --stop /mnt/raid0/llm/tmp/compute-flags/STOP.f8-hsf-5p-microbench --port 18385 --workdir /mnt/raid0/llm/tmp/f8-launchers-20261024/hsf-5p/gpu --gpu-threads 184-191
+2026-10-24T15:35:32Z mi210_0 flock held
+[2026-10-24T15:35:32Z] item=hsf-5p-microbench dir=/mnt/raid0/llm/tmp/f8-launchers-20261024/hsf-5p/gpu cpus=184-191 threads=8 deadline=2026-10-24T16:42:30Z ram_need=64GiB dry=0
+[2026-10-24T15:35:32Z] ram_admit: admit: MemAvailable 1053 GiB, need 64 GiB
+[2026-10-24T15:35:35Z] STEP M1 OK 60 rows
+[2026-10-24T15:35:35Z] ram_admit 64: admit: MemAvailable 1053 GiB, need 64 GiB
+[2026-10-24T15:35:35Z] arm A1: server pid 3633067 (no mirror flag)
+health ok, port 18385 owned by our pid 3633067
+[2026-10-24T15:37:51Z] pid 3633067 dead (verified)
+[2026-10-24T15:37:51Z] STEP M3-A1 OK arm A1 done, restore ok=True
+[2026-10-24T15:37:51Z] ram_admit 64: admit: MemAvailable 1053 GiB, need 64 GiB
+[2026-10-24T15:37:51Z] arm B: server pid 3646416 (--kv-host-mirror k=6,node=3,mode=lag)
+health ok, port 18385 owned by our pid 3646416
+[2026-10-24T15:40:13Z] pid 3646416 dead (verified)
+[2026-10-24T15:40:13Z] STEP M3-B OK arm B done, restore ok=True
+[2026-10-24T15:40:13Z] ram_admit 64: admit: MemAvailable 1052 GiB, need 64 GiB
+[2026-10-24T15:40:13Z] arm A2: server pid 3660765 (no mirror flag)
+health ok, port 18385 owned by our pid 3660765
+[2026-10-24T15:42:29Z] pid 3660765 dead (verified)
+[2026-10-24T15:42:30Z] pid 3660767 dead (verified)
+[2026-10-24T15:42:30Z] STEP M3-A2 OK arm A2 done, restore ok=True
+[2026-10-24T15:42:30Z] ram_admit 64: admit: MemAvailable 1052 GiB, need 64 GiB
+[2026-10-24T15:42:30Z] arm Bf: server pid 3679639 (--kv-host-mirror k=6,node=3,mode=fresh)
+health ok, port 18385 owned by our pid 3679639
+[2026-10-24T15:44:52Z] pid 3679639 dead (verified)
+[2026-10-24T15:44:52Z] STEP M3-Bf OK arm Bf done, restore ok=True
+[2026-10-24T15:44:52Z] VERDICT INCONCLUSIVE: {"verdict": "INCONCLUSIVE", "gates": {"G1_decode": "PASS", "G2_graphs_reused": "PASS", "G3_restore": "PASS", "G4_mirror_engaged": "INCONCLUSIVE"}, "belief_rows": 0}
+job rc=0
+2026-10-24T15:44:54Z [hsf-5p-microbench] ended rc=0 reason=exited (grant deleted)
+2026-10-25T07:58:28Z [hsf-5p-microbench] START regions=mi210_0,184-191 cpus=184-191 threads=8 gpu=1 end=2026-10-25T09:07Z
+[region-lock] --cpu-list '184-191' includes SMT siblings: claiming ['q3'] (their physical cores) instead of the primary-only []; --no-fold-siblings for the legacy mapping
+[region-lock] acquiring gpu-quiet shared + regions ['q3'] as role='build' (timeout_s=4112.0) …
+[region-lock] held gpu-quiet shared + regions ['q3'] after 0.0s wait; running: /bin/bash /mnt/raid0/llm/tmp/fillers-3c4ca599/filler_run9.sh --inner --id hsf-5p-microbench --class gpu --cmd bash /mnt/raid0/llm/tmp/f8-launchers-20261024/hsf-5p/gpu/job.sh --min-window 3000 --stop /mnt/raid0/llm/tmp/compute-flags/STOP.f8-hsf-5p-microbench --port 18385 --workdir /mnt/raid0/llm/tmp/f8-launchers-20261024/hsf-5p/gpu --gpu-threads 184-191
+2026-10-25T07:58:28Z mi210_0 flock held
+[2026-10-25T07:58:28Z] item=hsf-5p-microbench dir=/mnt/raid0/llm/tmp/f8-launchers-20261024/hsf-5p/gpu cpus=184-191 threads=8 deadline=2026-10-25T09:05:30Z ram_need=64GiB dry=0
+[2026-10-25T07:58:28Z] ram_admit: admit: MemAvailable 1085 GiB, need 64 GiB
+[2026-10-25T07:58:28Z] M1 already OK
+[2026-10-25T07:58:28Z] VERDICT INCONCLUSIVE: {"verdict": "INCONCLUSIVE", "gates": {"G1_decode": "PASS", "G2_graphs_reused": "PASS", "G3_restore": "PASS", "G4_mirror_engaged": "INCONCLUSIVE"}, "belief_rows": 0}
+job rc=0
+2026-10-25T07:58:31Z [hsf-5p-microbench] ended rc=0 reason=exited (grant deleted)
+2026-10-25T13:29:17Z [hsf-5p-microbench] START regions=mi210_0,184-191 cpus=184-191 threads=8 gpu=1 end=2026-10-25T14:39Z
+[region-lock] --cpu-list '184-191' includes SMT siblings: claiming ['q3'] (their physical cores) instead of the primary-only []; --no-fold-siblings for the legacy mapping
+[region-lock] acquiring gpu-quiet shared + regions ['q3'] as role='build' (timeout_s=4183.0) …
+[region-lock] held gpu-quiet shared + regions ['q3'] after 0.0s wait; running: /bin/bash /mnt/raid0/llm/tmp/fillers-3c4ca599/filler_run9.sh --inner --id hsf-5p-microbench --class gpu --cmd bash /mnt/raid0/llm/tmp/f8-launchers-20261024/hsf-5p/gpu/job.sh --min-window 3000 --stop /mnt/raid0/llm/tmp/compute-flags/STOP.f8-hsf-5p-microbench --port 18385 --workdir /mnt/raid0/llm/tmp/f8-launchers-20261024/hsf-5p/gpu --gpu-threads 184-191
+2026-10-25T13:29:17Z mi210_0 flock held
+[2026-10-25T13:29:17Z] item=hsf-5p-microbench dir=/mnt/raid0/llm/tmp/f8-launchers-20261024/hsf-5p/gpu cpus=184-191 threads=8 deadline=2026-10-25T14:37:30Z ram_need=64GiB dry=0
+[2026-10-25T13:29:17Z] ram_admit: admit: MemAvailable 1045 GiB, need 64 GiB
+[2026-10-25T13:29:20Z] STEP M1 OK 60 rows
+[2026-10-25T13:29:20Z] ram_admit 64: admit: MemAvailable 1045 GiB, need 64 GiB
+[2026-10-25T13:29:20Z] arm A1: server pid 3172298 (no mirror flag)
+health ok, port 18385 owned by our pid 3172298
+[2026-10-25T13:31:42Z] pid 3172298 dead (verified)
+[2026-10-25T13:31:42Z] STEP M3-A1 OK arm A1 done, restore ok=True
+[2026-10-25T13:31:42Z] ram_admit 64: admit: MemAvailable 1046 GiB, need 64 GiB
+[2026-10-25T13:31:42Z] arm B: server pid 3186970 (--kv-host-mirror k=6,node=3,mode=lag)
+health ok, port 18385 owned by our pid 3186970
+[2026-10-25T13:41:52Z] pid 3186970 dead (verified)
+[2026-10-25T13:41:53Z] pid 3186974 dead (verified)
+[2026-10-25T13:41:53Z] STEP M3-B OK arm B done, restore ok=True
+[2026-10-25T13:41:53Z] ram_admit 64: admit: MemAvailable 1047 GiB, need 64 GiB
+[2026-10-25T13:41:53Z] arm A2: server pid 3204918 (no mirror flag)
+health ok, port 18385 owned by our pid 3204918
+[2026-10-25T13:44:09Z] pid 3204918 dead (verified)
+[2026-10-25T13:44:09Z] STEP M3-A2 OK arm A2 done, restore ok=True
+[2026-10-25T13:44:09Z] ram_admit 64: admit: MemAvailable 1047 GiB, need 64 GiB
+[2026-10-25T13:44:09Z] arm Bf: server pid 3212861 (--kv-host-mirror k=6,node=3,mode=fresh)
+health ok, port 18385 owned by our pid 3212861
+[2026-10-25T13:48:14Z] pid 3212861 dead (verified)
+[2026-10-25T13:48:15Z] pid 3212863 dead (verified)
+[2026-10-25T13:48:15Z] STEP M3-Bf OK arm Bf done, restore ok=True
+[2026-10-25T13:48:15Z] VERDICT FAIL: {"verdict": "FAIL", "gates": {"G1_decode": "FAIL", "G2_graphs_reused": "PASS", "G3_restore": "PASS", "G4_mirror_engaged": "PASS"}, "belief_rows": 24}
+job rc=0
+2026-10-25T13:48:16Z [hsf-5p-microbench] ended rc=0 reason=complete (grant deleted)
+2026-10-25T13:48:16Z [hsf-5p-microbench] ALL DONE: wrote /mnt/raid0/llm/tmp/compute-flags/grants/hsf-5p-microbench.complete, row marked COMPLETE; exiting for good

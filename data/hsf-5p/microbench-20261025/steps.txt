@@ -1,0 +1,5 @@
+M1 OK 60 rows
+M3-A1 OK arm A1 done, restore ok=True
+M3-B OK arm B done, restore ok=True
+M3-A2 OK arm A2 done, restore ok=True
+M3-Bf OK arm Bf done, restore ok=True
