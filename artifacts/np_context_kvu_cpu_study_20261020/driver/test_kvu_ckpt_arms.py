@@ -1,5 +1,7 @@
 """Server-free tests for kvu_ckpt_arms.py (KVU-12.1 / KVU-12.3 arms). No llama-server, no model, no network:
-every server interaction is either pure arithmetic or replaced by a fake. Run: python3 -m pytest -q <this file>."""
+every server interaction is either pure arithmetic or replaced by a fake. Requires CPython 3.12
+(imported kvu_cpu_matrix.py uses PEP 701 f-strings). Execution requires a calendar compute grant.
+Stdlib runner from this driver directory: <pinned CPython 3.12> -B -m unittest test_kvu_ckpt_arms."""
 import contextlib, io, json, sys, tempfile, types, unittest
 from pathlib import Path
 from unittest import mock
@@ -516,13 +518,17 @@ class EmitterAndRequests(unittest.TestCase):
             launch = K.Launch("select__q36_35b__dense", "q36_35b", "dense", "select", 40960, cells, (), 120.0, str(binp))
             facts = {"kv_unified": "false", "n_ctx_slot": "40960", "n_slots": "1", "n_ctx_train_warn": None}
             fields = dict(cell_key=cells[0].key, model="q36_35b", policy_arm="dense", unit="8k", L=8192, probe="edit_back_2048", wave=0,
-                          prompt_n=2100, cache_n=6000, ttft_s=31.2)
+                      prompt_n=2100, cache_n=6000, ttft_s=31.2, raw_request_record_schema=K.HPR_PREFIX_CAPTURE_SCHEMA,
+                      prefix_capture=dict(schema=K.HPR_PREFIX_CAPTURE_SCHEMA, state="incomplete", prompt_token_ids=[1, 2],
+                                          generated_token_ids=[3], retained_slot_tokens=None, problems=["missing final stop event"]))
             row = K.emit_request_row(fields, a, K._la(launch, K.ARM_DENSE, 40960), srv, facts, [0.5, 0.4, 0.3], 0)
             self.assertEqual(row["validation_problems"], [])
             self.assertEqual(row["row_sha256"], M.row_hash(row))          # hash covers the row as written (validation_problems included)
             self.assertEqual(row["schema"], M.CAPTURE_SCHEMA)
             self.assertEqual((row["prompt_n"], row["cache_n"], row["policy_arm"], row["np"]), (2100, 6000, "dense", 1))
             self.assertEqual(row["kv_unified_from_log"], "false")
+        self.assertEqual(row["prefix_capture"]["state"], "incomplete")
+        self.assertEqual(row["raw_request_record_schema"], K.HPR_PREFIX_CAPTURE_SCHEMA)
 
     def test_stream_request_parses_chat_sse_timings_and_usage(self):
         lines = [b'data: {"choices":[{"delta":{"role":"assistant"}}]}\n',
@@ -541,10 +547,119 @@ class EmitterAndRequests(unittest.TestCase):
         self.assertEqual((rec["prompt_n"], rec["cache_n"], rec["decode_tps"]), (7, 993, 11.5))
 
     def test_completion_collects_token_ids(self):
-        lines = [b'data: {"content":"a","tokens":[5,6]}\n', b'data: {"content":"b","tokens":[7],"stop":true,"timings":{"prompt_n":3,"cache_n":0}}\n']
-        with mock.patch.object(K.urllib.request, "urlopen", return_value=FakeResp(lines)):
+        # Preserve the original helper's body and aggregation, including a final token array.
+        lines = [b'data: {"content":"a","tokens":[5,6]}\n',
+                 b'data: {"content":"b","tokens":[7],"stop":true,"timings":{"prompt_n":3,"cache_n":0}}\n']
+        with mock.patch.object(K.urllib.request, "urlopen", return_value=FakeResp(lines)) as send:
             rec = K.completion_request(1, [1, 2, 3], 3)
         self.assertEqual(rec["ids"], [5, 6, 7]); self.assertEqual(rec["prompt_n"], 3)
+        self.assertNotIn("native_events", rec)
+        self.assertEqual(json.loads(send.call_args.args[0].data), dict(prompt=[1, 2, 3], n_predict=3, ignore_eos=True,
+                         temperature=0, seed=42, stream=True, return_tokens=True, cache_prompt=True, id_slot=0))
+
+    def test_hpr_opt_in_native_metadata_and_junction_translation(self):
+        lines = [b'data: {"content":"a","tokens":[5],"stop":false}\n',
+                 b'data: {"content":"b","tokens":[6,7],"stop":false}\n',
+                 b'data: {"content":"","tokens":[],"stop":true,"stop_type":"limit","truncated":false,"tokens_cached":5,"tokens_evaluated":3,"tokens_predicted":3,"timings":{"prompt_n":3,"cache_n":0,"predicted_n":3}}\n']
+        sent = {}
+        def urlopen(req, timeout):
+            sent["url"], sent["body"] = req.full_url, json.loads(req.data)
+            return FakeResp(lines)
+        extra = {"model": "pinned-model", "stop": ["custom-stop"], "top_k": 1}
+        with mock.patch.object(K.urllib.request, "urlopen", side_effect=urlopen), \
+             mock.patch.object(M, "file_sha256", return_value=K.HPR_NATIVE_CONTRACT["template_sha256"]):
+            rec = K.hpr_completion_request(1, [1, 2, 3], 3, K.ARM_TAIL, [1], "q36_35b", extra)
+        self.assertEqual(rec["ids"], [5, 6, 7])
+        self.assertEqual(rec["final_events"][0]["tokens_cached"], 5); self.assertEqual(rec["prompt_n"], 3)
+        capture = K.native_prefix_capture([1, 2, 3], rec)
+        self.assertEqual(capture["state"], "complete")
+        self.assertEqual(capture["retained_generated_tokens"], 2)
+        self.assertEqual([1, 2, 3] + capture["generated_token_ids"][:capture["retained_generated_tokens"]], [1, 2, 3, 5, 6])
+        self.assertEqual(capture["request_binding"]["endpoint"], "/completion")
+        self.assertEqual(capture["request_binding"]["request_args"]["n_predict"], 3)
+        self.assertEqual(sent["url"], "http://127.0.0.1:1/completion")
+        self.assertEqual(sent["body"]["prompt"], [1, 2, 3])
+        self.assertEqual(sent["body"]["checkpoint_at"], [1])
+        self.assertEqual(sent["body"]["message_delimiters"], K.HPR_NATIVE_CONTRACT["message_delimiters"])
+        for key, value in extra.items():
+            self.assertEqual(sent["body"][key], value)
+        self.assertEqual(capture["request_binding"]["native_contract"]["status"], "UNVERIFIED")
+        self.assertEqual({k: sent["body"][k] for k in ("n_predict", "ignore_eos", "temperature", "seed", "stream", "return_tokens", "cache_prompt", "id_slot", "timings_per_token")},
+                         {"n_predict": 3, "ignore_eos": True, "temperature": 0, "seed": 42, "stream": True, "return_tokens": True,
+                          "cache_prompt": True, "id_slot": 0, "timings_per_token": False})
+
+    def test_chat_and_native_preserve_sampling_and_extras_in_their_explicit_bodies(self):
+        extra = {"model": "same-model", "stop": ["same-stop"], "top_p": 0.9}
+        sent = []
+        def stream(port, path, body, **kwargs):
+            sent.append((path, body, kwargs)); return {}
+        with mock.patch.object(K, "stream_request", side_effect=stream), \
+             mock.patch.object(M, "file_sha256", return_value=K.HPR_NATIVE_CONTRACT["template_sha256"]):
+            K.chat_request(1, [{"role": "user", "content": "synthetic"}], 16, extra)
+            K.hpr_completion_request(1, [1, 2, 3], 16, K.ARM_DENSE, [1], "q36_35b", extra)
+        chat, native = sent[0][1], sent[1][1]
+        for key in ("model", "stop", "top_p", "ignore_eos", "temperature", "seed", "stream", "cache_prompt", "id_slot", "timings_per_token"):
+            self.assertEqual(chat[key], native[key])
+        self.assertEqual(chat["max_tokens"], native["n_predict"])
+        self.assertNotIn("message_delimiters", chat)
+        self.assertEqual(sent[0][2], {})               # default chat/helper call semantics preserved
+        self.assertTrue(sent[1][2]["native_capture"])
+
+    def test_native_prefix_capture_refuses_missing_final_and_inconsistent_token_bounds(self):
+        base = native_fixture([1, 2, 3], [5, 6], 4)
+        self.assertEqual(K.native_prefix_capture([1, 2, 3], base)["state"], "complete")
+        cases = [dict(base, final_events=[]), dict(base, final_events=base["final_events"] * 2), dict(base, ids=[5, True]),
+                 dict(base, ids=[5]), dict(base, error="broken stream"), dict(base, native_anomalies=["partial after final"])]
+        for change in ({"tokens_cached": None}, {"tokens_cached": 6}, {"tokens_predicted": 3}, {"tokens": [6]},
+                       {"stop_type": "eos"}, {"stop_type": "word"}, {"truncated": True}):
+            cases.append(dict(base, final_events=[dict(base["final_events"][0], **change)]))
+        for rec in cases:
+            with self.subTest(rec=rec):
+                capture = K.native_prefix_capture([1, 2, 3], rec)
+                self.assertEqual(capture["state"], "incomplete")
+                self.assertNotIn("retained_generated_tokens", capture)
+                self.assertEqual(capture["final_events"], rec["final_events"])
+
+    def test_native_bad_stream_retains_raw_and_refuses_exact_state(self):
+        lines = [b'data: not-json\n', b'data: {"tokens":[],"stop":true}\n',
+                 b'data: {"tokens":[8],"stop":false}\n']
+        with mock.patch.object(K.urllib.request, "urlopen", return_value=FakeResp(lines)), \
+             mock.patch.object(M, "file_sha256", return_value=K.HPR_NATIVE_CONTRACT["template_sha256"]):
+            rec = K.hpr_completion_request(1, [1, 2, 3], 2, K.ARM_DENSE, [1], "q36_35b")
+        capture = K.native_prefix_capture([1, 2, 3], rec)
+        self.assertEqual(capture["state"], "incomplete")
+        self.assertEqual(capture["native_raw_lines_hex"], [line.hex() for line in lines])
+        self.assertIn("malformed SSE JSON event", capture["problems"])
+        self.assertIn("partial event after final event", capture["problems"])
+
+    def test_crafted_hpr_suffix_geometry_is_synthetic_algorithm_regression(self):
+        # Crafted token IDs only. These are not the missing IDs from the historical HPR-B run.
+        prompt = list(range(100_000, 165_318))
+        generated = list(range(200_000, 200_016))
+        rec = native_fixture(prompt, generated, 65_333)
+        capture = K.native_prefix_capture(prompt, rec)
+        prior_slot = prompt + generated[:capture["retained_generated_tokens"]]
+        next_prompt = prior_slot + list(range(300_000, 302_799))
+        self.assertEqual(len(next_prompt), 68_132)
+        lcp = K.common_prefix(prior_slot, next_prompt)
+        sim = K.ServerSim(K.ARM_DENSE, held=[(65_314, False, 0)], cached=capture["retained_slot_tokens"])
+        result = sim.request(len(next_prompt), [], lcp, n_generated=len(generated))
+        self.assertEqual((lcp, result["cache_n"], result["prompt_n"]), (65_333, 65_333, 2_799))
+
+    def test_synthetic_8k_and_wave1_controls_do_not_extend_on_unmatched_suffix(self):
+        # Algorithmic controls only; no old measured rows or token IDs are replayed here.
+        for control, n in (("synthetic_8k_control", 8_000), ("synthetic_wave1_control", 100)):
+            with self.subTest(control=control):
+                prompt = list(range(100_000, 100_000 + n))
+                generated = list(range(800_000, 800_016))
+                rec = native_fixture(prompt, generated, n + 15)
+                capture = K.native_prefix_capture(prompt, rec)
+                prior_slot = prompt + generated[:capture["retained_generated_tokens"]]
+                next_prompt = prompt + [9_999] + list(range(10_000, 10_019))
+                lcp = K.common_prefix(prior_slot, next_prompt)
+                sim = K.ServerSim(K.ARM_DENSE, held=[(n, False, 0)], cached=capture["retained_slot_tokens"])
+                result = sim.request(len(next_prompt), [], lcp, n_generated=len(generated))
+                self.assertEqual((lcp, result["cache_n"], result["prompt_n"]), (n, n, 20))
 
     def test_http_error_is_recorded_not_raised(self):
         err = K.urllib.error.HTTPError("u", 400, "bad", {}, io.BytesIO(b"exceeds context"))
@@ -568,6 +683,88 @@ class FakeResp:
     def __enter__(self): return self
     def __exit__(self, *a): return False
     def __iter__(self): return iter(self.lines)
+
+
+def native_fixture(prompt, generated, retained):
+    """Clearly synthetic native response, generated through the actual opt-in writer helper."""
+    final = dict(content="", tokens=[], stop=True, stop_type="limit", truncated=False,
+                 tokens_cached=retained, tokens_evaluated=len(prompt), tokens_predicted=len(generated),
+                 timings=dict(prompt_n=len(prompt), cache_n=0, predicted_n=len(generated)))
+    events = [dict(content="synthetic", tokens=generated, stop=False), final]
+    lines = [("data: " + json.dumps(event) + "\n").encode() for event in events]
+    with mock.patch.object(K.urllib.request, "urlopen", return_value=FakeResp(lines)), \
+         mock.patch.object(M, "file_sha256", return_value=K.HPR_NATIVE_CONTRACT["template_sha256"]):
+        return K.hpr_completion_request(1, prompt, len(generated), K.ARM_DENSE, [], "q36_35b")
+
+
+class ProspectiveNativeReplay(unittest.TestCase):
+    def test_native_opt_in_cannot_resume_or_repair_a_historical_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / K.CELLS_FILE).write_text('{"result":"INVALID_SIM_DISAGREES"}\n')
+            args = types.SimpleNamespace(hpr_native_prefix_capture=True, stages="holdout", out=directory)
+            with self.assertRaisesRegex(SystemExit, "fresh output"):
+                K.cmd_run(args)
+
+    def test_current_prediction_cannot_read_current_observed_cache_or_retained_boundary(self):
+        results, boundaries = [], []
+        for retained in (4, 5):
+            rec = native_fixture([1, 2, 3], [8, 9], retained)
+            rec["cache_n"] = 999_999                    # observation is irrelevant to the prediction
+            capture = K.native_prefix_capture([1, 2, 3], rec)
+            sim = K.ServerSim(K.ARM_DENSE)
+            result, next_ids, prior = K.hpr_sim_step(sim, capture, [], [], "launch_seed")
+            results.append(result); boundaries.append(sim.cached)
+            self.assertEqual(prior["retained_slot_tokens"], 0)
+            self.assertEqual(len(next_ids), retained)
+        self.assertEqual(results[0], results[1])
+        self.assertEqual((results[0]["cache_n"], boundaries), (0, [4, 5]))
+
+    def test_new_schema_live_and_offline_share_prior_capture_state_but_never_admit(self):
+        sim = K.ServerSim(K.ARM_DENSE)
+        prior_ids, prior_probe, rows, inputs, expected = [], "launch_seed", {}, [], {}
+        # Second prompt extends the retained generated suffix, rather than just the prior prompt.
+        for name, prompt, generated, retained in (("cold", [1, 2, 3], [8, 9], 4),
+                                                   ("extend", [1, 2, 3, 8, 10, 11], [12, 13], 7)):
+            rec = native_fixture(prompt, generated, retained)
+            capture = K.native_prefix_capture(prompt, rec)
+            lcp = K.common_prefix(prior_ids, prompt)
+            result, prior_ids, prior = K.hpr_sim_step(sim, capture, [], prior_ids, prior_probe)
+            expected[name] = dict(cache_n=result["cache_n"], prompt_n=result["prompt_n"])
+            rows[name] = dict(probe=name, status=200, error=None, predicted_n=2, prefix_capture=capture,
+                              raw_request_record_schema=K.HPR_PREFIX_CAPTURE_SCHEMA, prior_prefix_state=prior)
+            inputs.append(dict(probe=name, n_prompt_total=len(prompt), user_starts=[], lcp_prev=lcp))
+            prior_probe = name
+        def compare(result, row, sizes):
+            return dict(cache_n=result["cache_n"], prompt_n=result["prompt_n"]), []
+        with mock.patch.object(K, "sim_compare", side_effect=compare):
+            replay = K.replay_cell_sim(K.ARM_DENSE, inputs, rows)
+        self.assertEqual(replay["per_probe"], expected)
+        self.assertFalse(replay["matches"])
+        self.assertTrue(all("UNVERIFIED" in message for message in replay["mismatches"]))
+        row = dict(cell_key="q36_35b|dense|ckpt|8k|w0|bsynthetic", result="UNVERIFIED_NATIVE_CONTRACT")
+        self.assertTrue(K.sim_gate_problems([row]))
+
+    def test_replay_refuses_incomplete_capture_without_advancing_state(self):
+        rec = native_fixture([1, 2, 3], [8, 9], 4)
+        rec["ids"] = [8]                              # e.g. the server omitted an incomplete UTF-8 token
+        capture = K.native_prefix_capture([1, 2, 3], rec)
+        sim = K.ServerSim(K.ARM_DENSE)
+        with self.assertRaises(ValueError):
+            K.hpr_sim_step(sim, capture, [], [], "launch_seed")
+        self.assertEqual(sim.cached, 0)
+        self.assertEqual(capture["generated_token_ids"], [8])
+        self.assertEqual(capture["final_events"][0]["tokens_predicted"], 2)
+
+    def test_changed_template_and_untranslatable_junction_refuse_before_send(self):
+        with mock.patch.object(M, "file_sha256", return_value="changed"), mock.patch.object(K, "stream_request") as send:
+            with self.assertRaises(M.CellRefused):
+                K.hpr_completion_request(1, [1, 2], 2, K.ARM_DENSE, [], "q36_35b")
+            send.assert_not_called()
+        with mock.patch.object(M, "file_sha256", return_value=K.HPR_NATIVE_CONTRACT["template_sha256"]), \
+             mock.patch.object(K, "stream_request") as send:
+            with self.assertRaises(M.CellRefused):
+                K.hpr_completion_request(1, [1, 2], 2, K.ARM_TAIL, [], "q36_35b")
+            send.assert_not_called()
 
 
 class RunLoop(unittest.TestCase):

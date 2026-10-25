@@ -28,6 +28,16 @@ sys.path.insert(0, str(HERE))
 import kvu_cpu_matrix as M                                     # noqa: E402  (driver reused, never edited here)
 
 SCHEMA = "epyc.kvu121.ckpt_arms.v1"
+HPR_PREFIX_CAPTURE_SCHEMA = "epyc.kvu121.hpr_prefix_capture.v1"
+HPR_NATIVE_CONTRACT = dict(
+    version="epyc.kvu121.hpr_native_contract.v1", status="UNVERIFIED",
+    template_sha256="1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551",
+    message_delimiters=[{"role": "assistant", "delimiter": "<|im_start|>assistant"},
+                        {"role": "user", "delimiter": "<|im_start|>user"}],
+    stop=[], checkpoint_at="positive token count at final user start",
+    admission="requires future owner-reviewed golden parity/control probe and new predeclaration",
+)
+HPR_NATIVE_CONTRACT_SHA256 = hashlib.sha256(json.dumps(HPR_NATIVE_CONTRACT, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 CELLS_FILE, REQS_FILE = "cells.jsonl", "requests.jsonl"
 
 # ----------------------------------------------------------------------------------------------- predeclared constants
@@ -684,8 +694,10 @@ def edit_index_for_back(starts, n_total, back_tok):
 
 
 # ----------------------------------------------------------------------------------------------- requests
-def _sse(resp):
+def _sse(resp, capture=None):
     for raw in resp:
+        if capture is not None:
+            capture["native_raw_lines_hex"].append(raw.hex())
         line = raw.decode(errors="ignore").strip()
         if not line.startswith("data:"):
             continue
@@ -695,25 +707,54 @@ def _sse(resp):
         try:
             yield json.loads(body)
         except ValueError:
+            if capture is not None:
+                capture["native_anomalies"].append("malformed SSE JSON event")
             continue
 
 
-def stream_request(port, path, body, collect_ids=False, timeout=14400):
-    """POST a streaming request; returns dict(status, error, ttft, text, ids, timings, t_start, t_end, n_chunks)."""
+def stream_request(port, path, body, collect_ids=False, timeout=14400, native_capture=False):
+    """POST a streaming request; native token capture also records distinct partial/final token fields."""
     rec = dict(status=None, error=None, ttft=None, text="", ids=[], timings={}, n_chunks=0)
-    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+    if native_capture:
+        rec.update(native_events=[], native_anomalies=[], final_events=[], native_raw_lines_hex=[])
+    payload = json.dumps(body).encode()
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=payload, headers={"Content-Type": "application/json"})
     t0 = time.time(); rec["t_start"] = t0
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             rec["status"] = r.status
-            for j in _sse(r):
+            for j in _sse(r, rec if native_capture else None):
+                if native_capture and not isinstance(j, dict):
+                    rec["native_anomalies"].append("native SSE event is not an object")
+                    continue
+                if native_capture:
+                    if not isinstance(j.get("tokens"), list):
+                        rec["native_anomalies"].append("native tokens field is not an array")
+                    rec["native_events"].append(j)
                 if "error" in j:
                     rec["error"] = json.dumps(j["error"])[:300]; continue
                 ch = (j.get("choices") or [{}])[0]
                 delta = ch.get("delta") or {}
                 piece = delta.get("content") or delta.get("reasoning_content") or j.get("content") or ""
                 toks = j.get("tokens") or []
-                if collect_ids: rec["ids"] += toks
+                if native_capture:
+                    # Native /completion streams emit each generated token in a partial chunk
+                    # (`stop: false`). The final chunk has `stop: true` and an empty tokens array.
+                    # Keep these channels separate so a server that repeats a final array is
+                    # detected by validation rather than silently double-counted.
+                    if j.get("stop") is True:
+                        rec["final_events"].append(j)
+                    elif j.get("stop") is False:
+                        if rec["final_events"]:
+                            rec["native_anomalies"].append("partial event after final event")
+                        if isinstance(toks, list):
+                            rec["ids"] += toks
+                        else:
+                            rec["native_anomalies"].append("partial tokens is not an array")
+                    else:
+                        rec["native_anomalies"].append("native event has no boolean stop field")
+                elif collect_ids:
+                    rec["ids"] += toks                 # legacy generation helper semantics
                 if (piece or toks) and rec["ttft"] is None:
                     rec["ttft"] = time.time() - t0
                 rec["text"] += piece
@@ -748,6 +789,145 @@ def completion_request(port, prompt_ids, n_predict, extra=None):
             "return_tokens": True, "cache_prompt": True, "id_slot": 0}
     body.update(extra or {})
     return stream_request(port, "/completion", body, collect_ids=True)
+
+
+def hpr_completion_request(port, prompt_ids, n_predict, arm, user_starts, model, extra=None):
+    """Opt-in NEW native instrument, never a claim of automatic chat endpoint parity.
+
+    Fork server-schema.cpp checkpoint_at integers are prompt token counts, not message indices.
+    Fixed Qwen delimiter/stop assumptions remain UNVERIFIED until the owner reviews a golden probe.
+    """
+    if model not in MODELS or M.file_sha256(M.TEMPLATE) != HPR_NATIVE_CONTRACT["template_sha256"]:
+        raise M.CellRefused("REFUSED_HPR_NATIVE_CONTRACT: unsupported model or changed template")
+    request_extra = dict(arm.request_extra())
+    request_extra.update(extra or {})
+    original_extra = dict(request_extra)
+    if arm.junction:
+        if request_extra.get("checkpoint_at") != [{"message": -1, "at": "start"}] or not user_starts or user_starts[-1] <= 0:
+            raise M.CellRefused("REFUSED_HPR_NATIVE_CONTRACT: junction must identify a positive final-user token position")
+        request_extra["checkpoint_at"] = [user_starts[-1]]
+    body = {"prompt": prompt_ids, "n_predict": n_predict, "ignore_eos": True, "temperature": 0, "seed": 42, "stream": True,
+            "return_tokens": True, "cache_prompt": True, "id_slot": 0, "timings_per_token": False,
+            "message_delimiters": HPR_NATIVE_CONTRACT["message_delimiters"], "stop": HPR_NATIVE_CONTRACT["stop"]}
+    body.update(request_extra)
+    if body["message_delimiters"] != HPR_NATIVE_CONTRACT["message_delimiters"]:
+        raise M.CellRefused("REFUSED_HPR_NATIVE_CONTRACT: delimiter override is outside this instrument")
+    # Extras may carry model, stop or sampling settings; never silently discard/replace them.
+    rec = stream_request(port, "/completion", body, collect_ids=True, native_capture=True)
+    args = {k: v for k, v in body.items() if k != "prompt"}
+    canonical_args = json.dumps(args, sort_keys=True, separators=(",", ":"), default=str).encode()
+    rec["request_binding"] = dict(
+        schema=HPR_PREFIX_CAPTURE_SCHEMA,
+        endpoint="/completion",
+        endpoint_sha256=hashlib.sha256(b"/completion").hexdigest(),
+        prompt_ids_sha256=hashlib.sha256(json.dumps(prompt_ids, separators=(",", ":")).encode()).hexdigest(),
+        request_args=args,
+        request_args_sha256=hashlib.sha256(canonical_args).hexdigest(),
+        request_body_sha256=hashlib.sha256(json.dumps(body).encode()).hexdigest(),
+        request_body_json=json.dumps(body),
+        model_key=model, original_request_extra=original_extra,
+        native_contract=dict(HPR_NATIVE_CONTRACT), native_contract_sha256=HPR_NATIVE_CONTRACT_SHA256,
+    )
+    return rec
+
+
+def native_prefix_capture(prompt_ids, rec):
+    """Validate a native streamed completion and return its exact retained slot prefix, or a refusal record."""
+    generated = list(rec.get("ids") or [])
+    finals = rec.get("final_events") or []
+    final = finals[0] if len(finals) == 1 else {}
+    retained_total = final.get("tokens_cached")
+    binding = rec.get("request_binding") or {}
+    args = binding.get("request_args") or {}
+    problems = list(rec.get("native_anomalies") or [])
+    # Native source records, including failed captures, retain the original wire bytes. The
+    # explicit-new-schema reader must re-derive IDs/finals from those bytes, never invent them.
+    try:
+        raw_check = dict(native_raw_lines_hex=[], native_anomalies=[])
+        raw_lines = rec.get("native_raw_lines_hex") or []
+        events = list(_sse([bytes.fromhex(line) for line in raw_lines], raw_check))
+        derived_ids, derived_finals, seen_final = [], [], False
+        for event in events:
+            if not isinstance(event, dict) or not isinstance(event.get("tokens"), list):
+                raise ValueError("invalid native event")
+            if event.get("stop") is True:
+                derived_finals.append(event); seen_final = True
+            elif event.get("stop") is False and not seen_final:
+                derived_ids.extend(event["tokens"])
+            else:
+                raise ValueError("invalid native event order")
+        if (not raw_lines or raw_check["native_anomalies"] or events != rec.get("native_events")
+                or generated != derived_ids or finals != derived_finals):
+            problems.append("native raw stream does not re-derive captured ids/finals")
+    except (TypeError, ValueError, AttributeError):
+        problems.append("native raw stream is incomplete or malformed")
+    if rec.get("status") != 200 or rec.get("error") is not None:
+        problems.append("request did not complete successfully")
+    if len(finals) != 1:
+        problems.append(f"native stream has {len(finals)} final stop events, expected one")
+    if final.get("tokens") != []:
+        problems.append("native final event unexpectedly repeats token ids")
+    if any(not isinstance(t, int) or isinstance(t, bool) or t < 0 for t in list(prompt_ids) + generated):
+        problems.append("prompt/generated token ids must be nonnegative integers")
+    if final.get("tokens_evaluated") != len(prompt_ids):
+        problems.append(f"tokens_evaluated {final.get('tokens_evaluated')} != prompt id count {len(prompt_ids)}")
+    if final.get("tokens_predicted") != len(generated):
+        problems.append(f"tokens_predicted {final.get('tokens_predicted')} != streamed token id count {len(generated)}")
+    if any(type(final.get(key)) is not int for key in ("tokens_evaluated", "tokens_predicted")):
+        problems.append("native token counts must be integers")
+    if args.get("ignore_eos") is not True or type(args.get("n_predict")) is not int or args.get("n_predict", 0) <= 0 or args.get("n_predict") != len(generated):
+        problems.append("fixed-length ignore_eos request did not emit exactly n_predict token ids")
+    if final.get("stop_type") != "limit" or final.get("truncated") is not False:
+        problems.append("native response did not finish by prediction limit without truncation")
+    if binding.get("native_contract_sha256") != HPR_NATIVE_CONTRACT_SHA256 or binding.get("native_contract") != HPR_NATIVE_CONTRACT:
+        problems.append("missing or different native instrument contract")
+    try:
+        body_json = binding["request_body_json"]
+        if (hashlib.sha256(body_json.encode()).hexdigest() != binding.get("request_body_sha256")
+                or json.loads(body_json) != dict(prompt=list(prompt_ids), **args)
+                or hashlib.sha256(json.dumps(args, sort_keys=True, separators=(",", ":")).encode()).hexdigest() != binding.get("request_args_sha256")
+                or hashlib.sha256(json.dumps(prompt_ids, separators=(",", ":")).encode()).hexdigest() != binding.get("prompt_ids_sha256")
+                or binding.get("endpoint") != "/completion"
+                or binding.get("endpoint_sha256") != hashlib.sha256(b"/completion").hexdigest()):
+            problems.append("native request binding does not re-derive")
+    except (KeyError, TypeError, ValueError, AttributeError):
+        problems.append("native request binding is incomplete")
+    if type(rec.get("predicted_n")) is not int or rec.get("predicted_n") != len(generated):
+        problems.append(f"timings predicted_n {rec.get('predicted_n')} != streamed token id count {len(generated)}")
+    if not isinstance(retained_total, int) or isinstance(retained_total, bool):
+        problems.append("native final event has no integer tokens_cached slot length")
+    elif not len(prompt_ids) <= retained_total <= len(prompt_ids) + len(generated):
+        problems.append(f"tokens_cached {retained_total} outside prompt/generation bounds [{len(prompt_ids)}, {len(prompt_ids) + len(generated)}]")
+    capture = dict(schema=HPR_PREFIX_CAPTURE_SCHEMA, state="incomplete", prompt_token_ids=list(prompt_ids),
+                   generated_token_ids=generated, retained_slot_tokens=retained_total,
+                   request_binding=binding, native_events=rec.get("native_events") or [],
+                   native_raw_lines_hex=rec.get("native_raw_lines_hex") or [],
+                   final_events=finals, native_anomalies=rec.get("native_anomalies") or [], problems=problems)
+    if not problems:
+        retained_generated = retained_total - len(prompt_ids)
+        capture.update(state="complete", retained_generated_tokens=retained_generated)
+    return capture
+
+
+def hpr_sim_step(sim, capture, user_starts, prior_ids, prior_probe, checkpoint_at=()):
+    """Conditional policy prediction, shared by live/new-schema offline replay.
+
+    CURRENT prediction reads only prior simulator state and LCP against PRIOR captured IDs.
+    The current native final boundary conditions NEXT request; it does not test native retention.
+    Contract acceptance is separate: even complete captures are UNVERIFIED and cannot admit a cell.
+    """
+    if capture.get("schema") != HPR_PREFIX_CAPTURE_SCHEMA or capture.get("state") != "complete":
+        raise ValueError("incomplete or legacy prefix capture cannot seed exact state")
+    prompt = capture["prompt_token_ids"]
+    lcp = common_prefix(prior_ids, prompt)
+    prior = dict(source_probe=prior_probe, retained_slot_tokens=sim.cached, prefix_token_count=len(prior_ids),
+                 prefix_ids_sha256=hashlib.sha256(json.dumps(prior_ids, separators=(",", ":")).encode()).hexdigest(), lcp_prev=lcp,
+                 scope="checkpoint policy conditional on prior native retained boundary")
+    result = sim.request(len(prompt), user_starts, lcp, n_generated=len(capture["generated_token_ids"]), checkpoint_at=checkpoint_at)
+    # result is frozen before observing current final slot length; never rewrite result['cache_n'].
+    sim.cached = capture["retained_slot_tokens"]
+    next_ids = prompt + capture["generated_token_ids"][:capture["retained_generated_tokens"]]
+    return result, next_ids, prior
 
 
 def render_tokens(port, messages):
@@ -1094,6 +1274,7 @@ def replay_cell_sim(arm, req_inputs, logged_rows, seed=None):
     `seed` = dict(held, cached) for a server that was not fresh. Returns dict(per_probe, mismatches, matches)."""
     seed = seed or {}
     sim = ServerSim(arm, held=seed.get("held", ()), cached=seed.get("cached", 0))
+    prior_ids, prior_probe = list(seed.get("prev_ids") or []), "launch_seed"
     sizes = sizes_from_rows(logged_rows.values())
     per, bad = {}, []
     for q in req_inputs:
@@ -1102,7 +1283,27 @@ def replay_cell_sim(arm, req_inputs, logged_rows, seed=None):
             bad.append(f"{q['probe']}: request failed or missing (status {None if row is None else row.get('status')})")
             continue
         at = (q["user_starts"][-1],) if (arm.junction and q["user_starts"]) else ()
-        res = sim.request(q["n_prompt_total"], q["user_starts"], q["lcp_prev"], n_generated=row.get("predicted_n") or PROBE_NPREDICT, checkpoint_at=at)
+        if row.get("raw_request_record_schema") == HPR_PREFIX_CAPTURE_SCHEMA:
+            capture = row.get("prefix_capture") or {}
+            # Validate producer-native fields, not a state='complete' assertion supplied on read.
+            finals = capture.get("final_events") or []
+            raw = dict(status=row.get("status"), error=row.get("error"), ids=capture.get("generated_token_ids"),
+                       final_events=finals, request_binding=capture.get("request_binding"),
+                       native_events=capture.get("native_events"), native_anomalies=capture.get("native_anomalies"),
+                       native_raw_lines_hex=capture.get("native_raw_lines_hex"), predicted_n=row.get("predicted_n"))
+            checked = native_prefix_capture(capture.get("prompt_token_ids") or [], raw)
+            lcp = common_prefix(prior_ids, checked["prompt_token_ids"])
+            if (checked["state"] != "complete" or q["n_prompt_total"] != len(checked["prompt_token_ids"])
+                    or q["lcp_prev"] != lcp or (sim.cached > len(prior_ids) and lcp == len(prior_ids))):
+                bad.append(f"{q['probe']}: incomplete or inconsistent prospective prefix capture")
+                break
+            res, prior_ids, prior = hpr_sim_step(sim, checked, q["user_starts"], prior_ids, prior_probe, at)
+            if row.get("prior_prefix_state") != prior:
+                bad.append(f"{q['probe']}: prior captured state provenance does not re-derive")
+            prior_probe = q["probe"]
+            bad.append(f"{q['probe']}: UNVERIFIED native contract; golden parity/control review required")
+        else:
+            res = sim.request(q["n_prompt_total"], q["user_starts"], q["lcp_prev"], n_generated=row.get("predicted_n") or PROBE_NPREDICT, checkpoint_at=at)
         per[q["probe"]], b = sim_compare(res, row, sizes)
         bad += b
     return dict(per_probe=per, mismatches=bad, matches=not bad and bool(per))
@@ -1119,8 +1320,13 @@ def run_ckpt_cell(ctx, cell):
     tail, cs = LogTail(logp), CkptSet()
     cs.apply(parse_ckpt_events(logp.read_bytes()[:tail.off].decode(errors="ignore") if logp.exists() else ""))   # every checkpoint the server holds
     seed = ctx.get("sim_seed") or {}
+    native_capture = bool(getattr(a, "hpr_native_prefix_capture", False))
     sim = ServerSim(arm, held=[(n, False, 0) for n in cs.positions()], cached=seed.get("cached", 0))
-    prev_ids = list(seed.get("prev_ids") or [])
+    prev_slot_ids = list(seed.get("prev_ids") or [])
+    # The launch warmup's generated ids are not captured in this protocol. They can only affect
+    # the first HPR request if its prompt matches the entire seeded prompt prefix; refuse that
+    # edge case rather than inventing the missing suffix from its count.
+    seed_suffix_unknown = bool(seed and sim.cached > len(prev_slot_ids))
     udelim, mdelim = tokenize_ids(port, USER_DELIM), tokenize_ids(port, MSG_DELIM)
     # same text for every arm of a wave: the corpus cursor is a pure function of (model, L, wave)
     corpus.cursor = (int(hashlib.sha1(f"{model}|{cell.unit}|{cell.wave}".encode()).hexdigest()[:8], 16) * 7919) % max(1, len(corpus.text) // 2)
@@ -1145,14 +1351,23 @@ def run_ckpt_cell(ctx, cell):
     la = _la(ctx["launch"], arm, c_slot)
     loadavg = [round(x, 2) for x in os.getloadavg()]
     sim_inputs, sim_bad, sim_per = [], [], {}
+    prior_probe = "launch_seed"
+    if native_capture:
+        sim_bad.append("UNVERIFIED native contract; golden parity/control review and new predeclaration required")
 
     def do(name, messages):
-        nonlocal prev_ids
+        nonlocal prev_slot_ids, seed_suffix_unknown, prior_probe
         tail.events()                                # drain anything unrelated first
         ids = render_ids(port, messages)
         ustarts, mst = user_starts_from_ids(ids, udelim), user_starts_from_ids(ids, mdelim)
-        lcp = common_prefix(prev_ids, ids)
-        rec = chat_request(port, messages, PROBE_NPREDICT, arm.request_extra())
+        lcp = common_prefix(prev_slot_ids, ids)
+        if native_capture and seed_suffix_unknown and lcp == len(prev_slot_ids):
+            raise M.CellRefused("REFUSED_SIM_PREFIX_CAPTURE: first prompt reaches beyond the uncaptured launch-warmup token ids")
+        if native_capture:
+            rec = hpr_completion_request(port, ids, PROBE_NPREDICT, arm, ustarts, model)
+            prefix_capture = native_prefix_capture(ids, rec)
+        else:
+            rec = chat_request(port, messages, PROBE_NPREDICT, arm.request_extra())
         evs = tail.events()
         created = cs.apply(evs)
         res = resume_summary(evs)
@@ -1163,18 +1378,29 @@ def run_ckpt_cell(ctx, cell):
                    created_this_request=created, retained=cs.summary(), **res,
                    sim_inputs=dict(n_prompt_total=len(ids), user_starts=ustarts, msg_starts=mst, lcp_prev=lcp),
                    result_class="counts=correctness; ttft_s=INDICATIVE timing")
+        if native_capture:
+            row.update(raw_request_record_schema=HPR_PREFIX_CAPTURE_SCHEMA, prefix_capture=prefix_capture)
         sim_inputs.append(dict(probe=name, **row["sim_inputs"]))
-        if ok:
+        if ok and (not native_capture or prefix_capture["state"] == "complete"):
             at = (ustarts[-1],) if (arm.junction and ustarts) else ()
-            sres = sim.request(len(ids), ustarts, lcp, n_generated=rec.get("predicted_n") or PROBE_NPREDICT, checkpoint_at=at)
+            if native_capture:
+                sres, next_ids, row["prior_prefix_state"] = hpr_sim_step(sim, prefix_capture, ustarts, prev_slot_ids, prior_probe, at)
+            else:
+                sres = sim.request(len(ids), ustarts, lcp, n_generated=rec.get("predicted_n") or PROBE_NPREDICT, checkpoint_at=at)
+                next_ids = ids
             sizes = sizes_from_rows(reqs + [row])
             row["sim"], b = sim_compare(sres, row, sizes)
             sim_per[name] = row["sim"]; sim_bad.extend(b)
-            prev_ids = ids                           # a refused request never reached the slot
+            prev_slot_ids, prior_probe = next_ids, name
+            seed_suffix_unknown = False
+        elif ok:
+            sim_bad.append(f"{name}: native prefix capture incomplete ({'; '.join(prefix_capture['problems'])})")
         else:
             sim_bad.append(f"{name}: request failed (status {rec['status']})")
         reqs.append(row)
         append_jsonl(ctx["req_path"], emit_request_row(row, a, la, srv, ctx["facts"], loadavg, cell.wave))
+        if native_capture and ok and prefix_capture["state"] != "complete":
+            raise M.CellRefused(f"REFUSED_SIM_PREFIX_CAPTURE: {name}: {'; '.join(prefix_capture['problems'])}")
         return rec, row, mst
 
     rec0, r0, mst0 = do("cold_build", msgs)
@@ -1195,7 +1421,7 @@ def run_ckpt_cell(ctx, cell):
     ok = all(r["error"] is None and r["status"] == 200 for r in reqs)
     pn = {r["probe"]: r["prompt_n"] for r in reqs if r["probe"] != "cold_build"}
     cn = {r["probe"]: r["cache_n"] for r in reqs if r["probe"] != "cold_build"}
-    row = dict(schema=SCHEMA, cell_key=cell.key, result="OK" if ok else "ERRORS", kind="ckpt", model=model, arm=arm.name, unit=cell.unit, L=L, wave=cell.wave,
+    row = dict(schema=SCHEMA, cell_key=cell.key, result=("UNVERIFIED_NATIVE_CONTRACT" if native_capture else "OK") if ok else "ERRORS", kind="ckpt", model=model, arm=arm.name, unit=cell.unit, L=L, wave=cell.wave,
                n_requests=len(reqs), n_ok=sum(1 for r in reqs if r["error"] is None and r["status"] == 200),
                n_fit=n_total, fit_target=target, n_extended=n_ext, c_slot=c_slot, fresh_server=(len(ctx["launch"].cells) == 1),
                ckpt_count=build_summary["count"], ckpt_bytes_mib=build_summary["bytes_total_mib"], ckpt_mib_each=build_summary["mib_each"],
@@ -1209,6 +1435,9 @@ def run_ckpt_cell(ctx, cell):
                sim_positions_cold=cold_sim, sim_inputs=sim_inputs, sim_check=dict(per_probe=sim_per, mismatches=sim_bad),
                sim_matches_log=(not sim_bad and len(sim_per) == len(reqs)),
                binary_sha256=M.file_sha256(os.path.realpath(srv.argv[0])), result_class="counts/prompt_n/bytes=correctness; ttft=INDICATIVE")
+    if native_capture:
+        row.update(native_contract=HPR_NATIVE_CONTRACT, native_contract_sha256=HPR_NATIVE_CONTRACT_SHA256,
+                   reason="prospective instrument only; owner-reviewed golden parity/control probe required before measurement admission")
     return row
 
 
@@ -1412,6 +1641,13 @@ def plan_from_args(a):
 
 
 def cmd_run(a):
+    if getattr(a, "hpr_native_prefix_capture", False):
+        if "gen" in a.stages.split(","):
+            sys.exit("HPR native capture is a ckpt-only prospective instrument; use explicit select/holdout stages")
+        # Instrument identity is not part of historical cell keys. Never let resume reuse, repair,
+        # or overwrite held HPR rows from another contract; a new predeclaration needs a new output.
+        if any((Path(a.out) / name).exists() and (Path(a.out) / name).stat().st_size for name in (CELLS_FILE, REQS_FILE)):
+            sys.exit("HPR native capture requires fresh output; historical/held runs are immutable")
     if a.dry_run:
         return cmd_plan(a)
     if a.port in range(8000, 8201):
@@ -1551,6 +1787,8 @@ def main(argv=None):
     pl = sub.add_parser("plan", help="dry-run: launches, cells, estimates, resources; starts nothing"); common(pl)
     ru = sub.add_parser("run", help="run as a filler: STOP file + deadline + per-cell resume"); common(ru)
     ru.add_argument("--out", required=True); ru.add_argument("--stop-file", default=""); ru.add_argument("--deadline-epoch", type=int, default=0)
+    ru.add_argument("--hpr-native-prefix-capture", action="store_true",
+                    help="opt in to the UNVERIFIED native HPR instrument; captures cannot admit measurement/decision rows until future golden parity/control review")
     ru.add_argument("--no-sim-gate", dest="sim_gate", action="store_false",
                     help="DO NOT USE for decision runs: skip the KVU-12.1a phase gate (every earlier ckpt cell in --out must agree exactly with the simulator)")
     ru.add_argument("--smoke", action="store_true", help="validate the FIRST cell run (checkpoint log lines parsed, prompt_n/cache_n present, control probe sane); abort rc 7 if not");
