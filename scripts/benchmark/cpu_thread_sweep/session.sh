@@ -172,6 +172,7 @@ say "contention: $($PY "$HERE/screen.py" one "$OUT/$LABEL.foreign.jsonl" 2>&1 | 
 say "host: $($PY "$HERE/screen.py" host "$OUT/$LABEL.host.jsonl" --own-threads "$THREADS" 2>&1 | tail -1)"
 numastat -p "$SPID" > "$OUT/$LABEL.end.numastat" 2>&1
 THPEND=$(awk '/^THP_enabled:/{print $2}' "/proc/$SPID/status" 2>/dev/null)
+AFF=$(aff_check "$SPID" "$CPUS") || { say "FATAL live affinity readback failed: $AFF"; die 68; }
 $LIB meta --out "$OUT/$LABEL.meta.json" label="$LABEL" threads="$THREADS" cpus="$CPUS" champ="$CHAMP" version="$VER" \
     trunk="$TRUNK" mtp_head="$MTPH" ctx="$CTX" port="$PORT" pid="$SPID" load_s="$LOADED" client_rc="$CRC" \
     thp_enabled_end="$THPEND" live_affinity="$AFF" placement_load_gib="$PL" started="$(date -u -d "@$T0" +%FT%TZ)" >/dev/null

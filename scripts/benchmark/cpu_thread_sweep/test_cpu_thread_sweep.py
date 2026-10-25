@@ -438,6 +438,22 @@ class TestShellAndProvenance:
     def test_bash_syntax(self, script):
         assert subprocess.run(["bash", "-n", str(HERE / script)], capture_output=True).returncode == 0
 
+    def test_session_captures_live_affinity_before_meta_and_teardown(self, tmp_path):
+        source = (HERE / "session.sh").read_text()
+        capture = 'AFF=$(aff_check "$SPID" "$CPUS")'
+        meta = '$LIB meta --out'
+        teardown = '\nstop_server\n'
+        assert capture in source
+        assert 'live_affinity="$AFF"' in source
+        assert source.index(capture) < source.index(meta) < source.index(teardown)
+
+        self._fake_proc(tmp_path, 314, "0-3", ["0", "1-2", "3"])
+        command = (f'set -u; . "{HERE}/affinity_lib.sh"; SPID=314; CPUS=0-3; PROC_ROOT="{tmp_path}"; '
+                   f'{capture}; printf "live_affinity=%s\\n" "$AFF"')
+        result = subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "live_affinity=threads=3 union_cpus=4 process_mask=0-3 within 0-3"
+
     @staticmethod
     def _fake_proc(root, pid, proc_mask, thread_masks):
         d = root / str(pid)
