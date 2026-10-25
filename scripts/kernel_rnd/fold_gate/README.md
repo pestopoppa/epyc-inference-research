@@ -5,9 +5,20 @@ Compares the shared libs of a candidate store image against the previous champio
 ```
 python3 fold_gate.py --base-image $STORE/<kind>-<old>/bin --new-image $STORE/<kind>-<new>/bin \
     --src-repo /mnt/raid0/llm/llama.cpp --base-commit <old sha> --cand-commit <new sha> \
-    --expected-changed libllama-bench-impl.so      # lib stem(s) the fold is SUPPOSED to change
+    --expected-changed libllama-bench-impl.so \
+    --record-json $RUN/fold_gate_record.json      # immutable Vidya source record; optional
 ```
 Exit 0 = PASS. Run once for `cpu`, once for `gpu`. No manual acceptance: every difference is classified or the gate fails.
+
+`--record-json` is opt-in, so existing stdout, exit status, and callers stay unchanged. It writes one
+complete `epyc.champion_fold_gate.v1` JSON record without replacing an existing file. The record
+contains every per-library class (including missing/extra), code-identity flag, differing details,
+the checked symlink targets, the overall gate verdict, and the base/candidate store paths plus the
+SHA-256 of each store's `SHA256SUMS` file. Every library record carries the exact identity
+proposition that the Vidya verifier projects. An `EXPLAINED-UI` result also emits its own exception
+record, naming `fold_gate.v4:EXPLAINED-UI` as the deterministic rule that accepted it; it does not
+accept any other code difference. Writing the record requires both store `SHA256SUMS` files to be
+present and refuses to replace an earlier receipt.
 
 | class | meaning |
 |---|---|
