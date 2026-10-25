@@ -33,6 +33,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import token as token_module
@@ -40,11 +41,35 @@ import tokenize
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import preflight as P  # noqa: E402
+_KERNEL_RND = str(Path(__file__).resolve().parents[2])
+if _KERNEL_RND not in sys.path:
+    sys.path.insert(0, _KERNEL_RND)
+from autokernel import schemas as S  # noqa: E402
+from autokernel.resource import preflight as P  # noqa: E402
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import schemas as S  # noqa: E402
+
+class PackageImportIsolationTest(unittest.TestCase):
+    def test_package_import_does_not_shadow_stdlib_resource(self):
+        # Run in a clean interpreter so an earlier stdlib import cannot mask
+        # the sys.path pollution this regression guards against.
+        code = (
+            "import runpy; "
+            f"runpy.run_path({str(Path(__file__).resolve())!r}); "
+            "import resource as std_resource; "
+            "assert hasattr(std_resource, 'setrlimit'); "
+            "assert hasattr(std_resource, 'RLIMIT_AS'); "
+            "assert 'autokernel' not in str(std_resource.__file__)"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[4],
+            env={key: value for key, value in os.environ.items()
+                 if key not in {"PYTHONPATH", "PYTHONHOME"}},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
 
 # ---------------------------------------------------------------------------

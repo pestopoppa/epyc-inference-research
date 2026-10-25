@@ -98,7 +98,6 @@ import ast
 import json
 import math
 import os
-import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -107,21 +106,10 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 
 # --- schemas import -------------------------------------------------------
 # The verdict vocabulary has ONE source of truth (`schemas.PASS/FAIL/
-# COULD_NOT_CHECK`); redefining the strings here would create a second one that
-# drifts silently. The `sys.path` fallback is the repo's established idiom for
-# running a module both as a package member and as a plain file, but mutating
-# `sys.path` at import is itself AutoPilot scar item 12 (§2.5) — ambient import
-# identity, *"which code scores your eval depends on which eval ran first"*. The
-# assertion below is the mitigation: the module we bound MUST be the schemas.py
-# sitting next to this package, or we refuse to import at all.
+# COULD_NOT_CHECK`); importing this module as a package member preserves that
+# identity without placing the package named `resource` on `sys.path`.
 _SCHEMAS_PATH = Path(__file__).resolve().parent.parent / "schemas.py"
-try:
-    from .. import schemas as _schemas
-except ImportError:
-    _PKG_DIR = str(_SCHEMAS_PATH.parent)
-    if _PKG_DIR not in sys.path:
-        sys.path.insert(0, _PKG_DIR)
-    import schemas as _schemas  # type: ignore[no-redef]
+from .. import schemas as _schemas
 
 if Path(_schemas.__file__).resolve() != _SCHEMAS_PATH:
     raise ImportError(
