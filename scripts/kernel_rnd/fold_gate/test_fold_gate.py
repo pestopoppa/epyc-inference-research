@@ -1,10 +1,11 @@
 """Unit tests for the fold gate.  Fixtures are compiled at test time (gcc for host ELF, ROCm clang for gfx90a device
 code); nothing binary is committed.  Run: python3 -m pytest scripts/kernel_rnd/fold_gate -q"""
 import os
+import json
+import hashlib
 import shutil
 import subprocess
 import sys
-
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -123,6 +124,18 @@ def test_ui_source_identical_is_proved_by_git(tmp_path):
     assert not fold_gate.ui_source_identical(None, None, None, [])[0]
 
 
+def test_structured_record_write_is_immutable_and_outside_stores(tmp_path):
+    base, candidate = tmp_path / 'base', tmp_path / 'candidate'
+    base.mkdir(); candidate.mkdir()
+    record = {'base': {'store_path': str(base)}, 'candidate': {'store_path': str(candidate)}}
+    target = tmp_path / 'receipt.json'
+    fold_gate._write_record(target, record)
+    with pytest.raises(FileExistsError):
+        fold_gate._write_record(target, record)
+    with pytest.raises(OSError, match='outside the base store'):
+        fold_gate._write_record(base / 'receipt.json', record)
+
+
 @needs_gcc
 def test_driver_end_to_end(tmp_path):
     ba, nb = tmp_path / 'base' / 'bin', tmp_path / 'new' / 'bin'
@@ -146,8 +159,25 @@ def test_driver_end_to_end(tmp_path):
     fold_gate.ui_source_identical = lambda *x: (True, 'stub')
     try:
         lines2 = []
-        assert fold_gate.run(a2, lines2.append), lines2
+        (ba.parent / 'SHA256SUMS').write_text('base fixture manifest\n')
+        (nb.parent / 'SHA256SUMS').write_text('candidate fixture manifest\n')
+        receipt = tmp_path / 'fold_gate_record.json'
+        assert fold_gate.run(a2, lines2.append, record_json=receipt), lines2
         assert any('EXPLAINED-UI' in l for l in lines2) and any('EXPECTED' in l for l in lines2)
+        assert lines2[-1] == '(b) PASS'  # structured output does not replace stdout
+        doc = json.loads(receipt.read_text())
+        assert doc['schema'] == fold_gate.RECORD_SCHEMA
+        assert doc['gate_verdict'] == 'PASS'
+        assert doc['base']['sha256s_sha256'] == hashlib.sha256(b'base fixture manifest\n').hexdigest()
+        assert len(doc['libraries']) == 3
+        by_stem = {row['soname_stem']: row for row in doc['libraries']}
+        assert by_stem['libllama.so']['verdict_class'] == 'EXPLAINED'
+        assert by_stem['libllama.so']['code_identical'] is True
+        assert by_stem['libllama-bench-impl.so']['verdict_class'] == 'EXPECTED'
+        assert by_stem['libllama-bench-impl.so']['code_identical'] is False
+        assert len(doc['exceptions']) == 1
+        assert doc['exceptions'][0]['accepted_by'] == 'fold_gate.v4:EXPLAINED-UI'
+        assert 'executable code is identical' in by_stem['libllama.so']['decided_proposition']
         a3 = fold_gate.argparse.Namespace(**{**vars(a), 'expected_changed': []})
         assert not fold_gate.run(a3, [].append)    # bench-impl change not declared -> FAIL
     finally:
