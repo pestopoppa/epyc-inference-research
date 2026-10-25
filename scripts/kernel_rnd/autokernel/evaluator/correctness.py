@@ -535,7 +535,24 @@ def _verdict(reasons: Sequence[str]) -> schemas.Check:
 
 
 def _under_production_tree(path: str) -> bool:
-    return any(path == root or path.startswith(root + "/") for root in PRODUCTION_TREE_ROOTS)
+    """Whether ``path`` resolves inside a frozen production tree.
+
+    Resolve symlinks and ``..`` before comparing path components. Invalid or
+    unresolvable inputs raise rather than turning an unknown path into an
+    allowed one; relative paths are anchored to the current working directory.
+    """
+    try:
+        if isinstance(path, str) and (not path or "\0" in path):
+            raise ValueError("path must be a non-empty text path without NUL bytes")
+        declared = str(Path(path))
+        resolved = Path(declared).resolve()
+        for root in PRODUCTION_TREE_ROOTS:
+            canonical_root = Path(root).resolve()
+            if resolved == canonical_root or canonical_root in resolved.parents:
+                return True
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise CorrectnessError(f"cannot safely resolve production-tree path {path!r}: {exc}") from exc
+    return False
 
 
 @functools.lru_cache(maxsize=1)

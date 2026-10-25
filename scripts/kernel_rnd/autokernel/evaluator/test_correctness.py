@@ -30,6 +30,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -2927,6 +2928,31 @@ class TestAPlaceholderDigestIsNotAnIdentity(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             build(output_binary_sha256="not-a-digest")
         self.assertIn("lowercase sha256 hex digest", str(ctx.exception))
+
+
+class TestProductionTreeContainment(unittest.TestCase):
+    def test_resolves_traversal_and_path_components(self):
+        root = C.PRODUCTION_TREE_ROOTS[0]
+        escaped_prefix = str(Path(root).parent / "llama.cpp-experimental" / ".."
+                             / "llama.cpp" / "build")
+        self.assertTrue(C._under_production_tree(escaped_prefix))
+        self.assertTrue(C._under_production_tree(f"{root}/build"))
+        self.assertFalse(C._under_production_tree(f"{root}-ak-sibling/build"))
+
+    def test_symlink_alias_into_production_is_inside(self):
+        root = C.PRODUCTION_TREE_ROOTS[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            alias = Path(tmp) / "production-alias"
+            try:
+                alias.symlink_to(Path(root) / "build", target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"cannot create symlink fixture: {exc}")
+            self.assertTrue(C._under_production_tree(str(alias)))
+
+    def test_invalid_paths_fail_closed(self):
+        for invalid in (None, b"/mnt/raid0/llm/llama.cpp/build", ""):
+            with self.subTest(path=invalid), self.assertRaises(C.CorrectnessError):
+                C._under_production_tree(invalid)
 
 
 if __name__ == "__main__":
