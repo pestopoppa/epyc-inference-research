@@ -1,0 +1,17 @@
+/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops: OK
+/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-base.so: OK
+/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-cpu.so: OK
+/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-hip.so: OK
+/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml.so: OK
+run-v3.py: OK
+fixtures-v3.py: OK
+job-v3.sh: OK
+launch-v3.sh: OK
+watch-v3.sh: OK
+dryrun-v3.sh: OK
+preflight-v3.py: OK
+OWNER-REPLY-1038.raw.json: OK
+OWNER-PREFLIGHT-REQUEST.md: OK
+ROWS-PROPOSED-NOT-READY.md: OK
+V2-V3-DRIVER.diff: OK
+/mnt/raid0/llm/tmp/fillers-3c4ca599/filler_run8.sh: OK

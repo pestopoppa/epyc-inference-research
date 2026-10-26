@@ -1,0 +1,124 @@
+{
+  "schema": "epyc.model_free_backend_correctness.v1",
+  "row_id": "ni-gpu-sampler-attention-20261026-v3",
+  "created_utc": "2026-10-26T10:49:50.853545+00:00",
+  "model_free": true,
+  "scope": "synthetic seeded tensor numerical correctness of this exact executable and DSOs",
+  "proposition": "Selected supported ROPE, SOFT_MAX and FLASH_ATTN_EXT cases agree with the native CPU reference under the binary native tolerances; each op must have actual OKs, unsupported cases remain explicit.",
+  "claim_limits": [
+    "Binary-specific conformance only",
+    "No performance or release warrant",
+    "No current-clean-champion or graph-capture/determinism assertion",
+    "No grading rule or independent oracle assertion"
+  ],
+  "source": {
+    "commit": "c463f601bd39d0e313b744c214b8c22f9455bcd3",
+    "removed_worktree_dirty_state": "UNKNOWN",
+    "snapshot": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-pool-elementwise/audit/test-backend-ops-c463f601b.cpp",
+    "sha256": "9a017871d6354015151630af6d75fa88d77637d599a40421a38746e0f67e7239"
+  },
+  "artifacts": [
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops",
+      "sha256": "373b44b7476e7d34cae8e1b03e1bee40c31e515ece133667d440ce4128eb745f"
+    },
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-base.so",
+      "sha256": "23735e6f21028356fa81657393f9c4ffeda70477e3377a4fb49fb2eda55b002a"
+    },
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-cpu.so",
+      "sha256": "a19eb802decd2c76acd7403239ecf0ec054ae4519e2b991d6bd4cfff8edb6b5e"
+    },
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-hip.so",
+      "sha256": "45bca96a11d4dbaa30470e79b24012f32504d8c0edd00710c130ad755ca0bb7c"
+    },
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml.so",
+      "sha256": "9c1bcacfe8fd67b0a1ac8dab56ff6c21ca6825a5771adfd8dbee1606461fa742"
+    }
+  ],
+  "shim": {
+    "path": "/mnt/raid0/llm/cache/shims/nprocs_shim.so",
+    "sha256": "d3103d7ab45e0a5fe9473d7dd401e5462f39c06174b4a64109af6e387e3b3eb4",
+    "SHIM_NPROCS": 2,
+    "original_source_digest_receipt": "51080dff80b0b8a72b7a41ce878f093eff0f13e739fee93d3490421c8d1041e6",
+    "later_recreated_source_matches_receipt": false
+  },
+  "seed": 2026102603,
+  "workload_cap_seconds": 1400,
+  "environment": {
+    "LD_LIBRARY_PATH": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin:/opt/rocm/lib",
+    "LD_PRELOAD": "/mnt/raid0/llm/cache/shims/nprocs_shim.so",
+    "OMP_NUM_THREADS": "1",
+    "HSA_OVERRIDE_CPU_AFFINITY_DEBUG": "0",
+    "GGML_CUDA_DISABLE_GRAPHS": "1"
+  },
+  "evidence": {
+    "residency.json": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/residency.json",
+    "linkage.log": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/linkage.log",
+    "shim-probe.json": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/shim-probe.json",
+    "death-proof.json": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/death-proof.json",
+    "results.json": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/results.json"
+  },
+  "runs": [
+    {
+      "op": "ROPE",
+      "argv": [
+        "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops",
+        "test",
+        "-b",
+        "ROCm0",
+        "-o",
+        "ROPE",
+        "-p",
+        "^type=(f32|f16),ne_a=\\[(128,32,2,1|64,128,2,1|36,16,2457,1)\\],",
+        "-j",
+        "1",
+        "--suite-seed",
+        "2026102603"
+      ],
+      "expected_generated": 328,
+      "raw_log": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/ROPE.log"
+    },
+    {
+      "op": "SOFT_MAX",
+      "argv": [
+        "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops",
+        "test",
+        "-b",
+        "ROCm0",
+        "-o",
+        "SOFT_MAX",
+        "-p",
+        "^type=f32,ne=\\[(16|15|32|1024|1023),(2|15|16|1023|1024),",
+        "-j",
+        "1",
+        "--suite-seed",
+        "2026102603"
+      ],
+      "expected_generated": 207,
+      "raw_log": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/SOFT_MAX.log"
+    },
+    {
+      "op": "FLASH_ATTN_EXT",
+      "argv": [
+        "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops",
+        "test",
+        "-b",
+        "ROCm0",
+        "-o",
+        "FLASH_ATTN_EXT",
+        "-p",
+        "^hsk=(64|128),hsv=(64|128),nh=4,nr23=\\[(1|4),1\\],kv=(113|512|1024),nb=(1|3|32|75),.*type_K=f16,type_V=f16,",
+        "-j",
+        "1",
+        "--suite-seed",
+        "2026102603"
+      ],
+      "expected_generated": 528,
+      "raw_log": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/FLASH_ATTN_EXT.log"
+    }
+  ]
+}

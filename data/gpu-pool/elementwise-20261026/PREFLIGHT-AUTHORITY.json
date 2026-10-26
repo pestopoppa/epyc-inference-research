@@ -1,0 +1,182 @@
+[
+  {
+    "authority": "owner-special-PREFLIGHT-only",
+    "owner_entry": {
+      "ts": "2026-10-26T10:38Z",
+      "from": "workspace-58",
+      "text": "ACK status. PREFLIGHT/DRYRUN ADMISSION (owner-permitted, no row needed, so not circular): q1 (24-47) has NO open grant and NO HOLD now. Run DRY_RUN=1 of real launchers there: taskset -c 26,27 (24,25 reserved for the refactor peer), OMP_NUM_THREADS=1, timeout 300, one at a time, no model/server/GPU device open. Re-check grants/ before each. GPU host 184-191 is NOT for preflight (q3 holds EB). GRANDFATHER: D9 publication + budget-ratchet phase1 armed before 10:33 rule -> send rows now with their existing preflight logs; I register them to q1 24-47. GPU v3 rows need the dryrun log. TOOLING (T2, after T1 A1/A5/A6): build the admission gate per /mnt/raid0/llm/tmp/compute-flags/ws58-dryrun-gate-placement.md (dryrun_check.py run/verify, sidecar pins launcher sha, register+grant_ok rc17, merge preflight as Stage A/B, waivers operator-file only). R6 D6: ALL_PRODUCERS_BOUND precondition accepted; preserving grant+metadata on failure is correct; do not claim exclusivity. Refactor peer answered in its owner-reply.md (q1 24-47, not whole host)."
+    },
+    "owner_receipt_sha256": "bd92629e3a0f8eebb5bb3b05bf4c39788cc95c1ed14dac6038ff6705dd40e5d3",
+    "cpus": [
+      26,
+      27
+    ],
+    "pid": 1191624,
+    "time": 1793011459.601517,
+    "grants": {
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant": "regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z\n",
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant": "regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z\n"
+    },
+    "holds": []
+  },
+  {
+    "authority": "owner-special-PREFLIGHT-only",
+    "owner_entry": {
+      "ts": "2026-10-26T10:38Z",
+      "from": "workspace-58",
+      "text": "ACK status. PREFLIGHT/DRYRUN ADMISSION (owner-permitted, no row needed, so not circular): q1 (24-47) has NO open grant and NO HOLD now. Run DRY_RUN=1 of real launchers there: taskset -c 26,27 (24,25 reserved for the refactor peer), OMP_NUM_THREADS=1, timeout 300, one at a time, no model/server/GPU device open. Re-check grants/ before each. GPU host 184-191 is NOT for preflight (q3 holds EB). GRANDFATHER: D9 publication + budget-ratchet phase1 armed before 10:33 rule -> send rows now with their existing preflight logs; I register them to q1 24-47. GPU v3 rows need the dryrun log. TOOLING (T2, after T1 A1/A5/A6): build the admission gate per /mnt/raid0/llm/tmp/compute-flags/ws58-dryrun-gate-placement.md (dryrun_check.py run/verify, sidecar pins launcher sha, register+grant_ok rc17, merge preflight as Stage A/B, waivers operator-file only). R6 D6: ALL_PRODUCERS_BOUND precondition accepted; preserving grant+metadata on failure is correct; do not claim exclusivity. Refactor peer answered in its owner-reply.md (q1 24-47, not whole host)."
+    },
+    "owner_receipt_sha256": "bd92629e3a0f8eebb5bb3b05bf4c39788cc95c1ed14dac6038ff6705dd40e5d3",
+    "cpus": [
+      26,
+      27
+    ],
+    "pid": 1191624,
+    "time": 1793011459.6024084,
+    "grants": {
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant": "regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z\n",
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant": "regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z\n"
+    },
+    "holds": []
+  },
+  {
+    "authority": "owner-special-PREFLIGHT-only",
+    "owner_entry": {
+      "ts": "2026-10-26T10:38Z",
+      "from": "workspace-58",
+      "text": "ACK status. PREFLIGHT/DRYRUN ADMISSION (owner-permitted, no row needed, so not circular): q1 (24-47) has NO open grant and NO HOLD now. Run DRY_RUN=1 of real launchers there: taskset -c 26,27 (24,25 reserved for the refactor peer), OMP_NUM_THREADS=1, timeout 300, one at a time, no model/server/GPU device open. Re-check grants/ before each. GPU host 184-191 is NOT for preflight (q3 holds EB). GRANDFATHER: D9 publication + budget-ratchet phase1 armed before 10:33 rule -> send rows now with their existing preflight logs; I register them to q1 24-47. GPU v3 rows need the dryrun log. TOOLING (T2, after T1 A1/A5/A6): build the admission gate per /mnt/raid0/llm/tmp/compute-flags/ws58-dryrun-gate-placement.md (dryrun_check.py run/verify, sidecar pins launcher sha, register+grant_ok rc17, merge preflight as Stage A/B, waivers operator-file only). R6 D6: ALL_PRODUCERS_BOUND precondition accepted; preserving grant+metadata on failure is correct; do not claim exclusivity. Refactor peer answered in its owner-reply.md (q1 24-47, not whole host)."
+    },
+    "owner_receipt_sha256": "bd92629e3a0f8eebb5bb3b05bf4c39788cc95c1ed14dac6038ff6705dd40e5d3",
+    "cpus": [
+      26,
+      27
+    ],
+    "pid": 1191624,
+    "time": 1793011459.6115186,
+    "grants": {
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant": "regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z\n",
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant": "regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z\n"
+    },
+    "holds": []
+  },
+  {
+    "authority": "owner-special-PREFLIGHT-only",
+    "owner_entry": {
+      "ts": "2026-10-26T10:38Z",
+      "from": "workspace-58",
+      "text": "ACK status. PREFLIGHT/DRYRUN ADMISSION (owner-permitted, no row needed, so not circular): q1 (24-47) has NO open grant and NO HOLD now. Run DRY_RUN=1 of real launchers there: taskset -c 26,27 (24,25 reserved for the refactor peer), OMP_NUM_THREADS=1, timeout 300, one at a time, no model/server/GPU device open. Re-check grants/ before each. GPU host 184-191 is NOT for preflight (q3 holds EB). GRANDFATHER: D9 publication + budget-ratchet phase1 armed before 10:33 rule -> send rows now with their existing preflight logs; I register them to q1 24-47. GPU v3 rows need the dryrun log. TOOLING (T2, after T1 A1/A5/A6): build the admission gate per /mnt/raid0/llm/tmp/compute-flags/ws58-dryrun-gate-placement.md (dryrun_check.py run/verify, sidecar pins launcher sha, register+grant_ok rc17, merge preflight as Stage A/B, waivers operator-file only). R6 D6: ALL_PRODUCERS_BOUND precondition accepted; preserving grant+metadata on failure is correct; do not claim exclusivity. Refactor peer answered in its owner-reply.md (q1 24-47, not whole host)."
+    },
+    "owner_receipt_sha256": "bd92629e3a0f8eebb5bb3b05bf4c39788cc95c1ed14dac6038ff6705dd40e5d3",
+    "cpus": [
+      26,
+      27
+    ],
+    "pid": 1191624,
+    "time": 1793011459.6137178,
+    "grants": {
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant": "regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z\n",
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant": "regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z\n"
+    },
+    "holds": []
+  },
+  {
+    "authority": "owner-special-PREFLIGHT-only",
+    "owner_entry": {
+      "ts": "2026-10-26T10:38Z",
+      "from": "workspace-58",
+      "text": "ACK status. PREFLIGHT/DRYRUN ADMISSION (owner-permitted, no row needed, so not circular): q1 (24-47) has NO open grant and NO HOLD now. Run DRY_RUN=1 of real launchers there: taskset -c 26,27 (24,25 reserved for the refactor peer), OMP_NUM_THREADS=1, timeout 300, one at a time, no model/server/GPU device open. Re-check grants/ before each. GPU host 184-191 is NOT for preflight (q3 holds EB). GRANDFATHER: D9 publication + budget-ratchet phase1 armed before 10:33 rule -> send rows now with their existing preflight logs; I register them to q1 24-47. GPU v3 rows need the dryrun log. TOOLING (T2, after T1 A1/A5/A6): build the admission gate per /mnt/raid0/llm/tmp/compute-flags/ws58-dryrun-gate-placement.md (dryrun_check.py run/verify, sidecar pins launcher sha, register+grant_ok rc17, merge preflight as Stage A/B, waivers operator-file only). R6 D6: ALL_PRODUCERS_BOUND precondition accepted; preserving grant+metadata on failure is correct; do not claim exclusivity. Refactor peer answered in its owner-reply.md (q1 24-47, not whole host)."
+    },
+    "owner_receipt_sha256": "bd92629e3a0f8eebb5bb3b05bf4c39788cc95c1ed14dac6038ff6705dd40e5d3",
+    "cpus": [
+      26,
+      27
+    ],
+    "pid": 1191624,
+    "time": 1793011459.615785,
+    "grants": {
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant": "regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z\n",
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant": "regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z\n"
+    },
+    "holds": []
+  },
+  {
+    "authority": "owner-special-PREFLIGHT-only",
+    "owner_entry": {
+      "ts": "2026-10-26T10:38Z",
+      "from": "workspace-58",
+      "text": "ACK status. PREFLIGHT/DRYRUN ADMISSION (owner-permitted, no row needed, so not circular): q1 (24-47) has NO open grant and NO HOLD now. Run DRY_RUN=1 of real launchers there: taskset -c 26,27 (24,25 reserved for the refactor peer), OMP_NUM_THREADS=1, timeout 300, one at a time, no model/server/GPU device open. Re-check grants/ before each. GPU host 184-191 is NOT for preflight (q3 holds EB). GRANDFATHER: D9 publication + budget-ratchet phase1 armed before 10:33 rule -> send rows now with their existing preflight logs; I register them to q1 24-47. GPU v3 rows need the dryrun log. TOOLING (T2, after T1 A1/A5/A6): build the admission gate per /mnt/raid0/llm/tmp/compute-flags/ws58-dryrun-gate-placement.md (dryrun_check.py run/verify, sidecar pins launcher sha, register+grant_ok rc17, merge preflight as Stage A/B, waivers operator-file only). R6 D6: ALL_PRODUCERS_BOUND precondition accepted; preserving grant+metadata on failure is correct; do not claim exclusivity. Refactor peer answered in its owner-reply.md (q1 24-47, not whole host)."
+    },
+    "owner_receipt_sha256": "bd92629e3a0f8eebb5bb3b05bf4c39788cc95c1ed14dac6038ff6705dd40e5d3",
+    "cpus": [
+      26,
+      27
+    ],
+    "pid": 1191624,
+    "time": 1793011459.6178699,
+    "grants": {
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant": "regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z\n",
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant": "regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z\n"
+    },
+    "holds": []
+  },
+  {
+    "authority": "owner-special-PREFLIGHT-only",
+    "owner_entry": {
+      "ts": "2026-10-26T10:38Z",
+      "from": "workspace-58",
+      "text": "ACK status. PREFLIGHT/DRYRUN ADMISSION (owner-permitted, no row needed, so not circular): q1 (24-47) has NO open grant and NO HOLD now. Run DRY_RUN=1 of real launchers there: taskset -c 26,27 (24,25 reserved for the refactor peer), OMP_NUM_THREADS=1, timeout 300, one at a time, no model/server/GPU device open. Re-check grants/ before each. GPU host 184-191 is NOT for preflight (q3 holds EB). GRANDFATHER: D9 publication + budget-ratchet phase1 armed before 10:33 rule -> send rows now with their existing preflight logs; I register them to q1 24-47. GPU v3 rows need the dryrun log. TOOLING (T2, after T1 A1/A5/A6): build the admission gate per /mnt/raid0/llm/tmp/compute-flags/ws58-dryrun-gate-placement.md (dryrun_check.py run/verify, sidecar pins launcher sha, register+grant_ok rc17, merge preflight as Stage A/B, waivers operator-file only). R6 D6: ALL_PRODUCERS_BOUND precondition accepted; preserving grant+metadata on failure is correct; do not claim exclusivity. Refactor peer answered in its owner-reply.md (q1 24-47, not whole host)."
+    },
+    "owner_receipt_sha256": "bd92629e3a0f8eebb5bb3b05bf4c39788cc95c1ed14dac6038ff6705dd40e5d3",
+    "cpus": [
+      26,
+      27
+    ],
+    "pid": 1191624,
+    "time": 1793011460.1774013,
+    "grants": {
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant": "regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z\n",
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant": "regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z\n"
+    },
+    "holds": []
+  },
+  {
+    "authority": "owner-special-PREFLIGHT-only",
+    "owner_entry": {
+      "ts": "2026-10-26T10:38Z",
+      "from": "workspace-58",
+      "text": "ACK status. PREFLIGHT/DRYRUN ADMISSION (owner-permitted, no row needed, so not circular): q1 (24-47) has NO open grant and NO HOLD now. Run DRY_RUN=1 of real launchers there: taskset -c 26,27 (24,25 reserved for the refactor peer), OMP_NUM_THREADS=1, timeout 300, one at a time, no model/server/GPU device open. Re-check grants/ before each. GPU host 184-191 is NOT for preflight (q3 holds EB). GRANDFATHER: D9 publication + budget-ratchet phase1 armed before 10:33 rule -> send rows now with their existing preflight logs; I register them to q1 24-47. GPU v3 rows need the dryrun log. TOOLING (T2, after T1 A1/A5/A6): build the admission gate per /mnt/raid0/llm/tmp/compute-flags/ws58-dryrun-gate-placement.md (dryrun_check.py run/verify, sidecar pins launcher sha, register+grant_ok rc17, merge preflight as Stage A/B, waivers operator-file only). R6 D6: ALL_PRODUCERS_BOUND precondition accepted; preserving grant+metadata on failure is correct; do not claim exclusivity. Refactor peer answered in its owner-reply.md (q1 24-47, not whole host)."
+    },
+    "owner_receipt_sha256": "bd92629e3a0f8eebb5bb3b05bf4c39788cc95c1ed14dac6038ff6705dd40e5d3",
+    "cpus": [
+      26,
+      27
+    ],
+    "pid": 1191624,
+    "time": 1793011460.2111437,
+    "grants": {
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant": "regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z\n",
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant": "regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z\n"
+    },
+    "holds": []
+  },
+  {
+    "authority": "owner-special-PREFLIGHT-only",
+    "owner_entry": {
+      "ts": "2026-10-26T10:38Z",
+      "from": "workspace-58",
+      "text": "ACK status. PREFLIGHT/DRYRUN ADMISSION (owner-permitted, no row needed, so not circular): q1 (24-47) has NO open grant and NO HOLD now. Run DRY_RUN=1 of real launchers there: taskset -c 26,27 (24,25 reserved for the refactor peer), OMP_NUM_THREADS=1, timeout 300, one at a time, no model/server/GPU device open. Re-check grants/ before each. GPU host 184-191 is NOT for preflight (q3 holds EB). GRANDFATHER: D9 publication + budget-ratchet phase1 armed before 10:33 rule -> send rows now with their existing preflight logs; I register them to q1 24-47. GPU v3 rows need the dryrun log. TOOLING (T2, after T1 A1/A5/A6): build the admission gate per /mnt/raid0/llm/tmp/compute-flags/ws58-dryrun-gate-placement.md (dryrun_check.py run/verify, sidecar pins launcher sha, register+grant_ok rc17, merge preflight as Stage A/B, waivers operator-file only). R6 D6: ALL_PRODUCERS_BOUND precondition accepted; preserving grant+metadata on failure is correct; do not claim exclusivity. Refactor peer answered in its owner-reply.md (q1 24-47, not whole host)."
+    },
+    "owner_receipt_sha256": "bd92629e3a0f8eebb5bb3b05bf4c39788cc95c1ed14dac6038ff6705dd40e5d3",
+    "cpus": [
+      26,
+      27
+    ],
+    "pid": 1191624,
+    "time": 1793011460.3259115,
+    "grants": {
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant": "regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z\n",
+      "/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant": "regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z\n"
+    },
+    "holds": []
+  }
+]

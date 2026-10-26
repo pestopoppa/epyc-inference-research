@@ -1,0 +1,11 @@
+{
+  "raw_runs": 3,
+  "native_multiline_ROCm_headers_every_run": true,
+  "raw_totals": {
+    "observed": 1063,
+    "passed": 1063,
+    "unsupported": 0,
+    "failed": 0
+  },
+  "raw_every_row_matches_record": true
+}

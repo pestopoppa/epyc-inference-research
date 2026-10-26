@@ -1,0 +1,14 @@
+{
+  "samples": 1331,
+  "partial": 7,
+  "partial_with_task_skip": 7,
+  "partial_without_task_skip": 0,
+  "overlap_false": 0,
+  "empty_tasks": 0,
+  "masks": [
+    "184-191"
+  ],
+  "all_maps_pinned_directory": true,
+  "pid_identity_stable": true,
+  "raw_identity_fields_consistent": true
+}

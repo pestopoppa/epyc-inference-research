@@ -1,0 +1,38 @@
+[
+  {
+    "op": "ROPE",
+    "rc": 0,
+    "generated_expected": 328,
+    "observed": 328,
+    "passed": 328,
+    "unsupported": 0,
+    "failed": [],
+    "resident_samples": 827,
+    "seconds": 20.083059549331665,
+    "max_tasks": 7
+  },
+  {
+    "op": "SOFT_MAX",
+    "rc": 0,
+    "generated_expected": 207,
+    "observed": 207,
+    "passed": 207,
+    "unsupported": 0,
+    "failed": [],
+    "resident_samples": 131,
+    "seconds": 3.4848904609680176,
+    "max_tasks": 7
+  },
+  {
+    "op": "FLASH_ATTN_EXT",
+    "rc": 0,
+    "generated_expected": 528,
+    "observed": 528,
+    "passed": 528,
+    "unsupported": 0,
+    "failed": [],
+    "resident_samples": 319,
+    "seconds": 8.266695499420166,
+    "max_tasks": 7
+  }
+]

@@ -1,0 +1,4 @@
+/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-f-fb.grant
+regions=0-23 start=2026-10-26T07:37Z end=2026-10-26T11:37Z
+/mnt/raid0/llm/tmp/compute-flags/grants/kpf64-eb-q2q3.grant
+regions=48-95 start=2026-10-26T05:32Z end=2026-10-27T06:32Z

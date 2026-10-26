@@ -1,0 +1,4 @@
+2026-10-26T10:47:35Z
+1200017  1000 1200017 Mon Oct 26 10:47:34 2026 /bin/bash /mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/watch-v3.sh
+[raw /proc stat line omitted: pii_precommit false positive on pid digits]
+/bin/bash /mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/watch-v3.sh 

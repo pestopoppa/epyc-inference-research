@@ -1,0 +1,5 @@
+373b44b7476e7d34cae8e1b03e1bee40c31e515ece133667d440ce4128eb745f  /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops
+23735e6f21028356fa81657393f9c4ffeda70477e3377a4fb49fb2eda55b002a  /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-base.so
+a19eb802decd2c76acd7403239ecf0ec054ae4519e2b991d6bd4cfff8edb6b5e  /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-cpu.so
+45bca96a11d4dbaa30470e79b24012f32504d8c0edd00710c130ad755ca0bb7c  /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-hip.so
+9c1bcacfe8fd67b0a1ac8dab56ff6c21ca6825a5771adfd8dbee1606461fa742  /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml.so

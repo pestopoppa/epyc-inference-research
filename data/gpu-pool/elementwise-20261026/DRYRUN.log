@@ -1,0 +1,46 @@
+run-v3.py: OK
+fixtures-v3.py: OK
+job-v3.sh: OK
+launch-v3.sh: OK
+watch-v3.sh: OK
+dryrun-v3.sh: OK
+preflight-v3.py: OK
+OWNER-REPLY-1038.raw.json: OK
+OWNER-PREFLIGHT-REQUEST.md: OK
+ROWS-PROPOSED-NOT-READY.md: OK
+V2-V3-DRIVER.diff: OK
+/mnt/raid0/llm/tmp/fillers-3c4ca599/filler_run8.sh: OK
+run-v3.py: OK
+fixtures-v3.py: OK
+job-v3.sh: OK
+launch-v3.sh: OK
+watch-v3.sh: OK
+dryrun-v3.sh: OK
+preflight-v3.py: OK
+OWNER-REPLY-1038.raw.json: OK
+OWNER-PREFLIGHT-REQUEST.md: OK
+ROWS-PROPOSED-NOT-READY.md: OK
+V2-V3-DRIVER.diff: OK
+/mnt/raid0/llm/tmp/fillers-3c4ca599/filler_run8.sh: OK
+binary : /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops
+expect : libraries under /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909
+
+  OK   libggml.so.0                 -> /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml.so.0
+  OK   libggml-cpu.so.0             -> /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-cpu.so.0
+  OK   libggml-base.so.0            -> /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-base.so.0
+  OK   libggml-hip.so.0             -> /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-hip.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin
+         2	/opt/rocm/lib
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.
+isolated fake missing-grant/HOLD/STOP/shape refusal controls passed; not real scheduling authority
+25 sampler controls passed; fixture data are not native numerical/residency evidence
+Native source c463f601b/artifacts pinned; Python sampler repair is interpreted source sealed now; native binary need not postdate Python repair.
+DRYRUN PASS: pinned owner10:38Z special preflight authority, one thread/two CPUs, sealed paths/pins/source/knobs/linkage/env,184-191 mask,8GiB host request,1800>=1400+300,ports=none,owned flag paths and fake abort guards+25 sampler controls. No native GPU benchmark/model/server executed.

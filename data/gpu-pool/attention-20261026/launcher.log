@@ -1,0 +1,32 @@
+run-v3.py: OK
+fixtures-v3.py: OK
+job-v3.sh: OK
+launch-v3.sh: OK
+watch-v3.sh: OK
+dryrun-v3.sh: OK
+preflight-v3.py: OK
+OWNER-REPLY-1038.raw.json: OK
+OWNER-PREFLIGHT-REQUEST.md: OK
+ROWS-PROPOSED-NOT-READY.md: OK
+V2-V3-DRIVER.diff: OK
+/mnt/raid0/llm/tmp/fillers-3c4ca599/filler_run8.sh: OK
+2026-10-26T10:47:35Z [ni-gpu-sampler-attention-20261026-v3] launcher up pid=1200016 class=gpu poll=45s grants=/mnt/raid0/llm/tmp/compute-flags/grants stop=/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/STOP minwin=1500s ports=none
+2026-10-26T10:49:50Z [ni-gpu-sampler-attention-20261026-v3] START regions=mi210_0,184-191 cpus=184-191 threads=8 gpu=1 end=2026-10-26T11:19Z
+[region-lock] acquiring gpu-quiet shared as role='build' (timeout_s=1750.0) …
+[region-lock] held gpu-quiet shared + regions [] after 0.0s wait; running: /bin/bash /mnt/raid0/llm/tmp/fillers-3c4ca599/filler_run8.sh --inner --id ni-gpu-sampler-attention-20261026-v3 --class gpu --cmd /bin/bash /mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/job-v3.sh --min-window 1500 --stop /mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/STOP --port  --workdir /mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention --gpu-threads 184-191
+2026-10-26T10:49:50Z mi210_0 flock held
+run-v3.py: OK
+fixtures-v3.py: OK
+job-v3.sh: OK
+launch-v3.sh: OK
+watch-v3.sh: OK
+dryrun-v3.sh: OK
+preflight-v3.py: OK
+OWNER-REPLY-1038.raw.json: OK
+OWNER-PREFLIGHT-REQUEST.md: OK
+ROWS-PROPOSED-NOT-READY.md: OK
+V2-V3-DRIVER.diff: OK
+/mnt/raid0/llm/tmp/fillers-3c4ca599/filler_run8.sh: OK
+job rc=0
+2026-10-26T10:50:23Z [ni-gpu-sampler-attention-20261026-v3] ended rc=0 reason=complete (grant deleted)
+2026-10-26T10:50:23Z [ni-gpu-sampler-attention-20261026-v3] ALL DONE: wrote /mnt/raid0/llm/tmp/compute-flags/grants/ni-gpu-sampler-attention-20261026-v3.complete, row marked COMPLETE; exiting for good

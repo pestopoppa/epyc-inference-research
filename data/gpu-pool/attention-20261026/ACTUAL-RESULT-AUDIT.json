@@ -1,0 +1,147 @@
+{
+  "runs": 3,
+  "owned_pids": 3,
+  "unique_owned_pids": 3,
+  "native_all_rc0": true,
+  "full_counts": true,
+  "resident_every_run": true,
+  "all_actual_masks184_191": true,
+  "totals": {
+    "expected": 1063,
+    "observed": 1063,
+    "passed": 1063,
+    "unsupported": 0,
+    "failed": 0,
+    "samples": 1331,
+    "qualified_samples": 1277,
+    "partial_samples": 7,
+    "skipped_tasks": 7,
+    "missing_observations": 0
+  },
+  "skipped_errno_counts": [
+    {
+      "errno": 2,
+      "count": 1
+    },
+    {
+      "errno": 3,
+      "count": 6
+    }
+  ],
+  "missing_errno_counts": [],
+  "by_op": [
+    {
+      "op": "FLASH_ATTN_EXT",
+      "runs": 1,
+      "seeds": [
+        2026102603
+      ],
+      "expected": 528,
+      "observed": 528,
+      "passed": 528,
+      "unsupported": 0,
+      "qualified_samples": 319,
+      "min_qualified_per_run": 319,
+      "max_tasks": 7
+    },
+    {
+      "op": "ROPE",
+      "runs": 1,
+      "seeds": [
+        2026102603
+      ],
+      "expected": 328,
+      "observed": 328,
+      "passed": 328,
+      "unsupported": 0,
+      "qualified_samples": 827,
+      "min_qualified_per_run": 827,
+      "max_tasks": 7
+    },
+    {
+      "op": "SOFT_MAX",
+      "runs": 1,
+      "seeds": [
+        2026102603
+      ],
+      "expected": 207,
+      "observed": 207,
+      "passed": 207,
+      "unsupported": 0,
+      "qualified_samples": 131,
+      "min_qualified_per_run": 131,
+      "max_tasks": 7
+    }
+  ],
+  "detail": [
+    {
+      "op": "ROPE",
+      "seed": 2026102603,
+      "pid": 1205422,
+      "rc": 0,
+      "expected": 328,
+      "observed": 328,
+      "passed": 328,
+      "unsupported": 0,
+      "failed_count": 0,
+      "reported_resident": 827,
+      "recomputed_resident": 827,
+      "samples": 842,
+      "partial_samples": 3,
+      "overlap_samples": 842,
+      "skipped_tasks": 3,
+      "missing_observations": 0,
+      "max_tasks": 7,
+      "masks": [
+        "184-191"
+      ],
+      "mask_escape": false
+    },
+    {
+      "op": "SOFT_MAX",
+      "seed": 2026102603,
+      "pid": 1211759,
+      "rc": 0,
+      "expected": 207,
+      "observed": 207,
+      "passed": 207,
+      "unsupported": 0,
+      "failed_count": 0,
+      "reported_resident": 131,
+      "recomputed_resident": 131,
+      "samples": 144,
+      "partial_samples": 0,
+      "overlap_samples": 144,
+      "skipped_tasks": 0,
+      "missing_observations": 0,
+      "max_tasks": 7,
+      "masks": [
+        "184-191"
+      ],
+      "mask_escape": false
+    },
+    {
+      "op": "FLASH_ATTN_EXT",
+      "seed": 2026102603,
+      "pid": 1215000,
+      "rc": 0,
+      "expected": 528,
+      "observed": 528,
+      "passed": 528,
+      "unsupported": 0,
+      "failed_count": 0,
+      "reported_resident": 319,
+      "recomputed_resident": 319,
+      "samples": 345,
+      "partial_samples": 4,
+      "overlap_samples": 345,
+      "skipped_tasks": 4,
+      "missing_observations": 0,
+      "max_tasks": 7,
+      "masks": [
+        "184-191"
+      ],
+      "mask_escape": false
+    }
+  ]
+}

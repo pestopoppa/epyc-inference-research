@@ -1,0 +1,159 @@
+[
+  {
+    "time": 1793011794.4558723,
+    "pid": 1205422,
+    "start_ticks": "113426458",
+    "overlap": true,
+    "tasks": 5,
+    "masks": {
+      "1205422": "184-191",
+      "1205428": "184-191",
+      "1205530": "184-191",
+      "1205531": "184-191",
+      "1205532": "184-191"
+    },
+    "skipped_tasks": [
+      {
+        "tid": "1206262",
+        "errno": 3,
+        "reason": "task vanished during status read"
+      }
+    ],
+    "partial": true
+  },
+  {
+    "time": 1793011798.9560783,
+    "pid": 1205422,
+    "start_ticks": "113426458",
+    "overlap": true,
+    "tasks": 5,
+    "masks": {
+      "1205422": "184-191",
+      "1205428": "184-191",
+      "1205530": "184-191",
+      "1205531": "184-191",
+      "1205532": "184-191"
+    },
+    "skipped_tasks": [
+      {
+        "tid": "1207580",
+        "errno": 3,
+        "reason": "task vanished during status read"
+      }
+    ],
+    "partial": true
+  },
+  {
+    "time": 1793011804.183539,
+    "pid": 1205422,
+    "start_ticks": "113426458",
+    "overlap": true,
+    "tasks": 6,
+    "masks": {
+      "1205422": "184-191",
+      "1205428": "184-191",
+      "1205530": "184-191",
+      "1205531": "184-191",
+      "1205532": "184-191",
+      "1209513": "184-191"
+    },
+    "skipped_tasks": [
+      {
+        "tid": "1209512",
+        "errno": 3,
+        "reason": "task vanished during status read"
+      }
+    ],
+    "partial": true
+  },
+  {
+    "time": 1793011817.4083855,
+    "pid": 1215000,
+    "start_ticks": "113428815",
+    "overlap": true,
+    "tasks": 6,
+    "masks": {
+      "1215000": "184-191",
+      "1215003": "184-191",
+      "1215066": "184-191",
+      "1215067": "184-191",
+      "1215068": "184-191",
+      "1219021": "184-191"
+    },
+    "skipped_tasks": [
+      {
+        "tid": "1219022",
+        "errno": 3,
+        "reason": "task vanished during status read"
+      }
+    ],
+    "partial": true
+  },
+  {
+    "time": 1793011819.7623878,
+    "pid": 1215000,
+    "start_ticks": "113428815",
+    "overlap": true,
+    "tasks": 6,
+    "masks": {
+      "1215000": "184-191",
+      "1215003": "184-191",
+      "1215066": "184-191",
+      "1215067": "184-191",
+      "1215068": "184-191",
+      "1223482": "184-191"
+    },
+    "skipped_tasks": [
+      {
+        "tid": "1223481",
+        "errno": 2,
+        "reason": "task vanished during status read"
+      }
+    ],
+    "partial": true
+  },
+  {
+    "time": 1793011820.0327897,
+    "pid": 1215000,
+    "start_ticks": "113428815",
+    "overlap": true,
+    "tasks": 5,
+    "masks": {
+      "1215000": "184-191",
+      "1215003": "184-191",
+      "1215066": "184-191",
+      "1215067": "184-191",
+      "1215068": "184-191"
+    },
+    "skipped_tasks": [
+      {
+        "tid": "1224089",
+        "errno": 3,
+        "reason": "task vanished during status read"
+      }
+    ],
+    "partial": true
+  },
+  {
+    "time": 1793011820.7249584,
+    "pid": 1215000,
+    "start_ticks": "113428815",
+    "overlap": true,
+    "tasks": 5,
+    "masks": {
+      "1215000": "184-191",
+      "1215003": "184-191",
+      "1215066": "184-191",
+      "1215067": "184-191",
+      "1215068": "184-191"
+    },
+    "skipped_tasks": [
+      {
+        "tid": "1225394",
+        "errno": 3,
+        "reason": "task vanished during status read"
+      }
+    ],
+    "partial": true
+  }
+]

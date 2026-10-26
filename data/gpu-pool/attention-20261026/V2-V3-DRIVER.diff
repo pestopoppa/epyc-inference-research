@@ -1,0 +1,16 @@
+--- /mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/attention/run-v2.py	2026-10-26 08:20:29.740628990 +0000
++++ /mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention/run-v3.py	2026-10-26 10:38:45.958407249 +0000
+@@ -1,11 +1,11 @@
+ #!/usr/bin/python3
+ """Grant-only finite artifact correctness; no timing or release inference."""
+ import ctypes, datetime, glob, hashlib, json, os, pathlib, re, signal, subprocess, time
+-ROOT=pathlib.Path('/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/attention')
++ROOT=pathlib.Path('/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-sampler-exit-recovery/v3/attention')
+ BUILD=pathlib.Path('/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909')
+ BIN=BUILD/'bin/test-backend-ops'
+ FLAGS=pathlib.Path('/mnt/raid0/llm/tmp/compute-flags')
+-ID='ni-gpu-sampler-attention-20261026-v2'
++ID='ni-gpu-sampler-attention-20261026-v3'
+ ALLOWED=set(range(184,192))
+ STARTED=time.monotonic()
+ CASES=[('ROPE',r'^type=(f32|f16),ne_a=\[(128,32,2,1|64,128,2,1|36,16,2457,1)\],',328),
