@@ -1,0 +1,38 @@
+name: actor native wire gate
+on:
+  push:
+    paths: ['scripts/kernel_rnd/autokernel/loop/**', '.github/workflows/actor-wire.yml']
+  pull_request:
+    paths: ['scripts/kernel_rnd/autokernel/loop/**', '.github/workflows/actor-wire.yml']
+permissions:
+  contents: read
+jobs:
+  native-wire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned native clients and test dependencies
+        run: |
+          npm install --global @openai/codex@0.163.0 @anthropic-ai/claude-code@2.1.310 opencode-ai@1.18.31
+          python -m pip install pytest mcp
+      - name: Admission and failure controls
+        env:
+          PYTHONPATH: scripts/kernel_rnd
+        run: python -m pytest -q scripts/kernel_rnd/autokernel/loop/test_actor_wire_gate.py
+      - name: Native provider matrix without credentials or inference
+        env:
+          PYTHONPATH: scripts/kernel_rnd
+        run: python -m autokernel.loop.actor_wire_test --matrix --record actor-wire-pass.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actor-wire-record
+          path: actor-wire-pass.json
+          if-no-files-found: warn

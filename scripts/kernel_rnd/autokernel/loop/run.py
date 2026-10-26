@@ -748,6 +748,43 @@ def measurement_epoch_inputs(epoch_inputs: Mapping[str, Any],
         if resolved_campaign is not None else None)
 
 
+def _actor_wire_seats(args, planner_backend, critic_backend, lane_backends,
+                      author_plan, resolved_campaign=None):
+    """Effective factory seats, including lane overrides and every author member."""
+    from . import actor_wire_gate
+    common = {"bounded": args.actor_seat == "bounded", "fan_out": args.actor_fan_out,
+              "steps": args.actor_steps, "context_mode": args.actor_context_mode,
+              **_actor_knobs(args), **_actor_limits(args), **_actor_budgets(args),
+              **_actor_thinking(args), **_actor_sandbox(args), **_actor_salvage(args),
+              **_actor_reasoning_history(args), **_actor_serving(args)}
+    seat = actors.ActorSeat(**common)
+    launch = _actor_config(args, resolved_campaign)
+    seats = []
+    def add(role, backend, config):
+        seats.append(actor_wire_gate.describe(role, backend, config,
+                     timeout_s=args.actor_timeout_s, launch_config=launch))
+    for role in ("planner", "author"):
+        add(role, planner_backend, seat)
+        for backend in lane_backends.values():
+            add(role, backend, replace(seat, author_thinking="default",
+                                      planner_reasoning_history="keep"))
+    add("critic", critic_backend, actors.ActorSeat(
+        bounded=False, **_actor_knobs(args), **_actor_limits(args), **_actor_sandbox(args),
+        serving_f1=_actor_serving(args)["serving_f1"]))
+    if author_plan.panel:
+        for spec in author_plan.specs:
+            budget = author_plan.budget.for_member(spec)
+            member = actors.ActorSeat(
+                bounded=args.actor_seat == "bounded", fan_out=args.actor_fan_out,
+                steps=args.actor_steps, context_mode=args.actor_context_mode,
+                **_actor_knobs(args), **{**_actor_limits(args),
+                    "context_limit": budget.context_limit,
+                    "author_output_limit": budget.output_limit},
+                **_actor_budgets(args), **{**_actor_thinking(args), "author_thinking": spec.thinking},
+                **_actor_sandbox(args), serving_f1=_actor_serving(args)["serving_f1"])
+            add("author", planner_backend, member)
+    return actor_wire_gate.normalize(seats)
+
 def _actor_config(args, resolved_campaign=None) -> dict[str, Any]:
     """This launch's actor/backend configuration: provenance only, never identity.
 
@@ -2614,6 +2651,10 @@ def main(argv: list[str] | None = None) -> int:
                              "calls; 0 = none (default: %(default)s)")
     parser.add_argument("--actor-steps", type=int, default=actors.ActorSeat.steps,
                         help="bounded seat: opencode step cap per call (default: %(default)s)")
+    parser.add_argument("--actor-wire-test-record", type=Path,
+                        help="passing native-client wire record for this exact actor seat configuration")
+    parser.add_argument("--allow-untested-actor-seats", metavar="REASON",
+                        help="explicit wire-gate override, durably recorded before actor calls")
     parser.add_argument("--actor-timeout-s", type=int, default=actors.DEFAULT_TIMEOUT_S,
                         help="wall budget per planner/critic call before it is a transient "
                              "(default: %(default)s). The default was sized for cloud actors; "
@@ -3699,11 +3740,29 @@ def main(argv: list[str] | None = None) -> int:
                 args, anchor_commit=anchor_commit, experimental=experimental,
                 epoch=epoch, measurement_epoch=measurement_epoch,
                 actor_config=launch_actor_config, carry=resume_carry)
+        # Export a wire request without claiming admission or running any client.
+        from . import actor_wire_gate
+        wire_request = actor_wire_gate.request(_actor_wire_seats(
+            args, planner_backend, critic_backend, lane_backends, author_plan,
+            resolved_campaign if selected_identity is not None else None))
+        actor_wire_gate.write(args.store / "actor-wire-request.json", wire_request)
+        print(f"actors    UNTESTED: wire request {args.store / 'actor-wire-request.json'}")
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
     if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
         parser.error("direct runtime calibration requires the original serving launch")
+    # OAB-29 admission precedes every actor call, including resumed work.
+    from . import actor_wire_gate
+    try:
+        actor_wire_receipt = actor_wire_gate.admit(
+            _actor_wire_seats(args, planner_backend, critic_backend, lane_backends,
+                              author_plan, resolved_campaign if selected_identity is not None else None),
+            store=args.store, out=args.out, record_path=args.actor_wire_test_record,
+            override=args.allow_untested_actor_seats)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        parser.error(f"actor wire gate refused: {exc}")
+    launch_actor_config["actor_wire_gate"] = actor_wire_receipt
     runtime_preparation = ({} if runtime_enabled else {"status": "keep_grade_declared_arms",
         "reason": ("declared bit-exact runtime arms are judged by the matched paired serving A/B "
                    "against the current recipe's matched floor; planner-proposed runtime "
@@ -7861,6 +7920,7 @@ def main(argv: list[str] | None = None) -> int:
                 "schema": "epyc.autokernel.loop_run.v1",
                 "epoch": epoch, "anchor_commit": anchor_commit,
                 "measurement_epoch": measurement_epoch, "actor_config": launch_actor_config,
+                "actor_wire_gate": actor_wire_receipt,
                 "comparability": history_view[0],
                 **({"runtime_preparation": dict(runtime_preparation)} if direct_launch else {}),
                 **({"runtime_recipe_reference": runtime_recipe_reference[0]}

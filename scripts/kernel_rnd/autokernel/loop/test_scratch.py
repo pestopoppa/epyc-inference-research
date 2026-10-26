@@ -673,6 +673,31 @@ _SELF_CLEANING = "self-cleaning with-block temp; lands in the run scope's tmp (a
 #: `module:qualname:kind` -> (count, reason). Counts are exact: a NEW creating call in an
 #: allowlisted function fails too, so each one is reviewed.
 ALLOWLIST: dict[str, tuple[int, str]] = {
+    # Exact existing producer sites audited after OAB-29's full inventory check.
+    # Output paths below are durable evidence; probe scratch is with-block owned.
+    "ab_server_pair.py:ServerPair.start:mkdir": (1, "evidence: explicit log_dir retains each arm's server logs"),
+    "ab_server_pair.py:ServerPair.start:open-write": (1, "evidence: per-arm append log retained under explicit log_dir"),
+    "apply_registry_serving_floors.py:apply_plan:write_text": (1, "durable registry update: temporary sibling atomically replaces validated registry"),
+    "champion_reanchor.py:launch_paths:mkdir": (1, "evidence: explicit out_dir retains validated relaunch artifacts without replacing originals"),
+    "cpu_repack_cases.py:calibrate:TemporaryDirectory": (1, _SELF_CLEANING),
+    "cpu_repack_cases.py:calibrate:mkdir": (1, "evidence: parent directory for explicit calibration manifest output"),
+    "cpu_repack_cases.py:calibrate:write_text": (2, "evidence: explicit raw calibration output and atomically replaced manifest"),
+    "cpu_repack_cases.py:check_case_set:TemporaryDirectory": (1, _SELF_CLEANING),
+    "cpu_repack_cases.py:fixture_regression:TemporaryDirectory": (1, _SELF_CLEANING),
+    "cpu_repack_cases.py:fixture_regression:mkdir": (2, "scratch: per-mode and negative probes inside the function's with-block temporary directory"),
+    "cpu_repack_cases.py:main:write_text": (1, "evidence: explicit CLI --report output"),
+    "cpu_repack_cases.py:run_probe:write_text": (1, "scratch: case TSV inside callers' with-block temporary probe directory"),
+    "floor_registry.py:_write_atomic:mkdir": (1, "evidence: parent of immutable floor-registry records"),
+    "floor_registry.py:_write_atomic:os.link": (1, "evidence: exclusive atomic publication of immutable floor-registry record"),
+    "floor_registry.py:_write_atomic:write_text": (1, "evidence: temporary sibling atomically linked/replaced as floor-registry record"),
+    "run.py:_FloorRegistryContext.persist:open-write": (1, "evidence: append-only floor-registry lookup audit under the run store"),
+    "run_paired_serving_ab.py:main:mkdir": (1, "evidence: explicit paired-serving output directory"),
+    "run_paired_serving_ab.py:main:write_text": (4, "evidence: proof, paired record, teardown and manifest retained under explicit output directory"),
+    "actor_wire_test.py:configure:mkdir": (2, _SELF_CLEANING),
+    "actor_wire_test.py:configure:write_text": (2, _SELF_CLEANING),
+    "actor_wire_test.py:run_seat:TemporaryDirectory": (1, _SELF_CLEANING),
+    "actor_wire_test.py:run_seat:mkdir": (2, _SELF_CLEANING),
+    "actor_wire_test.py:run_seat:write_text": (2, _SELF_CLEANING + " (inside-lane and external fixture sentinels)"),
     # -- actor call scratch (migrated): bundle, seat config, orchestrator inputs --------
     "actor_context.py:Bundle.seal:write_text": (1, _IN_SCOPE + " (bundle manifest)"),
     "actor_context.py:explode:mkdir": (1, _IN_SCOPE + " (bundle json tree)"),
