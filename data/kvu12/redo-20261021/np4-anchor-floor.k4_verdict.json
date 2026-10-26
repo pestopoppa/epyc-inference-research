@@ -1,0 +1,27 @@
+{
+ "proposed_by": "workspace-f8 2026-10-21",
+ "status": "PROPOSED-until-ratified",
+ "invalid": [],
+ "anchor_floor_pct": {
+  "decode_tps_sum_med": 12.48,
+  "decode_tps_stream_med": 11.93,
+  "ttft_s_med": 0.51
+ },
+ "aba_split_spread_pct": {
+  "decode_tps_sum_med": 2.6,
+  "decode_tps_stream_med": 1.89,
+  "ttft_s_med": 1.89
+ },
+ "floor_unit": "percent of the anchor-cell median; unit = anchor launch (n=3 launches at start/mid/end; each = median over its waves; per-stream n = 8 clients x decode waves within each launch)",
+ "threshold_pct": {
+  "decode_tps_sum_med": 24.96,
+  "decode_tps_stream_med": 23.86,
+  "ttft_s_med": 3.78
+ },
+ "gap_unified_vs_mean_split_pct": {
+  "decode_tps_sum_med": -22.78,
+  "decode_tps_stream_med": -24.33,
+  "ttft_s_med": 0.79
+ },
+ "verdict": "NO_DIFFERENCE"
+}
