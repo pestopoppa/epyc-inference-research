@@ -1,0 +1,82 @@
+{
+  "archive_spec_sha256": "e4b7a82725307f8986f34f94efa8d9374357bd684f08469a23d908c1f6ad454f",
+  "compression_argv": [
+    "gzip",
+    "-n",
+    "-c"
+  ],
+  "created_at_utc": "2026-10-26T11:41:42Z",
+  "files": [
+    {
+      "archive_relative_path": "64k-coarse-native/divergent_edit.raw.json.gz",
+      "archive_sha256": "1742821c82bdfd1fb3cdf232dbff9156bba916d4e01c8812875327a8fecef4a4",
+      "archive_size_bytes": 39162,
+      "archived_at_utc": "2026-10-26T11:41:42Z",
+      "decompressed_sha256": "bf2241b9840850bfd14c4c1da03001266ac1241eef6f9b292d0e771440c96261",
+      "decompressed_size_bytes": 5392996,
+      "source_postarchive_sha256": "bf2241b9840850bfd14c4c1da03001266ac1241eef6f9b292d0e771440c96261",
+      "source_postarchive_size_bytes": 5392996,
+      "source_prearchive_sha256": "bf2241b9840850bfd14c4c1da03001266ac1241eef6f9b292d0e771440c96261",
+      "source_prearchive_size_bytes": 5392996,
+      "source_relative_path": "64k-coarse-native/divergent_edit.raw.json",
+      "source_sha256": "bf2241b9840850bfd14c4c1da03001266ac1241eef6f9b292d0e771440c96261",
+      "source_size_bytes": 5392996
+    },
+    {
+      "archive_relative_path": "64k-coarse-native/matched_extension.raw.json.gz",
+      "archive_sha256": "07da3a7f2d1f20dabc02b053ce14483b5218f22c4c51fe3c73b25d7c9ffff980",
+      "archive_size_bytes": 38959,
+      "archived_at_utc": "2026-10-26T11:41:42Z",
+      "decompressed_sha256": "3568a5a229ecfb4ea1e1798a42c0a2b23dc3ceee64b09ebc8385c85618325785",
+      "decompressed_size_bytes": 5392910,
+      "source_postarchive_sha256": "3568a5a229ecfb4ea1e1798a42c0a2b23dc3ceee64b09ebc8385c85618325785",
+      "source_postarchive_size_bytes": 5392910,
+      "source_prearchive_sha256": "3568a5a229ecfb4ea1e1798a42c0a2b23dc3ceee64b09ebc8385c85618325785",
+      "source_prearchive_size_bytes": 5392910,
+      "source_relative_path": "64k-coarse-native/matched_extension.raw.json",
+      "source_sha256": "3568a5a229ecfb4ea1e1798a42c0a2b23dc3ceee64b09ebc8385c85618325785",
+      "source_size_bytes": 5392910
+    },
+    {
+      "archive_relative_path": "64k-dense-native/divergent_edit.raw.json.gz",
+      "archive_sha256": "790ded3954b7d219acef943248eaf2c39f117a583c2bc642172062f45c70ecfe",
+      "archive_size_bytes": 39111,
+      "archived_at_utc": "2026-10-26T11:41:42Z",
+      "decompressed_sha256": "9fa92cee639be356aa3ff4d4ae3c56d6068172d90179a22b23a9ceb2e106bba6",
+      "decompressed_size_bytes": 5393020,
+      "source_postarchive_sha256": "9fa92cee639be356aa3ff4d4ae3c56d6068172d90179a22b23a9ceb2e106bba6",
+      "source_postarchive_size_bytes": 5393020,
+      "source_prearchive_sha256": "9fa92cee639be356aa3ff4d4ae3c56d6068172d90179a22b23a9ceb2e106bba6",
+      "source_prearchive_size_bytes": 5393020,
+      "source_relative_path": "64k-dense-native/divergent_edit.raw.json",
+      "source_sha256": "9fa92cee639be356aa3ff4d4ae3c56d6068172d90179a22b23a9ceb2e106bba6",
+      "source_size_bytes": 5393020
+    },
+    {
+      "archive_relative_path": "64k-dense-native/matched_extension.raw.json.gz",
+      "archive_sha256": "f0bb4ea8589dea65084ddd5f9dacf71e9f62e9764a4a88848826d39e402c2859",
+      "archive_size_bytes": 38879,
+      "archived_at_utc": "2026-10-26T11:41:42Z",
+      "decompressed_sha256": "17929e7663a569a3741938de5876a076aace4a4e06caf93f13c1de31e2b86f5b",
+      "decompressed_size_bytes": 5392901,
+      "source_postarchive_sha256": "17929e7663a569a3741938de5876a076aace4a4e06caf93f13c1de31e2b86f5b",
+      "source_postarchive_size_bytes": 5392901,
+      "source_prearchive_sha256": "17929e7663a569a3741938de5876a076aace4a4e06caf93f13c1de31e2b86f5b",
+      "source_prearchive_size_bytes": 5392901,
+      "source_relative_path": "64k-dense-native/matched_extension.raw.json",
+      "source_sha256": "17929e7663a569a3741938de5876a076aace4a4e06caf93f13c1de31e2b86f5b",
+      "source_size_bytes": 5392901
+    }
+  ],
+  "filler_hard_end_epoch": 1793015760,
+  "filler_id": "hpr-golden-large-originals-20261026",
+  "filler_work_deadline_epoch": 1793015670,
+  "native_evidence_commit": "3f2ead26abf2b44898b4c2cf2bb7eed970bdb98c",
+  "purpose": "lossless byte custody archive; no new measurement or result change",
+  "schema": "epyc.hpr.large_original_archive_manifest.v1",
+  "source_root": "/mnt/raid0/llm/tmp/codex-ni-20261024-hpr-recovery/run-golden-v3/live/golden-out-v3",
+  "verification_argv": [
+    "gzip",
+    "-dc"
+  ]
+}
