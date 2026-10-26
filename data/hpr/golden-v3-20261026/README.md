@@ -14,11 +14,8 @@ Native contract UNVERIFIED. No historical regrade, no performance claim, no pare
 
 Native source: `/mnt/raid0/llm/tmp/codex-ni-20261024-hpr-recovery/run-golden-v3/live/golden-out-v3/` (tmp; not durable).
 
-## Not copied (> 5 MB) — sealed by audit/NATIVE-EVIDENCE.SHA256SUMS
+## Large native captures
 
-| path | bytes | sha256 |
-|---|---|---|
-| `64k-coarse-native/divergent_edit.raw.json` | 5392996 | `bf2241b9840850bfd14c4c1da03001266ac1241eef6f9b292d0e771440c96261` |
-| `64k-coarse-native/matched_extension.raw.json` | 5392910 | `3568a5a229ecfb4ea1e1798a42c0a2b23dc3ceee64b09ebc8385c85618325785` |
-| `64k-dense-native/divergent_edit.raw.json` | 5393020 | `9fa92cee639be356aa3ff4d4ae3c56d6068172d90179a22b23a9ceb2e106bba6` |
-| `64k-dense-native/matched_extension.raw.json` | 5392901 | `17929e7663a569a3741938de5876a076aace4a4e06caf93f13c1de31e2b86f5b` |
+The four raw captures previously omitted because each exceeded 5 MB are now stored losslessly in [large-originals/](large-originals/README.md). Its native JSON manifest records source before/after hashes and sizes, compressed hashes and sizes, full decompressed verification, and actual archive timestamps. The existing 44 native files remain unchanged.
+
+This is preservation of the accepted 24 captures / 12 comparisons. The 72 reader projections are not 72 probes. Native contract remains UNVERIFIED; no historical regrade, parent HPR closure, new measurement class, warrant, or grade.

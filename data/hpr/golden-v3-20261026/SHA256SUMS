@@ -43,8 +43,14 @@ e10cd3cc7f91810d4726eec788589a9e867d7348aaa187bbb566c244bc2082c9  ./8k-tail_junc
 2c06d05734c07bfcce4c8679edc804b248002d44eeba58c3f17bddbb577d33c6  ./8k-tail_junction-native/matched_extension.raw.json
 6ca7447efd361db394493d7e79deeef1b91bfc4d6c47e67d55480da97a0aff4a  ./8k-tail_junction-native/server.log
 3e0f03f0697f678364a7b8c515158ab377545c7e8ba676b0129357acd15c1ec1  ./GOLDEN_RESULT.json
-8cc173ad0014a225fc4a2b5e7af18fe31ec8615d4710932c5a3224e9ac55e469  ./README.md
+881ee86fe8bc2dd3d42f372d5295faf0303493199c779befefa30f33de94b7ec  ./README.md
 3deb374065881b02ff935392738c482c3909002e789fb5d4fcf64c6a463f815e  ./audit/ACCEPTED-CHECKPOINT.md
 64b436763804175006fd8da78671c31e3fb714c19ef6e9985e1a08d3d517f0c2  ./audit/AUDIT.md
 aca6c8367fd46ee93799bbfa560e2d9dc2a0205dbcdc62f4c76c9a8d6d5dbaf8  ./audit/NATIVE-EVIDENCE.SHA256SUMS
 97b46fa893413b735246104debb035d499fdedc84d5bbaedfe43fba34c71d35b  ./audit/OWNER-CLOSEOUT-DRAFT.md
+1742821c82bdfd1fb3cdf232dbff9156bba916d4e01c8812875327a8fecef4a4  ./large-originals/64k-coarse-native/divergent_edit.raw.json.gz
+07da3a7f2d1f20dabc02b053ce14483b5218f22c4c51fe3c73b25d7c9ffff980  ./large-originals/64k-coarse-native/matched_extension.raw.json.gz
+790ded3954b7d219acef943248eaf2c39f117a583c2bc642172062f45c70ecfe  ./large-originals/64k-dense-native/divergent_edit.raw.json.gz
+f0bb4ea8589dea65084ddd5f9dacf71e9f62e9764a4a88848826d39e402c2859  ./large-originals/64k-dense-native/matched_extension.raw.json.gz
+d5af2a33a72b215a6f77a25f354d14ebaafc08f3b1f38ef3426bff4caa4ccb38  ./large-originals/README.md
+b53fa12bec7bb94db76afa21ebfcc5312d10f9ae5056fdfa4523ab5f6ced3d04  ./large-originals/archive-manifest.json
