@@ -23,6 +23,9 @@
 #           CLBENCH_VENV=/mnt/raid0/llm/tmp/clbench-venv (python 3.13, litellm/typer/texasholdem; `clbench` console script).
 # NOTE: clbench's argparse takes HYPHENATED system flags (--system.base-url, --system.max-context-tokens);
 #       the underscore spellings are rejected ("unrecognized arguments") -- verified 2026-10-21.
+# Optional candidate only: set CLBENCH_SYSTEM_PROMPT or CLBENCH_SYSTEM_PROMPT_FILE
+# (mutually exclusive). Neither set preserves the adapter's empty system prompt.
+# Candidate prompt text/hash and source hashes land in OUT_ROOT/run_metadata.json.
 set -euo pipefail
 
 if [[ "${WINDOW_CONFIRMED:-0}" != "1" ]]; then
@@ -52,8 +55,52 @@ owner="$(ss -H -ltnp "sport = :$port" | sed -nE 's/.*pid=([0-9]+).*/\1/p' | head
 curl -fsS --max-time 10 "${CLBENCH_EPYC_BASE_URL%/}/models" >/dev/null \
   || { echo "endpoint ${CLBENCH_EPYC_BASE_URL} not answering /models" >&2; exit 4; }
 
-"$here/clbench_epyc_local/install_into_clbench.sh" "$CLBENCH_REPO"
 mkdir -p "$OUT_ROOT"
+prompt_args=()
+if [[ ${CLBENCH_SYSTEM_PROMPT+x} || ${CLBENCH_SYSTEM_PROMPT_FILE+x} ]]; then
+  # Read UTF-8 strictly, preserving trailing newlines; Bash argv cannot carry NUL.
+  # Exclusive creates prevent a candidate from overwriting another run's identity.
+  python3 -I - "$OUT_ROOT" "$here" "$CLBENCH_REPO" <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+
+out, here, repo = map(Path, sys.argv[1:])
+direct = "CLBENCH_SYSTEM_PROMPT" in os.environ
+file_set = "CLBENCH_SYSTEM_PROMPT_FILE" in os.environ
+if direct and file_set:
+    raise SystemExit("set only one of CLBENCH_SYSTEM_PROMPT and CLBENCH_SYSTEM_PROMPT_FILE")
+source = os.environ.get("CLBENCH_SYSTEM_PROMPT_FILE") if file_set else None
+raw = Path(source).read_bytes() if file_set else os.environ["CLBENCH_SYSTEM_PROMPT"].encode("utf-8")
+prompt = raw.decode("utf-8", errors="strict")
+if "\0" in prompt:
+    raise SystemExit("system prompt must not contain NUL")
+snapshot = out / "system_prompt.txt"
+metadata = out / "run_metadata.json"
+if snapshot.exists() or metadata.exists():
+    raise SystemExit("candidate prompt identity already exists; choose a fresh CLBENCH_OUT_ROOT")
+sources = [here / "run_clbench_epyc_local.sh", here / "clbench_epyc_local/system.py", repo / "src/cli.py"]
+record = {
+    "schema": "epyc.clbench_candidate_prompt.v1",
+    "system_prompt": prompt,
+    "system_prompt_sha256": hashlib.sha256(raw).hexdigest(),
+    "prompt_source": "file" if file_set else "environment",
+    "prompt_source_path": str(Path(source).resolve()) if file_set else None,
+    "source_sha256": {str(path.resolve()): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources},
+}
+with snapshot.open("xb") as stream:
+    stream.write(raw)
+with metadata.open("x", encoding="utf-8") as stream:
+    json.dump(record, stream, ensure_ascii=False, indent=2)
+    stream.write("\n")
+PY
+  prompt=""
+  IFS= read -r -d '' prompt < "$OUT_ROOT/system_prompt.txt" || true
+  prompt_args=("--system.system-prompt=$prompt")
+fi
+"$here/clbench_epyc_local/install_into_clbench.sh" "$CLBENCH_REPO"
 # CME-7T: failed / empty / runaway raw replies land next to cache_hit_report.json (system.py honours this env)
 export CLBENCH_EPYC_RAW_LOG="$(cd "$OUT_ROOT" && pwd)/raw_replies.jsonl"
 cd "$CLBENCH_REPO"
@@ -61,7 +108,7 @@ before="$(ls -d results/"$TASK"/traces/*/ 2>/dev/null | sort || true)"
 set +e
 "$CLBENCH_VENV/bin/clbench" run "$TASK" --schedule "$SCHEDULE" --system epyc_local \
   --system.model "$EPYC_MODEL" --system.base-url "$CLBENCH_EPYC_BASE_URL" \
-  --system.max-context-tokens "$MAX_CTX" --no-live-dashboard 2>&1 | tee "$OUT_ROOT/clbench_run.log"
+  --system.max-context-tokens "$MAX_CTX" "${prompt_args[@]}" --no-live-dashboard 2>&1 | tee "$OUT_ROOT/clbench_run.log"
 rc=${PIPESTATUS[0]}
 set -e
 traces="$(comm -13 <(printf '%s\n' "$before") <(ls -d results/"$TASK"/traces/*/ | sort) | tail -1)"
