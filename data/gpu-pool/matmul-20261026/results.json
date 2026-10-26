@@ -1,0 +1,115 @@
+{
+  "schema": "epyc.model_free_backend_correctness.v1",
+  "row_id": "ni-gpu-pool-matmul-20261026-v1",
+  "created_utc": "2026-10-26T08:07:53.868098+00:00",
+  "model_free": true,
+  "scope": "synthetic seeded tensor correctness for this exact executable and DSOs",
+  "proposition": "Selected supported MUL_MAT and MUL_MAT_ID cases agree with the native CPU reference under the existing binary NMSE tolerance 5e-4; each selected type must have an actual pass, and unsupported cases remain explicit.",
+  "claim_limits": [
+    "No performance warrant",
+    "No release or current-clean-champion assertion",
+    "No new grading rule"
+  ],
+  "source": {
+    "commit": "c463f601bd39d0e313b744c214b8c22f9455bcd3",
+    "removed_worktree_dirty_state": "UNKNOWN",
+    "snapshot": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-pool-matmul/test-backend-ops.c463f601b.cpp"
+  },
+  "artifacts": [
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops",
+      "sha256": "373b44b7476e7d34cae8e1b03e1bee40c31e515ece133667d440ce4128eb745f"
+    },
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-base.so",
+      "sha256": "23735e6f21028356fa81657393f9c4ffeda70477e3377a4fb49fb2eda55b002a"
+    },
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-cpu.so",
+      "sha256": "a19eb802decd2c76acd7403239ecf0ec054ae4519e2b991d6bd4cfff8edb6b5e"
+    },
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml-hip.so",
+      "sha256": "45bca96a11d4dbaa30470e79b24012f32504d8c0edd00710c130ad755ca0bb7c"
+    },
+    {
+      "path": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/libggml.so",
+      "sha256": "9c1bcacfe8fd67b0a1ac8dab56ff6c21ca6825a5771adfd8dbee1606461fa742"
+    }
+  ],
+  "shim": {
+    "path": "/mnt/raid0/llm/cache/shims/nprocs_shim.so",
+    "sha256": "d3103d7ab45e0a5fe9473d7dd401e5462f39c06174b4a64109af6e387e3b3eb4",
+    "SHIM_NPROCS": 2,
+    "original_source_digest_receipt": "51080dff80b0b8a72b7a41ce878f093eff0f13e739fee93d3490421c8d1041e6",
+    "later_recreated_source_matches_receipt": false
+  },
+  "seed": 20261026,
+  "workload_cap_seconds": 1400,
+  "evidence": {
+    "residency": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-pool-matmul/residency.json",
+    "linkage": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-pool-matmul/linkage.log",
+    "shim_probe": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-pool-matmul/shim-probe.json",
+    "death_proof": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-pool-matmul/death-proof.json"
+  },
+  "runs": [
+    {
+      "op": "MUL_MAT",
+      "argv": [
+        "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops",
+        "test",
+        "-b",
+        "ROCm0",
+        "-o",
+        "MUL_MAT",
+        "-p",
+        "^type_a=(f32|f16|q4_0|q8_0|q4_K|q6_K),type_b=f32,m=16,n=([1-9]|16),k=256,bs=\\[(1,1|3,1|3,2|2,3)\\],nr=\\[[12],[12]\\],per=\\[(0,1,2,3|0,2,1,3|0,1,3,2|0,3,2,1)\\],k_v=0,o=1$",
+        "-j",
+        "1",
+        "--suite-seed",
+        "20261026"
+      ],
+      "seed": 20261026,
+      "log": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-pool-matmul/MUL_MAT.log",
+      "generated_expected": 201,
+      "status": "native_exit_recorded",
+      "rc": 0,
+      "observed": 201,
+      "passed": 201,
+      "unsupported": 0,
+      "failed": [],
+      "resident_samples": 52,
+      "seconds": 1.7055106163024902,
+      "max_tasks": 7
+    },
+    {
+      "op": "MUL_MAT_ID",
+      "argv": [
+        "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin/test-backend-ops",
+        "test",
+        "-b",
+        "ROCm0",
+        "-o",
+        "MUL_MAT_ID",
+        "-p",
+        "^type_a=(f32|f16|q4_0|q8_0|q4_K|q6_K),type_b=f32,((n_mats=4,n_used=2,b=0,m=64,n=16,k=(3|96|768))|(n_mats=(4|8),n_used=(1|2|4),b=[01],m=512,n=(1|4|5|17|32|129),k=256))$",
+        "-j",
+        "1",
+        "--suite-seed",
+        "20261026"
+      ],
+      "seed": 20261026,
+      "log": "/mnt/raid0/llm/tmp/codex-ni-20261026-gpu-pool-matmul/MUL_MAT_ID.log",
+      "generated_expected": 370,
+      "status": "native_exit_recorded",
+      "rc": 0,
+      "observed": 370,
+      "passed": 370,
+      "unsupported": 0,
+      "failed": [],
+      "resident_samples": 452,
+      "seconds": 11.182166337966919,
+      "max_tasks": 7
+    }
+  ]
+}

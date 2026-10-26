@@ -1,0 +1,2 @@
+PASS expired1400s cap refuses before grant access; stable write-side provenance record preserves artifact scope, hashes, UNKNOWN source and raw evidence links
+exit=0 command=taskset -c 48,144 timeout300 syntax+focused-cap-record-fixture threads1 end=2026-10-26T03:08:12Z
