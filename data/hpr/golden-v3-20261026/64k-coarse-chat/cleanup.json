@@ -1,0 +1,9 @@
+{
+  "elapsed_s": 3.129398958059028,
+  "pid": 3124186,
+  "returncode": 0,
+  "signals": [
+    "TERM"
+  ],
+  "status": "REAPED"
+}

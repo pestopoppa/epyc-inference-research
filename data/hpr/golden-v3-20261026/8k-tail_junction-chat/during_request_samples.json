@@ -1,0 +1,956 @@
+[
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985651.5030198,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.4,
+      36.4
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985652.504538,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.48,
+      36.48
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985653.5065796,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.48,
+      36.48
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985654.5085394,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.48,
+      36.48
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985655.5105355,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.48,
+      36.48
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985656.51254,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.48,
+      36.48
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985657.5145378,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.48,
+      36.48
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985658.5155392,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.48,
+      36.48
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985659.516542,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.48,
+      36.48
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985660.518543,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.69,
+      36.69
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985661.5205374,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985662.5215466,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985663.5235376,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985664.5255349,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985665.5275362,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985666.529532,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985667.5305316,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985668.531529,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985669.532535,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985670.534533,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985671.5365453,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985672.5385363,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.8,
+      36.8
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985673.5405374,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985674.5425394,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985675.5445335,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985676.5465443,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985677.5485368,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985678.5505335,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985679.5515556,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985680.5535378,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985681.555544,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985682.5575418,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985683.5595386,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985684.5605483,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.82,
+      36.82
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985685.5625567,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985686.5645368,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985687.5665476,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985688.5685387,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985689.5705385,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985690.5715487,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985691.5735373,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985692.5745466,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985693.5765333,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985694.5775387,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985695.5795383,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985696.5815365,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985697.582545,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985698.584542,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985699.586541,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985700.588538,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985701.5905428,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.89,
+      36.89
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985702.5915556,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      36.92,
+      36.92
+    ]
+  },
+  {
+    "affinity": [
+      24
+    ],
+    "epoch": 1792985704.5963955,
+    "linkage": {
+      "all_in_kernel_store": true,
+      "lib_dirs": [
+        "/mnt/raid0/llm/kernels/builds/cpu-20261021-80a09c6ad-p1r2-fork/bin"
+      ]
+    },
+    "pid": 2441755,
+    "request_active": true,
+    "rss": [
+      37.07,
+      37.07
+    ]
+  }
+]
