@@ -593,6 +593,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 "target_kernel_functions": ["add_kernel"],
             }, workspace)
 
+    @mock.patch.object(
+        R, "_evaluator_python_identity", R._declared_evaluator_python_identity)
     def test_identity_drift_refuses_before_claim_or_worker(self):
         worker = mock.Mock()
         runner = R.GovernedArenaCellRunner(self.config(), worker=worker)

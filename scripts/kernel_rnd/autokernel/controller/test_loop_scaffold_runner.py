@@ -92,14 +92,43 @@ class Fixture(unittest.TestCase):
             str(self.source_repo), self.source_commit,
             R._tree_digest(self.source_repo, self.source_commit))
 
-        self.arena = Path(
-            "/mnt/raid0/llm/tmp/inf03-vendor-inspect-UqTLqw/AgentKernelArena")
+        # All external execution identities are owned byte fixtures. Keep the pin
+        # validators active while replacing discovery of host-installed runtimes.
+        self.arena = self.root / "arena"
+        self.arena.mkdir()
+        git(self.arena, "init", "-q")
+        (self.arena / "src").mkdir()
+        (self.arena / "src" / "evaluator.py").write_text(
+            "# fixture evaluator; never executed\n", encoding="utf-8")
         task_relative = "tasks/hip2hip/gpumode/SimpleMatmulModule"
         task = self.arena / task_relative
-        expected_python = R.arena_cell_runner._evaluator_python_identity()
-        python = Path(expected_python["path"])
+        task.mkdir(parents=True)
+        (task / "config.yaml").write_text("fixture: true\n", encoding="utf-8")
+        arena_commit = commit_all(self.arena)
+        python = self.root / "python-byte-fixture"
+        python.write_bytes(b"fixture interpreter; never executed\n")
+        self.wrapper = self.root / "codex-byte-fixture"
+        self.wrapper.write_bytes(b"fixture wrapper; never executed\n")
+        expected_python = {
+            "path": str(python), "sha256": sha(python.read_bytes()),
+            "packages": {"fixture": "1"},
+        }
+        runtime = {
+            "kind": "docker_workspace_bind_only",
+            "writable_host_binds": ["/workspace"],
+            "image_id": C.CONTAINER_IMAGE_ID,
+        }
+        for patcher in (
+            mock.patch.object(R.arena_adapter, "AGENT_KERNEL_ARENA_PIN",
+                              mock.Mock(commit=arena_commit)),
+            mock.patch.object(R.arena_cell_runner, "_evaluator_python_identity",
+                              return_value=expected_python),
+            mock.patch.object(C, "runtime_identity", return_value=runtime),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.evaluator = R.ArenaEvaluatorPin(
-            str(self.arena), R.arena_adapter.AGENT_KERNEL_ARENA_PIN.commit,
+            str(self.arena), arena_commit,
             "src/evaluator.py",
             sha((self.arena / "src" / "evaluator.py").read_bytes()),
             task_relative, R._digest(R._tree_state(task)),
@@ -107,11 +136,7 @@ class Fixture(unittest.TestCase):
             expected_python["sha256"], R._digest(expected_python["packages"]),
             str(R.REPOSITORY_ROOT), sha(R.EVALUATOR_BRIDGE.read_bytes()))
 
-        self.wrapper = Path(subprocess.run(
-            ("bash", "-lc", "command -v codex"), capture_output=True,
-            text=True, check=True).stdout.strip()).resolve()
-        runtime = C.runtime_identity(self.wrapper)
-        actor_python = python.resolve()
+        actor_python = python
         self.ctx = context()
         self.spec = contract(self.ctx)
         self.actors = tuple(R.ActorPin(
