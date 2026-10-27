@@ -862,7 +862,10 @@ def test_existing_run_emits_actual_current_and_cor_then_resumes_without_anchor_r
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
-        original_main = run.main
+        real_main = run.main
+
+        def original_main(argv):
+            return real_main([*argv, "--allow-untested-actor-seats", "synthetic fixture actors"])
         batch = [0]
         first = fixture.root / "batch0"
         second = fixture.root / "batch1"

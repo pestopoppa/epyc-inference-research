@@ -10,6 +10,8 @@ measurement would block it, or it would block them. So:
   region or gpu-quiet lock a test reaches is a temporary file;
 * `claim.DEVICE_LOCK` points into the test's tmp dir (tests that patch it themselves
   still win: their monkeypatch runs after this one);
+* the serial current-run pointer is redirected into the test's tmp dir, including
+  in subprocesses, even when the caller inherited a production override;
 * `claim.hold_gpu_quiet_measurement` is a recording no-op (`gpu_quiet_holds`) and
   `claim.gpu_quiet_preflight` a no-op; tests of the window itself inject their own
   `hold`, and `real_gpu_quiet` hands tests the unpatched originals;
@@ -49,6 +51,8 @@ def _isolate_host_claims(tmp_path_factory):
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("ORCHESTRATOR_TMP_DIR", str(root / "orchestrator-locks"))
+        patch.setenv("AUTOKERNEL_CURRENT_SERIAL_RUN_POINTER", str(root / "current-serial-run.json"))
+        patch.setenv("AUTOKERNEL_CURRENT_SERIAL_RUN_TRUSTED_ROOT", str(tmp_path_factory.getbasetemp()))
         patch.setattr(claim, "DEVICE_LOCK", root / "gpu_device.mi210_0.lock")
         patch.setattr(claim, "hold_gpu_quiet_measurement", hold_gpu_quiet_measurement)
         patch.setattr(claim, "gpu_quiet_preflight", lambda: root / "gpu_quiet.lock")

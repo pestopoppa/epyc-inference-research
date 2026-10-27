@@ -597,3 +597,7 @@ def test_shared_author_sandbox_reaches_real_authenticated_control_startup(
     assert len(snapshots) == 1 and snapshots[0]["owner_id"]
     seen = json.loads((tmp_path / "router" / "seen.jsonl").read_text())
     assert sr.option(seen["argv"], "--actor-author-sandbox") == sandbox
+    pointer = Path(os.environ["AUTOKERNEL_CURRENT_SERIAL_RUN_POINTER"])
+    published = json.loads(pointer.read_text())
+    assert published["state_dir"] == str((tmp_path / "router").resolve())
+    assert published["phase"] == "complete"
