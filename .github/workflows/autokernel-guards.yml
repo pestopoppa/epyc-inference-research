@@ -20,6 +20,7 @@ on:
       - 'scripts/kernel_rnd/autokernel/**'
       - 'scripts/benchmark/run_autokernel_gpu_discovery.py'
       - 'scripts/benchmark/autokernel_*.py'
+      - '.github/workflows/autokernel-guards.yml'
 
 jobs:
   guards:

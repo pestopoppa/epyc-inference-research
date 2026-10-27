@@ -20,13 +20,14 @@ Two mechanisms made that possible, and both are checkable:
 These guards are deliberately blunt. The LOC budget is arbitrary, and that is the
 point: it forces the conversation at 2x rather than at 50x.
 
-Run: python3 -m scripts.kernel_rnd.autokernel.check_regrowth_guards
+Run: python3 -m scripts.kernel_rnd.autokernel.check_regrowth_guards (requires a reviewed baseline)
 Exit 0 clean, 1 on a violation.
 """
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
+import json
+from pathlib import Path, PurePosixPath
 import re
 import sys
 
@@ -65,6 +66,10 @@ import sys
 #: conversation at 2x, not at 50x.
 LOOP_LOC_BUDGET = 3450
 
+
+#: HISTORICAL RECORD: retain the 2026-08-31–09-04 budget rationale below verbatim.
+#: LOOP_CODE_BUDGET is historical only; per-file manifest enforcement is defined below.
+#: There is deliberately no aggregate --code-budget override.
 #: THE ENFORCED BUDGET, 2026-08-31. `LOOP_LOC_BUDGET` above is still printed, because a
 #: total-line number is the review burden a reader wants to see -- but it no longer
 #: FAILS anything, and this does.
@@ -144,6 +149,55 @@ _DOC_READ = re.compile(
                        "HYPOTHESIS_PORTFOLIO_V2.md")) + r")")
 
 
+
+#: Versioned source-count contract. Changing either identifier requires a reviewed
+#: migration because the manifest is meaningful only for this exact scan and metric.
+LOOP_CODE_SCOPE = "autokernel.loop.non_test_python_source.v1"
+LOOP_CODE_METRIC = "python_nonblank_noncomment_nondocstring_physical_lines.v1"
+BASELINE_REVISION = "cdf6faa44d81ba12adbc99b9cd1eb47ea91fd4ba"
+DEFAULT_CODE_BASELINE = Path(__file__).resolve().with_name("loop_code_budget_baseline.json")
+
+
+def _source_files(root: Path) -> list[Path]:
+    """The exact existing source scope: recursive Python files except test_*.py."""
+    return [path for path in sorted(root.rglob("*.py"))
+            if not path.name.startswith("test_")]
+
+
+def file_composition(path: Path) -> tuple[int, int, int]:
+    """Return `(code, prose, blank)` using the existing composition semantics."""
+    import ast, io, tokenize
+    src = path.read_text(encoding="utf-8")
+    marked: set[int] = set()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef,
+                             ast.FunctionDef, ast.AsyncFunctionDef)):
+            if ast.get_docstring(node, clean=False) is not None and node.body:
+                first = node.body[0]
+                marked.update(range(first.lineno, (first.end_lineno or first.lineno) + 1))
+    for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+        if tok.type == tokenize.COMMENT:
+            marked.add(tok.start[0])
+    code = prose = blank = 0
+    for lineno, line in enumerate(src.splitlines(), 1):
+        if not line.strip():
+            blank += 1
+        elif lineno in marked:
+            prose += 1
+        else:
+            code += 1
+    return code, prose, blank
+
+
+def composition_by_file(root: Path) -> dict[str, int]:
+    """Code-line ceiling inputs for exactly the files inside the guarded scope."""
+    if not root.is_dir():
+        return {}
+    return {path.relative_to(root).as_posix(): file_composition(path)[0]
+            for path in _source_files(root)}
+
+
 def composition(root: Path) -> tuple[int, int, int]:
     """`(code, prose, blank)` for the loop package, computed rather than remembered.
 
@@ -151,30 +205,14 @@ def composition(root: Path) -> tuple[int, int, int]:
     LOOP_LOC_BUDGET. The budget counts all three, so the split is what tells a reader
     whether a raise is buying capability or documentation.
     """
-    import ast, io, tokenize
     code = prose = blank = 0
-    for path in sorted(root.rglob("*.py")):
-        if path.name.startswith("test_"):
-            continue
-        src = path.read_text(encoding="utf-8")
-        marked: set[int] = set()
-        tree = ast.parse(src)
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.Module, ast.ClassDef,
-                                 ast.FunctionDef, ast.AsyncFunctionDef)):
-                if ast.get_docstring(node, clean=False) is not None and node.body:
-                    first = node.body[0]
-                    marked.update(range(first.lineno, (first.end_lineno or first.lineno) + 1))
-        for tok in tokenize.generate_tokens(io.StringIO(src).readline):
-            if tok.type == tokenize.COMMENT:
-                marked.add(tok.start[0])
-        for lineno, line in enumerate(src.splitlines(), 1):
-            if not line.strip():
-                blank += 1
-            elif lineno in marked:
-                prose += 1
-            else:
-                code += 1
+    if not root.is_dir():
+        return code, prose, blank
+    for path in _source_files(root):
+        counts = file_composition(path)
+        code += counts[0]
+        prose += counts[1]
+        blank += counts[2]
     return code, prose, blank
 
 
@@ -183,13 +221,91 @@ def loop_package_loc(root: Path) -> tuple[int, list[tuple[str, int]]]:
     if not root.is_dir():
         return 0, []
     rows = []
-    for path in sorted(root.rglob("*.py")):
-        if path.name.startswith("test_"):
-            continue
-        rows.append((str(path.relative_to(root)),
+    for path in _source_files(root):
+        rows.append((path.relative_to(root).as_posix(),
                      len(path.read_text(encoding="utf-8").splitlines())))
     return sum(count for _, count in rows), rows
 
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key!r}")
+        result[key] = value
+    return result
+
+
+def manifest_for(files: dict[str, int], *, status: str = "GENERATED") -> dict[str, object]:
+    """Build the versioned manifest representation; does not write any file."""
+    return {"schema_version": 1, "status": status, "source_revision": BASELINE_REVISION,
+            "scope": LOOP_CODE_SCOPE, "metric": LOOP_CODE_METRIC,
+            "files": dict(sorted(files.items())), "exceptions": {}}
+
+
+def check_code_baseline(baseline_path: Path, current: dict[str, int]) -> list[str]:
+    """Fail closed on invalid, ungenerated, drifting, or exceeded baselines."""
+    try:
+        raw = json.loads(baseline_path.read_text(encoding="utf-8"),
+                         object_pairs_hook=_unique_object)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        return [f"cannot read valid baseline {baseline_path}: {exc}"]
+    if not isinstance(raw, dict) or set(raw) != {
+            "schema_version", "status", "source_revision", "scope", "metric", "files", "exceptions"}:
+        return ["baseline fields do not match the required schema"]
+    if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
+        return ["baseline schema_version must be integer 1"]
+    if raw["status"] != "GENERATED":
+        return ["baseline is UNGENERATED; an authorized owner must review generated ceilings"]
+    if raw["source_revision"] != BASELINE_REVISION:
+        return ["baseline source revision differs from the frozen revision"]
+    if raw["scope"] != LOOP_CODE_SCOPE:
+        return [f"baseline scope must be {LOOP_CODE_SCOPE!r}"]
+    if raw["metric"] != LOOP_CODE_METRIC:
+        return [f"baseline metric must be {LOOP_CODE_METRIC!r}"]
+    files = raw["files"]
+    if not isinstance(files, dict) or not files:
+        return ["baseline files must be a non-empty object"]
+    exceptions = raw["exceptions"]
+    if not isinstance(exceptions, dict):
+        return ["exceptions must be an object"]
+    for name, entry in exceptions.items():
+        if (not isinstance(entry, dict) or set(entry) != {"ceiling", "approval"}
+                or type(entry["ceiling"]) is not int or entry["ceiling"] < 0
+                or not isinstance(entry["approval"], str) or not entry["approval"].strip()):
+            return [f"invalid exception for {name!r}: require ceiling and operator approval reference"]
+
+    errors: list[str] = []
+    for name, ceiling in files.items():
+        if (not isinstance(name, str) or not name or "\\" in name
+                or PurePosixPath(name).is_absolute()
+                or any(part in ("", ".", "..") for part in name.split("/"))
+                or PurePosixPath(name).as_posix() != name):
+            errors.append(f"invalid relative POSIX source path: {name!r}")
+        if type(ceiling) is not int or ceiling < 0:
+            errors.append(f"ceiling for {name!r} must be a nonnegative integer (not bool)")
+    if errors:
+        return errors
+
+    expected, recorded = set(current), set(files)
+    for name in sorted(set(exceptions) - expected):
+        errors.append(f"stale exception path: {name}")
+    for name in sorted(expected - recorded):
+        if name not in exceptions:
+            errors.append(f"new in-scope source has no baseline entry: {name}")
+    for name in sorted(recorded - expected):
+        errors.append(f"stale baseline path is outside current scope: {name}")
+    for name in sorted(expected & (recorded | set(exceptions))):
+        ceiling = exceptions[name]["ceiling"] if name in exceptions else files[name]
+        if current[name] > ceiling:
+            errors.append(f"{name}: {current[name]} code lines exceeds ceiling "
+                          f"{ceiling} by {current[name] - ceiling}")
+    return errors
+
+
+def generated_manifest_json(files: dict[str, int]) -> str:
+    """Serialize proposed counts to stdout; callers must review before adoption."""
+    return json.dumps(manifest_for(files), indent=2, sort_keys=False) + "\n"
 
 def doc_coupled_tests(package: Path) -> list[tuple[str, int, str]]:
     """Test files coupled to a guarded documentation file.
@@ -210,6 +326,8 @@ def doc_coupled_tests(package: Path) -> list[tuple[str, int, str]]:
     return hits
 
 
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -217,8 +335,12 @@ def main(argv: list[str] | None = None) -> int:
                         default=Path(__file__).resolve().parent)
     parser.add_argument("--loop-package", type=Path, default=None,
                         help="the rebuilt loop package (default <package>/loop)")
-    parser.add_argument("--budget", type=int, default=LOOP_LOC_BUDGET)
-    parser.add_argument("--code-budget", type=int, default=LOOP_CODE_BUDGET)
+    parser.add_argument("--baseline", type=Path, default=DEFAULT_CODE_BASELINE,
+                        help="versioned per-file source ceiling manifest")
+    parser.add_argument("--emit-baseline-json", action="store_true",
+                        help="print current per-file ceilings for owner review; never writes a file")
+    parser.add_argument("--budget", type=int, default=LOOP_LOC_BUDGET,
+                        help="informational total-LOC comparison only")
     parser.add_argument("--check-doc-assertions", action="store_true",
                         help="also fail on tests that pin documentation prose. Off by "
                              "default while the superseded suites still exist; the "
@@ -227,8 +349,16 @@ def main(argv: list[str] | None = None) -> int:
 
     loop_root = args.loop_package or (args.package / "loop")
     problems = 0
-
     total, rows = loop_package_loc(loop_root)
+    if args.emit_baseline_json:
+        files = composition_by_file(loop_root)
+        if not files:
+            print(f"cannot generate baseline: no in-scope Python source at {loop_root}",
+                  file=sys.stderr)
+            return 1
+        print(generated_manifest_json(files), end="")
+        return 0
+
     if not rows:
         print(f"loop package not present yet at {loop_root} — LOC budget not applicable")
     else:
@@ -236,23 +366,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"loop package composition: {code} code / {prose} prose / {blank} blank "
               f"({100.0 * prose / max(1, code + prose + blank):.1f}% prose)")
         print(f"loop package: {total} LOC across {len(rows)} files "
-              f"(budget {args.budget})")
+              f"(informational budget {args.budget})")
         for name, count in sorted(rows, key=lambda item: -item[1])[:10]:
             print(f"    {count:>6}  {name}")
         if total > args.budget:
-            # REPORTED, NOT ENFORCED. The total is the review burden; the code count is
-            # the thing bounded. Failing on the total is what made deleting the incident
-            # record the cheapest way to pass.
-            print(f"\nNOTE: the loop package is {total} LOC, over the reported "
-                  f"{args.budget}. Not a violation — see LOOP_CODE_BUDGET.")
-        if code > args.code_budget:
-            print(f"\nVIOLATION: the loop package is {code} lines of CODE, over its "
-                  f"{args.code_budget} budget by {code - args.code_budget}.\n"
-                  f"  Comments and docstrings are excluded on purpose, so deleting the "
-                  f"incident record cannot satisfy this: only deleting code fits. "
-                  f"Raise it deliberately, in a commit that says why, or delete "
-                  f"something.", file=sys.stderr)
-            problems += 1
+            print(f"\nNOTE: the loop package is {total} LOC, over the informational "
+                  f"{args.budget}; this is not a violation.")
+
+    current = composition_by_file(loop_root)
+    baseline_errors = check_code_baseline(args.baseline, current)
+    if baseline_errors:
+        print("\nCODE BASELINE VIOLATION:", file=sys.stderr)
+        for error in baseline_errors:
+            print(f"  - {error}", file=sys.stderr)
+        problems += 1
+    else:
+        print(f"per-file code baseline: {len(current)} files within reviewed ceilings")
 
     hits = doc_coupled_tests(args.package)
     if hits:

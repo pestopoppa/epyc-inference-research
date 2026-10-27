@@ -1,0 +1,7 @@
+# Loop source code budget
+
+The initial inventory is frozen at research main `cdf6faa44d81ba12adbc99b9cd1eb47ea91fd4ba`. It records the existing code, not permission for future growth. The recursive `loop/**/*.py` scope excludes basenames beginning `test_`. Each nonblank physical line is code unless it belongs to an AST-recognized module, class, function or async-function docstring or contains a Python comment token; blank lines take precedence. In particular, an inline comment classifies its entire line as prose. This preserves the former checker exactly.
+
+Each file has its own ceiling; reductions cannot offset growth elsewhere. A new source file, growth above its ceiling, or a missing source corresponding to a baseline entry fails. Deletion requires a reviewed manifest update. Review any changes to the frozen inventory and source revision; regeneration from an arbitrary working tree is not evidence of a reviewed revision. `--emit-baseline-json` prints a proposal only and cannot authorize or write it.
+
+For explicitly operator-reviewed growth or additions, add an `exceptions` entry keyed by path, with `ceiling` and a nonempty `approval` reference identifying the operator decision. Review the decision and its bounded ceiling with the change; the checker validates the record's shape, not the authenticity of an approval. Remove stale exceptions when their file is removed. No exceptions are currently recorded. Historical aggregate budget decisions remain in the checker as incident history; the total LOC report is informational.
