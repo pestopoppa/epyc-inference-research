@@ -77,14 +77,30 @@ def parse_scheduler_graph(log: str) -> dict[str, Any]:
     }
 
 
-def shape_argv(binary: Path, model: Path, shape: Shape, recipe_argv: Iterable[str] = ()) -> list[str]:
-    """Build a callback-free probe argv while retaining the registered recipe flags."""
+def shape_argv(binary: Path, model: Path, shape: Shape, recipe_argv: Iterable[str] = (), *,
+               binary_help: str = "") -> list[str]:
+    """Build a probe without assuming llama-bench supports native parallelism.
+
+    Single-sequence probes use llama-bench's native single-sequence workload.
+    Wider shapes require ``-np`` advertised by this binary's help; never flatten
+    a parallel shape into a different token count or silently drop its width.
+    This function is pure: callers acquire help only inside their execution claim.
+    """
+    recipe_flags = list(recipe_argv)
+    if any(flag in {"-np", "--parallel"} or flag.startswith(("-np=", "--parallel="))
+           for flag in recipe_flags):
+        raise ValueError("parallel width belongs in Shape.n_seq, not recipe_argv")
+    parallel = []
+    if shape.n_seq > 1:
+        if not re.search(r"^\s*-np(?:\s|,|$)", ANSI.sub("", binary_help), re.M):
+            raise ValueError(f"binary help does not advertise -np; cannot probe n_seq={shape.n_seq}")
+        parallel = ["-np", str(shape.n_seq)]
     if shape.phase == "prefill":
         work = ["-p", str(shape.n_tokens), "-n", "0"]
     else:
-        # Decode and speculative verify widths are represented by parallel sequences.
-        work = ["-p", "0", "-n", str(shape.n_tokens), "-np", str(shape.n_seq)]
-    return [str(binary), "-m", str(model), *work, *list(recipe_argv), "-r", "1", "-o", "json", "-v"]
+        work = ["-p", "0", "-n", str(shape.n_tokens)]
+    return [str(binary), "-m", str(model), *work, *parallel, *recipe_flags,
+            "-r", "1", "-o", "json", "-v"]
 
 
 def run_process(argv: list[str], *, env: Mapping[str, str], timeout: int) -> subprocess.CompletedProcess:
@@ -99,15 +115,22 @@ def run_dispatch_probe(binary: Path, model: Path, shape: Shape, *,
                        ) -> dict[str, Any]:
     probe_env = dict(env or {})
     probe_env["GGML_SCHED_DEBUG"] = "2"
-    argv = shape_argv(binary, model, shape, recipe_argv)
-    proc = (runner or run_process)(argv, env=probe_env, timeout=timeout)
+    execute = runner or run_process
+    binary_help = ""
+    if shape.n_seq > 1:
+        help_proc = execute([str(binary), "--help"], env=probe_env, timeout=min(timeout, 30))
+        if help_proc.returncode != 0:
+            raise ValueError("cannot establish native parallel capability: binary --help failed")
+        binary_help = help_proc.stdout + help_proc.stderr
+    argv = shape_argv(binary, model, shape, recipe_argv, binary_help=binary_help)
+    proc = execute(argv, env=probe_env, timeout=timeout)
     graph = parse_scheduler_graph(proc.stdout + proc.stderr)
     required = frozenset(expected_ops)
     ops_present = required <= set(graph["op_backend"])
     device_ok = graph["device_seen"] or not require_device
     observed = (proc.returncode == 0 and graph["nodes_total"] > MIN_GRAPH_NODES
                 and ops_present and device_ok)
-    return {**graph, "shape": shape.to_dict(), "rc": proc.returncode,
+    return {**graph, "shape": shape.to_dict(), "argv": argv, "rc": proc.returncode,
             "state": OBSERVED if observed else UNKNOWN,
             "vacuous_guards": {
                 "nodes_total_gt_min": graph["nodes_total"] > MIN_GRAPH_NODES,
