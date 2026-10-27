@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import sys
 import time
+from typing import Callable
 import urllib.request
 
 HERE = Path(__file__).resolve().parent
@@ -280,16 +281,28 @@ def request_payload(m: dict, phase: str, question: dict) -> dict:
 
 
 def capture(m: dict, phase: str, arm: str, kv: str, draft: str, start: int, count: int,
-            port: int, out: Path, timeout: int, grant_proof: Path, server_log: Path) -> None:
+            port: int, out: Path, timeout: int, grant_proof: Path, server_log: Path,
+            before_request: Callable[[], None]) -> None:
     validate_manifest(m)
     if (phase, arm, kv, draft) not in {(p, a, k, d) for p in PHASES for a in ARMS for k in KVS for d in DRAFTS}:
         raise ValueError("invalid cell")
     proof = read_json(grant_proof)
-    if proof != {"manifest_sha256": m["seal_sha256"], "arm": arm, "kv": kv,
-                 "draft": draft, "port": port, "actual_grant_ok": True}:
+    required_proof = {"manifest_sha256": m["seal_sha256"], "arm": arm, "kv": kv,
+                      "draft": draft, "port": port, "actual_grant_ok": True,
+                      "hip_sha256": m["declaration"]["images"][arm]["hip_sha256"],
+                      "server_log": str(server_log)}
+    if any(proof.get(k) != v for k, v in required_proof.items()):
         raise ValueError("grant proof does not match cell")
+    identity = proof.get("server_identity")
+    if (not isinstance(identity, dict) or
+            any(type(identity.get(k)) is not int for k in ("pid", "uid", "sid", "pgid", "ticks")) or
+            identity["uid"] != os.getuid() or identity["sid"] != identity["pid"] or
+            identity["pgid"] != identity["pid"]):
+        raise ValueError("grant proof lacks owned server identity")
     if not server_log.is_file():
         raise ValueError("server log window unavailable")
+    if not callable(before_request):
+        raise ValueError("grant-bound per-request guard required")
     ids = [q["id"] for q in m["scored"]] if phase == "score" else m["greedy_ids"]
     if start < 0 or count < 1 or start + count > len(ids):
         raise ValueError("invalid chunk bounds")
@@ -311,6 +324,7 @@ def capture(m: dict, phase: str, arm: str, kv: str, draft: str, start: int, coun
                 raise ValueError(f"resume mismatch: {path}")
             validate_record(row, phase, q, m, arm, kv, draft)
             continue
+        before_request()  # outside request-failure capture: normal slice stop preserves completed items
         raw = None
         try:
             req = urllib.request.Request(f"http://127.0.0.1:{port}{m['requests'][phase]['endpoint']}",
@@ -334,7 +348,11 @@ def capture(m: dict, phase: str, arm: str, kv: str, draft: str, start: int, coun
                    "arm": arm, "kv": kv, "draft": draft, "index": i, "id": q["id"],
                    "prompt_sha256": m["prompt_sha256"][q["id"]], "request_sha256": request_sha,
                    "response_sha256": hashlib.sha256(raw).hexdigest(),
-                   "raw_response_text": raw.decode("utf-8"), **parsed}
+                   "raw_response_text": raw.decode("utf-8"), **parsed,
+                   "grant_proof_path": str(grant_proof),
+                   "grant_proof_sha256": file_sha(grant_proof),
+                   "server_pid": identity["pid"], "server_startticks": identity["ticks"],
+                   "server_port": port, "server_log_path": str(server_log)}
             row["server_log_window_sha256"] = hashlib.sha256(window_bytes).hexdigest()
             row["server_log_start"] = log_start
             row["server_log_end"] = log_start + len(window_bytes)
@@ -372,6 +390,21 @@ def validate_record(row: dict, phase: str, q: dict, m: dict, arm: str, kv: str, 
         raise ValueError("missing request/response hash")
     if not isinstance(row.get("raw_response_text"), str) or hashlib.sha256(row["raw_response_text"].encode()).hexdigest() != row["response_sha256"]:
         raise ValueError("raw response hash mismatch")
+    proof_path = Path(row.get("grant_proof_path", ""))
+    log_path = Path(row.get("server_log_path", ""))
+    if (not proof_path.is_absolute() or not log_path.is_absolute() or
+            file_sha(proof_path) != row.get("grant_proof_sha256")):
+        raise ValueError("grant proof linkage mismatch")
+    proof = read_json(proof_path)
+    identity = proof.get("server_identity", {})
+    required = {"manifest_sha256": m["seal_sha256"], "arm": arm, "kv": kv,
+                "draft": draft, "port": row.get("server_port"), "actual_grant_ok": True,
+                "hip_sha256": m["declaration"]["images"][arm]["hip_sha256"],
+                "server_log": str(log_path)}
+    if (any(proof.get(k) != v for k, v in required.items()) or
+            identity.get("pid") != row.get("server_pid") or
+            identity.get("ticks") != row.get("server_startticks")):
+        raise ValueError("server/grant identity mismatch")
     response = json.loads(row["raw_response_text"])
     if not isinstance(response, dict) or not finite_json(response):
         raise ValueError("raw response invalid")
@@ -397,6 +430,11 @@ def validate_record(row: dict, phase: str, q: dict, m: dict, arm: str, kv: str, 
     if not (type(row.get("server_log_start")) is int and type(row.get("server_log_end")) is int
             and 0 <= row["server_log_start"] <= row["server_log_end"]):
         raise ValueError("invalid server log byte window")
+    with log_path.open("rb") as stream:
+        stream.seek(row["server_log_start"])
+        window = stream.read(row["server_log_end"] - row["server_log_start"])
+    if hashlib.sha256(window).hexdigest() != row["server_log_window_sha256"]:
+        raise ValueError("server log window linkage mismatch")
     if not isinstance(row.get("content"), str) or garbage(row["content"]):
         raise ValueError("garbage content")
     if phase == "greedy":
@@ -418,9 +456,13 @@ def analyze(m: dict, out: Path) -> dict:
     validate_manifest(m)
     by_id = {q["id"]: q for q in m["scored"]}
     report = {"schema": SCHEMA, "manifest_sha256": m["seal_sha256"], "cells": {}}
+    checked_logs: set[Path] = set()
     for kv in KVS:
         for draft in DRAFTS:
             cell = f"{kv}:{draft}"
+            for arm in ARMS:
+                if list((out / arm / f"{kv}-{draft}").glob("server_log_failure-*.json")):
+                    raise ValueError(f"{arm}/{cell}: whole-server log failure present")
             scored = {}
             greedy = {}
             for phase in PHASES:
@@ -439,6 +481,14 @@ def analyze(m: dict, out: Path) -> dict:
                         if q is None or row["id"] in rows:
                             raise ValueError("unknown or duplicate captured ID")
                         validate_record(row, phase, q, m, arm, kv, draft)
+                        log_path = Path(row["server_log_path"])
+                        if log_path not in checked_logs:
+                            health = read_json(log_path.parent / "server-log-health.json")
+                            if (health.get("server_log") != str(log_path) or health.get("bad_matches") != [] or
+                                    health.get("bytes") != log_path.stat().st_size or
+                                    health.get("sha256") != file_sha(log_path)):
+                                raise ValueError("whole-server log health mismatch")
+                            checked_logs.add(log_path)
                         if row.get("index") != expected_ids.index(row["id"]):
                             raise ValueError("item order/index mismatch")
                         rows[row["id"]] = row
@@ -478,19 +528,6 @@ def main() -> int:
     f.add_argument("--declaration", required=True, type=Path)
     f.add_argument("--output", required=True, type=Path)
     f.add_argument("--seed", type=int, default=42)
-    c = sub.add_parser("capture")
-    c.add_argument("--manifest", required=True, type=Path)
-    c.add_argument("--phase", required=True, choices=PHASES)
-    c.add_argument("--arm", required=True, choices=ARMS)
-    c.add_argument("--kv", required=True, choices=KVS)
-    c.add_argument("--draft", required=True, choices=DRAFTS)
-    c.add_argument("--start", required=True, type=int)
-    c.add_argument("--count", required=True, type=int)
-    c.add_argument("--port", required=True, type=int)
-    c.add_argument("--output-dir", required=True, type=Path)
-    c.add_argument("--grant-proof", required=True, type=Path)
-    c.add_argument("--server-log", required=True, type=Path)
-    c.add_argument("--timeout", type=int, default=1800)
     a = sub.add_parser("analyze")
     a.add_argument("--manifest", required=True, type=Path)
     a.add_argument("--output-dir", required=True, type=Path)
@@ -500,11 +537,7 @@ def main() -> int:
         freeze(args.declaration, args.output, args.seed)
     else:
         m = read_json(args.manifest)
-        if args.mode == "capture":
-            capture(m, args.phase, args.arm, args.kv, args.draft, args.start, args.count,
-                    args.port, args.output_dir, args.timeout, args.grant_proof, args.server_log)
-        else:
-            write_new(args.report, analyze(m, args.output_dir))
+        write_new(args.report, analyze(m, args.output_dir))
     return 0
 
 

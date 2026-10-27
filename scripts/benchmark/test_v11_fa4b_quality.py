@@ -44,7 +44,28 @@ def fixture_manifest():
     return result
 
 
-def record(manifest, q, phase, arm, kv, draft, index, correct=True, tokens=None):
+def proof_files(root, manifest, arm, kv, draft, port=19000):
+    folder = root / "slices" / f"{arm}-{kv}-{draft}"
+    folder.mkdir(parents=True, exist_ok=True)
+    log = folder / "server.log"
+    proof = folder / "grant-proof.json"
+    if not log.exists():
+        log.write_text("")
+    if not proof.exists():
+        proof.write_text(json.dumps({"manifest_sha256": manifest["seal_sha256"],
+            "arm": arm, "kv": kv, "draft": draft, "port": port, "actual_grant_ok": True,
+            "hip_sha256": manifest["declaration"]["images"][arm]["hip_sha256"],
+            "server_log": str(log), "server_identity": {"pid": 123, "uid": __import__('os').getuid(),
+            "sid": 123, "pgid": 123, "ticks": 456}}))
+    health = folder / "server-log-health.json"
+    if not health.exists():
+        health.write_text(json.dumps({"server_log": str(log), "sha256": m.file_sha(log),
+                                      "bytes": log.stat().st_size, "bad_matches": []}))
+    return proof, log
+
+
+def record(root, manifest, q, phase, arm, kv, draft, index, correct=True, tokens=None):
+    proof, log = proof_files(root, manifest, arm, kv, draft)
     raw = (json.dumps({"content": "A complete response", "tokens": tokens,
                        "truncated": False, "stop_type": "eos"}) if phase == "greedy" else
            json.dumps({"choices": [{"finish_reason": "stop",
@@ -54,8 +75,11 @@ def record(manifest, q, phase, arm, kv, draft, index, correct=True, tokens=None)
            "prompt_sha256": manifest["prompt_sha256"][q["id"]],
            "request_sha256": m.digest(m.request_payload(manifest, phase, q)),
            "response_sha256": __import__("hashlib").sha256(raw.encode()).hexdigest(),
-           "raw_response_text": raw, "server_log_window_sha256": "b" * 64,
+           "raw_response_text": raw, "server_log_window_sha256": __import__('hashlib').sha256(b'').hexdigest(),
            "server_log_start": 0, "server_log_end": 0,
+           "grant_proof_path": str(proof), "grant_proof_sha256": m.file_sha(proof),
+           "server_log_path": str(log), "server_pid": 123,
+           "server_startticks": 456, "server_port": 19000,
            "content": "A complete response", "correct": correct if phase == "score" else None,
            "tokens": tokens if phase == "greedy" else None,
            "truncated": False, "termination_unknown": False,
@@ -133,17 +157,12 @@ class QualitySourceTests(unittest.TestCase):
         q = x["scored"][0]
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            proof = root / "proof.json"
-            proof.write_text(json.dumps({"manifest_sha256": x["seal_sha256"], "arm": "ON",
-                                         "kv": "q8_0", "draft": "off", "port": 19000,
-                                         "actual_grant_ok": True}))
-            log = root / "server.log"
-            log.write_text("")
+            proof, log = proof_files(root, x, "ON", "q8_0", "off")
             response = json.dumps({"content": "A", "tokens": [101, 202],
                                    "stop_type": "eos", "truncated": False}).encode()
             with patch.object(m.urllib.request, "urlopen", return_value=io.BytesIO(response)) as post:
-                m.capture(x, "greedy", "ON", "q8_0", "off", 0, 1, 19000, root, 2, proof, log)
-                m.capture(x, "greedy", "ON", "q8_0", "off", 0, 1, 19000, root, 2, proof, log)
+                m.capture(x, "greedy", "ON", "q8_0", "off", 0, 1, 19000, root, 2, proof, log, lambda: None)
+                m.capture(x, "greedy", "ON", "q8_0", "off", 0, 1, 19000, root, 2, proof, log, lambda: None)
                 self.assertEqual(post.call_count, 1)
             path = next((root / "ON/q8_0-off/greedy").glob("000-*.json"))
             row = m.read_json(path)
@@ -152,7 +171,7 @@ class QualitySourceTests(unittest.TestCase):
             row["tokens"] = [999]
             path.write_text(json.dumps(row))
             with self.assertRaisesRegex(ValueError, "record seal"):
-                m.capture(x, "greedy", "ON", "q8_0", "off", 0, 1, 19000, root, 2, proof, log)
+                m.capture(x, "greedy", "ON", "q8_0", "off", 0, 1, 19000, root, 2, proof, log, lambda: None)
             row["tokens"] = [101, 202]
             row["raw_response_text"] = "{}"
             row["seal_sha256"] = m.digest({k: v for k, v in row.items() if k != "seal_sha256"})
@@ -163,12 +182,7 @@ class QualitySourceTests(unittest.TestCase):
         x = fixture_manifest()
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            proof = root / "proof.json"
-            proof.write_text(json.dumps({"manifest_sha256": x["seal_sha256"], "arm": "ON",
-                                         "kv": "q8_0", "draft": "off", "port": 19000,
-                                         "actual_grant_ok": True}))
-            log = root / "server.log"
-            log.write_text("")
+            proof, log = proof_files(root, x, "ON", "q8_0", "off")
             response = json.dumps({"content": "A", "tokens": [101],
                                    "stop_type": "eos", "truncated": False}).encode()
             class Response(io.BytesIO):
@@ -178,7 +192,7 @@ class QualitySourceTests(unittest.TestCase):
                     return self
             with patch.object(m.urllib.request, "urlopen", return_value=Response(response)):
                 with self.assertRaisesRegex(ValueError, "nonfinite"):
-                    m.capture(x, "greedy", "ON", "q8_0", "off", 0, 1, 19000, root, 2, proof, log)
+                    m.capture(x, "greedy", "ON", "q8_0", "off", 0, 1, 19000, root, 2, proof, log, lambda: None)
             self.assertEqual(list((root / "ON/q8_0-off/greedy").glob("000-*.json")), [])
             failures = list((root / "ON/q8_0-off/greedy/failures").glob("000-*.json"))
             self.assertEqual(len(failures), 1)
@@ -197,7 +211,7 @@ class QualitySourceTests(unittest.TestCase):
                             folder.mkdir(parents=True)
                             for i, qid in enumerate(ids):
                                 q = next(q for q in x["scored"] if q["id"] == qid)
-                                r = record(x, q, phase, arm, kv, draft, i,
+                                r = record(root, x, q, phase, arm, kv, draft, i,
                                            correct=(i != 0 or arm == "ON"), tokens=[i, 5])
                                 if phase == "score" and arm == "ON" and i == 1:
                                     r["truncated"] = True
