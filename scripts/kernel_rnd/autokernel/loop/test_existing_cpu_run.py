@@ -375,7 +375,13 @@ def test_gpu_actor_program_and_epoch_inputs_remain_legacy_exact():
     fixture.setUp()
     try:
         original_epoch = run.archive.epoch_for
-        with mock.patch.object(run.archive, "epoch_for", wraps=original_epoch) as epoch:
+        original_main = run.main
+
+        def run_with_synthetic_actors(argv):
+            return original_main(argv + ["--allow-untested-actor-seats", "synthetic fixture actors"])
+
+        with mock.patch.object(run.archive, "epoch_for", wraps=original_epoch) as epoch, \
+                mock.patch.object(run, "main", side_effect=run_with_synthetic_actors):
             rc, _calls, planners, _scratch, log = fixture._run_one_keep()
         assert rc == 0, log
         assert "baseline_scope" not in run.status.read(fixture.store)
