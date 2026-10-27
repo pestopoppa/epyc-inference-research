@@ -95,8 +95,7 @@ def serve(recipe, requests: Sequence[tuple[str, bytes]], *,
     Returns [(prompt_id, digest, preview, full)], `full` = {"content", "tokens"} (the
     divergence receipt's raw material). Raises on any launch/request failure."""
     recipe.validate_launch(recipe.template, recipe.build_dir, recipe.port)
-    ram_admit.guard_launch(recipe.argv)  # DS41-W8d: pre-Popen RAM admission
-    server = subprocess.Popen(list(recipe.argv), env=dict(recipe.launch_env),
+    server = ram_admit.popen(list(recipe.argv), env=dict(recipe.launch_env),
                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL, start_new_session=True)
     try:

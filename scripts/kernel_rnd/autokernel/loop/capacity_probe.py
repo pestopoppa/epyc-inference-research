@@ -121,8 +121,7 @@ def run(*, argv: Sequence[str], env: Mapping[str, str], port: int,
     proc = None
     with sampler:
         try:
-            ram_admit.guard_launch(argv)  # DS41-W8d: pre-Popen RAM admission
-            proc = popen(list(argv), env=dict(env), stdout=subprocess.DEVNULL,
+            proc = ram_admit.popen(list(argv), popen=popen, env=dict(env), stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
             sampler.watch_pid(proc.pid)
             wait_healthy(port, proc, boot_timeout_s)

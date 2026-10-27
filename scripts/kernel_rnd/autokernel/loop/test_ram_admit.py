@@ -11,6 +11,17 @@ import pytest
 
 from . import ab_server_pair, capacity_probe, model_identity, ram_admit, serving
 
+@pytest.fixture(autouse=True)
+def private_lease(tmp_path, monkeypatch):
+    directory = tmp_path / "lease"
+    directory.mkdir(mode=0o700)
+    path = directory / "lease.lock"
+    path.touch(mode=0o600)
+    monkeypatch.setattr(ram_admit, "DS41_LEASE_PATH", str(path))
+    monkeypatch.setattr(ram_admit, "_trusted_ancestors", lambda parent: os.open(parent, os.O_RDONLY | os.O_DIRECTORY))
+
+
+REAL_TRUSTED_ANCESTORS = ram_admit._trusted_ancestors
 DS41 = ram_admit.DS41_SHARD
 OTHER = "/mnt/raid0/llm/models/Qwen/Qwen3.6-35B-A3B-Q4_K_M.gguf"
 
@@ -193,9 +204,57 @@ def test_server_pair_refuses_before_popen(monkeypatch, tmp_path):
 
 
 def test_every_popen_launch_site_is_guarded():
-    """Structural: each server-start function calls guard_launch before its Popen."""
+    """Each server-start function uses the lifetime-admission launch helper."""
     for fn in (serving._measure_once, model_identity.serve, capacity_probe.run,
                ab_server_pair.ServerPair.start):
         src = inspect.getsource(fn)
-        launch = re.search(r"[Pp]open\(", src).start()
-        assert 0 <= src.index("guard_launch(") < launch
+        assert "ram_admit.popen(" in src
+
+
+def test_non_ds41_exact_passthrough():
+    spawn = mock.Mock(return_value=object())
+    argv = ["server", "-m", OTHER]
+    result = ram_admit.popen(argv, popen=spawn, env={"X": "y"}, start_new_session=True)
+    assert result is spawn.return_value
+    spawn.assert_called_once_with(argv, env={"X": "y"}, start_new_session=True)
+
+def test_missing_or_untrusted_inode_refuses(monkeypatch, tmp_path):
+    monkeypatch.setattr(ram_admit, "DS41_LEASE_PATH", str(tmp_path / "missing"))
+    with pytest.raises(ram_admit.RamAdmissionRefused, match="lease unavailable"):
+        ram_admit.popen(["server", "-m", DS41], popen=mock.Mock())
+
+def test_lease_closes_on_check_and_spawn_failure(monkeypatch):
+    argv = ["server", "-m", DS41]
+    monkeypatch.setattr(ram_admit, "check", lambda *a, **k: REFUSE)
+    with pytest.raises(ram_admit.RamAdmissionRefused):
+        ram_admit.popen(argv, popen=mock.Mock())
+    monkeypatch.setattr(ram_admit, "check", lambda *a, **k: ADMIT)
+    with pytest.raises(Stop):
+        ram_admit.popen(argv, popen=mock.Mock(side_effect=Stop))
+    fd = ram_admit._lease_fd(ram_admit.DS41_LEASE_PATH)
+    os.close(fd)
+
+
+def test_insecure_lease_permissions_refused(monkeypatch):
+    os.chmod(ram_admit.DS41_LEASE_PATH, 0o666)
+    with pytest.raises(ram_admit.RamAdmissionRefused, match="lease unavailable"):
+        ram_admit.popen(["server", "-m", DS41], popen=mock.Mock())
+
+
+def test_exec_failure_releases_lease(monkeypatch):
+    monkeypatch.setattr(ram_admit, "check", lambda *a, **k: ADMIT)
+    monkeypatch.setattr(ram_admit.os, "execvpe", mock.Mock(side_effect=FileNotFoundError))
+    with pytest.raises(FileNotFoundError):
+        ram_admit.exec_ds41(["server", "-m", DS41])
+    fd = ram_admit._lease_fd(ram_admit.DS41_LEASE_PATH)
+    os.close(fd)
+
+
+def test_ancestor_walk_rejects_writable_and_missing_paths(tmp_path):
+    # The test root under the host's writable tmp is itself intentionally refused.
+    with pytest.raises(PermissionError):
+        REAL_TRUSTED_ANCESTORS(str(tmp_path))
+    fd = REAL_TRUSTED_ANCESTORS("/usr")
+    os.close(fd)
+    with pytest.raises(OSError):
+        REAL_TRUSTED_ANCESTORS("/usr/not-a-real-lease-directory")

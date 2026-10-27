@@ -1086,10 +1086,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             observe("phase", "load")
             coverage_sink = kernel_coverage.open_launch_sink(recipe, build_dir)
             require_free_port(port)
-            # DS41-W8d: DS41-class launches need RAM admission BEFORE Popen. Pre-launch
-            # check only: argv/env and every recipe identity are untouched.
-            ram_admit.guard_launch(argv)
-            srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+            # DS41 launches hold their admission lease across the server lifetime.
+            srv = ram_admit.popen(argv, stdout=subprocess.DEVNULL,
                                    stderr=(subprocess.DEVNULL if coverage_sink is None
                                            else coverage_sink.handle),
                                    env=launch_env)

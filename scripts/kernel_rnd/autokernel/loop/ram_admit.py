@@ -2,8 +2,8 @@
 
 Mirrors /mnt/raid0/llm/tmp/compute-flags/ram_admit.sh; switch to the tracked script once
 OP-RAMADMIT-D9 lands (intended tracked path: root
-`scripts/coordination/ram_admit.sh`). Stdlib only, read-only:
-this module only reads /proc and NEVER signals or matches processes by name pattern
+`scripts/coordination/ram_admit.sh`). Stdlib only:
+the observer reads /proc and NEVER signals processes or matches them for killing
 (INC-20260731-broad-process-pattern-kills).
 
 Admit iff
@@ -13,12 +13,15 @@ Admit iff
     (`/proc/<pid>/cmdline`) the DS41-1017 shard, by full path or basename. Own pid and own
     ancestors are skipped (a launcher wrapper's argv necessarily names the model).
 
-`guard_launch(argv)` is the pre-Popen call site: it is a no-op for non-DS41 argv and raises
+`guard_launch(argv)` is a read-only observation: it is a no-op for non-DS41 argv and raises
 `RamAdmissionRefused` for a refused DS41-class launch. It never touches argv or env.
 """
 from __future__ import annotations
 
 import os
+import fcntl
+import stat
+import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -139,3 +142,102 @@ def guard_launch(argv: Sequence[object], **kw) -> AdmitResult | None:
     if not result.admit:
         raise RamAdmissionRefused(result)
     return result
+
+
+# PROPOSED shared inode; the owner must provision this exact private directory and
+# file before enabling any participating launcher. Never unlink/replace either.
+DS41_LEASE_PATH = "/mnt/raid0/llm/ds41-admission/lease.lock"
+
+def _trusted_ancestors(parent):
+    if not os.path.isabs(parent):
+        raise PermissionError("lease path must be absolute")
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        for part in parent.split("/"):
+            if not part:
+                continue
+            if part in (".", ".."):
+                raise PermissionError("invalid lease path")
+            next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+            st = os.fstat(fd)
+            if st.st_uid not in (0, os.geteuid()) or st.st_mode & 0o022:
+                raise PermissionError("lease ancestor must be trusted and not group/world writable")
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+def _lease_fd(path):
+    parent, name = os.path.split(os.fspath(path))
+    directory = _trusted_ancestors(parent)
+    try:
+        ds = os.fstat(directory)
+        if ds.st_uid != os.geteuid() or stat.S_IMODE(ds.st_mode) != 0o700:
+            raise PermissionError("lease directory must be owned by this UID and mode 0700")
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
+        try:
+            st = os.fstat(fd)
+            current = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            parent_now = os.stat(parent, follow_symlinks=False)
+            if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid()
+                    or stat.S_IMODE(st.st_mode) != 0o600 or st.st_nlink != 1
+                    or (st.st_dev, st.st_ino) != (current.st_dev, current.st_ino)
+                    or (ds.st_dev, ds.st_ino) != (parent_now.st_dev, parent_now.st_ino)):
+                raise PermissionError("untrusted or replaced lease inode")
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
+    finally:
+        os.close(directory)
+
+def popen(argv, *, popen=None, **kwargs):
+    """Start DS41 under a lifetime lease; non-DS41 calls pass through unchanged.
+
+    The child must retain the passed FD through all exec wrappers and until exit.
+    The inherited open description retains the flock even if the parent dies.
+    """
+    spawn = subprocess.Popen if popen is None else popen
+    if not is_ds41_argv(argv):
+        return spawn(argv, **kwargs)
+    if "pass_fds" in kwargs:
+        raise ValueError("caller must not supply pass_fds to DS41 admission")
+    try:
+        fd = _lease_fd(DS41_LEASE_PATH)
+    except OSError as exc:
+        raise RamAdmissionRefused(AdmitResult(False, f"DS41 lease unavailable: {exc}", 0, DS41_NEED_GIB)) from exc
+    try:
+        guard_launch(argv)
+        return spawn(argv, pass_fds=(fd,), **kwargs)
+    finally:
+        os.close(fd)  # Never unlock the shared open description.
+
+
+def exec_ds41(argv):
+    """CLI model-exec choke point for a DS41 shell launcher; replaces this PID."""
+    if not is_ds41_argv(argv):
+        raise ValueError("DS41 exec requires a recognized model argv")
+    try:
+        fd = _lease_fd(DS41_LEASE_PATH)
+    except OSError as exc:
+        raise RamAdmissionRefused(AdmitResult(False, f"DS41 lease unavailable: {exc}", 0, DS41_NEED_GIB)) from exc
+    try:
+        guard_launch(argv)
+        os.set_inheritable(fd, True)
+        os.execvpe(argv[0], argv, os.environ)
+    finally:
+        os.close(fd)
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 3 or sys.argv[1] != "--":
+        sys.exit("usage: ram_admit.py -- command [args ...]")
+    try:
+        exec_ds41(sys.argv[2:])
+    except (RamAdmissionRefused, OSError, ValueError) as exc:
+        print(f"refuse: {exc}", file=sys.stderr)
+        sys.exit(4)
