@@ -21,7 +21,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
         invalid_once=False, enrolled_pair=False, runtime_transition=None,
         expected_claim_cycles=None, result_expectation=None, runtime_declaration=True,
-        reference_verdict=None, route_verdict=None, repeat_runtime_treatment=False):
+        reference_verdict=None, route_verdict=None, repeat_runtime_treatment=False,
+        expected_actor_calls=None, expected_oracle_calls=None):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -226,7 +227,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
 
             argv += ["--cpu-serving-launch", str(launch_file), "--frozen-prompts", str(prompt_file),
                      "--experimental-branch", branch, "--iterations", "5", "--serving-pairs", "2",
-                     "--cpu-calibrate-serving", "3", "--out", str(fixture.root / "result")]
+                     "--cpu-calibrate-serving", "3", "--out", str(fixture.root / "result"),
+                     "--allow-untested-actor-seats", "synthetic fixture actors"]
             if runtime_declaration:
                 argv += ["--runtime-statistics", str(statistical_file),
                          "--runtime-calibration-max-launches", "800"]
@@ -275,9 +277,11 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             assert not any((held, issued, measured, builds, oracles))
             assert "DRY RUN" in log
         else:
-            assert len(issued) == (5 if result_expectation is not None else
+            assert len(issued) == (expected_actor_calls if expected_actor_calls is not None else
+                                   5 if result_expectation is not None else
                                    4 if invalid_once else 10 if enrolled_pair else 5)
-            assert len(oracles) == (1 if repeat_runtime_treatment else len(issued))
+            assert len(oracles) == (expected_oracle_calls if expected_oracle_calls is not None else
+                                    1 if repeat_runtime_treatment else len(issued))
             claim_cycles = (2 if enrolled_pair else 1) \
                 if expected_claim_cycles is None else expected_claim_cycles
             assert held == [value for _ in range(claim_cycles) for value in (True, False)]
