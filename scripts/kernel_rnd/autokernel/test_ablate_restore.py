@@ -1,76 +1,93 @@
-"""Model-free regressions for the actual HARNESS-1 entrypoint."""
+"""Model-free transaction tests against the actual script and full identity helper."""
+import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
+import time
+
+SCRIPT = Path(__file__).with_name('ablate.sh')
+IDENT = Path(__file__).with_name('ablate_identity.py')
+TRANSACTION = Path(__file__).with_name('ablate_transaction.sh')
 
 
-SCRIPT = Path(__file__).with_name("ablate.sh")
+def test_transaction(tmp_path):
+    w = tmp_path / 'work'; w.mkdir()
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(w), *args], text=True)
+    git('init', '-q'); git('config', 'user.name', 'fixture'); git('config', 'user.email', 'fixture@example.invalid')
+    (w / 'lever').write_text('champion\n'); (w / 'obsolete').write_text('kept\n'); git('add', 'lever', 'obsolete'); git('commit', '-qm', 'champion'); git('checkout', '--detach', '-q')
+    bd = w / 'build-cpu'; bd.mkdir(); (bd / 'lever.o').write_text('champion\n')
+    h = tmp_path / 'h'; h.mkdir()
+    manifest = tmp_path / 'manifest.json'; manifest.write_text(json.dumps({'lever.o': hashlib.sha256(b'champion\n').hexdigest()}))
+    exp = tmp_path / 'expected.json'; exp.write_text('["lever.o"]')
+    runner = tmp_path / 'ablate.sh'; text = SCRIPT.read_text()
+    # Retain all transaction logic; only replace the host-specific lock executor.
+    original = '/workspace/repos/epyc-orchestrator/scripts/region-lock run --cpu-list "$FILLER_CPUS" --role build --tag "abl-$NAME" -- '
+    assert text.count(original) == 1
+    runner.write_text(text.replace(original, 'env ')); (tmp_path / 'ablate_identity.py').write_bytes(IDENT.read_bytes()); (tmp_path / 'ablate_transaction.sh').write_bytes(TRANSACTION.read_bytes())
+    bin_dir = tmp_path / 'bin'; bin_dir.mkdir()
+    cmake = bin_dir / 'cmake'; cmake.write_text('#!/bin/bash\nset -e\ncp "$ABL_WORKTREE/lever" "$ABL_WORKTREE/build-cpu/lever.o"\n'); cmake.chmod(0o755)
+    env = dict(os.environ, ABL_WORKTREE=str(w), ABL_HARNESS=str(h), ABL_MANIFEST=str(manifest), FILLER_CPUS=str(min(os.sched_getaffinity(0))), FILLER_ID='fixture', FILLER_DEADLINE=str(int(time.time())+3600), FILLER_END=str(int(time.time())+3690), FILLER_STOPFILE=str(tmp_path/'STOP'), PATH=str(bin_dir) + os.pathsep + os.environ['PATH'])
+    def run(name, mutation='printf arm > lever'):
+        return subprocess.run(['bash', str(runner), name, str(exp), mutation], env=env, capture_output=True, text=True)
+    # Expired and stopped grants must never invoke the mutation.
+    env['FILLER_DEADLINE'] = str(int(time.time()) - 1)
+    assert run('expired', 'touch never-expired').returncode != 0
+    assert not (w/'never-expired').exists()
+    env['FILLER_DEADLINE'] = str(int(time.time()) + 3600)
+    Path(env['FILLER_STOPFILE']).touch()
+    assert run('stopped', 'touch never-stopped').returncode != 0
+    assert not (w/'never-stopped').exists()
+    Path(env['FILLER_STOPFILE']).unlink()
+    # A stop arriving during mutation refuses the arm build but still restores.
+    result = run('during-stop', 'printf arm > lever; touch "$FILLER_STOPFILE"')
+    assert result.returncode != 0
+    assert (w/'lever').read_text() == 'champion\n'
+    assert (bd/'lever.o').read_text() == 'champion\n'
+    assert (h/'ablate/during-stop/restored.json').exists()
+    assert not (h/'ablate/during-stop/arm.build.log').exists()
+    assert not (bd/'.ablate-quarantined').exists()
+    Path(env['FILLER_STOPFILE']).unlink()
+    # A staged-only edit must not be cleared by the cleanup handler.
+    (w / 'lever').write_text('staged')
+    git('add', 'lever')
+    (w / 'lever').write_text('champion\n')
+    before = git('diff', '--cached')
+    assert run('dirty').returncode != 0
+    assert git('diff', '--cached') == before
+    git('restore', '--staged', '--worktree', 'lever')
+    assert run('good').returncode == 0
+    assert (w/'lever').read_text() == 'champion\n'
+    assert json.loads((h/'ablate/good/arm.json').read_text())['changed'] == ['lever.o']
+    assert json.loads((h/'ablate/good/restored.json').read_text())['changed'] == []
+    assert run('staged-arm', 'printf arm > lever; git add lever; git rm obsolete; printf added > new; git add new').returncode == 0
+    assert (w/'obsolete').read_text() == 'kept\n' and not (w/'new').exists()
+    assert git('diff', 'HEAD') == ''
+    exp.write_text('["wrong.o"]')
+    assert run('wrong').returncode != 0
+    assert (w/'lever').read_text() == 'champion\n' and (bd/'lever.o').read_text() == 'champion\n'
+    (bd/'lever.o').write_text('stale')
+    assert run('stale').returncode != 0
+    assert (w/'lever').read_text() == 'champion\n'
+    assert not (bd/'.ablate-quarantined').exists()
+    (bd/'lever.o').write_text('champion\n')
+    cmake.write_text('#!/bin/bash\nexit 1\n'); cmake.chmod(0o755)
+    assert run('buildfail').returncode != 0
+    assert (w/'lever').read_text() == 'champion\n'
+    assert (bd/'.ablate-quarantined').exists()
 
 
-def git(work, *args):
-    return subprocess.check_output(["git", "-C", str(work), *args], text=True)
-
-
-def fixture(tmp_path):
-    work = tmp_path / "work"
-    work.mkdir()
-    git(work, "init", "-q")
-    git(work, "config", "user.email", "fixture@example.invalid")
-    git(work, "config", "user.name", "Fixture")
-    (work / "lever").write_text("champion\n")
-    (work / "obsolete").write_text("retained champion file\n")
-    git(work, "add", "lever", "obsolete")
-    git(work, "commit", "-qm", "champion")
-    # No real build, region claim, model or object inspection is invoked.
-    fakebin = tmp_path / "bin"
-    fakebin.mkdir()
-    for name, content in {
-        "taskset": '#!/bin/bash\nshift 2\nexec "$@"\n',
-        "cmake": "#!/bin/bash\nexit 0\n",
-        "python3": "#!/bin/bash\nexit ${FAKE_DIFF_RC:-0}\n",
-    }.items():
-        p = fakebin / name
-        p.write_text(content)
-        p.chmod(0o755)
-    # region-lock's absolute path is deliberately preserved in production;
-    # replace only that executor in a fixture copy, never the cleanup logic.
-    runner = tmp_path / "ablate.sh"
-    original = SCRIPT.read_text()
-    executor = "/workspace/repos/epyc-orchestrator/scripts/region-lock run --cpu-list 48-95 --role build --tag harness1-abl-$NAME -- "
-    assert original.count(executor) == 1, "refuse fixture if real build executor changed"
-    runner.write_text(original.replace(executor, "env "))
-    env = dict(os.environ, ABL_WORKTREE=str(work), ABL_HARNESS=str(tmp_path / "harness"),
-               PATH=str(fakebin) + os.pathsep + os.environ["PATH"])
-    return work, runner, env
-
-
-def test_staged_arm_is_restored_and_preexisting_index_is_refused(tmp_path):
-    work, runner, env = fixture(tmp_path)
-    sentinel = work / "untracked-operator-artifact"
-    sentinel.write_text("retain")
-    result = subprocess.run(["bash", str(runner), "staged",
-                             "printf mutated > lever; printf added > new-tracked; "
-                             "git add lever new-tracked; git rm obsolete"], env=env)
+def test_identity_reports_all_changed_objects(tmp_path):
+    build = tmp_path / 'build'; build.mkdir()
+    original = {}
+    for i in range(25):
+        name = f'{i:02}.o'
+        original[name] = hashlib.sha256(b'before').hexdigest()
+        (build / name).write_bytes(b'after')
+    ref = tmp_path / 'ref.json'; ref.write_text(json.dumps(original))
+    expected = tmp_path / 'expected.json'; expected.write_text(json.dumps(sorted(original)))
+    output = tmp_path / 'result.json'
+    result = subprocess.run(['python3', str(IDENT), str(ref), str(build), str(expected), str(output)])
     assert result.returncode == 0
-    assert (work / "lever").read_text() == "champion\n"
-    assert git(work, "diff", "HEAD", "--") == ""
-    assert sentinel.read_text() == "retain"
-    assert (work / "obsolete").read_text() == "retained champion file\n"
-    assert not (work / "new-tracked").exists()
-    (work / "lever").write_text("operator change")
-    git(work, "add", "lever")
-    before = git(work, "diff", "--cached")
-    # HEAD-only dirt checks miss an index change whose worktree is back at HEAD.
-    (work / "lever").write_text("champion\n")
-    result = subprocess.run(["bash", str(runner), "refused", "exit 99"], env=env)
-    assert result.returncode == 1
-    assert git(work, "diff", "--cached") == before
-
-
-def test_failed_diff_pipeline_preserves_status_and_restores_staged_arm(tmp_path):
-    work, runner, env = fixture(tmp_path)
-    env["FAKE_DIFF_RC"] = "37"
-    result = subprocess.run(["bash", str(runner), "diff-fails", "printf mutated > lever; git add lever"], env=env)
-    assert result.returncode == 37
-    assert (work / "lever").read_text() == "champion\n"
-    assert git(work, "diff", "HEAD", "--") == ""
+    assert len(json.loads(output.read_text())['changed']) == 25
