@@ -48,6 +48,8 @@ def test_original_run_publisher_retains_actual_output_and_pid():
 
 def test_serial_current_run_pointer_follows_finished_run(tmp_path, monkeypatch):
     pointer = tmp_path / "current-serial-run.json"
+    monkeypatch.delenv("AUTOKERNEL_CURRENT_SERIAL_RUN_POINTER", raising=False)
+    monkeypatch.delenv("AUTOKERNEL_CURRENT_SERIAL_RUN_TRUSTED_ROOT", raising=False)
     monkeypatch.setattr(serial_run, "CURRENT_SERIAL_RUN_TRUSTED_ROOT", tmp_path)
     monkeypatch.setattr(serial_run, "CURRENT_SERIAL_RUN_POINTER", pointer)
     root, argv = test_serial_run._inputs(tmp_path, monkeypatch, mode="good", rounds=1)
@@ -83,6 +85,8 @@ def test_old_serial_run_cannot_repoint_newer_run(tmp_path):
 
 def test_serial_current_run_pointer_marks_startup_failure(tmp_path, monkeypatch):
     pointer = tmp_path / "current-serial-run.json"
+    monkeypatch.delenv("AUTOKERNEL_CURRENT_SERIAL_RUN_POINTER", raising=False)
+    monkeypatch.delenv("AUTOKERNEL_CURRENT_SERIAL_RUN_TRUSTED_ROOT", raising=False)
     monkeypatch.setattr(serial_run, "CURRENT_SERIAL_RUN_TRUSTED_ROOT", tmp_path)
     monkeypatch.setattr(serial_run, "CURRENT_SERIAL_RUN_POINTER", pointer)
     _root, argv = test_serial_run._inputs(tmp_path, monkeypatch, mode="good", rounds=1)
