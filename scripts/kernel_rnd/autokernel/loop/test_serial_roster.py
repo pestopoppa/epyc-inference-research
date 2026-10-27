@@ -51,7 +51,7 @@ def _inputs(tmp_path, *, backends=("cpu", "gpu"), unowned=False, missing=False,
         root = tmp_path / name
         root.mkdir()
         build = root / "original-build"
-        template = _recipe()
+        template = replace(_recipe(), model=str(tmp_path / "fixture-model"))
         if backend == "gpu":
             # Keep the declared virtual footprint stable across narrow test
             # owners. The taskset shim confines actual children to the owner's
@@ -134,6 +134,17 @@ def test_ready_production_and_candidate_roster_preserves_original_inputs(tmp_pat
     assert not (tmp_path / "router").exists()
 
 
+def _assert_only_actor_wire_request(tmp_path):
+    from . import actor_wire_gate
+
+    files = [path for path in (tmp_path / "router").rglob("*") if path.is_file()]
+    assert len(files) == 1 and files[0].name == "actor-wire-request.json"
+    request = json.loads(files[0].read_text())
+    assert request["schema"] == actor_wire_gate.SCHEMA
+    assert request["seats"]
+    assert request["actor_config_digest"] == actor_wire_gate.digest(request["seats"])
+
+
 @pytest.mark.parametrize("backend,experimental", [("cpu", True), ("gpu", False), ("gpu", True)])
 def test_generated_dry_run_reaches_actual_owner_without_side_effects(
         tmp_path, monkeypatch, capsys, backend, experimental):
@@ -145,12 +156,14 @@ def test_generated_dry_run_reaches_actual_owner_without_side_effects(
     monkeypatch.setattr(run, "_git", lambda *_a: "a" * 40)
     monkeypatch.setattr(run.workload_contract, "read_census",
         lambda *_a: SimpleNamespace(n_embd=4096, dominant_quant="Q4_K"))
-    monkeypatch.setattr(run.actors, "backend_for", lambda *_a: SimpleNamespace(describe=lambda: "fixture"))
+    backend_for = run.actors.backend_for
+    monkeypatch.setattr(run.actors, "backend_for",
+                        lambda model, effort: replace(backend_for(model, effort), binary="/nonexistent/fixture-cli"))
     assert sr.main(argv + ["--dry-run"]) == 0
     assert len(starts) == 1 and starts[0]["experimental_identity"] is experimental
     assert starts[0]["anchor_build"] == Path(owners[f"{backend}-0"]["anchor_build"])
     assert "no owned source/anchor/request inputs" in capsys.readouterr().out
-    assert not (tmp_path / "router").exists()
+    _assert_only_actor_wire_request(tmp_path)
 
 
 def test_resolved_campaign_refuses_batched_scheduled_child_before_launch(tmp_path, monkeypatch, capsys):
@@ -507,8 +520,9 @@ def test_shared_author_sandbox_reaches_owner_parser_with_default_unchanged(
     monkeypatch.setattr(run, "_git", lambda *_a: "a" * 40)
     monkeypatch.setattr(run.workload_contract, "read_census",
                         lambda *_a: SimpleNamespace(n_embd=4096, dominant_quant="Q4_K"))
+    backend_for = run.actors.backend_for
     monkeypatch.setattr(run.actors, "backend_for",
-                        lambda *_a: SimpleNamespace(describe=lambda: "fixture"))
+                        lambda model, effort: replace(backend_for(model, effort), binary="/nonexistent/fixture-cli"))
     parsed = []
     original_parse = argparse.ArgumentParser.parse_args
 
@@ -523,7 +537,7 @@ def test_shared_author_sandbox_reaches_owner_parser_with_default_unchanged(
     assert len(parsed) == 1
     assert parsed[0].actor_author_sandbox == (sandbox or "on")
     assert run._actor_sandbox(parsed[0]) == {"author_sandbox": sandbox != "off"}
-    assert not (tmp_path / "router").exists()
+    _assert_only_actor_wire_request(tmp_path)
 
 
 def test_author_sandbox_is_actor_provenance_not_target_or_resume_identity(tmp_path):
@@ -566,6 +580,8 @@ def test_shared_author_sandbox_reaches_real_authenticated_control_startup(
     child.write_text(CHILD)
     monkeypatch.setattr(sr, "_child_command", lambda args: [sr.sys.executable, str(child), *args])
     _confine_fixture_child(tmp_path, monkeypatch)
+    here = Path(sr.__file__).resolve()
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
     monkeypatch.setenv("AUTOKERNEL_CONTROL_TOKEN", "fixture-token")
     original_start = serial_control.SerialHTTPService.start
     snapshots = []
