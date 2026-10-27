@@ -108,11 +108,86 @@ class ShapeEnvelope(unittest.TestCase):
     def test_prefill_decode_and_verify_widths_are_encoded(self):
         prefill = census.shape_argv(Path("bench"), Path("m"), census.Shape("prefill", 512))
         decode = census.shape_argv(Path("bench"), Path("m"), census.Shape("decode", 16, 1))
-        verify = census.shape_argv(Path("bench"), Path("m"), census.Shape("verify", 8, 4))
+        verify = census.shape_argv(Path("bench"), Path("m"), census.Shape("verify", 8, 4),
+                                   binary_help="  -np, --parallel N  parallel sequences\n")
         self.assertEqual(prefill[prefill.index("-p") + 1], "512")
-        self.assertEqual(decode[decode.index("-np") + 1], "1")
+        self.assertNotIn("-np", decode)
+        self.assertEqual(decode[decode.index("-n") + 1], "16")
         self.assertEqual(verify[verify.index("-np") + 1], "4")
         self.assertIn("-v", verify)
+
+    def test_parallel_prefill_retains_width_and_registered_flags(self):
+        argv = census.shape_argv(Path("bench"), Path("m"), census.Shape("prefill", 512, 2),
+                                 (arg for arg in ("-ub", "512", "-ngl", "99")),
+                                 binary_help="  -np N  parallel sequences\n")
+        self.assertEqual(argv, ["bench", "-m", "m", "-p", "512", "-n", "0", "-np", "2",
+                                "-ub", "512", "-ngl", "99", "-r", "1", "-o", "json", "-v"])
+
+    def test_unsupported_parallel_shapes_fail_without_changing_workload(self):
+        for phase in ("prefill", "decode", "verify"):
+            for help_text in ("", "  -n N tokens\n", "unsupported flag -np\n", "  -npp N\n"):
+                with self.subTest(phase=phase, help=help_text):
+                    with self.assertRaisesRegex(ValueError, "cannot probe n_seq=2"):
+                        census.shape_argv(Path("bench"), Path("m"), census.Shape(phase, 8, 2),
+                                          binary_help=help_text)
+
+    def test_recipe_cannot_override_parallel_width(self):
+        for flag in ("-np", "-np=4", "--parallel", "--parallel=4"):
+            with self.assertRaisesRegex(ValueError, "Shape.n_seq"):
+                census.shape_argv(Path("bench"), Path("m"), census.Shape("decode", 8), [flag])
+
+    def test_runtime_capability_probe_precedes_model_and_preserves_env(self):
+        calls = []
+
+        def runner(argv, **kwargs):
+            calls.append((argv, kwargs))
+            if argv == ["fake-bench", "--help"]:
+                return mock.Mock(returncode=0, stdout="  -np N  parallel sequences\n", stderr="")
+            return mock.Mock(returncode=0, stdout=recorded_27b_log(), stderr="")
+
+        row = census.run_dispatch_probe(Path("fake-bench"), Path("m"), census.Shape("verify", 8, 4),
+                                        env={"LD_LIBRARY_PATH": "/owned/lib"}, runner=runner)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][0], ["fake-bench", "--help"])
+        self.assertEqual(calls[0][1]["timeout"], 30)
+        self.assertEqual(calls[1][1]["env"],
+                         {"LD_LIBRARY_PATH": "/owned/lib", "GGML_SCHED_DEBUG": "2"})
+        self.assertEqual(row["argv"], calls[1][0])
+        self.assertEqual(row["argv"][row["argv"].index("-n") + 1], "8")
+        self.assertEqual(row["argv"][row["argv"].index("-np") + 1], "4")
+        self.assertEqual(row["state"], census.OBSERVED)
+
+    def test_failed_or_unsupported_help_never_loads_model(self):
+        for rc, help_text in ((1, "  -np N\n"), (0, "  -n N\n")):
+            runner = mock.Mock(return_value=mock.Mock(returncode=rc, stdout=help_text, stderr=""))
+            with self.assertRaises(ValueError):
+                census.run_dispatch_probe(Path("fake-bench"), Path("m"), census.Shape("decode", 8, 2),
+                                            runner=runner)
+            self.assertEqual(runner.call_count, 1)
+            self.assertEqual(runner.call_args.args[0], ["fake-bench", "--help"])
+
+    def test_legacy_fake_binary_rejects_np_but_single_sequence_probe_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "legacy-bench"
+            binary.write_text(
+                "#!/bin/sh\n"
+                "for arg do\n"
+                "  if [ \"$arg\" = -np ]; then exit 64; fi\n"
+                "done\n"
+                "if [ \"$1\" = --help ]; then echo '  -n N tokens'; exit 0; fi\n"
+                "i=0\n"
+                "while [ \"$i\" -lt 1002 ]; do\n"
+                "  echo 'node # 1 (MUL_MAT): x [CPU]'; i=$((i+1))\n"
+                "done\n")
+            binary.chmod(0o700)
+            for phase in ("prefill", "decode", "verify"):
+                row = census.run_dispatch_probe(binary, Path(tmp) / "unused.gguf",
+                                                census.Shape(phase, 8), timeout=5)
+                self.assertEqual(row["state"], census.OBSERVED)
+                self.assertNotIn("-np", row["argv"])
+            with self.assertRaisesRegex(ValueError, "cannot probe n_seq=2"):
+                census.run_dispatch_probe(binary, Path(tmp) / "unused.gguf",
+                                          census.Shape("decode", 8, 2), timeout=5)
 
 
 if __name__ == "__main__":
