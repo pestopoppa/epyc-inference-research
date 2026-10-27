@@ -1,6 +1,5 @@
 """DS41-W8d: RAM admission before DS41-class server starts. No server is ever launched."""
 import contextlib
-import inspect
 import os
 import re
 import subprocess
@@ -111,6 +110,11 @@ def order_log(result):
         return result
     def popen(*a, **k):
         log.append("popen")
+        if ram_admit.is_ds41_argv(a[0]):
+            assert len(k["pass_fds"]) == 1
+            os.fstat(k["pass_fds"][0])
+            with pytest.raises(OSError):
+                ram_admit._lease_fd(ram_admit.DS41_LEASE_PATH)
         raise Stop
     return log, check, popen
 
@@ -203,12 +207,40 @@ def test_server_pair_refuses_before_popen(monkeypatch, tmp_path):
     assert log == ["admit"]
 
 
-def test_every_popen_launch_site_is_guarded():
-    """Each server-start function uses the lifetime-admission launch helper."""
-    for fn in (serving._measure_once, model_identity.serve, capacity_probe.run,
-               ab_server_pair.ServerPair.start):
-        src = inspect.getsource(fn)
-        assert "ram_admit.popen(" in src
+@pytest.mark.parametrize("site", ["identity", "capacity", "pair"])
+def test_call_site_admits_before_spawn_with_live_lease(site, monkeypatch, tmp_path):
+    events = []
+    def check(*args, **kwargs):
+        events.append("check")
+        return ADMIT
+    def spawn(argv, **kwargs):
+        events.append("spawn")
+        assert ram_admit.is_ds41_argv(argv)
+        fds = kwargs["pass_fds"]
+        assert len(fds) == 1
+        os.fstat(fds[0])
+        with pytest.raises(OSError):
+            ram_admit._lease_fd(ram_admit.DS41_LEASE_PATH)
+        raise Stop
+    monkeypatch.setattr(ram_admit, "check", check)
+    if site == "identity":
+        monkeypatch.setattr(model_identity.subprocess, "Popen", spawn)
+        call = lambda: model_identity.serve(mock.Mock(argv=["server", "-m", DS41], launch_env={}), [])
+    elif site == "capacity":
+        call = lambda: capacity_probe.run(argv=["server", "-m", DS41], env={}, port=1,
+            sequence=[], backend="cpu", popen=spawn,
+            sampler_factory=lambda: contextlib.nullcontext(mock.Mock()))
+    else:
+        monkeypatch.setattr(ab_server_pair.subprocess, "Popen", spawn)
+        monkeypatch.setattr(ab_server_pair, "port_is_free", lambda p: True)
+        monkeypatch.setattr(ab_server_pair, "argv_for", lambda s: ["server", "-m", DS41])
+        monkeypatch.setattr(ab_server_pair, "env_for", lambda s: {})
+        pair = ab_server_pair.ServerPair.__new__(ab_server_pair.ServerPair)
+        pair.specs, pair.log_dir, pair.procs, pair.proof = {"A": mock.Mock()}, tmp_path, {}, {}
+        call = pair.start
+    with pytest.raises(Stop):
+        call()
+    assert events == ["check", "spawn"]
 
 
 def test_non_ds41_exact_passthrough():
