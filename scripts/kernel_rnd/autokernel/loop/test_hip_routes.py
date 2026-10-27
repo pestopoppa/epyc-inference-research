@@ -1,6 +1,7 @@
 """Zero-hardware fixtures for AKX-P0b's HIP route layer."""
 from pathlib import Path
 from unittest import mock
+import pytest
 
 from autokernel.loop import census, hip_routes
 
@@ -63,7 +64,40 @@ def test_two_run_entrypoint_sets_level_2_and_requires_structural_identity():
     assert result["state"] == census.OBSERVED
     assert result["structurally_identical"]
     assert len(seen) == 2 and seen[0] == seen[1]
+    assert "--help" not in seen[0][0]
+    assert "-np" not in seen[0][0]
     assert seen[0][1]["GGML_CUDA_LOG_MMVQ_ROUTE"] == "2"
+
+
+def test_parallel_aa_checks_actual_help_then_keeps_two_identical_captures():
+    seen = []
+    def runner(argv, *, env, timeout):
+        seen.append((list(argv), dict(env), timeout))
+        if argv == ["/b/bin/llama-bench", "--help"]:
+            return mock.Mock(returncode=0, stdout="", stderr="  -np, --parallel N\n")
+        return mock.Mock(returncode=0, stdout="", stderr=W1_DECODE)
+    with mock.patch.object(hip_routes.residency, "loader_env", return_value={"BASE": "1"}):
+        result = hip_routes.run_aa(Path("/b/bin/llama-bench"), Path("/m/w1.gguf"),
+                                   IDENTITY, shape=census.Shape("verify", 8, 4),
+                                   recipe_argv=("-ub", "512"), timeout=123, runner=runner)
+    assert result["state"] == census.OBSERVED
+    assert len(result["runs"]) == 2
+    assert len(seen) == 3 and seen[1] == seen[2]
+    assert seen[0][2] == 30 and seen[1][2] == 123
+    assert seen[0][1] == seen[1][1] == {"BASE": "1", "GGML_CUDA_LOG_MMVQ_ROUTE": "2"}
+    assert seen[1][0] == ["/b/bin/llama-bench", "-m", "/m/w1.gguf", "-p", "0", "-n", "8",
+                          "-np", "4", "-ub", "512", "-r", "1", "-o", "json", "-v"]
+
+
+@pytest.mark.parametrize("rc,help_text", [(0, "  -n N\n"), (1, "  -np N\n")])
+def test_parallel_aa_failed_or_unsupported_help_never_starts_a_capture(rc, help_text):
+    runner = mock.Mock(return_value=mock.Mock(returncode=rc, stdout=help_text, stderr=""))
+    with mock.patch.object(hip_routes.residency, "loader_env", return_value={}):
+        with pytest.raises(ValueError):
+            hip_routes.run_aa(Path("/b/bin/llama-bench"), Path("/m/w1.gguf"), IDENTITY,
+                              shape=census.Shape("decode", 1, 2), timeout=7, runner=runner)
+    runner.assert_called_once_with(["/b/bin/llama-bench", "--help"],
+                                   env={"GGML_CUDA_LOG_MMVQ_ROUTE": "2"}, timeout=7)
 
 
 def test_two_different_multisets_are_unknown():

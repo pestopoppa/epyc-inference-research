@@ -92,7 +92,13 @@ def run_aa(binary: Path, model: Path, identity: Mapping[str, Any], *,
     """Run the exact same route probe twice, sequentially, and compare multisets."""
     env = dict(residency.loader_env(binary))
     env["GGML_CUDA_LOG_MMVQ_ROUTE"] = "2"
-    argv = census.shape_argv(binary, model, shape, recipe_argv)
+    binary_help = ""
+    if shape.n_seq > 1:
+        help_proc = runner([str(binary), "--help"], env=env, timeout=min(timeout, 30))
+        if help_proc.returncode != 0:
+            raise ValueError("cannot establish native parallel capability: binary --help failed")
+        binary_help = help_proc.stdout + help_proc.stderr
+    argv = census.shape_argv(binary, model, shape, recipe_argv, binary_help=binary_help)
     captures = []
     for _ in range(2):
         proc = runner(argv, env=env, timeout=timeout)
