@@ -1379,6 +1379,9 @@ server_mode:
   # Pure MoE — speculative decoding IS viable (unlike Qwen3.5 hybrids)
   # Direct A/B comparison target: worker (same arch unpruned, 39.1 t/s)
   reap_25b:
+    deprecated: true
+    deprecated_date: 2026-10-28
+    deprecated_reason: "REAP-25B Q4_K_M GGUF deleted 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); catalogue-only row, no live role bound. Archive note: /mnt/raid0/llm/archive/retired-models-20261028.md"
     url: http://localhost:8196  # benchmark port, not production
     port: 8196
     slots: 1
@@ -2960,6 +2963,9 @@ roles:
       Do NOT deploy 4×48t — cross-NUMA memory access causes 4x per-instance degradation.
 
   reap_25b:
+    deprecated: true
+    deprecated_date: 2026-10-28
+    deprecated_reason: "REAP-25B Q4_K_M GGUF deleted 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); catalogue-only row, no live role bound. Archive note: /mnt/raid0/llm/archive/retired-models-20261028.md"
     tier: B
     description: REAP-pruned Qwen3-Coder-25B-A3B — 25% expert removal, pure MoE, spec decode viable
     model:
@@ -5469,6 +5475,9 @@ roles:
   # --- Qwen3-4B-Instruct-2507 (registered 2026-04-23, downloaded 2026-04-21) ---
   # Non-thinking instruct variant (distinct from Qwen3-4B-Thinking-2507). Pure dense transformer.
   qwen3_4b_2507_q8:
+    deprecated: true
+    deprecated_date: 2026-10-28
+    deprecated_reason: "Qwen3-4B-Instruct-2507 Q8_0 GGUF deleted 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); catalogue-only row, no live role bound. Archive note: /mnt/raid0/llm/archive/retired-models-20261028.md"
     tier: C
     description: Qwen3-4B-Instruct-2507 Q8_0 — dense transformer, non-thinking instruct variant
     model:
@@ -5528,6 +5537,9 @@ roles:
       draft for larger Qwen3 family models.
 
   qwen3_4b_2507_bf16:
+    deprecated: true
+    deprecated_date: 2026-10-28
+    deprecated_reason: "Qwen3-4B-Instruct-2507 bf16 GGUF deleted 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); catalogue-only row, no live role bound. Archive note: /mnt/raid0/llm/archive/retired-models-20261028.md"
     tier: C
     description: Qwen3-4B-Instruct-2507 BF16 — full-precision reference for the -2507 non-thinking variant
     model:
@@ -7659,11 +7671,12 @@ roles:
   formalizer:
     tier: B
     description: Problem formalizer - converts vague tasks to formal specifications
+    model_note: 'Repointed 2026-10-28 from the Q8_0 (mradermacher/...Q8_0.gguf) to the Q4_K_M sibling: Q8_0 deleted 2026-10-28 in the disk reclaim, operator-approved (/mnt/raid0/llm/archive/retired-models-20261028.md).'
     model:
-      name: MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0
-      path: mradermacher/MathSmith-Hard-Problem-Synthesizer-Qwen3-8B-GGUF/MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0.gguf
-      quant: Q8_0
-      size_gb: 8.1
+      name: MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M
+      path: /mnt/raid0/llm/models/MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 4.7
       architecture: dense
     candidate_roles:
     - formalizer
@@ -11208,6 +11221,9 @@ roles:
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   qwen3_4b_fable5_glint_local_q8:
+    deprecated: true
+    deprecated_date: 2026-10-28
+    deprecated_reason: "Qwen3-4B-SFT-Fable5-Glint Q8_0 GGUF deleted 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); catalogue-only row, no live role bound. Archive note: /mnt/raid0/llm/archive/retired-models-20261028.md"
     tier: C
     description: Local Qwen3-4B-SFT-Fable5-Glint Q8_0 scaffold-generator candidate; catalogue-only exact-path entry.
     model:
@@ -12702,6 +12718,31 @@ runtime_quirks:
 # Models deleted 2026-01-18 during MiniMax M2.1 download cleanup
 # Based on BLIND_RESCORE_2026-01-16.md analysis
 deprecated_models:
+  - model: cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M
+    path_was: /mnt/raid0/llm/models/bartowski/cerebras_Qwen3-Coder-REAP-25B-A3B-GGUF/cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M.gguf
+    size_gb: 15.2
+    reason: "DELETED 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); roles.reap_25b + server_mode.reap_25b (catalogue-only). Hashes and sizes: /mnt/raid0/llm/archive/retired-models-20261028.md"
+    deleted: 2026-10-28
+  - model: MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0
+    path_was: /mnt/raid0/llm/models/mradermacher/MathSmith-Hard-Problem-Synthesizer-Qwen3-8B-GGUF/MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0.gguf
+    size_gb: 8.7
+    reason: "DELETED 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); roles.formalizer repointed to the kept Q4_K_M sibling. Hashes and sizes: /mnt/raid0/llm/archive/retired-models-20261028.md"
+    deleted: 2026-10-28
+  - model: Qwen3-4B-Instruct-2507 BF16
+    path_was: /mnt/raid0/llm/models/Qwen3-4B-Instruct-2507-GGUF/Qwen_Qwen3-4B-Instruct-2507-bf16.gguf
+    size_gb: 8.1
+    reason: "DELETED 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); roles.qwen3_4b_2507_bf16 (catalogue-only). Hashes and sizes: /mnt/raid0/llm/archive/retired-models-20261028.md"
+    deleted: 2026-10-28
+  - model: Qwen3-4B-Instruct-2507 Q8_0
+    path_was: /mnt/raid0/llm/models/Qwen3-4B-Instruct-2507-GGUF/Qwen_Qwen3-4B-Instruct-2507-Q8_0.gguf
+    size_gb: 4.3
+    reason: "DELETED 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); roles.qwen3_4b_2507_q8 (catalogue-only). Hashes and sizes: /mnt/raid0/llm/archive/retired-models-20261028.md"
+    deleted: 2026-10-28
+  - model: Qwen3-4B-SFT-Fable5-Glint Q8_0
+    path_was: /mnt/raid0/llm/models/qwen3-4b-sft-fable5-glint.q8_0.gguf
+    size_gb: 4.3
+    reason: "DELETED 2026-10-28 in the operator-approved disk reclaim (REVIEW-ws58 section 3); roles.qwen3_4b_fable5_glint_local_q8 (catalogue-only). Hashes and sizes: /mnt/raid0/llm/archive/retired-models-20261028.md"
+    deleted: 2026-10-28
   - model: gemma-4-26B-A4B-it (all quants + both MTP assistant heads)
     path_was: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-{ORIG-Q8_0,ORIG-Q4_K_M,Q4_K_M,Q4_K_M-current,assistant-Q8_0,assistant-v6-Q8_0}.gguf
     size_gb: 70
