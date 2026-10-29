@@ -45,16 +45,23 @@ class Native(unittest.TestCase):
 if __name__=='__main__':unittest.main()
 
 class Lineage(unittest.TestCase):
- def test_odl_unique_grant_and_tamper(self):
+ def test_odl_rearm_and_ambiguous_window(self):
   import time,datetime
   from odl_bench import pip02_lineage as l
   with tempfile.TemporaryDirectory() as tmp:
-   base=Path(tmp); armed=base/'armed'; armed.mkdir(); ident='codex3-pip02-fresh-odl-s0-20261029'; packet=armed/(ident+'.json'); producer=base/'producer';producer.write_text('source'); log=base/'log'; now=time.time(); begin=datetime.datetime.fromtimestamp(now-10,datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'); end=datetime.datetime.fromtimestamp(now+3600,datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'); grant=f'regions=24-47 start={begin} end={end}\n'
+   base=Path(tmp); armed=base/'armed'; armed.mkdir(); ident='codex3-pip02-fresh-odl-s0-20261029'; packet=armed/(ident+'.json'); producer=base/'producer';producer.write_text('source'); log=base/'log'; now=time.time()
+   stamp=lambda delta:datetime.datetime.fromtimestamp(now+delta,datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+   begin1,end1,begin2,end2=stamp(-10),stamp(60),stamp(120),stamp(3600)
    draft={'id':ident,'regions':'24-47','launcher_log':str(log),'launcher':{'path':str(producer),'sha256':r.digest(producer)},'job':{'path':str(producer),'sha256':r.digest(producer)},'source_manifest':{'path':str(producer),'sha256':r.digest(producer)}};dump(packet,draft)
-   log.write_text(f'[{ident}] START regions=24-47 end={end}\n --inner --id {ident} {producer} --shard 0 \n');page=base/'page';dump(page/'start.json',{'started':now+1,'grant':grant}); pins={str(packet.resolve()):r.digest(packet),str(producer.resolve()):r.digest(producer)}
+   start1=f'[{ident}] START regions=24-47 end={end1}\n';start2=f'[{ident}] START regions=24-47 end={end2}\n';cmd=f' --inner --id {ident} {producer} --shard 0 \n'
+   log.write_text(start1+cmd+start2+cmd);p1=base/'page1';p2=base/'page2';dump(p1/'start.json',{'started':now+1,'grant':f'regions=24-47 start={begin1} end={end1}\n'});dump(p2/'start.json',{'started':now+130,'grant':f'regions=24-47 start={begin2} end={end2}\n'});pins={str(packet.resolve()):r.digest(packet),str(producer.resolve()):r.digest(producer)}
    with patch.object(l,'ARMED',armed):
-    self.assertTrue(l.odl_lineage(page,0,pins)['verified']);log.write_text(log.read_text()*2)
-    with self.assertRaises(ValueError):l.odl_lineage(page,0,pins)
+    self.assertTrue(l.odl_lineage(p1,0,pins)['verified']);self.assertTrue(l.odl_lineage(p2,0,pins)['verified'])
+    log.write_text(start1+cmd+cmd+start2+cmd)
+    with self.assertRaises(ValueError):l.odl_lineage(p1,0,pins)
+    self.assertTrue(l.odl_lineage(p2,0,pins)['verified'])
+    log.write_text(start1+cmd+start2+cmd+start2+cmd)
+    with self.assertRaises(ValueError):l.odl_lineage(p2,0,pins)
  def test_paddle_unique_capture_and_ambiguity(self):
   import datetime,time,os
   from odl_bench import pip02_lineage as l

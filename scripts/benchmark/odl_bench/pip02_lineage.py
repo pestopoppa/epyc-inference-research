@@ -25,9 +25,12 @@ def odl_lineage(page_dir, shard, pins):
     region,begin,end=match.groups(); begin_dt=datetime.datetime.fromisoformat(begin.replace('Z','+00:00')); end_dt=datetime.datetime.fromisoformat(end.replace('Z','+00:00'))
     if region!=draft['regions'] or not begin_dt.timestamp()<=start['started']<=end_dt.timestamp(): raise ValueError('page outside recorded grant')
     log=Path(draft['launcher_log']); raw=log.read_bytes(); lines=raw.decode().splitlines()
-    starts=[x for x in lines if f'[{ident}] START regions={region} ' in x and f'end={end}' in x]
-    commands=[x for x in lines if '--inner --id '+ident+' ' in x and draft['job']['path'] in x and f'--shard {shard} ' in x]
-    if len(starts)!=1 or len(commands)!=1: raise ValueError('original launcher record is missing or ambiguous')
+    starts=[i for i,x in enumerate(lines) if f'[{ident}] START regions={region} ' in x and f'end={end}' in x]
+    if len(starts)!=1: raise ValueError('original launcher START is missing or ambiguous')
+    begin_line=starts[0]
+    next_start=next((i for i in range(begin_line+1,len(lines)) if f'[{ident}] START ' in lines[i]),len(lines))
+    commands=[x for x in lines[begin_line:next_start] if '--inner --id '+ident+' ' in x and draft['job']['path'] in x and f'--shard {shard} ' in x]
+    if len(commands)!=1: raise ValueError('original launcher command is missing or ambiguous in grant window')
     return {'verified':True,'basis':'inferred from recorded page grant, pre-start armed packet, launcher START and actual command; source hash is not recorded on the page','packet_sha256':sha(packet.read_bytes()),'launcher_log_sha256':sha(raw),'grant_sha256':sha(grant.encode())}
 
 def paddle_lineage(directory,page,campaign,shard,pins):
