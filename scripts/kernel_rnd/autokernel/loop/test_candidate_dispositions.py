@@ -222,17 +222,15 @@ class AbandonedCandidatesGetTheirOwnRow(unittest.TestCase):
         self.assertEqual([row["status"] for row in outcome.abandoned_candidates],
                          ["hypothesis_rejected", "patch_rejected"])
 
-    def test_a_recording_fault_is_carried_not_raised(self):
+    def test_a_recording_fault_aborts_before_further_authoring(self):
         def broken(candidate):
             raise OSError("store is read-only")
-        outcome = loop.iterate(
-            planner=_Planner([_hypothesis()]), critic=_Critic(), context={},
-            measure=lambda h, p: None, gate=_refusing_gate, commit=lambda h, p, c: None,
-            hypothesis_rounds=1, record_abandoned=broken)
-        self.assertEqual(outcome.status, loop.SCOPE_BLOCKED)
-        self.assertEqual(len(outcome.abandoned_candidates), 2)
-        self.assertTrue(all("store is read-only" in row["record_error"]
-                            for row in outcome.abandoned_candidates))
+        with self.assertRaisesRegex(loop.RunAborted, "store is read-only"):
+            loop.iterate(
+                planner=_Planner([_hypothesis()]), critic=_Critic(), context={},
+                measure=lambda h, p: None, gate=_refusing_gate, commit=lambda h, p, c: None,
+                hypothesis_rounds=1, record_abandoned=broken)
+
 
 
 class PoolAttachesLineageAndTheRefusedDiffsReservation(unittest.TestCase):
