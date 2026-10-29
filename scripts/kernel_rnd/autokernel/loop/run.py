@@ -6268,27 +6268,17 @@ def main(argv: list[str] | None = None) -> int:
             counts) is untouched.
             """
             hypothesis = candidate.hypothesis
-            hold = pool.begin_custody_hold(
-                worker, getattr(hypothesis, "mechanism_id", None) or "unnamed",
-                identity={"resumed_from": candidate.resumed_from,
-                          "resume_stage": candidate.resume_stage,
-                          "attempt_identity": candidate.attempt_identity,
-                          "candidate_diff_sha256": candidate.candidate_diff_sha256,
-                          "spawn_parent": candidate.spawn_parent})
             if hypothesis is not None and hypothesis.runtime_pair is None \
                     and candidate.status != "hypothesis_rejected":
-                kept = keep_the_diff(worker, hypothesis)
-                if kept is None:
-                    pre_author = (candidate.status == loop.RESUME_REJECTED
-                                  and candidate.patch_round == 0
-                                  and pool.prove_empty_pre_author(worker, candidate.spawn_parent))
-                    if not pre_author:
-                        raise RuntimeError("candidate retention captured no patch; lane remains held")
-                else:
-                    candidate.retained_patch = {
+                try:
+                    kept = keep_the_diff(worker, hypothesis)
+                    candidate.retained_patch = (None if kept is None else {
                         "patch_file": str(kept.resolve()),
                         "metadata_file": str(kept.with_suffix(".json").resolve()),
-                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
+                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()})
+                except Exception as exc:      # noqa: BLE001 -- the row still lands
+                    candidate.retained_patch = {
+                        "error": f"patch retention failed: {type(exc).__name__}: {exc}"}
             attempt = candidate.to_attempt()
             attempt["research_scope"] = archive.original_research_scope(
                 attempt, model=args.model, quant=census.dominant_quant,
@@ -6314,7 +6304,6 @@ def main(argv: list[str] | None = None) -> int:
                                     effect=None, epoch=epoch)
                 finally:
                     registry.close()
-            pool.finish_custody_hold(hold)
             reason = candidate.reasons[0] if candidate.reasons else ""
             patch = (candidate.retained_patch or {}).get("patch_file") \
                 or (candidate.retained_patch or {}).get("error") or "no patch"

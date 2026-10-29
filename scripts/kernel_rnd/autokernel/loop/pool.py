@@ -152,57 +152,6 @@ def champion_head(champion_tree: Path = CHAMPION_TREE,
     return _git(champion_tree, "rev-parse", branch)
 
 
-CUSTODY_HOLD = ".autokernel-custody-hold.json"
-
-
-def custody_hold_path(worker: pipeline.Worker) -> Path:
-    # A sibling survives every git checkout/reset/clean inside the lane itself.
-    return worker.worktree.parent / ("." + worker.worktree.name + CUSTODY_HOLD)
-
-
-def prove_empty_pre_author(worker: pipeline.Worker, expected_base: str | None) -> bool:
-    """Prove a pre-author lane is clean, including ignored and untracked paths."""
-    if not expected_base:
-        return False
-    try:
-        before = _git(worker.worktree, "rev-parse", "HEAD")
-        status = _git(worker.worktree, "status", "--porcelain=v1",
-                      "--untracked-files=all", "--ignored=matching",
-                      "--ignore-submodules=none")
-        after = _git(worker.worktree, "rev-parse", "HEAD")
-    except (OSError, subprocess.SubprocessError, archive.RatchetRefused):
-        return False
-    return before == expected_base == after and not status
-
-
-def begin_custody_hold(worker: pipeline.Worker, mechanism: str, *,
-                       identity: Mapping[str, Any] | None = None) -> Path:
-    """Fence reuse before disposition; a crash leaves the lane held for reconciliation."""
-    path = custody_hold_path(worker)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, "w") as f:
-        json.dump({"lane": worker.name, "worktree": str(worker.worktree.resolve()),
-                   "mechanism": mechanism, "identity": dict(identity or {})}, f, sort_keys=True)
-        f.write("\n")
-        f.flush()
-        os.fsync(f.fileno())
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
-    return path
-
-
-def finish_custody_hold(path: Path) -> None:
-    path.unlink()
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
-
-
 def reset_to_champion(worker: pipeline.Worker, *,
                       champion_tree: Path = CHAMPION_TREE,
                       branch: str = CHAMPION_BRANCH) -> str:
@@ -217,8 +166,6 @@ def reset_to_champion(worker: pipeline.Worker, *,
     `clean` is scoped to the source directories a patch may touch, so a lane's build
     directory (which lives outside the tree) and any operator scratch survive.
     """
-    if custody_hold_path(worker).exists() or custody_hold_path(worker).is_symlink():
-        raise RuntimeError(f"lane custody hold requires reconciliation: {worker.worktree}")
     head = champion_head(champion_tree, branch)
     # --force, and reset BEFORE clean. Without the force, the previous iteration's
     # uncommitted patch blocks the checkout outright:

@@ -1489,8 +1489,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 verdicts=(), resume_checkpoint: dict | None = None) -> None:
         """Record one abandoned candidate NOW, with its reason and gate.
 
-        A recording failure stops the run before another author can overwrite the
-        lane. The pooled recorder also leaves a durable lane custody hold.
+        A recording fault is carried on the iteration's final outcome rather than
+        raised: raising here would turn one refused candidate into a lane error that
+        discards the rest of the turn, which is the loss this exists to stop.
         """
         candidate = Outcome(status, hypothesis,
                             [reason or f"{refusal_gate} refused without a reason"],
@@ -1509,16 +1510,14 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             candidate.author_panels = [dict(progress["author_panel"])]
         _mark_report_source(candidate, progress)
         _mark_belief(candidate, progress)
+        record_error = None
         if record_abandoned is not None:
             try:
                 record_abandoned(candidate)
             except Exception as exc:      # noqa: BLE001 -- see docstring
-                raise RunAborted(
-                    f"abandoned-candidate custody failed; retain lane: {type(exc).__name__}: {exc}"
-                ) from exc
-            if isinstance(candidate.retained_patch, dict) and candidate.retained_patch.get("error"):
-                raise RunAborted("abandoned-candidate custody failed; retain lane: "
-                                 + str(candidate.retained_patch["error"]))
+                record_error = f"{type(exc).__name__}: {exc}"
+                print(f"warning: abandoned-candidate record failed: {record_error}",
+                      file=sys.stderr)
         if resume_checkpoint is not None:
             # The owner retained the diff while recording. A later stop row carries
             # this checkpoint too, so a failed disposal record cannot lose it.
@@ -1534,6 +1533,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             "attempt_identity": candidate.attempt_identity,
             "candidate_diff_sha256": candidate.candidate_diff_sha256,
         }
+        if record_error is not None:
+            summary["record_error"] = record_error
         if candidate.resumed_from is not None:
             summary["resumed_from"] = candidate.resumed_from
         abandoned.append(summary)
