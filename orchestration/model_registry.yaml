@@ -4641,17 +4641,21 @@ roles:
     deprecated_date: 2026-09-22
     deprecated_reason: >
       RETIRED 2026-09-22 (operator-directed lineup change). architect_critic — this model's
-      only role — moved to Qwen3.8-Flash-Next UD-IQ4_XS. GGUF IS STILL ON DISK: the MTP/UD
-      3-shard set at /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/ totals
-      78,260,403,200 B (72.89 GiB), verified. Deletion is a SEPARATE operator action at session
-      end; this marker records role retirement, not disk reclamation.
+      only role — moved to Qwen3.8-Flash-Next UD-IQ4_XS. GGUF IS NOT ON DISK (corrected
+      2026-10-29): the MTP/UD 3-shard set at /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/
+      (78,260,403,200 B = 72.89 GiB) was deleted 2026-09-23, re-downloaded 2026-10-28 for INF-34
+      DR-3e only, and deleted again 2026-10-29 ~07:20Z with operator approval once DR-3e was retired.
+      Both deletions are graveyard rows in deprecated_models.
       SELF-DRAFT: no external drafter is orphaned — the NEXTN head is embedded in the same file.
       MEASURED RECORD PRESERVED HERE so it is not lost with the role: FULL instance, canonical
       placement (0-95, interleave=all), draft-mtp n-max 4 — 24.00 t/s short ctx, 15.76 long ctx,
       11.30 spec-off; quality 2.57/3; live prod 2026-07-05 :8083 telemetry n=287 median ~16 t/s;
       bundle data/cpu_optimization/2026-05-04-qwen35-122b-arch-probe/.
-      ⚠ ROLLBACK ANCHOR: this row is RETAINED UNMODIFIED below the marker precisely so the
-      122B remains restorable if the Flash-Next cutover fails its load or quality proof.
+      NOT A ROLLBACK ANCHOR (corrected 2026-10-29). This row was once retained unmodified as the
+      Flash-Next cutover's rollback anchor; that anchor was withdrawn when the weights were deleted
+      on 2026-09-23 (operator: no rollback path needed, re-download acceptable), and the 2026-10-28
+      re-download was a research copy for DR-3e, not a restored anchor. The row now stays only as
+      the record of the measured history above.
     description: Qwen3.5-122B-A10B Q4_K_M — was the PRODUCTION model for architect_critic 2026-07-31 to 2026-09-22 (MoE, 256 experts, 8 active); inherited from architect_general
     # ARTIFACT MISMATCH, 2026-07-31: `model.path` below is the plain Q4_K_M HF-style path. The
     # DEPLOYED artifact is the MTP/UD file
@@ -4740,13 +4744,14 @@ roles:
       roles.qwen35_122b_q4km but not this exact-artifact catalogue row beneath it, which stayed live
       and non-deprecated; marked 2026-09-23 to close that gap. Never role-bound: no server_mode row
       and no live role resolves to it (verified 2026-09-23, retire-model enumerate_refs: 0 BLOCK).
-      GGUF REMAINS ON DISK at
+      GGUF IS NOT ON DISK (corrected 2026-10-29): the file at
       /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf
-      (40,377,862,848 B = 37.60 GiB, stat-verified 2026-09-23). DELETION IS A SEPARATE OPERATOR
-      ACTION; this marker records catalogue retirement, not disk reclamation.
+      (40,377,862,848 B = 37.60 GiB) was deleted 2026-09-23, re-downloaded 2026-10-28 for INF-34
+      DR-3e only, and deleted again 2026-10-29 ~07:20Z with operator approval. Both deletions are
+      graveyard rows in deprecated_models.
       The measured MI210 record below is retained, not superseded.
-      NOTE — this row is NOT the rollback anchor: the anchor named by roles.qwen35_122b_q4km is the
-      UD-Q4_K_M 3-shard set under the same MTP-GGUF tree, a different artifact, untouched here.
+      NOTE — this row is NOT a rollback anchor, and neither is roles.qwen35_122b_q4km any more
+      (its anchor was withdrawn with the 2026-09-23 deletion).
     description: Qwen3.5-122B-A10B UD-IQ2_M — GPU-resident architect/drafter research candidate
     model:
       name: Qwen3.5-122B-A10B
@@ -12779,6 +12784,20 @@ deprecated_models:
       stack-change gate skipped with --allow-known-gaps), so until that closes the role is unmeasured AND
       unbacked. The unsloth Q4_K_M copy was a second, never-deployed download of the same weights.
     deleted: 2026-09-23
+  - model: Qwen3.5-122B-A10B (MTP UD-Q4_K_M 3-shard + UD-IQ2_M), 2026-10-28 re-download
+    path_was: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/{UD-Q4_K_M/,UD-IQ2_M/}
+    size_gb: 110.5
+    reason: >-
+      DELETED 2026-10-29 ~07:20Z with operator approval. A second graveyard row for the same weights as the
+      2026-09-23 row above: the UD-Q4_K_M 3-shard set (72.89 GiB) and the UD-IQ2_M file (37.60 GiB),
+      118,638,266,048 B = 110.50 GiB together, were re-downloaded on 2026-10-28 for one consumer only, the
+      INF-34 DR-3e P-GPU-1 rerun (the 122B quant-asymmetric K2 lane: a Q4 CPU verifier with an IQ2 MI210
+      drafter). The operator retired DR-3/DR-3e the same day because Qwen3.5-122B is deprecated (epyc-root
+      84dff9d39), which left the copy with no consumer. Not a rollback anchor; roles.qwen35_122b_q4km and
+      roles.qwen35_122b_iq2m stay deprecated catalogue rows. Where the unarmed DR-3e preparation is kept
+      is recorded in epyc-root handoffs/active/mi210-big-model-and-acceleration-roadmap.md (DR-3/DR-3e
+      RETIRED note). None of its 122B evidence transfers to Flash-Next.
+    deleted: 2026-10-29
   - model: GLM-5.3-Flash-UD-Q4_K_XL (unsloth, 6 shards)
     path_was: /mnt/raid0/llm/models/unsloth/GLM-5.3-Flash-GGUF/UD-Q4_K_XL/
     size_gb: 186
