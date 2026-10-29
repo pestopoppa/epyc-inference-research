@@ -43,3 +43,28 @@ class Native(unittest.TestCase):
    values=run(plan,[g],'/none','/none',cfg)
   self.assertEqual(values['odl']['table_weighted_means']['teds'],0);self.assertIsNone(values['paddle']['table_weighted_means']['teds'])
 if __name__=='__main__':unittest.main()
+
+class Lineage(unittest.TestCase):
+ def test_odl_unique_grant_and_tamper(self):
+  import time
+  from odl_bench import pip02_lineage as l
+  with tempfile.TemporaryDirectory() as tmp:
+   base=Path(tmp); grants=base/'grants'; grants.mkdir(); packet=base/'packets-final/odl-s0/draft.json'; producer=base/'producer';producer.write_text('source'); grant=grants/'job.grant';grant.write_text('grant')
+   draft={'id':'job','launcher':{'path':str(producer),'sha256':r.digest(producer)},'job':{'path':str(producer),'sha256':r.digest(producer)},'source_manifest':{'path':str(producer),'sha256':r.digest(producer)}};dump(packet,draft)
+   page=base/'page';dump(page/'start.json',{'started':time.time()+1,'grant':'grant'}); pins={str(packet.resolve()):r.digest(packet),str(producer.resolve()):r.digest(producer)}
+   with patch.object(l,'BASE',base),patch.object(l,'GRANTS',grants):
+    self.assertTrue(l.odl_lineage(page,0,pins)['verified']);(grants/'other.grant').write_text('grant')
+    with self.assertRaises(ValueError):l.odl_lineage(page,0,pins)
+ def test_paddle_unique_capture_and_ambiguity(self):
+  import datetime,time,os
+  from odl_bench import pip02_lineage as l
+  with tempfile.TemporaryDirectory() as tmp:
+   base=Path(tmp); page,_=fixture(); campaign={'population_sha256':'p','scope':'scope'};d=base/'journal';d.mkdir();key=r.sha(r.canon({'campaign':r.sha(r.canon(campaign)),'page':page})); finish=d/(key+'.result'); finish.write_text('{}')
+   now=time.time();os.utime(finish,(now,now));producer=base/'producer.py';producer.write_text('source'); pins={str(producer.resolve()):r.digest(producer)}
+   cap={'started_utc':datetime.datetime.fromtimestamp(now-5,datetime.timezone.utc).isoformat(),'smoke':False,'shard':0,'protocol_sha256':'dc7d8e167edc79a07b9db10849940cb84a7f04c34f67274afbe067531d226ae3','grant':'grant','grant_sha256':H(b'grant'),'source_pins':{'producer.py':r.digest(producer)}}
+   result={'population_sha256':'p','scope':'scope','states':{'0':'complete'}}
+   dump(base/'attempts/a/capture.json',cap);dump(base/'attempts/a/result.json',result)
+   with patch.object(l,'BASE',base):
+    self.assertTrue(l.paddle_lineage(d,page,campaign,0,pins)['verified'])
+    dump(base/'attempts/b/capture.json',cap);dump(base/'attempts/b/result.json',result)
+    with self.assertRaises(ValueError):l.paddle_lineage(d,page,campaign,0,pins)
