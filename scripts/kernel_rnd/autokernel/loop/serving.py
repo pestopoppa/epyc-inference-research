@@ -47,6 +47,7 @@ import urllib.error
 from . import (headline_admissibility, hip_launch_proof, kernel_coverage, launch_affinity,
                loadgen_selfcheck, lifecycle_observation, procguard, ram_admit, residency, status)
 from . import native_server_response as server_response
+from .floor_units import FLOOR_UNITS, UNIT_ARM, UNIT_PROCESS, UNIT_SESSION
 from .serving_server_owner import (ServerOwnershipRefused, ServerPortOwner,
                                    require_free_port)
 from .loop import ActorStopped, MeasurementFailed, MeasurementInvalid
@@ -79,11 +80,8 @@ MATCHED_CALIBRATION_PAIRS = 24
 # underestimate that would have been spent as real host time. So the unit is a
 # REQUIRED field of every floor record, and a gate handed a floor of a different
 # unit than the effect REFUSES: it does not warn, and it does not rescale.
-UNIT_ARM = "arm"
-UNIT_SESSION = "session"
-UNIT_PROCESS = "process"
-#: The only admissible units, narrowest first.
-FLOOR_UNITS = (UNIT_ARM, UNIT_SESSION, UNIT_PROCESS)
+# The dependency-free floor_units leaf owns the vocabulary. Keep these imported
+# names public here for existing callers, without making bench import serving.
 
 #: The unit `compare` itself measures in: every sample of every arm is a FRESH
 #: server launch (`_measure_once` launches, fires `np` requests, tears down), so
