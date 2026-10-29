@@ -152,3 +152,45 @@ def test_empty_pre_author_proof_refuses_dirty_ignored_and_changed_head(tmp_path)
     assert not pool.prove_empty_pre_author(worker, base)
     git('add', 'tracked'); git('commit', '-qm', 'changed')
     assert not pool.prove_empty_pre_author(worker, base)
+
+
+@pytest.mark.parametrize('phase', ['before_archive', 'after_archive', 'after_ledger'])
+def test_real_archive_ledger_crash_boundaries_leave_claim_and_lane_held(tmp_path, phase):
+    from . import resume
+    lane = tmp_path / 'lane'; lane.mkdir()
+    store = tmp_path / 'store'; store.mkdir()
+    worker = pipeline.Worker('lane0', lane, lane)
+    (lane / 'candidate.c').write_text('original authored bytes')
+    with resume.ClaimLedger(store) as ledger:
+        assert ledger.claim('checkpoint', 'base', state='resumed')
+    code = r'''
+import os
+from pathlib import Path
+from autokernel.loop import archive, pool, pipeline, resume
+lane = Path(os.environ['LANE']); store = Path(os.environ['STORE'])
+worker = pipeline.Worker('lane0', lane, lane)
+pool.begin_custody_hold(worker, 'mechanism', identity={'resumed_from':'checkpoint', 'spawn_parent':'base'})
+if os.environ['PHASE'] == 'before_archive': os._exit(17)
+a = {'status':'gate_refused', 'mechanism_id':'mechanism', 'reason':'refused', 'proposal_sha256':'fixture-attempt'}
+archive.record(store, a, epoch='epoch', recorded_at='2026-01-01T00:00:00Z', campaign_id='ak-loop')
+if os.environ['PHASE'] == 'after_archive': os._exit(17)
+with resume.ClaimLedger(store) as ledger:
+    assert ledger.settle_outcome('checkpoint', 'base', result_status='gate_refused') == 'pending'
+os._exit(17)
+'''
+    child = subprocess.run([sys.executable, '-c', code], env=dict(os.environ,
+                           LANE=str(lane), STORE=str(store), PHASE=phase))
+    assert child.returncode == 17
+    with resume.ClaimLedger(store) as ledger:
+        row = ledger.rows()[0]
+        assert row['state'] == 'resumed' and row['result_status'] is None
+        assert not ledger.claim('checkpoint', 'base', state='resumed')
+    assert (lane / 'candidate.c').read_text() == 'original authored bytes'
+    with pytest.raises(RuntimeError, match='custody hold'):
+        pool.reset_to_champion(worker)
+    if phase != 'before_archive':
+        from . import archive
+        attempt = {'status':'gate_refused', 'mechanism_id':'mechanism',
+                   'reason':'refused', 'proposal_sha256':'fixture-attempt'}
+        assert not archive.record(store, attempt, epoch='epoch',
+                                  recorded_at='2026-01-01T00:00:00Z', campaign_id='ak-loop')
