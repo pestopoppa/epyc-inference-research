@@ -59,13 +59,13 @@ class Lineage(unittest.TestCase):
   import datetime,time,os
   from odl_bench import pip02_lineage as l
   with tempfile.TemporaryDirectory() as tmp:
-   base=Path(tmp); page,_=fixture(); campaign={'population_sha256':'p','scope':'scope'};d=base/'journal';d.mkdir();key=r.sha(r.canon({'campaign':r.sha(r.canon(campaign)),'page':page})); finish=d/(key+'.result'); finish.write_text('{}')
+   base=Path(tmp); page,_=fixture(); campaign={'population_sha256':'p','scope':'scope','server_pins':{}};d=base/'journal';d.mkdir();key=r.sha(r.canon({'campaign':r.sha(r.canon(campaign)),'page':page})); finish=d/(key+'.result'); finish.write_text('{}')
    now=time.time();os.utime(finish,(now,now));producer=base/'producer.py';producer.write_text('source'); pins={str(producer.resolve()):r.digest(producer)}
    cap={'started_utc':datetime.datetime.fromtimestamp(now-5,datetime.timezone.utc).isoformat(),'smoke':False,'shard':0,'protocol_sha256':'dc7d8e167edc79a07b9db10849940cb84a7f04c34f67274afbe067531d226ae3','grant':'grant','grant_sha256':H(b'grant'),'source_pins':{'producer.py':r.digest(producer)}}
    result={'population_sha256':'p','scope':'scope','states':{'0':'complete'}}
    capture=base/'attempts/a/capture.json';dump(capture,cap);dump(base/'attempts/a/result.json',result)
    prefix='region-'+r.sha(r.canon(page))[:24]+'-000000'; start=d/(prefix+'.start.json'); end=d/(prefix+'.result.json'); body=b'input'; response=b'output'
-   dump(start,{'body_hex':body.hex(),'body_sha256':H(body),'provenance':{'identity':{'campaign_sha256':r.sha(r.canon(campaign))},'origin_capture_sha256':r.digest(capture)}})
+   dump(start,{'body_hex':body.hex(),'body_sha256':H(body),'provenance':{'identity':{'campaign_sha256':r.sha(r.canon(campaign)),'source_pins':cap['source_pins'],'model_pins':{}},'origin_grant':'grant','origin_capture_sha256':r.digest(capture)}})
    dump(end,{'request_sha256':H(body),'start_sha256':r.digest(start),'body_hex':response.hex(),'response_sha256':H(response),'status':200})
    with patch.object(l,'BASE',base):
     self.assertTrue(l.paddle_lineage(d,page,campaign,0,pins)['verified'])

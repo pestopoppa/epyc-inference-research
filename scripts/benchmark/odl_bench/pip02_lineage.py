@@ -36,12 +36,12 @@ def paddle_lineage(directory,page,campaign,shard,pins):
     prefix='region-'+sha(canon(page))[:24]+'-'
     region_starts=sorted(Path(directory).glob(prefix+'*.start.json'))
     if not region_starts: raise ValueError('no request-origin evidence for finishing capture')
-    origins=set()
+    origins={}
     for region_start in region_starts:
         a=json.loads(region_start.read_bytes()); response_path=region_start.with_name(region_start.name.replace('.start.json','.result.json')); b=json.loads(response_path.read_bytes())
         provenance=a['provenance']; identity=provenance['identity']
         if identity['campaign_sha256']!=campaign_sha or sha(bytes.fromhex(a['body_hex']))!=a['body_sha256'] or b['request_sha256']!=a['body_sha256'] or b['start_sha256']!=sha(region_start.read_bytes()) or sha(bytes.fromhex(b['body_hex']))!=b['response_sha256'] or not 200<=b['status']<300: raise ValueError('region request/response identity')
-        origins.add(provenance['origin_capture_sha256'])
+        origins.setdefault(provenance['origin_capture_sha256'],[]).append(provenance)
     validated_origins=set()
     for capture_path in (BASE/'attempts').glob('*/capture.json'):
         try:
@@ -53,7 +53,12 @@ def paddle_lineage(directory,page,campaign,shard,pins):
             for name,expected in source.items():
                 path=pinned(BASE/name,pins)
                 if sha(path.read_bytes())!=expected: raise ValueError('captured source mismatch')
-            if sha(capture_path.read_bytes()) in origins: validated_origins.add(sha(capture_path.read_bytes()))
+            capture_sha=sha(capture_path.read_bytes())
+            if capture_sha in origins:
+                for provenance in origins[capture_sha]:
+                    identity=provenance['identity']
+                    if identity.get('source_pins')!=source or identity.get('model_pins')!=campaign['server_pins'] or provenance.get('origin_grant')!=cap['grant']: raise ValueError('region provenance differs from original capture')
+                validated_origins.add(capture_sha)
             if not result_path.is_file(): continue
             started=datetime.datetime.fromisoformat(cap['started_utc'].replace('Z','+00:00')).timestamp()
             if not (int(started*1e9)<=finish_ns<=result_path.stat().st_mtime_ns): continue
@@ -67,7 +72,7 @@ def paddle_lineage(directory,page,campaign,shard,pins):
                 if sha(path.read_bytes())!=expected: raise ValueError('captured source mismatch')
             candidates.append((capture_path,cap))
         except (KeyError,ValueError,OSError,TypeError): continue
-    if origins != validated_origins: raise ValueError('region origins are not all supported by captured source/grant')
+    if set(origins) != validated_origins: raise ValueError('region origins are not all supported by captured source/grant')
     if len(candidates)!=1: raise ValueError('finishing capture is not uniquely identifiable')
     capture,cap=candidates[0]
     return {'verified':True,'basis':'inferred from unique overlapping capture and complete native state; mtime is not an original per-page capture','capture_sha256':sha(capture.read_bytes()),'grant_sha256':cap['grant_sha256']}
