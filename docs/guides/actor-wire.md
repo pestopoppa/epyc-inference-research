@@ -1,7 +1,10 @@
 # Actor wire admission (OAB-29)
 
-Every loop launch writes `<store>/actor-wire-request.json` after resolving its
-planner, author panel, critic and lane overrides. Before making an actor call,
+Live loop launches write `<store>/actor-wire-request.json` after resolving their
+planner, author panel, critic and lane overrides. A `--dry-run` changes nothing in
+the store: it emits the same request as one complete JSON line on stdout, with
+`schema: epyc.autokernel.actor_wire.v1`. Save that JSON line to an explicitly chosen
+request file outside the store before running the command below. Before making an actor call,
 `run.py` requires a matching passing record or `--allow-untested-actor-seats REASON`.
 The override and exact reason enter the initial `loop-run.json` before the calls;
 the final manifest preserves the same receipt.
@@ -10,7 +13,7 @@ Run the requested configuration against installed native clients and a fake prov
 
 ```bash
 PYTHONPATH=scripts/kernel_rnd python -m autokernel.loop.actor_wire_test \
-  --request /path/to/store/actor-wire-request.json \
+  --request /path/to/actor-wire-request.json \
   --record /path/to/actor-wire-pass.json
 ```
 

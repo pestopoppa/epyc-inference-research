@@ -134,12 +134,20 @@ def test_ready_production_and_candidate_roster_preserves_original_inputs(tmp_pat
     assert not (tmp_path / "router").exists()
 
 
-def _assert_only_actor_wire_request(tmp_path):
+def _assert_stdout_actor_wire_request(tmp_path, output):
     from . import actor_wire_gate
 
     files = [path for path in (tmp_path / "router").rglob("*") if path.is_file()]
-    assert len(files) == 1 and files[0].name == "actor-wire-request.json"
-    request = json.loads(files[0].read_text())
+    assert files == []
+    requests = []
+    for line in output.splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            requests.append(row)
+    request = next(row for row in requests if row.get("schema") == actor_wire_gate.SCHEMA)
     assert request["schema"] == actor_wire_gate.SCHEMA
     assert request["seats"]
     assert request["actor_config_digest"] == actor_wire_gate.digest(request["seats"])
@@ -162,8 +170,9 @@ def test_generated_dry_run_reaches_actual_owner_without_side_effects(
     assert sr.main(argv + ["--dry-run"]) == 0
     assert len(starts) == 1 and starts[0]["experimental_identity"] is experimental
     assert starts[0]["anchor_build"] == Path(owners[f"{backend}-0"]["anchor_build"])
-    assert "no owned source/anchor/request inputs" in capsys.readouterr().out
-    _assert_only_actor_wire_request(tmp_path)
+    output = capsys.readouterr().out
+    assert "no owned source/anchor/request inputs" in output
+    _assert_stdout_actor_wire_request(tmp_path, output)
 
 
 def test_resolved_campaign_refuses_batched_scheduled_child_before_launch(tmp_path, monkeypatch, capsys):
@@ -505,7 +514,7 @@ def test_keep_policy_flags_are_shared_policy_not_resume_identity():
 @pytest.mark.parametrize("sandbox,equals", [(None, False), ("off", False),
                                            ("on", False), ("off", True), ("on", True)])
 def test_shared_author_sandbox_reaches_owner_parser_with_default_unchanged(
-        tmp_path, monkeypatch, sandbox, equals):
+        tmp_path, monkeypatch, capsys, sandbox, equals):
     """Admission must preserve the owner's explicit value and historical default."""
     import argparse
 
@@ -537,7 +546,7 @@ def test_shared_author_sandbox_reaches_owner_parser_with_default_unchanged(
     assert len(parsed) == 1
     assert parsed[0].actor_author_sandbox == (sandbox or "on")
     assert run._actor_sandbox(parsed[0]) == {"author_sandbox": sandbox != "off"}
-    _assert_only_actor_wire_request(tmp_path)
+    _assert_stdout_actor_wire_request(tmp_path, capsys.readouterr().out)
 
 
 def test_author_sandbox_is_actor_provenance_not_target_or_resume_identity(tmp_path):

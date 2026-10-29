@@ -78,7 +78,7 @@ def test_store_anchor_is_admitted_on_an_experimental_lane():
     (commit ancestor-or-equal of the champion head) and the clean-source rule still apply."""
     start = RUN.index("        store_anchor = (_FLOOR_REGISTRY is not None")
     seg = RUN[start:RUN.index("    if direct_launch is not None and not args.dry_run:", start)]
-    assert "experimental_identity=experimental and not source_authoring and not store_anchor" in seg
+    assert "experimental_identity=experimental and not source_authoring" in seg
     assert "floor_registry.store_build_commit_is_descendant(" in seg
     assert 'if experimental and _git(args.worktree, "status", "--porcelain"):' in seg
 

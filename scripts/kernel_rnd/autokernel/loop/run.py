@@ -2787,7 +2787,8 @@ def main(argv: list[str] | None = None) -> int:
         _FLOOR_REGISTRY = _FloorRegistryContext(
             args.floor_registry, role=args.floor_registry_role, numerics_epoch=args.floor_numerics_epoch,
             require_grade=args.floor_require_grade, co_tenancy=args.floor_co_tenancy,
-            source_repo=args.worktree, branch=args.champion_branch, store=args.store,
+            source_repo=args.worktree, branch=args.champion_branch,
+            store=None if args.dry_run else args.store,
             allow_stale=args.floor_allow_stale_upstream)
     if args.cpu_window_wait_bound_s <= 0:
         parser.error("--cpu-window-wait-bound-s must be > 0")
@@ -3303,11 +3304,17 @@ def main(argv: list[str] | None = None) -> int:
         # with an in-build IDENTITY.json receipt; a store image never carries one (the store is
         # immutable), so that receipt check refused every store anchor on an experimental lane.
         # The store attestation below replaces it; the receipt's clean-source rule is kept here.
-        verified_head = champion.verify_startup(
-            worktree=args.worktree, branch=args.champion_branch,
-            anchor_build=args.anchor_build,
-            allow_unverified_anchor=args.allow_unverified_anchor or store_anchor,
-            experimental_identity=experimental and not source_authoring and not store_anchor)
+        if store_anchor:
+            # Store images use VERSION.txt attestation below, not an unverified
+            # provenance.json escape hatch or a flag the caller never supplied.
+            verified_head = champion.verify_worktree(args.worktree, args.champion_branch)
+            champion.warn_divergence(args.worktree, args.champion_branch)
+        else:
+            verified_head = champion.verify_startup(
+                worktree=args.worktree, branch=args.champion_branch,
+                anchor_build=args.anchor_build,
+                allow_unverified_anchor=args.allow_unverified_anchor,
+                experimental_identity=experimental and not source_authoring)
         if store_anchor:
             try:
                 attested = floor_registry.store_build_commit_is_descendant(
@@ -3745,8 +3752,8 @@ def main(argv: list[str] | None = None) -> int:
         wire_request = actor_wire_gate.request(_actor_wire_seats(
             args, planner_backend, critic_backend, lane_backends, author_plan,
             resolved_campaign if selected_identity is not None else None))
-        actor_wire_gate.write(args.store / "actor-wire-request.json", wire_request)
-        print(f"actors    UNTESTED: wire request {args.store / 'actor-wire-request.json'}")
+        print("actors    UNTESTED: wire request (dry run; stdout only)")
+        print(json.dumps(wire_request, sort_keys=True))
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
