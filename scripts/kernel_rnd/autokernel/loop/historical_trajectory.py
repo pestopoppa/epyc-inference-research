@@ -165,10 +165,9 @@ def build(*, store: Path, research: Path, root_repo: Path) -> dict[str, Any]:
         "missing_checkpoints": [{"commit": CURRENT, "baseline": {"commit": PRODUCTION,
             "label": "production-consolidated-v9"}, "evidence_state": "missing_production_ab",
             "note": "current champion ef81196d has no direct production A/B; bff30ce is historical only"}],
-        "active_campaign": {"id": "aku12a-glm53-five-loop", "model": "GLM-5.3-Flash",
-            "store": "/mnt/raid0/llm/tmp/aku12a-glm53-five-loop-store",
-            "champion_of_record": "c463f601bd39d0e313b744c214b8c22f9455bcd3",
-            "expected_keep_count": 23, "expected_gain_pct_vs_cor": 0.8303809823155373},
+        # Historical checkpoints do not select a current campaign. The retired
+        # GLM store is gone; preserve its points without attributing live work to it.
+        "active_campaign": None,
     }
 
 

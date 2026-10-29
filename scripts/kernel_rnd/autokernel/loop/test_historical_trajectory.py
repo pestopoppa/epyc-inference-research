@@ -31,4 +31,4 @@ def test_live_build_is_sorted_separate_and_marks_conflict_and_missing() -> None:
     assert any(p["model"].startswith("gemma-4") and p["gain_pct"] == pytest.approx(7.205928) for p in payload["points"])
     assert {p["surface"] for p in payload["points"] if p["commit"] == trajectory.CURRENT} == {"plain-decode", "mtp-decode"}
     assert payload["missing_checkpoints"][0]["commit"] == trajectory.CURRENT
-    assert payload["active_campaign"]["expected_keep_count"] == 23
+    assert payload["active_campaign"] is None
