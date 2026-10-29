@@ -1,4 +1,4 @@
-import json,sys
+import argparse,json,sys
 from pathlib import Path
 from odl_bench import pip02_compare as m
 from odl_bench.pip02_native_score import evaluate
@@ -26,5 +26,6 @@ for i in range(5):
   if m.digest(p)!=v['sha256']: raise ValueError('packet source mismatch: '+str(p))
   paths.add(str(p.resolve()))
 manifest={'python':sys.version,'gt_sha256':m.digest(gt),'files':{p:m.digest(p) for p in sorted(paths)}}
-Path('/mnt/raid0/llm/tmp/codex3-pip02-phasec-20261029/scoring-prep/pins_v2.json').write_text(json.dumps(manifest,indent=2)+'\n')
+parser=argparse.ArgumentParser(); parser.add_argument('--out',required=True); args=parser.parse_args()
+with Path(args.out).open('x',encoding='utf-8') as fh: fh.write(json.dumps(manifest,indent=2)+'\n')
 print('files',len(paths))
