@@ -105,6 +105,8 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_readme.py
 # cost SYNC-10 seven MTP arms, the two THP knobs that must never collapse into one, the
 # per-surface shim, and the binary pin that must refuse to certify the current champion.
 PYTEST_SMOKE += scripts/lib/test_qwen38_flash_next_recipe.py
+# Keep canonical kernel paths, launch prefixes, and linkage guards in the default gate.
+PYTEST_SMOKE += scripts/lib/test_canonical_recipe.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check evidence-check autopilot-gate'
