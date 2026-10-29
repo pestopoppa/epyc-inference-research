@@ -36,9 +36,9 @@ class Native(unittest.TestCase):
    for v in result.values():self.assertFalse(v['full_population_defined']);self.assertIsNone(v['table_weighted_means']['teds']);self.assertEqual(v['coverage']['gt_tables_scored'],0)
  def test_full_population_and_partial(self):
   p,g=fixture(); plan={'pages':[p],'total':1,'table_regions':1}; cfg={'server':{'pins':{}}}
-  with patch('odl_bench.pip02_records.odl',return_value=HTML),patch('odl_bench.pip02_records.paddle',return_value=HTML):
-   values=run(plan,[g],'/none','/none',cfg)
-  self.assertTrue(all(v['full_population_defined'] and v['table_weighted_means']['teds']==1 for v in values.values()))
+  with patch('odl_bench.pip02_records.odl',return_value=HTML),patch('odl_bench.pip02_records.paddle',return_value=HTML),patch('odl_bench.pip02_lineage.odl_lineage',return_value={'verified':True,'basis':'synthetic'}),patch('odl_bench.pip02_lineage.paddle_lineage',return_value={'verified':True,'basis':'synthetic'}):
+   values=run(plan,[g],'/none','/none',cfg,pins={})
+  self.assertTrue(all(v['full_population_defined'] and v['gate_eligible'] and v['table_weighted_means']['teds']==1 for v in values.values()))
   with patch('odl_bench.pip02_records.odl',return_value=''),patch('odl_bench.pip02_records.paddle',return_value=None):
    values=run(plan,[g],'/none','/none',cfg)
   self.assertEqual(values['odl']['table_weighted_means']['teds'],0);self.assertIsNone(values['paddle']['table_weighted_means']['teds'])
@@ -46,14 +46,14 @@ if __name__=='__main__':unittest.main()
 
 class Lineage(unittest.TestCase):
  def test_odl_unique_grant_and_tamper(self):
-  import time
+  import time,datetime
   from odl_bench import pip02_lineage as l
   with tempfile.TemporaryDirectory() as tmp:
-   base=Path(tmp); grants=base/'grants'; grants.mkdir(); packet=base/'packets-final/odl-s0/draft.json'; producer=base/'producer';producer.write_text('source'); grant=grants/'job.grant';grant.write_text('grant')
-   draft={'id':'job','launcher':{'path':str(producer),'sha256':r.digest(producer)},'job':{'path':str(producer),'sha256':r.digest(producer)},'source_manifest':{'path':str(producer),'sha256':r.digest(producer)}};dump(packet,draft)
-   page=base/'page';dump(page/'start.json',{'started':time.time()+1,'grant':'grant'}); pins={str(packet.resolve()):r.digest(packet),str(producer.resolve()):r.digest(producer)}
-   with patch.object(l,'BASE',base),patch.object(l,'GRANTS',grants):
-    self.assertTrue(l.odl_lineage(page,0,pins)['verified']);(grants/'other.grant').write_text('grant')
+   base=Path(tmp); armed=base/'armed'; armed.mkdir(); ident='codex3-pip02-fresh-odl-s0-20261029'; packet=armed/(ident+'.json'); producer=base/'producer';producer.write_text('source'); log=base/'log'; now=time.time(); begin=datetime.datetime.fromtimestamp(now-10,datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'); end=datetime.datetime.fromtimestamp(now+3600,datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'); grant=f'regions=24-47 start={begin} end={end}\n'
+   draft={'id':ident,'regions':'24-47','launcher_log':str(log),'launcher':{'path':str(producer),'sha256':r.digest(producer)},'job':{'path':str(producer),'sha256':r.digest(producer)},'source_manifest':{'path':str(producer),'sha256':r.digest(producer)}};dump(packet,draft)
+   log.write_text(f'[{ident}] START regions=24-47 end={end}\n --inner --id {ident} {producer} --shard 0 \n');page=base/'page';dump(page/'start.json',{'started':now+1,'grant':grant}); pins={str(packet.resolve()):r.digest(packet),str(producer.resolve()):r.digest(producer)}
+   with patch.object(l,'ARMED',armed):
+    self.assertTrue(l.odl_lineage(page,0,pins)['verified']);log.write_text(log.read_text()*2)
     with self.assertRaises(ValueError):l.odl_lineage(page,0,pins)
  def test_paddle_unique_capture_and_ambiguity(self):
   import datetime,time,os
@@ -63,7 +63,10 @@ class Lineage(unittest.TestCase):
    now=time.time();os.utime(finish,(now,now));producer=base/'producer.py';producer.write_text('source'); pins={str(producer.resolve()):r.digest(producer)}
    cap={'started_utc':datetime.datetime.fromtimestamp(now-5,datetime.timezone.utc).isoformat(),'smoke':False,'shard':0,'protocol_sha256':'dc7d8e167edc79a07b9db10849940cb84a7f04c34f67274afbe067531d226ae3','grant':'grant','grant_sha256':H(b'grant'),'source_pins':{'producer.py':r.digest(producer)}}
    result={'population_sha256':'p','scope':'scope','states':{'0':'complete'}}
-   dump(base/'attempts/a/capture.json',cap);dump(base/'attempts/a/result.json',result)
+   capture=base/'attempts/a/capture.json';dump(capture,cap);dump(base/'attempts/a/result.json',result)
+   prefix='region-'+r.sha(r.canon(page))[:24]+'-000000'; start=d/(prefix+'.start.json'); end=d/(prefix+'.result.json'); body=b'input'; response=b'output'
+   dump(start,{'body_hex':body.hex(),'body_sha256':H(body),'provenance':{'identity':{'campaign_sha256':r.sha(r.canon(campaign))},'origin_capture_sha256':r.digest(capture)}})
+   dump(end,{'request_sha256':H(body),'start_sha256':r.digest(start),'body_hex':response.hex(),'response_sha256':H(response),'status':200})
    with patch.object(l,'BASE',base):
     self.assertTrue(l.paddle_lineage(d,page,campaign,0,pins)['verified'])
     dump(base/'attempts/b/capture.json',cap);dump(base/'attempts/b/result.json',result)
