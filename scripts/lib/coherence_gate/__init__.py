@@ -7,6 +7,7 @@ that a harness already captured and returns one verdict per item, naming the tie
     tier 0  paired byte-identity vs the base/anchor arm (greedy)      -> PASS
     tier 1  ground-truth answer checks + degeneracy.v2 on REAL token ids, compared PAIRED
             -> REGRESSION (candidate worse) | BOTH_BAD (reported, not failed) | PASS
+            SHORT anchors cannot establish a degeneracy regression; flagged outputs need review.
     tier 2  injected judge_fn(item_pair), only for diverged items with no decisive ground truth;
             default: NEEDS_REVIEW ("unjudged")
     gate    FAIL (any REGRESSION) | INCOMPLETE (any NEEDS_REVIEW, or no items) | PASS

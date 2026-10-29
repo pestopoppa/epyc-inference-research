@@ -8,7 +8,9 @@
             (a) ground-truth answer checks (answers.py), (b) degeneracy.v2 (degeneracy.py) on real
             token ids (tokens.py refuses synthetic ones).
             PAIRED: a REGRESSION is the candidate doing worse than base on the same item: a higher
-            degeneracy severity, or correct -> wrong/unanswered. Items bad in both arms are BOTH_BAD:
+            degeneracy severity against a non-SHORT anchor, or correct -> wrong/unanswered.
+            A SHORT anchor cannot establish a degeneracy regression; flagged candidates need review.
+            Items bad in both arms are BOTH_BAD:
             reported, not failed. A decisive answer check that is correct (or improved) is PASS.
     tier 2  `judge_fn(item_pair) -> verdict`, called ONLY for items that diverged at tier 0, did not
             regress at tier 1 and have no decisive ground truth. Injected by the caller; with no judge
@@ -31,7 +33,7 @@ from . import degeneracy as D
 from . import tokens as T
 
 SCHEMA_ID = "epyc.coherence_gate.v1"
-LIBRARY_VERSION = "coherence_gate 1.0.0"
+LIBRARY_VERSION = "coherence_gate 1.0.1"
 VERDICTS = ("PASS", "REGRESSION", "BOTH_BAD", "NEEDS_REVIEW")
 
 JudgeFn = Callable[[dict], Any]
@@ -217,9 +219,13 @@ def evaluate_pair(b: Output | None, c: Output | None, truth: dict | None = None,
         return rec
     reg, notes = [], []
     cand_review_only = deg["cand"]["cls"] == "DEGENERATE" and deg["cand"].get("review")
+    short_anchor_review = (deg["base"]["cls"] == "SHORT"
+                           and deg["cand"]["cls"] == "DEGENERATE")
     if sc > sb:
         msg = f"degeneracy {deg['base']['cls']} -> {deg['cand']['cls']} {deg['cand'].get('reasons', [])}"
-        (notes if cand_review_only else reg).append(msg + (" (ascii-only: review)" if cand_review_only else ""))
+        review_reason = (" (short anchor: review)" if short_anchor_review else
+                         " (ascii-only: review)" if cand_review_only else "")
+        (notes if cand_review_only or short_anchor_review else reg).append(msg + review_reason)
     rb = rc = None
     if ac and ac["base"] and ac["cand"]:
         rb, rc = ac["base"]["status"], ac["cand"]["status"]

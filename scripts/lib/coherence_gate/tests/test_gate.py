@@ -87,6 +87,36 @@ def test_drafted_worse_than_nodraft_is_regression():                      # q38 
     assert rep["aggregate"]["gate"] == "FAIL"
 
 
+def test_flagged_candidate_with_short_anchor_needs_review_without_judge():
+    rep = ev([row("p", "D")], [row("p", LOOP)])
+    it = item(rep)
+    assert it["degeneracy"]["base"]["cls"] == "SHORT"
+    assert it["degeneracy"]["cand"]["cls"] == "DEGENERATE"
+    assert it["verdict"] == "NEEDS_REVIEW"
+    assert rep["aggregate"]["gate"] == "INCOMPLETE"
+    assert any("short anchor: review" in reason for reason in it["reasons"])
+
+
+def test_flagged_candidate_with_short_anchor_reaches_judge():
+    pairs = []
+
+    def judge(pair):
+        pairs.append(pair)
+        return "PASS"
+
+    rep = ev([row("p", "D")], [row("p", LOOP)], judge_fn=judge)
+    assert len(pairs) == 1
+    assert pairs[0]["degeneracy"] == {"base": "SHORT", "cand": "DEGENERATE"}
+    assert (item(rep)["tier"], item(rep)["verdict"]) == (2, "PASS")
+
+
+@pytest.mark.parametrize("finish", ["stop", None])
+def test_empty_candidate_against_short_anchor_is_still_regression(finish):
+    rep = ev([row("p", "D")], [row("p", "", finish=finish)])
+    assert item(rep)["degeneracy"]["cand"]["cls"] in ("EARLY-EOS", "EMPTY")
+    assert item(rep)["verdict"] == "REGRESSION"
+
+
 def test_shared_nonok_is_both_bad_not_failure():                         # q38 verdict test
     rep = ev([row("gsm", LOOP), row("mc", "E")], [row("gsm", LOOP + " x"), row("mc", "E")],
              [{"id": "mc", "expected": "E", "scoring_method": "multiple_choice"}])
@@ -112,8 +142,9 @@ def test_both_wrong_is_model_not_drafting():                              # q38 
     assert item(rep)["verdict"] == "BOTH_BAD" and rep["aggregate"]["gate"] == "PASS"
 
 
-def test_http_error_in_candidate_is_regression_and_in_base_needs_review():  # q38 verdict test
-    rep = ev([row("p", GOOD)], [row("p", "", http_ok=False)])
+@pytest.mark.parametrize("base", [GOOD, "E"])
+def test_http_error_in_candidate_is_regression_and_in_base_needs_review(base):  # q38 verdict test
+    rep = ev([row("p", base)], [row("p", "", http_ok=False)])
     assert item(rep)["verdict"] == "REGRESSION" and rep["aggregate"]["gate"] == "FAIL"
     rep = ev([row("p", "", error="timeout")], [row("p", GOOD)])
     assert item(rep)["verdict"] == "NEEDS_REVIEW" and rep["aggregate"]["gate"] == "INCOMPLETE"
