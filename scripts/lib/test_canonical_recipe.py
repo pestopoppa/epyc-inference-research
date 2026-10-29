@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from pathlib import Path
 import sys
 import tempfile
 import unittest
@@ -513,6 +514,63 @@ class TestQ8Subgate(unittest.TestCase):
         with tempfile.NamedTemporaryFile() as model:
             with self.assertRaises(r.CanonicalRecipeViolation):
                 r.build_canonical_bench_command(model=model.name, ggml_iqk_q8_0="0")
+
+
+class TestQwenPreflightIsMetadataOnly(unittest.TestCase):
+    """WRAP-15: an ordinary serve must not acquire a 96 GB model-hashing read."""
+
+    def _preflight(self, *, missing=None, wrong_size=None):
+        import qwen38_flash_next_recipe as recipe
+
+        sizes = {path: size for path, size, _sha in recipe.TRUNK_SHARDS}
+        sizes[recipe.MTP_HEAD_GGUF] = recipe.MTP_HEAD_BYTES
+        artifacts = {}
+        for path, size in sizes.items():
+            artifact = mock.Mock(spec=Path)
+            artifact.is_file.return_value = path != missing
+            artifact.stat.return_value = mock.Mock(st_size=size - (path == wrong_size))
+            artifact.open.side_effect = AssertionError("preflight opened model weights")
+            artifact.read_bytes.side_effect = AssertionError("preflight read model weights")
+            artifacts[path] = artifact
+
+        def metadata_path(value):
+            return artifacts[str(value)] if str(value) in artifacts else Path(value)
+
+        bindir = "/test-only/preflight-binaries"
+        with (
+            mock.patch.object(recipe, "Path", side_effect=metadata_path),
+            mock.patch("builtins.open", side_effect=AssertionError("preflight opened a file")),
+            mock.patch.object(
+                recipe,
+                "assert_artifact_digests",
+                side_effect=AssertionError("preflight requested full model hashing"),
+            ) as full_hash,
+            mock.patch.object(recipe, "CHAMPION_PIN_RESOLVED", True),
+            mock.patch.object(recipe, "assert_current_champion_identity") as pin,
+            mock.patch.object(recipe, "assert_knob_markers") as markers,
+            mock.patch.object(recipe, "assert_binary_identity") as binary,
+            mock.patch.object(recipe, "assert_flag_forms_exist") as flags,
+        ):
+            recipe.preflight(bindir, require_pin_resolved=True)
+            full_hash.assert_not_called()
+            pin.assert_called_once_with()
+            markers.assert_called_once_with(bindir)
+            binary.assert_called_once_with(bindir)
+            flags.assert_called_once_with(str(Path(bindir) / "llama-server"))
+            for artifact in artifacts.values():
+                artifact.is_file.assert_called_once_with()
+                artifact.stat.assert_called_once_with()
+
+    def test_preflight_checks_every_model_without_reading_weights(self):
+        self._preflight()
+
+    def test_preflight_still_rejects_missing_or_truncated_models(self):
+        import qwen38_flash_next_recipe as recipe
+
+        with self.assertRaisesRegex(recipe.RecipeViolation, "artifact missing"):
+            self._preflight(missing=recipe.TRUNK_SHARDS[-1][0])
+        with self.assertRaisesRegex(recipe.RecipeViolation, "bytes, recipe pins"):
+            self._preflight(wrong_size=recipe.MTP_HEAD_GGUF)
 
 
 if __name__ == "__main__":
