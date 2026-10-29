@@ -59,6 +59,62 @@ class ParseExportReproducesC20c(unittest.TestCase):
         # session -- a compaction does not zero or exclude anything already counted.
         self.assertGreater(stats["steps"], 0)
 
+    def test_native_reasoning_parts_are_counted_when_usage_reports_zero(self):
+        stats = actor_metrics.parse_export(PLAIN_EXPORT)
+        self.assertEqual(stats["reasoning_chars"], 137524)
+        self.assertGreater(stats["reasoning_tokens"], 0)
+        self.assertEqual(stats["reasoning_estimated_steps"], 22)
+        self.assertTrue(stats["reasoning_tokens_estimated"])
+        self.assertEqual(stats["reasoning_token_estimator"], "ceil(reasoning_chars/4)")
+        self.assertTrue(stats["decoded_includes_reasoning"])
+        self.assertEqual(stats["decoded_tokens"], 57702)
+
+    def test_reasoning_usage_wins_and_each_fallback_keeps_its_basis(self):
+        messages = []
+        for usage, text in [(7, "x" * 80), (0, "x" * 9), (None, "x" * 4), (0, "")]:
+            tokens = {"output": 100}
+            if usage is not None:
+                tokens["reasoning"] = usage
+            messages.append({"info": {"role": "assistant", "tokens": tokens},
+                             "parts": [{"type": "reasoning", "text": text}]})
+        # User text must never contribute to assistant reasoning counts.
+        messages.append({"info": {"role": "user"},
+                         "parts": [{"type": "reasoning", "text": "x" * 999}]})
+        stats = actor_metrics.parse_export_data({"messages": messages})
+        self.assertEqual(stats["reasoning_chars"], 93)
+        self.assertEqual(stats["reasoning_tokens"], 11)
+        self.assertEqual(stats["reasoning_estimated_steps"], 2)
+        self.assertEqual(stats["reasoning_usage_steps"], 2)
+        self.assertEqual([s["source"] for s in stats["reasoning_steps"]],
+                         ["server_usage", "chars_estimate", "chars_estimate", "server_usage"])
+        self.assertEqual(stats["decoded_tokens"], 400)
+
+    def test_missing_reasoning_evidence_is_explicitly_unknown(self):
+        stats = actor_metrics.parse_export_data({"messages": [
+            {"info": {"role": "assistant", "tokens": {"output": 5}}, "parts": []}]})
+        self.assertEqual(stats["reasoning_unknown_steps"], 1)
+        self.assertIsNone(stats["reasoning_steps"][0]["tokens"])
+        self.assertEqual(stats["reasoning_steps"][0]["source"], "unavailable")
+        self.assertFalse(stats["reasoning_tokens_estimated"])
+
+    def test_invalid_usage_cannot_masquerade_as_a_reported_count(self):
+        for usage, expected, source in [(7.0, 7, "server_usage"),
+                                        (True, 2, "chars_estimate"),
+                                        (-1, 2, "chars_estimate"),
+                                        (3.5, 2, "chars_estimate"),
+                                        (float("nan"), 2, "chars_estimate")]:
+            stats = actor_metrics.parse_export_data({"messages": [
+                {"info": {"role": "assistant", "tokens": {"reasoning": usage}},
+                 "parts": [{"type": "reasoning", "text": "12345"}]}]})
+            self.assertEqual(stats["reasoning_tokens"], expected)
+            self.assertEqual(stats["reasoning_steps"][0]["source"], source)
+
+        for usage in (None, True, -1, 3.5, float("nan")):
+            stats = actor_metrics.parse_export_data({"messages": [
+                {"info": {"role": "assistant", "tokens": {"reasoning": usage}}, "parts": []}]})
+            self.assertEqual(stats["reasoning_unknown_steps"], 1)
+            self.assertIsNone(stats["reasoning_steps"][0]["tokens"])
+
     def test_truncated_pipe_capture_raises(self):
         """The real 98,304-byte pipe-truncated capture of this same session
         (pitfall #2): invalid JSON, must raise, never silently return zeros."""
@@ -98,6 +154,10 @@ class Collect(unittest.TestCase):
         self.assertEqual(result["totals"]["steps"], 23)
         self.assertEqual(result["totals"]["tool_calls"], 25)
         self.assertEqual(result["totals"]["decoded_tokens"], 57702)
+        self.assertEqual(result["totals"]["reasoning_chars"], 137524)
+        self.assertEqual(result["totals"]["reasoning_estimated_steps"], 22)
+        self.assertTrue(result["reasoning_tokens_estimated"])
+        self.assertTrue(result["decoded_includes_reasoning"])
         self.assertEqual(result["totals"]["compactions"], 1)
         self.assertEqual(result["context_first_tokens"], 39192)
         self.assertEqual(result["context_max_tokens"], 93443)
@@ -111,6 +171,49 @@ class Collect(unittest.TestCase):
             result = actor_metrics.collect(self.workspace, set(), self.replies, stamp="s")
         self.assertIn("no new opencode session", result["metrics_error"])
         self.assertEqual(result["sessions"], [])
+
+    def test_mixed_reasoning_sources_keep_session_and_whole_call_flags(self):
+        def fake_export(workspace, session_id, out_path):
+            tokens = {"output": 10}
+            text = {"usage": "x" * 80, "estimate": "12345", "unknown": ""}[session_id]
+            if session_id != "unknown":
+                tokens["reasoning"] = 10 if session_id == "usage" else 0
+            data = {"messages": [{"info": {"role": "assistant", "sessionID": session_id,
+                                          "tokens": tokens},
+                                  "parts": [{"type": "reasoning", "text": text}]}]}
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(data))
+        with mock.patch.object(actor_metrics, "list_session_ids",
+                               return_value={"usage", "estimate", "unknown"}), \
+             mock.patch.object(actor_metrics, "export_session", side_effect=fake_export):
+            result = actor_metrics.collect(self.workspace, set(), self.replies, stamp="mixed")
+        self.assertIsNone(result["metrics_error"])
+        self.assertEqual(result["totals"]["reasoning_tokens"], 12)
+        self.assertEqual(result["totals"]["decoded_tokens"], 30)
+        for field in ("reasoning_usage_steps", "reasoning_estimated_steps", "reasoning_unknown_steps"):
+            self.assertEqual(result["totals"][field], 1)
+        self.assertTrue(result["reasoning_tokens_estimated"])
+        self.assertEqual(result["reasoning_token_estimator"], "ceil(reasoning_chars/4)")
+        self.assertEqual({s["session_id"]: s["reasoning_tokens_estimated"] for s in result["sessions"]},
+                         {"usage": False, "estimate": True, "unknown": False})
+
+    def test_continued_call_counts_only_its_new_reasoning(self):
+        source = self.workspace / "continued.json"
+        source.write_text(json.dumps({"messages": [
+            {"info": {"role": "assistant", "time": {"created": 1000},
+                      "tokens": {"output": 100, "reasoning": 80}}, "parts": []},
+            {"info": {"role": "assistant", "time": {"created": 2000},
+                      "tokens": {"output": 10, "reasoning": 0}},
+             "parts": [{"type": "reasoning", "text": "12345"}]}]}))
+        with self._patch_export(source):
+            result = actor_metrics.collect_continued(self.workspace, "known", self.replies,
+                                                     stamp="continued", started_at=2.0)
+        self.assertIsNone(result["metrics_error"])
+        self.assertEqual(result["totals"]["reasoning_tokens"], 2)
+        self.assertEqual(result["totals"]["decoded_tokens"], 10)
+        self.assertTrue(result["reasoning_tokens_estimated"])
+        self.assertTrue(result["sessions"][0]["reasoning_tokens_estimated"])
+        self.assertTrue(result["decoded_includes_reasoning"])
 
     def test_a_truncated_export_is_a_metrics_error_never_a_raise(self):
         """A metrics-collection failure (here: the real pipe-truncation pitfall)

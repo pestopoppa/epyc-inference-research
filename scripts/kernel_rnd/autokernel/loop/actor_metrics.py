@@ -242,7 +242,52 @@ def _run_cli(argv: list[str], *, cwd: Path, timeout_s: float, stdout) -> subproc
 #: ROOT's VB-AK-SEAT `derive_totals` convention for the seat A/B arm record.
 TOTAL_FIELDS = ("steps", "tool_calls", "compactions", "decoded_tokens", "prompt_tokens",
                 "cache_read_tokens", "cache_write_tokens", "tool_output_chars",
-                "bundle_tool_calls", "output_capped_steps")
+                "bundle_tool_calls", "output_capped_steps", "reasoning_chars",
+                "reasoning_tokens", "reasoning_estimated_steps", "reasoning_usage_steps",
+                "reasoning_unknown_steps")
+
+REASONING_TOKEN_ESTIMATOR = "ceil(reasoning_chars/4)"
+
+
+def _reasoning_stats(messages: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Separate captured reasoning from inclusive decoded output (OAB-21).
+
+    Some opencode exports report zero reasoning usage despite carrying reasoning
+    text. In that case the character heuristic is explicitly an estimate, never
+    a tokenizer count. Missing usage AND text stays unknown at the step level.
+    """
+    steps = []
+    for message in messages:
+        info = message.get("info") or {}
+        if info.get("role") != "assistant":
+            continue
+        chars = sum(len(part["text"]) for part in message.get("parts", [])
+                    if part.get("type") == "reasoning" and isinstance(part.get("text"), str))
+        recorded = info.get("tokens")
+        usage = recorded.get("reasoning") if isinstance(recorded, Mapping) else None
+        reported = ((isinstance(usage, int) and not isinstance(usage, bool) and usage >= 0)
+                    or (isinstance(usage, float) and usage >= 0 and usage.is_integer()))
+        if reported and (usage or not chars):
+            tokens, source = int(usage), "server_usage"
+        elif chars:
+            tokens, source = (chars + 3) // 4, "chars_estimate"
+        else:
+            tokens, source = None, "unavailable"
+        steps.append({"step": len(steps) + 1, "message_id": info.get("id"),
+                      "chars": chars, "tokens": tokens, "source": source})
+    estimated = sum(step["source"] == "chars_estimate" for step in steps)
+    return {
+        "reasoning_chars": sum(step["chars"] for step in steps),
+        "reasoning_tokens": sum(step["tokens"] or 0 for step in steps),
+        "reasoning_estimated_steps": estimated,
+        "reasoning_usage_steps": sum(step["source"] == "server_usage" for step in steps),
+        "reasoning_unknown_steps": sum(step["source"] == "unavailable" for step in steps),
+        "reasoning_tokens_estimated": bool(estimated),
+        "reasoning_token_estimator": REASONING_TOKEN_ESTIMATOR if estimated else None,
+        "reasoning_steps": steps,
+        # Do not add the separate reasoning count to tokens.output a second time.
+        "decoded_includes_reasoning": True,
+    }
 
 #: A tool call's input that names a file under a variable-mode context bundle
 #: (`actor_context.BUNDLE_DIR`, one directory per call): the path relative to that
@@ -393,6 +438,7 @@ def parse_export_data(data: Mapping[str, Any]) -> dict[str, Any]:
         "bundle_tool_calls": sum(bundle_tools.values()),
         "bundle_tools": bundle_tools,
         "bundle_paths": sorted(bundle_paths),
+        **_reasoning_stats(msgs),
     }
 
 
@@ -449,6 +495,10 @@ def collect(workspace: Path, before_ids: set[str], replies_dir: Path, *, stamp: 
             "primary_session_id": primary.get("session_id") or new_ids[0],
             "sessions": sessions,
             "totals": totals,
+            "reasoning_tokens_estimated": bool(totals["reasoning_estimated_steps"]),
+            "reasoning_token_estimator": (REASONING_TOKEN_ESTIMATOR
+                                          if totals["reasoning_estimated_steps"] else None),
+            "decoded_includes_reasoning": True,
             "context_first_tokens": primary.get("context_first_tokens"),
             "context_max_tokens": max((s.get("context_max_tokens") or 0) for s in sessions),
             # The ROOT session's last step (the one whose text is the reply).
@@ -518,6 +568,9 @@ def collect_continued(workspace: Path, session_id: str, replies_dir: Path, *, st
             "primary_session_id": session_id,
             "sessions": [parsed],
             "totals": {key: int(parsed.get(key) or 0) for key in TOTAL_FIELDS},
+            "reasoning_tokens_estimated": parsed["reasoning_tokens_estimated"],
+            "reasoning_token_estimator": parsed["reasoning_token_estimator"],
+            "decoded_includes_reasoning": True,
             "context_first_tokens": parsed.get("context_first_tokens"),
             "context_max_tokens": parsed.get("context_max_tokens") or 0,
             "final_step_capped": bool(parsed.get("final_step_capped")),

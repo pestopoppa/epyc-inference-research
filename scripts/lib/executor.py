@@ -59,6 +59,7 @@ DEFAULT_THREADS = 96
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_TEMPERATURE = 0.6
 DEFAULT_TIMEOUT = _read_registry_timeout("scripts", "executor_default", 180)
+DEFAULT_BINARY_DIR = "/mnt/raid0/llm/kernels/production/cpu"
 
 # Skip prompt lookup for models larger than this (GB)
 # Lookup doesn't benefit large models - they timeout waiting for verification
@@ -69,10 +70,10 @@ LOOKUP_MAX_MODEL_SIZE_GB = 999
 def get_binary_paths(registry: Optional["ModelRegistry"] = None) -> dict[str, str]:
     """Get binary paths from registry (single source of truth).
 
-    Falls back to hardcoded paths only if registry is unavailable.
+    Falls back to the serving kernel store if registry is unavailable.
     """
     fallback = {
-        "base_dir": "/mnt/raid0/llm/llama.cpp/build/bin",
+        "base_dir": DEFAULT_BINARY_DIR,
         "completion": "llama-completion",
         "speculative": "llama-speculative",
         "lookup": "llama-lookup",
@@ -105,7 +106,7 @@ def get_binary(name: str, registry: Optional["ModelRegistry"] = None) -> str:
         Full absolute path to the binary
     """
     paths = get_binary_paths(registry)
-    base_dir = os.environ.get("LLAMA_BIN_DIR", paths.get("base_dir", "/mnt/raid0/llm/llama.cpp/build/bin"))
+    base_dir = os.environ.get("LLAMA_BIN_DIR", paths.get("base_dir", DEFAULT_BINARY_DIR))
     binary_name = paths.get(name, name)
     return os.path.join(base_dir, binary_name)
 

@@ -31,6 +31,7 @@ from typing import Callable, Sequence
 
 from ..execution import microbench
 from . import residency
+from .floor_units import FLOOR_UNITS, UNIT_PROCESS
 
 #: The unit EVERY number in this module is measured in, floors and effects alike: a
 #: sample is one `llama-bench` INVOCATION, and the arms alternate across those
@@ -40,10 +41,9 @@ from . import residency
 #: 2.793% between launches (~13x), and the arm-unit reading once under-sized an
 #: experiment 1200-fold (R23-55 / INF-70 RETEST-1).
 #:
-#: The vocabulary's home is `serving.FLOOR_UNITS`; the literal is repeated here because
-#: `serving` imports `loop` which imports `bench`, so a module-level import of `serving`
-#: here is a cycle. `test_bench` asserts the two cannot drift.
-FLOOR_UNIT = "process"
+#: The shared vocabulary lives in a dependency-free leaf: importing `serving` here
+#: would cycle through `loop` back to `bench`.
+FLOOR_UNIT = UNIT_PROCESS
 
 #: The one writer of a store bench-floor record: `benchmark/autokernel_aa_campaign.py`.
 #: A record carrying this schema is process-unit BY CONSTRUCTION -- that writer runs
@@ -650,7 +650,6 @@ def record_unit(body: dict) -> str | None:
     record is process-unit by construction. Silence with no recognised schema is NOT
     resolved by assumption -- the two candidate answers differ by ~13x.
     """
-    from .serving import FLOOR_UNITS  # leaf import: see FLOOR_UNIT above
     unit = body.get("unit")
     if unit in FLOOR_UNITS:
         return unit

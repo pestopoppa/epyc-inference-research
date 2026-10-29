@@ -255,8 +255,7 @@ class TheBenchFloorCarriesItsUnitToo(unittest.TestCase):
         return store
 
     def test_the_two_modules_share_one_vocabulary(self):
-        """`bench` repeats the literal because importing `serving` there is a cycle. This
-        is what stops the two copies drifting."""
+        """The public names remain compatible after moving the vocabulary to a leaf."""
         self.assertIn(bench.FLOOR_UNIT, serving.FLOOR_UNITS)
         self.assertEqual(bench.FLOOR_UNIT, serving.UNIT_PROCESS)
 
