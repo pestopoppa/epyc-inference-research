@@ -61,7 +61,7 @@ class AnswerProtocol(unittest.TestCase):
             seat=actors.ActorSeat(bounded=False, planner_budget_s=4500,
                                   planner_salvage_s=salvage_s, answer_protocol=protocol))
 
-    def _run(self, planner, *replies):
+    def _run(self, planner, *replies, context=None):
         calls, queue = [], list(replies)
 
         def fake(prompt, **kw):
@@ -75,7 +75,7 @@ class AnswerProtocol(unittest.TestCase):
             return item
         with mock.patch.object(actors, "_run_agent", side_effect=fake):
             try:
-                return planner.propose({}), calls
+                return planner.propose({} if context is None else context), calls
             except BaseException as exc:  # noqa: BLE001
                 return exc, calls
 
@@ -85,6 +85,38 @@ class AnswerProtocol(unittest.TestCase):
             return []
         rows = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
         return [r for r in rows if r.get("schema") == actor_metrics.ANSWER_PROTOCOL_SCHEMA]
+
+    def test_unexpected_runtime_binding_errors_escape_without_more_actor_turns(self):
+        body = {**HYP, "runtime_treatment": {"kind": "threads", "candidate": 12}}
+        for phase in ("main", "forced"):
+            for error_type in (KeyError, TypeError, ImportError, actors.ActorStopped):
+                with self.subTest(phase=phase, error=error_type.__name__):
+                    failure = error_type("runtime binding implementation failure")
+                    replies = ([_cut(body)] if phase == "main"
+                               else [_cut(), json.dumps(body)])
+                    with mock.patch.object(actors, "_runtime_pair", side_effect=failure):
+                        result, calls = self._run(
+                            self._planner(), *replies, context={"runtime_anchor": {}})
+                    self.assertIs(result, failure)
+                    self.assertEqual(len(calls), 1 if phase == "main" else 2)
+
+    def test_expected_parse_schema_and_treatment_refusals_remain_incomplete(self):
+        missing = {key: value for key, value in HYP.items() if key != "statement"}
+        treatment = {**HYP, "runtime_treatment": {"kind": "threads"}}
+        cases = [("json", JUNK, {}, "no parseable JSON object"),
+                 ("schema", json.dumps(missing), {}, "hypothesis is missing"),
+                 ("treatment", json.dumps(treatment), {"runtime_anchor": {}},
+                  "runtime treatment must name one kind and candidate value")]
+        planner = self._planner()
+        for label, raw, context, reason in cases:
+            with self.subTest(failure=label):
+                with self.assertRaises(actors.ProviderTransient) as caught:
+                    planner._proposal_from_raw(raw, context)
+                self.assertIn(reason, str(caught.exception))
+                self.assertIsNone(planner._parse_complete(raw, context, "forced"))
+        parsed = planner._parse_complete(json.dumps({"abstain": "no grounded change"}),
+                                         {}, "forced")
+        self.assertIsInstance(parsed[0], loop_mod.Abstain)
 
     def test_natural_end_is_one_call_with_the_json_first_rule(self):
         result, calls = self._run(self._planner(), json.dumps(HYP))
