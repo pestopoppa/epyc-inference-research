@@ -11,14 +11,125 @@ Reads the per-question JSONL each arm writes and reports, per suite:
     parsing failure is never silently read as a reasoning failure.
 
 Usage: architect_bench_analyze.py <runs_dir> [--suite S]
+       [--slow-crr-baseline ARM]
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 from collections import defaultdict
 from pathlib import Path
+
+SLOW_CRR_MIN_SOLVED = 30
+
+
+def slow_crr(candidate_rows: list[dict], baseline_rows: list[dict]) -> dict:
+    """Describe how often a correct candidate answer is no faster than baseline.
+
+    The unit is one matched (suite, question id, seed) output. Only candidate
+    outputs explicitly marked ``correct is True`` enter the denominator. For
+    every such output the baseline row and both positive finite ``decode_tok_s``
+    values must be present; otherwise the conditional is reported unavailable
+    rather than silently shrinking its denominator.
+
+    This is a descriptive conditional diagnostic, not a score or gate. The
+    handoff's existing 30-correct-output floor controls whether the fraction is
+    reportable.
+    """
+    result = {
+        "status": "below_minimum", "solved": 0, "no_faster": None,
+        "fraction": None, "reason": None, "unmatched": 0,
+        "invalid_candidate_speed": 0, "invalid_baseline_speed": 0,
+        "duplicate_candidate_identity": 0, "duplicate_baseline_identity": 0,
+    }
+    baseline_by_key: dict[tuple[str, str, object], list[dict]] = defaultdict(list)
+    for row in baseline_rows:
+        try:
+            key = (str(row["suite"]), str(row["id"]), row["seed"])
+            hash(key)
+        except (KeyError, TypeError):
+            return {**result, "status": "incomplete", "reason": "baseline identity missing",
+                    "unmatched": 1}
+        baseline_by_key[key].append(row)
+
+    seen_candidate: set[tuple[str, str, object]] = set()
+    candidate_by_key: dict[tuple[str, str, object], dict] = {}
+    invalid_correctness = 0
+    no_faster = 0
+    for row in candidate_rows:
+        try:
+            key = (str(row["suite"]), str(row["id"]), row["seed"])
+            hash(key)
+        except (KeyError, TypeError):
+            return {**result, "status": "incomplete", "reason": "candidate identity missing",
+                    "unmatched": 1}
+        if key in seen_candidate:
+            result["duplicate_candidate_identity"] += 1
+            continue
+        seen_candidate.add(key)
+        if type(row.get("correct")) is not bool:
+            invalid_correctness += 1
+            continue
+        if row["correct"] is not True:
+            continue
+        candidate_by_key[key] = row
+
+    solved = len(candidate_by_key)
+    result["solved"] = solved
+    if invalid_correctness or result["duplicate_candidate_identity"]:
+        result.update(status="incomplete", reason=(
+            f"candidate rows invalid: correctness={invalid_correctness}, "
+            f"duplicate_identity={result['duplicate_candidate_identity']}"))
+        return result
+
+    for key, row in candidate_by_key.items():
+        matches = baseline_by_key.get(key, [])
+        if len(matches) != 1:
+            if len(matches) > 1:
+                result["duplicate_baseline_identity"] += 1
+            else:
+                result["unmatched"] += 1
+            continue
+        candidate_speed = row.get("decode_tok_s")
+        baseline_speed = matches[0].get("decode_tok_s")
+        try:
+            candidate_speed_valid = (
+                not isinstance(candidate_speed, bool)
+                and isinstance(candidate_speed, (int, float))
+                and math.isfinite(candidate_speed) and candidate_speed > 0)
+        except (OverflowError, TypeError, ValueError):
+            candidate_speed_valid = False
+        if not candidate_speed_valid:
+            result["invalid_candidate_speed"] += 1
+            continue
+        try:
+            baseline_speed_valid = (
+                not isinstance(baseline_speed, bool)
+                and isinstance(baseline_speed, (int, float))
+                and math.isfinite(baseline_speed) and baseline_speed > 0)
+        except (OverflowError, TypeError, ValueError):
+            baseline_speed_valid = False
+        if not baseline_speed_valid:
+            result["invalid_baseline_speed"] += 1
+            continue
+        if candidate_speed <= baseline_speed:
+            no_faster += 1
+
+    if any(result[name] for name in (
+            "unmatched", "invalid_candidate_speed", "invalid_baseline_speed",
+            "duplicate_baseline_identity")):
+        result.update(status="incomplete", reason=(
+            f"matched-speed coverage incomplete: unmatched={result['unmatched']}, "
+            f"duplicate_baseline={result['duplicate_baseline_identity']}, "
+            f"invalid_candidate_speed={result['invalid_candidate_speed']}, "
+            f"invalid_baseline_speed={result['invalid_baseline_speed']}"))
+        return result
+    if solved < SLOW_CRR_MIN_SOLVED:
+        return result
+    result.update(status="reported", no_faster=no_faster, fraction=no_faster / solved)
+    return result
 
 
 def load(runs_dir: Path) -> dict:
@@ -74,6 +185,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs_dir", type=Path)
     ap.add_argument("--suite", default=None)
+    ap.add_argument(
+        "--slow-crr-baseline", default=None, metavar="ARM",
+        help=("also report the descriptive Slow/CRR conditional against ARM: "
+              "among correct candidate outputs, share with decode_tok_s <= ARM; "
+              "reported only at 30 or more correct outputs"),
+    )
     args = ap.parse_args()
 
     data = load(args.runs_dir)
@@ -138,6 +255,30 @@ def main() -> int:
                         sig = "" if lo <= 0 <= hi else "  *"
                         print(f"  {a} - {b}: {d:+.1%}  "
                               f"paired-bootstrap 95% CI [{lo:+.1%}, {hi:+.1%}]{sig}")
+
+        if args.slow_crr_baseline:
+            baseline = args.slow_crr_baseline
+            print(f"\nSlow/CRR conditional (correct candidate outputs with decode_tok_s "
+                  f"<= {baseline}; descriptive only; minimum {SLOW_CRR_MIN_SOLVED}):")
+            if baseline not in arms:
+                print(f"  unavailable: baseline arm {baseline!r} is absent from suite")
+                continue
+            # This diagnostic has its own candidate/baseline matched set. Do not
+            # reuse the all-arm accuracy cohort above: a third arm or a missing
+            # baseline row must not silently remove correct candidate outputs.
+            for candidate in sorted(arms):
+                if candidate == baseline:
+                    continue
+                metric = slow_crr(arms[candidate], arms[baseline])
+                if metric["status"] == "reported":
+                    print(f"  {candidate}: {metric['no_faster']}/{metric['solved']} = "
+                          f"{metric['fraction']:.1%}")
+                elif metric["status"] == "below_minimum":
+                    print(f"  {candidate}: not reported ({metric['solved']} correct; "
+                          f"requires {SLOW_CRR_MIN_SOLVED})")
+                else:
+                    print(f"  {candidate}: unavailable ({metric['reason']}; "
+                          f"{metric['solved']} correct outputs)")
     return 0
 
 
