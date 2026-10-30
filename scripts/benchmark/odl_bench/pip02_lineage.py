@@ -10,6 +10,8 @@ RECOVERY_SHA='b2ce8fc980bba8d6aaca2bfc73508e24db33e798baa799e55d782af78ef449cd'
 RECOVERY_ID='codex3-pip02-odl-recover-50-118-310-r1-20261030'
 ODL_R3=BASE/'odl-relocatable-r3-20261030'/'SOURCES.sha256'
 ODL_R3_SHA='2cbd60601aff752f709a5e7bf47b6f6f207dfcfbcad383a06ef300cec99f4961'
+ODL_R4=BASE/'odl-relocatable-r4-20261030'/'SOURCES.sha256'
+ODL_R4_SHA='af6262aaf380b3a69031fc5b7f5b11ec0f8b697f314c410c159568bccf4cc62a'
 PADDLE_ROOTS={
  'r7':(Path('/mnt/raid0/llm/tmp/codex3-pip02-paddle-parallel-owner-r7-20261029'),'fdae650ccb36ace00838e5be695f93b196d5ae13deae0b47510ed17208ac12a8'),
  'r8':(Path('/mnt/raid0/llm/tmp/codex3-pip02-paddle-relocatable-r8-20261029'),'809585fee03923bb58c769d33aac53a3afa73eb08a4b4283f19f10c28d5837d0'),
@@ -65,6 +67,7 @@ def odl_lineage(page_dir,shard,pins):
   if start.get('resolution_sha256')!=sha(pinned(RECOVERY/'RESOLUTIONS.json',pins).read_bytes()) or done.get('producer_id')!=producer or done.get('producer_source_manifest_sha256')!=digest or done.get('start_sha256')!=sha((Path(page_dir)/'start.json').read_bytes()) or done.get('result_sha256')!=sha(result.read_bytes()) or done.get('prediction_sha256')!=sha(prediction.read_bytes()):raise ValueError('recovery completion identity mismatch')
  elif producer==f'codex3-pip02-odl-relocatable-r2-s{shard}-20261029' and manifest==str(ODL) and digest==ODL_SHA:p=pinned(ODL,pins)
  elif shard in (24,25,28,29) and producer==f'codex3-pip02-odl-relocatable-r3-s{shard}-20261030' and manifest==str(ODL_R3) and digest==ODL_R3_SHA:p=pinned(ODL_R3,pins)
+ elif shard in (24,25,28,29) and producer==f'codex3-pip02-odl-relocatable-r4-s{shard}-20261030' and manifest==str(ODL_R4) and digest==ODL_R4_SHA:p=pinned(ODL_R4,pins)
  else:raise ValueError('unregistered ODL captured producer')
  if sha(p.read_bytes())!=digest:raise ValueError('ODL source manifest mismatch')
  for line in p.read_text().splitlines():
