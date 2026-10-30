@@ -350,7 +350,8 @@ class ResolvedRecipe:
 
     def _normalized_execution_dict(self) -> dict[str, Any]:
         argv = list(self.argv)
-        executable_index = 3 if len(argv) >= 4 and argv[:2] == ["taskset", "-c"] else 0
+        executable_index = (6 if len(argv) >= 7 and argv[0] == "numactl" else
+                            3 if len(argv) >= 4 and argv[:2] == ["taskset", "-c"] else 0)
         argv[executable_index] = f"<executable:{self.executable.sha256}>"
         replacements = {"-m": f"<model:{self.model.sha256}>",
                         "--port": "<listen-port>"}
@@ -578,36 +579,42 @@ def _canonical_command(command: tuple[str, ...]) -> tuple[str, dict[str, str | b
     return executable, parsed
 
 
-def _canonical_prefix(prefix: tuple[str, ...]) -> str | None:
+def _canonical_topology(prefix: tuple[str, ...]) -> tuple[str | None, str | None]:
     if not prefix:
-        return None
-    policy_pattern = (r"--(?:interleave=(?:all|[0-9]+(?:,[0-9]+)*)|"
-                      r"membind=[0-9]+(?:,[0-9]+)*)")
+        return None, None
+    numa = None
     if len(prefix) == 3 and prefix[:2] == ("taskset", "-c"):
         cpu_list = prefix[2]
     elif (len(prefix) == 5 and prefix[:2] == ("taskset", "-c")
           and prefix[3] == "numactl"):
         cpu_list = prefix[2]
-        if not re.fullmatch(policy_pattern, prefix[4]):
+        if not serving._valid_numa_policy(prefix[4]):
             raise ResolutionError("unsupported canonical numactl policy")
+        numa = prefix[4]
     elif (len(prefix) == 6 and prefix[0] == "numactl" and prefix[2] == "--"
           and prefix[3:5] == ("taskset", "-c")):
         cpu_list = prefix[5]
-        if not re.fullmatch(policy_pattern, prefix[1]):
+        if not serving._valid_numa_policy(prefix[1]):
             raise ResolutionError("unsupported canonical numactl policy")
+        numa = prefix[1]
     else:
         raise ResolutionError(
             "canonical topology prefix must contain one taskset declaration and optional numactl")
     cpu_list = _text(cpu_list, "canonical topology CPU list")
     if not re.fullmatch(r"[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*", cpu_list):
         raise ResolutionError("canonical topology CPU list is malformed")
-    return cpu_list
+    return cpu_list, numa
+
+
+def _canonical_prefix(prefix: tuple[str, ...]) -> str | None:
+    return _canonical_topology(prefix)[0]
 
 
 def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
                                 topology_prefix: Sequence[str], n_predict: int = 256,
                                 temperature: float = 0.6, top_p: float = 0.95,
-                                top_k: int = 20, metric: str = "aggregate_tok_s"
+                                top_k: int = 20, metric: str = "aggregate_tok_s",
+                                include_numa: bool = False
                                 ) -> serving.Recipe:
     """Parse the closed production grammar into Recipe's semantic fields."""
     command = _argv_sequence(command_argv, "canonical command_argv")
@@ -616,7 +623,7 @@ def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
     if isinstance(topology_prefix, (str, bytes)) or not isinstance(topology_prefix, Sequence):
         raise ResolutionError("topology_prefix must be an array")
     prefix = tuple(_text(x, "topology_prefix[]") for x in topology_prefix)
-    cpu_list = _canonical_prefix(prefix)
+    cpu_list, numa = _canonical_topology(prefix)
     device = str(parsed.get("--device", "none"))
     raw_ngl = parsed.get("-ngl")
     ngl = 99 if raw_ngl == "all" else (
@@ -654,6 +661,7 @@ def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
         ctk=str(parsed.get("-ctk", "f16")), ctv=str(parsed.get("-ctv", "f16")),
         fa=str(parsed.get("--flash-attn", parsed.get("-fa", "off"))),
         kv_unified=kv_unified, extra_flags=extra, cpu_list=cpu_list,
+        numa=numa if include_numa else None,
         n_predict=n_predict, temperature=temperature, top_p=top_p, top_k=top_k,
         metric=metric)
 
@@ -989,7 +997,9 @@ def _validate_resolved_consistency(resolved: ResolvedRecipe) -> None:
     if (len({item.path for item in resolved.dsos}) != len(resolved.dsos)
             or len({Path(item.path).name for item in resolved.dsos}) != len(resolved.dsos)):
         raise ResolutionError("resolved DSO paths and loader names must be unique")
-    executable = (resolved.argv[3] if len(resolved.argv) >= 4
+    executable = (resolved.argv[6] if len(resolved.argv) >= 7
+                  and resolved.argv[0] == "numactl" else
+                  resolved.argv[3] if len(resolved.argv) >= 4
                   and resolved.argv[:2] == ("taskset", "-c") else resolved.argv[0])
     expected_executable = str(Path(resolved.build_dir) / "bin" / "llama-server")
     if resolved.executable.path != expected_executable or executable != expected_executable:
@@ -1273,7 +1283,7 @@ def _validate_canonical_consistency(resolved: CanonicalResolvedRecipe,
         name=template.name, command_argv=resolved.command_argv,
         topology_prefix=resolved.topology_prefix, n_predict=template.n_predict,
         temperature=template.temperature, top_p=template.top_p, top_k=template.top_k,
-        metric=template.metric)
+        metric=template.metric, include_numa=template.numa is not None)
     # The canonical grammar carries environment in launch_env, never in the command, so the
     # projection is env-less by construction and is compared without the template's env
     # declaration. That declaration (which _validate_exactness may REQUIRE, e.g.
@@ -1287,6 +1297,8 @@ def _validate_canonical_consistency(resolved: CanonicalResolvedRecipe,
     cpu_list = _canonical_prefix(resolved.topology_prefix)
     if cpu_list != template.cpu_list:
         raise ResolutionError("canonical topology CPU list differs from template")
+    if template.numa is not None and _canonical_topology(resolved.topology_prefix)[1] != template.numa:
+        raise ResolutionError("canonical topology NUMA policy differs from template")
     executable, parsed = _canonical_command(resolved.command_argv)
     if executable != resolved.executable.path \
             or executable != str(Path(resolved.build_dir) / "bin" / "llama-server"):

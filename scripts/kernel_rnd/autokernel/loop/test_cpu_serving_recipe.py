@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from . import resolved_recipe as rr, serving
+from .test_glm_frozen_requests import _canonical_launch
 from .test_resolved_recipe import BUILD, _policy, _rehash, _resolve
 from .test_serving_residency import _proof, _sampler_class
 
@@ -62,6 +64,115 @@ def test_cpu_zero_vram_is_not_a_gpu_veto_and_evidence_stays_unproven():
     assert evidence[0]["gpu_residency"] == serving.RESIDENCY_NOT_APPLICABLE
     assert evidence[0]["cpu_placement"] == "unproven"
     assert evidence[0]["contention"] == "unproven"
+
+
+def test_numa_is_opt_in_identity_and_exact_cpu_launch_prefix():
+    legacy = serving.Recipe(name="cpu", model="/m", device="none", ngl=0,
+                            cpu_list="0-95", threads=48)
+    old_row = legacy.to_dict()
+    old_hash = legacy.recipe_hash
+    assert "numa" not in old_row
+    assert serving.Recipe.from_dict(old_row).to_dict() == old_row
+    assert serving.Recipe.from_dict(old_row).recipe_hash == old_hash
+    gpu = serving.Recipe(name="gpu", model="/m")
+    assert "numa" not in gpu.to_dict()
+    assert gpu.recipe_hash == (
+        "7f2f98b728201ab769d86f99906582260137e8cc38117c4dc5ee5dcfc0a672b5")
+    pinned = replace(legacy, numa="--interleave=0-3")
+    assert pinned.to_dict()["numa"] == "--interleave=0-3"
+    assert "numa=--interleave=0-3" in pinned.describe()
+    assert serving.Recipe.from_dict(pinned.to_dict()).to_dict() == pinned.to_dict()
+    assert pinned.recipe_hash != old_hash
+    assert pinned.server_argv(BUILD, 18311)[:6] == [
+        "numactl", "--interleave=0-3", "--", "taskset", "-c", "0-95"]
+    resolved = _resolve(pinned, backend="cpu")
+    assert rr.ResolvedRecipe.from_dict(resolved.to_dict()) == resolved
+    value, seen, _ = _launch(pinned, resolved, _proof(peak=0, median=0, kfd=0))
+    assert value == 25.0 * pinned.np
+    assert seen["argv"][:6] == pinned.server_argv(BUILD, 18311)[:6]
+
+
+@pytest.mark.parametrize("bad", ["interleave=all", "--interleave=", "--membind=all",
+                                     "--membind=3;true", "--interleave=3-",
+                                     "--interleave=3-1", "--membind=2-0",
+                                     "--interleave=0,3-1", "--preferred=0", ""])
+def test_numa_rejects_unvalidated_policy(bad):
+    with pytest.raises(serving.RecipeError, match="numa"):
+        serving.Recipe(name="cpu", model="/m", device="none", ngl=0,
+                       cpu_list="0-95", numa=bad)
+
+
+def test_numa_requires_cpu_recipe_and_affinity():
+    for options in ({"device": "ROCm0", "ngl": 99, "cpu_list": "0-95"},
+                    {"device": "none", "ngl": 1, "cpu_list": "0-95"},
+                    {"device": "none", "ngl": 0, "cpu_list": None}):
+        with pytest.raises(serving.RecipeError, match="CPU recipe"):
+            serving.Recipe(name="bad", model="/m", numa="--interleave=all", **options)
+
+
+@pytest.mark.parametrize("bad", ("--interleave=3-1", "--membind=2-0"))
+def test_canonical_topology_rejects_descending_numa_ranges(bad):
+    _, old = _canonical_launch(18311)
+    for prefix in (("numactl", bad, "--", "taskset", "-c", "0-95"),
+                   ("taskset", "-c", "0-95", "numactl", bad)):
+        with pytest.raises(rr.ResolutionError, match="unsupported canonical numactl policy"):
+            rr.canonical_recipe_projection(
+                name="bad", command_argv=old.command_argv,
+                topology_prefix=prefix, include_numa=True)
+
+
+def test_legacy_canonical_cpu_prefix_does_not_upgrade_recipe_identity():
+    template, old = _canonical_launch(18311)
+    assert old.topology_prefix[:2] == ("numactl", "--interleave=all")
+    assert "numa" not in template.to_dict()
+    assert template.recipe_hash == (
+        "42414714a17895ccfedff608d59d3e4df1bbb22a2706f12ad54a059c121b91eb")
+    assert old.snapshot_digest == (
+        "7cc3b513d68d681cb1c05495a81c6e5e8378bdc36d51c6a9ec78e6782e28891a")
+    assert rr.CanonicalResolvedRecipe.from_dict(old.to_dict()).to_dict() == old.to_dict()
+    replay = rr.resolve_canonical_launch(
+        template, build_dir=old.build_dir, command_argv=old.command_argv,
+        topology_prefix=old.topology_prefix, launch_environment=dict(old.launch_env),
+        artifact_identities={"model": old.model.to_dict(),
+                             "drafter": old.drafter.to_dict() if old.drafter else None,
+                             "executable": old.executable.to_dict(),
+                             "dsos": [item.to_dict() for item in old.dsos]},
+        backend="cpu", environment_policy=old.environment_policy, port=old.port,
+        runtime_binary_dir=old.runtime_binary_dir,
+        runtime_ld_paths=old.runtime_ld_paths, provenance=dict(old.provenance))
+    assert replay.template_hash == old.template_hash == template.recipe_hash
+    assert replay.to_dict() == old.to_dict()
+
+
+def test_explicit_canonical_numa_policy_must_match_resolved_prefix():
+    legacy, old = _canonical_launch(18311)
+    pinned = replace(legacy, numa="--interleave=all")
+    assert rr.canonical_recipe_projection(
+        name=legacy.name, command_argv=old.command_argv,
+        topology_prefix=old.topology_prefix,
+        n_predict=legacy.n_predict, temperature=legacy.temperature,
+        top_p=legacy.top_p, top_k=legacy.top_k, metric=legacy.metric,
+        include_numa=True).to_dict() == pinned.to_dict()
+    kwargs = dict(build_dir=old.build_dir, command_argv=old.command_argv,
+                  launch_environment=dict(old.launch_env),
+                  artifact_identities={"model": old.model.to_dict(),
+                                       "drafter": None,
+                                       "executable": old.executable.to_dict(),
+                                       "dsos": [item.to_dict() for item in old.dsos]},
+                  backend="cpu", environment_policy=old.environment_policy, port=old.port,
+                  runtime_binary_dir=old.runtime_binary_dir,
+                  runtime_ld_paths=old.runtime_ld_paths, provenance=dict(old.provenance))
+    resolved = rr.resolve_canonical_launch(
+        pinned, topology_prefix=old.topology_prefix, **kwargs)
+    assert resolved.template_hash == pinned.recipe_hash != old.template_hash
+    assert rr.CanonicalResolvedRecipe.from_dict(resolved.to_dict()).to_dict() == resolved.to_dict()
+    with pytest.raises(rr.ResolutionError, match="NUMA policy|semantic projection"):
+        rr.resolve_canonical_launch(
+            pinned, topology_prefix=("numactl", "--membind=0", "--",
+                                     "taskset", "-c", "0-95"), **kwargs)
+    with pytest.raises(rr.ResolutionError, match="NUMA policy|semantic projection"):
+        rr.resolve_canonical_launch(
+            pinned, topology_prefix=("taskset", "-c", "0-95"), **kwargs)
 
 
 def test_gpu_zero_vram_still_refuses_and_forged_not_applicable_cannot_bypass():
