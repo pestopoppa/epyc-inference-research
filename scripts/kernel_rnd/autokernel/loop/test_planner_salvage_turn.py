@@ -23,6 +23,7 @@ each wasting 45-75 min, though the investigation was usually done. What must hol
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 from pathlib import Path
@@ -574,10 +575,26 @@ class CliFlag(unittest.TestCase):
 
     def test_only_the_proposal_planner_seat_takes_it(self):
         from autokernel.loop import run
-        source = Path(run.__file__).read_text(encoding="utf-8")
-        planner = source[source.index("def make_planner(worker)"):][:1600]
-        self.assertIn("**_actor_salvage(args)", planner)
-        self.assertEqual(source.count("**_actor_salvage(args)"), 1)
+        tree = ast.parse(Path(run.__file__).read_text(encoding="utf-8"))
+        main = next(node for node in tree.body
+                    if isinstance(node, ast.FunctionDef) and node.name == "main")
+        planner = next(node for node in ast.walk(main)
+                       if isinstance(node, ast.FunctionDef) and node.name == "make_planner")
+
+        def seats(node):
+            return [call for call in ast.walk(node) if isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute) and call.func.attr == "ActorSeat"
+                    and isinstance(call.func.value, ast.Name) and call.func.value.id == "actors"]
+
+        def takes_salvage(call):
+            return any(keyword.arg is None and isinstance(keyword.value, ast.Call)
+                       and isinstance(keyword.value.func, ast.Name)
+                       and keyword.value.func.id == "_actor_salvage"
+                       for keyword in call.keywords)
+
+        planner_seats = seats(planner)
+        self.assertEqual(len(planner_seats), 1)
+        self.assertEqual([seat for seat in seats(main) if takes_salvage(seat)], planner_seats)
 
 
 # ------------------------------------------------------------------ the wire: opencode 1.18.31
