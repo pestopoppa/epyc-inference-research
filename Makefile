@@ -26,6 +26,7 @@ PYTEST_SMOKE += scripts/halo/test_closed_loop_observation_surface.py
 PYTEST_SMOKE += scripts/benchmark/test_capture_contract_guard.py
 PYTEST_SMOKE += scripts/benchmark/test_capture_integrity_watchdog.py
 PYTEST_SMOKE += scripts/benchmark/test_agentic_swe_harness.py
+PYTEST_SMOKE += scripts/benchmark/test_architect_bench_slow_crr.py
 PYTEST_SMOKE += scripts/kernel_rnd/test_kernel_store.py
 PYTEST_SMOKE += scripts/kernel_rnd/test_c6_reward_integrity.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_schemas.py
