@@ -11,10 +11,9 @@ from pathlib import Path
 import subprocess
 import statistics
 import time
-from types import SimpleNamespace
 
-from .. import campaign, schemas
-from ..evaluator import api, controls, correctness, statistics as st
+from .. import production_pins, schemas
+from ..evaluator import anchor_drift, api, controls, correctness, statistics as st, t0_policy
 from ..execution.cpu_region_claim import parse_cpu_list
 from ..resource import preflight
 from . import gates, observation_binding as ob, runtime_calibration as rc
@@ -53,7 +52,7 @@ def source_identity():
     # Whole-file pins include supporting callables, not just their callers' names.
     from . import native_server_response, resolved_recipe, serving, serving_beliefs, runtime_recovery
     from .run import _cpu_arm, _rebind_build_dso
-    modules = (api, controls, correctness, st, rc, rw, gates,
+    modules = (production_pins, anchor_drift, t0_policy, api, controls, correctness, st, rc, rw, gates,
                native_server_response, resolved_recipe, serving, serving_beliefs)
     paths = (Path(__file__), *(Path(module.__file__) for module in modules))
     from . import lifecycle_observation as lo
@@ -126,7 +125,7 @@ class DirectGates:
         self.raw_ref, self.original_prompts = raw_ref, original_prompts
 
     def run_gates(self, request):
-        policy = campaign.HostOps._t0_evaluator_policy(SimpleNamespace(backend=request.backend))
+        policy = t0_policy.t0_evaluator_policy(request.backend)
         result = []
         for row in self.operations:
             value = row["verdict"]

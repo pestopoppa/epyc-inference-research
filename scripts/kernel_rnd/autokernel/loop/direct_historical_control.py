@@ -15,8 +15,8 @@ from pathlib import Path
 import subprocess
 import time
 
-from .. import campaign, schemas, storage
-from ..evaluator import api, controls, correctness, recipes, statistics as st
+from .. import production_pins, schemas, storage
+from ..evaluator import anchor_drift, t0_policy, api, controls, correctness, recipes, statistics as st
 from ..execution import control_runner as cr, inference_window, live_controls as lc, microbench, sandbox
 from ..execution import t0_provider as tp
 from . import observation_binding as ob, runtime_window as rw, serial_run
@@ -81,7 +81,7 @@ def _frame():
 
 def source_identity():
     from . import lifecycle_observation as lo, runtime_recovery
-    modules = (lc, microbench, tp, cr, api, controls, correctness, st, rw, inference_window)
+    modules = (production_pins, anchor_drift, t0_policy, lc, microbench, tp, cr, api, controls, correctness, st, rw, inference_window)
     paths = (Path(__file__), *(Path(module.__file__) for module in modules))
     return {"files": {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths},
         "recovery": runtime_recovery.source_identity(),
@@ -176,12 +176,12 @@ def _t0_plan(source_sha, *, arm):
     candidate = tp.CandidateBuild(str(lc.INSTRUMENT_ROOT), str(binary.parent.parent),
         lc.INSTRUMENT_COMMIT, source_sha, str(binary), str(binary.parent),
         str(binary.parent / "test-backend-ops"))
-    return tp.T0ExecutionPlan(candidate=candidate, tools=campaign.HostOps._t0_tools(),
+    return tp.T0ExecutionPlan(candidate=candidate, tools=t0_policy.t0_tools(),
         op_suite=tp.OpSuitePlan(backend_filter="CPU", ops=correctness.MANDATORY_BACKEND_OPS,
             suite_id="test-backend-ops/v1", suite_source_sha256=source_sha, suite_seed=2026081101),
         dispatch=tp.DispatchTracePlan(derived_surface=correctness.MANDATORY_BACKEND_OPS),
         anchor=tp.AnchorBuild(str(lc.INSTRUMENT_ROOT), lc.INSTRUMENT_COMMIT, str(binary), str(binary.parent)),
-        generation=campaign.HostOps._t0_generation_plan(type("HistoricalModel", (), {"model": str(lc.MODEL)})()),
+        generation=t0_policy.t0_generation_plan(str(lc.MODEL)),
         determinism_runs=2, backend="llama_cpu",
         parameter_env=(("GGML_IQK", "0" if arm == "anchor" else "1"),))
 
@@ -305,7 +305,7 @@ def _t0_gates(store, reference, declaration):
         metric=recipes.get_recipe(lc.PREFILL_RECIPE_ID).metric, metric_direction="higher_better",
         reps=lc.CALIBRATION_REPS, change_class="parameter", anchor_tier="T0", transfer_ratio_to=(),
         created_at=declaration["issued_at"], campaign_controls=None, calibration=None)
-    policy = campaign.HostOps._t0_evaluator_policy(request)
+    policy = t0_policy.t0_evaluator_policy(request.backend)
     gates = (correctness.check_backend_op_units(request, ops, surface, policy),
         correctness.check_determinism_class(request, determinism, policy)[0],
         correctness.check_output_coherence(request, coherence, policy, determinism)[0])
