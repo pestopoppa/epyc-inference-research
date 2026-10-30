@@ -37,6 +37,7 @@ import math
 import os
 from pathlib import Path
 import random
+import re
 import statistics
 import subprocess
 import time
@@ -58,6 +59,21 @@ if TYPE_CHECKING:
 #: Schema of the on-disk recipe file, and part of the recipe's identity: a schema bump
 #: changes what the fields MEAN, so it must change the hash too.
 RECIPE_SCHEMA = "epyc.autokernel.canonical_recipe.v1"
+
+
+def _valid_numa_policy(value: object) -> bool:
+    """Accept only numactl policies the recipe can launch and the resolver can parse."""
+    if not isinstance(value, str) or not re.fullmatch(
+            r"--(?:interleave=(?:all|[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*)|"
+            r"membind=[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*)", value):
+        return False
+    nodes = value.split("=", 1)[1]
+    for part in nodes.split(","):
+        if "-" in part:
+            start, end = part.split("-", 1)
+            if int(start) > int(end):
+                return False
+    return True
 LEGACY_INSTRUMENT = "legacy_v1"
 MATCHED_INSTRUMENT = "matched_process_v2"
 MATCHED_ESTIMATOR = "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
@@ -345,8 +361,16 @@ class Recipe:
     #: positional constructor. The 2026-10-20 Q38FN depth sweep: `-tb 96` lifts shallow
     #: prefill +21-29% with decode unchanged.
     threads_batch: int | None = None
+    #: Explicit CPU memory policy. Absent preserves all legacy recipe identities and launches.
+    #: Supported spellings match the closed canonical topology grammar.
+    numa: str | None = None
 
     def __post_init__(self) -> None:
+        if self.numa is not None:
+            if not _valid_numa_policy(self.numa):
+                raise RecipeError("numa must be --interleave=all|nodes or --membind=nodes")
+            if self.device != "none" or self.ngl != 0 or not self.cpu_list:
+                raise RecipeError("numa requires a CPU recipe with ngl=0 and cpu_list")
         for key, value in (self.env or {}).items():
             self._validate_env_key(key, "env")
             if not isinstance(value, str):
@@ -434,6 +458,8 @@ class Recipe:
             out["explicit_unsets"] = list(self.explicit_unsets)
         if self.threads_batch is not None:
             out["threads_batch"] = self.threads_batch
+        if self.numa is not None:
+            out["numa"] = self.numa
         return out
 
     @property
@@ -542,6 +568,8 @@ class Recipe:
 
     def server_argv(self, build_dir: Path, port: int) -> list[str]:
         argv = ["taskset", "-c", self.cpu_list] if self.cpu_list else []
+        if self.numa is not None:
+            argv = ["numactl", self.numa, "--", *argv]
         argv += [str(Path(build_dir) / "bin" / "llama-server"),
                 "-m", self.model, "-np", str(self.np), "-c", str(self.ctx),
                 "-t", str(self.threads), "-tb", str(self.effective_threads_batch),
@@ -575,6 +603,7 @@ class Recipe:
         """
         sd = self.spec_decode.get("type", "none")
         pin = f" cpu={self.cpu_list}" if self.cpu_list else " cpu=unpinned"
+        numa = f" numa={self.numa}" if self.numa is not None else ""
         env = self.env or {}
         env_states = ([f"{k}={v}" for k, v in sorted(env.items())]
                       + [f"{k}=<unset>" for k in self.explicit_unsets])
@@ -582,7 +611,7 @@ class Recipe:
         rb = self.readback_expectations()
         rbs = " readback=" + ",".join(f"{f}={v}" for f, v in rb) if rb else ""
         tb = f" tb={self.threads_batch}" if self.threads_batch is not None else ""
-        return (f"{self.name} [np{self.np} {sd} {self.metric}{pin}{tb}{envs}{rbs} "
+        return (f"{self.name} [np{self.np} {sd} {self.metric}{pin}{numa}{tb}{envs}{rbs} "
                 f"#{self.recipe_hash[:12]}]")
 
 

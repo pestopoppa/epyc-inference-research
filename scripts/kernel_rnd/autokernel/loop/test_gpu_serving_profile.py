@@ -484,6 +484,9 @@ def test_kernel_weight_matches_the_target_symbol_to_kernel_names():
     view = {"launch_weighted": gsp.launch_weighted(windows)}
     assert gsp.kernel_weight(view, "mul_mat_q") == 5_000.0          # not the fixup kernel
     assert gsp.kernel_weight(view, "mul_mat_q_stream_k_fixup") == 1_000.0
+    # GPU candidate records target the host launcher, which emits both device kernels.
+    assert gsp.kernel_weight(view, "launch_mul_mat_q") == 6_000.0
+    assert gsp.kernel_weight(view, "launch_unmapped") is None
     assert gsp.kernel_weight(view, "cpy_1_scalar") == 200.0         # template-argument name
     assert gsp.kernel_weight(view, "ggml_cuda::mul_mat_q") == 5_000.0
     assert gsp.kernel_weight(view, "vec_dot_q4_K_q8_1") is None     # inlined: no kernel

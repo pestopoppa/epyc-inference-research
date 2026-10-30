@@ -65,6 +65,78 @@ def _commit(repo: Path, value: Any, label: str) -> str:
     return value
 
 
+DO_NOT_FOLD_SCHEMA = "epyc.autokernel.do_not_fold_screen.v1"
+DO_NOT_FOLD_COMMIT = "2516c9807b8a92d472c8e75a0a1ce8558d2e34a7"
+
+
+def screen_do_not_fold(repo: Path, parent_commit: str, candidate_commit: str) -> dict[str, Any]:
+    """Screen the introduced range against the ratified AKX refusal.
+
+    An already-present baseline ancestor is not re-vetoed. Missing commits, shallow
+    history, and Git errors remain UNKNOWN so callers cannot turn an unprovable range
+    into a passing screen. This records a decision; it does not merge or promote.
+    """
+    repo = Path(repo).resolve()
+    parent = _commit(repo, parent_commit, "fold parent commit")
+    candidate = _commit(repo, candidate_commit, "fold candidate commit")
+    try:
+        protected = _commit(repo, DO_NOT_FOLD_COMMIT, "ratified DO-NOT-FOLD commit")
+    except FoldRefused:
+        return {"schema": DO_NOT_FOLD_SCHEMA, "protected_commit": DO_NOT_FOLD_COMMIT,
+                "parent_commit": parent, "candidate_commit": candidate,
+                "protected_in_parent": None, "protected_in_candidate": None,
+                "env_knobs": [], "disposition": "pending",
+                "reason": "ratified commit context is unavailable"}
+
+    def ancestor(older: str, newer: str) -> bool | None:
+        done = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor",
+                               older, newer], capture_output=True, text=True, timeout=60,
+                              check=False)
+        if done.returncode == 0:
+            return True
+        if done.returncode == 1:
+            return False
+        return None
+
+    in_parent = ancestor(protected, parent)
+    in_candidate = ancestor(protected, candidate)
+    if in_parent is None or in_candidate is None:
+        disposition, reason = "pending", "commit ancestry is not provable"
+        knobs, footprint_sha = [], None
+    elif in_parent:
+        disposition, reason = "passed", "protected commit is already in the baseline"
+        knobs, footprint_sha = [], None
+    elif not in_candidate:
+        disposition, reason = "passed", "protected commit is outside the introduced range"
+        knobs, footprint_sha = [], None
+    else:
+        # Reproduce the existing static footprint for the exact committed change.  The
+        # P3c fixture uses the producer's knob projection; no new knob grading ladder.
+        try:
+            from ..evaluator import footprint
+            protected_parent = _git(repo, "rev-parse", f"{protected}^1")
+            patch = _git(repo, "show", "--format=", "--no-ext-diff", "--no-renames", protected)
+            tree = _git(repo, "rev-parse", f"{protected}^{{tree}}")
+            projected = footprint.produce_patch_footprint(
+                source_tree=tree, parent=protected_parent, child=protected,
+                diff_text=patch, compile_commands=(), depfiles={})
+            knobs = [knob.to_dict() for knob in projected.env_knobs]
+            footprint_sha = projected.sha256()
+        except (FoldRefused, ValueError, OSError, subprocess.SubprocessError):
+            disposition, reason = "pending", "protected change footprint is not reproducible"
+            knobs, footprint_sha = [], None
+        else:
+            if any(item["default_after"] == "ON" for item in knobs):
+                disposition, reason = "failed", "fold range introduces ratified DO-NOT-FOLD commit"
+            else:
+                disposition, reason = "pending", "protected change footprint lacks the ratified ON default"
+    return {"schema": DO_NOT_FOLD_SCHEMA, "protected_commit": protected,
+            "parent_commit": parent, "candidate_commit": candidate,
+            "protected_in_parent": in_parent, "protected_in_candidate": in_candidate,
+            "env_knobs": knobs, "footprint_sha256": footprint_sha,
+            "disposition": disposition, "reason": reason}
+
+
 @dataclass(frozen=True)
 class ExperimentalKeepReceipt:
     surface: str

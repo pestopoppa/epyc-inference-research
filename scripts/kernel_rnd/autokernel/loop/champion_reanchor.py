@@ -175,7 +175,7 @@ def diagnose_store_builds(champion: dict, worktree: Path | str,
     instead of saying none exists. Images with another tree (or no readable commit) are only counted."""
     reference = None
     if reference_build is not None:
-        reference = fr.equivalence_for_build(reference_build, source_repo=worktree)["cmake_recipe_digest"]
+        reference = fr.equivalence_for_build(reference_build, source_repo=worktree)
     rejected: list[dict] = []
     other = 0
     match = None
@@ -197,9 +197,19 @@ def diagnose_store_builds(champion: dict, worktree: Path | str,
             other += 1
         elif defect is not None:
             rejected.append({"build": str(build), "commit": full, "reason": defect})
-        elif reference is not None and eq["cmake_recipe_digest"] != reference:
+        elif reference is not None and eq["cmake_recipe_digest"] != reference["cmake_recipe_digest"]:
+            candidate_recipe, reference_recipe = eq["cmake_recipe"], reference["cmake_recipe"]
             rejected.append({"build": str(build), "commit": full,
-                             "reason": "CMake recipe digest differs from the reference build's"})
+                             "reason": "CMake recipe digest differs from the reference build's",
+                             "cmake_recipe_digest": eq["cmake_recipe_digest"],
+                             "reference_build": str(reference_build),
+                             "reference_commit": reference["commit"],
+                             "reference_cmake_recipe_digest": reference["cmake_recipe_digest"],
+                             "recipe_differences": {
+                                 key: {"candidate": candidate_recipe.get(key),
+                                       "reference": reference_recipe.get(key)}
+                                 for key in sorted(candidate_recipe.keys() | reference_recipe.keys())
+                                 if candidate_recipe.get(key) != reference_recipe.get(key)}})
         elif match is None:
             match = eq
     return {"match": match, "rejected": rejected, "other": other}
@@ -368,7 +378,8 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
             msg += ("; tree-matching image(s) REJECTED: "
                     + "; ".join(f"{r['build']} (commit {r['commit'][:12]}): {r['reason']}"
                                 for r in diag["rejected"])
-                    + " -- repair the image, do not rebuild")
+                    + " -- preserve raw recipe digests; inspect provenance and recipe differences "
+                    "before selecting a prospective calibration recipe")
             out["rejected_builds"] = diag["rejected"]
         else:
             msg += ": build and store it first"
@@ -557,7 +568,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="proceed although origin/main cannot be refreshed and the last fetch is >24h old")
     p.add_argument("--builds-root", type=Path, default=DEFAULT_BUILDS_ROOT)
     p.add_argument("--reference-build", type=Path,
-                   help="require the store build's CMake recipe to equal this build's (the old anchor)")
+                   help="require the store build's raw CMake recipe to equal this explicit reference "
+                        "(no normalization or floor carry-forward is implied)")
     p.add_argument("--numerics-epoch", default="default")
     p.add_argument("--require-grade", choices=fr.GRADES, default="decision")
     p.add_argument("--co-tenancy", choices=fr.CO_TENANCY, default="quiet")
