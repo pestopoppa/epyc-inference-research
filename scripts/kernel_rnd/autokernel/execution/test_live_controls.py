@@ -146,6 +146,106 @@ class CampaignIdentity(unittest.TestCase):
                     root, campaign_id="ak-controls-v9-terminal")
 
 
+class DeclarationReaderConsistency(unittest.TestCase):
+    """Write real fixture metadata and enter both actual reader paths."""
+
+    class InstrumentBoundary(RuntimeError):
+        pass
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.model = self.root / "fixture.gguf"
+        self.model.write_bytes(b"MOCK_ONLY tiny model identity fixture")
+        self.instrument = self.root / "instrument" / "llama-bench"
+        self.instrument.parent.mkdir()
+        self.instrument.write_bytes(b"MOCK_ONLY never executed instrument")
+        copied = self.root / "anchor_binary_copy" / "llama-bench"
+        copied.parent.mkdir()
+        copied.write_bytes(self.instrument.read_bytes())
+        self.identity = live_controls.LiveCampaignIdentity("ak-declaration-consistency", str(self.root))
+        patcher = mock.patch.object(live_controls, "MODEL", self.model)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(live_controls, "INSTRUMENT_BINARY", self.instrument)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        digest = hashlib.sha256(self.instrument.read_bytes()).hexdigest()
+        live_controls._write_declaration(
+            self.root, identity=self.identity, instrument_sha=digest,
+            copy_sha=digest, instrument_linkage="2" * 64,
+            copy_linkage="2" * 64, toolchain_manifest_sha256="3" * 64,
+            sealed_binding=live_controls.recipes.ToolBinding(
+                binary=str(copied), source_root=str(self.root), library_path=str(copied.parent)))
+        self.path = self.root / "campaign_declaration.json"
+        self.original = self.path.read_bytes()
+        self.declaration = json.loads(self.original)
+
+    def _reader(self, mode):
+        original_hash = live_controls._sha256_file
+        def at_instrument(path):
+            if Path(path) == self.instrument:
+                raise self.InstrumentBoundary("declaration and source checks passed")
+            self.assertTrue(Path(path).is_relative_to(self.root), "no shared weight/artifact reads")
+            return original_hash(path)
+        with mock.patch.object(live_controls, "_sha256_file", side_effect=at_instrument), \
+             mock.patch.object(live_controls, "_ensure_instrument_build",
+                               side_effect=AssertionError("no build")), \
+             mock.patch.object(live_controls, "_claim",
+                               side_effect=AssertionError("no inference claim"), create=True):
+            if mode == "resume":
+                return live_controls.execute(self.root, campaign_id=self.identity.campaign_id,
+                                             resume_existing=True)
+            return live_controls.evaluate_existing(self.root, campaign_id=self.identity.campaign_id)
+
+    def test_each_fixed_writer_field_is_bound_by_both_actual_readers(self):
+        fields = set(self.declaration) - {"declared_at"}
+        self.assertTrue({"model_sha256", "physical_envelopes", "contribution_floor",
+                         "max_candidates", "max_blocks_per_candidate", "anchor_motion_window_blocks",
+                         "anchor_motion_settling", "between_leg_policy", "belief_capture_schema"} <= fields)
+        for mode in ("resume", "evaluate"):
+            for field in sorted(fields):
+                for mutation in ("replace", "remove"):
+                    with self.subTest(mode=mode, field=field, mutation=mutation):
+                        changed = dict(self.declaration)
+                        if mutation == "replace":
+                            changed[field] = "MUTATED-FIXTURE"
+                        else:
+                            del changed[field]
+                        self.path.write_text(json.dumps(changed))
+                        with self.assertRaises(ValueError):
+                            self._reader(mode)
+
+    def test_unchanged_current_writer_and_volatile_time_reach_next_independent_check(self):
+        for mode in ("resume", "evaluate"):
+            for declared_at in (self.declaration["declared_at"], "different volatile capture time"):
+                with self.subTest(mode=mode, declared_at=declared_at):
+                    self.path.write_text(json.dumps(dict(self.declaration, declared_at=declared_at)))
+                    with self.assertRaises(self.InstrumentBoundary):
+                        self._reader(mode)
+
+    def test_existing_legacy_resume_bridge_preserves_original_declaration_bytes(self):
+        legacy = dict(self.declaration,
+                      anchor_motion_settling=live_controls.LEGACY_ANCHOR_MOTION_SETTLING)
+        del legacy["between_leg_policy"]
+        self.path.write_text(json.dumps(legacy))
+        before = self.path.read_bytes()
+        with self.assertRaises(self.InstrumentBoundary):
+            self._reader("resume")
+        self.assertEqual(self.path.read_bytes(), before)
+        # No new terminal read-side policy amendment is invented.
+        self.assertFalse((self.root / "resume_amendment.json").exists())
+        with self.assertRaises(ValueError):
+            self._reader("evaluate")
+
+    def test_undeclared_fixed_input_cannot_be_silently_ignored(self):
+        self.path.write_text(json.dumps(dict(self.declaration, uncommitted_policy="MUTATED")))
+        for mode in ("resume", "evaluate"):
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "uncommitted_policy"):
+                self._reader(mode)
+
+
 class CalibrationFrame(unittest.TestCase):
 
     def test_calibration_is_explicitly_iqk_off_at_campaign_repetition_count(self):
