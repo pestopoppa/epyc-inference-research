@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -246,20 +247,32 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         self.assertIn("--spec-draft-n-max 4", joined)
         self.assertIn("--slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor", joined)
 
-    def test_v9_coder_alias_disables_speculation_per_request(self):
-        scenario = k35.scenario_by_name("v9_coder_escalation_gpu_request_no_spec")
-        argv = k35.build_server_argv(
-            scenario,
-            binary=Path("/tmp/v9-hip/bin/llama-server"),
-            port=19131,
-            nominal_context=2048,
-            max_tokens=256,
+    def test_kvu16h_no_draft_scenarios_launch_dedicated_no_draft_servers(self):
+        names = (
+            "v9_coder_escalation_gpu_request_no_spec",
+            "v9_dsv4_q8_dspark_request_nmax0",
+            "v9_dsv4_iq3_xxs_dspark_request_nmax0",
         )
-        body = k35.build_chat_request_body(scenario, "Return OK", max_tokens=32)
-        joined = " ".join(argv)
-        self.assertIn("--spec-type draft-mtp", joined)
-        self.assertIn("--spec-draft-n-max 4", joined)
-        self.assertEqual(body["speculative.n_max"], 0)
+        for index, name in enumerate(names):
+            with self.subTest(scenario=name):
+                scenario = k35.scenario_by_name(name)
+                argv = k35.build_server_argv(
+                    scenario,
+                    binary=Path("/tmp/kvu16h/bin/llama-server"),
+                    port=19131 + index,
+                    nominal_context=2048,
+                    max_tokens=32,
+                )
+                body = k35.build_chat_request_body(scenario, "Return OK", max_tokens=16)
+                self.assertEqual(scenario.protocol_revision, "kvu16h-dedicated-no-draft-v2")
+                self.assertEqual(scenario.spec_type, "none")
+                self.assertIsNone(scenario.request_spec_n_max)
+                self.assertIsNone(scenario.draft_model)
+                self.assertIsNone(scenario.spec_draft_n_max)
+                self.assertNotIn("-md", argv)
+                self.assertFalse(any(arg.startswith("--spec-draft-") for arg in argv))
+                self.assertNotIn("speculative.n_max", body)
+                self.assertIn("Protocol correction KVU-16h-runner v2", scenario.description)
 
     def test_v9_vision_omits_undeclared_ubatch_and_adds_projector(self):
         scenario = k35.scenario_by_name("v9_worker_vision_gpu_no_spec")
@@ -276,7 +289,7 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         self.assertIn("mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf", joined)
         self.assertIn("--image-min-tokens 1024", joined)
 
-    def test_v9_dspark_pair_differs_only_at_request_cap(self):
+    def test_v9_dspark_pair_uses_separate_no_draft_server(self):
         disabled = k35.scenario_by_name("v9_dsv4_q8_dspark_request_nmax0")
         enabled = k35.scenario_by_name("v9_dsv4_q8_dspark_request_nmax3")
         disabled_argv = k35.build_server_argv(
@@ -293,12 +306,13 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             nominal_context=2048,
             max_tokens=16,
         )
-        self.assertEqual(disabled_argv, enabled_argv)
-        self.assertIn("--spec-type", disabled_argv)
-        self.assertIn("draft-dspark", disabled_argv)
-        self.assertEqual(
-            k35.build_chat_request_body(disabled, "prompt", max_tokens=16)["speculative.n_max"],
-            0,
+        self.assertNotIn("-md", disabled_argv)
+        self.assertNotIn("draft-dspark", disabled_argv)
+        self.assertIn("-md", enabled_argv)
+        self.assertIn("draft-dspark", enabled_argv)
+        self.assertNotIn(
+            "speculative.n_max",
+            k35.build_chat_request_body(disabled, "prompt", max_tokens=16),
         )
         self.assertEqual(
             k35.build_chat_request_body(enabled, "prompt", max_tokens=16)["speculative.n_max"],
@@ -317,9 +331,30 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         enabled = k35.scenario_by_name("v9_dsv4_iq3_xxs_dspark_request_nmax3")
         self.assertEqual(disabled.model, enabled.model)
         self.assertIn("UD-IQ3_XXS", str(disabled.model))
-        self.assertEqual(disabled.draft_model, enabled.draft_model)
-        self.assertEqual(disabled.request_spec_n_max, 0)
+        self.assertIsNone(disabled.draft_model)
+        self.assertIsNotNone(enabled.draft_model)
+        self.assertIsNone(disabled.request_spec_n_max)
         self.assertEqual(enabled.request_spec_n_max, 3)
+
+    def test_plan_rejects_request_nmax_zero_on_a_drafted_server(self):
+        unsafe = replace(
+            k35.scenario_by_name("v9_dsv4_q8_dspark_request_nmax3"),
+            name="unsafe-request-disabled-draft",
+            request_spec_n_max=0,
+        )
+        args = k35.parse_args(["--only", "frontdoor_cpu_no_spec", "--context", "2048"])
+        with mock.patch.object(k35, "selected_scenarios", return_value=[unsafe]):
+            with self.assertRaisesRegex(ValueError, "dedicated spec_type=none server arm"):
+                k35.build_plan(args)
+
+    def test_plan_records_protocol_revision_for_corrected_arms(self):
+        args = k35.parse_args(
+            ["--only", "v9_coder_escalation_gpu_request_no_spec", "--context", "2048"]
+        )
+        plan = k35.build_plan(args)
+        self.assertEqual(
+            plan["cells"][0]["protocol_revision"], "kvu16h-dedicated-no-draft-v2"
+        )
 
     def test_dspark_summary_captures_tokens_and_effective_cap(self):
         scenario = k35.scenario_by_name("v9_dsv4_q8_dspark_request_nmax0")
