@@ -3919,7 +3919,9 @@ class AgentPlanner:
                                            report_source=_ANSWER_PHASE_SOURCES[phase])
         except ActorStopped:
             raise
-        except Exception:  # noqa: BLE001 -- an incomplete phase answer is not a failure
+        except ProviderTransient:
+            # Malformed/incomplete provider replies are recoverable. Programming or
+            # context-binding failures must escape instead of spending another turn.
             return None
 
     def _answer_turn(self, phase: str, message: str, budget: float, backend: Backend,
