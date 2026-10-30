@@ -16,6 +16,18 @@ for name, expected in {'odl_quad_job.py':'051c5bfa92dd77053b287241c9598e3ffb3ae1
  path=Path('/mnt/raid0/llm/tmp/codex3-pip02-phasec-20261029')/name
  if m.digest(path)!=expected: raise ValueError('quad source mismatch: '+str(path))
  paths.add(str(path.resolve()))
+# Capture-time source registries are explicitly allowlisted, never inferred from mtime.
+from odl_bench import pip02_lineage as lineage
+registries=[(lineage.ODL,lineage.ODL_SHA)]+[(root/'source-pins.json',expected) for root,expected in lineage.PADDLE_ROOTS.values()]
+for registry,expected in registries:
+ if m.digest(registry)!=expected: raise ValueError('registered producer manifest changed: '+str(registry))
+ paths.add(str(registry.resolve()))
+ if registry.suffix=='.json': entries=json.loads(registry.read_bytes()).items()
+ else: entries=((name,digest) for digest,name in (line.split('  ',1) for line in registry.read_text().splitlines()))
+ for name,digest in entries:
+  p=Path(name)
+  if not p.is_file() or m.digest(p)!=digest: raise ValueError('registered producer source mismatch: '+str(p))
+  paths.add(str(p.resolve()))
 for i in range(5):
  ident='codex3-pip02-fresh-odl-s0-20261029' if i==0 else f'codex3-pip02-fresh-odl-quad-s{i}-20261029'
  packet=Path('/mnt/raid0/llm/tmp/compute-flags/ready/armed')/(ident+'.json')
