@@ -1,7 +1,7 @@
 """Strict source-bound lineage; no file-mtime or post-hoc producer inference."""
 import datetime,hashlib,json,re
 from pathlib import Path
-from .pip02_records import canon,sha
+from .pip02_records import canon,sha,LayeredPaths
 BASE=Path('/mnt/raid0/llm/tmp/codex3-pip02-phasec-20261029')
 ODL=BASE/'odl-relocatable-r2'/'SOURCES.sha256'
 ODL_SHA='a17e08f66ffcd3c49e980110e444db2841ae5367b5f6dfff410db18423897cb9'
@@ -19,7 +19,11 @@ PADDLE_ROOTS={
  'r10':(Path('/mnt/raid0/llm/tmp/codex3-pip02-paddle-relocatable-r10-20261030'),'6acc1d15c2bb3a2804cead02b1df916557147bff52637a78c472d2fefa0b2180'),
  'r11':(Path('/mnt/raid0/llm/tmp/codex3-pip02-paddle-relocatable-r11-20261030'),'20b60b7ac3fb6fcd4db6d49163eea7d3158a4be0c6b4a94e04a2fab850226ebb'),
  'r13':(Path('/mnt/raid0/llm/tmp/codex3-pip02-paddle-relocatable-r13-20261030'),'9e206417a8654fbd79f5d73238d152dbca25282a09be796bf3e0e56b0e8b3a58'),
+ 'r14':(Path('/mnt/raid0/llm/tmp/codex3-pip02-paddle-pool-r14-20261030/smoke-native'),'fe9ea7d7c98ff6b0280cfd7955fcd227fb4e8c028895b0d00e1d18b877ffd879'),
  'r15':(Path('/mnt/raid0/llm/tmp/codex3-pip02-paddle-pool-r15-20261030/smoke-native'),'07e23ed4e08b3a3accd46c5529e9ee992d02982ce1026d23c53377bdef65f926'),
+ 'r22':(Path('/mnt/micron/codex3-pip-split-r22-20261030'),'2019dcee79c82de51497a77605062bf534572119e0aa104d8cd3c308af4529f5'),
+ 'r25':(Path('/mnt/micron/codex3-pip-relocatable-r25-20261030'),'df6c355fa89f5182f28a3d25ba8b86f5524b31db682cb99ffa560070144cdbcd'),
+ 'r26':(Path('/mnt/micron/codex3-pip-head-r26-20261030'),'11d496e2b52ea9e5034df15feeeae7602a06587f8ef14a47d07017022ca430ac'),
 }
 PROTOCOL='dc7d8e167edc79a07b9db10849940cb84a7f04c34f67274afbe067531d226ae3'
 def pinned(path,pins):
@@ -81,7 +85,8 @@ def odl_lineage(page_dir,shard,pins):
  return {'verified':True,'basis':'pre-client producer id and registered source-manifest digest captured in native start; grant interval verified','source_manifest_sha256':digest,'grant_sha256':sha(start['grant'].encode())}
 
 def paddle_lineage(directory,page,campaign,shard,pins):
- campaign_sha=sha(canon(campaign));prefix='region-'+sha(canon(page))[:24]+'-';starts=sorted(Path(directory).glob(prefix+'*.start.json'))
+ directory=directory if isinstance(directory,LayeredPaths) else Path(directory)
+ campaign_sha=sha(canon(campaign));prefix='region-'+sha(canon(page))[:24]+'-';starts=sorted(directory.glob(prefix+'*.start.json'))
  if not starts:raise ValueError('no native request-origin receipts')
  captures={}
  for version,(root,registered_sha) in PADDLE_ROOTS.items():
@@ -94,22 +99,23 @@ def paddle_lineage(directory,page,campaign,shard,pins):
    raw=path.read_bytes();cap=json.loads(raw)
    if cap.get('smoke') is not False or shard not in cap.get('shards',[]):continue
    if cap.get('source_pins')!=registered or cap.get('protocol_sha256')!=PROTOCOL:continue
-   ident=cap.get('id','');pattern={'r7':r'codex3-pip02-paddle-parallel-owner-r7-g\d+-20261029','r8':r'codex3-pip02-paddle-relocatable-r8-g\d+-20261029','r9':r'codex3-pip02-paddle-relocatable-r9-g\d+-20261029','r10':r'codex3-pip02-paddle-relocatable-r10-g\d+-20261029','r11':r'codex3-pip02-paddle-relocatable-r11-g\d+-20261029','r13':r'codex3-pip02-paddle-relocatable-r13-g(?:5|8|11|17|26|32|35|65|128)-20261030','r15':r'codex3-pip02-paddle-relocatable-r15-pool[0-3]-20261030'}[version]
+   ident=cap.get('id','');pattern={'r7':r'codex3-pip02-paddle-parallel-owner-r7-g\d+-20261029','r8':r'codex3-pip02-paddle-relocatable-r8-g\d+-20261029','r9':r'codex3-pip02-paddle-relocatable-r9-g\d+-20261029','r10':r'codex3-pip02-paddle-relocatable-r10-g\d+-20261029','r11':r'codex3-pip02-paddle-relocatable-r11-g\d+-20261029','r13':r'codex3-pip02-paddle-relocatable-r13-g(?:5|8|11|17|26|32|35|65|128)-20261030','r14':r'codex3-pip02-paddle-relocatable-r14-pool[0-3]-20261030','r15':r'codex3-pip02-paddle-relocatable-r15-pool[0-3]-20261030','r22':r'codex3-pip02-paddle-relocatable-r22-pool[0-3]-20261030','r25':r'codex3-pip02-paddle-relocatable-r(?:25|27)-pool[0-3]-20261030','r26':r'codex3-pip02-paddle-relocatable-r(?:26|27)-head-20261030'}[version]
    if not re.fullmatch(pattern,ident):continue
    if version=='r13':
     first=int(re.search(r'-g(\d+)-20261030$',ident).group(1))
     if cap.get('shards')!=list(range(first,first+3)):raise ValueError('R13 captured shard group mismatch')
-   if version=='r15':
+   if version in ('r14','r15','r22','r25'):
     group=cap.get('shards')
     if not isinstance(group,list) or not group or type(group[0]) is not int:raise ValueError('R15 captured group shape')
     first=group[0];pool=int(re.search(r'-pool([0-3])-20261030$',ident).group(1))
     if not 5<=first<=149 or (first-5)%3 or ((first-5)//3)%4!=pool or group!=list(range(first,min(first+3,151))):raise ValueError('R15 captured pool/group mismatch')
+   if version=='r26' and cap.get('shards') not in ([0,1,2],[3,4]):raise ValueError('head captured shard group mismatch')
    grant=cap.get('grant');grant_window(grant)
    if sha(grant.encode())!=cap.get('grant_sha256'):raise ValueError('Paddle captured grant hash')
    captures[sha(raw)]=cap
  origins=set()
  for p in starts:
-  a=json.loads(p.read_bytes());response=p.with_name(p.name.replace('.start.json','.result.json'))
+  a=json.loads(p.read_bytes());response=directory/(p.name.replace('.start.json','.result.json'))
   if not response.is_file():raise ValueError('unknown native request exposure')
   b=json.loads(response.read_bytes());prov=a['provenance'];identity=prov['identity'];cap=captures.get(prov['origin_capture_sha256'])
   if cap is None:raise ValueError('unregistered original capture')
@@ -119,10 +125,10 @@ def paddle_lineage(directory,page,campaign,shard,pins):
   stamp=datetime.datetime.fromisoformat(a['originated_at'].replace('Z','+00:00'))
   if stamp.tzinfo is None:raise ValueError('request timestamp timezone')
   grant_window(cap['grant'],stamp.timestamp());origins.add(prov['origin_capture_sha256'])
- key=sha(canon({'campaign':campaign_sha,'page':page}));finish=Path(directory)/(key+'.finish.json')
+ key=sha(canon({'campaign':campaign_sha,'page':page}));finish=directory/(key+'.finish.json')
  if not finish.exists():return {'verified':False,'request_origins_verified':True,'origin_capture_sha256':sorted(origins),'basis':'native request origins verified; page-result record has no assembler/finishing-capture binding, so page lineage remains unverified'}
- receipt=json.loads(finish.read_bytes());cap=captures.get(receipt.get('capture_sha256'));result_path=Path(directory)/(key+'.result');result=json.loads(result_path.read_bytes())
- if cap is None or not (re.fullmatch(r'codex3-pip02-paddle-relocatable-r(?:9|10|11)-g\d+-20261029',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r13-g(?:5|8|11|17|26|32|35|65|128)-20261030',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r15-pool[0-3]-20261030',cap['id'])):raise ValueError('finish capture is not registered R9/R10/R11/R13/R15')
+ receipt=json.loads(finish.read_bytes());cap=captures.get(receipt.get('capture_sha256'));result_path=directory/(key+'.result');result=json.loads(result_path.read_bytes())
+ if cap is None or not (re.fullmatch(r'codex3-pip02-paddle-relocatable-r(?:9|10|11)-g\d+-20261029',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r13-g(?:5|8|11|17|26|32|35|65|128)-20261030',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r(?:14|15)-pool[0-3]-20261030',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r(?:22|25|27)-pool[0-3]-20261030',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r(?:26|27)-head-20261030',cap['id'])):raise ValueError('finish capture is not registered')
  source_sha=sha(canon(cap['source_pins']))
  if receipt.get('schema')!='pip02-paddle-page-finish/v1' or receipt.get('page')!=page or receipt.get('campaign_sha256')!=campaign_sha or receipt.get('result_sha256')!=sha(result_path.read_bytes()) or receipt.get('markdown_sha256')!=result.get('markdown_sha256') or sha(result['markdown'].encode())!=receipt.get('markdown_sha256') or receipt.get('source_pins_sha256')!=source_sha or receipt.get('grant_sha256')!=cap['grant_sha256']:raise ValueError('native finish receipt mismatch')
- return {'verified':True,'request_origins_verified':True,'origin_capture_sha256':sorted(origins),'finish_capture_sha256':receipt['capture_sha256'],'basis':'native R9/R10/R11/R13/R15 finish receipt binds page result and markdown to captured grant and registered source'}
+ return {'verified':True,'request_origins_verified':True,'origin_capture_sha256':sorted(origins),'finish_capture_sha256':receipt['capture_sha256'],'basis':'native registered finish receipt binds page result and markdown to captured grant and registered source'}

@@ -41,7 +41,7 @@ def pins_verify(pins):
 def campaign(config):
     return {'scope':'pip02-english-fresh-20261029-Paddle-full-4096','population_sha256':PLAN,'layout_sha256':LAYOUT,'server_pins':config['server']['pins']}
 
-def run(plan,gt,odl_root,paddle_root,config,image_root=None,pins=None):
+def run(plan,gt,odl_root,paddle_root,config,image_root=None,pins=None,paddle_extra_roots=()):
     if len(plan['pages'])!=plan['total'] or len({p['image'] for p in plan['pages']})!=len(plan['pages']): raise ValueError('plan duplicate/size')
     output={arm:{'pages':[],'scores':[]} for arm in ('odl','paddle')}; total=0
     from src.dataset.end2end_dataset import End2EndDataset
@@ -54,7 +54,9 @@ def run(plan,gt,odl_root,paddle_root,config,image_root=None,pins=None):
         odl_dir=original_odl
         try: odl_dir=lineage.recovery_directory(pos,original_odl,pins)
         except (OSError,ValueError,KeyError,TypeError): pass  # original remains invalid/unknown; no recovery warrant
-        sources={'odl':lambda:records.odl(odl_dir,page,PLAN,PROTOCOL,DEPENDENCY), 'paddle':lambda:records.paddle(Path(paddle_root)/f'shard-{pos//5:02d}'/f'shard-{pos//5}',page,campaign(config))}
+        paddle_dirs=[Path(root)/f'shard-{pos//5:02d}'/f'shard-{pos//5}' for root in (paddle_root,*paddle_extra_roots)]
+        paddle_dir=records.LayeredPaths(paddle_dirs) if paddle_extra_roots else paddle_dirs[0]
+        sources={'odl':lambda:records.odl(odl_dir,page,PLAN,PROTOCOL,DEPENDENCY), 'paddle':lambda:records.paddle(paddle_dir,page,campaign(config))}
         for arm,reader in sources.items():
             try:
                 text=reader()
@@ -64,7 +66,7 @@ def run(plan,gt,odl_root,paddle_root,config,image_root=None,pins=None):
             lineage_record={'verified':False,'basis':'source lineage not evaluated'}
             if text is not None and pins is not None:
                 try:
-                    lineage_record=(lineage.odl_lineage(odl_dir,pos//25,pins) if arm=='odl' else lineage.paddle_lineage(Path(paddle_root)/f'shard-{pos//5:02d}'/f'shard-{pos//5}',page,campaign(config),pos//5,pins))
+                    lineage_record=(lineage.odl_lineage(odl_dir,pos//25,pins) if arm=='odl' else lineage.paddle_lineage(paddle_dir,page,campaign(config),pos//5,pins))
                 except (OSError,ValueError,KeyError,TypeError) as exc: lineage_record={'verified':False,'basis':str(exc)}
             values=evaluate(g,text) if text is not None else None
             if values is not None and len(values)!=count: raise ValueError('matcher denominator mismatch')
@@ -81,11 +83,11 @@ def run(plan,gt,odl_root,paddle_root,config,image_root=None,pins=None):
     return output
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument('--plan',required=True); ap.add_argument('--gt',required=True); ap.add_argument('--config',required=True); ap.add_argument('--image-root',required=True); ap.add_argument('--odl-root',required=True); ap.add_argument('--paddle-root',required=True); ap.add_argument('--pins',required=True); ap.add_argument('--pins-sha256',required=True); ap.add_argument('--out-dir',required=True); a=ap.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument('--plan',required=True); ap.add_argument('--gt',required=True); ap.add_argument('--config',required=True); ap.add_argument('--image-root',required=True); ap.add_argument('--odl-root',required=True); ap.add_argument('--paddle-root',required=True); ap.add_argument('--paddle-extra-root',action='append',default=[]); ap.add_argument('--pins',required=True); ap.add_argument('--pins-sha256',required=True); ap.add_argument('--out-dir',required=True); a=ap.parse_args()
     if digest(a.pins)!=a.pins_sha256: raise ValueError('manifest identity')
     pins=json.loads(Path(a.pins).read_bytes()); pins_verify(pins)
     if digest(a.plan)!=PLAN or digest(a.config)!=CONFIG or digest(a.gt)!=pins['gt_sha256']: raise ValueError('population/config/GT identity')
-    output=run(json.loads(Path(a.plan).read_bytes()),json.loads(Path(a.gt).read_bytes()),a.odl_root,a.paddle_root,json.loads(Path(a.config).read_bytes()),a.image_root,pins['files'])
+    output=run(json.loads(Path(a.plan).read_bytes()),json.loads(Path(a.gt).read_bytes()),a.odl_root,a.paddle_root,json.loads(Path(a.config).read_bytes()),a.image_root,pins['files'],a.paddle_extra_root)
     pins_verify(pins)
     out=Path(a.out_dir); out.mkdir(parents=True,exist_ok=False)
     report={'schema':'pip02.common-teds.v1','pins_sha256':a.pins_sha256,'plan_sha256':PLAN,'gt_sha256':pins['gt_sha256'],'arms':output,'joint_full_population_defined':all(v['full_population_defined'] for v in output.values()),'gate_eligible':all(v['gate_eligible'] for v in output.values())}
