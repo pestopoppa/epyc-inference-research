@@ -862,6 +862,12 @@ def _kernel_matches(kernel: str, symbol: str) -> bool:
     if not symbol:
         return False
     base = kernel.split("<", 1)[0].strip()
+    # The recorded GPU MMQ hypotheses name the host launcher. Its source in mmq.cuh
+    # launches both the main kernel and, for Stream K, the fixup kernel. Map this
+    # known route explicitly; stripping "launch_" from arbitrary symbols would
+    # claim a device-kernel relationship that the source has not established.
+    if symbol == "launch_mul_mat_q" and base in {"mul_mat_q", "mul_mat_q_stream_k_fixup"}:
+        return True
     if base == symbol:
         return True
     return symbol in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", kernel.partition("<")[2])
