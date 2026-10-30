@@ -469,6 +469,57 @@ def _instrument_receipt_capability(binary: Path) -> schemas.Check:
          "escape-check, and device-sync receipt key",))
 
 
+def _expected_declaration(*, identity: LiveCampaignIdentity,
+                          source_sha: str) -> dict[str, Any]:
+    """One fixed input frame shared by the writer and both evidence readers."""
+    return {
+        "schema": "epyc.autokernel.live_control_campaign_declaration.v1",
+        "campaign_id": identity.campaign_id,
+        "campaign_seed_sha256": hashlib.sha256(
+            identity.campaign_seed.encode("utf-8")).hexdigest(),
+        "window_id": identity.window_id,
+        "recipe_id": RECIPE_ID,
+        "cpu_list": CPU_LIST,
+        "model": str(MODEL),
+        "model_sha256": _sha256_file(MODEL) if MODEL.is_file() else None,
+        **_token_fields(),
+        "calibration_blocks": CALIBRATION_BLOCKS,
+        "neutral_blocks": NEUTRAL_BLOCKS,
+        "calibration_frame": _calibration_frame(),
+        "anchor_motion_window_blocks": ANCHOR_MOTION_WINDOW_BLOCKS,
+        "anchor_motion_settling": ANCHOR_MOTION_SETTLING,
+        "between_leg_policy": BETWEEN_LEG_POLICY,
+        "contribution_floor": CONTRIBUTION_FLOOR,
+        "max_candidates": 10,
+        "max_blocks_per_candidate": 20,
+        "physical_envelopes": {
+            label: envelope.to_dict()
+            for label, envelope in sorted(_declared_physical_envelopes().items())
+        },
+        "source_sha256": source_sha,
+        "belief_capture_schema": BELIEF_RECEIPT_SCHEMA,
+    }
+
+
+def _check_declaration(declaration: Mapping[str, Any], *,
+                       identity: LiveCampaignIdentity, source_sha: str,
+                       resume_amendment: Mapping[str, Any] | None = None) -> None:
+    expected = _expected_declaration(identity=identity, source_sha=source_sha)
+    if expected["model_sha256"] is None:
+        raise ValueError("campaign declaration model_sha256 is unavailable")
+    observed = {key: value for key, value in declaration.items() if key != "declared_at"}
+    if resume_amendment is not None:
+        # Only _resume_amendment's existing exact operator-authorized bridge
+        # licenses these two fields. Never rewrite the immutable declaration.
+        observed["anchor_motion_settling"] = ANCHOR_MOTION_SETTLING
+        observed["between_leg_policy"] = BETWEEN_LEG_POLICY
+    failed = sorted(key for key in set(expected) | set(observed)
+                    if key not in expected or key not in observed
+                    or expected[key] != observed[key])
+    if failed:
+        raise ValueError(f"campaign declaration checks failed: {failed}")
+
+
 def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
                        instrument_sha: str, copy_sha: str,
                        instrument_linkage: str, copy_linkage: str,
@@ -496,34 +547,8 @@ def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
     source_sha = schemas.content_hash(source_manifest)
     _write_json(output_root / "runtime-source-label.json",
                 {**source_manifest, "source_sha256": source_sha})
-    declaration = {
-        "schema": "epyc.autokernel.live_control_campaign_declaration.v1",
-        "declared_at": _utc_now(),
-        "campaign_id": identity.campaign_id,
-        "campaign_seed_sha256": hashlib.sha256(
-            identity.campaign_seed.encode("utf-8")).hexdigest(),
-        "window_id": identity.window_id,
-        "recipe_id": RECIPE_ID,
-        "cpu_list": CPU_LIST,
-        "model": str(MODEL),
-        "model_sha256": _sha256_file(MODEL) if MODEL.is_file() else None,
-        **_token_fields(),
-        "calibration_blocks": CALIBRATION_BLOCKS,
-        "neutral_blocks": NEUTRAL_BLOCKS,
-        "calibration_frame": _calibration_frame(),
-        "anchor_motion_window_blocks": ANCHOR_MOTION_WINDOW_BLOCKS,
-        "anchor_motion_settling": ANCHOR_MOTION_SETTLING,
-        "between_leg_policy": BETWEEN_LEG_POLICY,
-        "contribution_floor": CONTRIBUTION_FLOOR,
-        "max_candidates": 10,
-        "max_blocks_per_candidate": 20,
-        "physical_envelopes": {
-            label: envelope.to_dict()
-            for label, envelope in sorted(_declared_physical_envelopes().items())
-        },
-        "source_sha256": source_sha,
-        "belief_capture_schema": BELIEF_RECEIPT_SCHEMA,
-    }
+    declaration = {**_expected_declaration(identity=identity, source_sha=source_sha),
+                   "declared_at": _utc_now()}
     _write_json(output_root / "campaign_declaration.json", declaration)
     return source_sha
 
@@ -1855,34 +1880,6 @@ def _validate_resume_existing(
                 "recomputed from the immutable AA and neutral raw vectors")
 
     declaration = _load_json(output_root / "campaign_declaration.json")
-    checks = {
-        "schema": declaration.get("schema")
-                  == "epyc.autokernel.live_control_campaign_declaration.v1",
-        "campaign_id": declaration.get("campaign_id") == identity.campaign_id,
-        "campaign_seed": declaration.get("campaign_seed_sha256") == hashlib.sha256(
-            identity.campaign_seed.encode("utf-8")).hexdigest(),
-        "window_id": declaration.get("window_id") == identity.window_id,
-        "recipe_id": declaration.get("recipe_id") == RECIPE_ID,
-        "cpu_list": declaration.get("cpu_list") == CPU_LIST,
-        "model": declaration.get("model") == str(MODEL),
-        "model_sha256": declaration.get("model_sha256") == _sha256_file(MODEL),
-        "token_fields": all(
-            declaration.get(key) == value for key, value in _token_fields().items()),
-        "calibration_blocks": declaration.get("calibration_blocks")
-                              == CALIBRATION_BLOCKS,
-        "neutral_blocks": declaration.get("neutral_blocks") == NEUTRAL_BLOCKS,
-        "calibration_frame": declaration.get("calibration_frame")
-                             == _calibration_frame(),
-        "physical_envelopes": declaration.get("physical_envelopes") == {
-            label: envelope.to_dict()
-            for label, envelope in sorted(_declared_physical_envelopes().items())},
-    }
-    failed = sorted(name for name, passed in checks.items() if not passed)
-    if failed:
-        raise ValueError(f"resume declaration checks failed: {failed}")
-    amendment = _resume_amendment(
-        output_root, identity=identity, declaration=declaration)
-
     runtime = _load_json(output_root / "runtime-source-label.json")
     runtime_body = {key: value for key, value in runtime.items()
                     if key != "source_sha256"}
@@ -1890,6 +1887,11 @@ def _validate_resume_existing(
     if source_sha != schemas.content_hash(runtime_body) \
             or declaration.get("source_sha256") != source_sha:
         raise ValueError("resume runtime source label does not verify")
+    amendment = _resume_amendment(
+        output_root, identity=identity, declaration=declaration)
+    _check_declaration(declaration, identity=identity, source_sha=source_sha,
+                       resume_amendment=amendment)
+
     if runtime.get("production_source_commit") != PRODUCTION_COMMIT \
             or runtime.get("measurement_instrument_commit") != INSTRUMENT_COMMIT \
             or runtime.get("binary_copy_exact") is not True:
@@ -2248,27 +2250,6 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
                 f"{terminal} already exists; completed composition is immutable")
 
     declaration = _load_json(output_root / "campaign_declaration.json")
-    declared_checks = {
-        "schema": declaration.get("schema")
-                  == "epyc.autokernel.live_control_campaign_declaration.v1",
-        "campaign_id": declaration.get("campaign_id") == identity.campaign_id,
-        "campaign_seed": declaration.get("campaign_seed_sha256") == hashlib.sha256(
-            identity.campaign_seed.encode("utf-8")).hexdigest(),
-        "window_id": declaration.get("window_id") == identity.window_id,
-        "recipe_id": declaration.get("recipe_id") == RECIPE_ID,
-        "cpu_list": declaration.get("cpu_list") == CPU_LIST,
-        "model": declaration.get("model") == str(MODEL),
-        "calibration_blocks": declaration.get("calibration_blocks")
-                              == CALIBRATION_BLOCKS,
-        "neutral_blocks": declaration.get("neutral_blocks") == NEUTRAL_BLOCKS,
-        "calibration_frame": declaration.get("calibration_frame") == _calibration_frame(),
-        "contribution_floor": declaration.get("contribution_floor")
-                              == CONTRIBUTION_FLOOR,
-    }
-    failed = sorted(name for name, passed in declared_checks.items() if not passed)
-    if failed:
-        raise ValueError(f"campaign declaration checks failed: {failed}")
-
     runtime = _load_json(output_root / "runtime-source-label.json")
     source_sha = runtime.get("source_sha256")
     runtime_body = {key: value for key, value in runtime.items()
@@ -2276,6 +2257,8 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
     if source_sha != schemas.content_hash(runtime_body) \
             or declaration.get("source_sha256") != source_sha:
         raise ValueError("runtime source label does not hash to the declared source")
+    _check_declaration(declaration, identity=identity, source_sha=source_sha)
+
     copy_sha = str(runtime.get("copied_binary_sha256"))
     linkage_sha = str(runtime.get("copied_linkage_sha256"))
     if runtime.get("binary_copy_exact") is not True \
