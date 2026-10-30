@@ -5243,11 +5243,11 @@ def main(argv: list[str] | None = None) -> int:
                               jobs=build_jobs, cpu_list=build_cpu_list)
 
     def publish_headline() -> None:
-        """Refresh the dashboard headline for the champion that was just promoted.
+        """Refresh the dashboard headline for the current verified anchor.
 
-        The champion arm is `anchor_build[0]` -- the slot `pool.promote_anchor` built
-        from this commit and `anchor.verify` just proved holds the champion. No second
-        build is paid for here, and nothing below is allowed to end the run.
+        The champion arm is `anchor_build[0]`: verified at startup, then rebuilt
+        and guarded by the promotion path after each advance. This reuses that
+        build; `production.refresh` contains baseline/measurement failures.
         """
         if experimental:
             print("headline  experimental serving results only; production comparison not applicable")
@@ -7934,6 +7934,11 @@ def main(argv: list[str] | None = None) -> int:
                             recorded_at=loop._now(), campaign_id="ak-loop",
                             on_serving_export=feedback.exported)
             else:
+                # R21-1: recover a missed headline after restart. The run's claims
+                # are held here, and no pool lanes/actor checks exist yet. The same
+                # build/measurement wrappers used after promotion own local phases
+                # and quiet windows, including the recorded-baseline fallback.
+                publish_headline()
                 pooled = run_pooled()
                 outcomes = pooled.outcomes
 
