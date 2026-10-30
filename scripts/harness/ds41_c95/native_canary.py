@@ -25,7 +25,10 @@ VERIFY = pathlib.Path(
 RUN = pathlib.Path(os.environ["A6_OUTPUT_ROOT"]).resolve()
 if os.environ.get("A6_SMOKE") != "1":
     raise SystemExit("standalone R11 normal diagnostic requires A6_SMOKE=1")
-out = sandbox3.claim_fresh_output(RUN, "normal")
+MODE = os.environ.get("A6_MODE", "normal")
+if MODE not in ("normal", "cutoff"):
+    raise SystemExit("invalid A6 mode")
+out = sandbox3.claim_fresh_output(RUN, MODE)
 work = out / "workspace"
 work.mkdir(exist_ok=True)
 result = out / "result"
@@ -101,7 +104,22 @@ with socket.socket() as sock:
     port = sock.getsockname()[1]
 server = None
 proxy = None
-proof = {"mode": "R11-standalone-normal", "cpu_claim": cpus, "pins": pins, "partial": True}
+c = None
+proof = {"mode": f"R11-standalone-{MODE}", "cpu_claim": cpus, "pins": pins, "partial": True}
+
+
+def birth(pid):
+    fields = pathlib.Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()
+    return int(fields[19])
+
+
+def durable_new(path, value):
+    raw = (json.dumps(value, sort_keys=True) + "\n").encode()
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(raw)
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def drain(p):
@@ -143,7 +161,10 @@ try:
         "cpu_affinity": sorted(os.sched_getaffinity(0)),
         "context_id": "C2",
         "context_meta_sha256": digest(sandbox3.BASE / "contexts/C2/meta.json"),
-        "prompt_sha256": hashlib.sha256(b"Reply with the single word READY.").hexdigest(),
+        "prompt_sha256": hashlib.sha256((
+            b"Count upward from 1, one integer per line. Continue until 1000."
+            if MODE == "cutoff" else b"Reply with the single word READY."
+        )).hexdigest(),
         "policy_sha256": proof["policy_sha256"],
         "source_sha256": {
             str(p): pins[str(p)]
@@ -191,6 +212,7 @@ try:
         stderr=subprocess.STDOUT,
     )
     proof["server_pid"] = server.pid
+    proof["server_birth"] = birth(server.pid)
     load_deadline = min(end - 5, time.time() + 150)
     while time.time() < load_deadline:
         if server.poll() is not None:
@@ -222,6 +244,7 @@ try:
         stderr=subprocess.STDOUT,
     )
     proof["proxy_pid"] = proxy.pid
+    proof["proxy_birth"] = birth(proxy.pid)
     proxy_port = None
     for _ in range(80):
         if proxy.poll() is not None:
@@ -243,43 +266,90 @@ try:
         "A6_RESULT": str(result),
         "A6_PROXY_URL": f"http://127.0.0.1:{proxy_port}",
         "A6_MODEL_NAME": MODEL.stem,
+        "A6_MODE": MODE,
+        "A6_CUTOFF_STOP": str(result / "STOP"),
     }
     remaining = end - time.time() - 5
     if remaining <= 0:
         raise TimeoutError("client deadline before request")
-    c = subprocess.run(
-        [
-            sys.executable,
-            str(HERE / "sandbox3.py"),
-            "exec",
-            "--policy",
-            str(pf),
-            "--report",
-            str(out / "sandbox-report.json"),
-            "--",
-            sys.executable,
-            str(HERE / "native_client.py"),
-        ],
-        env=cenv,
-        capture_output=True,
-        text=True,
-        timeout=min(100, remaining),
-    )
-    (out / "client.stdout").write_text(c.stdout)
-    (out / "client.stderr").write_text(c.stderr)
+    cmd = [sys.executable, str(HERE / "sandbox3.py"), "exec", "--policy", str(pf),
+           "--report", str(out / "sandbox-report.json"), "--", sys.executable,
+           str(HERE / "native_client.py")]
+    if MODE == "normal":
+        c = subprocess.run(cmd, env=cenv, capture_output=True, text=True,
+                           timeout=min(100, remaining))
+        (out / "client.stdout").write_text(c.stdout)
+        (out / "client.stderr").write_text(c.stderr)
+    else:
+        with (out / "client.stdout").open("w") as cout, (out / "client.stderr").open("w") as cerr:
+            c = subprocess.Popen(cmd, env=cenv, stdout=cout, stderr=cerr)
+            proof["client_pid"] = c.pid
+            proof["client_birth"] = birth(c.pid)
+            request_path = result / "request-start.json"
+            progress_path = result / "stream-progress.json"
+            checks_path = result / "filesystem-checks.json"
+            client_deadline = min(end - 5, time.time() + 100)
+            request = progress = checks = None
+            while time.time() < client_deadline:
+                if c.poll() is not None:
+                    raise RuntimeError(f"client exited before cutoff: {c.returncode}")
+                if stopfile.exists():
+                    raise TimeoutError("external STOP before in-flight progress")
+                try:
+                    request = json.loads(request_path.read_text())
+                    progress = json.loads(progress_path.read_text())
+                    checks = json.loads(checks_path.read_text())
+                except (FileNotFoundError, json.JSONDecodeError):
+                    time.sleep(0.01)
+                    continue
+                if not all(isinstance(item, dict) for item in (request, progress, checks)):
+                    raise RuntimeError("stream marker schema invalid")
+                break
+            else:
+                raise TimeoutError("no live stream progress before deadline")
+            required = ("future_denied", "live_denied", "anchor_read", "workspace_write", "result_write")
+            if not all(checks.get(key) for key in required):
+                raise RuntimeError("filesystem isolation failed before cutoff")
+            if request["pid"] != c.pid or progress["pid"] != c.pid or progress["nonterminal_content_events"] < 2:
+                raise RuntimeError("stream markers do not identify live client")
+            if not request["monotonic_ns"] < progress["monotonic_ns"]:
+                raise RuntimeError("stream chronology invalid")
+            if c.poll() is not None:
+                raise RuntimeError("stream ended before owned STOP")
+            stop_ns = time.monotonic_ns()
+            durable_new(result / "STOP", {"monotonic_ns": stop_ns, "client_pid": c.pid,
+                                           "client_birth": proof["client_birth"]})
+            c.wait(timeout=min(20, max(1, client_deadline - time.time())))
+            ack = json.loads((result / "cutoff-ack.json").read_text())
+            if (c.returncode != 75 or ack["pid"] != c.pid or
+                not progress["monotonic_ns"] < stop_ns < ack["monotonic_ns"] or
+                ack["request_id"] != progress["request_id"] or
+                ack["nonterminal_content_events"] < 2 or
+                ack["finish_observed"] or ack["done_observed"]):
+                raise RuntimeError("cutoff did not interrupt verified live stream")
+            proof["cutoff"] = {"request": request, "progress": progress,
+                               "stop_monotonic_ns": stop_ns, "ack": ack,
+                               "client_birth": proof["client_birth"]}
     proof["client_rc"] = c.returncode
     proof["client_checks"] = (
         json.loads((result / "client-proof.json").read_text())
         if (result / "client-proof.json").exists()
         else {}
     )
+    if MODE == "cutoff":
+        for _ in range(200):
+            if (wire / "wire.jsonl").exists() and (wire / "wire.jsonl").stat().st_size:
+                break
+            time.sleep(0.01)
     proof["wire_rows"] = (
         len((wire / "wire.jsonl").read_text().splitlines()) if (wire / "wire.jsonl").exists() else 0
     )
-    if c.returncode or not proof["wire_rows"]:
+    if MODE == "normal" and (c.returncode or not proof["wire_rows"]):
         raise RuntimeError("native client or wire failed")
-    proof["partial"] = False
-    rc = 0
+    if MODE == "cutoff" and (c.returncode != 75 or not proof["wire_rows"]):
+        raise RuntimeError("client cutoff or wire row invalid")
+    proof["partial"] = MODE == "cutoff"
+    rc = 75 if MODE == "cutoff" else 0
 except (TimeoutError, subprocess.TimeoutExpired) as exc:
     proof["stop_reason"] = str(exc)
     rc = 75
@@ -287,8 +357,11 @@ except Exception as exc:
     proof["error"] = f"{type(exc).__name__}: {exc}"
     rc = 1
 finally:
+    if isinstance(c, subprocess.Popen):
+        drain(c)
     drain(proxy)
     drain(server)
+    proof["client_dead"] = c is None or not isinstance(c, subprocess.Popen) or c.poll() is not None
     proof["proxy_dead"] = proxy is None or proxy.poll() is not None
     proof["server_dead"] = server is None or server.poll() is not None
     proof["finished_at"] = time.time()
