@@ -1192,13 +1192,13 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     if not isinstance(payload, Mapping):
         return ["payload: required mapping"]
     if kind == KIND_A2_RUNTIME_EXECUTION:
+        if __package__:
+            from .loop.a2_execution_state import A2ExecutionStateRefused, validate_transition
+        else:
+            from autokernel.loop.a2_execution_state import A2ExecutionStateRefused, validate_transition
         try:
-            if __package__:
-                from .loop.a2_execution_state import validate_transition
-            else:
-                from autokernel.loop.a2_execution_state import validate_transition
             validate_transition(payload)
-        except Exception as exc:
+        except A2ExecutionStateRefused as exc:
             out.append(f"A2 runtime execution transition: {exc}")
     elif kind in {KIND_UNIFIED_DRIVER_ISSUED, KIND_UNIFIED_DRIVER_SETTLED}:
         expected = {"schema", "catalog_id", "campaign_id", "config_generation",
@@ -1243,27 +1243,34 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
         except (TypeError, ValueError) as exc:
             out.append(f"payload: non-canonical JSON value: {exc}")
     elif kind == KIND_ACTOR_PREPARATION:
+        if __package__:
+            from .loop.actor_preparation_state import ActorStateRefused, validate_event
+        else:
+            from autokernel.loop.actor_preparation_state import ActorStateRefused, validate_event
         try:
-            if __package__:
-                from .loop.actor_preparation_state import validate_event
-            else:
-                from autokernel.loop.actor_preparation_state import validate_event
             validate_event(payload)
-        except Exception as exc:
+        except ActorStateRefused as exc:
             out.append(f"payload: invalid actor preparation event: {exc}")
     elif kind in {KIND_WORKER_LIFECYCLE, KIND_WORKER_ACQUISITION,
                   KIND_CAMPAIGN_COMMAND_V2, KIND_CAMPAIGN_COMMAND_V3}:
-        try:
+        if __package__:
+            from .loop.worker_lifecycle import (
+                LifecycleRefused, validate_acquisition_transition, validate_command_transition_v2,
+                validate_event,
+            )
+        else:
+            from autokernel.loop.worker_lifecycle import (
+                LifecycleRefused, validate_acquisition_transition, validate_command_transition_v2,
+                validate_event,
+            )
+        refusal = LifecycleRefused
+        if kind == KIND_CAMPAIGN_COMMAND_V3:
             if __package__:
-                from .loop.worker_lifecycle import (
-                    validate_acquisition_transition, validate_command_transition_v2,
-                    validate_event,
-                )
+                from .loop.campaign_command_v2 import CommandV2Refused, validate_transition
             else:
-                from autokernel.loop.worker_lifecycle import (
-                    validate_acquisition_transition, validate_command_transition_v2,
-                    validate_event,
-                )
+                from autokernel.loop.campaign_command_v2 import CommandV2Refused, validate_transition
+            refusal = CommandV2Refused
+        try:
             if kind == KIND_WORKER_LIFECYCLE:
                 validate_event(payload)
             elif kind == KIND_WORKER_ACQUISITION:
@@ -1271,30 +1278,26 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             elif kind == KIND_CAMPAIGN_COMMAND_V2:
                 validate_command_transition_v2(payload)
             else:
-                if __package__:
-                    from .loop.campaign_command_v2 import validate_transition
-                else:
-                    from autokernel.loop.campaign_command_v2 import validate_transition
                 validate_transition(payload)
-        except Exception as exc:
+        except refusal as exc:
             out.append(f"lifecycle/control event: {exc}")
     elif kind == KIND_MAINTENANCE_EXECUTION:
+        if __package__:
+            from .loop.maintenance_execution import MaintenanceExecutionRefused, validate_event
+        else:
+            from autokernel.loop.maintenance_execution import MaintenanceExecutionRefused, validate_event
         try:
-            if __package__:
-                from .loop.maintenance_execution import validate_event
-            else:
-                from autokernel.loop.maintenance_execution import validate_event
             validate_event(payload)
-        except Exception as exc:
+        except MaintenanceExecutionRefused as exc:
             out.append(f"maintenance execution event: {exc}")
     elif kind == KIND_RETENTION_CATALOG_INSTALLED:
+        if __package__:
+            from .loop.native_retention_catalog import NativeRetentionCatalogRefused, validate_install_event
+        else:
+            from autokernel.loop.native_retention_catalog import NativeRetentionCatalogRefused, validate_install_event
         try:
-            if __package__:
-                from .loop.native_retention_catalog import validate_install_event
-            else:
-                from autokernel.loop.native_retention_catalog import validate_install_event
             validate_install_event(payload)
-        except Exception as exc:
+        except NativeRetentionCatalogRefused as exc:
             out.append(f"retention catalog event: {exc}")
     elif kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
         capture_schema = payload.get("schema")
