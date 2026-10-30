@@ -1,5 +1,5 @@
 """Prospective process-pair instrument; synthetic rates and tiny HTTP children only."""
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import json
 import os
 from pathlib import Path
@@ -203,7 +203,8 @@ def test_actual_http_counterbalanced_requests_archive_and_teardown(tmp_path, mon
                    campaign_id="synthetic-http")
 
 
-def test_actual_run_startup_compare_then_floor_reuse(monkeypatch):
+@pytest.mark.parametrize("allow_synthetic_actors", [True, False])
+def test_actual_run_startup_compare_then_floor_reuse(monkeypatch, allow_synthetic_actors):
     from . import test_promotion_targets as fixtures
     from .test_cpu_screen import _inputs as cpu_inputs
     fixture = fixtures.TheKeepBuildsAProductionCompleteAnchor()
@@ -213,6 +214,7 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch):
         requests = prompts.requests(("glm-fixed2029",), launch.template)
         calls, comparisons = [], []
         real_main = run.main
+        actor_reason = "MOCK_ONLY: matched-serving unit fixture replaces planner and critic"
         @contextmanager
         def hold(*_args, **_quiet): yield {"device_id": "synthetic-cpu-claim"}
         def drive(**kwargs):
@@ -228,6 +230,8 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch):
             return pool.PoolResult()
         def invoke(argv):
             argv += options + ["--serving-pairs", "5", "--serving-instrument", serving.MATCHED_INSTRUMENT]
+            if allow_synthetic_actors:
+                argv += ["--allow-untested-actor-seats", actor_reason]
             with mock.patch.object(run.claim, "hold_cpu", hold), \
                     mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
                     mock.patch.object(run.os, "sched_setaffinity"), \
@@ -237,9 +241,25 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch):
                     mock.patch.object(serving, "_measure_once", _measure(calls)), \
                     mock.patch.object(pool, "provision", return_value=[]), \
                     mock.patch.object(pool, "drive", drive):
-                return real_main(argv)
+                with ExitStack() as refused_actions:
+                    if not allow_synthetic_actors:
+                        for owner, name in ((run.claim, "hold_cpu"), (run.gates, "compiles"),
+                                            (pool, "provision"), (pool, "drive")):
+                            refused_actions.enter_context(mock.patch.object(
+                                owner, name, side_effect=AssertionError(
+                                    "unqualified actors must refuse before build/claim/pool")))
+                    return real_main(argv)
         with mock.patch.object(run, "main", invoke):
+            if not allow_synthetic_actors:
+                with pytest.raises(SystemExit, match="2"):
+                    fixture._run_one_keep()
+                assert (fixture.store / "actor-wire-request.json").is_file()
+                assert not (fixture.store / "loop-run.json").exists()
+                assert calls == comparisons == []
+                return
             assert fixture._run_one_keep()[0] == 0
+            gate = json.loads((fixture.store / "loop-run.json").read_text())["actor_wire_gate"]
+            assert gate["status"] == "OVERRIDDEN" and gate["override_reason"] == actor_reason
             assert len(calls) == 58
             exact_anchor = run._cpu_arm(launch, fixture.startup_anchor)
             floor_store = run._source_floor_store(

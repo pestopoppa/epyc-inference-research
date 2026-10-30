@@ -90,10 +90,15 @@ def test_source_research_continues_without_implicit_800_launch_runtime_frame(mon
     monkeypatch.setattr(run.status, "write_json", written)
     test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         False, runtime_declaration=False)
-    assert observed and observed[0]["runtime_preparation"]["status"] == "observation_only"
-    assert "explicit prospective statistics" in observed[0]["runtime_preparation"]["reason"]
-    assert "cannot select a recipe or keep" in observed[0]["runtime_preparation"]["reason"]
-    assert all(row.get("runtime_pair") is None for row in observed[0]["iterations"])
+    admissions = [row for row in observed if row.get("state") == "actor_admitted"]
+    assert len(admissions) == 1 and admissions[0]["actor_wire_gate"]["status"] == "OVERRIDDEN"
+    runs = [row for row in observed if "iterations" in row and "runtime_preparation" in row]
+    assert len(runs) == 1
+    result = runs[0]
+    assert result["runtime_preparation"]["status"] == "observation_only"
+    assert "explicit prospective statistics" in result["runtime_preparation"]["reason"]
+    assert "cannot select a recipe or keep" in result["runtime_preparation"]["reason"]
+    assert all(row.get("runtime_pair") is None for row in result["iterations"])
 
 
 def test_explicit_calibration_without_bounded_statistics_refuses_before_claim(monkeypatch):
@@ -276,14 +281,18 @@ def test_existing_run_retains_original_default_without_changing_observation_sema
     if dry_run:
         assert defaults == [] and artifacts == [] and snapshots == []
     else:
-        assert len(defaults) == len(snapshots) == 1
+        admissions = [row for row in snapshots if row.get("state") == "actor_admitted"]
+        assert len(admissions) == 1 and admissions[0]["actor_wire_gate"]["status"] == "OVERRIDDEN"
+        runs = [row for row in snapshots if "iterations" in row and "runtime_preparation" in row]
+        assert len(defaults) == len(runs) == 1
+        result = runs[0]
         body, reference = defaults[0]
         assert body["selection"] == "original_default" and body["qualified"] is False
         assert body["statistics"]["controls"]["calibration_block_count"] == 200
-        assert snapshots[0]["runtime_preparation"]["default_recipe"] == reference
-        assert snapshots[0]["runtime_preparation"]["status"] == "observed_not_admitted"
+        assert result["runtime_preparation"]["default_recipe"] == reference
+        assert result["runtime_preparation"]["status"] == "observed_not_admitted"
         assert all(row["runtime_pair"]["anchor"]["execution_digest"] == body["recipe"]["execution_digest"]
-                   for row in snapshots[0]["iterations"])
+                   for row in result["iterations"])
         assert "direct-calibration-launch" not in artifacts
 
 
