@@ -1,0 +1,204 @@
+{
+  "artifacts": {
+    "autopilot_state_sha256": "f4d8bdf1e974d01dc5760a153a4bb1c06d7e97597ed10ff81aa6bc3240182ffc",
+    "e8_attestation_sha256": "8f69882c88b1e3cda2ae5716129f834e9274db56a6e5cd2f74cdd0e45317bcb7",
+    "e8_transaction_journal_sha256": "bbb41d237a2d23dd8b5f9fd1444e79117d61071fa3bca7720b451c415e80a6c9",
+    "instrument_eras_sha256": "ca007f15997807b3fc4817336f14700f3655cd22726c2dd57f819d88b1e25050",
+    "operator_script_sha256": "aaddce4cc1cab17e6df0748a0391a99a2c654ad0a3d5c5ba61de76d89c0066ea",
+    "system_card_sha256": "8cd7d632524542ec82e016d618f6ed6347263115ec90c536a9cb7328d373c097",
+    "transaction_journal": "artifacts/operator/v8-final-freeze-transaction-20260725T183843Z/journal.json"
+  },
+  "cutover_boundary": "2026-07-25T18:38:43Z",
+  "decision": "FREEZE-V8",
+  "e8_eligibility_fence": {
+    "active_instrument_eras": {
+      "autopilot_speed": "E8-autopilot-speed",
+      "cpu_bench": "E8-cpu-kernel"
+    },
+    "attestation_path": "artifacts/operator/ratify_v8_era_fence_20260725.json",
+    "attestation_sha256": "8f69882c88b1e3cda2ae5716129f834e9274db56a6e5cd2f74cdd0e45317bcb7",
+    "decision": "RATIFY-V8-ERA-FENCE",
+    "frontier_rerun_required": {
+      "min_numeric_trials": 16,
+      "required": true
+    },
+    "production_frozen_before_this_transaction": false,
+    "scope": "eligibility_fence_only",
+    "separate_freeze_required": true,
+    "transaction_journal_path": "artifacts/operator/v8-era-fence-transaction-20260725T183843Z/journal.json",
+    "transaction_journal_sha256": "bbb41d237a2d23dd8b5f9fd1444e79117d61071fa3bca7720b451c415e80a6c9"
+  },
+  "evidence_sha256": {
+    "cpu_matrix": "fb0b8db8bcf1f8aea34cbf1ca7231df36b223ebd7556df61f98d8a471176943a",
+    "cutover_journal": "e2c3b9f67072798eafcb945004c2faed59a04e048ce7e1510a98611d82330991",
+    "pgpu_audit_provenance": "c8d06d81f9dddb5df130f48bff1d0a3918576ba0f8ec9a0137041322598555ca",
+    "pgpu_completeness_audit": "c9410dc7124232c8652f5ccec17e3bea3e9d5c6a0a77d537a0b70ea8689c74e9",
+    "pgpu_summary": "73c28e4b86a38732c7fa99f3210e31f53efcced6420b8e81607007690621059e",
+    "provisional_laguna_attestation": "54daa05c3c0540a65fda3cb008fd1ec6e89a9c2a169ced0b2af81bf12783bc5d",
+    "quarter_promotion_gate": "9d37c9fc6b90889a2b68cbf99bd7d6417508eb9c0ed93b25147f8c36f526de4b",
+    "quarter_stack_rows": "808207961490e5d2df9a24e79e3d53ee617ccfec3e69a2229e2656f2b54fa639",
+    "quarter_stack_summary": "e25feaadba51d8d75736b31932ea088f8f2a0a7fafbd29d63f80c66a799c54f4",
+    "waive_q8": "fcd52b61610fcc2782e11f41ffac359343233924805f83d872eeceffbb7522d7"
+  },
+  "frozen_at": "2026-07-26T10:08:39Z",
+  "immutable_provisional_attestation": {
+    "path": "handoffs/active/laguna-pgpu1-v8-promotion-attestation.json",
+    "sha256": "54daa05c3c0540a65fda3cb008fd1ec6e89a9c2a169ced0b2af81bf12783bc5d"
+  },
+  "laguna_dflash": {
+    "iq2_gpu_tested": true,
+    "lineup_disposition": "no-go; provisional fail-closed screen only",
+    "q4_cpu_tested": true
+  },
+  "production_binary_sha256": {
+    "cpu": "a4b667163022aa166ade7c0e00fa4e775b37662e02c10da7642c8c23a4d6b414",
+    "hip": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882"
+  },
+  "production_branch": "production-consolidated-v8",
+  "production_frozen": true,
+  "production_head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+  "production_lineup_gate": {
+    "both_mode_smoke": {
+      "absolute_path": "/mnt/raid0/llm/epyc-root/artifacts/operator/v8-both-smoke-20260725T202558Z/both_stack_smoke.jsonl",
+      "path": "artifacts/operator/v8-both-smoke-20260725T202558Z/both_stack_smoke.jsonl",
+      "repository": "epyc-root",
+      "sha256": "6742e1990581ed00ca6556ae167220a14d1b1275a94bb9f93d1c1083fb7bece2"
+    },
+    "live_api_contract": {
+      "all_ok": true,
+      "backend_probes": 6,
+      "models_loaded": 6
+    },
+    "live_api_evidence": {
+      "absolute_path": "/mnt/raid0/llm/epyc-root/artifacts/operator/v8-both-smoke-20260725T202558Z/api_health_6of6.json",
+      "path": "artifacts/operator/v8-both-smoke-20260725T202558Z/api_health_6of6.json",
+      "repository": "epyc-root",
+      "sha256": "3632dd3323e1684bcee6d2be4cb93756dd7d758b44e5b88dae84659799281e92"
+    },
+    "mode": "both",
+    "quality_artifacts": {
+      "architect_baseline": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v7-architect-general-baseline.json",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v7-architect-general-baseline.json",
+        "repository": "epyc-inference-research",
+        "sha256": "099804f018432b9c957d46faa366ca9a844e38e86ba252b6c7dfec7ac6d27aab"
+      },
+      "architect_baseline_per_question": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v7-architect-general-baseline.per-question.jsonl",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v7-architect-general-baseline.per-question.jsonl",
+        "repository": "epyc-inference-research",
+        "sha256": "b4c6797056ccf553479b17d0ffeb42a181566910617edf5fc1c33452e113f8ce"
+      },
+      "architect_per_question": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-production-architect-general.per-question.jsonl",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-production-architect-general.per-question.jsonl",
+        "repository": "epyc-inference-research",
+        "sha256": "4accb62ff867867c0e24ee959cd21bb9af38ec510a5682b1c72d6d6d40a938df"
+      },
+      "architect_report": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-architect-quality-gate-report.md",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-architect-quality-gate-report.md",
+        "repository": "epyc-inference-research",
+        "sha256": "e8c853bae63003c4ebff2d16cea4d52a1511b49674a7a7ef9bd6a86e4142ef3f"
+      },
+      "architect_result": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-production-architect-general.json",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-production-architect-general.json",
+        "repository": "epyc-inference-research",
+        "sha256": "70f884b4c80551d511eee2923b29313982f0b0d152e4d4b49f7261d99601cd7f"
+      },
+      "questions": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/questions.json",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/questions.json",
+        "repository": "epyc-inference-research",
+        "sha256": "1532906b4a754673937027e73e2023d8eee7ed5d08f084c207a60ac81460adb1"
+      },
+      "worker_baseline": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v7-worker-general-baseline.json",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v7-worker-general-baseline.json",
+        "repository": "epyc-inference-research",
+        "sha256": "f3a02eb46592ff093b90927887bcfdf96dd776ccce64f52559dec5ce15cc9410"
+      },
+      "worker_baseline_per_question": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v7-worker-general-baseline.per-question.jsonl",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v7-worker-general-baseline.per-question.jsonl",
+        "repository": "epyc-inference-research",
+        "sha256": "bc5b10187d68a198572b92a7af401fbe95ea8fc5418b257e26047e4e511a2917"
+      },
+      "worker_per_question": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-production-worker-general.per-question.jsonl",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-production-worker-general.per-question.jsonl",
+        "repository": "epyc-inference-research",
+        "sha256": "b15244afed54d20edd508054981010df473aba2d145f4024c47eb574fa4e388d"
+      },
+      "worker_report": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-worker-quality-gate-report.md",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-worker-quality-gate-report.md",
+        "repository": "epyc-inference-research",
+        "sha256": "e98e0015d06ebbb41620a8b1f878683b0bbc976a0ac2e753cd8d5805a7e70f1c"
+      },
+      "worker_result": {
+        "absolute_path": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-production-worker-general.json",
+        "path": "data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-production-worker-general.json",
+        "repository": "epyc-inference-research",
+        "sha256": "9d9c5015de06dee3cce60148f4ed555088293cf4fceb155414a10819f98d6b67"
+      }
+    },
+    "quality_contract": {
+      "architect_arm": "v8-production-architect-general-full-8083",
+      "architect_baseline_arm": "v7-architect-general-baseline-full-18083",
+      "baseline_binary": "/mnt/raid0/llm/llama.cpp-v7-build-backup-6ad45fa3ff/cpu-bin/llama-server",
+      "baseline_kernel": "production-consolidated-v7",
+      "candidate_binary": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server",
+      "candidate_kernel": "production-consolidated-v8",
+      "effective_questions": {
+        "gpqa": 195,
+        "mmlu_pro": 200
+      },
+      "regression_threshold": 0.05,
+      "requested_questions_per_suite": 200,
+      "roles": [
+        "worker_general",
+        "architect_general"
+      ],
+      "shared_question_identity": {
+        "baseline_and_candidate_rows_exact": true,
+        "questions_artifact": "questions.json",
+        "repeats": 1,
+        "seed": 42
+      },
+      "status": "pass",
+      "suites": [
+        "mmlu_pro",
+        "gpqa"
+      ],
+      "worker_arm": "v8-production-worker-general-full-8072",
+      "worker_baseline_arm": "v7-worker-general-baseline-full-18072",
+      "zero_errors_required": true
+    },
+    "smoke_contract": {
+      "chat": 18,
+      "embedding": 6,
+      "total": 24
+    },
+    "status": "pass"
+  },
+  "production_version": "10107 (67a433bf4)",
+  "production_version_number": 10107,
+  "promotion_decision": false,
+  "promotion_decision_interpretation": "The CPU campaign's promotion_decision=false is preserved as a non-automatic matrix verdict; this final freeze is an operator-attested release decision.",
+  "q8_claim": "none; campaign-scoped WAIVE-Q8 remains binding and v8 makes no Q8 non-regression claim",
+  "ratified_at": "2026-07-26T10:08:39Z",
+  "repository_heads": {
+    "epyc_inference_research": "965e353e94576ccb4cf4f3806c233ccc6eb1bbbc",
+    "epyc_orchestrator": "125b11bc3a6909095df94743f993fc592d286dad",
+    "epyc_root": "5a297cbade72f1926b022d932529a403e5494626"
+  },
+  "rollback": {
+    "branch": "production-consolidated-v7",
+    "head": "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3"
+  },
+  "schema": "epyc.operator_v8_final_freeze_attestation.v1",
+  "scope": "mechanical_post_e8_freeze",
+  "status": "production_promoted_frozen"
+}

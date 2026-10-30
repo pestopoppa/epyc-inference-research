@@ -38,7 +38,7 @@ from pathlib import Path
 from .. import schemas, storage
 from . import t3
 from .test_t3 import (
-    _LIVE_HUMAN_ONLY_BOUNDARY, _TEST_ATTESTATION_ROOT, _test_human_only_boundary,
+    _TEST_ATTESTATION_ROOT, _begin_fixture_scope, _end_fixture_scope,
     NOW, matrix_cells, read_waiver, reasons_of, request,
 )
 
@@ -51,7 +51,9 @@ V8_RATIFICATION_PATH = (
 #: `schemas.content_hash`, which digests a canonical re-encoding and matches nothing
 #: anybody ratified.
 V8_WAIVER_SHA = "fcd52b61610fcc2782e11f41ffac359343233924805f83d872eeceffbb7522d7"
-V8_WAIVER = json.loads(Path(V8_WAIVER_PATH).read_bytes())
+# Collection uses exact versioned historical bytes, never a live ROOT file.
+V8_WAIVER = json.loads((Path(__file__).parent / "testdata" / "operator_v8" /
+                       "waive_q8_cpu_prefill_v8_20260725.json").read_bytes())
 V8_CANDIDATE = V8_WAIVER["candidate_head"]
 V8_PRODUCTION = V8_WAIVER["production_head"]
 #: The two arms the operator actually excluded, as this gate spells their cells.
@@ -62,11 +64,11 @@ _FORGERY_DIR = None
 
 
 def setUpModule() -> None:  # noqa: N802 - unittest's spelling
-    t3.human_only_boundary = _test_human_only_boundary
+    _begin_fixture_scope()
 
 
 def _forgery_dir() -> Path:
-    """A directory inside THIS CHECKOUT spelled `artifacts/operator/…`.
+    """A directory inside the private fixture checkout, never the source tree.
 
     This disposable worktree is deliberately admitted only by the suite's
     synthetic boundary. The live boundary refuses it. That keeps the hostile
@@ -83,10 +85,12 @@ def _forgery_dir() -> Path:
 
 def tearDownModule() -> None:  # noqa: N802 - unittest's spelling
     global _FORGERY_DIR
-    t3.human_only_boundary = _LIVE_HUMAN_ONLY_BOUNDARY
-    if _FORGERY_DIR is not None:
-        shutil.rmtree(_FORGERY_DIR, ignore_errors=True)
-        _FORGERY_DIR = None
+    try:
+        if _FORGERY_DIR is not None:
+            shutil.rmtree(_FORGERY_DIR, ignore_errors=True)
+            _FORGERY_DIR = None
+    finally:
+        _end_fixture_scope()
 
 
 def _write(document, *, name="waive.json") -> tuple:

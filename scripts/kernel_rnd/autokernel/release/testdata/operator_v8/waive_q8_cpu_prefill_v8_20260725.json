@@ -1,0 +1,29 @@
+{
+  "schema": "epyc.cpu_prefill_v8.operator_waiver.v1",
+  "decision": "WAIVE-Q8",
+  "ratified_at": "2026-07-25T14:04:16Z",
+  "protocol": "P-BENCH-PREFILL-1",
+  "protocol_changed": false,
+  "candidate_head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+  "production_head": "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3",
+  "runner_sha256_before_waiver_implementation": "2fb0013d2cb71b149a7429995830ac0356048582671ae83428cb1ef15ccfe024",
+  "scope": {
+    "excluded_model": "qwen36_q8",
+    "excluded_model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "excluded_pairs": [
+      "qwen36_q8-tg128-iqk1",
+      "qwen36_q8-pp2048-iqk1"
+    ],
+    "excluded_arm_runs": 4,
+    "remaining_matched_pairs": 14,
+    "remaining_arm_runs": 28
+  },
+  "reason": "The Qwen3.6 Q8 workload naturally sustains about 50-55 target core-equivalents and cannot satisfy the ratified 72-core eligibility floor.",
+  "consequences": [
+    "No v8 Q8 non-regression claim may be made from this campaign.",
+    "The ratified 72-core eligibility floor remains unchanged for every remaining arm.",
+    "The Gemma Q4 non-IQ B4 pairs remain mandatory.",
+    "All retained IQ B3 pairs remain mandatory.",
+    "Pre-waiver artifacts remain ineligible and cannot be retro-certified."
+  ]
+}

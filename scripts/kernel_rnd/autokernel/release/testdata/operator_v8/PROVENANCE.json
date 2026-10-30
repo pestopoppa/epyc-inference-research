@@ -1,0 +1,18 @@
+{
+  "source_repo": "epyc-root",
+  "source_commit": "702722155f3d2fb1d5b96362d0852ae5e98222fe",
+  "source_prefix": "artifacts/operator",
+  "copies": [
+    {
+      "name": "waive_q8_cpu_prefill_v8_20260725.json",
+      "bytes": 1267,
+      "sha256": "fcd52b61610fcc2782e11f41ffac359343233924805f83d872eeceffbb7522d7"
+    },
+    {
+      "name": "ratify_v8_final_freeze_20260725.json",
+      "bytes": 11911,
+      "sha256": "e7fce2c5cd720940fc84b669f57b78a61589fd8baef9b4e03030ed0dc4a3175b"
+    }
+  ],
+  "scope": "Immutable historical bytes for hermetic source tests only. These paths are NOT live operator roots or production authority. Tests use existing explicit test-only boundary and attestation-root injection."
+}

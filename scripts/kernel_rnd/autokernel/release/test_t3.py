@@ -30,6 +30,7 @@ suite runs no inference, no benchmark, no build, and reads no production tree.
 from __future__ import annotations
 
 import atexit
+from contextlib import ExitStack
 import dataclasses
 import json
 import os
@@ -37,6 +38,7 @@ import shutil
 import stat
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from .. import schemas, storage
@@ -264,7 +266,7 @@ def transaction(**overrides) -> t3.TransactionPlan:
         "service_impact": ("llama-server restart at the inference owner's boundary",),
         "era_actions": ({"draft": True, "action": "kernel_era_row",
                          "branch": "production-consolidated-v9"},),
-        "receipt_paths": ("artifacts/operator/v9-freeze/",),
+        "receipt_paths": (str(_TEST_ATTESTATION_ROOT / "v9-freeze") + "/",),
         "rollback_branch": "production-consolidated-v8",
         "rollback_head": V8_HEAD,
     }
@@ -329,7 +331,7 @@ def request(**overrides) -> t3.T3Request:
         # This suite cannot write to `/workspace/artifacts/operator/` — that is the
         # operator's tree, and the reader's DEFAULT root — so every read waiver it
         # builds comes from `_TEST_ATTESTATION_ROOT`, an `artifacts/operator/`
-        # directory inside this checkout that the suite creates with `mkdir -p`.
+        # directory inside the private fixture checkout.
         # That is exactly the location `verify_waiver` now refuses by default, and
         # declaring it here is the point: the widening is stated by the RUN, in the
         # request, where the fingerprint hashes it, rather than being handed to the
@@ -676,7 +678,13 @@ def quoted_waiver(document=None, **overrides) -> t3.WaiverBinding:
 #: therefore never write to; they declare this root explicitly instead, and
 #: `TestTheDeclaredAttestationRootNarrowsTheCitationCheck` proves the default refuses
 #: this very directory.
-_TEST_ATTESTATION_ROOT = storage.REPO_ROOT / "artifacts" / "operator"
+# HOME is outside the unchanged production scratch blacklist. The tree is
+# disposable test data, never a live/default operator attestation root.
+_FIXTURE_HOME = tempfile.TemporaryDirectory(prefix=".ak-t3-fixture-", dir=Path.home())
+atexit.register(_FIXTURE_HOME.cleanup)
+_FIXTURE_CHECKOUT = Path(_FIXTURE_HOME.name) / "fixture-checkout"
+_TEST_ATTESTATION_ROOT = _FIXTURE_CHECKOUT / "artifacts" / "operator"
+_FIXTURE_SCOPE = None
 _WAIVER_FILE_DIR = None
 _LIVE_HUMAN_ONLY_BOUNDARY = t3.human_only_boundary
 
@@ -691,15 +699,16 @@ def _fixture_boundary() -> schemas.TrustBoundary:
     """
     live = _LIVE_HUMAN_ONLY_BOUNDARY()
     forms = schemas.repo_relative_forms(str(_TEST_ATTESTATION_ROOT))
-    if len(forms) != 1:
+    root = _TEST_ATTESTATION_ROOT.relative_to(Path(_FIXTURE_HOME.name)).as_posix()
+    if root not in forms:
         raise AssertionError(f"test attestation root has unexpected forms: {forms}")
-    root = forms[0]
     return schemas.TrustBoundary(
         globs=tuple(dict.fromkeys((*live.globs, root, root + "/*"))),
         branches=live.branches, source="test-only:release-waiver-fixtures")
 
 
-_TEST_BOUNDARY = _fixture_boundary()
+# Collection performs no live ROOT/waiver reads or global root overrides.
+_TEST_BOUNDARY = None
 
 
 def _test_human_only_boundary(manifest=None):
@@ -707,30 +716,50 @@ def _test_human_only_boundary(manifest=None):
             else _LIVE_HUMAN_ONLY_BOUNDARY(manifest))
 
 
+def _begin_fixture_scope() -> None:
+    """Only a running fixture module temporarily recognizes its private tree."""
+    global _FIXTURE_SCOPE, _TEST_BOUNDARY
+    if _FIXTURE_SCOPE is not None:
+        raise AssertionError("T3 fixture authority scope already active")
+    scope = ExitStack()
+    try:
+        scope.enter_context(mock.patch.object(
+            schemas, "REPO_CHECKOUT_ROOTS",
+            (_FIXTURE_HOME.name, *schemas.REPO_CHECKOUT_ROOTS)))
+        _TEST_BOUNDARY = _fixture_boundary()
+        scope.enter_context(mock.patch.object(t3, "human_only_boundary", _test_human_only_boundary))
+    except BaseException:
+        scope.close()
+        raise
+    _FIXTURE_SCOPE = scope
+
+
+def _end_fixture_scope() -> None:
+    global _FIXTURE_SCOPE, _TEST_BOUNDARY
+    try:
+        _remove_waiver_file_dir()
+    finally:
+        if _FIXTURE_SCOPE is not None:
+            _FIXTURE_SCOPE.close()
+            _FIXTURE_SCOPE = None
+        _TEST_BOUNDARY = None
+
+
 def setUpModule():  # noqa: N802 - unittest protocol
-    t3.human_only_boundary = _test_human_only_boundary
+    _begin_fixture_scope()
 
 
 def _waiver_file_dir() -> Path:
     global _WAIVER_FILE_DIR
+    if _FIXTURE_SCOPE is None:
+        raise AssertionError("waiver fixture requires an active test authority scope")
     if _WAIVER_FILE_DIR is None:
         _TEST_ATTESTATION_ROOT.mkdir(parents=True, exist_ok=True)
         _WAIVER_FILE_DIR = Path(tempfile.mkdtemp(prefix="_ak_waiver_",
                                                  dir=_TEST_ATTESTATION_ROOT))
-        # Cleanup registered by the CREATOR, not by a module teardown, because the
-        # creator is not always this module. `test_t3_waiver_authority_redteam`
-        # imports `read_waiver` from here and defines its own `tearDownModule` for
-        # its own directory, so running that file alone — which `make test` now
-        # does, since it is in PYTEST_SMOKE — built one `_ak_waiver_*` here and
-        # cleaned a different one, orphaning a directory per run. Measured: eight
-        # had accumulated, then nine, then ten.
-        #
-        # Litter anywhere else would be cosmetic. Here it is not: this path is
-        # `<checkout>/artifacts/operator/`, the directory whose SPELLING makes
-        # `schemas.operator_owned_path_check` PASS, and the whole reason
-        # `DEFAULT_ATTESTATION_ROOTS` exists is that agents in this repo can create
-        # it with `mkdir -p`. A test suite that leaves operator-shaped JSON lying in
-        # it is manufacturing the exploit fixture the reader was hardened against.
+        # The creator registers fallback cleanup even when another test module
+        # imports this helper. Module teardown removes the disposable leaf and
+        # restores the narrowly scoped authority/root overrides.
         atexit.register(_remove_waiver_file_dir)
     return _WAIVER_FILE_DIR
 
@@ -744,8 +773,7 @@ def _remove_waiver_file_dir() -> None:
 
 
 def tearDownModule():
-    t3.human_only_boundary = _LIVE_HUMAN_ONLY_BOUNDARY
-    _remove_waiver_file_dir()
+    _end_fixture_scope()
 
 
 def write_waiver_file(document, *, name=None, raw=None) -> tuple:
@@ -2211,6 +2239,28 @@ class TestTheFixturesDoNotManufactureTheExploitTheyTestFor(unittest.TestCase):
             schemas.PASS)
 
 
+class TestPrivateFixtureAuthority(unittest.TestCase):
+    def test_historical_bytes_require_explicit_private_roots(self):
+        data = Path(__file__).parent / "testdata" / "operator_v8"
+        waiver = _waiver_file_dir() / "historical-waiver.json"
+        ratification = _waiver_file_dir() / "historical-ratification.json"
+        waiver.write_bytes((data / "waive_q8_cpu_prefill_v8_20260725.json").read_bytes())
+        ratification.write_bytes((data / "ratify_v8_final_freeze_20260725.json").read_bytes())
+        fields = {"pinned_sha256": V8_WAIVER_SHA, "waiver_id": "WAIVE-Q8",
+                  "covers_cell_ids": ("llama_cpu.pair.qwen36_q8-pp2048-iqk1",),
+                  "ratification_pin": (str(ratification), "waive_q8")}
+        with self.assertRaises(t3.WaiverNotReadable):
+            t3.waiver_binding_from_path(str(waiver), **fields)
+        binding = t3.waiver_binding_from_path(
+            str(waiver), **fields, attestation_roots=(str(_TEST_ATTESTATION_ROOT),))
+        self.assertEqual(binding.read_receipt.bytes_sha256, V8_WAIVER_SHA)
+        self.assertEqual(binding.read_receipt.byte_length, 1267)
+        self.assertEqual(binding.read_receipt.ratification_pin, V8_WAIVER_SHA)
+        self.assertFalse(storage.is_scratch_path(_TEST_ATTESTATION_ROOT))
+        self.assertFalse(schemas.under_any_root(
+            str(_TEST_ATTESTATION_ROOT), t3.DEFAULT_ATTESTATION_ROOTS))
+
+
 class TestTheReaderRefusesADocumentThatMeansTwoThings(unittest.TestCase):
     """A digest is honest about BYTES and silent about how they are READ.
 
@@ -3159,7 +3209,7 @@ class TestBackendUnchanged(unittest.TestCase):
         if receipt:
             receipts["llama_gpu"] = t3.TransferReceipt(
                 backend="llama_gpu",
-                incumbent_artifacts=(("data/ak/v8/gpu-matrix.json", digest("gpu-matrix")),),
+                incumbent_artifacts=((str(_FIXTURE_CHECKOUT / "data/ak/v8/gpu-matrix.json"), digest("gpu-matrix")),),
                 incumbent_evidence_refs=("P-GPU-1 v8 production matrix",),
                 unchanged_digest=digest("unchanged:llama_gpu"),
                 incumbent_commit=V8_HEAD)
@@ -3218,7 +3268,7 @@ class TestBackendUnchanged(unittest.TestCase):
         views, receipts = self._drop_gpu()
         receipts["llama_gpu"] = t3.TransferReceipt(
             backend="llama_gpu",
-            incumbent_artifacts=(("data/ak/v7/gpu.json", digest("v7-gpu")),),
+            incumbent_artifacts=((str(_FIXTURE_CHECKOUT / "data/ak/v7/gpu.json"), digest("v7-gpu")),),
             incumbent_evidence_refs=("P-GPU-1 v7 matrix",),
             unchanged_digest=digest("u"), incumbent_commit=V7_HEAD)
         result = t3.run_t3(request(backend_unchanged=views, transfer_receipts=receipts))
@@ -3545,7 +3595,7 @@ class TestPlanSeam(unittest.TestCase):
 
         incumbent = plan_module.IncumbentEvidence(
             backend="llama_gpu", era_id="E8-gpu",
-            artifacts=(("data/ak/v8/gpu-matrix.json", digest("gpu-matrix")),),
+            artifacts=((str(_FIXTURE_CHECKOUT / "data/ak/v8/gpu-matrix.json"), digest("gpu-matrix")),),
             protocol_ids=("P-GPU-1",),
             archive_path="/mnt/raid0/llm/kernels/archive/v8")
         receipt = plan_module.TransferReceipt(
@@ -3560,7 +3610,7 @@ class TestPlanSeam(unittest.TestCase):
         compiled = type("FakePlan", (), {"backends": (backend_plan,)})()
         adapted = t3.transfer_receipts_from_plan(compiled, incumbent_commit=V8_HEAD)
         self.assertEqual(adapted["llama_gpu"].incumbent_artifacts,
-                         (("data/ak/v8/gpu-matrix.json", digest("gpu-matrix")),))
+                         ((str(_FIXTURE_CHECKOUT / "data/ak/v8/gpu-matrix.json"), digest("gpu-matrix")),))
         self.assertEqual(adapted["llama_gpu"].check().outcome, schemas.PASS)
 
     def test_release_plan_view_refuses_a_shape_it_cannot_read(self):
@@ -3737,7 +3787,10 @@ class TestCalibrationV8(unittest.TestCase):
         result = t3.run_t3(t3.T3Request(**{
             **{f.name: getattr(request_with_archive, f.name)
                for f in request_with_archive.__dataclass_fields__.values()},
-            "quality_evidence": quality}))
+            "quality_evidence": quality,
+            "transaction": dataclasses.replace(
+                request_with_archive.transaction,
+                receipt_paths=(str(_TEST_ATTESTATION_ROOT / "v8-final-freeze-20260725") + "/",))}))
         self.assertEqual(result.verdict, "PASS_WITH_WAIVER",
                          " | ".join(result.verdict_computation.blocking_reasons))
         self.assertEqual(len(result.receipt.suppressed_claims), 2)
@@ -4072,7 +4125,7 @@ class TestPerformanceMatrixCannotBeEmptied(unittest.TestCase):
         }
         receipt = t3.TransferReceipt(
             backend="llama_gpu",
-            incumbent_artifacts=(("data/ak/v8/llama_gpu.jsonl", digest("v8-gpu")),),
+            incumbent_artifacts=((str(_FIXTURE_CHECKOUT / "data/ak/v8/llama_gpu.jsonl"), digest("v8-gpu")),),
             incumbent_evidence_refs=("v8 gpu matrix",),
             unchanged_digest=digest("unchanged:llama_gpu"), incumbent_commit=V8_HEAD)
         result = t3.run_t3(request(

@@ -31,7 +31,17 @@ from .test_packager import (
     INCUMBENT_BINARIES, LLAMA_BACKENDS, NOW, V8_HEAD, digest, era_draft,
     incumbent_archive, operator_commands, rollback_plan, transaction_plan,
 )
-from .test_t3 import draft_protocol, ratified_protocol, request
+from .test_t3 import (_begin_fixture_scope, _end_fixture_scope,
+                      draft_protocol, ratified_protocol, request)
+
+
+def setUpModule() -> None:  # noqa: N802 - unittest protocol
+    _begin_fixture_scope()
+
+
+def tearDownModule() -> None:  # noqa: N802 - unittest protocol
+    _end_fixture_scope()
+
 
 # The two protocols the speech readiness seam is actually satisfied through. Neither
 # is a per-phase grading instrument: `P-AK-SEARCH-1` is the search authority and
