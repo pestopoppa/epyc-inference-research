@@ -1595,19 +1595,21 @@ class TestOwnedProcessDiscipline(_TmpMixin):
         script = textwrap.dedent(f"""
             import subprocess, sys, time
             child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-            open({marker!r}, "w").write(str(child.pid))
+            from pathlib import Path
+            birth = Path(f"/proc/{{child.pid}}/stat").read_text().rsplit(")", 1)[1].split()[19]
+            open({marker!r}, "w").write(f"{{child.pid}} {{birth}}")
             time.sleep(60)
         """)
         disposition, _ = W._run_owned([sys.executable, "-c", script],
                                       timeout_s=3.0, kill_grace_s=5.0)
         self.assertTrue(disposition.timed_out)
         with open(marker) as handle:
-            grandchild = int(handle.read())
-        deadline = time.monotonic() + 5.0
-        while time.monotonic() < deadline and os.path.exists(f"/proc/{grandchild}"):
-            time.sleep(0.05)
-        self.assertFalse(os.path.exists(f"/proc/{grandchild}"),
-                         f"grandchild {grandchild} survived the process-group kill")
+            grandchild, birth = map(int, handle.read().split())
+        # A subreaper may retain a dead zombie after our leader is reaped.
+        # Kernel exit, not /proc disappearance, is the cleanup requirement.
+        current = W._owned_process_snapshot(grandchild)
+        self.assertTrue(current is None or current[0] != birth or current[1] in ("Z", "X"),
+                        f"original grandchild {grandchild}/{birth} remained live: {current}")
 
     def test_a_normal_process_is_not_signalled_at_all(self):
         """Compliant control: nothing that exits on its own gets a signal."""

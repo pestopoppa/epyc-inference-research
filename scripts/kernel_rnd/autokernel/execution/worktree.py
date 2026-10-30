@@ -143,6 +143,8 @@ import os
 from pathlib import Path
 import re
 import secrets
+import select
+import selectors
 import signal
 import stat
 import subprocess
@@ -1077,33 +1079,299 @@ def _require_config_is_a_read(args: Sequence[str]) -> None:
             "in the clone's shared config")
 
 
-def _terminate_owned(proc: "subprocess.Popen", pgid: int, *,
-                     grace_s: float) -> tuple:
-    """TERM → grace → KILL against a process group WE created. Returns signals sent.
+def _require_owned_process_capabilities() -> None:
+    """Refuse before spawning if the unreaped-leader ownership proof is unavailable."""
+    if not all(hasattr(os, name) for name in
+               ("pidfd_open", "waitid", "WNOWAIT", "WEXITED", "WNOHANG")) or not hasattr(
+                   signal, "pidfd_send_signal"):
+        raise ProcessEscalationFailed("owned process execution requires pidfds and WNOWAIT")
+    try:
+        fd = os.pidfd_open(os.getpid())
+        try:
+            signal.pidfd_send_signal(fd, 0)
+        finally:
+            os.close(fd)
+        try:
+            os.waitid(os.P_PID, os.getpid(), os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        except ChildProcessError:
+            pass  # The caller is not its own child; the syscall is available.
+        if _owned_process_snapshot(os.getpid()) is None:
+            raise ProcessEscalationFailed("own process identity unavailable before launch")
+    except (OSError, NotImplementedError) as exc:
+        raise ProcessEscalationFailed("owned process identity capabilities unavailable") from exc
 
-    `start_new_session=True` made the child a session leader, so `pgid == pid` —
-    the group is exactly this child and its descendants, and killing it cannot
-    reach anything we did not launch. That is the whole reason for the new
-    session: a build forks a compiler tree, and killing only the top PID leaves
-    the compilers running on a shared box.
+
+def _owned_process_snapshot(pid: int) -> Optional[tuple]:
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        return (int(fields[19]), fields[0], int(fields[2]), int(fields[3]))
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    except (OSError, ValueError, IndexError) as exc:
+        raise ProcessEscalationFailed(f"cannot inspect process identity {pid}") from exc
+
+
+def _pidfd_exited(fd: int) -> bool:
+    return bool(select.select([fd], [], [], 0)[0])
+
+
+class _OwnedSession:
+    """Keep our unreaped session leader reserved until its group has been verified.
+
+    No poll/wait/communicate is allowed before verification: reaping the leader
+    would release the PID that proves ownership of the numeric session/group.
+    Member pidfds also allow exact, bounded cleanup if inspection later fails.
     """
+
+    def __init__(self, proc: "subprocess.Popen", *, grace_s: float = 10.0):
+        self.proc = proc
+        self.grace_s = grace_s
+        self.pid = proc.pid
+        try:
+            self.fd = os.pidfd_open(self.pid)
+        except OSError as exc:
+            # This Popen child has never been reaped, so its PID cannot have
+            # been recycled. Refuse without leaving that exact child running.
+            proc.kill()
+            proc.wait(timeout=self.grace_s)
+            raise ProcessEscalationFailed("cannot reserve spawned child pidfd") from exc
+        self.members: dict[int, tuple[int, int]] = {}
+        self.birth = None
+        self.termination_attempted = False
+        try:
+            snapshot = _owned_process_snapshot(self.pid)
+            if snapshot is None or snapshot[2:] != (self.pid, self.pid):
+                raise ProcessEscalationFailed("spawned child is not our reserved session leader")
+            self.birth = snapshot[0]
+        except BaseException:
+            try:
+                self.abort_known()
+            finally:
+                self.close()
+            raise
+
+    def validate(self) -> None:
+        snapshot = _owned_process_snapshot(self.pid)
+        if (self.proc.returncode is not None or snapshot is None or
+                snapshot[0] != self.birth or snapshot[2:] != (self.pid, self.pid)):
+            raise ProcessEscalationFailed("reserved process group identity was lost")
+
+    def leader_exited(self) -> bool:
+        self.validate()
+        try:
+            return os.waitid(os.P_PID, self.pid,
+                             os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+        except (ChildProcessError, OSError) as exc:
+            raise ProcessEscalationFailed("cannot observe reserved child without reaping") from exc
+
+    def live_members(self) -> tuple[int, ...]:
+        self.validate()
+        live = []
+        try:
+            entries = list(Path("/proc").iterdir())
+        except OSError as exc:
+            raise ProcessEscalationFailed("cannot enumerate owned group") from exc
+        for entry in entries:
+            if not entry.name.isdecimal():
+                continue
+            pid = int(entry.name)
+            try:
+                if os.getpgid(pid) != self.pid:
+                    continue
+            except ProcessLookupError:
+                continue
+            except OSError as exc:
+                raise ProcessEscalationFailed("cannot inspect group membership") from exc
+            snapshot = _owned_process_snapshot(pid)
+            if snapshot is None or snapshot[2:] != (self.pid, self.pid):
+                continue
+            if snapshot[1] in ("Z", "X"):
+                continue
+            if pid == self.pid:
+                fd = self.fd
+            else:
+                known = self.members.get(pid)
+                if known is not None and known[0] != snapshot[0]:
+                    os.close(known[1])
+                    del self.members[pid]
+                    known = None
+                if known is None:
+                    try:
+                        fd = os.pidfd_open(pid)
+                    except ProcessLookupError:
+                        continue
+                    except OSError as exc:
+                        raise ProcessEscalationFailed(f"cannot bind owned member {pid}") from exc
+                    self.members[pid] = (snapshot[0], fd)
+                else:
+                    fd = known[1]
+            rebound = _owned_process_snapshot(pid)
+            if rebound != snapshot:
+                # Exit and state transitions are ordinary races. A new census
+                # must resolve them; never treat an unknown transition as dead.
+                if rebound is None or _pidfd_exited(fd):
+                    continue
+                if rebound[0] != snapshot[0] or rebound[2:] != (self.pid, self.pid):
+                    raise ProcessEscalationFailed("owned member identity changed during census")
+            if not _pidfd_exited(fd):
+                live.append(pid)
+        self.validate()
+        return tuple(live)
+
+    def verified_empty(self) -> bool:
+        # A fork may race the /proc directory snapshot. Re-enumerate after an
+        # empty census, while the original session leader remains reserved.
+        return not self.live_members() and not self.live_members()
+
+    def abort_known(self) -> None:
+        """Drain a provable group, otherwise stop only captured pidfd identities.
+
+        This does NOT attest group cleanup; the original refusal still escapes.
+        Never retry an exhausted escalation or enter an unbounded context wait.
+        """
+        try:
+            if not self.termination_attempted:
+                _terminate_owned(self, grace_s=self.grace_s)
+        except (ProcessEscalationFailed, OSError):
+            # Inspection/ownership uncertainty forbids any further group signal.
+            # Already bound pidfds remain exact identities, including if a PID
+            # or process group has since been reused.
+            pass
+        for fd in [self.fd, *(value[1] for value in self.members.values())]:
+            try:
+                signal.pidfd_send_signal(fd, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        try:
+            self.proc.wait(timeout=self.grace_s)
+        except subprocess.TimeoutExpired as exc:
+            raise ProcessEscalationFailed("captured leader survived exact pidfd cleanup") from exc
+
+    def close(self) -> None:
+        for stream in (self.proc.stdin, self.proc.stdout, self.proc.stderr):
+            if stream is not None:
+                stream.close()
+        for fd in [self.fd, *(value[1] for value in self.members.values())]:
+            os.close(fd)
+
+
+class _OwnedPipes:
+    """Nonblocking communicate semantics without reaping the ownership anchor."""
+
+    def __init__(self, proc: "subprocess.Popen", input_bytes: Optional[bytes] = None,
+                 *, leader_fd: int):
+        self.selector = selectors.DefaultSelector()
+        self.selector.register(leader_fd, selectors.EVENT_READ, "leader")
+        self.output = bytearray()
+        self.input = memoryview(input_bytes or b"")
+        self.offset = 0
+        for stream, event in ((proc.stdout, selectors.EVENT_READ),
+                              (proc.stdin, selectors.EVENT_WRITE)):
+            if stream is None:
+                continue
+            if event == selectors.EVENT_WRITE and not self.input:
+                stream.close()
+                continue
+            os.set_blocking(stream.fileno(), False)
+            self.selector.register(stream, event)
+
+    def pump(self, delay: float) -> None:
+        for key, event in self.selector.select(max(0.0, delay)):
+            if key.data == "leader":
+                self.selector.unregister(key.fileobj)
+                continue
+            stream = key.fileobj
+            try:
+                if event == selectors.EVENT_READ:
+                    chunk = os.read(stream.fileno(), 65536)
+                    if chunk:
+                        self.output.extend(chunk)
+                        continue
+                else:
+                    self.offset += os.write(stream.fileno(), self.input[self.offset:self.offset + 4096])
+                    if self.offset < len(self.input):
+                        continue
+            except BlockingIOError:
+                continue
+            except BrokenPipeError:
+                pass
+            self.selector.unregister(stream)
+            stream.close()
+
+    def complete(self) -> bool:
+        return not any(key.data != "leader" for key in self.selector.get_map().values())
+
+    def close(self) -> None:
+        for key in list(self.selector.get_map().values()):
+            if key.data != "leader":
+                key.fileobj.close()
+        self.selector.close()
+
+
+def _terminate_owned(session: _OwnedSession, *, grace_s: float,
+                     pipes: Optional[_OwnedPipes] = None) -> tuple:
+    """TERM → grace → KILL, even when the reserved leader has already exited."""
     sent = []
-    for sig, wait_s in ((signal.SIGTERM, grace_s), (signal.SIGKILL, grace_s)):
-        if proc.poll() is not None:
-            break
+    session.termination_attempted = True
+    pgid = session.pid
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        if session.verified_empty():
+            return tuple(sent)
+        session.validate()
         try:
             os.killpg(pgid, sig)
             sent.append(sig.name)
         except ProcessLookupError:
-            break
-        except PermissionError as exc:  # pragma: no cover - would mean pgid reuse
-            raise ProcessEscalationFailed(
-                f"not permitted to signal process group {pgid}: {exc}") from exc
-        try:
-            proc.wait(timeout=wait_s)
-        except subprocess.TimeoutExpired:
-            continue
+            # Absence from killpg alone is not a group-cleanup proof.
+            pass
+        except PermissionError as exc:
+            raise ProcessEscalationFailed(f"not permitted to signal owned group {pgid}") from exc
+        deadline = time.monotonic() + grace_s
+        while True:
+            if session.verified_empty():
+                return tuple(sent)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            if pipes is None:
+                time.sleep(min(0.05, remaining))
+            else:
+                pipes.pump(min(0.05, remaining))
+    if not session.verified_empty():
+        raise ProcessEscalationFailed(f"owned group {pgid} survived {sent}")
     return tuple(sent)
+
+
+def _communicate_owned(session: _OwnedSession, *, timeout_s: float,
+                       grace_s: float, input_bytes: Optional[bytes] = None) -> tuple:
+    pipes = _OwnedPipes(session.proc, input_bytes, leader_fd=session.fd)
+    deadline = time.monotonic() + timeout_s
+    signals_sent = ()
+    timed_out = False
+    try:
+        while not (session.leader_exited() and pipes.complete()):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                break
+            pipes.pump(min(0.05, remaining))
+        if not session.verified_empty():
+            signals_sent = _terminate_owned(session, grace_s=grace_s, pipes=pipes)
+        if not session.verified_empty():
+            raise ProcessEscalationFailed("owned process group did not drain")
+        # All group writers are dead. Use the existing post-termination
+        # pipe-drain grace for buffered bytes, then reap only after verification.
+        # An escaped writer holding a pipe cannot cause an unbounded wait.
+        drain_deadline = time.monotonic() + grace_s
+        while not pipes.complete():
+            remaining = drain_deadline - time.monotonic()
+            if remaining <= 0:
+                raise ProcessEscalationFailed("owned output pipe remained open after group exit")
+            pipes.pump(min(0.05, remaining))
+        exit_code = session.proc.wait(timeout=grace_s)
+        return bytes(pipes.output), timed_out, signals_sent, exit_code
+    finally:
+        pipes.close()
 
 
 def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
@@ -1154,6 +1422,7 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
             "cgroup_root": (sandbox_policy.cgroup_root
                             if sandbox_policy is not None else None),
         })
+    _require_owned_process_capabilities()
     started = time.monotonic()
     started_at = _utc_now_iso()
     sink = None
@@ -1163,11 +1432,13 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
     else:
         stdout_target = subprocess.PIPE
     try:
-        with subprocess.Popen(
+        proc = subprocess.Popen(
                 spawn_argv, cwd=cwd, env=executed_env,
                 stdout=stdout_target, stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL, start_new_session=True,
-                close_fds=True) as proc:
+                close_fds=True)
+        session = _OwnedSession(proc, grace_s=kill_grace_s)
+        try:
             pid = proc.pid
             try:
                 pgid = os.getpgid(pid)
@@ -1186,27 +1457,21 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
                         "sandbox_receipt_path": sandbox_receipt_path,
                     })
                 except BaseException:
-                    _terminate_owned(proc, pgid, grace_s=kill_grace_s)
-                    proc.wait()
+                    _terminate_owned(session, grace_s=kill_grace_s)
+                    proc.wait(timeout=kill_grace_s)
                     if sandbox_policy is not None:
                         cgroup_path = sandbox_policy.cgroup_path(pid)
                         if cgroup_path.exists():
                             process_sandbox.cleanup_cgroup(sandbox_policy, pid)
                     raise
-            signals_sent: tuple = ()
-            timed_out = False
-            captured = b""
-            try:
-                captured, _ = proc.communicate(timeout=timeout_s)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                signals_sent = _terminate_owned(proc, pgid, grace_s=kill_grace_s)
-                try:
-                    captured, _ = proc.communicate(timeout=kill_grace_s)
-                except subprocess.TimeoutExpired:  # pragma: no cover - post-SIGKILL
-                    captured = b""
-            exit_code = proc.poll()
-            verified_dead = exit_code is not None
+            captured, timed_out, signals_sent, exit_code = _communicate_owned(
+                session, timeout_s=timeout_s, grace_s=kill_grace_s)
+            verified_dead = True
+        except BaseException:
+            session.abort_known()
+            raise
+        finally:
+            session.close()
 
         stream_raw: bytes | None = None
         stream_identity: dict[str, int] | None = None
@@ -1293,24 +1558,22 @@ def _run_guarded_patch_input(worktree: "Worktree", patch_bytes: bytes, *,
     argv = _validate_argv(args)
     started = time.monotonic()
     started_at = _utc_now_iso()
-    with subprocess.Popen(
-            argv, env=_sanitized_env(None), stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, stdin=subprocess.PIPE,
-            start_new_session=True, close_fds=True) as proc:
-        pid = proc.pid
-        try:
-            pgid = os.getpgid(pid)
-        except ProcessLookupError:  # pragma: no cover - child already reaped
-            pgid = pid
-        signals_sent: tuple = ()
-        timed_out = False
-        try:
-            captured, _ = proc.communicate(input=patch_bytes, timeout=worktree.timeout_s)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            signals_sent = _terminate_owned(proc, pgid, grace_s=10.0)
-            captured, _ = proc.communicate()
-        exit_code = proc.poll()
+    _require_owned_process_capabilities()
+    proc = subprocess.Popen(
+        argv, env=_sanitized_env(None), stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, stdin=subprocess.PIPE,
+        start_new_session=True, close_fds=True)
+    session = _OwnedSession(proc, grace_s=10.0)
+    pid = pgid = proc.pid
+    try:
+        captured, timed_out, signals_sent, exit_code = _communicate_owned(
+            session, timeout_s=worktree.timeout_s, grace_s=10.0,
+            input_bytes=patch_bytes)
+    except BaseException:
+        session.abort_known()
+        raise
+    finally:
+        session.close()
     disposition = ProcessDisposition(
         argv=argv, pid=pid, pgid=pgid, exit_code=exit_code,
         timed_out=timed_out, signals_sent=signals_sent,
