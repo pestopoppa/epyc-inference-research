@@ -3715,11 +3715,18 @@ class HostOps:
             self._build_snapshot = snapshot
         else:  # test-double compatibility; executing HostOps always has the typed tree
             snapshot = tree
+        jobs = min(64, os.cpu_count() or 1)
+        try:
+            allowed = os.sched_getaffinity(0)
+        except (AttributeError, NotImplementedError):
+            allowed = ()
+        if allowed:
+            jobs = min(jobs, len(allowed))
         plan = worktree.BuildPlan(
             source_root=snapshot.path,
             build_dir=worktree.default_build_dir(spec.campaign_id, spec.candidate_id),
             actor_worktree=tree.path,
-            parallelism=worktree.BuildParallelism(jobs=64, load_average_cap=None),
+            parallelism=worktree.BuildParallelism(jobs=jobs, load_average_cap=None),
             targets=(T0_GENERATION_TOOL, "llama-bench", "test-backend-ops"),
             cmake_defines=(("LLAMA_FATAL_WARNINGS", "ON"),
                            ("LLAMA_BUILD_EXAMPLES", "ON")),

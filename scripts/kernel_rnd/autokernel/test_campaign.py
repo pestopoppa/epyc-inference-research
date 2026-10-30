@@ -2407,6 +2407,25 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         self.assertEqual(dict(plan.effective_defines)["LLAMA_BUILD_EXAMPLES"], "ON")
         self.assertIn(campaign.T0_GENERATION_TOOL, plan.targets)
 
+    def test_host_build_parallelism_fits_the_reported_cpu_count(self):
+        source = campaign.worktree.SandboxPath.create(
+            str(Path(self.tempdir.name) / "source"), production_trees=())
+        build_dir = campaign.worktree.SandboxPath.create(
+            str(Path(self.tempdir.name) / "build"), production_trees=())
+        tree = mock.Mock(path=source)
+        for reported, allowed, expected in ((4, 4, 4), (192, 192, 64),
+                                             (None, 192, 1), (192, 24, 24),
+                                             (192, 0, 64), (192, None, 64)):
+            with self.subTest(reported=reported, allowed=allowed), \
+                    mock.patch.object(campaign.os, "cpu_count", return_value=reported), \
+                    mock.patch.object(campaign.os, "sched_getaffinity",
+                                      return_value=set(range(allowed or 0)), create=True,
+                                      side_effect=NotImplementedError if allowed is None else None), \
+                    mock.patch.object(campaign.worktree, "default_build_dir", return_value=build_dir), \
+                    mock.patch.object(campaign.worktree, "run_build", return_value=object()) as build:
+                campaign.HostOps(nominal_khz=2_900_000).build(spec(), tree)
+                self.assertEqual(build.call_args.args[0].parallelism.jobs, expected)
+
     def test_failed_build_is_refused_before_artifact_hashing(self):
         """THE BITE: a failed compiler result cannot enter T0 evidence assembly."""
         failed = mock.Mock(spec=campaign.worktree.BuildResult)
