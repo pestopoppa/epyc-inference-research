@@ -12,7 +12,7 @@ from unittest import mock
 
 from ..evaluator import statistics
 from . import live_controls
-from .. import campaign, schemas
+from .. import schemas
 
 
 class InstrumentSelection(unittest.TestCase):
@@ -187,7 +187,11 @@ class DeclarationReaderConsistency(unittest.TestCase):
         def at_instrument(path):
             if Path(path) == self.instrument:
                 raise self.InstrumentBoundary("declaration and source checks passed")
-            self.assertTrue(Path(path).is_relative_to(self.root), "no shared weight/artifact reads")
+            self.assertTrue(
+                Path(path).is_relative_to(self.root) or Path(path) in {
+                    Path(module.__file__) for module in (live_controls.production_pins,
+                        live_controls.anchor_drift, live_controls.t0_policy)},
+                "no shared weight/artifact reads; only explicit source-leaf fingerprints")
             return original_hash(path)
         with mock.patch.object(live_controls, "_sha256_file", side_effect=at_instrument), \
              mock.patch.object(live_controls, "_ensure_instrument_build",
@@ -198,6 +202,18 @@ class DeclarationReaderConsistency(unittest.TestCase):
                 return live_controls.execute(self.root, campaign_id=self.identity.campaign_id,
                                              resume_existing=True)
             return live_controls.evaluate_existing(self.root, campaign_id=self.identity.campaign_id)
+
+    def test_actual_readers_refuse_changed_shared_leaf_bytes(self):
+        for leaf in (live_controls.production_pins, live_controls.anchor_drift,
+                     live_controls.t0_policy):
+            changed = self.root / Path(leaf.__file__).name
+            changed.write_bytes(Path(leaf.__file__).read_bytes() + b"\n# MOCK_ONLY changed source\n")
+            for mode in ("resume", "evaluate"):
+                with self.subTest(leaf=leaf.__name__, mode=mode), \
+                     mock.patch.object(leaf, "__file__", str(changed)):
+                    with self.assertRaisesRegex(ValueError, "supporting_source_sha256"):
+                        self._reader(mode)
+            self.assertEqual(self.path.read_bytes(), self.original)
 
     def test_each_fixed_writer_field_is_bound_by_both_actual_readers(self):
         fields = set(self.declaration) - {"declared_at"}

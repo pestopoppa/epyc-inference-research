@@ -27,8 +27,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from .. import campaign, schemas
-from ..evaluator import api, controls, recipes, statistics
+from .. import production_pins, schemas
+from ..evaluator import anchor_drift, t0_policy, api, controls, recipes, statistics
 from ..resource import device_claim
 from . import (control_runner, cpu_region_claim, inference_window, microbench,
                physical_bounds, powercap_broker, sandbox, screening_baseline, worktree)
@@ -40,27 +40,27 @@ PREFILL_RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
 DECODE_RECIPE_ID = "t1b.llama_cpu.llama_bench_decode.v1"
 RECIPE_ID = PREFILL_RECIPE_ID
 CPU_LIST = recipes.CANONICAL_PREFIX[recipes.CANONICAL_PREFIX.index("-c") + 1]
-# DERIVED from `campaign`, not re-typed here (2026-09-22, v9 -> v10 repin).
+# DERIVED from `production_pins`, not re-typed here (2026-09-22, v9 -> v10 repin).
 # These five were four hand-copied literals that `test_campaign` asserted equal
 # to the campaign constants — which is a drift DETECTOR, and a detector only
 # fires after the drift. Binding them makes the drift unrepresentable, so a
-# promotion has exactly one place to edit (`campaign.PRODUCTION_*`) instead of
+# promotion has exactly one place to edit (`production_pins.PRODUCTION_*`) instead of
 # two that agree only because a test says so.
-PRODUCTION_ROOT = Path(campaign.PRODUCTION_REPO)
-PRODUCTION_COMMIT = campaign.PRODUCTION_COMMIT
+PRODUCTION_ROOT = Path(production_pins.PRODUCTION_REPO)
+PRODUCTION_COMMIT = production_pins.PRODUCTION_COMMIT
 # The reward instrument now ships IN production (the v9 overlay was folded into
-# the v10 freeze; see `campaign.MEASUREMENT_REPO`), so the instrument identity is
+# the v10 freeze; see `production_pins.MEASUREMENT_REPO`), so the instrument identity is
 # the production identity. Both env knobs stay: they are the recovery-helper
 # escape hatch. They are now independent of one another, because the build root
 # is no longer a subdirectory of the source root — it cannot be, production
 # being frozen.
 INSTRUMENT_ROOT = Path(os.environ.get(
-    "AUTOKERNEL_INSTRUMENT_ROOT", campaign.MEASUREMENT_REPO))
+    "AUTOKERNEL_INSTRUMENT_ROOT", production_pins.MEASUREMENT_REPO))
 INSTRUMENT_BINARY = Path(os.environ.get(
     "AUTOKERNEL_INSTRUMENT_BINARY",
-    str(Path(campaign.MEASUREMENT_BUILD_ROOT) / "bin" / "llama-bench")))
-INSTRUMENT_BRANCH = campaign.MEASUREMENT_BRANCH
-INSTRUMENT_COMMIT = campaign.MEASUREMENT_COMMIT
+    str(Path(production_pins.MEASUREMENT_BUILD_ROOT) / "bin" / "llama-bench")))
+INSTRUMENT_BRANCH = production_pins.MEASUREMENT_BRANCH
+INSTRUMENT_COMMIT = production_pins.MEASUREMENT_COMMIT
 MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/"
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
@@ -71,7 +71,7 @@ NEUTRAL_BLOCKS = 60
 # campaign pairs use one llama-bench repetition.  Keep the A/A calibration
 # in that baseline frame: calibrating IQK-on against itself would produce an
 # apparently healthy noise pool whose anchor band cannot govern IQK-off runs.
-CALIBRATION_REPS = campaign.IQK_MATCHED_PAIR_REPS
+CALIBRATION_REPS = production_pins.IQK_MATCHED_PAIR_REPS
 CALIBRATION_IQK = "0"
 # A tg128 observation lasts only about 0.5 s after process startup on the
 # 0.5B calibration graph.  r2 showed that one such observation is bimodal even
@@ -93,9 +93,9 @@ ANCHOR_MOTION_LABEL = "anchor_motion_calibration"
 LEGACY_ANCHOR_MOTION_SETTLING = {
     "schema": "epyc.autokernel.anchor_motion_settling.v1",
     "kind": "non_ranked_post_work_quiet",
-    "quiet_barrier_s": campaign.POST_T0_QUIET_BARRIER_S,
-    "required_samples": campaign.POST_T0_QUIET_SAMPLES,
-    "sample_interval_s": campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S,
+    "quiet_barrier_s": production_pins.POST_T0_QUIET_BARRIER_S,
+    "required_samples": production_pins.POST_T0_QUIET_SAMPLES,
+    "sample_interval_s": production_pins.POST_T0_QUIET_SAMPLE_INTERVAL_S,
 }
 # v2 (2026-09-23): the blocking condition is no longer the PRESENCE of an
 # unowned inference server but WORK done by one inside the span between two
@@ -496,6 +496,9 @@ def _expected_declaration(*, identity: LiveCampaignIdentity,
             label: envelope.to_dict()
             for label, envelope in sorted(_declared_physical_envelopes().items())
         },
+        "supporting_source_sha256": {
+            module.__name__.rsplit(".", 1)[-1]: _sha256_file(Path(module.__file__))
+            for module in (production_pins, anchor_drift, t0_policy)},
         "source_sha256": source_sha,
         "belief_capture_schema": BELIEF_RECEIPT_SCHEMA,
     }
@@ -1767,7 +1770,7 @@ def _anchor_motion_authority(
         "settling_receipt_sha256": settling_receipt["receipt_sha256"],
         "raw_ref": str(raw_path), "raw_sha256": schemas.content_hash(raw),
         "anchor_medians": list(anchors),
-        "bound": campaign.drift_bound_from(anchors),
+        "bound": anchor_drift.drift_bound_from(anchors),
     }
 
 

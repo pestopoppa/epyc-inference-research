@@ -18,10 +18,10 @@ import time
 from types import SimpleNamespace
 
 from .. import schemas, storage
-from ..evaluator import api, controls, devices, statistics as st
+from ..evaluator import anchor_drift, t0_policy, api, controls, devices, statistics as st
 from ..execution import control_runner as cr, microbench, t0_provider as tp
 from ..evaluator import correctness
-from .. import campaign
+from .. import production_pins
 from . import bench, observation_binding as ob, runtime_calibration as rc
 from . import runtime_window as rw, serial_run
 from .claim import DEVICE_ID, HeldCpuClaim
@@ -206,7 +206,7 @@ def source_identity():
     from . import lifecycle_observation as lo
     return {"fixture_sha256": FIXTURE_SHA256,
         "files": {module.__name__: hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
-                  for module in (bench, microbench, tp, controls, st, rw)},
+                  for module in (production_pins, anchor_drift, t0_policy, bench, microbench, tp, controls, st, rw)},
         "self": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "loaded": [lo.callable_identity(value) for value in (
             fixture, resolution, require_available, OriginalClaims.observe,
@@ -346,14 +346,14 @@ def _t0_plan(frame, identities, arm):
         candidate=tp.CandidateBuild(frame["source_root"], str(build.parent),
             frame[arm + "_commit"], row["source_sha256"], str(build / "llama-cli"),
             str(build), str(build / "test-backend-ops")),
-        tools=campaign.HostOps._t0_tools(),
+        tools=t0_policy.t0_tools(),
         op_suite=tp.OpSuitePlan(backend_filter="ROCm0", ops=correctness.MANDATORY_BACKEND_OPS,
             suite_id="test-backend-ops/v1", suite_source_sha256=row["source_sha256"], suite_seed=2026091001),
         dispatch=tp.DispatchTracePlan(derived_surface=correctness.MANDATORY_BACKEND_OPS),
         anchor=tp.AnchorBuild(frame["source_root"], frame["anchor_commit"],
             str(anchor / "llama-cli"), str(anchor)),
-        generation=tp.GenerationPlan(prompt="The capital of France is", prompt_ref="ak-prompt-001",
-            n_predict=32, seed=42, threads=8, extra_argv=("-m", frame["model"], "-ngl", "99")),
+        generation=replace(t0_policy.t0_generation_plan(frame["model"]),
+            threads=8, extra_argv=("-m", frame["model"], "-ngl", "99")),
         determinism_runs=2, backend="llama_gpu")
 
 
@@ -526,7 +526,7 @@ def _t0_gates(store, reference, declaration, identities):
         metric="decode_tokens_per_s", metric_direction="higher_better", reps=9,
         change_class="layout", anchor_tier="T0", transfer_ratio_to=(),
         created_at=declaration["issued_at"], campaign_controls=None, calibration=None)
-    policy = campaign.HostOps._t0_evaluator_policy(request)
+    policy = t0_policy.t0_evaluator_policy(request.backend)
     return (correctness.check_backend_op_units(request, ops, surface, policy),
         correctness.check_determinism_class(request, determinism, policy)[0],
         correctness.check_output_coherence(request, coherence, policy, determinism)[0])

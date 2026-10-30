@@ -165,9 +165,10 @@ from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 from . import (artifact_diff, candidate_record, codegen_summary, dashboard, least_commitment_capture,
                journal as journal_module, source_candidate,
                source_prerequisite_package, source_prerequisite_producer)
-from . import schemas, storage
+from . import production_pins, schemas, storage
 from .controller import do_not_repeat, hypotheses
-from .evaluator import api, correctness, devices, recipes
+from .evaluator import anchor_drift as anchor_drift_math
+from .evaluator import api, correctness, devices, recipes, t0_policy
 from .execution import (chain, control_runner, cpu_region_claim, device_sampler,
                         inference_window, instrument_integrity, microbench, physical_bounds,
                         powercap_broker, provider, sandbox, screening_baseline,
@@ -224,9 +225,9 @@ __all__ = [
 # that known, already-finished work as a foreign co-tenant.  This is a phase
 # boundary, not a relaxation: after the fixed decay interval we take three
 # independent low-load observations, each paired with a fresh claim witness.
-POST_T0_QUIET_BARRIER_S = 65.0
-POST_T0_QUIET_SAMPLES = 3
-POST_T0_QUIET_SAMPLE_INTERVAL_S = 5.0
+POST_T0_QUIET_BARRIER_S = production_pins.POST_T0_QUIET_BARRIER_S
+POST_T0_QUIET_SAMPLES = production_pins.POST_T0_QUIET_SAMPLES
+POST_T0_QUIET_SAMPLE_INTERVAL_S = production_pins.POST_T0_QUIET_SAMPLE_INTERVAL_S
 
 # A completed arm's build can remain in Linux's one-minute load EWMA after its
 # owned children are reaped.  The following arm must not treat that known,
@@ -246,6 +247,9 @@ BUILD_LOAD_SETTLE_INTERVAL_S = 5.0
 #: Every module this driver may import, and the single reason each is essential.
 #: Each reason is a real incident or a fact measured on this host, not a taste.
 MODULES_THE_DRIVER_USES: Mapping[str, str] = {
+    "production_pins": "one unchanged production/measurement identity shared with live controls",
+    "evaluator.anchor_drift": "the original consecutive A/A arithmetic shared with live anchor observations",
+    "evaluator.t0_policy": "the same fixed T0 policy and tool plans shared with direct control callers",
     "artifact_diff": "AK-TR-6 compile-only register/scratch/instruction movement vetoes "
                      "a GPU claim before the behavioural T0 provider can launch",
     "candidate_record": "every executed candidate is durably recorded from the exact "
@@ -389,7 +393,7 @@ HISTORICAL_CALIBRATED_RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
 # instrument.  This is deliberately separate from CampaignSpec's generic
 # legacy default: the matched-pair producer below binds every executable IQK
 # pair to this value, while unrelated campaign families retain their own frame.
-IQK_MATCHED_PAIR_REPS = 1
+IQK_MATCHED_PAIR_REPS = production_pins.IQK_MATCHED_PAIR_REPS
 HISTORICAL_CONTRIBUTION_FLOOR = 0.03
 HISTORICAL_B_MIN_BLOCKS = 12
 HISTORICAL_MAX_BLOCKS = 20
@@ -435,29 +439,10 @@ class LeanCalibration:
         }
 
 
-def adjacent_relative_steps(series: Sequence[float]) -> tuple:
-    """The relative change between each pair of CONSECUTIVE runs.
-
-    Adjacent, not against the first run, because the quantity a paired design
-    is exposed to is ONE step: within a block the anchor and the candidate are
-    neighbours in time, so the drift the pairing fails to difference out is the
-    drift between two adjacent measurements, not the drift across the run.
-    """
-    values = [float(v) for v in series]
-    if len(values) < 2:
-        raise ValueError("a drift bound needs at least two consecutive observations")
-    return tuple((values[i + 1] - values[i]) / values[i] for i in range(len(values) - 1))
+adjacent_relative_steps = anchor_drift_math.adjacent_relative_steps
 
 
-def drift_bound_from(series: Sequence[float]) -> float:
-    """The largest single-step relative move an A/A of IDENTICAL code produced.
-
-    This is the number a candidate's median relative gain has to beat. It is
-    computed here from the recorded series rather than typed, so re-running the
-    A/A and updating `AA_*_RUNS` updates the rule — and so that no one can
-    quietly loosen the bound without changing a measurement.
-    """
-    return max(abs(step) for step in adjacent_relative_steps(series))
+drift_bound_from = anchor_drift_math.drift_bound_from
 
 
 #: Keyed by `recipes.RecipeSpec.metric`, because the bound is a property of the
@@ -1157,9 +1142,9 @@ DEFAULT_RECIPE_BY_BACKEND = {
 #: still exists at its old commit, so `resolve_anchor` kept succeeding after the
 #: v10 freeze and every campaign would have measured against v9 with no check
 #: ever failing. A stale anchor here is silent by construction.
-PRODUCTION_REPO = "/mnt/raid0/llm/llama.cpp"
-PRODUCTION_BRANCH = "production-consolidated-v10"
-PRODUCTION_COMMIT = "ffc1bac82eeca6f9099e1ccd9ba49703c460a115"
+PRODUCTION_REPO = production_pins.PRODUCTION_REPO
+PRODUCTION_BRANCH = production_pins.PRODUCTION_BRANCH
+PRODUCTION_COMMIT = production_pins.PRODUCTION_COMMIT
 
 #: Reviewed measurement source.  RETIRED AS A SEPARATE IDENTITY, 2026-09-22.
 #:
@@ -1176,9 +1161,9 @@ PRODUCTION_COMMIT = "ffc1bac82eeca6f9099e1ccd9ba49703c460a115"
 #:
 #: RVP-C6-1 (`execution/instrument_integrity.py`) is unchanged in force; only its
 #: anchor moved.  It now reads: a candidate may not edit what production ships.
-MEASUREMENT_REPO = PRODUCTION_REPO
-MEASUREMENT_BRANCH = PRODUCTION_BRANCH
-MEASUREMENT_COMMIT = PRODUCTION_COMMIT
+MEASUREMENT_REPO = production_pins.MEASUREMENT_REPO
+MEASUREMENT_BRANCH = production_pins.MEASUREMENT_BRANCH
+MEASUREMENT_COMMIT = production_pins.MEASUREMENT_COMMIT
 #: NOT under `MEASUREMENT_REPO` any more.  It used to be a build directory inside
 #: the overlay worktree; that worktree is now the FROZEN production tree, and
 #: invariant 3 (`worktree.PRODUCTION_TREES`) forbids any actor from building in
@@ -1186,8 +1171,7 @@ MEASUREMENT_COMMIT = PRODUCTION_COMMIT
 #: so a promotion is a cache MISS that builds once rather than a stale directory
 #: silently reused under the new freeze's name — the same contract as
 #: `loop/production.baseline_slot`.
-MEASUREMENT_BUILD_ROOT = os.path.join(
-    "/mnt/raid0/llm/tmp", f"build-ak-t0-cpu-{PRODUCTION_COMMIT[:9]}")
+MEASUREMENT_BUILD_ROOT = production_pins.MEASUREMENT_BUILD_ROOT
 
 # ``llama-cli`` now starts an embedded HTTP server and talks to it over a
 # loopback socket. Candidate T0 is deliberately network-denied, so use the
@@ -3035,24 +3019,7 @@ class HostOps:
 
     @staticmethod
     def _t0_evaluator_policy(spec: CampaignSpec) -> correctness.T0Policy:
-        """Return the fixed evaluator policy for an executed campaign.
-
-        The policy lives on the evaluator side of the boundary, but construction
-        happens here because the campaign supplies the backend identity.  It is
-        intentionally explicit: :class:`T0Policy` has no defaults, and a bare
-        construction would turn a protocol omission into a live-run failure.
-        """
-        return correctness.T0Policy(
-            required_backend_ops=correctness.MANDATORY_BACKEND_OPS,
-            symbol_shrinkage_reject_ratio=0.6,
-            diff_ceiling=correctness.DiffComplexityCeiling(
-                backend=spec.backend,
-                max_changed_lines=400,
-                max_files_touched=10,
-                shared_core_forces_review=True),
-            determinism_min_runs=2,
-            coherence_tolerance_floor=0.98,
-            policy_ref="ak-policy/v1")
+        return t0_policy.t0_evaluator_policy(spec.backend)
 
     # -- 0. preflight ------------------------------------------------------
 
@@ -3060,7 +3027,9 @@ class HostOps:
     def _evaluator_bundle_files() -> tuple[Path, ...]:
         """Return the complete driver-side evaluator closure to seal at start."""
         direct = (
-            Path(__file__), Path(api.__file__), Path(correctness.__file__),
+            Path(__file__), Path(production_pins.__file__),
+            Path(anchor_drift_math.__file__), Path(t0_policy.__file__),
+            Path(api.__file__), Path(correctness.__file__),
             Path(schemas.__file__), Path(recipes.__file__),
             Path(control_runner.__file__), Path(source_prerequisite_producer.__file__),
         )
@@ -3744,11 +3713,7 @@ class HostOps:
 
     @staticmethod
     def _t0_tools() -> t0_provider.ToolPaths:
-        return t0_provider.ToolPaths(
-            bash="/bin/bash",
-            verify_ggml_linkage_sh=str(
-                recipes.REPO_ROOT / "scripts" / "utils" / "verify_ggml_linkage.sh"),
-            cmake="/usr/bin/cmake")
+        return t0_policy.t0_tools()
 
     @staticmethod
     def _measurement_anchor_build(tool: str) -> t0_provider.AnchorBuild:
@@ -3759,18 +3724,7 @@ class HostOps:
 
     @staticmethod
     def _t0_generation_plan(spec: CampaignSpec) -> t0_provider.GenerationPlan:
-        """The T0 graph/output probe, bound to this campaign's exact model.
-
-        The direct completion executable needs the model explicitly to
-        construct a graph and generate output. Keep it in the typed plan,
-        rather than relying on an ambient default or a build-local model path.
-        ``llama-cli`` is intentionally not used: its current implementation
-        starts a loopback HTTP server, while T0's candidate sandbox is
-        network-denied.
-        """
-        return t0_provider.GenerationPlan(
-            prompt="The capital of France is", prompt_ref="ak-prompt-001",
-            n_predict=32, seed=42, extra_argv=("-m", spec.model))
+        return t0_policy.t0_generation_plan(spec.model)
 
     @staticmethod
     def _t0_capture_sink(spec: CampaignSpec) -> t0_provider.DirectoryCaptureSink:

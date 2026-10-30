@@ -128,6 +128,12 @@ ENTRYPOINT_MODULE = f"{ROOT_PKG}.campaign"
 # decoration.
 
 CAMPAIGN_ROOTS = {
+    f"{ROOT_PKG}.production_pins":
+        "one unchanged production/measurement identity shared with live controls",
+    f"{ROOT_PKG}.evaluator.anchor_drift":
+        "the original consecutive A/A arithmetic shared with live anchor observations",
+    f"{ROOT_PKG}.evaluator.t0_policy":
+        "the same fixed T0 policy and tool plans shared with direct control callers",
     f"{ROOT_PKG}.artifact_diff":
         "AK-TR-6 must veto an unconfirmed GPU claim before behavioral T0 can launch",
     f"{ROOT_PKG}.candidate_record":
