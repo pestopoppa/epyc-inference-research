@@ -4457,6 +4457,30 @@ def main(argv: list[str] | None = None) -> int:
 
 
     def measure_for(worker):
+        def _tripwire(compared):
+            from . import same_code_tripwire
+            serving_launch = None
+            if direct_launch is not None:
+                # The resolved execution view keeps exact argv/env/workload but
+                # normalizes the build path and listen port. The code manifest
+                # below binds the executable/DSOs by code sections, not full-file
+                # linker metadata (RUNPATH legitimately changes across builds).
+                serving_launch = direct_launch._normalized_execution_dict()
+                serving_launch["command_argv"][0] = "<measured-code-manifest>"
+                serving_launch["artifacts"].pop("executable", None)
+                serving_launch["artifacts"].pop("dsos", None)
+            return same_code_tripwire.inspect(
+                args.store, compared, anchor_build=anchor_build[0],
+                candidate_build=worker.build_dir,
+                library=("libggml-cpu.so" if cpu_launch else "libggml-hip.so"),
+                measurement_epoch=measurement_epoch,
+                launch_identity={"build_recipe": recipe.to_dict(),
+                                 "serving_launch": serving_launch,
+                                 "model": str(args.model), "surface": args.surface,
+                                 "pp": pp, "tg": tg, "ubatch": ubatch,
+                                 "declared_pairs": (args.serving_pairs if direct_launch
+                                                    else args.pairs)})
+
         def measure(hypothesis, paths):
             nonlocal runtime_enabled
             if hypothesis.runtime_pair is not None:
@@ -4494,12 +4518,12 @@ def main(argv: list[str] | None = None) -> int:
             if longctx_surface is not None and longctx.attention_route(hypothesis):
                 # Audit C1: an attention route is judged AT DEPTH first; the short
                 # surface becomes its no-regression gate at keep (commit_pooled).
-                return longctx_compare(worker.build_dir)
+                return _tripwire(longctx_compare(worker.build_dir))
             if direct_launch:
                 compared = cpu_compare(anchor_build[0], worker.build_dir)
                 if not cpu_launch:
                     record_candidate_serving_profile(compared, worker, hypothesis)
-                return compared
+                return _tripwire(compared)
             # AKX-ALL-29.3: a HIP candidate whose gfx90a kernel bodies equal the
             # anchor's is not timed. None (hash unavailable, bodies differ, CPU
             # recipe) falls through to the normal measurement unchanged.
@@ -4512,11 +4536,11 @@ def main(argv: list[str] | None = None) -> int:
             # The anchor build is SHARED across lanes and only ever read, so it needs
             # no per-lane copy; the candidate binary is per lane because each lane
             # built it from its own patch.
-            return measured_bench_compare(
+            return _tripwire(measured_bench_compare(
                 bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
                 bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
-                surface=args.surface, ubatch=ubatch, calibrated=calibrated)
+                surface=args.surface, ubatch=ubatch, calibrated=calibrated))
         return measure
 
     def record_candidate_serving_profile(compared, worker, hypothesis) -> None:

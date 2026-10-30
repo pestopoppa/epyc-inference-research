@@ -97,6 +97,14 @@ CREATE TABLE IF NOT EXISTS experiments (
 );
 CREATE INDEX IF NOT EXISTS experiments_epoch ON experiments (epoch_sha256);
 CREATE INDEX IF NOT EXISTS experiments_mechanism ON experiments (mechanism_id);
+CREATE TABLE IF NOT EXISTS same_code_measurements (
+    attempt_id TEXT PRIMARY KEY,
+    work_key TEXT NOT NULL,
+    effect_fraction REAL NOT NULL,
+    floor_pct REAL,
+    FOREIGN KEY (attempt_id) REFERENCES experiments(attempt_id)
+);
+CREATE INDEX IF NOT EXISTS same_code_work ON same_code_measurements(work_key);
 CREATE TABLE IF NOT EXISTS epoch_aliases (
     full_epoch        TEXT PRIMARY KEY,
     measurement_epoch TEXT NOT NULL,
@@ -492,6 +500,18 @@ class ExperimentStore:
             "falsifier,status,effect_fraction,exact_effect,target_effect,"
             "refusal_reason,result_sha256,spawn_parent,branch_id,width,depth,payload"
             ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", row)
+        if cursor.rowcount == 1:
+            compared = payload.get("comparison") or {}
+            tripwire = compared.get("same_code_tripwire") or {}
+            key = tripwire.get("work_key")
+            floor = compared.get("noise_floor_pct")
+            if (isinstance(key, str) and len(key) == 64
+                    and row[12] is not None and payload.get("status") in
+                    ("kept", "measured_null", "regression", "keep_candidate")):
+                self._connection.execute(
+                    "INSERT INTO same_code_measurements "
+                    "(attempt_id,work_key,effect_fraction,floor_pct) VALUES (?,?,?,?)",
+                    (attempt_id, key, row[12], floor))
         self._connection.commit()
         if cursor.rowcount == 1 and receipt_out is not None:
             # The hash is over the exact TEXT bytes handed to SQLite, after the
@@ -506,6 +526,13 @@ class ExperimentStore:
                 "width": row[-3], "depth": row[-2],
             })
         return cursor.rowcount == 1
+
+    def prior_same_code(self, work_key: str) -> dict[str, Any] | None:
+        """Newest prospectively captured measurement of the exact work key."""
+        row = self._connection.execute(
+            "SELECT attempt_id,effect_fraction,floor_pct FROM same_code_measurements "
+            "WHERE work_key=? ORDER BY rowid DESC LIMIT 1", (work_key,)).fetchone()
+        return dict(row) if row is not None else None
 
     def trial_counters(self, *, epoch: str) -> dict[str, int | None]:
         """AK-HR-3: the next campaign-wide trial ordinal and cumulative token count for
