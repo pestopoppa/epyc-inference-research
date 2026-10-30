@@ -1288,8 +1288,27 @@ class TheStopSentinelAndPruning(unittest.TestCase):
             self.assertTrue(outside.is_dir())
             self.assertIn("foreign replacement left untouched", report.failed[0][1])
 
+    def test_descriptor_count_detects_a_deliberately_live_descriptor(self):
+        import gc
+        gc.collect()
+        if gc.isenabled():
+            gc.disable()
+            self.addCleanup(gc.enable)
+        before = len(os.listdir("/proc/self/fd"))
+        with tempfile.TemporaryFile():
+            with self.assertRaises(AssertionError):
+                self.assertEqual(len(os.listdir("/proc/self/fd")), before)
+
     def test_descriptor_ownership_covers_discovery_and_finalization_failures(self):
+        import gc
         from autokernel.loop import pool
+
+        # Unrelated cyclic garbage can close old descriptors between the two
+        # process-wide counts. Collect first and restore the prior GC state.
+        gc.collect()
+        if gc.isenabled():
+            gc.disable()
+            self.addCleanup(gc.enable)
 
         def fd_count():
             return len(os.listdir("/proc/self/fd"))

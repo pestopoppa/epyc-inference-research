@@ -11,6 +11,7 @@ base.txt) and of the store rows 629ca6ab (the author checkpoint: hypothesis plus
 accepted critic:hypothesis) and 548f8f24 (run 10e's critic auth failure, reason
 redacted). No test reads the live store.
 """
+import hashlib
 import io
 import json
 import os
@@ -139,15 +140,25 @@ class ACriticFailureLeavesACritic2Checkpoint(Fixture):
                                record_abandoned=self.owner.record_abandoned)
         self.assertEqual([ck["stage"] for ck in outcome.resume_checkpoints], ["author"])
 
-    def test_an_empty_lane_drops_the_critic2_checkpoint_and_keeps_the_author_one(self):
+    def test_authored_patch_survives_lane_reset_before_recording(self):
+        def retain(hypothesis):
+            path = archive.retain_patch(self.store, self.repo, lane="lane0",
+                                        mechanism_id=hypothesis.mechanism_id)
+            return {"patch_file": str(path), "metadata_file": str(path.with_suffix(".json")),
+                    "patch_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
         outcome = loop.iterate(
             planner=base.Planner(self.repo, [base.hyp()]), critic=TransientCritic(),
             context={}, measure=lambda h, p: None, gate=base.passing_gate,
-            commit=lambda h, p, c: None, hypothesis_rounds=1)
+            commit=lambda h, p, c: None, hypothesis_rounds=1,
+            author_lane=(self.repo, self.anchor), retain_authored=retain)
         base.reset(self.repo)                  # the lane lost its diff before recording
         self.owner.record(outcome)
         (row,) = base.rows_with(self.store, "planner_transient")
-        self.assertEqual([ck["stage"] for ck in row["resume_checkpoints"]], ["author"])
+        self.assertEqual([ck["stage"] for ck in row["resume_checkpoints"]], ["author", "critic2"])
+        raw = resume.verify_retained_patch(row["resume_checkpoints"][1]["retained_patch"],
+                                           anchor_commit=self.anchor,
+                                           mechanism_id="akm-demo-hoist")
+        self.assertIn(b"line 5 EDITED", raw)
 
     def test_a_report_path_failure_over_a_real_edit_checkpoints_critic2(self):
         """Run 10d: the author edited the lane; its report was unusable and the lane
@@ -197,7 +208,9 @@ class ACriticFailureLeavesACritic2Checkpoint(Fixture):
         (outcome,) = outcomes
         self.assertEqual(outcome.status, "lane_error")
         (row,) = base.rows_with(self.store, "lane_error")
-        (checkpoint,) = row["resume_checkpoints"]
+        self.assertEqual([item["stage"] for item in row["resume_checkpoints"]],
+                         ["author", "critic2"])
+        checkpoint = row["resume_checkpoints"][1]
         self.assertEqual(checkpoint["stage"], "critic2")
         self.assertTrue(checkpoint["retained_patch"]["patch_sha256"])
         base.reset(self.repo)
@@ -349,6 +362,10 @@ class ResumesAtCritic2(Fixture):
                                record_abandoned=disposed.append, resume=point)
         self.assertEqual(disposed[0].status, loop.RESUME_REJECTED)
         self.assertEqual(disposed[0].refusal_gate, "resume:integrity")
+        self.assertIn("stray file", disposed[0].reasons[0])
+        self.assertIn(b"line 5 EDITED", resume.verify_retained_patch(
+            disposed[0].retained_patch, anchor_commit=self.anchor,
+            mechanism_id="akm-demo-hoist"))
         self.assertEqual(outcome.hypothesis.mechanism_id, "akm-fresh")
 
 
