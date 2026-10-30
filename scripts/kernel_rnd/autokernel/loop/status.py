@@ -226,7 +226,8 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           actor_health: dict | None = None,
           scratch: Mapping[str, Any] | None = None,
           comparability: Mapping[str, Any] | None = None,
-          uncovered_gap: Mapping[str, Any] | None = None) -> Path:
+          uncovered_gap: Mapping[str, Any] | None = None,
+          scope_gap_error: Mapping[str, str] | None = None) -> Path:
     """Atomically publish the loop's current standing.
 
     `uncovered_gap` (2026-10-06 autonomy self-check, `roofline_coverage.py`): the
@@ -235,6 +236,9 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
     can touch today" as a LIVE field, not only inside a node-profile prose block.
     `None` (no node profile collected yet, or no ceiling configured) omits the field
     from the body rather than publishing a fabricated "not triggered".
+
+    `scope_gap_error` records observe-only scope artifact publication failures; it
+    is optional and disappears after recovery. It never changes an accept gate.
 
     Atomic because a dashboard polling a half-written file is how a surface reports
     something that was never true. `state` is what the loop is DOING, and it is
@@ -345,6 +349,8 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         body["scratch"] = dict(scratch)
     if uncovered_gap is not None:
         body["uncovered_gap"] = dict(uncovered_gap)
+    if scope_gap_error is not None:
+        body["scope_gap_error"] = dict(scope_gap_error)
     return write_json(store_root, STATUS_FILENAME, body)
 
 

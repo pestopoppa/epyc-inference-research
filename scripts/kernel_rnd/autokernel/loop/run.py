@@ -5994,6 +5994,10 @@ def main(argv: list[str] | None = None) -> int:
                 "failing": len(rows) >= 5 and len(fails) * 2 > len(rows),
                 "last_failure": reason or None}
 
+    from . import roofline_coverage
+    scope_gap_publisher = roofline_coverage.ScopeGapPublisher(args.store)
+    scope_gap_error: list[dict | None] = [None]
+
     def publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
                 step: str | None = None) -> None:
         """A loop that only reports when it succeeds looks identical to a stuck one."""
@@ -6002,16 +6006,25 @@ def main(argv: list[str] | None = None) -> int:
         # already triggered, write the durable scope_gap.json naming the uncovered
         # files/symbols for a human to act on. Entirely observe-only: never widens a
         # route, never blocks the publish this function exists to make.
+        scope_gap_payload = None
         try:
-            from . import roofline_coverage
+            gap = uncovered_gap_state[0]
+            if gap is not None:
+                if not isinstance(gap, Mapping):
+                    raise TypeError("uncovered gap is not a mapping")
+                json.dumps(dict(gap), sort_keys=True)
+                scope_gap_payload = gap
             attempts = [o.to_attempt() for o in outcomes]
-            scope_gap_path = roofline_coverage.stagnation_scope_gap_hook(
-                uncovered_gap_state[0], status.stagnation_signal(attempts),
-                store_root=args.store)
+            scope_gap_path = scope_gap_publisher.update(
+                uncovered_gap_state[0], status.stagnation_signal(attempts))
+            scope_gap_error[0] = None
             if scope_gap_path is not None:
                 print(f"profile   STAGNATION + UNCOVERED ROOFLINE GAP: wrote {scope_gap_path}")
-        except Exception as exc:  # pragma: no cover - defensive, observe-only
-            print(f"profile   scope-gap stagnation hook skipped ({type(exc).__name__}: {exc})")
+        except Exception as exc:
+            error = {"type": type(exc).__name__, "message": str(exc)}
+            if scope_gap_error[0] is None:
+                print(f"profile   scope-gap stagnation hook skipped ({type(exc).__name__}: {exc})")
+            scope_gap_error[0] = error
         status.write(
             args.store, state=state, epoch=epoch, campaign_id="ak-loop",
             anchor_commit=current_anchor_commit[0], surface=args.surface,
@@ -6036,7 +6049,8 @@ def main(argv: list[str] | None = None) -> int:
             actor_health=actor_health(outcomes),
             comparability=history_view[0],
             scratch=(scratch_registry[0].stats() if scratch_registry[0] is not None else None),
-            uncovered_gap=uncovered_gap_state[0])
+            uncovered_gap=scope_gap_payload,
+            scope_gap_error=scope_gap_error[0])
 
     latest: list = []
     original_source_keeps: list[dict] = []

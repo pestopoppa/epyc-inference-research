@@ -43,6 +43,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -362,10 +363,9 @@ def write_scope_gap(store_root: Path | str, uncovered_gap: Mapping[str, Any], *,
     """
     body = {**dict(uncovered_gap), "schema": SCOPE_GAP_SCHEMA,
             "generated_at": now or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}
-    target = Path(store_root) / SCOPE_GAP_FILENAME
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
-    return target
+    from . import status
+    return status.write_json(Path(store_root), SCOPE_GAP_FILENAME, body,
+                             prefix=".scope-gap-")
 
 
 def stagnation_scope_gap_hook(uncovered_gap: Mapping[str, Any] | None,
@@ -385,7 +385,29 @@ def stagnation_scope_gap_hook(uncovered_gap: Mapping[str, Any] | None,
     return write_scope_gap(store_root, uncovered_gap)
 
 
-__all__ = ["DEFAULT_HOST_CEILING_GB_S", "GGML_TYPE_BLOCK_BYTES", "ROUTE_FILE_SYMBOL",
+class ScopeGapPublisher:
+    """Emit once per observed stagnant episode/content change, under the writer lock.
+
+    A failed write never advances the transition, so a later heartbeat retries it.
+    Direct hook errors still raise; the caller owns observe-only error reporting.
+    """
+    def __init__(self, store_root: Path | str):
+        self.store_root = Path(store_root)
+        self._last_gap: str | None = None
+
+    def update(self, uncovered_gap, stagnation) -> Path | None:
+        if not uncovered_gap or not uncovered_gap.get("triggered") or not is_stagnant(stagnation):
+            self._last_gap = None
+            return None
+        key = hashlib.sha256(json.dumps(dict(uncovered_gap), sort_keys=True).encode()).hexdigest()
+        if key == self._last_gap:
+            return None
+        target = stagnation_scope_gap_hook(uncovered_gap, stagnation, store_root=self.store_root)
+        self._last_gap = key
+        return target
+
+
+__all__ = ["ScopeGapPublisher", "DEFAULT_HOST_CEILING_GB_S", "GGML_TYPE_BLOCK_BYTES", "ROUTE_FILE_SYMBOL",
            "RooflineRefused", "SCHEMA", "SCOPE_GAP_FILENAME", "SCOPE_GAP_SCHEMA",
            "STAGNATION_MIN_MEASURED_POINTS", "STAGNATION_NULL_STREAK",
            "UNCOVERED_GAP_WARN_THRESHOLD", "from_node_dump", "is_stagnant",
