@@ -735,7 +735,7 @@ ORACLE_MODULES = ("iqk_witness.py", "iqk_gdb_probe.py", "cpu_quant_reference.py"
                   "gdn_reference_probe.cpp", "cpu_fusion_reference.py",
                   "cpu_fusion_reference_probe.cpp", "model_identity.py",
                   "cpu_fa_reference.py", "cpu_fa_reference_probe.cpp",
-                  "served_shape_cases.py")
+                  "served_shape_cases.py", "cpu_repack_cases.py", "cpu_repack_probe.cpp")
 
 
 def scope_rules_fingerprint() -> str:

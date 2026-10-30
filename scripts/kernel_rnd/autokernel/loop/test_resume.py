@@ -793,6 +793,49 @@ class OracleUnavailableIsTheHarness(unittest.TestCase):
                 path.unlink()
                 self.assertNotEqual(after, loop.gate_rules_fingerprint())
 
+    def test_cpu_repack_oracle_sources_reopen_only_the_rule_refusal(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from autokernel.loop import cpu_repack_cases as crc
+
+        here = Path(loop.__file__).parent
+        recipe = SimpleNamespace(topology_prefix=("taskset", "-c", "0-95"),
+                                 command_argv=("llama-server", "-t", "48", "-tb", "48"),
+                                 launch_env={"GGML_IQK": "1"}, backend="cpu")
+        for oracle in ("cpu_repack_cases.py", "cpu_repack_probe.cpp"):
+            with self.subTest(oracle=oracle), tempfile.TemporaryDirectory() as directory:
+                isolated = Path(directory)
+                # Exercise the actual lazy gate delegation with a genuinely absent
+                # manifest. It must refuse before compiling a probe or measuring.
+                with patch.object(crc, "check_case_set", wraps=crc.check_case_set) as check:
+                    verdict = gates.check_cpu_repack_case_set(
+                        isolated / "build", resolved_recipe=recipe,
+                        manifest_path=isolated / "missing-manifest.json", lane="ds41")
+                check.assert_called_once()
+                self.assertEqual(verdict.gate, "oracle_unavailable")
+                self.assertFalse(verdict.passed)
+                for name in {"gates.py", *loop.ORACLE_MODULES,
+                             "cpu_repack_cases.py", "cpu_repack_probe.cpp"}:
+                    (isolated / name).write_bytes((here / name).read_bytes())
+                with patch.object(gates, "__file__", str(isolated / "gates.py")):
+                    before = loop.gate_rules_fingerprint()
+                    candidate = self.candidate(refusal_gate=verdict.gate,
+                                               gate_rules_fingerprint=before)
+                    self.assertIn("unchanged", resume.ineligible_reason(
+                        candidate, rules_fingerprint=before))
+                    path = isolated / oracle
+                    comment = b"//" if path.suffix == ".cpp" else b"#"
+                    path.write_bytes(path.read_bytes() + b"\n" + comment + b" corrected oracle source\n")
+                    after = loop.gate_rules_fingerprint()
+                    self.assertNotEqual(before, after)
+                    self.assertIsNone(resume.ineligible_reason(
+                        candidate, rules_fingerprint=after))
+                    self.assertIn("verdict on the patch", resume.ineligible_reason(
+                        self.candidate(refusal_gate="correctness", gate_rules_fingerprint=before),
+                        rules_fingerprint=after))
+                    path.unlink()
+                    self.assertNotEqual(after, loop.gate_rules_fingerprint())
+
     def test_it_spends_no_authoring_attempt(self):
         self.assertEqual(loop.classify_patch_rejection(
             "exact fused helper and dot specialization hits in candidate DSO not proven",
