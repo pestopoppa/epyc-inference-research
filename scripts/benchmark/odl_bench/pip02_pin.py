@@ -18,7 +18,7 @@ for name, expected in {'odl_quad_job.py':'051c5bfa92dd77053b287241c9598e3ffb3ae1
  paths.add(str(path.resolve()))
 # Capture-time source registries are explicitly allowlisted, never inferred from mtime.
 from odl_bench import pip02_lineage as lineage
-registries=[(lineage.ODL,lineage.ODL_SHA),(lineage.ODL_R3,lineage.ODL_R3_SHA),(lineage.RECOVERY/'SOURCES.sha256',lineage.RECOVERY_SHA)]+[(root/'source-pins.json',expected) for root,expected in lineage.PADDLE_ROOTS.values()]
+registries=[(lineage.ODL,lineage.ODL_SHA),(lineage.ODL_R3,lineage.ODL_R3_SHA),(lineage.ODL_R4,lineage.ODL_R4_SHA),(lineage.RECOVERY/'SOURCES.sha256',lineage.RECOVERY_SHA)]+[(root/'source-pins.json',expected) for root,expected in lineage.PADDLE_ROOTS.values()]
 for registry,expected in registries:
  if m.digest(registry)!=expected: raise ValueError('registered producer manifest changed: '+str(registry))
  paths.add(str(registry.resolve()))
