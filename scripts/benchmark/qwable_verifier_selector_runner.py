@@ -20,7 +20,6 @@ import re
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -70,7 +69,7 @@ SANITIZED_ENV = {
 }
 
 sys.path.insert(0, str(SCRIPT_DIR))
-from debug_scorer import _extract_code_block, score_answer  # noqa: E402
+from debug_scorer import score_answer  # noqa: E402
 
 
 @dataclasses.dataclass(frozen=True)
@@ -412,42 +411,15 @@ def strip_think(text: str) -> str:
     return THINK_RE.sub("", text or "").strip()
 
 
-TYPING_PREFIX = (
-    "from typing import List, Optional, Tuple, Dict, Set, Any\n"
-    "from collections import defaultdict, deque, Counter\n"
-    "import math, heapq, bisect, itertools, functools\n\n"
-)
-
-
 def run_code(answer: str, question: dict[str, Any]) -> bool:
-    cfg = question.get("scoring_config") or {}
-    code = _extract_code_block(answer, cfg.get("language", "python"))
-    if not code:
-        return False
-    test_code = cfg.get("test_code", "")
-    entry = cfg.get("entry_point", "")
-    expected = question.get("expected", "")
-    if "input()" in code or "sys.stdin" in code:
-        return bool(score_answer(answer, expected, "code_execution", cfg))
+    """Use the governed executable oracle, including its unavailable outcome.
 
-    full = TYPING_PREFIX + code
-    if test_code:
-        full += "\n\n" + test_code
-    elif entry and expected:
-        full += f"\n\nassert {entry}() == {expected}"
-    else:
-        return bool(score_answer(answer, expected, "code_execution", cfg))
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, dir="/tmp", encoding="utf-8") as handle:
-        handle.write(full)
-        path = Path(handle.name)
-    try:
-        timeout = int(cfg.get("timeout", 10))
-        result = subprocess.run(["python3", str(path)], capture_output=True, text=True, timeout=timeout, check=False)
-        return result.returncode == 0
-    except subprocess.TimeoutExpired:
-        return False
-    finally:
-        path.unlink(missing_ok=True)
+    The selector must not synthesize zero-argument assertions from expected
+    text or bypass the scorer's oracle checks and subprocess isolation.
+    """
+    cfg = question.get("scoring_config") or {}
+    expected = question.get("expected", "")
+    return bool(score_answer(answer, expected, "code_execution", cfg))
 
 
 def score_candidate(question: dict[str, Any], answer: str) -> bool:
