@@ -1123,9 +1123,11 @@ class _OwnedSession:
     Member pidfds also allow exact, bounded cleanup if inspection later fails.
     """
 
-    def __init__(self, proc: "subprocess.Popen", *, grace_s: float = 10.0):
+    def __init__(self, proc: "subprocess.Popen", *, grace_s: float = 10.0,
+                 term_grace_s: Optional[float] = None):
         self.proc = proc
         self.grace_s = grace_s
+        self.term_grace_s = term_grace_s
         self.pid = proc.pid
         try:
             self.fd = os.pidfd_open(self.pid)
@@ -1263,17 +1265,19 @@ class _OwnedPipes:
         self.selector = selectors.DefaultSelector()
         self.selector.register(leader_fd, selectors.EVENT_READ, "leader")
         self.output = bytearray()
+        self.error_output = bytearray()
         self.input = memoryview(input_bytes or b"")
         self.offset = 0
-        for stream, event in ((proc.stdout, selectors.EVENT_READ),
-                              (proc.stdin, selectors.EVENT_WRITE)):
+        for stream, event, channel in ((proc.stdout, selectors.EVENT_READ, "stdout"),
+                                       (proc.stderr, selectors.EVENT_READ, "stderr"),
+                                       (proc.stdin, selectors.EVENT_WRITE, "stdin")):
             if stream is None:
                 continue
             if event == selectors.EVENT_WRITE and not self.input:
                 stream.close()
                 continue
             os.set_blocking(stream.fileno(), False)
-            self.selector.register(stream, event)
+            self.selector.register(stream, event, channel)
 
     def pump(self, delay: float) -> None:
         for key, event in self.selector.select(max(0.0, delay)):
@@ -1285,7 +1289,8 @@ class _OwnedPipes:
                 if event == selectors.EVENT_READ:
                     chunk = os.read(stream.fileno(), 65536)
                     if chunk:
-                        self.output.extend(chunk)
+                        target = self.error_output if key.data == "stderr" else self.output
+                        target.extend(chunk)
                         continue
                 else:
                     self.offset += os.write(stream.fileno(), self.input[self.offset:self.offset + 4096])
@@ -1314,7 +1319,8 @@ def _terminate_owned(session: _OwnedSession, *, grace_s: float,
     sent = []
     session.termination_attempted = True
     pgid = session.pid
-    for sig in (signal.SIGTERM, signal.SIGKILL):
+    term_grace = grace_s if session.term_grace_s is None else session.term_grace_s
+    for sig, phase_grace in ((signal.SIGTERM, term_grace), (signal.SIGKILL, grace_s)):
         if session.verified_empty():
             return tuple(sent)
         session.validate()
@@ -1326,7 +1332,7 @@ def _terminate_owned(session: _OwnedSession, *, grace_s: float,
             pass
         except PermissionError as exc:
             raise ProcessEscalationFailed(f"not permitted to signal owned group {pgid}") from exc
-        deadline = time.monotonic() + grace_s
+        deadline = time.monotonic() + phase_grace
         while True:
             if session.verified_empty():
                 return tuple(sent)
@@ -1343,7 +1349,8 @@ def _terminate_owned(session: _OwnedSession, *, grace_s: float,
 
 
 def _communicate_owned(session: _OwnedSession, *, timeout_s: float,
-                       grace_s: float, input_bytes: Optional[bytes] = None) -> tuple:
+                       grace_s: float, input_bytes: Optional[bytes] = None,
+                       split_output: bool = False) -> tuple:
     pipes = _OwnedPipes(session.proc, input_bytes, leader_fd=session.fd)
     deadline = time.monotonic() + timeout_s
     signals_sent = ()
@@ -1369,7 +1376,9 @@ def _communicate_owned(session: _OwnedSession, *, timeout_s: float,
                 raise ProcessEscalationFailed("owned output pipe remained open after group exit")
             pipes.pump(min(0.05, remaining))
         exit_code = session.proc.wait(timeout=grace_s)
-        return bytes(pipes.output), timed_out, signals_sent, exit_code
+        output = ((bytes(pipes.output), bytes(pipes.error_output)) if split_output
+                  else bytes(pipes.output))
+        return output, timed_out, signals_sent, exit_code
     finally:
         pipes.close()
 

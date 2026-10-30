@@ -48,6 +48,7 @@ if str(_HERE.parents[2]) not in sys.path:
 from autokernel import schemas                                    # noqa: E402
 from autokernel.evaluator import api, correctness, integrity, recipes  # noqa: E402
 from autokernel.execution import t0_provider as t0                # noqa: E402
+from autokernel.execution import worktree as owned_worktree       # noqa: E402
 from autokernel.execution import cpu_region_claim               # noqa: E402
 
 TESTDATA = _HERE.parent / "testdata"
@@ -2693,20 +2694,20 @@ class NoOrphanOnAnUnexpectedFailure(unittest.TestCase):
 
     def test_a_non_timeout_failure_still_kills_the_child_it_launched(self):
         spawned = []
-        real = subprocess.Popen.communicate
+        real = subprocess.Popen
 
-        def explode(self_, *args, **kwargs):
-            spawned.append(self_.pid)
-            raise MemoryError("simulated failure inside communicate")
+        def capture(*args, **kwargs):
+            proc = real(*args, **kwargs)
+            spawned.append(proc.pid)
+            return proc
 
-        subprocess.Popen.communicate = explode
-        try:
+        with unittest.mock.patch.object(subprocess, "Popen", side_effect=capture), \
+                unittest.mock.patch.object(owned_worktree._OwnedPipes, "pump",
+                    side_effect=MemoryError("simulated failure inside owned pipe pump")):
             with self.assertRaises(MemoryError):
                 t0.SubprocessRunner(term_grace_s=2.0, kill_grace_s=2.0).run(
                     ["/bin/sleep", "60"], env={"PATH": "/usr/bin:/bin"}, cwd="/tmp",
                     timeout_s=30)
-        finally:
-            subprocess.Popen.communicate = real
         self.assertEqual(len(spawned), 1)
         pid = spawned[0]
         deadline = time.monotonic() + 10.0

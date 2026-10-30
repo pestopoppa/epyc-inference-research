@@ -95,12 +95,13 @@ without that receipt the exact-reference gate remains uncovered.
 from __future__ import annotations
 
 import ast
+import codecs
+import io
 import hashlib
 import json
 import math
 import os
 import re
-import signal
 import subprocess
 import tempfile
 import time
@@ -111,6 +112,7 @@ from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 from .. import schemas
 from ..evaluator import api, correctness, recipes
 from . import reward_hack_scan
+from . import worktree as owned_worktree
 from . import sandbox as process_sandbox
 from .server_generation import ServerGenerationEvidence, collect_server_coherence
 
@@ -573,7 +575,7 @@ class SubprocessRunner:
     4. **Kill by captured pid only.** The child gets its own session
        (`start_new_session=True`), so the only pgid this module ever signals is
        one it created. SIGTERM, then SIGKILL, then VERIFY — and a survivor is
-       reported as an orphan rather than assumed dead.
+       causes an infrastructure refusal rather than a clean orphan list.
     """
 
     def __init__(self, *, term_grace_s: float = 10.0, kill_grace_s: float = 5.0,
@@ -618,6 +620,7 @@ class SubprocessRunner:
         env_pairs = tuple(sorted(executed_env.items()))
         started = time.monotonic()
         try:
+            owned_worktree._require_owned_process_capabilities()
             proc = subprocess.Popen(  # noqa: S603 - argv list, no shell, declared env
                 list(spawn_argv),
                 env=dict(env_pairs),
@@ -629,44 +632,50 @@ class SubprocessRunner:
                 start_new_session=True,
                 text=True,
             )
-        except BaseException:
+        except BaseException as exc:
             if scratch is not None:
                 scratch.cleanup()
+            if isinstance(exc, owned_worktree.ProcessEscalationFailed):
+                raise ProcessEscaped(f"owned T0 process identity unavailable: {exc}") from exc
             raise
-        timed_out = False
-        signalled = False
-        orphans: tuple = ()
+        owner = None
         sandbox_receipt = None
         sandbox_teardown = None
         try:
-            stdout, stderr = proc.communicate(timeout=timeout_s)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            signalled = True
-            orphans = self._terminate(proc)
-
+            owner = owned_worktree._OwnedSession(
+                proc, grace_s=self._kill_grace_s, term_grace_s=self._term_grace_s)
+            # Popen's text wrappers define locale encoding, strict errors and
+            # universal newlines. Capture raw bytes without reaping the leader,
+            # then apply precisely those text semantics after verified drain.
+            formats = tuple((stream.encoding, stream.errors)
+                            for stream in (proc.stdout, proc.stderr))
+            streams, timed_out, signals_sent, exit_code = owned_worktree._communicate_owned(
+                owner, timeout_s=timeout_s, grace_s=self._kill_grace_s,
+                split_output=True)
+            decoded = []
+            for raw, (encoding, errors) in zip(streams, formats):
+                decoder = io.IncrementalNewlineDecoder(
+                    codecs.getincrementaldecoder(encoding)(errors), translate=True)
+                decoded.append(decoder.decode(raw, final=True))
+            stdout, stderr = decoded
+        except BaseException as exc:
+            # Keep cleanup bounded and exact even on MemoryError, bad encoding
+            # or lost inspection. An unknown group can never yield clean facts.
             try:
-                stdout, stderr = proc.communicate(timeout=self._kill_grace_s)
-            except subprocess.TimeoutExpired:
-                stdout, stderr = "", ""
-                self._close_pipes(proc)
-        except BaseException:
-            # ANY other way out of `communicate` — MemoryError, a KeyboardInterrupt
-            # at the console, an OSError on the pipes — used to propagate with the
-            # child still running. `run()` is the only place holding that pid, so
-            # nothing downstream could ever kill it, and on this host the escapee
-            # is a `taskset -c 0-95` llama-cli with the full OMP stack that owns
-            # the machine until someone finds it by name — which is the operation
-            # INC-20260731 forbids. Terminate what we launched, THEN re-raise.
-            try:
-                self._terminate(proc)
-            except BaseException:  # noqa: BLE001 - never mask the original failure
+                if owner is not None:
+                    owner.abort_known()
+            except BaseException:  # noqa: BLE001 - preserve the original infrastructure fault
                 pass
             self._close_pipes(proc)
             self._cleanup_sandbox_after_failure(proc.pid)
             if scratch is not None:
                 scratch.cleanup()
+            if isinstance(exc, owned_worktree.ProcessEscalationFailed):
+                raise ProcessEscaped(f"owned T0 process group could not be verified: {exc}") from exc
             raise
+        finally:
+            if owner is not None:
+                owner.close()
         if self._sandbox_policy is not None:
             try:
                 sandbox_receipt = process_sandbox.read_receipt(receipt_path)
@@ -686,13 +695,13 @@ class SubprocessRunner:
             argv=argv,
             env=env_pairs,
             cwd=cwd,
-            exit_code=proc.returncode,
+            exit_code=exit_code,
             stdout=stdout or "",
             stderr=stderr or "",
             duration_s=time.monotonic() - started,
             timed_out=timed_out,
-            signalled=signalled,
-            orphans=orphans,
+            signalled=bool(signals_sent),
+            orphans=(),  # The shared owner verified no live group members before reaping.
             sandbox_receipt=sandbox_receipt,
             sandbox_teardown=sandbox_teardown,
         )
@@ -711,10 +720,10 @@ class SubprocessRunner:
 
     @staticmethod
     def _close_pipes(proc: "subprocess.Popen") -> None:
-        """Close the stdio pipes on the paths that never reach `communicate`'s return.
+        """Close pipes even when session construction or pipe setup refuses.
 
-        `communicate` closes them on a normal return; the two abnormal exits here
-        do not, and the test suite runs under `-W error::ResourceWarning`.
+        Normal capture closes them through the owned session. The test suite
+        runs under ``-W error::ResourceWarning`` on exceptional paths too.
         """
         for stream in (proc.stdout, proc.stderr, proc.stdin):
             if stream is not None:
@@ -722,66 +731,6 @@ class SubprocessRunner:
                     stream.close()
                 except OSError:  # pragma: no cover - already closed
                     pass
-
-    def _terminate(self, proc: "subprocess.Popen") -> tuple:
-        """SIGTERM -> SIGKILL -> verify, against the pgid WE created.
-
-        Returns the pids still alive after SIGKILL — the honest orphan list that
-        `StateSafetyEvidence.orphan_processes` carries.
-
-        **Death is proved by REAPING, not by `os.kill(pid, 0)`.** The first
-        version of this method used `os.kill(pid, 0)` alone and the timeout test
-        failed with a live orphan every time: a killed child that has not been
-        waited for is a ZOMBIE, and a zombie answers signal 0 exactly like a
-        running process. Reporting it as an escaped process would have put a
-        phantom orphan on every timed-out capture's state-safety evidence — and
-        `check_state_rollback_teardown_race` FAILs on a non-empty orphan list,
-        so every timeout would have failed a T0 gate for a process that was
-        already dead. `proc.poll()` reaps and returns the status; that is the
-        proof. `_pid_alive` is kept as the secondary check for the case where
-        the child was reaped by someone else.
-        """
-        pid = proc.pid
-        try:
-            pgid = os.getpgid(pid)
-        except ProcessLookupError:
-            return ()
-        for sig, grace in ((signal.SIGTERM, self._term_grace_s),
-                           (signal.SIGKILL, self._kill_grace_s)):
-            try:
-                os.killpg(pgid, sig)
-            except ProcessLookupError:
-                return ()
-            except PermissionError as exc:
-                raise ProcessEscaped(
-                    f"cannot signal process group {pgid} that this runner created: {exc}"
-                ) from exc
-            deadline = time.monotonic() + grace
-            while time.monotonic() < deadline:
-                if proc.poll() is not None or not _pid_alive(pid):
-                    return ()
-                time.sleep(0.05)
-        if proc.poll() is None and _pid_alive(pid):
-            return (str(pid),)
-        return ()
-
-
-def _pid_alive(pid: int) -> bool:
-    """True when `pid` still exists. `os.kill(pid, 0)` sends no signal.
-
-    This is a check on ONE pid this module captured. It is not `pgrep`, it takes
-    no name, and it can match nothing else on a shared host.
-
-    It cannot distinguish a zombie from a running process — see `_terminate`,
-    which is why the primary proof of death there is a reap.
-    """
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
 
 
 class RecordedProcessRunner:
