@@ -17,6 +17,7 @@ from . import test_promotion_targets as fixture_module
 
 
 _REAL_ROCM_CHECK = run.build_recipe.check_rocm_version
+_SYNTHETIC_ACTOR_REASON = "MOCK_ONLY: this unit fixture replaces planners and critics"
 
 
 @pytest.fixture(autouse=True)
@@ -67,7 +68,8 @@ def _inputs(fixture, *, experimental):
     paths = {"--gpu-serving-launch": ("gpu.json", selected.to_dict()),
              "--frozen-prompts": ("prompts.json", manifest.to_dict()),
              "--resolved-campaign": ("campaign.json", resolved.to_dict())}
-    argv = ["--target-id", "selected", "--serving-pairs", "2"]
+    argv = ["--target-id", "selected", "--serving-pairs", "2",
+            "--allow-untested-actor-seats", _SYNTHETIC_ACTOR_REASON]
     for flag, (name, body) in paths.items():
         path = fixture.root / name
         path.write_text(json.dumps(body))
@@ -219,6 +221,8 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
         assert len(calibration_calls) == 1
         assert calibration_calls[0]["samples"] == 2
         result = json.loads((fixture.root / "result/loop-run.json").read_text())
+        assert result["actor_wire_gate"]["status"] == "OVERRIDDEN"
+        assert result["actor_wire_gate"]["override_reason"] == _SYNTHETIC_ACTOR_REASON
         outcome = result["iterations"][0]
         assert outcome["status"] == "kept"
         row = outcome["comparison"]
@@ -414,5 +418,31 @@ def test_gpu_serving_rocm_refusal_precedes_startup(version, tmp_path, monkeypatc
         message = capsys.readouterr().err
         assert f"requires ROCm {run.build_recipe.ROCM_VERSION_REQUIRED}" in message
         assert ("host reports unreadable:" if version is None else f"host reports {version}") in message
+    finally:
+        fixture.doCleanups()
+
+
+def test_gpu_serving_without_fixture_actor_override_refuses_before_execution(capsys):
+    fixture = fixture_module.TheKeepBuildsAProductionCompleteAnchor()
+    fixture.setUp()
+    try:
+        _, _, _, options, _ = _inputs(fixture, experimental=True)
+        position = options.index("--allow-untested-actor-seats")
+        del options[position:position + 2]
+        argv = ["--worktree", str(fixture.repo), "--anchor-build", str(fixture.startup_anchor),
+                "--store", str(fixture.store), *options]
+        with mock.patch.object(run.champion, "verify_startup", return_value=fixture.tip), \
+                mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
+                    n_embd=1536, dominant_quant="Q5_0")), \
+                mock.patch.object(run.gates, "compiles", side_effect=AssertionError("build")), \
+                mock.patch.object(run.claim, "hold", side_effect=AssertionError("GPU claim")), \
+                mock.patch.object(run.claim, "hold_cpu", side_effect=AssertionError("CPU claim")), \
+                mock.patch.object(run.pool, "provision", side_effect=AssertionError("pool startup")), \
+                pytest.raises(SystemExit) as error:
+            run.main(argv)
+        assert error.value.code == 2
+        assert "actor wire gate refused: no passing actor wire record" in capsys.readouterr().err
+        assert (fixture.store / "actor-wire-request.json").is_file()
+        assert not (fixture.store / "loop-run.json").exists()
     finally:
         fixture.doCleanups()
