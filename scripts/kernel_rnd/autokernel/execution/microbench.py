@@ -189,6 +189,7 @@ import json
 import math
 import os
 import re
+import stat
 import subprocess
 import statistics as python_statistics
 import tempfile
@@ -1139,6 +1140,118 @@ RECEIPT_VERIFICATION_REQUIREMENTS = (
 )
 
 
+def _dso_stat(value) -> tuple:
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_size,
+            value.st_mtime_ns, value.st_ctime_ns)
+
+
+def _dso_state(path: Path) -> tuple:
+    named = _dso_stat(path.lstat())
+    target = path.resolve(strict=True)
+    observed = target.stat()
+    if not stat.S_ISREG(observed.st_mode):
+        raise integrity.IntegrityError(f"declared DSO is not a regular file: {path}")
+    return str(target), named, _dso_stat(observed)
+
+
+def _static_elf_without_dependencies(binary: Path) -> bool:
+    """Bounded Linux x86-64 ELF metadata proof for an explicitly empty inventory.
+
+    Read only headers and at most 64 KiB of dynamic entries; never execute the
+    binary or infer actual dlopen/residency. Other formats remain unknown.
+    """
+    with binary.open("rb") as handle:
+        before = _dso_stat(os.fstat(handle.fileno()))
+        header = handle.read(64)
+        def number(data, offset, size):
+            return int.from_bytes(data[offset:offset + size], "little")
+        if len(header) != 64 or header[:7] != b"\x7fELF\x02\x01\x01" \
+                or number(header, 16, 2) not in (2, 3) \
+                or number(header, 18, 2) != 62 or number(header, 20, 4) != 1 \
+                or number(header, 52, 2) != 64 or number(header, 54, 2) != 56:
+            return False
+        offset, count = number(header, 32, 8), number(header, 56, 2)
+        if not 1 <= count <= 1024 or offset < 64 or offset + count * 56 > before[3]:
+            return False
+        load = False
+        for index in range(count):
+            handle.seek(offset + index * 56)
+            entry = handle.read(56)
+            kind = number(entry, 0, 4)
+            start, size = number(entry, 8, 8), number(entry, 32, 8)
+            if len(entry) != 56 or start + size > before[3] or kind == 3:  # PT_INTERP
+                return False
+            load |= kind == 1  # PT_LOAD
+            if kind == 2:  # PT_DYNAMIC: DT_NEEDED would make emptiness unknown.
+                if not 16 <= size <= 65536 or size % 16:
+                    return False
+                handle.seek(start)
+                terminated = False
+                for _ in range(size // 16):
+                    dynamic = handle.read(16)
+                    tag = number(dynamic, 0, 8)
+                    if len(dynamic) != 16 or tag == 1:
+                        return False
+                    if tag == 0:
+                        terminated = True
+                        break
+                if not terminated:
+                    return False
+        return (load and before == _dso_stat(os.fstat(handle.fileno()))
+                and before == _dso_stat(binary.stat()))
+
+
+def _capture_declared_dsos(binary: str, library_path: str) -> tuple:
+    """Stable declared lib*.so* identities; no claim about mapped libraries."""
+    root = Path(library_path)
+    if not root.is_dir():
+        raise integrity.IntegrityError(f"dynamic DSO inventory unknown/missing: {root}")
+    root_state = (_dso_stat(root.lstat()), str(root.resolve(strict=True)), _dso_stat(root.stat()))
+    paths = sorted(root.glob("lib*.so*"), key=lambda path: path.name)
+    if not paths:
+        if _static_elf_without_dependencies(Path(binary)) and not list(root.glob("lib*.so*")) \
+                and root_state == (_dso_stat(root.lstat()), str(root.resolve(strict=True)),
+                                   _dso_stat(root.stat())):
+            return ()
+        raise integrity.IntegrityError(
+            f"dynamic DSO inventory unknown/missing: {root}; no static ELF proof")
+    states, identities, digests = {}, [], {}
+    for path in paths:
+        observed = _dso_state(path)
+        target, _named, target_stat = observed
+        key = (target, target_stat)
+        if key not in digests:
+            flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
+            with os.fdopen(os.open(target, flags), "rb") as handle:
+                if _dso_stat(os.fstat(handle.fileno())) != target_stat:
+                    raise integrity.IntegrityError(f"DSO changed before hashing: {path}")
+                digest = hashlib.sha256()
+                for block in iter(lambda: handle.read(1 << 20), b""):
+                    digest.update(block)
+                if _dso_stat(os.fstat(handle.fileno())) != target_stat:
+                    raise integrity.IntegrityError(f"DSO changed during hashing: {path}")
+                digests[key] = digest.hexdigest()
+        if _dso_state(path) != observed:
+            raise integrity.IntegrityError(f"DSO path/target changed during hashing: {path}")
+        states[path.name] = observed
+        identities.append((path.name, target, digests[key]))
+    final = sorted(root.glob("lib*.so*"), key=lambda path: path.name)
+    if root_state != (_dso_stat(root.lstat()), str(root.resolve(strict=True)),
+                       _dso_stat(root.stat())) \
+            or [path.name for path in final] != [path.name for path in paths] \
+            or any(_dso_state(path) != states[path.name] for path in final):
+        raise integrity.IntegrityError("declared DSO inventory changed during capture")
+    return tuple(identities)
+
+
+def _decode_dso_identities(value):
+    if value is None:
+        return None
+    if not isinstance(value, (tuple, list)):
+        raise ValueError("dso_identities must be an ordered list")
+    return tuple(tuple(row) if isinstance(row, (tuple, list)) else row for row in value)
+
+
 @dataclass(frozen=True)
 class ExecutionReceipt:
     """Proof of which argv actually ran, in a form that can be re-derived.
@@ -1182,6 +1295,9 @@ class ExecutionReceipt:
     source_root: str
     library_path: str
     resolved_at: str
+    # Declared library directory only, NOT a mapped-library/residency warrant.
+    # None preserves legacy UNKNOWN; () requires a fresh static ELF proof.
+    dso_identities: Optional[tuple[tuple[str, str, str], ...]] = None
 
     def __post_init__(self) -> None:
         for name in ("runner_id", "recipe_id", "registry_id", "constructor_id",
@@ -1204,6 +1320,22 @@ class ExecutionReceipt:
                 or self.binary_size < 0:
             raise ValueError("receipt.binary_size must be a non-negative int")
 
+        if self.dso_identities is not None:
+            if not isinstance(self.dso_identities, tuple):
+                raise ValueError("receipt.dso_identities must be a tuple or legacy unknown")
+            names = []
+            for row in self.dso_identities:
+                if not isinstance(row, tuple) or len(row) != 3 \
+                        or not all(isinstance(item, str) for item in row):
+                    raise ValueError("receipt DSO identity must be (name, resolved target, sha256)")
+                name, target, digest = row
+                if Path(name).name != name or not Path(name).match("lib*.so*") \
+                        or not Path(target).is_absolute() or not _SHA256_RE.fullmatch(digest):
+                    raise ValueError("receipt DSO name/target/digest is malformed")
+                names.append(name)
+            if names != sorted(set(names)):
+                raise ValueError("receipt DSO inventory must have sorted unique names")
+
     @property
     def recipe_receipt(self) -> api.RecipeReceipt:
         """The three-field form that drops into `api.WindowAttestations.recipe`."""
@@ -1215,7 +1347,7 @@ class ExecutionReceipt:
         return self.recipe_receipt.render()
 
     def to_dict(self) -> dict:
-        return {
+        body = {
             "runner_id": self.runner_id, "recipe_id": self.recipe_id,
             "registry_id": self.registry_id, "arm": self.arm,
             "constructor_id": self.constructor_id,
@@ -1228,6 +1360,10 @@ class ExecutionReceipt:
             "binary_size": self.binary_size, "source_root": self.source_root,
             "library_path": self.library_path, "resolved_at": self.resolved_at,
         }
+
+        if self.dso_identities is not None:
+            body["dso_identities"] = [list(row) for row in self.dso_identities]
+        return body
 
 
 def _env_hash(env: Mapping) -> str:
@@ -1279,6 +1415,8 @@ def build_receipt(command: recipes.ConstructedCommand, *, env: Mapping,
         source_root=command.binding.source_root,
         library_path=command.binding.library_path,
         resolved_at=now(),
+        dso_identities=_capture_declared_dsos(command.binding.binary,
+                                             command.binding.library_path),
     )
 
 
@@ -3030,7 +3168,8 @@ def replay_completed_block(
                 binary_size=receipt_raw["binary_size"],
                 source_root=receipt_raw["source_root"],
                 library_path=receipt_raw["library_path"],
-                resolved_at=receipt_raw["resolved_at"])
+                resolved_at=receipt_raw["resolved_at"],
+                dso_identities=_decode_dso_identities(receipt_raw.get("dso_identities")))
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(
                 f"checkpoint block {expected.block_index} invocation {position} "
@@ -4001,6 +4140,15 @@ class MicrobenchRunner:
                 f"{digest[:12]}. A rebuild mid-campaign makes every earlier block a "
                 f"measurement of a different binary under one receipt.")
 
+        if receipt.dso_identities is None:
+            raise SpawnFailure("declared DSO inventory is legacy UNKNOWN; cannot attest a fresh spawn")
+        try:
+            identities = _capture_declared_dsos(command.binding.binary, command.binding.library_path)
+        except (OSError, integrity.IntegrityError) as exc:
+            raise SpawnFailure(f"the {arm} declared DSO inventory could not be verified {when}: {exc}") from exc
+        if identities != receipt.dso_identities:
+            raise SpawnFailure(f"the {arm} declared DSO inventory changed {when}")
+
     # -- the run -----------------------------------------------------------
 
     def run(
@@ -4027,6 +4175,11 @@ class MicrobenchRunner:
                 "completed_prefix must contain only replay_completed_block results")
         if on_block_completed is not None and not callable(on_block_completed):
             raise TypeError("on_block_completed must be callable or None")
+        for recovered in completed_prefix:
+            if any(invocation["receipt"].get("dso_identities") is None
+                   for invocation in recovered.raw["invocations"]):
+                raise PairingViolation("checkpoint declared DSO inventory is legacy UNKNOWN; "
+                                       "cannot qualify a fresh continuation")
         if plan.segment == statistics.SEGMENT_EXTENSION and self._run_ledger is None:
             raise RunLedgerRequired(
                 "an extension round requires a durable CompletedRunLedger; otherwise the "
@@ -4230,6 +4383,12 @@ class MicrobenchRunner:
                 raise ScheduleMismatch(
                     f"checkpoint prefix block {index} no longer matches the exact "
                     "derived plan/order slot")
+
+            for invocation in recovered.raw["invocations"]:
+                observed = _decode_dso_identities(invocation["receipt"].get("dso_identities"))
+                current = receipts[recovered.plan.unit_id][invocation["arm"]].dso_identities
+                if observed != current:
+                    raise PairingViolation("checkpoint declared DSO inventory differs from current binding")
 
         for block_plan in plans[len(completed_prefix):]:
             record = self._run_block(plan, block_plan, commands, envs, receipts,

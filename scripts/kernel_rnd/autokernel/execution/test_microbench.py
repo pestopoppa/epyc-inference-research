@@ -133,6 +133,7 @@ class BindingFixture:
         binary = bindir / "llama-bench"
         binary.write_bytes(payload)
         binary.chmod(0o755)
+        (bindir / "libggml-fixture.so").write_bytes(payload + b"-library")
         return recipes.ToolBinding(binary=str(binary), source_root=str(root),
                                    library_path=str(bindir))
 
@@ -1361,6 +1362,56 @@ class TestRunnerEndToEnd(unittest.TestCase):
         self.assertEqual(len(spawner.calls), 4)  # two blocks, two arms; prefix not replayed
         self.assertEqual(
             resumed.paired_blocks()[:2], first.paired_blocks()[:2])
+
+    def test_legacy_receipts_remain_readable_but_cannot_authorize_continuation(self):
+        plan = make_plan(self.binding, blocks=2)
+        first = self._runner().run(plan)
+        planned = M.plan_blocks(plan.schedule(), count=2, pairs=plan.pairs_per_block,
+                                unit_ids=plan.unit_ids, stratum=plan.stratum)
+        raw = first.blocks[0].to_dict()
+        for invocation in raw["invocations"]:
+            invocation["receipt"].pop("dso_identities")
+        recovered = M.replay_completed_block(planned[0], raw)
+        self.assertEqual(recovered.raw, raw)  # decoding does not backfill evidence
+        receipt = first.blocks[0].invocations[0].receipt
+        legacy = replace(receipt, dso_identities=None).to_dict()
+        self.assertNotIn("dso_identities", legacy)
+        self.assertEqual(legacy, {k: v for k, v in receipt.to_dict().items()
+                                  if k != "dso_identities"})
+        spawner = arm_aware_spawner(candidate_stdout=self.candidate_out,
+                                    anchor_stdout=self.anchor_out)
+        with self.assertRaisesRegex(M.PairingViolation, "legacy UNKNOWN"):
+            self._runner(spawner=spawner).run(plan, completed_prefix=(recovered,))
+        self.assertEqual(spawner.calls, [])
+
+    def test_known_dso_receipt_round_trips_and_malformed_inventories_are_rejected(self):
+        plan = make_plan(self.binding, blocks=1)
+        run = self._runner().run(plan)
+        receipt = run.blocks[0].invocations[0].receipt
+        identities = receipt.dso_identities
+        self.assertIsNotNone(identities)
+        self.assertTrue(identities)
+        self.assertEqual(receipt.to_dict()["dso_identities"], [list(row) for row in identities])
+        for invalid in ((identities[0], identities[0]), (("other", "/lib/x", "a" * 64),),
+                        (("libx.so", "relative", "a" * 64),), (("libx.so", "/x", "bad"),)):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                replace(receipt, dso_identities=invalid)
+        static = replace(receipt, dso_identities=())
+        self.assertEqual(static.to_dict()["dso_identities"], [])
+
+    def test_changed_dso_checkpoint_cannot_authorize_a_fresh_continuation(self):
+        plan = make_plan(self.binding, blocks=2)
+        first = self._runner().run(plan)
+        planned = M.plan_blocks(plan.schedule(), count=2, pairs=plan.pairs_per_block,
+                                unit_ids=plan.unit_ids, stratum=plan.stratum)
+        recovered = M.replay_completed_block(planned[0], first.blocks[0].to_dict())
+        library = Path(self.binding.candidate.library_path) / "libggml-fixture.so"
+        library.write_bytes(b"rebuilt after checkpoint")
+        spawner = arm_aware_spawner(candidate_stdout=self.candidate_out,
+                                    anchor_stdout=self.anchor_out)
+        with self.assertRaisesRegex(M.PairingViolation, "DSO inventory differs"):
+            self._runner(spawner=spawner).run(plan, completed_prefix=(recovered,))
+        self.assertEqual(spawner.calls, [])
 
     def test_fully_completed_prefix_is_idempotent_and_spawns_nothing(self):
         plan = make_plan(self.binding, blocks=3)
@@ -2689,6 +2740,114 @@ class TestAFailureIsDurable(unittest.TestCase):
                                              anchor_stdout=out)).run(
             make_plan(binding, blocks=2))
         self.assertTrue(run.complete, run.refusals)
+
+
+class TestDeclaredLibrariesAreReattested(unittest.TestCase):
+    def test_static_elf_is_explicitly_known_empty_but_dynamic_or_unproven_is_unknown(self):
+        import struct
+        binding = BindingFixture(self)
+        binary = Path(binding.candidate.binary)
+        root = Path(binding.candidate.library_path)
+        (root / "libggml-fixture.so").unlink()
+        with self.assertRaisesRegex(M.integrity.IntegrityError, "unknown/missing"):
+            M._capture_declared_dsos(str(binary), str(root))
+        header = struct.pack("<16sHHIQQQIHHHHHH", b"\x7fELF\x02\x01\x01" + b"\0" * 9,
+                             2, 62, 1, 0, 64, 0, 0, 64, 56, 1, 0, 0, 0)
+        load = struct.pack("<IIQQQQQQ", 1, 5, 0, 0, 0, 120, 120, 4096)
+        binary.write_bytes(header + load)
+        self.assertEqual(M._capture_declared_dsos(str(binary), str(root)), ())
+        # A dependency in PT_DYNAMIC also refuses, even without an interpreter.
+        two = bytearray(header)
+        two[56:58] = (2).to_bytes(2, "little")
+        dynamic = struct.pack("<IIQQQQQQ", 2, 4, 176, 0, 0, 32, 32, 8)
+        binary.write_bytes(two + load + dynamic + struct.pack("<QQQQ", 1, 0, 0, 0))
+        with self.assertRaisesRegex(M.integrity.IntegrityError, "unknown/missing"):
+            M._capture_declared_dsos(str(binary), str(root))
+        # The same bounded ELF with PT_INTERP is dynamic, not a known-empty case.
+        binary.write_bytes(header + struct.pack("<IIQQQQQQ", 3, 4, 0, 0, 0, 1, 1, 1))
+        with self.assertRaisesRegex(M.integrity.IntegrityError, "unknown/missing"):
+            M._capture_declared_dsos(str(binary), str(root))
+
+    def test_capture_streams_and_refuses_inventory_turnover_during_hashing(self):
+        from unittest import mock
+        binding = BindingFixture(self)
+        root = Path(binding.candidate.library_path)
+        library = root / "libggml-fixture.so"
+        library.write_bytes(b"a" * ((1 << 20) + 13))
+        original = M.hashlib.sha256
+        for change in ("stable", "bytes", "add", "retarget"):
+            with self.subTest(change=change):
+                added = root / "libadded.so"
+                added.unlink(missing_ok=True)
+                if library.is_symlink():
+                    library.unlink()
+                library.write_bytes(b"a" * ((1 << 20) + 13))
+                updates = []
+                class Digest:
+                    def __init__(self):
+                        self.inner = original()
+                    def update(self, chunk):
+                        updates.append(len(chunk))
+                        self.inner.update(chunk)
+                        if len(updates) == 1:
+                            if change == "bytes":
+                                library.write_bytes(b"rebuilt")
+                            elif change == "add":
+                                added.write_bytes(b"new")
+                            elif change == "retarget":
+                                target = root / "target"
+                                target.write_bytes(library.read_bytes())
+                                library.unlink()
+                                library.symlink_to(target)
+                    def hexdigest(self):
+                        return self.inner.hexdigest()
+                with mock.patch.object(M.hashlib, "sha256", Digest):
+                    if change == "stable":
+                        result = M._capture_declared_dsos(binding.candidate.binary, str(root))
+                        self.assertEqual(result[0][2], original(library.read_bytes()).hexdigest())
+                    else:
+                        with self.assertRaises(M.integrity.IntegrityError):
+                            M._capture_declared_dsos(binding.candidate.binary, str(root))
+                self.assertGreaterEqual(len(updates), 1)
+                self.assertLessEqual(max(updates), 1 << 20)
+
+    def test_a_changed_declared_library_inventory_stops_before_the_next_spawn(self):
+        for change in ("bytes", "add", "remove", "symlink-target"):
+            with self.subTest(change=change):
+                binding = BindingFixture(self)
+                library = Path(binding.candidate.library_path) / "libggml-fixture.so"
+                if change == "symlink-target":
+                    library.unlink()
+                    for name in ("target-a", "target-b"):
+                        (library.parent / name).write_bytes(b"identical target bytes")
+                    library.symlink_to("target-a")
+
+                def mutate():
+                    if change == "bytes":
+                        library.write_bytes(b"rebuilt library")
+                    elif change == "add":
+                        (library.parent / "libadded.so").write_bytes(b"new declared library")
+                    elif change == "remove":
+                        library.unlink()
+                    else:
+                        library.unlink()
+                        library.symlink_to("target-b")
+
+                class MutatingSpawner(M.RecordedSpawner):
+                    def run(self, *args, **kwargs):
+                        result = super().run(*args, **kwargs)
+                        if len(self.calls) == 1:
+                            mutate()
+                        return result
+
+                output = read_fixture(CANONICAL)
+                spawner = MutatingSpawner({M.ARM_CANDIDATE: output, M.ARM_ANCHOR: output})
+                result = M.MicrobenchRunner(
+                    claim=StubClaim(), policy=HEALTHY_POLICY, spawner=spawner,
+                    host_state=HostStateStub([healthy_state()])).run(make_plan(binding, blocks=2))
+                self.assertFalse(result.complete, change)
+                self.assertTrue(any("DSO" in reason for reason in result.refusals), result.refusals)
+                self.assertLess(len(spawner.calls), 4)
 
 
 class TestTheBinaryIsRedigestedBeforeEveryInvocation(unittest.TestCase):
