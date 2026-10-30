@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+from importlib import util as importlib_util
 import json
 import os
 from pathlib import Path
@@ -46,6 +47,18 @@ DEVICE_LOCK = Path("/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock")
 VRAM_SYSFS = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 KFD_PROC = Path("/sys/class/kfd/kfd/proc")
 CPU_LIST = "184-191"
+
+# Import only the dependency-free unit leaf; the benchmark script remains standalone.
+_FLOOR_UNITS_PATH = (Path(__file__).resolve().parents[1] /
+                     "kernel_rnd/autokernel/loop/floor_units.py")
+_FLOOR_UNITS_SPEC = importlib_util.spec_from_file_location("_aa_floor_units", _FLOOR_UNITS_PATH)
+if _FLOOR_UNITS_SPEC is None or _FLOOR_UNITS_SPEC.loader is None:
+    raise RuntimeError(f"cannot load floor-unit vocabulary: {_FLOOR_UNITS_PATH}")
+_FLOOR_UNITS = importlib_util.module_from_spec(_FLOOR_UNITS_SPEC)
+_FLOOR_UNITS_SPEC.loader.exec_module(_FLOOR_UNITS)
+
+# Each recorded sample is one fresh llama-bench subprocess invocation.
+SAMPLE_UNIT = _FLOOR_UNITS.UNIT_PROCESS
 
 
 def read_vram() -> int:
@@ -241,6 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     payload = {
         "schema": "epyc.autokernel.aa_noise_floor.v1",
         "authority": "instrument_characterisation_not_a_claim",
+        "unit": SAMPLE_UNIT,
         "binary": str(args.binary), "model": str(args.model),
         "pairs": args.pairs, "reps_per_invocation": args.reps, "elapsed_s": round(time.time() - started, 1),
         "results": results, "gpu_residency": proof,

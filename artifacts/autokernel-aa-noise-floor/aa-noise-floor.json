@@ -164,5 +164,6 @@
     "peak_vram_bytes": 1880965120,
     "peak_kfd_processes": 1,
     "baseline_vram_bytes": 13094912
-  }
+  },
+  "unit": "process"
 }
