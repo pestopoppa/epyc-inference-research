@@ -4472,7 +4472,7 @@ def main(argv: list[str] | None = None) -> int:
             return same_code_tripwire.inspect(
                 args.store, compared, anchor_build=anchor_build[0],
                 candidate_build=worker.build_dir,
-                library=("libggml-cpu.so" if cpu_launch else "libggml-hip.so"),
+                library=same_code_tripwire.library_for(recipe, direct_launch),
                 measurement_epoch=measurement_epoch,
                 launch_identity={"build_recipe": recipe.to_dict(),
                                  "serving_launch": serving_launch,

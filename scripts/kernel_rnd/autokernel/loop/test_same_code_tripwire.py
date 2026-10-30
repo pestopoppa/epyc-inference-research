@@ -57,6 +57,16 @@ class Comparison:
 
 
 class Tripwire(unittest.TestCase):
+    def test_plain_cpu_bench_uses_cpu_code_manifest(self):
+        recipe = type("Recipe", (), {"cmake_defines": lambda self: {"GGML_HIP": "OFF"}})()
+        self.assertEqual(st.library_for(recipe), "libggml-cpu.so")
+        self.assertEqual(st.library_for(recipe, type("Launch", (), {"backend": "gpu"})()),
+                         "libggml-hip.so")
+        recipe.cmake_defines = lambda: {"GGML_HIP": "ON"}
+        self.assertEqual(st.library_for(recipe), "libggml-hip.so")
+        self.assertEqual(st.library_for(recipe, type("Launch", (), {"backend": "cpu"})()),
+                         "libggml-cpu.so")
+
     def test_partial_source_imports_have_no_canonical_dependency(self):
         root = os.environ.get('R24_PARTIAL_SOURCE_ROOT')
         if root is None:

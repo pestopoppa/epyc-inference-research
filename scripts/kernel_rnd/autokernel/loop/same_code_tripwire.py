@@ -18,6 +18,13 @@ from . import loop
 SCHEMA = "epyc.autokernel.same_code_tripwire.v1"
 
 
+def library_for(recipe: Any, launch: Any = None) -> str:
+    """Select the measured backend for both direct serving and plain bench arms."""
+    cpu = (launch.backend == "cpu" if launch is not None else
+           str(dict(recipe.cmake_defines()).get("GGML_HIP", "ON")).upper() == "OFF")
+    return "libggml-cpu.so" if cpu else "libggml-hip.so"
+
+
 class ObservedComparison:
     """Carry tripwire evidence without changing the native comparison's decisions."""
 
