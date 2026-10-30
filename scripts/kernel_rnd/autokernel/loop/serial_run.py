@@ -1822,6 +1822,31 @@ def _required_source_validation(state, targets):
     commit = source["current_anchor"]["commit"]
     if receipts[-1].kept_commit != commit:
         raise SerialRefused("required validation lineage is not the current source tip")
+    do_not_fold_screens = [surface_fold.screen_do_not_fold(
+        Path(receipt.repo), receipt.parent_commit, receipt.kept_commit) for receipt in receipts]
+    screened_keeps = list(zip(receipts, do_not_fold_screens, strict=True))
+    refused_screens = [(receipt, screen) for receipt, screen in screened_keeps
+                       if screen["disposition"] == "failed"]
+    unknown_screens = [screen for _, screen in screened_keeps
+                       if screen["disposition"] == "pending"]
+    if refused_screens:
+        refused_rows = [{
+            "selected_id": receipt.selected_target["selected_id"],
+            "subject": f"do_not_fold:{receipt.keep_id}:{screen['protected_commit']}",
+            "reference": None, "disposition": "failed",
+            "intended_target": receipt is receipts[-1], "keep_id": receipt.keep_id,
+            "reason": screen["reason"]}
+            for receipt, screen in refused_screens]
+        body = {"schema": "epyc.autokernel.required_source_validation.v1",
+                "source_reference": dict(source_reference), "source_commit": commit,
+                "required_target_ids": [row["selected_id"] for row in refused_rows],
+                "intended_target_id": receipts[-1].selected_target["selected_id"],
+                "rows": refused_rows,
+                "missing_target_ids": [], "disposition": "failed",
+                "loo_rows": [], "loo_disposition": "pending",
+                "do_not_fold_screens": do_not_fold_screens}
+        body["aggregate_digest"] = _digest(body)
+        return body
     authored = {receipt.selected_target["selected_id"] for receipt in receipts}
     intended = receipts[-1].selected_target["selected_id"]
     required = []
@@ -1876,7 +1901,7 @@ def _required_source_validation(state, targets):
             refused_after = identity["selected_id"]
     dispositions = {row["disposition"] for row in rows}
     disposition = ("failed" if "failed" in dispositions else
-                   "pending" if missing or "pending" in dispositions else "passed")
+                   "pending" if missing or "pending" in dispositions or unknown_screens else "passed")
     loo_rows = []
     for row in rows:
         entry = state.get("source_loo", {}).get(row["subject"])
@@ -1900,7 +1925,8 @@ def _required_source_validation(state, targets):
                                     for _, _, identity in required],
             "intended_target_id": intended, "rows": rows,
             "missing_target_ids": missing, "disposition": disposition,
-            "loo_rows": loo_rows, "loo_disposition": loo_disposition}
+            "loo_rows": loo_rows, "loo_disposition": loo_disposition,
+            "do_not_fold_screens": do_not_fold_screens}
     if priority_reference is not None:
         body["priority_reference"] = dict(priority_reference)
     body["aggregate_digest"] = _digest(body)
@@ -1911,8 +1937,11 @@ def _refresh_required_source_validation(state, targets):
     aggregate = _required_source_validation(state, targets)
     state["required_source_validation"] = aggregate
     if isinstance(aggregate, dict) and aggregate.get("disposition") == "failed":
-        failed = [row.get("selected_id", "unknown") for row in aggregate.get("rows", ())
-                  if row.get("disposition") == "failed"]
+        failed = [
+            f"{row.get('selected_id', 'unknown')} ({row['subject']})"
+            if isinstance(row, dict) and row.get("subject") else
+            str(row.get("selected_id", "unknown"))
+            for row in aggregate.get("rows", ()) if row.get("disposition") == "failed"]
         detail = ", ".join(failed) if failed else "unknown target"
         raise SerialRefused(
             f"required source validation failed for current source tip: {detail}")

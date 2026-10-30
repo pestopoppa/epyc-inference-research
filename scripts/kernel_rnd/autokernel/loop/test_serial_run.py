@@ -1494,6 +1494,82 @@ def test_same_prior_owner_routes_required_source_validation(tmp_path):
     assert sr.option(child, "--source-anchor-sha256") == prior["sha256"]
 
 
+def test_do_not_fold_screen_is_range_scoped_and_unknown_fails_closed(tmp_path):
+    from ..evaluator import footprint
+    from . import surface_fold
+
+    parent, candidate = "a" * 40, "b" * 40
+    protected = surface_fold.DO_NOT_FOLD_COMMIT
+    def run_screen(codes):
+        projected = mock.Mock()
+        projected.env_knobs = [mock.Mock(to_dict=mock.Mock(return_value={
+            "name": "GGML_SCALE_SPLIT", "read_site": "ggml/src/ggml-cpu/ggml-cpu.c",
+            "default_before": "UNKNOWN", "default_after": "ON"}))]
+        projected.sha256.return_value = "c" * 64
+        git_calls = [mock.Mock(returncode=code) for code in codes]
+        with mock.patch.object(surface_fold, "_commit",
+                               side_effect=lambda _repo, value, _label: value), \
+                mock.patch.object(surface_fold.subprocess, "run", side_effect=git_calls) as git, \
+                mock.patch.object(surface_fold, "_git", side_effect=[
+                    "d" * 40, ("diff --git a/ggml/src/ggml-cpu/ggml-cpu.c "
+                              + "b/ggml/src/ggml-cpu/ggml-cpu.c\n"), "e" * 40]), \
+                mock.patch.object(footprint, "produce_patch_footprint",
+                                  return_value=projected) as producer:
+            result = surface_fold.screen_do_not_fold(tmp_path, parent, candidate)
+        assert git.call_count == 2
+        assert all(call.args[0][5] == protected for call in git.call_args_list)
+        if result["disposition"] == "failed":
+            producer.assert_called_once()
+            assert result["env_knobs"][0]["default_after"] == "ON"
+        return result
+
+    introduced = run_screen([1, 0])
+    assert introduced["disposition"] == "failed"
+    assert introduced["protected_in_parent"] is False
+    assert introduced["protected_in_candidate"] is True
+
+    inherited = run_screen([0, 0])
+    assert inherited["disposition"] == "passed"
+    assert inherited["reason"] == "protected commit is already in the baseline"
+
+    unknown = run_screen([128, 0])
+    assert unknown["disposition"] == "pending"
+    assert unknown["protected_in_parent"] is None
+
+
+def test_required_source_validation_persists_do_not_fold_refusal():
+    targets = [["--target-id", "prod"], ["--target-id", "author"]]
+    identities = {
+        "prod": {"selected_id": "prod", "original_target": {"enrolled_as": ["production"]}},
+        "author": {"selected_id": "author", "original_target": {"enrolled_as": ["seed"]}},
+    }
+    source_reference = {"path": "/source", "sha256": "a" * 64}
+    source = {"current_anchor": {"commit": "3" * 40},
+              "source_lineage_keeps": [{"locator": "author"}]}
+    receipt = mock.Mock(selected_target=identities["author"], repo="/source-repo",
+                        parent_commit="2" * 40, kept_commit="3" * 40, keep_id="keep-1")
+    screen = {"schema": "epyc.autokernel.do_not_fold_screen.v1",
+              "protected_commit": "2516c9807b8a92d472c8e75a0a1ce8558d2e34a7",
+              "disposition": "failed",
+              "reason": "fold range introduces ratified DO-NOT-FOLD commit"}
+    state = {"source_results": {}, "last_results": {}, "source_validations": {},
+             "source_loo": {}}
+    with mock.patch.object(sr, "_source_result", return_value=source_reference), \
+            mock.patch.object(sr, "load_completed", return_value=(source, "a" * 64)), \
+            mock.patch.object(run.surface_fold, "reopen_reference", return_value=receipt), \
+            mock.patch.object(run.surface_fold, "screen_do_not_fold", return_value=screen):
+        aggregate = sr._required_source_validation(state, targets)
+
+    assert aggregate["disposition"] == "failed"
+    assert aggregate["rows"][0]["subject"] == (
+        "do_not_fold:keep-1:" + screen["protected_commit"])
+    state["required_source_validation"] = None
+    with mock.patch.object(sr, "_required_source_validation", return_value=aggregate), \
+            pytest.raises(sr.SerialRefused, match="required source validation failed.*author.*keep-1"):
+        sr._refresh_required_source_validation(state, targets)
+    assert state["required_source_validation"] is aggregate
+
+
 def test_required_source_validation_uses_production_and_prior_keep_authors():
     targets = [["--target-id", value] for value in ("a", "b", "prod", "optional")]
     identities = {value: {"selected_id": value,
@@ -1502,8 +1578,10 @@ def test_required_source_validation_uses_production_and_prior_keep_authors():
     source_reference = {"path": "/source", "sha256": "a" * 64}
     source = {"current_anchor": {"commit": "3" * 40},
               "source_lineage_keeps": [{"locator": "a"}, {"locator": "b"}]}
-    receipts = [mock.Mock(selected_target=identities["a"], kept_commit="2" * 40),
-                mock.Mock(selected_target=identities["b"], kept_commit="3" * 40)]
+    receipts = [mock.Mock(selected_target=identities["a"], repo="/source-repo",
+                          parent_commit="1" * 40, kept_commit="2" * 40),
+                mock.Mock(selected_target=identities["b"], repo="/source-repo",
+                          parent_commit="2" * 40, kept_commit="3" * 40)]
     rows = {}
     validations = {}
     for value, intended in (("a", False), ("prod", False)):
@@ -1522,6 +1600,8 @@ def test_required_source_validation_uses_production_and_prior_keep_authors():
                 side_effect=lambda _state, argv, _index, _commit:
                     "subject-" + sr.option(argv, "--target-id")), \
             mock.patch.object(run.surface_fold, "reopen_reference", side_effect=receipts), \
+            mock.patch.object(run.surface_fold, "screen_do_not_fold",
+                              return_value={"disposition": "passed"}), \
             mock.patch.object(run.surface_validation, "reopen_reference",
                 side_effect=lambda reference: rows[reference["locator"]]):
         aggregate = sr._required_source_validation(state, targets)
@@ -1563,7 +1643,8 @@ def test_required_source_validation_stops_rows_after_first_refusal():
     source_reference = {"path": "/source", "sha256": "a" * 64}
     source = {"current_anchor": {"commit": "3" * 40},
               "source_lineage_keeps": [{"locator": "author"}]}
-    receipt = mock.Mock(selected_target=identities["author"], kept_commit="3" * 40)
+    receipt = mock.Mock(selected_target=identities["author"], repo="/source-repo",
+                        parent_commit="2" * 40, kept_commit="3" * 40)
     failed_ref = {"locator": "first", "sha256": "b" * 64}
     failed_row = {"source_commit": "3" * 40, "target": identities["first"],
                   "intended_target": False, "disposition": "failed"}
@@ -1578,6 +1659,8 @@ def test_required_source_validation_stops_rows_after_first_refusal():
                 side_effect=lambda _state, argv, _index, _commit:
                     "subject-" + sr.option(argv, "--target-id")), \
             mock.patch.object(run.surface_fold, "reopen_reference", return_value=receipt), \
+            mock.patch.object(run.surface_fold, "screen_do_not_fold",
+                              return_value={"disposition": "passed"}), \
             mock.patch.object(run.surface_validation, "reopen_reference",
                               return_value=failed_row):
         aggregate = sr._required_source_validation(state, targets)
