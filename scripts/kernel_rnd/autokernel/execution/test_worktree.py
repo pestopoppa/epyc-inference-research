@@ -784,9 +784,49 @@ class TestTeardownProvesImmutability(_TmpMixin):
         self.assertRegex(receipt.content_hash, r"^[0-9a-f]{64}$")
 
 
+class _ReadOnlyProductionAnchorAssertions:
+    def _assert_readonly_production_anchor(self, repo):
+        before = W.fingerprint_tree(repo)
+        self.assertIsNotNone(before.symbolic_ref, "frozen tree is detached")
+        # A same-named tag makes Git qualify the short name with heads/.
+        # Inspect the canonical branch namespace, not that presentation choice.
+        canonical = repo._git("symbolic-ref", "--quiet", "HEAD").strip()
+        self.assertTrue(
+            canonical.startswith("refs/heads/production-consolidated-"),
+            f"frozen tree is on {canonical!r}, not the production contract")
+        anchor = W.resolve_anchor(repo, canonical.removeprefix("refs/heads/"))
+        after = W.fingerprint_tree(repo)
+
+        proof = W.prove_unchanged(before, after)
+        self.assertTrue(proof.holds, proof.differences)
+        self.assertEqual(before.status_porcelain, after.status_porcelain)
+        self.assertEqual(anchor.commit, before.head_commit)
+        return anchor
+
+
+class TestReadOnlyProductionRefContract(_ReadOnlyProductionAnchorAssertions, _TmpMixin):
+    def test_same_named_branch_and_tag_remain_an_unambiguous_readonly_anchor(self):
+        branch = "production-consolidated-fixture"
+        head = _make_repo(self.tmp, branch=branch)
+        _git("config", "core.warnAmbiguousRefs", "true", cwd=self.tmp)
+        _git("tag", "-a", branch, "-m", "synthetic fixture", cwd=self.tmp)
+        repo = W.GitRepo(self.tmp)
+        self.assertEqual(repo.current_branch(), "heads/" + branch)
+        self.assertEqual(self._assert_readonly_production_anchor(repo).commit, head)
+
+    def test_a_production_named_tag_does_not_authorize_the_wrong_branch(self):
+        _make_repo(self.tmp, branch="ak/not-production")
+        _git("tag", "production-consolidated-fixture", cwd=self.tmp)
+        repo = W.GitRepo(self.tmp)
+        before = W.fingerprint_tree(repo)
+        with self.assertRaisesRegex(AssertionError, "not the production contract"):
+            self._assert_readonly_production_anchor(repo)
+        self.assertTrue(W.prove_unchanged(before, W.fingerprint_tree(repo)).holds)
+
+
 @unittest.skipUnless(os.path.isdir("/mnt/raid0/llm/llama.cpp/.git"),
                      "the frozen llama.cpp tree is not present on this host")
-class TestReadingFrozenProductionChangesNothing(unittest.TestCase):
+class TestReadingFrozenProductionChangesNothing(_ReadOnlyProductionAnchorAssertions, unittest.TestCase):
     """The one test that touches a frozen tree, and it only READS.
 
     Anchoring requires addressing the frozen clone, so "reading it is safe" must
@@ -805,18 +845,7 @@ class TestReadingFrozenProductionChangesNothing(unittest.TestCase):
         stays asserted is that reading changed nothing.
         """
         repo = W.GitRepo("/mnt/raid0/llm/llama.cpp")
-        before = W.fingerprint_tree(repo)
-        self.assertIsNotNone(before.symbolic_ref, "frozen tree is detached")
-        self.assertTrue(
-            before.symbolic_ref.startswith("production-consolidated-"),
-            f"frozen tree is on {before.symbolic_ref!r}, not the production contract")
-        anchor = W.resolve_anchor(repo, before.symbolic_ref)
-        after = W.fingerprint_tree(repo)
-
-        proof = W.prove_unchanged(before, after)
-        self.assertTrue(proof.holds, proof.differences)
-        self.assertEqual(before.status_porcelain, after.status_porcelain)
-        self.assertEqual(anchor.commit, before.head_commit)
+        self._assert_readonly_production_anchor(repo)
 
     def test_the_production_anchor_is_the_commit_the_campaign_believes_it_is(self):
         """The repin itself, checked against the live tree.
