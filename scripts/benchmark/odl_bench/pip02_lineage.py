@@ -112,23 +112,24 @@ def paddle_lineage(directory,page,campaign,shard,pins):
    if version=='r26' and cap.get('shards') not in ([0,1,2],[3,4]):raise ValueError('head captured shard group mismatch')
    grant=cap.get('grant');grant_window(grant)
    if sha(grant.encode())!=cap.get('grant_sha256'):raise ValueError('Paddle captured grant hash')
-   captures[sha(raw)]=cap
- origins=set()
+   captures[sha(raw)]=(cap, str(path.resolve()), str(registry), registered_sha)
+ origins=set(); selected={}; selected_pins={}; selected_registries={}
  for p in starts:
   a=json.loads(p.read_bytes());response=directory/(p.name.replace('.start.json','.result.json'))
   if not response.is_file():raise ValueError('unknown native request exposure')
-  b=json.loads(response.read_bytes());prov=a['provenance'];identity=prov['identity'];cap=captures.get(prov['origin_capture_sha256'])
+  b=json.loads(response.read_bytes());prov=a['provenance'];identity=prov['identity'];entry=captures.get(prov['origin_capture_sha256']);cap=entry[0] if entry else None
   if cap is None:raise ValueError('unregistered original capture')
   if identity.get('campaign_sha256')!=campaign_sha or identity.get('model_pins')!=campaign['server_pins'] or identity.get('source_pins')!=cap['source_pins'] or prov.get('origin_grant')!=cap['grant']:raise ValueError('request origin binding')
   raw=bytes.fromhex(a['body_hex']);body=bytes.fromhex(b['body_hex'])
   if sha(raw)!=a['body_sha256'] or b['request_sha256']!=a['body_sha256'] or b['start_sha256']!=sha(p.read_bytes()) or sha(body)!=b['response_sha256'] or not 200<=b['status']<300:raise ValueError('request/response hash')
   stamp=datetime.datetime.fromisoformat(a['originated_at'].replace('Z','+00:00'))
   if stamp.tzinfo is None:raise ValueError('request timestamp timezone')
-  grant_window(cap['grant'],stamp.timestamp());origins.add(prov['origin_capture_sha256'])
+  grant_window(cap['grant'],stamp.timestamp());origins.add(prov['origin_capture_sha256']);selected[entry[1]]=prov['origin_capture_sha256'];selected_pins[prov['origin_capture_sha256']]=cap['source_pins'];selected_registries[entry[2]]=entry[3]
  key=sha(canon({'campaign':campaign_sha,'page':page}));finish=directory/(key+'.finish.json')
- if not finish.exists():return {'verified':False,'request_origins_verified':True,'origin_capture_sha256':sorted(origins),'basis':'native request origins verified; page-result record has no assembler/finishing-capture binding, so page lineage remains unverified'}
- receipt=json.loads(finish.read_bytes());cap=captures.get(receipt.get('capture_sha256'));result_path=directory/(key+'.result');result=json.loads(result_path.read_bytes())
+ if not finish.exists():return {'verified':False,'request_origins_verified':True,'origin_capture_sha256':sorted(origins),'selected_captures':selected,'registered_source_pins':selected_pins,'selected_registries':selected_registries,'basis':'native request origins verified; page-result record has no assembler/finishing-capture binding, so page lineage remains unverified'}
+ receipt=json.loads(finish.read_bytes());entry=captures.get(receipt.get('capture_sha256'));cap=entry[0] if entry else None;result_path=directory/(key+'.result');result=json.loads(result_path.read_bytes())
  if cap is None or not (re.fullmatch(r'codex3-pip02-paddle-relocatable-r(?:9|10|11)-g\d+-20261029',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r13-g(?:5|8|11|17|26|32|35|65|128)-20261030',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r(?:14|15)-pool[0-3]-20261030',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r(?:22|25|27)-pool[0-3]-20261030',cap['id']) or re.fullmatch(r'codex3-pip02-paddle-relocatable-r(?:26|27)-head-20261030',cap['id'])):raise ValueError('finish capture is not registered')
  source_sha=sha(canon(cap['source_pins']))
  if receipt.get('schema')!='pip02-paddle-page-finish/v1' or receipt.get('page')!=page or receipt.get('campaign_sha256')!=campaign_sha or receipt.get('result_sha256')!=sha(result_path.read_bytes()) or receipt.get('markdown_sha256')!=result.get('markdown_sha256') or sha(result['markdown'].encode())!=receipt.get('markdown_sha256') or receipt.get('source_pins_sha256')!=source_sha or receipt.get('grant_sha256')!=cap['grant_sha256']:raise ValueError('native finish receipt mismatch')
- return {'verified':True,'request_origins_verified':True,'origin_capture_sha256':sorted(origins),'finish_capture_sha256':receipt['capture_sha256'],'basis':'native registered finish receipt binds page result and markdown to captured grant and registered source'}
+ selected[entry[1]]=receipt['capture_sha256'];selected_pins[receipt['capture_sha256']]=cap['source_pins'];selected_registries[entry[2]]=entry[3]
+ return {'verified':True,'request_origins_verified':True,'origin_capture_sha256':sorted(origins),'finish_capture_sha256':receipt['capture_sha256'],'selected_captures':selected,'registered_source_pins':selected_pins,'selected_registries':selected_registries,'basis':'native registered finish receipt binds page result and markdown to captured grant and registered source'}
