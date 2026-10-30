@@ -128,6 +128,7 @@ class Scenario:
     mlock: bool = False
     enable_thinking: bool | None = None
     request_spec_n_max: int | None = None
+    protocol_revision: str = "v1"
     request_endpoint: str = "chat"
     draft_model: Path | None = None
     spec_type: str = "none"
@@ -420,8 +421,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         name="v9_coder_escalation_gpu_request_no_spec",
         role="coder_escalation",
         description=(
-            "Current coder alias on the shared Qwen3.6-27B GPU server; launch MTP "
-            "but disable it request-locally with speculative.n_max=0."
+            "Protocol correction KVU-16h-runner v2: dedicated Qwen3.6-27B "
+            "no-draft GPU server. Historical request-local n_max=0 results are "
+            "not measurements of this launch recipe."
         ),
         model=Path("/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf"),
         max_context=65536,
@@ -434,9 +436,8 @@ SCENARIOS: tuple[Scenario, ...] = (
         reasoning="off",
         parallel=2,
         enable_thinking=False,
-        request_spec_n_max=0,
-        spec_type="draft-mtp",
-        spec_draft_n_max=4,
+        spec_type="none",
+        protocol_revision="kvu16h-dedicated-no-draft-v2",
         no_mmap=True,
         slot_save_path=Path("/mnt/raid0/llm/cache/kv_slots/architect_general"),
         prior_evidence="Derived from stack_priors.yaml and the v9 request-local contract.",
@@ -474,14 +475,14 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         name="v9_dsv4_q8_dspark_request_nmax0",
         role="dsv4_dspark_smoke",
-        description="DeepSeek V4 Flash Q8 plus DSpark sidecar, disabled per request.",
+        description=(
+            "Protocol correction KVU-16h-runner v2: dedicated DeepSeek V4 Flash "
+            "Q8 no-draft server. Historical request-local n_max=0 results are "
+            "not measurements of this launch recipe."
+        ),
         model=Path(
             "/mnt/raid0/llm/models/deepseek-v4-flash-0731/UD-Q8_K_XL/"
             "DeepSeek-V4-Flash-0731-UD-Q8_K_XL-00001-of-00005.gguf"
-        ),
-        draft_model=Path(
-            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/"
-            "dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf"
         ),
         max_context=4096,
         threads=24,
@@ -492,12 +493,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         kv_v="f16",
         reasoning="auto",
         parallel=1,
-        request_spec_n_max=0,
         request_endpoint="completion",
-        spec_type="draft-dspark",
-        spec_draft_n_max=3,
-        spec_draft_device="none",
-        spec_draft_ngl=0,
+        spec_type="none",
+        protocol_revision="kvu16h-dedicated-no-draft-v2",
         extra_args=("-b", "512", "--no-repack", "--no-warmup"),
         prior_evidence="Final-tip replay of the bounded v9 DSpark Q8 parity smoke.",
     ),
@@ -534,14 +532,14 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         name="v9_dsv4_iq3_xxs_dspark_request_nmax0",
         role="dsv4_dspark_smoke",
-        description="DeepSeek V4 Flash IQ3_XXS plus DSpark sidecar, disabled per request.",
+        description=(
+            "Protocol correction KVU-16h-runner v2: dedicated DeepSeek V4 Flash "
+            "IQ3_XXS no-draft server. Historical request-local n_max=0 results "
+            "are not measurements of this launch recipe."
+        ),
         model=Path(
             "/mnt/raid0/llm/models/deepseek-v4-flash-0731/UD-IQ3_XXS/"
             "DeepSeek-V4-Flash-0731-UD-IQ3_XXS-00001-of-00004.gguf"
-        ),
-        draft_model=Path(
-            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/"
-            "dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf"
         ),
         max_context=4096,
         threads=24,
@@ -552,12 +550,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         kv_v="f16",
         reasoning="auto",
         parallel=1,
-        request_spec_n_max=0,
         request_endpoint="completion",
-        spec_type="draft-dspark",
-        spec_draft_n_max=3,
-        spec_draft_device="none",
-        spec_draft_ngl=0,
+        spec_type="none",
+        protocol_revision="kvu16h-dedicated-no-draft-v2",
         extra_args=("-b", "512", "--no-repack", "--no-warmup"),
         prior_evidence="Operator-requested quick IQ3_XXS DSpark observation on production v9.",
     ),
@@ -999,6 +994,23 @@ def build_chat_request_body(
     return body
 
 
+def validate_scenario_speculation(scenario: Scenario) -> None:
+    """Reject request-local disabling on a server configured with a draft path."""
+    has_draft_server = (
+        scenario.spec_type != "none"
+        or scenario.draft_model is not None
+        or scenario.spec_draft_n_max is not None
+        or scenario.spec_draft_threads is not None
+        or scenario.spec_draft_device is not None
+        or scenario.spec_draft_ngl is not None
+    )
+    if scenario.request_spec_n_max == 0 and has_draft_server:
+        raise ValueError(
+            f"{scenario.name}: request speculative.n_max=0 is unsafe with a drafted server; "
+            "use a dedicated spec_type=none server arm"
+        )
+
+
 def query_chat(
     port: int,
     body: dict[str, Any],
@@ -1187,6 +1199,8 @@ def render_operator_run_script(args: argparse.Namespace) -> str:
 
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     scenarios = selected_scenarios(args.only)
+    for scenario in scenarios:
+        validate_scenario_speculation(scenario)
     contexts = selected_contexts(args.context)
     cells: list[dict[str, Any]] = []
     port = args.port_base
@@ -1202,6 +1216,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
                         "scenario": scenario.name,
                         "role": scenario.role,
                         "description": scenario.description,
+                        "protocol_revision": scenario.protocol_revision,
                         "prior_evidence": scenario.prior_evidence,
                         "nominal_context": nominal_context,
                         "rep": rep,
@@ -1319,6 +1334,7 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
         cleanup = terminate(proc)
         memory_samples.append(collect_post_cleanup_sample(proc.pid))
     result["started_at_monotonic"] = started
+    result["protocol_revision"] = scenario.protocol_revision
     result["memory_samples"] = memory_samples
     result["cleanup"] = cleanup
     mark_cleanup_failure(result, cleanup)
