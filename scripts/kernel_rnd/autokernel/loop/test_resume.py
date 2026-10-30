@@ -761,6 +761,38 @@ class OracleUnavailableIsTheHarness(unittest.TestCase):
             self.candidate(refusal_gate="correctness", gate_rules_fingerprint="0" * 64),
             rules_fingerprint=now))
 
+    def test_served_shape_oracle_change_reopens_only_the_rule_refusal(self):
+        from unittest.mock import patch
+
+        here = Path(loop.__file__).parent
+        oracle = "served_shape_cases.py"
+        self.assertTrue((here / oracle).is_file())
+        imports = [node for node in ast.walk(ast.parse(Path(gates.__file__).read_text()))
+                   if isinstance(node, ast.ImportFrom) and node.level == 1
+                   and node.module is None
+                   and any(alias.name == "served_shape_cases" for alias in node.names)]
+        self.assertTrue(imports, "the served-shape gate must still delegate to this oracle")
+        with tempfile.TemporaryDirectory() as directory:
+            isolated = Path(directory)
+            for name in ("gates.py", *loop.ORACLE_MODULES, oracle):
+                (isolated / name).write_bytes((here / name).read_bytes())
+            with patch.object(gates, "__file__", str(isolated / "gates.py")):
+                before = loop.gate_rules_fingerprint()
+                candidate = self.candidate(gate_rules_fingerprint=before)
+                self.assertIn("unchanged", resume.ineligible_reason(
+                    candidate, rules_fingerprint=before))
+                path = isolated / oracle
+                path.write_bytes(path.read_bytes() + b"\n# corrected served-shape corpus\n")
+                after = loop.gate_rules_fingerprint()
+                self.assertNotEqual(before, after)
+                self.assertIsNone(resume.ineligible_reason(
+                    candidate, rules_fingerprint=after))
+                self.assertIn("verdict on the patch", resume.ineligible_reason(
+                    self.candidate(refusal_gate="correctness", gate_rules_fingerprint=before),
+                    rules_fingerprint=after))
+                path.unlink()
+                self.assertNotEqual(after, loop.gate_rules_fingerprint())
+
     def test_it_spends_no_authoring_attempt(self):
         self.assertEqual(loop.classify_patch_rejection(
             "exact fused helper and dot specialization hits in candidate DSO not proven",
