@@ -176,6 +176,22 @@ def test_in_tree_provenance_json_image_is_rejected_by_name(world):
     assert diag["match"] is None and "provenance.json" in diag["rejected"][0]["reason"]
 
 
+def test_recipe_mismatch_reports_raw_values_without_relaxing_gate(world):
+    advance(world)
+    candidate = store_build_for_champion(world)
+    reference = build(world["tmp"], world["repo"], "reference", world["old"])
+    with (candidate / "CMakeCache.txt").open("a") as cache:
+        cache.write("\nCMAKE_C_FLAGS:STRING=-ffile-prefix-map=/private=/src\n")
+    diag = cr.diagnose_store_builds(
+        cr.detect(world["store"], world["repo"], BRANCH)["champion"], world["repo"],
+        world["builds"], reference_build=reference)
+    assert diag["match"] is None
+    rejected = diag["rejected"][0]
+    assert rejected["cmake_recipe_digest"] != rejected["reference_cmake_recipe_digest"]
+    assert rejected["reference_commit"] == world["old"]
+    assert rejected["recipe_differences"]["CMAKE_C_FLAGS"]["candidate"] == "-ffile-prefix-map=/private=/src"
+
+
 def test_other_tree_image_is_not_blamed_and_message_stays_build_it(world):
     old_build = build(world["tmp"], world["repo"], "builds/cpu-old", world["old"])
     (old_build / "PROVENANCE.md").unlink()
