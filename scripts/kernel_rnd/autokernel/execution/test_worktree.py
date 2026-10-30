@@ -859,6 +859,11 @@ class TestBuildParallelism(unittest.TestCase):
         with self.assertRaises(ValueError):
             W.BuildParallelism(jobs=(os.cpu_count() or 1) + 1)
 
+    def test_four_cpu_host_refuses_32_build_jobs(self):
+        with mock.patch.object(os, "cpu_count", return_value=4):
+            with self.assertRaisesRegex(ValueError, "jobs=32 exceeds the 4 CPUs"):
+                W.BuildParallelism(jobs=32)
+
     def test_cpu_list_must_be_a_taskset_literal(self):
         for bad in ("0-95; rm -rf /", "all", "$(nproc)", "0-95,", "-1"):
             with self.subTest(bad=bad):
@@ -879,6 +884,11 @@ class TestBuildParallelism(unittest.TestCase):
 class TestBuildPlanArgv(_TmpMixin):
     def setUp(self):
         super().setUp()
+        # This class tests exact eight-job argv, not the runner's host capacity.
+        # Keep the synthetic host local; real capacity refusals are tested above.
+        host = mock.patch.object(os, "cpu_count", return_value=64)
+        host.start()
+        self.addCleanup(host.stop)
         mk = lambda name: W.SandboxPath.create(  # noqa: E731
             os.path.join(self.tmp, name), production_trees=W.PRODUCTION_TREES)
         self.src = mk("src")
@@ -2096,7 +2106,7 @@ class TestRedTeamWrapperHidesTheProgram(_TmpMixin):
             os.path.join(self.tmp, name), production_trees=W.PRODUCTION_TREES)
         plan = W.BuildPlan(source_root=mk("s"), build_dir=mk("b"),
                            actor_worktree=mk("a"), targets=("llama-bench",),
-                           parallelism=W.BuildParallelism(jobs=8, cpu_list="0-95"),
+                           parallelism=W.BuildParallelism(jobs=min(8, os.cpu_count() or 1), cpu_list="0-95"),
                            cmake_defines=(("GGML_NATIVE", "ON"),))
         self.assertEqual(W._validate_argv(plan.build_argv())[:4],
                          ("taskset", "-c", "0-95", "cmake"))

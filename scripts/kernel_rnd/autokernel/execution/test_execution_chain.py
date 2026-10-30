@@ -384,7 +384,7 @@ class ChainWorld:
             source_root=self.worktree.path,
             build_dir=self.build_dir(),
             actor_worktree=self.worktree.path,
-            parallelism=WT.BuildParallelism(jobs=32),
+            parallelism=WT.BuildParallelism(jobs=min(32, os.cpu_count() or 1)),
             targets=("llama-cli", "test-backend-ops"),
             cmake="/usr/bin/cmake",
         )
