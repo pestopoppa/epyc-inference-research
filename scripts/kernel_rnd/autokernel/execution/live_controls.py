@@ -718,7 +718,17 @@ def _build_belief_receipt(
 
 
 def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
-                     host_state: Callable[..., microbench.HostState]) -> None:
+                     host_state: Callable[..., microbench.HostState], instrument_root=None,
+                     instrument_binary=None, instrument_branch=None, instrument_commit=None) -> None:
+    supplied = (instrument_root, instrument_binary, instrument_branch, instrument_commit)
+    if any(value is not None for value in supplied) and not all(value is not None for value in supplied):
+        raise ValueError("explicit preflight instrument context must be complete")
+    instrument_root = INSTRUMENT_ROOT if instrument_root is None else Path(instrument_root)
+    instrument_binary = INSTRUMENT_BINARY if instrument_binary is None else Path(instrument_binary)
+    expected_branch = INSTRUMENT_BRANCH if instrument_branch is None else instrument_branch
+    instrument_commit = INSTRUMENT_COMMIT if instrument_commit is None else instrument_commit
+    if instrument_commit != INSTRUMENT_COMMIT:
+        raise ValueError("explicit preflight cannot change the original instrument commit")
     topology = cpu_region_claim.verify_host_topology()
     free_bytes = shutil.disk_usage(output_root).free
     source_head = subprocess.run(
@@ -726,27 +736,27 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         check=True).stdout.strip()
     instrument_head = subprocess.run(
-        ("git", "-C", str(INSTRUMENT_ROOT), "rev-parse", "HEAD"),
+        ("git", "-C", str(instrument_root), "rev-parse", "HEAD"),
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         check=True).stdout.strip()
     instrument_branch = subprocess.run(
-        ("git", "-C", str(INSTRUMENT_ROOT), "branch", "--show-current"),
+        ("git", "-C", str(instrument_root), "branch", "--show-current"),
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         check=True).stdout.strip()
     instrument_status = subprocess.run(
-        ("git", "-C", str(INSTRUMENT_ROOT), "status", "--porcelain"),
+        ("git", "-C", str(instrument_root), "status", "--porcelain"),
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         check=True).stdout
     instrument_parents = subprocess.run(
-        ("git", "-C", str(INSTRUMENT_ROOT), "rev-list", "--parents", "-n", "1",
-         INSTRUMENT_COMMIT),
+        ("git", "-C", str(instrument_root), "rev-list", "--parents", "-n", "1",
+         instrument_commit),
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         check=True).stdout.split()[1:]
     state = host_state(cpu_list=CPU_LIST)
     host_policy = microbench.HostStatePolicy(
         nominal_khz=NOMINAL_KHZ, require_package_power=True)
     instrument_lineage_ok, instrument_lineage_rule = worktree.instrument_lineage_ok(
-        INSTRUMENT_COMMIT, PRODUCTION_COMMIT, instrument_parents)
+        instrument_commit, PRODUCTION_COMMIT, instrument_parents)
     checks = {
         "topology": _check_payload(topology),
         "production_commit": _check_payload(schemas.Check(
@@ -754,20 +764,20 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
             (f"production HEAD is {source_head}; required {PRODUCTION_COMMIT}",))),
         "measurement_instrument": _check_payload(schemas.Check(
             schemas.PASS if (
-                instrument_head == INSTRUMENT_COMMIT
-                and instrument_branch == INSTRUMENT_BRANCH
+                instrument_head == instrument_commit
+                and instrument_branch == expected_branch
                 and not instrument_status
                 and instrument_lineage_ok
             ) else schemas.FAIL,
             (f"instrument head={instrument_head}, branch={instrument_branch}, "
              f"dirty={bool(instrument_status)}, parents={instrument_parents}; "
              f"lineage_rule=[{instrument_lineage_rule}]; required clean "
-             f"{INSTRUMENT_COMMIT}",))),
+             f"{instrument_commit}",))),
         "binary_copy": _check_payload(schemas.Check(
             schemas.PASS if instrument_sha == copy_sha else schemas.FAIL,
             (f"instrument and evidence-copy SHA-256 are {instrument_sha}",))),
         "instrument_receipt_capability": _check_payload(
-            _instrument_receipt_capability(INSTRUMENT_BINARY)),
+            _instrument_receipt_capability(instrument_binary)),
         "model_present": _check_payload(schemas.Check(
             schemas.PASS if MODEL.is_file() else schemas.FAIL,
             (f"model path is {MODEL}",))),
@@ -1321,7 +1331,7 @@ def _measure(*, label: str, blocks: int, claim: object,
              output_root: Path,
              host_state: Callable[..., microbench.HostState],
              identity: LiveCampaignIdentity,
-             resume_existing: bool = False, held_claim=None) -> LiveMaterial:
+             resume_existing: bool = False, held_claim=None, instrument_root=None) -> LiveMaterial:
     # A Python default captures the object at function-definition time.  The
     # CLI selects its recipe after argument parsing, so ``= PROMPT_TOKENS``
     # here would retain pp512 even after ``configure_recipe`` selects tg128.
@@ -1339,14 +1349,18 @@ def _measure(*, label: str, blocks: int, claim: object,
         raise ValueError(
             f"control {label!r} at {unit}{prompt} was not predeclared; expected "
             f"{None if declared_prompt is None else f'{unit}{declared_prompt}'}")
+    bound_instrument_root = INSTRUMENT_ROOT if instrument_root is None else Path(instrument_root)
+    if instrument_root is not None and any(Path(value.source_root) != bound_instrument_root
+            for value in (candidate_binding, anchor_binding)):
+        raise ValueError("explicit control instrument differs from its tool bindings")
     envelope = _declared_physical_envelopes()[label]
     plan = microbench.MicrobenchPlan(
         recipe_id=RECIPE_ID, candidate_id=f"akc-control-{label}",
         campaign_seed=f"{identity.campaign_seed}/{label}",
         candidate_binding=candidate_binding, anchor_binding=anchor_binding,
         anchor=anchor, params=_params(prompt=prompt, reps=CALIBRATION_REPS),
-        candidate_instrument_root=str(INSTRUMENT_ROOT),
-        anchor_instrument_root=str(INSTRUMENT_ROOT),
+        candidate_instrument_root=str(bound_instrument_root),
+        anchor_instrument_root=str(bound_instrument_root),
         candidate_param_overrides={"ggml_iqk": candidate_iqk},
         anchor_param_overrides={"ggml_iqk": anchor_iqk},
         base_blocks=blocks, pairs_per_block=_fresh_pairs_per_block(),

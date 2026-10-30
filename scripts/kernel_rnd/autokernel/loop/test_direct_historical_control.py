@@ -151,12 +151,44 @@ def synthetic_execution(tmp_path, monkeypatch, *, failed_op=False, escaped=False
     from .test_search_window_preflight import _stat
     from ..execution import t0_provider as tp
     source = tmp_path / "instrument"
-    binaries = source / "build" / "bin"
+    source.mkdir()
+    (source / ".git").write_text("synthetic Git marker; native Git I/O is substituted")
+    binaries = tmp_path / "build-instrument" / "bin"
     binaries.mkdir(parents=True)
     for name in (*owner.lc.INSTRUMENT_BUILD_TARGETS, "libggml-base.so.0", "libggml-cpu.so.0", "libggml.so.0"):
         (binaries / name).write_bytes(b"synthetic-not-executable:" + name.encode())
     monkeypatch.setattr(owner.lc, "INSTRUMENT_BINARY", binaries / "llama-bench")
     monkeypatch.setattr(owner.lc, "INSTRUMENT_ROOT", source)
+    cache = binaries.parent / "CMakeCache.txt"
+    compiler = tmp_path / "synthetic-compiler"
+    compiler.write_bytes(b"synthetic compiler not executed")
+    cache.write_text("CMAKE_HOME_DIRECTORY:INTERNAL=" + str(source) + "\nCMAKE_CXX_COMPILER:FILEPATH=" + str(compiler) + "\n")
+    tree = b"synthetic-original-git-tree"
+    identity = {"schema": owner.hi.SCHEMA,
+        "source": {"root": str(source), "commit": owner.lc.INSTRUMENT_COMMIT,
+            "branch": "experimental/synthetic-historical", "tree_oid": "a" * 40,
+            "ls_tree_sha256": hashlib.sha256(tree).hexdigest()},
+        "build": {"root": str(binaries.parent), "compiler": {"path": str(compiler),
+            "sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(), "version": "synthetic-original-git-tree"},
+            "files": {str(path.relative_to(binaries.parent)): hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in [cache, *binaries.iterdir()]}}}
+    identity["binding_sha256"] = owner.schemas.content_hash(identity)
+    manifest = tmp_path / "synthetic-instrument.json"
+    manifest.write_text(json.dumps(identity))
+    monkeypatch.setenv(owner.hi.ENV, str(manifest))
+    def synthetic_git(root, *args):
+        assert Path(root) == source
+        if args[:2] == ("rev-parse", "HEAD"):
+            return owner.lc.INSTRUMENT_COMMIT.encode()
+        if args[0] == "branch":
+            return b"experimental/synthetic-historical"
+        if args[0] == "status":
+            return b""
+        if args[0] == "rev-parse":
+            return b"a" * 40
+        assert args[0] == "ls-tree"
+        return tree
+    monkeypatch.setattr(owner.hi, "_git", synthetic_git)
     monkeypatch.setattr(tp, "_complete_anchor_toolchain", lambda *args: ("synthetic-gcc", "1"))
     original_window = owner.inference_window.InferenceCallWindow
     monkeypatch.setattr(owner.inference_window, "InferenceCallWindow", lambda **kwargs:
@@ -229,11 +261,15 @@ def synthetic_execution(tmp_path, monkeypatch, *, failed_op=False, escaped=False
     monkeypatch.setattr(owner.rw, "snapshot", synthetic_snapshot)
     calls = []
     def measure(*, label, blocks, claim, held_claim, candidate_iqk, anchor_iqk,
-                output_root, identity, anchor, **kwargs):
+                output_root, identity, anchor, candidate_binding, anchor_binding, instrument_root, **kwargs):
         assert held_claim.owner is claim
         held_claim.attest()
         if label == "historical_win_replay":
             assert writes.index("direct-historical-stopping-rule") < len(writes)
+        assert instrument_root == source
+        assert candidate_binding.external_build_root == str(binaries.parent)
+        assert anchor_binding.external_build_root == str(binaries.parent)
+        assert candidate_binding.source_root == anchor_binding.source_root == str(source)
         calls.append(label)
         rng = random.Random(1 if label == "aa_calibration" else 2)
         count = owner.lc._fresh_pairs_per_block()
@@ -256,7 +292,9 @@ def synthetic_execution(tmp_path, monkeypatch, *, failed_op=False, escaped=False
             "constructor_id": "ak.microbench.llama_cpu.prefill/v1", "constructor_sha256": "3" * 64,
             "argv_sha256": "4" * 64, "binary_path": str(binaries / "llama-bench"),
             "binary_sha256": hashlib.sha256((binaries / "llama-bench").read_bytes()).hexdigest(),
-            "source_root": str(source), "library_path": str(binaries)}
+            "source_root": str(source), "library_path": str(binaries),
+            "dso_identities": [[path.name, str(path), hashlib.sha256(path.read_bytes()).hexdigest()]
+                for path in sorted(binaries.glob("lib*.so*"))]}
         raw = {"schema": "epyc.autokernel.microbench_raw_vector.v1", "recipe_id": owner.lc.RECIPE_ID,
             "candidate_id": "akc-control-" + label,
             "campaign_seed_sha256": hashlib.sha256((identity.campaign_seed + "/" + label).encode()).hexdigest(),
@@ -354,3 +392,71 @@ def test_original_raw_and_build_joins_refuse_changed_material(tmp_path, monkeypa
             material["raw"]["historical_win_replay"] = store.write("direct-historical-microbench", raw).to_dict()
         with pytest.raises(owner.HistoricalControlRefused, match="raw"):
             owner._compose(store, declaration, material, "synthetic-mutated-material")
+
+
+def test_public_binding_drift_refuses_before_native_or_performance(tmp_path, monkeypatch):
+    store = ArtifactStore(tmp_path / "artifacts")
+    calls = synthetic_execution(tmp_path, monkeypatch)
+    binding = owner.hi.resolve()
+    (binding.binary.parent / "libggml-cpu.so.0").write_bytes(b"drift")
+    monkeypatch.setattr(owner.tp, "SubprocessRunner", forbidden)
+    with held(tmp_path) as claim:
+        _resolution, observation, _ref = invoke(store, claim)
+        assert not observation.ran
+        assert "bytes differ" in observation.could_not_run_reason
+        assert not calls
+
+
+def test_public_reopen_refuses_new_instrument_declaration(tmp_path, monkeypatch):
+    store = ArtifactStore(tmp_path / "artifacts")
+    calls = synthetic_execution(tmp_path, monkeypatch)
+    with held(tmp_path) as claim:
+        _resolution, observation, ref = invoke(store, claim)
+        assert observation.ran
+        original_calls = list(calls)
+        changed = owner.hi.resolve().to_dict()
+        changed["build"]["compiler"]["version"] = "new compiler identity"
+        changed.pop("binding_sha256")
+        changed["binding_sha256"] = owner.schemas.content_hash(changed)
+        with pytest.raises(owner.HistoricalControlRefused, match="source/frame differs"):
+            invoke(store, claim, reference=ref.to_dict(), instrument_binding=changed)
+        assert calls == original_calls
+
+
+@pytest.mark.parametrize("change", ["bench", "dso", "candidate_root", "anchor_commit", "source"])
+def test_pure_public_reopen_rejects_rehashed_substitute_against_sealed_binding(tmp_path, monkeypatch, change):
+    store = ArtifactStore(tmp_path / "artifacts")
+    synthetic_execution(tmp_path, monkeypatch)
+    with held(tmp_path) as claim:
+        _, observation, reference = invoke(store, claim)
+        assert observation.ran
+        result = owner._read(store, owner.NAMESPACE, reference.to_dict())
+        declaration = owner._read(store, "direct-historical-declaration", result["declaration"])
+        material = owner._read(store, "direct-historical-material", result["material"])
+        if change == "bench":
+            material["instrument_sha256"] = "9" * 64
+            material["anchor"]["binary_sha256"] = "9" * 64
+        elif change == "anchor_commit":
+            material["anchor"]["source_commit"] = "9" * 40
+        elif change == "source":
+            material["source_tree_hex"] = b"different original source".hex()
+        for label, ref in list(material["raw"].items()):
+            raw = owner._read(store, "direct-historical-microbench", ref)
+            raw["anchor_identity"] = dict(material["anchor"])
+            for arm in ("candidate_receipt", "anchor_receipt"):
+                receipt = raw[arm]
+                if change == "bench":
+                    receipt["binary_sha256"] = "9" * 64
+                elif change == "dso":
+                    receipt["dso_identities"][0][2] = "9" * 64
+                elif change == "candidate_root":
+                    receipt["source_root"] = str(tmp_path / "another-source")
+            (Path(declaration["root"]) / "raw" / (label + ".json")).write_text(json.dumps(raw))
+            material["raw"][label] = store.write("direct-historical-microbench", raw).to_dict()
+        result["material"] = store.write("direct-historical-material", material).to_dict()
+        replacement = store.write(owner.NAMESPACE, result)
+        monkeypatch.setattr(owner.tp, "SubprocessRunner", forbidden)
+        monkeypatch.setattr(owner.subprocess, "run", forbidden)
+        monkeypatch.setattr(owner.lc, "_measure", forbidden)
+        with pytest.raises(owner.HistoricalControlRefused):
+            invoke(store, claim, reference=replacement.to_dict())

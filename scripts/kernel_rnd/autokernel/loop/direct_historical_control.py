@@ -20,6 +20,7 @@ from ..evaluator import anchor_drift, t0_policy, api, controls, correctness, rec
 from ..execution import control_runner as cr, inference_window, live_controls as lc, microbench, sandbox
 from ..execution import t0_provider as tp
 from . import observation_binding as ob, runtime_window as rw, serial_run
+from . import historical_instrument as hi
 from .claim import HeldCpuClaim
 from .measurement_capture import ArtifactStore, StoredArtifact
 
@@ -66,27 +67,42 @@ class HistoricalLaunchBudgetExhausted(HistoricalControlRefused):
     """Known before/after-launch boundary, not unknown child cleanup."""
 
 
-def _frame():
+def _instrument_paths(instrument):
+    return ((instrument.source_root, instrument.binary, instrument.commit)
+            if instrument is not None else (lc.INSTRUMENT_ROOT, lc.INSTRUMENT_BINARY, lc.INSTRUMENT_COMMIT))
+
+
+def _preflight_keywords(instrument):
+    return ({} if instrument is None else {"instrument_root": instrument.source_root,
+        "instrument_binary": instrument.binary, "instrument_branch": instrument.branch,
+        "instrument_commit": instrument.commit})
+
+
+def _frame(instrument=None):
+    instrument_root, instrument_binary, instrument_commit = _instrument_paths(instrument)
     if lc.RECIPE_ID != lc.PREFILL_RECIPE_ID or lc.PROMPT_TOKENS != 512:
         raise HistoricalControlRefused("historical pp512 frame cannot inherit another live-control recipe")
     return {"recipe_id": lc.PREFILL_RECIPE_ID, "model": str(lc.MODEL),
         "cpu_list": lc.CPU_LIST, "calibration": lc._calibration_frame(),
         "calibration_blocks": lc.CALIBRATION_BLOCKS, "neutral_blocks": lc.NEUTRAL_BLOCKS,
         "control_arms": list(lc.CONTROL_ARM_IQK["historical_win_replay"]),
-        "production_commit": lc.PRODUCTION_COMMIT, "instrument_commit": lc.INSTRUMENT_COMMIT,
-        "instrument_root": str(lc.INSTRUMENT_ROOT), "instrument_binary": str(lc.INSTRUMENT_BINARY),
+        "production_commit": lc.PRODUCTION_COMMIT, "instrument_commit": instrument_commit,
+        "instrument_root": str(instrument_root), "instrument_binary": str(instrument_binary),
+        **({"instrument_binding": instrument.to_dict()} if instrument is not None else {}),
         "reference_band": {"low": .03, "high": .60}, "phase": "prefill",
         "cell_class": recipes.CELL_CLASS_TINY_GRAPH}
 
 
 def source_identity():
     from . import lifecycle_observation as lo, runtime_recovery
-    modules = (production_pins, anchor_drift, t0_policy, lc, microbench, tp, cr, api, controls, correctness, st, rw, inference_window)
+    modules = (production_pins, anchor_drift, t0_policy, lc, microbench, tp, cr, api, controls, correctness, st, rw, inference_window, hi)
     paths = (Path(__file__), *(Path(module.__file__) for module in modules))
     return {"files": {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths},
         "recovery": runtime_recovery.source_identity(),
         "loaded": [lo.callable_identity(fn) for fn in
-                   (run_or_reopen, _collect, _compose, _t0_material, _window, _frame)]}
+                   (run_or_reopen, _collect, _compose, _t0_material, _window, _frame,
+                    _instrument_paths, _preflight_keywords, _t0_plan, hi.resolve,
+                    hi.InstrumentBinding.from_mapping, hi.InstrumentBinding.validate_live, hi._compiler_version)]}
 
 
 def _resolve(store):
@@ -150,13 +166,14 @@ class _Sink:
 
 
 class _BoundedRunner:
-    def __init__(self, root, deadline, store):
+    def __init__(self, root, deadline, store, instrument=None):
         self.deadline, self.store = deadline, store
+        self.instrument_binary = _instrument_paths(instrument)[1]
         self.runner = tp.SubprocessRunner(sandbox_policy=sandbox.SandboxPolicy(writable_root=str(root)))
 
     def run(self, argv, *, env, cwd, timeout_s):
         _deadline(self.deadline)
-        is_generation = str(lc.INSTRUMENT_BINARY.parent / "llama-completion") in argv and "-p" in argv
+        is_generation = str(self.instrument_binary.parent / "llama-completion") in argv and "-p" in argv
         wait_bound = 600.0 if self.deadline is None else max(0., self.deadline - time.monotonic())
         window = (inference_window.InferenceCallWindow(timeout_s=wait_bound).acquire()
                   if is_generation else nullcontext())
@@ -171,37 +188,39 @@ class _BoundedRunner:
         return result
 
 
-def _t0_plan(source_sha, *, arm):
-    binary = lc.INSTRUMENT_BINARY.parent / "llama-completion"
-    candidate = tp.CandidateBuild(str(lc.INSTRUMENT_ROOT), str(binary.parent.parent),
-        lc.INSTRUMENT_COMMIT, source_sha, str(binary), str(binary.parent),
+def _t0_plan(source_sha, *, arm, instrument=None):
+    instrument_root, instrument_binary, instrument_commit = _instrument_paths(instrument)
+    binary = instrument_binary.parent / "llama-completion"
+    candidate = tp.CandidateBuild(str(instrument_root), str(binary.parent.parent),
+        instrument_commit, source_sha, str(binary), str(binary.parent),
         str(binary.parent / "test-backend-ops"))
     return tp.T0ExecutionPlan(candidate=candidate, tools=t0_policy.t0_tools(),
         op_suite=tp.OpSuitePlan(backend_filter="CPU", ops=correctness.MANDATORY_BACKEND_OPS,
             suite_id="test-backend-ops/v1", suite_source_sha256=source_sha, suite_seed=2026081101),
         dispatch=tp.DispatchTracePlan(derived_surface=correctness.MANDATORY_BACKEND_OPS),
-        anchor=tp.AnchorBuild(str(lc.INSTRUMENT_ROOT), lc.INSTRUMENT_COMMIT, str(binary), str(binary.parent)),
+        anchor=tp.AnchorBuild(str(instrument_root), instrument_commit, str(binary), str(binary.parent)),
         generation=t0_policy.t0_generation_plan(str(lc.MODEL)),
         determinism_runs=2, backend="llama_cpu",
         parameter_env=(("GGML_IQK", "0" if arm == "anchor" else "1"),))
 
 
-def _collect_t0(store, adapter, root, source_sha, deadline):
+def _collect_t0(store, adapter, root, source_sha, deadline, instrument=None):
     sink = _Sink(store)
     root.mkdir()
-    runner = _BoundedRunner(root, deadline, store)
+    runner = _BoundedRunner(root, deadline, store, instrument)
     held = _T0Claim(adapter, deadline)
-    anchor = tp.capture_anchor(plan=_t0_plan(source_sha, arm="anchor"), runner=runner,
+    anchor = tp.capture_anchor(plan=_t0_plan(source_sha, arm="anchor", instrument=instrument), runner=runner,
         claim=held, sink=sink, generation_seeds=(42, 42))
     anchor_references = list(sink.references)
     sink.references.clear()
-    provider = tp.ExecutedT0EvidenceProvider(plan=_t0_plan(source_sha, arm="candidate"),
+    provider = tp.ExecutedT0EvidenceProvider(plan=_t0_plan(source_sha, arm="candidate", instrument=instrument),
         runner=runner, claim=held, sink=sink, anchor_capture=anchor)
     collected = tp._Collected()
     provider.collect_op_suite(collected)
     provider.collect_coherence(collected)
     provider.collect_determinism(collected)
     return store.write("direct-historical-t0", {"source_sha256": source_sha,
+        **({"instrument_binding": instrument.to_dict()} if instrument is not None else {}),
         "anchor": asdict(anchor), "anchor_captures": anchor_references,
         "candidate_captures": sink.references,
         "claim_observations": list(adapter.observations)})
@@ -210,6 +229,9 @@ def _collect_t0(store, adapter, root, source_sha, deadline):
 def _t0_material(store, reference):
     """Existing parsers replay original process output; no process or file probe."""
     body = _read(store, "direct-historical-t0", reference)
+    instrument = hi.resolve(body.get("instrument_binding")) if "instrument_binding" in body else None
+    if instrument is not None and body["source_sha256"] != instrument.source_sha256:
+        raise HistoricalControlRefused("original T0 source differs from its sealed instrument")
     anchor_row = dict(body["anchor"])
     for key in ("resolved_libraries", "output_digests", "output_lengths", "oracle_ids", "capture_refs", "notes"):
         anchor_row[key] = tuple(tuple(row) if isinstance(row, list) else row for row in anchor_row[key])
@@ -223,7 +245,7 @@ def _t0_material(store, reference):
         row = _read(store, "direct-historical-t0-process", ref)
         row.update(argv=tuple(row["argv"]), env=tuple(map(tuple, row["env"])), orphans=tuple(row["orphans"]))
         anchor_captures.append(tp.CompletedProcess(**row))
-    plan = _t0_plan(body["source_sha256"], arm="anchor")
+    plan = _t0_plan(body["source_sha256"], arm="anchor", instrument=instrument)
     # The anchor's successful repeats, not a stored 'stable' assertion, own
     # its output identity. The linkage capture is separate and remains raw.
     invocation = tp.build_generation_invocation(binary=plan.anchor.binary,
@@ -279,7 +301,7 @@ def _t0_material(store, reference):
             return self.check
 
     runner = OriginalRunner()
-    provider = tp.ExecutedT0EvidenceProvider(plan=_t0_plan(body["source_sha256"], arm="candidate"),
+    provider = tp.ExecutedT0EvidenceProvider(plan=_t0_plan(body["source_sha256"], arm="candidate", instrument=instrument),
         runner=runner, claim=RecordedWindow(), sink=tp.MemoryCaptureSink(), anchor_capture=anchor)
     collected = tp._Collected()
     ops = provider.collect_op_suite(collected)
@@ -292,6 +314,8 @@ def _t0_material(store, reference):
 
 def _t0_gates(store, reference, declaration):
     body, anchor, ops, coherence, determinism, surface = _t0_material(store, reference)
+    if body.get("instrument_binding") != declaration["frame"].get("instrument_binding"):
+        raise HistoricalControlRefused("original historical T0 instrument binding differs")
     request = api.EvaluationRequest(
         event_id="ake-historical-t0", campaign_id=declaration["control_campaign_id"],
         candidate_id="akc-historical-iqk", tier="T0", backend="llama_cpu", phase="prefill",
@@ -332,9 +356,10 @@ def _stopping_commitment(store, declaration, rule, *, reference=None, measured_a
     return commitment
 
 
-def _collect(store, held, declaration, root, deadline):
+def _collect(store, held, declaration, root, deadline, instrument=None):
     """Use existing tools only; never build, copy an instrument or reacquire."""
     _deadline(deadline)
+    instrument_root, instrument_binary, instrument_commit = _instrument_paths(instrument)
     try:
         adapter = rw.DirectHeldClaimAdapter(held, cpu_list=lc.CPU_LIST, store=store)
     except ValueError as exc:
@@ -342,29 +367,34 @@ def _collect(store, held, declaration, root, deadline):
         # not observed or launched anything. Insufficient coverage is not an
         # unavailable historical backend and never licenses a smaller replay.
         raise HistoricalControlRefused(f"original historical CPU footprint {lc.CPU_LIST} is not covered: {exc}") from exc
+    if instrument is None:
+        raise HistoricalControlRefused(
+            "missing explicit owned historical instrument binding; set " + hi.ENV + "; no implicit build")
     for name in lc.INSTRUMENT_BUILD_TARGETS:
-        if not (lc.INSTRUMENT_BINARY.parent / name).is_file():
+        if not (instrument_binary.parent / name).is_file():
             raise HistoricalControlRefused(f"original historical instrument is missing {name}; no implicit build")
+    instrument.validate_live()
     identity = lc.LiveCampaignIdentity(declaration["control_campaign_id"], str(root))
-    instrument_sha = lc._sha256_file(lc.INSTRUMENT_BINARY)
-    linkage_sha, linkage_text = lc._linkage(lc.INSTRUMENT_BINARY, lc.INSTRUMENT_BINARY.parent)
+    instrument_sha = lc._sha256_file(instrument_binary)
+    linkage_sha, linkage_text = lc._linkage(instrument_binary, instrument_binary.parent)
     lc._write_preflight(root, instrument_sha=instrument_sha, copy_sha=instrument_sha,
-                        host_state=microbench.read_host_state)
-    source = subprocess.run(["git", "-C", str(lc.INSTRUMENT_ROOT), "ls-tree", "-r", "-z", lc.INSTRUMENT_COMMIT],
+                        host_state=microbench.read_host_state, **_preflight_keywords(instrument))
+    source = subprocess.run(["git", "-C", str(instrument_root), "ls-tree", "-r", "-z", instrument_commit],
         capture_output=True, check=True, timeout=30).stdout
     if not source or len(source) > 16 * 1024 * 1024:
         raise HistoricalControlRefused("original instrument source manifest is unavailable")
     source_sha = hashlib.sha256(source).hexdigest()
     config = rw.configuration(store, held, storage_floor_bytes_free=200 * 1024 ** 3)
     opened = store.write("direct-historical-boundary", rw.boundary(config, held, marker="open"))
-    t0 = _collect_t0(store, adapter, root / "t0", source_sha, deadline)
+    t0 = _collect_t0(store, adapter, root / "t0", source_sha, deadline, instrument)
     _body, gates = _t0_gates(store, t0.to_dict(), declaration)
     original_gates = store.write("direct-historical-t0-gates", {
         "t0": t0.to_dict(), "gates": [row.to_dict() for row in gates]})
     if any(row.check.outcome != schemas.PASS for row in gates):
         raise HistoricalControlRefused(f"original historical T0 failed before performance collection: {_ref(original_gates)}")
-    binding = recipes.ToolBinding(str(lc.INSTRUMENT_BINARY), str(lc.INSTRUMENT_ROOT), str(lc.INSTRUMENT_BINARY.parent))
-    anchor = api.AnchorIdentity(lc.INSTRUMENT_COMMIT, instrument_sha, linkage_sha, tool="llama-bench")
+    binding = recipes.ToolBinding(str(instrument_binary), str(instrument_root), str(instrument_binary.parent),
+        external_build_root=str(instrument.build_root))
+    anchor = api.AnchorIdentity(instrument_commit, instrument_sha, linkage_sha, tool="llama-bench")
     originals, materials = {}, {}
 
     def host_state(**kwargs):
@@ -375,7 +405,7 @@ def _collect(store, held, declaration, root, deadline):
         _deadline(deadline)
         materials[label] = lc._measure(label=label, blocks=count, claim=held, held_claim=adapter,
             candidate_binding=binding, anchor_binding=binding, anchor=anchor,
-            candidate_iqk="0", anchor_iqk="0", output_root=root, host_state=host_state, identity=identity)
+            candidate_iqk="0", anchor_iqk="0", output_root=root, host_state=host_state, identity=identity, instrument_root=instrument_root)
         raw = json.loads((root / "raw" / (label + ".json")).read_text())
         originals[label] = store.write("direct-historical-microbench", raw).to_dict()
     _declared, rule, _construction, _split, solve = lc._campaign_inputs(
@@ -387,13 +417,14 @@ def _collect(store, held, declaration, root, deadline):
     _deadline(deadline)
     lc._measure(label=label, blocks=count, claim=held, held_claim=adapter,
         candidate_binding=binding, anchor_binding=binding, anchor=anchor,
-        candidate_iqk="1", anchor_iqk="0", output_root=root, host_state=host_state, identity=identity)
+        candidate_iqk="1", anchor_iqk="0", output_root=root, host_state=host_state, identity=identity, instrument_root=instrument_root)
     originals[label] = store.write("direct-historical-microbench", json.loads(
         (root / "raw" / (label + ".json")).read_text())).to_dict()
     closed = store.write("direct-historical-boundary", rw.boundary(config, held, marker="close"))
+    instrument.validate_live()
     (root / "close").mkdir()
     lc._write_preflight(root / "close", instrument_sha=instrument_sha,
-        copy_sha=lc._sha256_file(lc.INSTRUMENT_BINARY), host_state=microbench.read_host_state)
+        copy_sha=lc._sha256_file(instrument_binary), host_state=microbench.read_host_state, **_preflight_keywords(instrument))
     return {"identity": asdict(identity), "source_sha256": source_sha,
         "source_tree_hex": source.hex(), "instrument_sha256": instrument_sha,
         "linkage_sha256": linkage_sha, "linkage_text": linkage_text,
@@ -482,6 +513,25 @@ def _window(store, material, *, anchor, solve, rule, commitment, raw_ref):
 
 
 def _compose(store, declaration, material, raw_ref):
+    declared_instrument = declaration["frame"].get("instrument_binding")
+    declared_files = None
+    if declared_instrument is not None:
+        sealed = hi.resolve(declared_instrument)  # data-only: never probe a newer instrument on replay
+        declared_files = sealed.to_dict()["build"]["files"]
+        declared_bench = declared_files["bin/llama-bench"]
+        frame = declaration["frame"]
+        anchor_row = material["anchor"]
+        if (material["source_sha256"] != sealed.source_sha256
+                or hashlib.sha256(bytes.fromhex(material["source_tree_hex"])).hexdigest() != sealed.source_sha256
+                or material["instrument_sha256"] != declared_bench
+                or anchor_row["source_commit"] != sealed.commit
+                or anchor_row["binary_sha256"] != declared_bench
+                or anchor_row.get("tool") != "llama-bench"
+                or anchor_row["linkage_sha256"] != material["linkage_sha256"]
+                or frame["instrument_commit"] != sealed.commit
+                or frame["instrument_root"] != str(sealed.source_root)
+                or frame["instrument_binary"] != str(sealed.binary)):
+            raise HistoricalControlRefused("original material/anchor differs from its sealed instrument")
     identity = lc.LiveCampaignIdentity(**material["identity"])
     root = Path(identity.evidence_ref)
     if identity.campaign_id != declaration["control_campaign_id"] or root != Path(declaration["root"]):
@@ -498,6 +548,25 @@ def _compose(store, declaration, material, raw_ref):
                 "library_path": str(Path(declaration["frame"]["instrument_binary"]).parent)}
             if any(receipt.get(key) != value for key, value in expected.items()):
                 raise HistoricalControlRefused("original historical raw arm differs from its measured instrument")
+            if declared_files is not None:
+                expected_dsos = {name.removeprefix("bin/"): sha for name, sha in declared_files.items()
+                    if name.startswith("bin/lib") and ".so" in Path(name).name}
+                rows = receipt.get("dso_identities")
+                if not isinstance(rows, (list, tuple)):
+                    raise HistoricalControlRefused("original raw DSO closure is missing from sealed instrument")
+                observed = {}
+                for row in rows:
+                    if not isinstance(row, (list, tuple)) or len(row) != 3 or not all(type(x) is str for x in row):
+                        raise HistoricalControlRefused("original raw DSO closure is malformed")
+                    name, target, sha = row
+                    target_path = Path(target)
+                    if (name in observed or name not in expected_dsos or expected_dsos[name] != sha
+                            or target_path.parent != Path(expected["library_path"])
+                            or expected_dsos.get(target_path.name) != sha):
+                        raise HistoricalControlRefused("original raw DSO differs from sealed instrument")
+                    observed[name] = sha
+                if observed != expected_dsos:
+                    raise HistoricalControlRefused("original raw DSO inventory differs from sealed instrument")
     for label, count in (("aa_calibration", lc.CALIBRATION_BLOCKS), ("neutral_calibration", lc.NEUTRAL_BLOCKS)):
         loaded, raw = lc._load_recorded_material(root, identity=identity, label=label,
             expected_blocks=count, prompt=512, candidate_iqk="0", anchor_iqk="0")
@@ -572,15 +641,18 @@ def _compose(store, declaration, material, raw_ref):
     return observation, stages
 
 
-def prepare_replacement(*, store, reference, held_claim, recovery_reference):
+def prepare_replacement(*, store, reference, held_claim, recovery_reference, instrument_binding=None):
     """Only known budget-ending observations can get a fresh original window."""
+    instrument = hi.resolve(instrument_binding)
     from . import runtime_recovery
     previous = _read(store, NAMESPACE, reference)
     if not isinstance(previous.get("error"), str) or not previous["error"].startswith(
             "HistoricalLaunchBudgetExhausted:"):
         raise HistoricalControlRefused("historical control is not a known budget interruption")
     declaration = _read(store, "direct-historical-declaration", previous["declaration"])
-    if declaration["frame"] != _frame() or declaration["source"] != source_identity():
+    if instrument is None and "instrument_binding" in declaration["frame"]:
+        instrument = hi.resolve(declaration["frame"]["instrument_binding"])
+    if declaration["frame"] != _frame(instrument) or declaration["source"] != source_identity():
         raise HistoricalControlRefused("original historical predecessor source/frame differs")
     try:
         binding = runtime_recovery.replacement(reference=recovery_reference,
@@ -591,7 +663,7 @@ def prepare_replacement(*, store, reference, held_claim, recovery_reference):
 
 
 def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=None,
-                  deadline_monotonic_s=None, replacement=None):
+                  deadline_monotonic_s=None, replacement=None, instrument_binding=None):
     """Installed runtime consumer entrypoint; replay never executes work."""
     if type(store) is not ArtifactStore or type(held_claim) is not HeldCpuClaim:
         raise TypeError("historical control requires the original store and acquired CPU context")
@@ -599,6 +671,7 @@ def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=Non
         raise HistoricalControlRefused("historical control requires the original campaign identity")
     if type(window_index) is not int or window_index < 0:
         raise HistoricalControlRefused("historical control window index must be nonnegative")
+    instrument = hi.resolve(instrument_binding)
     key = _digest({"campaign_id": campaign_id, "window_index": window_index})
     if reference is not None:
         result = _read(store, NAMESPACE, reference)
@@ -606,7 +679,9 @@ def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=Non
         if (result["schema"] != SCHEMA or declaration["parent_campaign_id"] != campaign_id
                 or declaration["window_index"] != window_index):
             raise HistoricalControlRefused("historical receipt belongs to another original campaign/window")
-        if declaration["frame"] != _frame() or declaration["source"] != source_identity():
+        if instrument is None and "instrument_binding" in declaration["frame"]:
+            instrument = hi.resolve(declaration["frame"]["instrument_binding"])
+        if declaration["frame"] != _frame(instrument) or declaration["source"] != source_identity():
             raise HistoricalControlRefused("original historical source/frame differs; no receipt relabeling")
         resolution = _resolution(store, declaration["resolution"])
         if result["error"] is not None:
@@ -624,6 +699,8 @@ def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=Non
     if replacement is not None:
         previous = _read(store, NAMESPACE, replacement["previous"])
         previous_declaration = _read(store, "direct-historical-declaration", previous["declaration"])
+        if instrument is None and "instrument_binding" in previous_declaration["frame"]:
+            instrument = hi.resolve(previous_declaration["frame"]["instrument_binding"])
         if (previous_declaration["parent_campaign_id"] != campaign_id
                 or previous_declaration["window_index"] != window_index):
             raise HistoricalControlRefused("replacement changes the original historical allocation")
@@ -634,18 +711,18 @@ def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=Non
         if result_path.exists():
             retained, _sha = serial_run._json(result_path, limit=4096)
             return run_or_reopen(store=store, held_claim=held_claim, campaign_id=campaign_id,
-                window_index=window_index, reference=retained)
+                window_index=window_index, reference=retained, instrument_binding=instrument)
         if not result_path.exists():
             from .loop import RunAborted
             raise RunAborted("original historical execution cleanup unresolved; no fallback measurement")
         raise HistoricalControlRefused("historical control already issued; unresolved original execution is not replayable")
     if replacement is not None and replacement != prepare_replacement(store=store,
             reference=replacement["previous"], held_claim=held_claim,
-            recovery_reference=replacement["recovery"]):
+            recovery_reference=replacement["recovery"], instrument_binding=instrument):
         raise HistoricalControlRefused("historical replacement original holder binding differs")
     declaration = {"schema": SCHEMA, "parent_campaign_id": campaign_id, "window_index": window_index,
         "control_campaign_id": "ak-historical-" + key[:32], "root": str(root),
-        "frame": _frame(), "source": source_identity(), "resolution": _resolve(store).to_dict(),
+        "frame": _frame(instrument), "source": source_identity(), "resolution": _resolve(store).to_dict(),
         "deadline_monotonic_s": deadline_monotonic_s,
         "holder": runtime_recovery.holder_identity(held_claim),
         **({"replacement": replacement} if replacement is not None else {}),
@@ -657,12 +734,12 @@ def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=Non
     try:
         if not resolution.available:
             raise HistoricalControlRefused(resolution.reason())
-        material = _collect(store, held_claim, declaration, root, deadline_monotonic_s)
+        material = _collect(store, held_claim, declaration, root, deadline_monotonic_s, instrument)
         material_ref = store.write("direct-historical-material", material)
         observation, stages = _compose(store, declaration, material, _ref(material_ref))
     except tp.ProcessEscaped:
         raise  # Possibly live owned work cannot be converted into a retryable control result.
-    except (HistoricalControlRefused, OSError, st.CalibrationFailed,
+    except (HistoricalControlRefused, hi.InstrumentBindingRefused, OSError, st.CalibrationFailed,
             tp.InstrumentCapabilityError, tp.AnchorCaptureIncomplete) as exc:
         error = f"{type(exc).__name__}: {exc}"
         observation = controls.ControlObservation(controls.CONTROL_HISTORICAL_WIN_REPLAY,
