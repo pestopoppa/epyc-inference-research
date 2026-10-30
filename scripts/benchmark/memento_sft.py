@@ -1411,7 +1411,17 @@ def main():
              "on 0.6B; adapter is no longer GGUF-convertible)",
     )
 
+    parser.add_argument("--cge-config", type=Path, default=None,
+        help="Pinned S2-CGE-1 preparation contract; no independent labels are inferred")
+    parser.add_argument("--cge-config-sha256", default=None,
+        help="Reviewed content hash of the preparation contract")
+    parser.add_argument("--cge-prepare-only", action="store_true",
+        help="Prepare a bounded verified-target slice using local tokenizer only; no model weights")
     args = parser.parse_args()
+    if args.cge_prepare_only != (args.cge_config is not None):
+        parser.error("CGE draft supports preparation only: supply --cge-config and --cge-prepare-only together")
+    if args.cge_config and (args.dry_run or args.evaluate):
+        parser.error("CGE preparation cannot be combined with dry-run or evaluation")
 
     # Build config
     config = MementoTrainingConfig(
@@ -1435,6 +1445,20 @@ def main():
     if args.evaluate:
         print("[STUB] Evaluation mode — requires trained model")
         evaluate_math500(None, None, adapter_path=args.adapter)
+        return
+
+    if args.cge_prepare_only:
+        # Deliberately before setup_model_and_lora/train_stage and no network.
+        from memento_cge import prepare_from_contract, write_preparation_attempt
+        if args.output_dir is None:
+            raise ValueError("CGE preparation requires an explicit private --output-dir")
+        envelope = write_preparation_attempt(Path(args.output_dir),
+            contract_sha256=args.cge_config_sha256,
+            operation=lambda: prepare_from_contract(args.cge_config, args.cge_config_sha256,
+                data_loader=load_parquet_dataset, data_dir=DATA_DIR,
+                special_tokens=SPECIAL_TOKENS))
+        if envelope["status"] != "PREPARED":
+            raise SystemExit(2)
         return
 
     # Full training path
