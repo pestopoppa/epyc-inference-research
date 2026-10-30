@@ -50,7 +50,11 @@ def run(plan,gt,odl_root,paddle_root,config,image_root=None,pins=None):
         if g['page_info']['image_path']!=page['image'] or g['page_info']['page_attribute']['language']!='english': raise ValueError('GT identity')
         count=len(End2EndDataset.get_page_elements(None,g).get('table',[])); total+=count
         if count!=page['table_count']: raise ValueError('GT table count')
-        sources={'odl':lambda:records.odl(Path(odl_root)/f'shard-{pos//25:02d}'/f'page-{pos:04d}',page,PLAN,PROTOCOL,DEPENDENCY), 'paddle':lambda:records.paddle(Path(paddle_root)/f'shard-{pos//5:02d}'/f'shard-{pos//5}',page,campaign(config))}
+        original_odl=Path(odl_root)/f'shard-{pos//25:02d}'/f'page-{pos:04d}'
+        odl_dir=original_odl
+        try: odl_dir=lineage.recovery_directory(pos,original_odl,pins)
+        except (OSError,ValueError,KeyError,TypeError): pass  # original remains invalid/unknown; no recovery warrant
+        sources={'odl':lambda:records.odl(odl_dir,page,PLAN,PROTOCOL,DEPENDENCY), 'paddle':lambda:records.paddle(Path(paddle_root)/f'shard-{pos//5:02d}'/f'shard-{pos//5}',page,campaign(config))}
         for arm,reader in sources.items():
             try:
                 text=reader()
@@ -60,7 +64,7 @@ def run(plan,gt,odl_root,paddle_root,config,image_root=None,pins=None):
             lineage_record={'verified':False,'basis':'source lineage not evaluated'}
             if text is not None and pins is not None:
                 try:
-                    lineage_record=(lineage.odl_lineage(Path(odl_root)/f'shard-{pos//25:02d}'/f'page-{pos:04d}',pos//25,pins) if arm=='odl' else lineage.paddle_lineage(Path(paddle_root)/f'shard-{pos//5:02d}'/f'shard-{pos//5}',page,campaign(config),pos//5,pins))
+                    lineage_record=(lineage.odl_lineage(odl_dir,pos//25,pins) if arm=='odl' else lineage.paddle_lineage(Path(paddle_root)/f'shard-{pos//5:02d}'/f'shard-{pos//5}',page,campaign(config),pos//5,pins))
                 except (OSError,ValueError,KeyError,TypeError) as exc: lineage_record={'verified':False,'basis':str(exc)}
             values=evaluate(g,text) if text is not None else None
             if values is not None and len(values)!=count: raise ValueError('matcher denominator mismatch')

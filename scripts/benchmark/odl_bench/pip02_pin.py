@@ -18,7 +18,7 @@ for name, expected in {'odl_quad_job.py':'051c5bfa92dd77053b287241c9598e3ffb3ae1
  paths.add(str(path.resolve()))
 # Capture-time source registries are explicitly allowlisted, never inferred from mtime.
 from odl_bench import pip02_lineage as lineage
-registries=[(lineage.ODL,lineage.ODL_SHA)]+[(root/'source-pins.json',expected) for root,expected in lineage.PADDLE_ROOTS.values()]
+registries=[(lineage.ODL,lineage.ODL_SHA),(lineage.ODL_R3,lineage.ODL_R3_SHA),(lineage.RECOVERY/'SOURCES.sha256',lineage.RECOVERY_SHA)]+[(root/'source-pins.json',expected) for root,expected in lineage.PADDLE_ROOTS.values()]
 for registry,expected in registries:
  if m.digest(registry)!=expected: raise ValueError('registered producer manifest changed: '+str(registry))
  paths.add(str(registry.resolve()))
@@ -27,6 +27,16 @@ for registry,expected in registries:
  for name,digest in entries:
   p=Path(name)
   if not p.is_file() or m.digest(p)!=digest: raise ValueError('registered producer source mismatch: '+str(p))
+  paths.add(str(p.resolve()))
+# Original pre-client resolution evidence is part of prospective scoring pins.
+for rr in json.loads((lineage.RECOVERY/'RESOLUTIONS.json').read_bytes()).values():
+ for field in ('producer_source','original_launcher_log'):
+  p=Path(rr[field])
+  if m.digest(p)!=rr[field+'_sha256']: raise ValueError('recovery eligibility source changed: '+str(p))
+  paths.add(str(p.resolve()))
+ for name,expected in rr['evidence'].items():
+  p=Path(rr['original_path'])/name
+  if m.digest(p)!=expected: raise ValueError('original pre-client input changed: '+str(p))
   paths.add(str(p.resolve()))
 for i in range(5):
  ident='codex3-pip02-fresh-odl-s0-20261029' if i==0 else f'codex3-pip02-fresh-odl-quad-s{i}-20261029'

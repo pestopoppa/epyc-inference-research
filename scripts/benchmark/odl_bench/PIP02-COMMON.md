@@ -10,3 +10,6 @@ Results: `coverage-and-scores.json` includes per-page state and per-table scores
 
 The write-side belief adapter should preserve run/source pins, GT/cohort identity, exact coverage, producer state, comparison artifacts and native per-table measurements as a native record, project to the shared `ClaimTuple`, and let `claim_tuple.grade()` decide. No new grading ladder or invented warrant. This code does not itself wire the belief writer.
 
+
+
+ODL R3 is registered only for original shards24/25/28/29 with its frozen source digest and captured producer/grant identity. The separate first-client recovery for original ordinals50/118/310 is eligible only while the original input, producer and pre-client failure-log hashes match and all original client/start/result records remain absent. Its actual new start and DONE must bind source, resolution, result and prediction. Source pin generation includes every referenced original input and failure record; changed predictions, prior-client evidence, wrong shards and source drift fail closed. Existing table metrics, matching, denominators and decision rules are unchanged.

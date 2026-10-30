@@ -5,6 +5,11 @@ from .pip02_records import canon,sha
 BASE=Path('/mnt/raid0/llm/tmp/codex3-pip02-phasec-20261029')
 ODL=BASE/'odl-relocatable-r2'/'SOURCES.sha256'
 ODL_SHA='a17e08f66ffcd3c49e980110e444db2841ae5367b5f6dfff410db18423897cb9'
+RECOVERY=BASE/'odl-recover-50-118-310-r1-20261030'
+RECOVERY_SHA='b2ce8fc980bba8d6aaca2bfc73508e24db33e798baa799e55d782af78ef449cd'
+RECOVERY_ID='codex3-pip02-odl-recover-50-118-310-r1-20261030'
+ODL_R3=BASE/'odl-relocatable-r3-20261030'/'SOURCES.sha256'
+ODL_R3_SHA='2cbd60601aff752f709a5e7bf47b6f6f207dfcfbcad383a06ef300cec99f4961'
 PADDLE_ROOTS={
  'r7':(Path('/mnt/raid0/llm/tmp/codex3-pip02-paddle-parallel-owner-r7-20261029'),'fdae650ccb36ace00838e5be695f93b196d5ae13deae0b47510ed17208ac12a8'),
  'r8':(Path('/mnt/raid0/llm/tmp/codex3-pip02-paddle-relocatable-r8-20261029'),'809585fee03923bb58c769d33aac53a3afa73eb08a4b4283f19f10c28d5837d0'),
@@ -27,13 +32,41 @@ def grant_window(grant,epoch=None):
  if epoch is not None and not a.timestamp()<=epoch<=b.timestamp():raise ValueError('exposure outside captured grant')
  return region
 
+def recovery_directory(ordinal,original,pins):
+ if ordinal not in (50,118,310):return Path(original)
+ recovered=RECOVERY/'first-client'/f'page-{ordinal:04d}'
+ if not recovered.exists():return Path(original)
+ if pins is None:raise ValueError('recovery requires source pins')
+ manifest=pinned(RECOVERY/'SOURCES.sha256',pins)
+ if sha(manifest.read_bytes())!=RECOVERY_SHA:raise ValueError('recovery source manifest mismatch')
+ for line in manifest.read_text().splitlines():
+  expected,name=line.split('  ',1)
+  if sha(pinned(name,pins).read_bytes())!=expected:raise ValueError('recovery source mismatch')
+ resolution=pinned(RECOVERY/'RESOLUTIONS.json',pins);rr=json.loads(resolution.read_bytes())[str(ordinal)];old=Path(original)
+ if rr['ordinal']!=ordinal or rr['shard']!=ordinal//25 or Path(rr['original_path'])!=old:raise ValueError('recovery original identity mismatch')
+ if any((old/name).exists() for name in rr['expected_absent']):raise ValueError('original pre-client evidence changed')
+ for name,expected in rr['evidence'].items():
+  if sha((old/name).read_bytes())!=expected:raise ValueError('original input evidence changed')
+ if sha(pinned(rr['producer_source'],pins).read_bytes())!=rr['producer_source_sha256']:raise ValueError('original producer changed')
+ if sha(pinned(rr['original_launcher_log'],pins).read_bytes())!=rr['original_launcher_log_sha256']:raise ValueError('original failure log changed')
+ return recovered
+
 def odl_lineage(page_dir,shard,pins):
  start=json.loads((Path(page_dir)/'start.json').read_bytes());producer=start.get('producer_id');manifest=start.get('producer_source_manifest_path');digest=start.get('producer_source_manifest_sha256')
  if not producer and not manifest and not digest:
   return {'verified':False,'basis':'legacy ODL start does not capture producer source; cannot infer from packet time or mtime'}
- if producer!=f'codex3-pip02-odl-relocatable-r2-s{shard}-20261029' or manifest!=str(ODL) or digest!=ODL_SHA:raise ValueError('unregistered ODL captured producer')
- p=pinned(ODL,pins)
- if sha(p.read_bytes())!=ODL_SHA:raise ValueError('ODL source manifest mismatch')
+ if producer==RECOVERY_ID and manifest==str(RECOVERY/'SOURCES.sha256') and digest==RECOVERY_SHA:
+  m=re.fullmatch(r'page-(\d{4})',Path(page_dir).name)
+  if not m:raise ValueError('recovery page path')
+  ordinal=int(m.group(1)); original=BASE/f'odl-batch-results/shard-{ordinal//25:02d}/page-{ordinal:04d}'
+  if ordinal//25!=shard or recovery_directory(ordinal,original,pins)!=Path(page_dir):raise ValueError('recovery scope mismatch')
+  p=pinned(RECOVERY/'SOURCES.sha256',pins)
+  done=json.loads((Path(page_dir)/'DONE').read_bytes()); result=Path(page_dir)/'result.json'; prediction=Path(page_dir)/'out/input.md'
+  if start.get('resolution_sha256')!=sha(pinned(RECOVERY/'RESOLUTIONS.json',pins).read_bytes()) or done.get('producer_id')!=producer or done.get('producer_source_manifest_sha256')!=digest or done.get('start_sha256')!=sha((Path(page_dir)/'start.json').read_bytes()) or done.get('result_sha256')!=sha(result.read_bytes()) or done.get('prediction_sha256')!=sha(prediction.read_bytes()):raise ValueError('recovery completion identity mismatch')
+ elif producer==f'codex3-pip02-odl-relocatable-r2-s{shard}-20261029' and manifest==str(ODL) and digest==ODL_SHA:p=pinned(ODL,pins)
+ elif shard in (24,25,28,29) and producer==f'codex3-pip02-odl-relocatable-r3-s{shard}-20261030' and manifest==str(ODL_R3) and digest==ODL_R3_SHA:p=pinned(ODL_R3,pins)
+ else:raise ValueError('unregistered ODL captured producer')
+ if sha(p.read_bytes())!=digest:raise ValueError('ODL source manifest mismatch')
  for line in p.read_text().splitlines():
   expected,name=line.split('  ',1);source=pinned(name,pins)
   if sha(source.read_bytes())!=expected:raise ValueError('ODL registered source mismatch')

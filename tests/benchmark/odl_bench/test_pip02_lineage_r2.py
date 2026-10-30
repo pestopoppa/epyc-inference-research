@@ -16,6 +16,16 @@ class StrictLineage(unittest.TestCase):
     start['producer_source_manifest_sha256']='a'*64;dump(page/'start.json',start)
     with self.assertRaises(ValueError):l.odl_lineage(page,20,pins)
     dump(page/'start.json',{'grant':grant,'started':1793315700});self.assertFalse(l.odl_lineage(page,20,pins)['verified'])
+ def test_r3_producer_scope_and_source_tampering(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   t=Path(tmp);source=t/'odl_page.py';source.write_text('r3 native');manifest=t/'SOURCES.sha256';manifest.write_text(f'{d(source)}  {source}\n');pins={str(source):d(source),str(manifest):d(manifest)};page=t/'page';grant='regions=48-71 start=2026-10-29T23:00Z end=2026-10-30T00:00Z\n';start={'producer_id':'codex3-pip02-odl-relocatable-r3-s24-20261030','producer_source_manifest_path':str(manifest),'producer_source_manifest_sha256':d(manifest),'grant':grant,'started':1793315700};dump(page/'start.json',start)
+   with patch.object(l,'ODL_R3',manifest),patch.object(l,'ODL_R3_SHA',d(manifest)):
+    self.assertTrue(l.odl_lineage(page,24,pins)['verified'])
+    with self.assertRaises(ValueError):l.odl_lineage(page,25,pins)
+    start['producer_id']='codex3-pip02-odl-relocatable-r3-s23-20261030';dump(page/'start.json',start)
+    with self.assertRaises(ValueError):l.odl_lineage(page,23,pins)
+    start['producer_id']='codex3-pip02-odl-relocatable-r3-s24-20261030';dump(page/'start.json',start);source.write_text('tampered')
+    with self.assertRaises(ValueError):l.odl_lineage(page,24,pins)
  def test_paddle_origins_cannot_imply_finisher(self):
   with tempfile.TemporaryDirectory() as tmp:
    t=Path(tmp);root=t/'r8';root.mkdir();source=t/'worker.py';source.write_text('native');registry=root/'source-pins.json';dump(registry,{str(source):d(source)});pins={str(registry.resolve()):d(registry),str(source.resolve()):d(source)};campaign={'server_pins':{'model':'m'}};page={'image':'x','index':7};grant='regions=48-71 start=2026-10-29T23:00Z end=2026-10-30T00:00Z\n';cap={'id':'codex3-pip02-paddle-relocatable-r8-g5-20261029','shards':[5,6,7],'smoke':False,'source_pins':{str(source):d(source)},'protocol_sha256':l.PROTOCOL,'grant':grant,'grant_sha256':sha(grant.encode())};capfile=root/'attempts/a/capture.json';dump(capfile,cap);prefix='region-'+sha(canon(page))[:24]+'-000000';start=t/'journal'/f'{prefix}.start.json';response=t/'journal'/f'{prefix}.result.json';body=b'request';output=b'response';origin={'identity':{'campaign_sha256':sha(canon(campaign)),'model_pins':campaign['server_pins'],'source_pins':cap['source_pins']},'origin_grant':grant,'origin_capture_sha256':d(capfile)};dump(start,{'provenance':origin,'body_hex':body.hex(),'body_sha256':sha(body),'originated_at':'2026-10-29T23:10:00+00:00'});dump(response,{'request_sha256':sha(body),'start_sha256':d(start),'body_hex':output.hex(),'response_sha256':sha(output),'status':200})
