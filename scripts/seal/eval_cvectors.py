@@ -5,7 +5,7 @@ Tests a control vector at a given scaling factor (or baseline) against a set of
 math problems, measuring token count, correctness, and brevity ratio.
 
 Because llama.cpp loads control vectors at server startup via
---control-vector-scaled <path>,<factor>, each scaling factor requires a server
+--control-vector-scaled <path>:<factor>, each scaling factor requires a server
 restart. This script tests ONE configuration per invocation. Use --run-all mode
 for an interactive workflow that prompts between scaling factors.
 
@@ -605,7 +605,7 @@ def main() -> None:
                 print(
                     f"\nRestart the server with:\n"
                     f"  llama-server -m <model> "
-                    f"--control-vector-scaled {args.cvector},{factor}\n"
+                    f"--control-vector-scaled {args.cvector}:{factor}\n"
                 )
                 input("Press Enter when the server is ready (or Ctrl+C to abort)...")
             all_results[label] = evaluate_problems(

@@ -79,7 +79,9 @@ def generate(port, prompt, max_tokens=400):
 def start_server(model, port, threads, cvec=None):
     args = [SERVER, "-m", model, "-t", str(threads), "-c", "2048",
             "--port", str(port), "--host", "127.0.0.1", "--no-warmup", "-np", "1"]
-    if cvec and os.path.exists(cvec):
+    if cvec:
+        if not os.path.isfile(cvec):
+            raise FileNotFoundError(f"control vector missing: {cvec}")
         args += ["--control-vector-scaled", f"{cvec}:0.5"]
     proc = subprocess.Popen(args, env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(25)
@@ -204,7 +206,7 @@ if __name__ == "__main__":
     # Honest exit status. A printed "YES!" that exits 0 is a vacuous pass.
     regressed = [r["name"] for r in all_results
                  if r.get("status") == "OK" and r["cv_correct"] < r["base_correct"]]
-    failed = [r.get("name", "?") for r in all_results if r.get("status") == "FAILED"]
+    failed = [r.get("name", "?") for r in all_results if r.get("status") in {"FAILED", "REFUSED", "SKIPPED"}]
     if regressed or failed:
         if regressed:
             print(f"FAIL: accuracy regression in role(s): {', '.join(regressed)}")
