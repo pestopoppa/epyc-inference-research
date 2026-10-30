@@ -334,6 +334,74 @@ def finalize_wgm_proxy(
     )
 
 
+def finalize_nemo_native(
+    receipt: Mapping[str, Any],
+    *,
+    capture_root: Path,
+    source_locator: str,
+    source_sha256: str,
+) -> dict[str, Any]:
+    """Strict prospective native joins through the existing profile carrier."""
+    from scripts.benchmark import nemo_native_join as native
+
+    report, values = native.read_capture(receipt, capture_root)
+    native.qualify_capture(receipt, values)
+    pins = receipt.get("analysis_sources")
+    expected = {
+        "nemo_native_join.py": sha256_file(native.__file__),
+        "autokernel_profile_beliefs.py": sha256_file(__file__),
+    }
+    if pins != expected:
+        raise ProfileBeliefError("prospective native analysis source pins differ")
+    campaign = _text(receipt.get("campaign_id"), "campaign_id")
+    claim = _claim_pair(
+        receipt.get("device_claim_open"), receipt.get("device_claim_released"), campaign_id=campaign
+    )
+    if claim["opened"]["device_id"] != receipt["agent_binding"]["device_id"]:
+        raise ProfileBeliefError("native dispatch device differs from acquired device")
+    metrics = native.measurement_values(report)
+    rows = []
+    for metric in metrics:
+        rows.append(
+            _measurement(
+                measurement_id=campaign + ":" + metric["label"] + ":" + metric["metric"],
+                metric=metric["metric"],
+                value=metric["value_ms"],
+                unit="ms",
+                direction="lower_better",
+                reps=1,
+                reps_basis=metric["reps_basis"],
+                claim=(
+                    "One traced native request observed "
+                    + metric["metric"]
+                    + "; attribution only, no keep/ship or optimization conclusion"
+                ),
+                extra={
+                    "native_request_id": metric["request_id"],
+                    "phase": metric["label"],
+                    "raw_values_ms": metric["raw_values_ms"],
+                    "observed_dependent_units": metric["observed_dependent_units"],
+                    "protocol_scope": "original NEMO L/B attribution, unratified single-request observation",
+                    "native_join_sha256": native.canonical_hash(report),
+                    "raw_readset": report["raw_readset"],
+                    "analysis_sources": expected,
+                },
+            )
+        )
+    result = _base(
+        receipt,
+        expected_schema=native.CAPTURE_SCHEMA,
+        source_locator=source_locator,
+        source_sha256=source_sha256,
+        claim=claim,
+        measurements=rows,
+    )
+    result["native_join"] = report
+    result["native_metric_vectors"] = metrics
+    result["receipt_sha256"] = receipt_sha256(result)
+    return result
+
+
 def receipt_sha256(receipt: Mapping[str, Any]) -> str:
     payload = dict(receipt)
     payload.pop("receipt_sha256", None)
@@ -355,7 +423,7 @@ def write_receipt(path: str | Path, receipt: Mapping[str, Any]) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--kind", choices=("g15", "c4", "wgm-proxy"), required=True)
+    parser.add_argument("--kind", choices=("g15", "c4", "wgm-proxy", "nemo-native"), required=True)
     parser.add_argument("--input-receipt", required=True)
     parser.add_argument("--report")
     parser.add_argument("--output", required=True)
@@ -363,7 +431,11 @@ def main() -> int:
     source_path = Path(args.input_receipt).resolve()
     source = json.loads(source_path.read_text(encoding="utf-8"))
     common = {"source_locator": str(source_path), "source_sha256": sha256_file(source_path)}
-    if args.kind == "g15":
+    if args.kind == "nemo-native":
+        if args.report:
+            raise ProfileBeliefError("native NEMO finalization reopens its exact raw readset")
+        finalized = finalize_nemo_native(source, capture_root=source_path.parent, **common)
+    elif args.kind == "g15":
         if args.report:
             raise ProfileBeliefError("G15 finalization does not accept --report")
         finalized = finalize_g15(source, **common)
