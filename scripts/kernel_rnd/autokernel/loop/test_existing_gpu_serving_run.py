@@ -16,6 +16,16 @@ from .test_resolved_recipe import _policy
 from . import test_promotion_targets as fixture_module
 
 
+_REAL_ROCM_CHECK = run.build_recipe.check_rocm_version
+
+
+@pytest.fixture(autouse=True)
+def synthetic_rocm62(monkeypatch):
+    """MOCK_ONLY: this module's GPU/build observations already use synthetic fixtures."""
+    monkeypatch.setattr(run.build_recipe, "check_rocm_version",
+                        lambda: (True, run.build_recipe.ROCM_VERSION_REQUIRED))
+
+
 def _inputs(fixture, *, experimental):
     model = fixture.root / f"{run.bench.MEASURED_FLOOR_MODEL_STEM}.gguf"
     branch = "ak/experimental/gpu-serving" if experimental else run.champion.CANONICAL_BRANCH
@@ -372,5 +382,37 @@ def test_gpu_serving_bad_inputs_refuse_before_startup(case):
                 pytest.raises(SystemExit) as error:
             run.main(argv)
         assert error.value.code == 2
+    finally:
+        fixture.doCleanups()
+
+
+@pytest.mark.parametrize("version", [None, "6.1.0-123"])
+def test_gpu_serving_rocm_refusal_precedes_startup(version, tmp_path, monkeypatch, capsys):
+    fixture = fixture_module.TheKeepBuildsAProductionCompleteAnchor()
+    fixture.setUp()
+    try:
+        _, _, _, options, _ = _inputs(fixture, experimental=True)
+        version_file = tmp_path / "private-ROCm-version"
+        if version is not None:
+            version_file.write_text(version)
+        monkeypatch.setattr(run.build_recipe, "check_rocm_version",
+                            lambda: _REAL_ROCM_CHECK(str(version_file)))
+        argv = ["--worktree", str(fixture.repo), "--anchor-build", str(fixture.startup_anchor),
+                "--store", str(fixture.store), *options]
+        # The existing artifact-only verification precedes this parser check; no
+        # hardware claim or execution may begin after the invalid version is seen.
+        with mock.patch.object(run.champion, "verify_startup", return_value=fixture.tip), \
+                mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
+                    n_embd=1536, dominant_quant="Q5_0")), \
+                mock.patch.object(run.gates, "compiles", side_effect=AssertionError("build")), \
+                mock.patch.object(run.claim, "hold", side_effect=AssertionError("GPU claim")), \
+                mock.patch.object(run.claim, "hold_cpu", side_effect=AssertionError("CPU claim")), \
+                mock.patch.object(run.pool, "provision", side_effect=AssertionError("pool startup")), \
+                pytest.raises(SystemExit) as error:
+            run.main(argv)
+        assert error.value.code == 2
+        message = capsys.readouterr().err
+        assert f"requires ROCm {run.build_recipe.ROCM_VERSION_REQUIRED}" in message
+        assert ("host reports unreadable:" if version is None else f"host reports {version}") in message
     finally:
         fixture.doCleanups()
