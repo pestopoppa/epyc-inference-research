@@ -155,7 +155,8 @@ class Owner:
                 ledger.settle(outcome.resumed_from, self.anchor, result_status=outcome.status)
 
     def record_abandoned(self, candidate):
-        if candidate.hypothesis is not None and candidate.status != "hypothesis_rejected":
+        if (candidate.hypothesis is not None and candidate.status != "hypothesis_rejected"
+                and candidate.retained_patch is None):
             kept = archive.retain_patch(self.store, self.repo, lane="lane0",
                                         mechanism_id=candidate.hypothesis.mechanism_id)
             if kept is not None:
@@ -465,6 +466,9 @@ class RevalidationFailuresAreRecordedAndNeverRetried(Fixture):
         (row,) = rows_with(self.store, "resume_rejected")
         self.assertEqual(row["refusal_gate"], "op_scope")
         self.assertEqual(row["resumed_from"], point.checkpoint_id)
+        self.assertIn(REFUSAL, row["reason"])
+        self.assertIn(b"line 5 EDITED", resume.verify_retained_patch(
+            row["retained_patch"], anchor_commit=self.anchor, mechanism_id="akm-demo-hoist"))
         self.assertNotIn("resume_checkpoints", row)     # a refusal is final
         queue, report = self.prepare()
         self.assertEqual((len(queue), report["already_claimed"]), (0, 1))
@@ -483,6 +487,8 @@ class RevalidationFailuresAreRecordedAndNeverRetried(Fixture):
         self.assertEqual((fresh.proposals, outcome.hypothesis.mechanism_id), (1, "akm-fresh"))
         (row,) = rows_with(self.store, "resume_rejected")
         self.assertEqual(row["refusal_gate"], "resume:anchor")
+        self.assertIn(b"line 5 EDITED", resume.verify_retained_patch(
+            row["retained_patch"], anchor_commit=self.anchor, mechanism_id="akm-demo-hoist"))
         self.assertNotIn("resume_checkpoints", row)
 
     def test_a_lane_time_failure_falls_through_to_fresh_work(self):
@@ -498,6 +504,10 @@ class RevalidationFailuresAreRecordedAndNeverRetried(Fixture):
         self.assertEqual(fresh.proposals, 1)
         self.assertEqual(outcome.abandoned_candidates[0]["status"], "resume_rejected")
         self.assertEqual(outcome.abandoned_candidates[0]["refusal_gate"], "resume:lane_dirty")
+        (row,) = rows_with(self.store, "resume_rejected")
+        self.assertIn("lane is not clean", row["reason"])
+        self.assertIn(b"line 5 EDITED", resume.verify_retained_patch(
+            row["retained_patch"], anchor_commit=self.anchor, mechanism_id="akm-demo-hoist"))
 
 
 class ARefusedResumeYieldsToTheNextQueuedCheckpoint(Fixture):

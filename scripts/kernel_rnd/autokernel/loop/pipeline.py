@@ -293,7 +293,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              reserve_candidate=None,
              make_author_panel: Callable[[Worker], Any] | None = None,
              record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
-             next_resume: Callable[[Worker, str], Any] | None = None
+             next_resume: Callable[[Worker, str], Any] | None = None,
+             retain_authored=None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -467,7 +468,11 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                         reservation = None
                     if record_abandoned is not None:
                         with outcomes_lock:
-                            record_abandoned(_w, candidate)
+                            try:
+                                record_abandoned(_w, candidate)
+                            except Exception as exc:
+                                raise loop_mod.RunAborted(
+                                    f"candidate disposition could not be recorded: {exc}") from exc
 
                 def draw_resume(_w=worker, _b=base):
                     # `iterate` asks again when it refuses `resumed` at re-validation.
@@ -500,6 +505,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     # The lane and the commit reset_to_champion put it on for THIS
                     # draw: the only lane an empty author report may be derived from.
                     author_lane=(worker.worktree, base),
+                    **({"retain_authored": lambda h, _w=worker: retain_authored(_w, h)}
+                       if retain_authored is not None else {}),
                     iteration_scope=iteration_scope)
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
@@ -558,7 +565,20 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 belief_refusals = 0
         close_iteration(None)
 
-    threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)
+    def guarded_lane(worker: Worker) -> None:
+        try:
+            lane(worker)
+        except Exception as exc:
+            # A recorder failure must stop the pool before this lane is reset.
+            with outcomes_lock:
+                budget.remaining = 0
+                failure = loop_mod.RunAborted(
+                    f"lane {worker.name} could not persist its outcome: "
+                    f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}")
+                failure.__cause__ = exc
+                aborted.append(failure)
+
+    threads = [threading.Thread(target=guarded_lane, args=(w,), name=w.name, daemon=True)
                for w in workers]
     with batch_scope:
         registry.sweep()

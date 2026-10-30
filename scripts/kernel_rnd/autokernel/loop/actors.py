@@ -51,7 +51,7 @@ import uuid
 
 from . import actor_metrics, belief_context, history_fields, integrity, procguard, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
-                   Review)
+                   Review, RunAborted)
 
 #: `--actor-belief-context`: the ONLY mode is `required` (operator 2026-10-21: there is no
 #: "off" for planning). Every proposal first obtains a validated `ready` answer from ROOT's
@@ -1115,16 +1115,20 @@ def _persist_reply(workspace: Path, backend: Backend,
         target = Path(workspace).parent / ACTOR_REPLY_DIR
         target.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-        stem = f"{stamp}-{backend.kind}-{backend.model.replace('/', '_')}-rc{done.returncode}"
+        stem = (f"{stamp}-{backend.kind}-{backend.model.replace('/', '_')}"
+                f"-{uuid.uuid4().hex}-rc{done.returncode}")
         refs: dict[str, Any] = {}
         for stream, text in (("stdout", done.stdout), ("stderr", done.stderr)):
-            data = (text or "")[-ACTOR_REPLY_KEEP_BYTES:].encode("utf-8", "replace")
-            (target / f"{stem}.{stream}").write_bytes(data)
+            data = (text or "").encode("utf-8", "replace")
+            final = target / f"{stem}.{stream}"
+            temporary = target / f".{stem}.{stream}.tmp"
+            temporary.write_bytes(data)
+            os.replace(temporary, final)
             refs[stream] = {"path": f"{stem}.{stream}",
                             "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
         return refs
-    except OSError:
-        return None  # a reply record is evidence, never a reason to fail the actor call
+    except OSError as exc:
+        raise RunAborted(f"actor reply retention failed: {exc}") from exc
 
 
 ACTOR_CALL_LOG = actor_metrics.CALL_LOG_NAME
@@ -1148,7 +1152,7 @@ def _record_call(workspace: Path, backend: Backend, prompt: str, *, returncode: 
               "backend": backend.describe(), "agent": backend.agent or None,
               "returncode": returncode, "wall_s": round(wall_s, 1),
               "prompt_chars": len(prompt),
-              "opencode_config": (env or {}).get("OPENCODE_CONFIG")}
+              "opencode_config": (env or {}).get("OPENCODE_CONFIG"), "reply": reply}
     try:
         row = _call_record_v1(workspace, backend, prompt, returncode=returncode,
                               wall_s=wall_s, finished=finished, env=env, schema=schema,
@@ -1160,8 +1164,8 @@ def _record_call(workspace: Path, backend: Backend, prompt: str, *, returncode: 
         target.mkdir(parents=True, exist_ok=True)
         with open(target / ACTOR_CALL_LOG, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
-    except OSError:
-        pass  # evidence, never a reason to fail the actor call
+    except OSError as exc:
+        raise RunAborted(f"actor call record failed: {exc}") from exc
 
 
 def _safe_role(schema: Mapping[str, Any] | None) -> str | None:
@@ -1730,6 +1734,14 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         # codex/claude have no local server to ask; the orchestrator kind already
         # repaired server-side (TD-21.1 `repl_final`, INF-78 OAB-2).
         return None
+    repair_started = time.monotonic()
+
+    def record_repair(done):
+        reply = _persist_reply(workspace, backend, done)
+        _record_call(workspace, backend, instruction, returncode=done.returncode,
+                     wall_s=time.monotonic() - repair_started, env=None,
+                     schema=schema, reply=reply)
+
     base = _provider_base_url(backend.model)
     if base is None:
         return None
@@ -1742,7 +1754,7 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
             base = wire
             headers["X-Client-Id"] = actor_passthrough.CLIENT_ID
     except actor_passthrough.UnroutedLocalProvider as exc:
-        _persist_reply(workspace, backend, subprocess.CompletedProcess(
+        record_repair(subprocess.CompletedProcess(
             args=["schema-repair"], returncode=-2, stdout="", stderr=str(exc)))
         return None
     import urllib.request
@@ -1769,6 +1781,7 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
     request = urllib.request.Request(
         base + "/chat/completions", data=json.dumps(body).encode("utf-8"),
         headers=headers, method="POST")
+    content = None
     try:
         with urllib.request.urlopen(request, timeout=timeout_s) as response:
             payload = json.loads(response.read().decode("utf-8", "replace"))
@@ -1776,10 +1789,11 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         repaired = json.loads(content)
     except (urllib.error.URLError, OSError, KeyError, IndexError, TypeError,
             ValueError) as exc:
-        _persist_reply(workspace, backend, subprocess.CompletedProcess(
-            args=["schema-repair"], returncode=-2, stdout="", stderr=f"{type(exc).__name__}: {exc}"))
+        record_repair(subprocess.CompletedProcess(
+            args=["schema-repair"], returncode=-2, stdout=content or "",
+            stderr=f"{type(exc).__name__}: {exc}"))
         return None
-    _persist_reply(workspace, backend, subprocess.CompletedProcess(
+    record_repair(subprocess.CompletedProcess(
         args=["schema-repair"], returncode=0, stdout=content, stderr=""))
     return repaired if isinstance(repaired, dict) else None
 

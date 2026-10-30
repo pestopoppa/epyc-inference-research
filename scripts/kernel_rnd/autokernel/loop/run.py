@@ -627,6 +627,21 @@ def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: b
         print(f"resume    (dry) pending {row.get('mechanism_id')} [{row.get('state')}]")
 
 
+def _existing_or_retain_patch(worker, hypothesis, retained, retain):
+    """Use this candidate's gate archive even if its lane has since been cleaned."""
+    entry = retained.get(worker.name)
+    if entry is not None and entry[0] is hypothesis:
+        return entry[1]
+    return retain(worker, hypothesis)
+
+
+def _retain_gate_patch(worker, hypothesis, retained, retain):
+    try:
+        retained[worker.name] = (hypothesis, retain(worker, hypothesis))
+    except Exception as exc:
+        raise loop.RunAborted(f"gate patch retention failed: {exc}") from exc
+
+
 def _bind_owned_cpu_affinity(original, resources):
     """Make inherited CPU placement explicit using only the campaign allocation."""
     from . import legacy_targets, resolved_recipe as rr
@@ -3944,6 +3959,8 @@ def main(argv: list[str] | None = None) -> int:
                if selected_identity else {}),
         }
 
+    retained_gate_patches: dict = {}
+
     def keep_the_diff(worker, hypothesis) -> Path | None:
         """Preserve every candidate patch, kept or not.
 
@@ -4013,7 +4030,7 @@ def main(argv: list[str] | None = None) -> int:
                     resolved_recipe=pair.candidate))
             # The diff first: a build that fails still leaves a patch worth reading,
             # and this is the last moment it exists on disk.
-            keep_the_diff(worker, hypothesis)
+            _retain_gate_patch(worker, hypothesis, retained_gate_patches, keep_the_diff)
             changed = tuple(archive._git(worker.worktree, "diff", "HEAD", "--name-only").splitlines())
             untracked = tuple(archive._git(worker.worktree, "ls-files", "--others",
                                            "--exclude-standard", "--", "ggml/src/", "src/").splitlines())
@@ -6137,6 +6154,7 @@ def main(argv: list[str] | None = None) -> int:
                       file=sys.stderr)
 
         def validate_pooled(worker, hypothesis, paths):
+            retained_gate_patches.pop(worker.name, None)
             # A byte-bounded or otherwise partial census legitimately has no
             # dominant quant.  Candidate integrity must still inspect the full
             # patch and bench-shape literals; an absent optional type constraint
@@ -6190,6 +6208,18 @@ def main(argv: list[str] | None = None) -> int:
         # The provisioned lanes by name, so the recorder can retain a lane's diff.
         lanes_by_name: dict = {}
 
+        def retained_for(worker, hypothesis):
+            return _existing_or_retain_patch(worker, hypothesis, retained_gate_patches,
+                                             keep_the_diff)
+
+        def retain_authored_pooled(worker, hypothesis):
+            kept = keep_the_diff(worker, hypothesis)
+            if kept is None:
+                raise loop.RunAborted("authored tree changed but no source patch was retained")
+            return {"patch_file": str(kept.resolve()),
+                    "metadata_file": str(kept.with_suffix(".json").resolve()),
+                    "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
+
         def retain_critic2(outcome, attempt) -> None:
             """A critic2 checkpoint points at the patch its lane holds NOW (resume.py).
 
@@ -6209,6 +6239,23 @@ def main(argv: list[str] | None = None) -> int:
                 attempt.pop("resume_checkpoints", None)
 
         def record_pooled(outcome) -> None:
+            # These terminal outcomes can leave an authored lane about to be reset.
+            # Bind its actual retained bytes to the disposition before that reset.
+            if (outcome.status in {"integrity_refused", "refused_duplicate", "superseded",
+                                   "measurement_invalid", "bench_failed", "no_op_build",
+                                   "interaction_regression", "keep_candidate"}
+                    and outcome.hypothesis is not None
+                    and outcome.hypothesis.runtime_pair is None
+                    and outcome.retained_patch is None):
+                worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
+                if worker is None:
+                    raise loop.RunAborted("cannot retain terminal patch: lane not found")
+                kept = retained_for(worker, outcome.hypothesis)
+                if kept is not None:
+                    outcome.retained_patch = {
+                        "patch_file": str(kept.resolve()),
+                        "metadata_file": str(kept.with_suffix(".json").resolve()),
+                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
             attempt = attempt_with_codegen(outcome, codegen_by_head)
             retain_critic2(outcome, attempt)
             attempt["research_scope"] = archive.original_research_scope(
@@ -6269,16 +6316,16 @@ def main(argv: list[str] | None = None) -> int:
             """
             hypothesis = candidate.hypothesis
             if hypothesis is not None and hypothesis.runtime_pair is None \
-                    and candidate.status != "hypothesis_rejected":
+                    and candidate.status != "hypothesis_rejected" \
+                    and candidate.retained_patch is None:
                 try:
-                    kept = keep_the_diff(worker, hypothesis)
+                    kept = retained_for(worker, hypothesis)
                     candidate.retained_patch = (None if kept is None else {
                         "patch_file": str(kept.resolve()),
                         "metadata_file": str(kept.with_suffix(".json").resolve()),
                         "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()})
                 except Exception as exc:      # noqa: BLE001 -- the row still lands
-                    candidate.retained_patch = {
-                        "error": f"patch retention failed: {type(exc).__name__}: {exc}"}
+                    raise loop.RunAborted(f"patch retention failed: {exc}") from exc
             attempt = candidate.to_attempt()
             attempt["research_scope"] = archive.original_research_scope(
                 attempt, model=args.model, quant=census.dominant_quant,
@@ -6812,6 +6859,7 @@ def main(argv: list[str] | None = None) -> int:
             # a dirty reused lane with no gate archive. Preserve it BEFORE the
             # original owned reset. An archive failure must prevent that reset.
             archive.retain_patch(args.store, worker.worktree, lane=worker.name)
+            retained_gate_patches.pop(worker.name, None)
             return pool.reset_to_champion(worker, champion_tree=args.worktree,
                                           branch=args.champion_branch)
 
@@ -7021,6 +7069,7 @@ def main(argv: list[str] | None = None) -> int:
                              "measurement_epoch_sha256": measurement_epoch}),
             reserve_candidate=reserve_pooled,
             record_abandoned=record_abandoned_pooled,
+            retain_authored=retain_authored_pooled,
             next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
             **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
             champion_tree=args.worktree, branch=args.champion_branch,

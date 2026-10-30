@@ -336,7 +336,8 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
                 "--model", str(self.root / f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"), "--store", str(self.store),
                 "--iterations", "1", "--workers", "1",
                 "--worker-root", str(self.root / "lanes"),
-                "--worker-build-root", str(self.root / "builds")]
+                "--worker-build-root", str(self.root / "builds"),
+                "--allow-untested-actor-seats", "synthetic fixture actors"]
         out = io.StringIO()
         with mock.patch.object(gates, "compiles", fake_compiles), \
              mock.patch.object(run_mod.kernel_coverage, "_nm", synthetic_symbols), \
@@ -369,8 +370,15 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         return rc, compile_calls, planners, scratch, out.getvalue()
 
     def test_the_automatic_keep_path_promotes_production_complete(self):
+        import sqlite3
         rc, calls, planners, scratch, log = self._run_one_keep()
         self.assertEqual(rc, 0, log)
+
+        with sqlite3.connect(self.store / "experiments.db") as database:
+            (payload,) = database.execute(
+                "SELECT payload FROM experiments WHERE status='kept'").fetchone()
+        kept = json.loads(payload)
+        self.assertIn(b"patched", Path(kept["retained_patch"]["patch_file"]).read_bytes())
 
         promoted = self.store / "anchor-gen-002"
         promotion = [c for c in calls if c["dest"] == promoted]

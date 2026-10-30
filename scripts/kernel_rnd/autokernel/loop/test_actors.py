@@ -919,7 +919,8 @@ class Backends(unittest.TestCase):
         b = actors.backend_for("prov/model", "high")
         done = mock.Mock(returncode=0, stdout="{}", stderr="")
         with mock.patch.object(actors.subprocess, "run", return_value=done) as ran, \
-             mock.patch.object(actors, "_persist_reply"):
+             mock.patch.object(actors, "_persist_reply"), \
+             mock.patch.object(actors, "_record_call"):
             actors._run_agent('say "hi" to me', workspace=Path("/ws"), backend=b)
         self.assertEqual(ran.call_args.kwargs["input"], 'say "hi" to me')
         self.assertNotIn('say "hi" to me', ran.call_args.args[0])
@@ -931,7 +932,9 @@ class Backends(unittest.TestCase):
     def test_run_agent_invokes_the_backend_argv_in_the_workspace(self):
         b = actors.backend_for("claude-fable-5-1", "medium")
         done = mock.Mock(returncode=0, stdout="{}", stderr="")
-        with mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
+        with mock.patch.object(actors.subprocess, "run", return_value=done) as ran, \
+             mock.patch.object(actors, "_persist_reply"), \
+             mock.patch.object(actors, "_record_call"):
             actors._run_agent("PROMPT", workspace=Path("/ws"), backend=b)
         argv = ran.call_args.args[0]
         self.assertEqual(argv, b.argv("PROMPT", Path("/ws")))
