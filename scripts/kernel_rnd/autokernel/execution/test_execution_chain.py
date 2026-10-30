@@ -68,6 +68,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 _HERE = Path(__file__).resolve()
@@ -1257,12 +1258,19 @@ def null_effect(*, seed: int, blocks: int, sigma: float = 0.01) -> tuple:
     return tuple(1.0 + rng.gauss(0.0, sigma) for _ in range(blocks))
 
 
+MOCK_DSO_NAME = "libggml-chain-MOCK_ONLY.so"
+MOCK_DSO_BYTES = b"MOCK_ONLY declared execution-chain DSO fixture; never loaded or executable.\n"
+
+
 def bench_binding(root: str, payload: bytes) -> recipes.ToolBinding:
     bindir = Path(root) / "bin"
     bindir.mkdir(parents=True, exist_ok=True)
     binary = bindir / "llama-bench"
     binary.write_bytes(payload)
     binary.chmod(0o755)
+    # RecordedSpawner parses labelled fixtures; neither this binary nor this
+    # declared library is an ELF or a claim about production residency.
+    (bindir / MOCK_DSO_NAME).write_bytes(MOCK_DSO_BYTES)
     return recipes.ToolBinding(binary=str(binary), source_root=str(root),
                                library_path=str(bindir))
 
@@ -1795,6 +1803,21 @@ class TestTheChainFits(_ChainCase):
                          self.leg.reduction.admissible.reasons)
         self.assertIsNotNone(self.leg.reduction.estimate)
 
+    def test_recorded_chain_captures_explicit_mock_only_dso_identities(self):
+        for receipt in (self.leg.t1_run.candidate_receipt, self.leg.t1_run.anchor_receipt):
+            library = Path(receipt.library_path) / MOCK_DSO_NAME
+            self.assertEqual(library.read_bytes(), MOCK_DSO_BYTES)
+            self.assertFalse(MOCK_DSO_BYTES.startswith(b"\x7fELF"))
+            self.assertEqual(
+                receipt.dso_identities,
+                ((MOCK_DSO_NAME, str(library.resolve()), hashlib.sha256(MOCK_DSO_BYTES).hexdigest()),),
+            )
+        for run in (self.leg.t1_run, *self.leg.t1_extension_runs):
+            self.assertTrue(run.complete, run.refusals)
+            for block in run.blocks:
+                for invocation in block.invocations:
+                    self.assertIsNone(invocation.spawn.pid, "recorded fixtures never imply native residency")
+
     def test_the_bench_argv_carried_the_canonical_prefix_and_the_whole_omp_stack(self):
         """The measurement discipline, asserted on what WOULD have been executed."""
         calls = self.leg.microbench_spawner.calls
@@ -1840,6 +1863,45 @@ class TestTheChainFits(_ChainCase):
 # =============================================================================
 # G. THE NEGATIVE PATHS — what the chain must REFUSE
 # =============================================================================
+
+class TestDeclaredDSOInventoryStillGatesTheChain(_ChainCase):
+    def test_missing_mock_dso_refuses_before_any_recorded_spawn(self):
+        leg = ChainLeg(self.world).up_to("t0")
+        original = leg._spawn_t1
+
+        def missing(plan, **kwargs):
+            (Path(plan.candidate_binding.library_path) / MOCK_DSO_NAME).unlink()
+            return original(plan, **kwargs)
+
+        with mock.patch.object(leg, "_spawn_t1", side_effect=missing):
+            run = leg.run_t1()
+        self.assertFalse(run.complete)
+        self.assertEqual(leg.microbench_spawner.calls, [])
+        self.assertIn("dynamic DSO inventory unknown/missing", " ".join(run.refusals))
+        with self.assertRaises(MB.RunRefused):
+            run.paired_blocks()
+
+    def test_dso_mutation_inside_recorded_spawn_cannot_enter_the_chain(self):
+        leg = ChainLeg(self.world).up_to("t0")
+        real_spawner = MB.RecordedSpawner
+
+        class MutatingRecordedSpawner(real_spawner):
+            def run(self, argv, env, **kwargs):
+                result = super().run(argv, env, **kwargs)
+                binary = next(value for value in argv if value.endswith("/bin/llama-bench"))
+                library = Path(binary).parent / MOCK_DSO_NAME
+                library.write_bytes(MOCK_DSO_BYTES + b"mutated during MOCK_ONLY spawn\n")
+                return result
+
+        with mock.patch.object(MB, "RecordedSpawner", MutatingRecordedSpawner):
+            run = leg.run_t1()
+        self.assertFalse(run.complete)
+        self.assertEqual(len(leg.microbench_spawner.calls), 2,
+                         "each changed arm must refuse before its next recorded spawn")
+        self.assertIn("declared DSO inventory changed", " ".join(run.refusals))
+        with self.assertRaises(MB.RunRefused):
+            run.paired_blocks()
+
 
 class TestNoClaimMeansNoMeasurement(_ChainCase):
     """Denial 8, at both doors, with a compliant-path control beside each."""
