@@ -335,7 +335,10 @@ BOOTSTRAP_KNOWLEDGE_KINDS = frozenset({
     "CONSTRAINT_COMPILED", "SEED_COMPILED", "SEED_BLOCKED", "SEED_REOPENED",
 })
 
+KIND_LESSON_ADMISSION_EVALUATED = "LESSON_ADMISSION_EVALUATED"
+
 NATIVE_KINDS = frozenset({
+    KIND_LESSON_ADMISSION_EVALUATED,
     KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED, KIND_TOMBSTONE,
     KIND_TORN_APPEND_DISCARDED, KIND_OPERATOR_CONTROL_ACK, KIND_VIEW_REBASED,
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
@@ -1157,6 +1160,9 @@ def retrieval_filter(
         raise RetrievalCitationError(
             f"cited event id(s) do not exist in this journal: {unknown}"
         )
+    admission_citations = sorted(eid for eid in cited_set if by_id[eid].kind == KIND_LESSON_ADMISSION_EVALUATED)
+    if admission_citations:
+        raise RetrievalCitationError("lesson admission is write-only pending AK-PM-11")
     withdrawn = sorted(cited_set & withheld)
     if withdrawn:
         raise RetrievalCitationError(
@@ -1166,7 +1172,7 @@ def retrieval_filter(
 
     out: list = []
     for entry in entries:
-        if entry.event_id in withheld:
+        if entry.event_id in withheld or entry.kind == KIND_LESSON_ADMISSION_EVALUATED:
             continue
         payload = dict(entry.payload)
         if entry.event_id not in cited_set:
@@ -1191,7 +1197,13 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     out: list = []
     if not isinstance(payload, Mapping):
         return ["payload: required mapping"]
-    if kind == KIND_A2_RUNTIME_EXECUTION:
+    if kind == KIND_LESSON_ADMISSION_EVALUATED:
+        if __package__:
+            from .lesson_admission import violations
+        else:
+            from autokernel.lesson_admission import violations
+        out.extend(violations(payload))
+    elif kind == KIND_A2_RUNTIME_EXECUTION:
         if __package__:
             from .loop.a2_execution_state import A2ExecutionStateRefused, validate_transition
         else:
@@ -2755,6 +2767,16 @@ class Journal:
                 raise ValueError(
                     f"{kind} payload is invalid: " + "; ".join(violations)
                 )
+
+        if kind == KIND_LESSON_ADMISSION_EVALUATED and payload.get("verification") is not None:
+            if __package__:
+                from .lesson_native import verify_artifacts
+            else:
+                from autokernel.lesson_native import verify_artifacts
+            try:
+                verify_artifacts(payload)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                raise ValueError("lesson native artifact verification failed") from exc
 
         effective_campaign = campaign_id if campaign_id is not None else self.campaign_id
         payload_campaign = payload.get("campaign_id")
