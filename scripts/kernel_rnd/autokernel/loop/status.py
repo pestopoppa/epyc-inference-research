@@ -11,7 +11,7 @@ stopped. A loop nobody can see is a loop nobody can trust.
 The data contract lives here, with the subsystem it observes; the page, the nav entry
 and the health probe live with the hub (`dashboard/README.md`, the plane rule).
 
-THREE THINGS THIS CARRIES THAT THE OLD SURFACE DID NOT
+FOUR THINGS THIS CARRIES THAT THE OLD SURFACE DID NOT
 
   * **A freshness envelope.** `generated_at` plus `stale_after_s`, so a reader can
     tell "still true" from "last true an hour ago". The superseded funnel could show
@@ -21,6 +21,10 @@ THREE THINGS THIS CARRIES THAT THE OLD SURFACE DID NOT
     reported iterations and receipts.
   * **The negatives.** Every disposition, not just the keeps. A board that shows only
     wins is how 0 promotions looked like progress.
+  * **Process generation.** The native loop writer records PID, `/proc` start ticks,
+    boot ID, source identity and canonical store path in the same atomic status file.
+    External observers use this tuple for identity; they never infer process death
+    from the status heartbeat or terminal state.
 """
 from __future__ import annotations
 
@@ -33,6 +37,7 @@ import tempfile
 from typing import Any, Mapping, Sequence
 
 STATUS_SCHEMA = "epyc.autokernel.loop_status.v1"
+PROCESS_IDENTITY_SCHEMA = "epyc.autokernel.loop_process_identity.v1"
 STATUS_FILENAME = "loop-status.json"
 #: An iteration is minutes, dominated by the planner call. Past this the reading is
 #: not "the loop is quiet", it is "nobody has heard from the loop".
@@ -43,6 +48,43 @@ STAGNATION_WINDOW = 20
 NO_MEASUREMENT_ALARM_N = 10
 KEEP_RATE_ALARM_WINDOW = 10
 KEEP_STATUSES = frozenset({"kept"})
+
+
+def process_identity(store_root: Path | str, source_identity: str, *,
+                     pid: int | None = None, proc_root: Path = Path("/proc"),
+                     boot_id_path: Path = Path("/proc/sys/kernel/random/boot_id")) -> dict | None:
+    """Return this loop writer's generation-bound process identity, or UNKNOWN.
+
+    The PID is bound to Linux's process start ticks and boot ID so a later reader
+    can distinguish the original process from a recycled PID. This is identity
+    metadata only; it carries no measurement or grading warrant.
+    """
+    pid = os.getpid() if pid is None else pid
+    if type(pid) is not int or pid <= 0 or not isinstance(source_identity, str) or not source_identity:
+        return None
+    try:
+        raw_stat = (proc_root / str(pid) / "stat").read_text(encoding="ascii")
+        if raw_stat.split(None, 1)[0] != str(pid):
+            return None
+        close = raw_stat.rfind(")")
+        if close < 0:
+            return None
+        fields = raw_stat[close + 1:].split()
+        # The tail begins at field 3 (state); starttime is field 22.
+        start_ticks = int(fields[19])
+        boot_id = boot_id_path.read_text(encoding="ascii").strip()
+        if start_ticks <= 0 or not boot_id:
+            return None
+        return {
+            "schema": PROCESS_IDENTITY_SCHEMA,
+            "pid": pid,
+            "start_ticks": start_ticks,
+            "boot_id": boot_id,
+            "source_identity": source_identity,
+            "store_path": str(Path(store_root).resolve()),
+        }
+    except (OSError, UnicodeError, ValueError, IndexError, RuntimeError):
+        return None
 
 # `Comparison.to_dict()` deliberately carries the complete measurement lifecycle,
 # including every residency sample from both arms.  That belongs in experiments.db,
@@ -351,6 +393,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           comparability: Mapping[str, Any] | None = None,
           uncovered_gap: Mapping[str, Any] | None = None,
           scope_gap_error: Mapping[str, str] | None = None,
+          source_identity: str | None = None,
           no_measurement_alarm_n: int = NO_MEASUREMENT_ALARM_N,
           keep_rate_alarm_window: int = KEEP_RATE_ALARM_WINDOW) -> Path:
     """Atomically publish the loop's current standing.
@@ -382,6 +425,11 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         "schema": STATUS_SCHEMA,
         "generated_at": _now(),
         "stale_after_s": int(stale_after_s),
+        # CH-OBS-BUNDLE: a native writer identity lets external observers verify
+        # the process generation. Legacy statuses have no such claim and remain
+        # unknown to consumers that require it.
+        "process_identity": (process_identity(store_root, source_identity)
+                             if source_identity is not None else None),
         # R23-52b: the planner/critic CLIs can fail for hours (session limit 2026-09-07,
         # 135 iterations) while the loop still reports "running"; surface it.
         "actor_health": actor_health,
@@ -526,5 +574,6 @@ def freshness(body: Mapping[str, Any] | None, *, now: datetime | None = None
 
 __all__ = ["DEFAULT_STALE_AFTER_S", "KEEP_RATE_ALARM_WINDOW",
            "NO_MEASUREMENT_ALARM_N", "STAGNATION_WINDOW", "STATUS_FILENAME",
-           "STATUS_SCHEMA", "freshness", "pool_health_signal", "read",
-           "stagnation_signal", "write", "write_json"]
+           "PROCESS_IDENTITY_SCHEMA", "STATUS_SCHEMA", "freshness",
+           "pool_health_signal", "process_identity", "read", "stagnation_signal",
+           "write", "write_json"]
