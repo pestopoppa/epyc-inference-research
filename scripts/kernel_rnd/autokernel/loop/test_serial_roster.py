@@ -134,6 +134,129 @@ def test_ready_production_and_candidate_roster_preserves_original_inputs(tmp_pat
     assert not (tmp_path / "router").exists()
 
 
+def test_lane_serving_preflight_accepts_native_roster_inputs_and_blocks_mismatched_store(
+        tmp_path, monkeypatch, capsys):
+    from . import lane_targets
+
+    resolved, owners, roster_argv = _inputs(tmp_path)
+    targets, _skipped, _cpus = _build(roster_argv)
+    alias = sr.option(targets[0], "--target-id")
+    target = next(row for row in resolved.targets if alias in row.target_ids)
+    # Lane targets require canonical launch paths. serial_roster's ordinary producer
+    # may derive them from enrolled recipes when owners omit the optional fields.
+    for owned_alias, owner in owners.items():
+        enrolled = next(row for row in resolved.targets if owned_alias in row.target_ids)
+        owner["launch"] = enrolled.execution.recipe.path
+    owned_path = Path(sr.option(roster_argv, "--owned-targets"))
+    owned_path.write_text(json.dumps(owners))
+    targets, _skipped, _cpus = _build(roster_argv)
+    child = next(row for row in targets if sr.option(row, "--target-id") == alias)
+    target_digest = sr._digest(target.to_dict())
+    lane_file = tmp_path / "lane-targets.json"
+    peer = next(row for row in resolved.targets if row.target_ids[0] != alias)
+    lane_file.write_text(json.dumps({
+        "schema": lane_targets.SCHEMA,
+        "lanes": {
+            "lane0": {"target_id": peer.target_ids[0], "owned_targets": str(owned_path),
+                      "exclusive_paths": ["src/models/peer*.cpp"],
+                      "as_peer_floor_file": None, "as_peer_max_regression_pct": 2.0},
+            "lane1": {"target_id": alias, "owned_targets": str(owned_path),
+                      "exclusive_paths": ["src/models/owned*.cpp"],
+                      "as_peer_floor_file": None, "as_peer_max_regression_pct": 2.0},
+        }}))
+    binding = lane_targets.resolve(lane_file, "lane1", target_id=alias, workers=1, lock=False,
+                                   require_selected_owner=True)
+    try:
+        lane_targets.validate_run_inputs(
+            binding,
+            launch=Path(sr.option(child, "--cpu-serving-launch")
+                        or sr.option(child, "--gpu-serving-launch")),
+            frozen_prompts=Path(sr.option(child, "--frozen-prompts")),
+            worktree=Path(sr.option(child, "--worktree")),
+            anchor_build=Path(sr.option(child, "--anchor-build")),
+            store=Path(sr.option(child, "--store")),
+            branch=owners[alias]["branch"], store_target_digest=target_digest)
+    finally:
+        binding.release()
+
+    from . import champion_reanchor
+    common_path = tmp_path / "common-lane-args.json"
+    common_path.write_text(json.dumps(["--lane-targets", str(lane_file), "--lane", "lane1"]))
+    reanchor_out = tmp_path / "reanchor-output"
+    old_launch = rr.CanonicalResolvedRecipe.from_dict(
+        json.loads(Path(owners[alias]["launch"]).read_text()))
+    owner_anchor = str(Path(owners[alias]["anchor_build"]).parent / "reanchored-build")
+    new_binary_dir = str(Path(owner_anchor) / "bin")
+    new_command = list(old_launch.command_argv)
+    new_command[0] = str(Path(new_binary_dir) / "llama-server")
+    new_environment = dict(old_launch.launch_env)
+    new_environment["LD_LIBRARY_PATH"] = new_binary_dir
+    rebound_launch = rr.resolve_canonical_launch(
+        old_launch.template, build_dir=owner_anchor, command_argv=new_command,
+        topology_prefix=old_launch.topology_prefix, launch_environment=new_environment,
+        artifact_identities=_artifacts(old_launch.template, build=Path(owner_anchor)),
+        backend=old_launch.backend, environment_policy=old_launch.environment_policy,
+        port=old_launch.port, runtime_binary_dir=new_binary_dir,
+        runtime_ld_paths=(new_binary_dir,), provenance=dict(old_launch.provenance))
+    rebound_launch_path = tmp_path / "rebound-launch.json"
+    rebound_launch_path.write_text(json.dumps(rebound_launch.to_dict()))
+    relaunch = champion_reanchor.launch_paths(
+        anchor_build=owner_anchor,
+        run_argv_additions=["--anchor-build", owner_anchor,
+                            "--new-anchor-epoch", "d" * 40],
+        floor_action="reuse",
+        launch={"resolved_campaign": str(sr.option(roster_argv, "--resolved-campaign")),
+                "owned_targets": str(owned_path), "alias": alias,
+                "target_root": str(Path(sr.option(roster_argv, "--state-dir")) / "targets"),
+                "common_args": str(common_path), "state_dir": str(tmp_path / "router"),
+                "iterations": 1, "rebound_launch": str(rebound_launch_path)},
+        out_dir=reanchor_out)
+    direct_argv = relaunch["direct_run_py"]["argv"]
+    rebound_lane_file = Path(sr.option(direct_argv, "--lane-targets"))
+    assert rebound_lane_file == reanchor_out / "lane-targets.reanchor.json"
+    original_binding = json.loads(lane_file.read_text())
+    copied_binding = json.loads(rebound_lane_file.read_text())
+    assert copied_binding["lanes"]["lane0"] == original_binding["lanes"]["lane0"]
+    assert copied_binding["lanes"]["lane1"]["owned_targets"] == str(
+        reanchor_out / "owned-targets.reanchor.json")
+    rebound = lane_targets.resolve(rebound_lane_file, "lane1", target_id=alias,
+                                   workers=1, lock=False, require_selected_owner=True)
+    try:
+        lane_targets.validate_run_inputs(
+            rebound,
+            launch=Path(sr.option(direct_argv, "--cpu-serving-launch")
+                        or sr.option(direct_argv, "--gpu-serving-launch")),
+            frozen_prompts=Path(sr.option(direct_argv, "--frozen-prompts")),
+            worktree=Path(sr.option(direct_argv, "--worktree")),
+            anchor_build=Path(sr.option(direct_argv, "--anchor-build")),
+            store=Path(sr.option(direct_argv, "--store")),
+            branch=owners[alias]["branch"], store_target_digest=target_digest)
+    finally:
+        rebound.release()
+
+    reached_capture = False
+
+    def capture_must_not_run(_path):
+        nonlocal reached_capture
+        reached_capture = True
+        raise AssertionError("startup reached store capture before lane refusal")
+
+    monkeypatch.setattr(run.kernel_coverage, "enable_capture", capture_must_not_run)
+    with pytest.raises(SystemExit):
+        run.main([*child, "--lane-targets", str(lane_file), "--lane", "lane1",
+                  "--workers", "1", "--dry-run", "--store", str(tmp_path / "wrong-store")])
+    assert not reached_capture
+    assert not (tmp_path / "wrong-store").exists()
+    serving_flag = f"--{target.execution.backend}-serving-launch"
+    with pytest.raises(SystemExit):
+        run.main([*child, "--lane-targets", str(lane_file), "--lane", "lane1",
+                  "--workers", "1", "--dry-run",
+                  serving_flag, str(tmp_path / "stale-launch.json"),
+                  "--new-anchor-epoch", "e" * 40])
+    assert "canonical launch mismatch" in capsys.readouterr().err
+    assert not reached_capture
+
+
 def _assert_stdout_actor_wire_request(tmp_path, output):
     from . import actor_wire_gate
 

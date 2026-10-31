@@ -111,6 +111,7 @@ class Bound:
     lane: LaneEntry
     peers: tuple[PeerTarget, ...]
     champion_branch: str | None = None
+    owner: Mapping[str, Any] = field(default_factory=dict, repr=False)
     _lock: Any = field(default=None, repr=False)
 
     def release(self) -> None:
@@ -208,6 +209,26 @@ def load_binding(path: Path) -> tuple[dict[str, LaneEntry], str | None]:
     return lanes, champion["branch"]
 
 
+def rebind_owner(path: Path, lane: str, *, target_id: str, old_owner: Path,
+                 new_owner: Path) -> dict:
+    """Return a schema-valid lane-binding copy with one selected owner file replaced.
+
+    Champion re-anchor writes a new owned-targets file rather than mutating the live
+    one. Its relaunch must point a matching lane-binding copy at that file; every peer
+    entry and all lane policy fields remain byte-for-byte values from the source map.
+    """
+    lanes, _champion = load_binding(path)
+    if lane not in lanes or lanes[lane].target_id != target_id:
+        raise LaneBindingError(f"re-anchor lane {lane!r} is not bound to {target_id!r}")
+    if lanes[lane].owned_targets.resolve() != Path(old_owner).resolve():
+        raise LaneBindingError(f"re-anchor lane {lane!r} owner differs from {old_owner}")
+    if not Path(new_owner).is_absolute():
+        raise LaneBindingError("re-anchor replacement owner must be an absolute path")
+    body = json.loads(Path(path).read_bytes())
+    body["lanes"][lane]["owned_targets"] = str(new_owner)
+    return body
+
+
 def _owned(entry: LaneEntry) -> Mapping[str, Any]:
     body = json.loads(entry.owned_targets.read_bytes())
     owner = body.get(entry.target_id) if isinstance(body, Mapping) else None
@@ -219,7 +240,8 @@ def _owned(entry: LaneEntry) -> Mapping[str, Any]:
 
 def resolve(path: Path | None, lane: str | None, *, target_id: str | None, workers: int,
             lock: bool = True, working_branch: str | None = None,
-            canonical_champion: str | None = None) -> Bound:
+            canonical_champion: str | None = None,
+            require_selected_owner: bool = False) -> Bound:
     """The child's lane, after every refusal that can be made before measuring.
 
     `canonical_champion` (run.py passes `champion.CANONICAL_BRANCH`): a binding that
@@ -242,19 +264,22 @@ def resolve(path: Path | None, lane: str | None, *, target_id: str | None, worke
     if entry.working_branch is not None and working_branch != entry.working_branch:
         raise LaneBindingError(f"{lane}'s working branch is {entry.working_branch}, "
                                f"not --experimental-branch {working_branch}")
+    selected_owner = _owned(entry) if require_selected_owner else {}
     peers = []
     for name, other in sorted(lanes.items()):
         if name == lane:
             continue
-        owner = _owned(other)
-        peers.append(PeerTarget(entry=other, launch_path=_abs(owner["launch"], f"{name} launch"),
-                                frozen_prompts=_abs(owner["frozen_prompts"], f"{name} prompts"),
-                                store=(None if owner.get("store") is None
-                                       else _abs(owner["store"], f"{name} store"))))
+        peer_owner = _owned(other)
+        peers.append(PeerTarget(entry=other,
+                                launch_path=_abs(peer_owner["launch"], f"{name} launch"),
+                                frozen_prompts=_abs(peer_owner["frozen_prompts"],
+                                                    f"{name} prompts"),
+                                store=(None if peer_owner.get("store") is None
+                                       else _abs(peer_owner["store"], f"{name} store"))))
     # A peer with no bar is not a startup refusal: a keep touching only this lane's
     # exclusive paths needs none, and any other keep is refused at `decide`.
     bound = Bound(path=Path(path), lane=entry, peers=tuple(peers),
-                  champion_branch=champion_branch)
+                  champion_branch=champion_branch, owner=selected_owner)
     if lock:
         handle = (Path(path).parent / f".lane-{lane}.lock").open("a")
         try:
@@ -264,6 +289,57 @@ def resolve(path: Path | None, lane: str | None, *, target_id: str | None, worke
             raise LaneBindingError(f"{lane} already has a running instance") from None
         bound._lock = handle
     return bound
+
+
+def _same_path(actual: Path, expected: Any, what: str) -> None:
+    if not isinstance(expected, str) or not expected.strip() or "\0" in expected \
+            or not Path(expected).is_absolute():
+        raise LaneBindingError(f"selected owner has no valid {what}; repair its owned-targets "
+                               "entry and rebuild the lane binding")
+    if Path(actual).resolve() != Path(expected).resolve():
+        raise LaneBindingError(f"{what} mismatch: lane {actual} does not match selected owner "
+                               f"{Path(expected)}; repair the owned-targets entry and rebuild "
+                               "the lane binding")
+
+
+def validate_run_inputs(bound: Bound, *, launch: Path | None, frozen_prompts: Path | None,
+                        worktree: Path, anchor_build: Path, store: Path,
+                        branch: str, store_target_digest: str | None = None) -> None:
+    """Fail closed when a serving child differs from its lane's owned target.
+
+    The owner map is the source consumed by ``serial_roster.build_targets``. When it
+    omits ``store``, accept only the producer's documented ``<target-root>/<digest>/store``
+    form, with the digest recomputed from the selected campaign target.
+    """
+    owner = bound.owner
+    if launch is None or frozen_prompts is None:
+        raise LaneBindingError("a bound serving lane requires both its canonical launch and "
+                               "frozen prompts; supply the selected owner's launch inputs")
+    _same_path(launch, owner.get("launch"), "canonical launch")
+    _same_path(frozen_prompts, owner.get("frozen_prompts"), "frozen prompts")
+    _same_path(worktree, owner.get("worktree"), "worktree")
+    _same_path(anchor_build, owner.get("anchor_build"), "anchor build")
+    if owner.get("store") is not None:
+        _same_path(store, owner.get("store"), "store")
+    else:
+        resolved_store = Path(store).resolve()
+        if (not isinstance(store_target_digest, str)
+                or len(store_target_digest) != 64
+                or any(char not in "0123456789abcdef" for char in store_target_digest)
+                or resolved_store.name != "store"
+                or resolved_store.parent.name != store_target_digest):
+            raise LaneBindingError("selected owner omits store and the run store is not the "
+                                   "serial_roster default "
+                                   "<target-root>/<selected-target-digest>/store; declare the "
+                                   "exact store in owned-targets and rebuild the lane binding")
+    expected_branch = owner.get("branch")
+    if not isinstance(expected_branch, str) or not expected_branch.strip():
+        raise LaneBindingError("selected owner has no valid branch; repair its owned-targets "
+                               "entry and rebuild the lane binding")
+    if branch != expected_branch:
+        raise LaneBindingError(f"branch mismatch: lane {branch!r} does not match selected "
+                               f"owner {expected_branch!r}; repair the owned-targets entry "
+                               "and rebuild the lane binding")
 
 
 def peer_serving(peer: PeerTarget):
@@ -385,4 +461,4 @@ def cross_check(bound: Bound, *, changed: Iterable[str],
 
 __all__ = ["Bound", "CHECK_SCHEMA", "FLAGS", "LaneBindingError", "LaneEntry", "PeerTarget",
            "SCHEMA", "cross_check", "decide", "load", "load_binding", "needs_cross_check",
-           "peer_bar", "resolve"]
+           "peer_bar", "rebind_owner", "resolve", "validate_run_inputs"]

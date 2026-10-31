@@ -26,7 +26,11 @@ def _binding(tmp_path: Path, **lane1_overrides) -> Path:
         "store": str(tmp_path / "ds41" / "store")}})
     owned1 = _write(tmp_path / "q38" / "owned-targets.json", {"q38-t": {
         "launch": str(tmp_path / "q38" / "launch.json"),
-        "frozen_prompts": str(tmp_path / "q38" / "prompts.json")}})
+        "frozen_prompts": str(tmp_path / "q38" / "prompts.json"),
+        "store": str(tmp_path / "q38" / "store"),
+        "worktree": str(tmp_path / "q38" / "source"),
+        "anchor_build": str(tmp_path / "q38" / "anchor"),
+        "branch": "ak/experimental-q38"}})
     floor = _write(tmp_path / "ds41" / "floor.json", {"unit": "process", "floor_pct": 3.412})
     lane1 = {"target_id": "q38-t", "owned_targets": str(owned1),
              "exclusive_paths": ["src/models/qwen4exp*.cpp"],
@@ -90,6 +94,134 @@ def test_one_lane_one_instance(tmp_path):
 def test_load_refuses_malformed_entries(tmp_path, override, needle):
     with pytest.raises(lane_targets.LaneBindingError, match=needle):
         lane_targets.load(_binding(tmp_path, **override))
+
+
+def test_serving_preflight_matches_the_selected_owner_inputs(tmp_path):
+    binding = lane_targets.resolve(_binding(tmp_path), "lane1", target_id="q38-t", workers=1,
+                                   lock=False, require_selected_owner=True)
+    try:
+        lane_targets.validate_run_inputs(
+            binding,
+            launch=tmp_path / "q38" / "launch.json",
+            frozen_prompts=tmp_path / "q38" / "prompts.json",
+            worktree=tmp_path / "q38" / "source",
+            anchor_build=tmp_path / "q38" / "anchor",
+            store=tmp_path / "q38" / "store",
+            branch="ak/experimental-q38")
+    finally:
+        binding.release()
+
+
+def test_nonserving_lane_keeps_legacy_selected_owner_behavior(tmp_path):
+    path = _binding(tmp_path)
+    owners_path = tmp_path / "q38" / "owned-targets.json"
+    owners = json.loads(owners_path.read_text())
+    owners["q38-t"].pop("launch")
+    owners_path.write_text(json.dumps(owners))
+    binding = lane_targets.resolve(path, "lane1", target_id="q38-t", workers=1, lock=False)
+    binding.release()
+    with pytest.raises(lane_targets.LaneBindingError, match="owns no launch/frozen prompts"):
+        lane_targets.resolve(path, "lane1", target_id="q38-t", workers=1, lock=False,
+                             require_selected_owner=True)
+
+
+@pytest.mark.parametrize("field,value,needle", [
+    ("launch", "other-launch.json", "canonical launch mismatch"),
+    ("frozen_prompts", "other-prompts.json", "frozen prompts mismatch"),
+    ("worktree", "other-source", "worktree mismatch"),
+    ("anchor_build", "other-anchor", "anchor build mismatch"),
+    ("store", "other-store", "store mismatch"),
+])
+def test_serving_preflight_refuses_owner_input_mismatches(tmp_path, field, value, needle):
+    path = _binding(tmp_path)
+    owners_path = tmp_path / "q38" / "owned-targets.json"
+    owners = json.loads(owners_path.read_text())
+    owners["q38-t"][field] = str(tmp_path / "q38" / value)
+    owners_path.write_text(json.dumps(owners))
+    binding = lane_targets.resolve(path, "lane1", target_id="q38-t", workers=1, lock=False,
+                                   require_selected_owner=True)
+    try:
+        with pytest.raises(lane_targets.LaneBindingError, match=needle):
+            lane_targets.validate_run_inputs(
+                binding,
+                launch=tmp_path / "q38" / "launch.json",
+                frozen_prompts=tmp_path / "q38" / "prompts.json",
+                worktree=tmp_path / "q38" / "source",
+                anchor_build=tmp_path / "q38" / "anchor",
+                store=tmp_path / "q38" / "store",
+                branch="ak/experimental-q38")
+    finally:
+        binding.release()
+
+
+@pytest.mark.parametrize("field,needle", [
+    ("worktree", "no valid worktree"),
+    ("anchor_build", "no valid anchor build"),
+    ("branch", "no valid branch"),
+])
+def test_serving_preflight_refuses_missing_required_owner_inputs(tmp_path, field, needle):
+    path = _binding(tmp_path)
+    owners_path = tmp_path / "q38" / "owned-targets.json"
+    owners = json.loads(owners_path.read_text())
+    owners["q38-t"].pop(field)
+    owners_path.write_text(json.dumps(owners))
+    binding = lane_targets.resolve(path, "lane1", target_id="q38-t", workers=1, lock=False,
+                                   require_selected_owner=True)
+    try:
+        with pytest.raises(lane_targets.LaneBindingError, match=needle):
+            lane_targets.validate_run_inputs(
+                binding,
+                launch=tmp_path / "q38" / "launch.json",
+                frozen_prompts=tmp_path / "q38" / "prompts.json",
+                worktree=tmp_path / "q38" / "source",
+                anchor_build=tmp_path / "q38" / "anchor",
+                store=tmp_path / "q38" / "store",
+                branch="ak/experimental-q38")
+    finally:
+        binding.release()
+
+
+def test_serving_preflight_resolves_the_roster_default_store_by_target_digest(tmp_path):
+    path = _binding(tmp_path)
+    owners_path = tmp_path / "q38" / "owned-targets.json"
+    owners = json.loads(owners_path.read_text())
+    owners["q38-t"].pop("store")
+    owners_path.write_text(json.dumps(owners))
+    binding = lane_targets.resolve(path, "lane1", target_id="q38-t", workers=1, lock=False,
+                                   require_selected_owner=True)
+    try:
+        lane_targets.validate_run_inputs(
+            binding,
+            launch=tmp_path / "q38" / "launch.json",
+            frozen_prompts=tmp_path / "q38" / "prompts.json",
+            worktree=tmp_path / "q38" / "source",
+            anchor_build=tmp_path / "q38" / "anchor",
+            store=tmp_path / "router" / "targets" / ("a" * 64) / "store",
+            branch="ak/experimental-q38", store_target_digest="a" * 64)
+    finally:
+        binding.release()
+
+
+def test_serving_preflight_refuses_unverifiable_roster_default_store(tmp_path):
+    path = _binding(tmp_path)
+    owners_path = tmp_path / "q38" / "owned-targets.json"
+    owners = json.loads(owners_path.read_text())
+    owners["q38-t"].pop("store")
+    owners_path.write_text(json.dumps(owners))
+    binding = lane_targets.resolve(path, "lane1", target_id="q38-t", workers=1, lock=False,
+                                   require_selected_owner=True)
+    try:
+        with pytest.raises(lane_targets.LaneBindingError, match="serial_roster default"):
+            lane_targets.validate_run_inputs(
+                binding,
+                launch=tmp_path / "q38" / "launch.json",
+                frozen_prompts=tmp_path / "q38" / "prompts.json",
+                worktree=tmp_path / "q38" / "source",
+                anchor_build=tmp_path / "q38" / "anchor",
+                store=tmp_path / "router" / "targets" / ("a" * 64) / "store",
+                branch="ak/experimental-q38", store_target_digest="b" * 64)
+    finally:
+        binding.release()
 
 
 def test_needs_cross_check_only_outside_exclusive_paths():

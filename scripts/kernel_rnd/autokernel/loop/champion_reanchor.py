@@ -288,7 +288,7 @@ def launch_paths(*, anchor_build: str, run_argv_additions: list[str], floor_acti
     import sys as _sys
     from . import serial_roster
     from . import serial_run as sr
-    out_dir = Path(out_dir)
+    out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     owners = json.loads(Path(launch["owned_targets"]).read_text(encoding="utf-8"))
     alias = launch["alias"]
@@ -310,6 +310,22 @@ def launch_paths(*, anchor_build: str, run_argv_additions: list[str], floor_acti
     common = []
     if launch.get("common_args"):
         common = json.loads(Path(launch["common_args"]).read_text(encoding="utf-8"))
+    lane_file = sr.option(common, "--lane-targets")
+    lane_name = sr.option(common, "--lane")
+    if lane_file is not None or lane_name is not None:
+        if lane_file is None or lane_name is None:
+            raise ReanchorRefused("lane re-anchor needs both --lane-targets and --lane")
+        from . import lane_targets
+        try:
+            rebound_binding = lane_targets.rebind_owner(
+                Path(lane_file), lane_name, target_id=alias,
+                old_owner=Path(launch["owned_targets"]), new_owner=patched)
+        except (OSError, ValueError) as refusal:
+            raise ReanchorRefused(
+                f"lane binding cannot follow the re-anchor owner: {refusal}") from refusal
+        rebound_binding_path = out_dir / "lane-targets.reanchor.json"
+        fr._write_atomic(rebound_binding_path, rebound_binding)
+        common = _replace_option(common, "--lane-targets", str(rebound_binding_path))
     common_path = out_dir / "common-args.reanchor.json"
     fr._write_atomic(common_path, [*common, *flags])
     try:
@@ -350,6 +366,28 @@ def _drop_pair(argv: list[str], flag: str) -> list[str]:
             skip = True
         else:
             out.append(item)
+    return out
+
+
+def _replace_option(argv: list[str], flag: str, value: str) -> list[str]:
+    """Replace every spelling of one valued common option, preserving argv order."""
+    out, found, skip = [], False, False
+    for item in argv:
+        if skip:
+            out.append(value)
+            skip = False
+        elif item == flag:
+            out.append(item)
+            found, skip = True, True
+        elif item.startswith(flag + "="):
+            out.append(f"{flag}={value}")
+            found = True
+        else:
+            out.append(item)
+    if skip:
+        raise ReanchorRefused(f"{flag} has no value in common arguments")
+    if not found:
+        raise ReanchorRefused(f"{flag} is absent from common arguments")
     return out
 
 

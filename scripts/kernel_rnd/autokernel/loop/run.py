@@ -2833,7 +2833,9 @@ def main(argv: list[str] | None = None) -> int:
                 args.lane_targets, args.lane, target_id=args.target_id, workers=args.workers,
                 lock=not args.dry_run,
                 working_branch=args.experimental_branch or args.champion_branch,
-                canonical_champion=champion.CANONICAL_BRANCH)
+                canonical_champion=champion.CANONICAL_BRANCH,
+                require_selected_owner=(args.cpu_serving_launch is not None
+                                        or args.gpu_serving_launch is not None))
             lane_peer_serving = {peer.entry.name: lane_targets.peer_serving(peer)
                                  for peer in lane_binding.peers}
             # ONE champion (2026-08-31 incident): the binding's champion IS
@@ -2930,6 +2932,23 @@ def main(argv: list[str] | None = None) -> int:
               "selection is not artifact verification or admission")
     elif args.model is None:
         parser.error("--model is required without --resolved-campaign and --target-id")
+
+    if lane_binding is not None and (args.cpu_serving_launch is not None
+                                     or args.gpu_serving_launch is not None):
+        try:
+            if selected_target is None:
+                raise ValueError("a bound serving lane requires its enrolled campaign target")
+            from . import lane_targets
+            lane_targets.validate_run_inputs(
+                lane_binding,
+                launch=args.cpu_serving_launch or args.gpu_serving_launch,
+                frozen_prompts=args.frozen_prompts,
+                worktree=args.worktree, anchor_build=args.anchor_build,
+                store=args.store,
+                branch=args.experimental_branch or args.champion_branch,
+                store_target_digest=serial_run._digest(selected_target.to_dict()))
+        except (OSError, ValueError, RuntimeError) as exc:
+            parser.error(f"lane binding: {exc}")
 
     source_resumed = None
     continuation_worktree = args.worktree
