@@ -307,11 +307,8 @@ questions:
       2 4 10
       3 4 1
 
-      Output: 3
-      (Path: 1→2→3→4 with total weight 3, using 3 edges... wait, that's 3 edges.
-       With K=2: 1→3→4 = 6, 1→2→4 = 11. Answer should be 6)
-
-      Actually output: 6
+      Output: 6
+      (The path 1→3→4 uses two edges and has total weight 6.)
 
       Write a complete Python solution.
     expected: "def solve"
@@ -319,13 +316,13 @@ questions:
     scoring_config:
       language: python
       timeout: 30
-      test_code: |
-        import sys
-        from io import StringIO
-        # Test case 1
-        test_input = "4 5 2\n1 2 1\n1 3 5\n2 3 1\n2 4 10\n3 4 1\n"
-        sys.stdin = StringIO(test_input)
-        # The solution should read from stdin and print to stdout
+      test_cases:
+        - input: "4 5 2\n1 2 1\n1 3 5\n2 3 1\n2 4 10\n3 4 1\n"
+          output: "6"
+        - input: "3 2 1\n1 2 4\n2 3 5\n"
+          output: "-1"
+        - input: "4 5 3\n1 2 1\n1 3 5\n2 3 1\n2 4 10\n3 4 1\n"
+          output: "3"
 
   - id: ma_hard_code_002
     tier: 3
