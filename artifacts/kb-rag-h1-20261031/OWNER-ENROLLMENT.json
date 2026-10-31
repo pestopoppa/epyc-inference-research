@@ -1,0 +1,9 @@
+{
+  "schema": "h1-prospective-source-enrollment-note/v1",
+  "applied_at": "2026-10-31T15:59:56.807803+00:00",
+  "root_baseline": "8a24905c3c93bc59c7de305851f686f8a15ea4e0",
+  "row_sha256": "e15e7b9798873d3124a2e1f2b4641283ba749d91cb98ab6f84d70ce2faacf28b",
+  "task_sha256": "c9f5a60a4829886d28551b2f5aacf4f8616ab8fab47c61dc231c35eb4ccd73ff",
+  "registry_commit_at_application": null,
+  "status": "owner applied before census; registry commit pending; no measurement grade asserted"
+}

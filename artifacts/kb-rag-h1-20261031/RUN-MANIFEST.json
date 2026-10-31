@@ -1,0 +1,13 @@
+{
+  "schema": "h1-qd-v1-census-enrollment/v1",
+  "enrollment": {"owner_note": "OWNER-ENROLLMENT.json", "root_baseline": "8a24905c3c93bc59c7de305851f686f8a15ea4e0", "row_sha256": "e15e7b9798873d3124a2e1f2b4641283ba749d91cb98ab6f84d70ce2faacf28b", "task_sha256": "c9f5a60a4829886d28551b2f5aacf4f8616ab8fab47c61dc231c35eb4ccd73ff", "registry_commit_at_application": null},
+  "cohort": {"sqlite_snapshot_sha256": "cb7067b30cebe0260e3432abec3f1a1d85498b732f58b9f7432240bb4d6fd7fb", "chunk_rows": 35280, "distinct_paths": 1774, "basis": "all chunk rows in frozen backup; FTS by rowid, orphan FTS excluded; mismatched and missing text unknown"},
+  "tokenizer_sha256": "23abe2a8f5640f8836c24cead7b76e77613b846824d7540151c6d90d7c2f4869",
+  "onnx_config_sha256": "73e4aac375a77036219a8b7b2f35f4febc31ec8e651996006254528c6c60ab35",
+  "sentence_transformers_config_sha256": "edbe6fd9b4ef756645baf9c979c3d8fe4307351fd8c1963018d0457deaedfed1",
+  "historical_source": {"app_commit": "4e5e84c0e", "encoder_blob": "780795faf03036ec62883390a3446eb3ca8886f7", "kb_rag_blob": "aaaee5e9a4e8e3ec934589bbb562213d3aba435e", "chunker_blob": "5eb8d9b976ebec688098382efa3197d54a7376d9"},
+  "recipe": {"producer_sha256": "c685536bf740081ba10b9fdd3be0ba025a57bada85a107592494fb827b5fe5fd", "controls_sha256": "cf389c5cd6a15d9a038a75ebfced389ae689b554d4fb772ce57d53610a7a94ea", "prefix": "[D] ", "cap": 256, "case": "do_lower_case false", "padding": "disabled; counts exclude padding", "specials": "native tokenizer postprocessor; token lengths include prefix and specials", "character_coverage": "union of uncapped versus capped token offsets within raw text; Unicode codepoints; prefix and specials excluded; whitespace without token offsets excluded; raw character count separately", "percentile": "nearest rank over known rows", "historical_tokenizer_identity": "not stamped, unknown"},
+  "runtime": {"python_version": "3.11.17", "python_executable_sha256": "ff9b2ac4362b81c68622ffb1730f7138eb269177d9846399c521a44c5daffb0e", "tokenizers_version": "0.22.2", "tokenizers_extension_sha256": "c116fcf1e80d461ce0a35c332974f25949e8359416f50b3d53371810d2ce1ccc", "os": "Linux 6.14.0-37-generic x86_64 glibc 2.39"},
+  "resources": {"mutex": "/mnt/raid0/llm/tmp/compute-flags/prep-locks/28-29.lock", "admission": "live R6 check under mutex immediately before launch", "cpus": "124,125 subject to admission", "omp_threads": 1, "rss_limit_bytes": 8589934592, "timeout_seconds": 900, "supervisor": "/mnt/raid0/llm/tmp/codex3-k4a-20261031/capsule/prep_supervisor.py"},
+  "outputs": {"rows": "rows.jsonl", "aggregate": "aggregate.json", "supervisor": "supervisor.json"}
+}

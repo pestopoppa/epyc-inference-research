@@ -1,0 +1,1 @@
+{"at_cap_or_more": 16283, "cohort_rows": 35280, "full_tokens_max": 1929, "full_tokens_p50": 229, "full_tokens_p95": 1111, "known_rows": 35280, "strictly_over_cap": 16243, "sums_known_only": {"full_covered_codepoints": 41200048, "full_tokens": 12378893, "kept_covered_codepoints": 21058629, "kept_tokens": 6347102, "raw_codepoints": 41200048}, "unknown_rows": 0}

@@ -1,0 +1,14 @@
+{
+  "schema": "h1-r6-reassignment/v1",
+  "supersedes_resource_section_of_manifest_sha256": "8e0d958a2db6a966778007cc7e1b9e4e8f75b6e402b07c4b8bc0fdd1a29c98e3",
+  "reason": "28-29 mutex held; owner reassigned to distinct allowed standing pair 30-31; all source and cohort identities unchanged",
+  "mutex": "/mnt/raid0/llm/tmp/compute-flags/prep-locks/30-31.lock",
+  "cpus": "126,127 subject to live admission under that mutex",
+  "relocation": "SMT siblings of 30-31, only if R6 admission confirms all quarters occupied and no timing grant",
+  "omp_threads": 1,
+  "tokenizers_parallelism": false,
+  "sampled_tree_rss_limit_bytes": 8589934592,
+  "timeout_seconds": 900,
+  "supervisor_sha256": "63222eb38697a0d15a7cee063d6e26fcbb9355c7e0c8701647a0dd9b7009ff65",
+  "admission_sha256": "6e0340cd380b7d268e0b68c18b35adeb5f71e7afaf5d7a6b408fd27d35abc2c0"
+}
