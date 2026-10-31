@@ -4,11 +4,9 @@ The fixture `fixtures/ds41-run8-planner-prompt.txt` is the planner prompt openco
 received at 2026-09-24T13:12:03Z (run 8, plain seat), recovered from the opencode
 session store (session ses_f2c7495aeffexoV7PMkxf2Txdf). The recovered bytes hashed to
 exactly the `prompt.sha256` of that call's `epyc.autokernel.actor_call.v1` record
-(`RUN8_RECORDED_SHA256`). ONE edit before commit: the seven 12-13 digit perf
-sample-period cells of the hotspot table read `[period redacted]`, because the repo's
-PII pre-commit hook classifies such digit runs as account numbers (a false positive,
-but the hook is not this lane's to change). Everything else is byte-for-byte. No
-inference is spent here.
+(`RUN8_RECORDED_SHA256`). The seven perf sample-period cells are restored
+from that exact prompt after the narrow observed-periods PII hook selector landed.
+The fixture is now byte-for-byte the recorded prompt. No inference is spent here.
 
 THE A/B CONTROL PROMPT IS NO LONGER THE RECORDED ONE (deliberate, 2026-09-24).
 `render_context` never printed `node_profile`, although run.py puts it in every CPU
@@ -31,7 +29,7 @@ from unittest import mock
 from autokernel.loop import actor_context, actors
 
 FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-planner-prompt.txt"
-FIXTURE_SHA256 = "c7e8a321eb993c88779edc9186b075d733ecb370020e28dc6e05ade754f1c262"
+FIXTURE_SHA256 = "72c8677850d955b2598bd9d7254460b0fdead5c0ee2f150c80e897ae0ce47b99"
 NODE_PROFILE_FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-node-profile.json"
 CONTROL_FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-planner-prompt-node-profile.txt"
 #: DS41 audit (2026-10): fix 1 appended an optional-identity clause to the abstain
@@ -39,7 +37,7 @@ CONTROL_FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-planner-prom
 #: control fixture -- built by wrapping the SAME recorded context in the live template
 #: -- carries that new suffix too. Only the trailing sentence changed; everything
 #: before it, including the recorded run-8 bytes the fixture wraps, is unchanged.
-HISTORICAL_CONTROL_SHA256 = "559f7a29e6eab717e10f494cdcd18dfccee35053da412c11f717f28fa76f1fb4"
+HISTORICAL_CONTROL_SHA256 = "153901707899305cb573cf7c7d5d579a344c2e371cba4eda9f0493f5f39e4cd5"
 #: 0e9e0b4a added this limitation to the prospective renderer. Preserve the
 #: original historical control bytes and reconcile the current renderer by
 #: applying this ONE explicit prose delta in memory, never rewriting run 8.
@@ -48,7 +46,7 @@ PATH_AGGREGATE_LIMITATION = (
     "that hits one weight path, prefill included -- their bandwidth is "
     "NOT a roofline reading. The ROOFLINE GAP table below is the "
     "per-node replacement for that framing.")
-CONTROL_SHA256 = "a51bcb9fe5e66aaf0d47777bf38995448f1a92ea43bf5f38be757cfcc68bbb44"  # P1-G: control + relies_on_claims template delta
+CONTROL_SHA256 = "ad87294ac66c8ceb9ba15823a0503d38b0e16f3141bb64f0cc88c6daad9ecea3"  # P1-G: control + relies_on_claims template delta
 NODE_PROFILE_SECTION_CHARS = 3878 + len(PATH_AGGREGATE_LIMITATION) + 1
 RUN8_RECORDED_SHA256 = "72c8677850d955b2598bd9d7254460b0fdead5c0ee2f150c80e897ae0ce47b99"
 CPU_FORMAT = dict(
@@ -94,7 +92,7 @@ def _with_relies_delta(prompt: str) -> str:
 
 
 def _recorded_prompt() -> str:
-    """Byte-for-byte what run 8 sent (less seven redactions)."""
+    """Byte-for-byte what run 8 sent."""
     return FIXTURE.read_text(encoding="utf-8")
 
 
@@ -145,9 +143,28 @@ def _cpu_context() -> dict:
 
 class TheFixtureIsTheRealPrompt(unittest.TestCase):
 
-    def test_fixture_bytes_are_the_recorded_run8_prompt_less_seven_redactions(self):
+    def test_fixture_bytes_are_the_recorded_run8_prompt(self):
         self.assertEqual(hashlib.sha256(FIXTURE.read_bytes()).hexdigest(), FIXTURE_SHA256)
-        self.assertEqual(_recorded_prompt().count("[period redacted]"), 7)
+        self.assertEqual(hashlib.sha256(_recorded_prompt().encode()).hexdigest(), RUN8_RECORDED_SHA256)
+        self.assertNotIn("[period redacted]", _recorded_prompt())
+        observed = [line.split(" | ")[1] for line in _recorded_prompt().splitlines()
+                    if line.startswith(("| 50.02% |", "| 16.99% |", "| 15.79% |",
+                                        "| 3.51% |", "| 2.29% |", "| 2.19% |",
+                                        "| 1.98% |"))]
+        self.assertEqual(len(observed), 7)
+        self.assertTrue(all(value.isdecimal() and len(value) in (12, 13)
+                            for value in observed))
+        for folder in ("20260925T020617-planner-rgp9ome_",
+                       "20260925T032928-planner-ujfpgr9f"):
+            index = (Path(__file__).resolve().parents[4] /
+                     "artifacts/autokernel_ctx_ab_20260925/bundle-manifests" /
+                     folder / "INDEX.md").read_text(encoding="utf-8")
+            self.assertNotIn("[period redacted]", index)
+            for line in _recorded_prompt().splitlines():
+                if line.startswith(("| 50.02% |", "| 16.99% |", "| 15.79% |",
+                                    "| 3.51% |", "| 2.29% |", "| 2.19% |",
+                                    "| 1.98% |")):
+                    self.assertIn(line, index)
 
     def test_node_profile_fixture_is_the_run8_retained_observation(self):
         body = json.loads(NODE_PROFILE_FIXTURE.read_text(encoding="utf-8"))
