@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/tmp/codex3-ap66-20261031/supervisor-esrch-fix/prep_supervisor.py", line 90, in <module>
+    prep_admission.live(os.sched_getaffinity(0))
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/tmp/codex3-ap66-20261031/supervisor-esrch-fix/prep_admission.py", line 68, in live
+    return check(set(pair),rows,records,time.time())
+  File "/mnt/raid0/llm/tmp/codex3-ap66-20261031/supervisor-esrch-fix/prep_admission.py", line 51, in check
+    if cls.startswith('block-timing'): raise ValueError('timing grant active')
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: timing grant active

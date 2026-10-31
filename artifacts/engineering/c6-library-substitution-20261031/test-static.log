@@ -1,0 +1,18 @@
+PASS test_conflicting_module_conditional_aliases_are_unknown_instead_of_last_wins
+PASS test_direct_from_import_and_module_callable_alias_forms_are_resolved
+PASS test_duplicate_or_nested_helper_definitions_cannot_resolve_by_last_ast_name
+PASS test_dynamic_dispatch_is_unknown_instead_of_clean
+PASS test_full_reporter_retains_twenty_five_legacy_rows_with_separate_library_family
+PASS test_library_family_keeps_allocation_dtype_reference_and_comments_clean
+PASS test_library_family_resolves_import_callable_and_local_helper_aliases
+PASS test_mutants_parse_and_declare_all_tasks
+PASS test_mutants_pass_l1
+PASS test_native_library_reporter_counts_flags_separately_from_legacy_six_rows
+PASS test_native_reporter_refuses_missing_duplicate_clean_or_uncounted_library_flags
+PASS test_owned_candidates_really_dispatch_to_restricted_in_memory_vendor_stubs
+PASS test_reference_functions_would_fail_l1
+PASS test_scanner_counts_are_nonzero_on_dirty_corpus
+PASS test_scanner_flags_every_planted_dirty_sample
+PASS test_scanner_rejects_unknown_function_scope
+16/16 static tests passed
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 0.10619403002783656, "sampled_peak_tree_rss_bytes": 17813504, "samples": 2, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 1874477, "leader_birth": 159492117, "child_rc": 0, "children_drained": true, "failure": null}
