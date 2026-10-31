@@ -83,8 +83,6 @@ RESEARCH_ROOT = BENCHMARK_DIR.parents[1]
 SCRIPTS_DIR = RESEARCH_ROOT / "scripts"
 ORCHESTRATOR_ROOT = Path("/mnt/raid0/llm/epyc-orchestrator")
 ORCHESTRATOR_PYTHON = ORCHESTRATOR_ROOT / ".venv" / "bin" / "python"
-EPYC_ROOT = Path("/mnt/raid0/llm/epyc-root")
-EPYC_ROOT_COORDINATION = EPYC_ROOT / "scripts" / "coordination"
 
 # clean_window_manifest.py performs its own sys.path.insert for dataset_adapters /
 # lib.registry / suites at import time, so it must be importable first.
@@ -93,6 +91,7 @@ for _p in (str(RESEARCH_ROOT), str(SCRIPTS_DIR), str(BENCHMARK_DIR)):
         sys.path.insert(0, _p)
 
 import clean_window_manifest as cwm  # noqa: E402  (path set up above)
+import belief_capture  # noqa: E402  (uses the shared EPYC_ROOT resolver)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -107,9 +106,17 @@ RUN_BENCHMARK_PY = BENCHMARK_DIR / "run_benchmark.py"
 # detector shares the same coordination tree. If the directory is absent or holds
 # no matching attestation, the topology is treated as UNVERIFIED and execute is
 # refused (dry-run/preflight still proceeds — it runs no inference).
-DEFAULT_ATTESTATION_DIR = Path(
-    "/mnt/raid0/llm/epyc-root/coordination/inference-batch/attestations"
-)
+DEFAULT_ATTESTATION_DIR = None
+
+
+def _root_coordination_dir() -> Path:
+    return belief_capture.root_checkout() / "scripts" / "coordination"
+
+
+def _attestation_dir(value: Path | None) -> Path:
+    if value is not None:
+        return Path(value)
+    return belief_capture.root_checkout() / "coordination" / "inference-batch" / "attestations"
 
 DEFAULT_DRY_RUN_TIMEOUT_S = 180
 DEFAULT_EXECUTE_TIMEOUT_S = 4 * 3600  # 4h ceiling for a single clean-window task
@@ -627,7 +634,7 @@ def load_attestation(
 def topology_gate(
     resolved: ResolvedEntry,
     *,
-    attestation_dir: Path = DEFAULT_ATTESTATION_DIR,
+    attestation_dir: Path | None = DEFAULT_ATTESTATION_DIR,
     hasher: Callable[[Path], Optional[str]] = cwm._file_sha256,
     live_hash_override: Optional[str] = None,
 ) -> TopologyGateResult:
@@ -663,6 +670,24 @@ def topology_gate(
             attestation_path=None,
             verified=True,
             reasons=[],
+        )
+    try:
+        attestation_dir = _attestation_dir(attestation_dir)
+    except belief_capture.CaptureUnavailable as exc:
+        reasons.append(str(exc))
+        hash_match = live is None or required == live
+        if artifact is not None and live is None:
+            reasons.append(
+                f"could not compute live topology hash from {artifact} (missing/unreadable registry)"
+            )
+        return TopologyGateResult(
+            required_hash=required,
+            live_hash=live,
+            topology_artifact=artifact,
+            hash_match=hash_match,
+            attestation_path=None,
+            verified=False,
+            reasons=reasons,
         )
     if artifact is not None and live is None:
         reasons.append(
@@ -859,10 +884,22 @@ def autopilot_precondition_gate(
             reason="precondition 'any' imposes no autopilot constraint",
         )
 
-    if str(EPYC_ROOT_COORDINATION) not in sys.path:
-        sys.path.insert(0, str(EPYC_ROOT_COORDINATION))
     try:
-        from autopilot_precondition_gate import check_autopilot_precondition
+        root_coordination = _root_coordination_dir()
+    except belief_capture.CaptureUnavailable as exc:
+        return AutopilotPreconditionGateResult(
+            required=required,
+            ok=False,
+            reason=f"autopilot precondition checker unavailable: {exc}",
+        )
+    if str(root_coordination) not in sys.path:
+        sys.path.insert(0, str(root_coordination))
+    try:
+        import autopilot_precondition_gate as checker
+        expected = (root_coordination / "autopilot_precondition_gate.py").resolve()
+        if Path(checker.__file__).resolve() != expected:
+            raise ValueError("loaded autopilot checker differs from the selected ROOT")
+        check_autopilot_precondition = checker.check_autopilot_precondition
     except Exception as exc:  # noqa: BLE001
         return AutopilotPreconditionGateResult(
             required=required,
@@ -874,6 +911,8 @@ def autopilot_precondition_gate(
         try:
             import inference_load_check as ic  # type: ignore[import-not-found]
 
+            if Path(ic.__file__).resolve() != (root_coordination / "inference_load_check.py").resolve():
+                raise ValueError("loaded state signal reader differs from the selected ROOT")
             load_signals = ic.classify_load()
         except Exception as exc:  # noqa: BLE001
             return AutopilotPreconditionGateResult(
@@ -1042,7 +1081,7 @@ def _blank_result(resolved: ResolvedEntry) -> dict[str, Any]:
 def run_preflight(
     resolved: ResolvedEntry,
     *,
-    attestation_dir: Path = DEFAULT_ATTESTATION_DIR,
+    attestation_dir: Path | None = DEFAULT_ATTESTATION_DIR,
     dry_run_timeout_s: float = DEFAULT_DRY_RUN_TIMEOUT_S,
     runner: Callable[..., tuple[int, str, str]] = _default_runner,
     stack_contract_checker: Callable[..., StackContractGateResult] = live_stack_contract_gate,
@@ -1154,7 +1193,7 @@ def run_batch_entry(
     manifest_json: Optional[Path] = None,
     regenerate: bool = True,
     builder: Callable[[], dict[str, Any]] = cwm.build_manifest,
-    attestation_dir: Path = DEFAULT_ATTESTATION_DIR,
+    attestation_dir: Path | None = DEFAULT_ATTESTATION_DIR,
     dry_run_timeout_s: float = DEFAULT_DRY_RUN_TIMEOUT_S,
     execute_timeout_s: float = DEFAULT_EXECUTE_TIMEOUT_S,
     execute: bool = False,               # DEFAULT OFF — never set by tests
@@ -1260,7 +1299,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Pre-generated clean-window manifest JSON (else regenerate)")
     p.add_argument("--no-regenerate", dest="regenerate", action="store_false", default=True,
                    help="Do not regenerate the clean-window manifest if --manifest-json is absent")
-    p.add_argument("--attestation-dir", type=Path, default=DEFAULT_ATTESTATION_DIR,
+    p.add_argument("--attestation-dir", type=Path, default=None,
                    help="Directory of B4 attestation JSONs (topology/affinity verification)")
     p.add_argument("--dry-run-timeout-s", type=float, default=DEFAULT_DRY_RUN_TIMEOUT_S)
     p.add_argument("--execute-timeout-s", type=float, default=DEFAULT_EXECUTE_TIMEOUT_S)

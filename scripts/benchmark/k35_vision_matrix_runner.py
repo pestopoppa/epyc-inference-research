@@ -27,7 +27,6 @@ import k35_stack_context_matrix_runner as k35
 
 
 RESEARCH_ROOT = Path(__file__).resolve().parent.parent.parent
-EPYC_ROOT = Path("/mnt/raid0/llm/epyc-root")
 ORCHESTRATOR_ROOT = Path("/mnt/raid0/llm/epyc-orchestrator")
 EXPERIMENTAL_BIN_DIR = Path("/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin")
 DEFAULT_BINARY = EXPERIMENTAL_BIN_DIR / "llama-server"

@@ -1128,3 +1128,15 @@ def test_response_sanity_and_artifact_auditor_negative_path() -> None:
         root = Path(tmp)
         (root / "summary.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
         assert audit_artifact(root)["status"] == "incomplete"
+
+
+def test_named_governance_root_is_required_and_canonical(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "GOVERNANCE_REPO", None)
+    monkeypatch.setattr(runner, "PROMOTION_ATTESTATION_PATH", None)
+    monkeypatch.delenv("EPYC_ROOT", raising=False)
+    assert "EPYC_ROOT is not set" in runner.verified_governance_attestation(tmp_path / "proof.json")[2]
+    (tmp_path / "scripts/vidya/adapters").mkdir(parents=True)
+    monkeypatch.setenv("EPYC_ROOT", str(tmp_path))
+    raw, proof, reason = runner.verified_governance_attestation(tmp_path / "wrong.json")
+    assert raw is None and proof is None
+    assert str(tmp_path / runner.PROMOTION_ATTESTATION_RELATIVE_PATH) in reason

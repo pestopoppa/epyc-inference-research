@@ -52,11 +52,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Mapping
 
+# AutoKernel is also invoked as `autokernel` with only scripts/kernel_rnd on
+# PYTHONPATH. Locate the shared research helper from this source checkout.
+_RESEARCH_ROOT = Path(__file__).resolve().parents[4]
+if str(_RESEARCH_ROOT) not in sys.path:
+    sys.path.insert(0, str(_RESEARCH_ROOT))
+from scripts.benchmark.belief_capture import CaptureUnavailable, root_checkout
+
 ROOT_REPO_ENV = "EPYC_ROOT_REPO"
-DEFAULT_ROOT = Path("/workspace")
-#: The hub-maintained view of ROOT origin/main, used when /workspace (a shared, possibly
-#: diverged clone nobody here may move) does not contain the reader.
-FALLBACK_ROOT = Path("/mnt/raid0/llm/views/epyc-root-main")
 READER_RELPATH = Path("scripts") / "vidya" / "loop_beliefs.py"
 CONSUMER = "autokernel.planner"
 #: The only planning mode. `--actor-belief-context` accepts nothing else.
@@ -100,22 +103,21 @@ def _now() -> str:
 
 def resolve_root_repo(explicit: str | Path | None = None, *,
                       env: Mapping[str, str] | None = None) -> Path:
-    """The ROOT checkout the belief reader (and the serving-receipt adapter) is read from.
+    """Resolve the named ROOT checkout through the shared, fail-closed resolver.
 
-    1. `--belief-root-repo` (`explicit`), verbatim; 2. env `EPYC_ROOT_REPO`, verbatim;
-    3. `/workspace`, IF it contains scripts/vidya/loop_beliefs.py; 4. else `FALLBACK_ROOT`
-    (the hub's view of origin/main), if it has the reader; 5. else `/workspace`, so a missing
-    reader stays what it is today: reader-missing, refused, critical alarm."""
-    if explicit:
-        return Path(explicit)
+    `--belief-root-repo` and `EPYC_ROOT_REPO` remain accepted for AutoKernel callers;
+    `belief_capture.root_checkout` owns the actual checkout validation and refuses when
+    neither is named. The older `/workspace` and hub-view guesses could silently select a
+    different ledger than the operator intended.
+    """
     environ = os.environ if env is None else env
-    named = environ.get(ROOT_REPO_ENV)
-    if named:
-        return Path(named)
-    for candidate in (DEFAULT_ROOT, FALLBACK_ROOT):
-        if (candidate / READER_RELPATH).is_file():
-            return candidate
-    return DEFAULT_ROOT
+    named = explicit if explicit is not None else environ.get(ROOT_REPO_ENV)
+    if named is None:
+        named = environ.get("EPYC_ROOT")
+    if isinstance(named, str):
+        named = named.strip()
+    selected_env = {} if named is None else {"EPYC_ROOT": str(named)}
+    return root_checkout(selected_env)
 
 
 def root_repo(root: str | Path | None = None) -> Path:
@@ -373,8 +375,14 @@ def raise_alarm(config: BeliefConfig, reason: str, detail: str, *,
             result = {"invoked": True, "returncode": getattr(done, "returncode", None)}
     except Exception as exc:  # noqa: BLE001 -- the refusal stands even if the alarm fails
         result = {"invoked": False, "error": f"{type(exc).__name__}: {exc}"[:300]}
-    if not config.reader().is_file():
-        result["fallback"] = _fallback_alarm(config, reason, detail, runner=runner)
+    try:
+        if not config.reader().is_file():
+            result["fallback"] = _fallback_alarm(config, reason, detail, runner=runner)
+    except CaptureUnavailable as exc:
+        # No named ROOT means no trustworthy alarm locator either. Keep the refusal
+        # and report the undeliverable critical alarm without guessing a checkout.
+        result["fallback"] = {"invoked": False, "error": str(exc)}
+        print(f"BELIEF LEDGER ALARM UNDELIVERABLE ({reason}): {exc}", file=sys.stderr)
     return result
 
 
@@ -569,6 +577,12 @@ def seal_receipt(belief: ReadyAnswer | None, *, prompt: str | None, workspace: s
                                                            or {})
     evidence = belief.evidence if belief is not None else {}
     state = belief.ledger_state if belief is not None else None
+    root_reader = None
+    root_reader_error = None
+    try:
+        root_reader = str(config.reader())
+    except CaptureUnavailable as exc:
+        root_reader_error = str(exc)
     body = {
         "schema": RECEIPT_SCHEMA, "ts": _now(), "consumer": config.consumer, "mode": "required",
         "call": {"prompt_sha256": (hashlib.sha256(prompt.encode("utf-8")).hexdigest()
@@ -578,7 +592,8 @@ def seal_receipt(belief: ReadyAnswer | None, *, prompt: str | None, workspace: s
         "target": (belief.target if belief is not None
                    else (refusal.target if refusal is not None else None)),
         "reader": {"module": "scripts/kernel_rnd/autokernel/loop/belief_context.py",
-                   "module_sha256": _module_sha256(), "root_reader": str(config.reader()),
+                   "module_sha256": _module_sha256(), "root_reader": root_reader,
+                   "root_reader_error": root_reader_error,
                    "consumer": config.consumer, "policy": answer.get("policy"),
                    "elapsed_s": (belief.elapsed_s if belief is not None
                                  else (refusal.elapsed_s if refusal is not None else None))},

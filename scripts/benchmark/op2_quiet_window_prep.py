@@ -19,6 +19,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
+import belief_capture
+
 
 SCHEMA = "epyc.op2_quiet_window_prep.v1"
 PGPU1_CERTIFICATION_NOTE = (
@@ -27,7 +29,6 @@ PGPU1_CERTIFICATION_NOTE = (
     "production-named kernel or strict retro-certification applies."
 )
 
-DEFAULT_ROOT = Path("/mnt/raid0/llm/epyc-root")
 DEFAULT_RESEARCH = Path("/mnt/raid0/llm/epyc-inference-research")
 DEFAULT_ORCHESTRATOR = Path("/mnt/raid0/llm/epyc-orchestrator")
 DEFAULT_PROD_LLAMA = Path("/mnt/raid0/llm/llama.cpp")
@@ -618,14 +619,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--frontdoor-model", default=str(DEFAULT_FRONTDOOR_Q8))
-    parser.add_argument("--measurement-path", default="/workspace/MEASUREMENT.md")
-    parser.add_argument("--root-repo", default=str(DEFAULT_ROOT))
+    parser.add_argument("--measurement-path", default=None)
+    parser.add_argument("--root-repo", default=None)
     parser.add_argument("--research-repo", default=str(DEFAULT_RESEARCH))
     parser.add_argument("--orchestrator-repo", default=str(DEFAULT_ORCHESTRATOR))
     parser.add_argument("--production-llama-repo", default=str(DEFAULT_PROD_LLAMA))
     parser.add_argument("--experimental-llama-repo", default=str(DEFAULT_EXP_LLAMA))
     parser.add_argument("--print-summary", action="store_true")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    root = (belief_capture.root_checkout({"EPYC_ROOT": args.root_repo})
+            if args.root_repo else belief_capture.root_checkout())
+    args.root_repo = str(root)
+    if args.measurement_path is None:
+        args.measurement_path = str(root / "MEASUREMENT.md")
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:

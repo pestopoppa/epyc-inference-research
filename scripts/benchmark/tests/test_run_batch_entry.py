@@ -894,3 +894,33 @@ def _run_all() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(_run_all())
+
+
+def test_default_attestation_and_autopilot_refuse_missing_root(monkeypatch):
+    monkeypatch.delenv("EPYC_ROOT", raising=False)
+    topology = rbe.topology_gate(_resolved_for_topology(), live_hash_override="HASH_A")
+    assert topology.hash_match is True
+    assert topology.verified is False
+    assert any("EPYC_ROOT is not set" in reason for reason in topology.reasons)
+    resolved = rbe.resolve_entry({"preconditions": {"autopilot": "stopped"},
+        "execution": {"command": "python probe.py", "concurrency_mode": "serial_noninference"}})
+    gate = rbe.autopilot_precondition_gate(resolved, load_signals={})
+    assert gate.ok is False
+    assert "EPYC_ROOT is not set" in gate.reason
+
+
+def test_named_root_controls_attestation_and_rejects_cached_foreign_checker(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    (tmp_path / "scripts/vidya/adapters").mkdir(parents=True)
+    monkeypatch.setenv("EPYC_ROOT", str(tmp_path))
+    assert rbe._attestation_dir(None) == tmp_path / "coordination/inference-batch/attestations"
+    explicit = tmp_path / "explicit"
+    assert rbe._attestation_dir(explicit) == explicit
+    monkeypatch.setitem(sys.modules, "autopilot_precondition_gate", SimpleNamespace(
+        __file__="/foreign/autopilot_precondition_gate.py",
+        check_autopilot_precondition=lambda *a: (True, "wrong checkout")))
+    resolved = rbe.resolve_entry({"preconditions": {"autopilot": "stopped"},
+        "execution": {"command": "python probe.py", "concurrency_mode": "serial_noninference"}})
+    gate = rbe.autopilot_precondition_gate(resolved, load_signals={})
+    assert gate.ok is False
+    assert "differs from the selected ROOT" in gate.reason

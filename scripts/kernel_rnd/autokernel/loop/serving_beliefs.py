@@ -152,11 +152,10 @@ class PlannerFeedback:
     """Lazy synchronous bridge; diagnostic faults never change loop outcomes."""
 
     def __init__(self, store_root, root_repo=None):
-        import os
         import threading
 
         self.store_root = Path(store_root)
-        self.root_repo = Path(root_repo or os.environ.get("EPYC_ROOT_REPO", "/workspace"))
+        self.root_repo = root_repo
         self._lock = threading.Lock()
         self._reader = None
         self._failure = None
@@ -164,7 +163,9 @@ class PlannerFeedback:
     def _load(self):
         import importlib
         import sys
+        from . import belief_context
 
+        self.root_repo = belief_context.resolve_root_repo(self.root_repo)
         expected = (self.root_repo / "scripts/vidya/adapters/autokernel_legacy_serving.py").resolve()
         if not expected.is_file():
             raise ValueError(f"serving belief reader is unavailable: {expected}")

@@ -473,7 +473,7 @@ def _with_trial_counters(store, attempt: Mapping[str, Any], epoch: str) -> Mappi
     return {**attempt, "trial_ordinal": ordinal, "cumulative_tokens": cumulative}
 
 
-_VIDYA_ROOT = Path("/workspace")
+_VIDYA_ROOT = None  # Explicit embedding/test override; otherwise resolve the named ROOT lazily.
 
 
 def _publish_ak_history(store_root: Path, attempt: Mapping[str, Any], *,
@@ -481,7 +481,11 @@ def _publish_ak_history(store_root: Path, attempt: Mapping[str, Any], *,
     """Write the prospective AK-HR-3 receipt for a committed loop trial only."""
     if "trial_id" not in attempt:
         return None
-    expected = (_VIDYA_ROOT / "scripts/vidya/adapters/ak_history.py").resolve()
+    from . import belief_context
+
+    explicit_root = _VIDYA_ROOT if _VIDYA_ROOT is not None else os.environ.get("AK_HISTORY_ROOT")
+    root = belief_context.resolve_root_repo(explicit_root)
+    expected = (root / "scripts/vidya/adapters/ak_history.py").resolve()
     if not expected.is_file():
         raise RuntimeError(f"AK history adapter absent: {expected}")
     vidya_path = str(expected.parents[1])

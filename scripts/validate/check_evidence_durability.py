@@ -197,6 +197,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote
 
+RESEARCH_ROOT = Path(__file__).resolve().parents[2]
+if str(RESEARCH_ROOT) not in sys.path:
+    sys.path.insert(0, str(RESEARCH_ROOT))
+from scripts.benchmark.belief_capture import CaptureUnavailable, root_checkout
+
 # --------------------------------------------------------------------------- config
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -219,10 +224,17 @@ EPHEMERAL_ROOTS = (
 # evidence citation only if its repo-relative portion starts with an artifact
 # tree, the same test applied to this repo.
 SIBLING_REPO_ROOTS = (
-    "/mnt/raid0/llm/epyc-root",
     "/mnt/raid0/llm/epyc-orchestrator",
-    "/workspace",
 )
+
+
+def _sibling_repo_roots() -> tuple[str, ...]:
+    try:
+        return SIBLING_REPO_ROOTS + (str(root_checkout()),)
+    except CaptureUnavailable:
+        # With no named ROOT checkout there is no safe path to guess here. Artifact-tree
+        # paths remain in scope through the absolute-path rule below.
+        return SIBLING_REPO_ROOTS
 
 # The ARTIFACT TREES. A path is an evidence citation only if its repo-relative portion
 # starts with one of these -- the same test for relative and absolute paths, so a
@@ -333,7 +345,7 @@ def _in_scope(path: str, repo: Path) -> bool:
         return True
     if path.startswith(ARTIFACT_TREES):          # repo-relative
         return True
-    for root in (str(repo),) + SIBLING_REPO_ROOTS:
+    for root in (str(repo),) + _sibling_repo_roots():
         if path.startswith(root + "/"):
             return path[len(root) + 1:].startswith(ARTIFACT_TREES)
     # An absolute path in no known repo can still be an evidence tree somebody parked on

@@ -435,6 +435,13 @@ class TestRelativeCitationsGetTheSameGuard:
 
 class TestRetargetedRule:
 
+    def test_selected_root_checkout_is_the_root_candidate(self, tmp_path, monkeypatch):
+        import check_evidence_durability as m
+        root = tmp_path / "selected-root"
+        (root / "scripts/vidya/adapters").mkdir(parents=True)
+        monkeypatch.setenv("EPYC_ROOT", str(root))
+        assert str(root.resolve()) in m._sibling_repo_roots()
+
     def test_absolute_path_inside_the_repo_is_ok(self, repo):
         reg = write_registry(
             repo, f"evidence: {repo}/data/good_campaign_20260801/summary.json\n")

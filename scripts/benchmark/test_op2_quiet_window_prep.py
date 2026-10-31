@@ -64,6 +64,7 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             tmp_path = Path(tmp)
             measurement = tmp_path / "MEASUREMENT.md"
             measurement.write_text("### P-GPU-1 — GPU canonical (DEFERRED — hardware not acquired)\n")
+            (tmp_path / "scripts/vidya/adapters").mkdir(parents=True)
             args = op2.parse_args(
                 [
                     "--run-id",
@@ -154,6 +155,7 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             tmp_path = Path(tmp)
             measurement = tmp_path / "MEASUREMENT.md"
             measurement.write_text("### P-GPU-1 — GPU canonical (DEFERRED — hardware not acquired)\n")
+            (tmp_path / "scripts/vidya/adapters").mkdir(parents=True)
             execution_dir = tmp_path / "execution"
             args = op2.parse_args(
                 [
@@ -187,3 +189,19 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_named_root_owns_measurement_default_and_cli_wins(tmp_path, monkeypatch):
+    named = tmp_path / "named"
+    explicit = tmp_path / "explicit"
+    for root in (named, explicit):
+        (root / "scripts/vidya/adapters").mkdir(parents=True)
+    monkeypatch.setenv("EPYC_ROOT", str(named))
+    base = ["--run-id", "fixture", "--output-dir", str(tmp_path / "out")]
+    args = op2.parse_args(base)
+    assert Path(args.root_repo) == named
+    assert Path(args.measurement_path) == named / "MEASUREMENT.md"
+    args = op2.parse_args(base + ["--root-repo", str(explicit),
+                                  "--measurement-path", str(tmp_path / "policy.md")])
+    assert Path(args.root_repo) == explicit
+    assert Path(args.measurement_path) == tmp_path / "policy.md"

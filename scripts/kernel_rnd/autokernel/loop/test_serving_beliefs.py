@@ -12,6 +12,15 @@ from ..controller import experiment_capture
 from .test_resolved_recipe import BUILD, _resolve
 
 
+def test_missing_root_is_a_lazy_diagnostic_failure(tmp_path, monkeypatch):
+    monkeypatch.delenv("EPYC_ROOT_REPO", raising=False)
+    monkeypatch.delenv("EPYC_ROOT", raising=False)
+    bridge = beliefs.PlannerFeedback(tmp_path)
+    result = bridge.context({"epoch": "fixture"})
+    assert result["status"] == "unavailable"
+    assert result["errors"] and "EPYC_ROOT is not set" in result["errors"][0]
+
+
 def comparison(monkeypatch, *, resolved=True, floor_pct=5.0):
     recipe = serving.Recipe(name="fixture", model="/fixture-model", device="none", ngl=0, np=1)
     launch = _resolve(recipe, backend="cpu") if resolved else None

@@ -23,6 +23,7 @@ import pytest
 from autokernel.conftest import belief_ready_answer
 from autokernel.loop import actors, belief_context as bc, bench, gates, loop, pipeline, resume
 from autokernel.loop.loop import Abstain, Hypothesis, Outcome
+from scripts.benchmark.belief_capture import CaptureUnavailable
 
 GPU_27B_REGIME = {"model": {"path": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf"},
                   "quant": "Q8_0", "backend": "gpu", "measurement_surface": "pp512"}
@@ -104,6 +105,7 @@ def _refused(reason="chain_broken", detail="frame 7: hash mismatch"):
 
 
 def _config(tmp_path, **kw):
+    (tmp_path / "root" / "scripts/vidya/adapters").mkdir(parents=True, exist_ok=True)
     return bc.BeliefConfig(root=tmp_path / "root", known_good=tmp_path / "kg.json",
                            alarm_state=tmp_path / "alarm-state.json",
                            alarm_config=tmp_path / "alarm.yaml", **kw)
@@ -616,31 +618,53 @@ def test_hypothesis_schema_accepts_optional_reliance_only():
 def _roots(tmp_path, monkeypatch, *, workspace_has, view_has, env=None):
     workspace, view = tmp_path / "workspace", tmp_path / "view"
     for root, has in ((workspace, workspace_has), (view, view_has)):
-        (root / "scripts" / "vidya").mkdir(parents=True)
+        (root / "scripts" / "vidya" / "adapters").mkdir(parents=True)
         if has:
             (root / bc.READER_RELPATH).write_text("# reader\n")
-    monkeypatch.setattr(bc, "DEFAULT_ROOT", workspace)
-    monkeypatch.setattr(bc, "FALLBACK_ROOT", view)
-    monkeypatch.delenv(bc.ROOT_REPO_ENV, raising=False)
     if env is not None:
-        monkeypatch.setenv(bc.ROOT_REPO_ENV, str(env))
+        (Path(env) / "scripts/vidya/adapters").mkdir(parents=True, exist_ok=True)
+    monkeypatch.delenv(bc.ROOT_REPO_ENV, raising=False)
+    monkeypatch.setenv(bc.ROOT_REPO_ENV, str(env if env is not None else workspace))
     return workspace, view
 
 
-def test_root_prefers_workspace_when_it_has_the_reader(tmp_path, monkeypatch):
+def test_root_uses_the_named_checkout_when_it_has_the_reader(tmp_path, monkeypatch):
     workspace, _ = _roots(tmp_path, monkeypatch, workspace_has=True, view_has=True)
     assert bc.resolve_root_repo() == workspace == bc.root_repo()
     assert bc.BeliefConfig().reader() == workspace / bc.READER_RELPATH
 
 
-def test_root_falls_back_to_the_hub_view_when_workspace_lacks_the_reader(tmp_path, monkeypatch):
+def test_root_does_not_guess_a_fallback_checkout(tmp_path, monkeypatch):
     _, view = _roots(tmp_path, monkeypatch, workspace_has=False, view_has=True)
-    assert bc.resolve_root_repo() == view
-    assert bc.BeliefConfig().reader().is_file()
+    selected = bc.resolve_root_repo()
+    assert selected != view
+    assert not bc.BeliefConfig().reader().is_file()
+
+
+def test_root_refuses_when_no_checkout_is_named(tmp_path, monkeypatch):
+    _roots(tmp_path, monkeypatch, workspace_has=True, view_has=True)
+    monkeypatch.delenv(bc.ROOT_REPO_ENV, raising=False)
+    monkeypatch.delenv("EPYC_ROOT", raising=False)
+    with pytest.raises(CaptureUnavailable, match="EPYC_ROOT is not set"):
+        bc.resolve_root_repo()
+
+
+def test_reader_root_env_precedence_and_validation(tmp_path, monkeypatch):
+    preferred, fallback = _roots(
+        tmp_path, monkeypatch, workspace_has=True, view_has=True, env=tmp_path / "view")
+    monkeypatch.setenv("EPYC_ROOT", str(preferred))
+    assert bc.resolve_root_repo() == fallback
+    monkeypatch.setenv(bc.ROOT_REPO_ENV, "   ")
+    with pytest.raises(CaptureUnavailable, match="EPYC_ROOT is not set"):
+        bc.resolve_root_repo()
+    monkeypatch.setenv(bc.ROOT_REPO_ENV, str(tmp_path / "invalid"))
+    with pytest.raises(CaptureUnavailable, match="has no scripts/vidya/adapters"):
+        bc.resolve_root_repo()
 
 
 def test_explicit_root_wins_over_env_and_both_are_verbatim(tmp_path, monkeypatch):
-    elsewhere = tmp_path / "elsewhere"          # no reader there: still taken verbatim
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "scripts/vidya/adapters").mkdir(parents=True)
     _roots(tmp_path, monkeypatch, workspace_has=True, view_has=True, env=tmp_path / "env-root")
     assert bc.resolve_root_repo(elsewhere) == elsewhere
     assert bc.resolve_root_repo() == tmp_path / "env-root"
@@ -649,7 +673,7 @@ def test_explicit_root_wins_over_env_and_both_are_verbatim(tmp_path, monkeypatch
 
 def test_neither_root_has_the_reader_stays_missing_refused_and_alarmed(tmp_path, monkeypatch):
     workspace, _ = _roots(tmp_path, monkeypatch, workspace_has=False, view_has=False)
-    assert bc.resolve_root_repo() == workspace          # today's behaviour, unchanged
+    assert bc.resolve_root_repo() == workspace
     config = bc.BeliefConfig()
     assert not config.reader().is_file()
 
@@ -664,7 +688,7 @@ def test_neither_root_has_the_reader_stays_missing_refused_and_alarmed(tmp_path,
 def test_serial_run_resolves_the_same_root(tmp_path, monkeypatch):
     from . import serial_run
     assert serial_run.belief_context.resolve_root_repo is bc.resolve_root_repo
-    _, view = _roots(tmp_path, monkeypatch, workspace_has=False, view_has=True)
+    _, view = _roots(tmp_path, monkeypatch, workspace_has=False, view_has=True, env=tmp_path / "view")
     assert serial_run.belief_context.resolve_root_repo(None) == view
 
 
@@ -723,6 +747,7 @@ def test_integration_real_root_child_ready_then_recheck_after_a_retraction(tmp_p
     fake_root = tmp_path / "root"
     vidya = fake_root / "scripts" / "vidya"
     vidya.mkdir(parents=True)
+    (vidya / "adapters").mkdir()
     for source in VIDYA.glob("*.py"):
         shutil.copyfile(source, vidya / source.name)
     (vidya / "sync.py").write_text(FAKE_SYNC)         # never the real plumbing sync
@@ -783,6 +808,7 @@ def test_integration_real_root_child_ready_then_recheck_after_a_retraction(tmp_p
 
 
 def test_missing_reader_alarm_falls_back_to_the_root_alarm_channel(tmp_path):
+    (tmp_path / "root" / "scripts" / "vidya" / "adapters").mkdir(parents=True)
     channel = tmp_path / "root" / "scripts" / "coordination" / "alarm_channel.py"
     channel.parent.mkdir(parents=True)
     channel.write_text("# stand-in; the runner below never executes it\n")
@@ -807,6 +833,7 @@ def test_missing_reader_alarm_falls_back_to_the_root_alarm_channel(tmp_path):
 
 
 def test_missing_reader_and_channel_is_recorded_not_raised(tmp_path):
+    (tmp_path / "nowhere" / "scripts" / "vidya" / "adapters").mkdir(parents=True)
     out = bc.raise_alarm(bc.BeliefConfig(root=tmp_path / "nowhere"), "reader_crash", "x",
                          runner=lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("x")))
     assert out["invoked"] is False
@@ -815,6 +842,7 @@ def test_missing_reader_and_channel_is_recorded_not_raised(tmp_path):
 
 def test_the_loop_store_is_ingested_by_the_reader_before_planning(tmp_path):
     seen = []
+    (tmp_path / "scripts" / "vidya" / "adapters").mkdir(parents=True)
 
     def runner(argv, **kw):
         seen.append(argv)
@@ -909,3 +937,48 @@ def test_belief_section_sits_directly_after_already_tried_not_at_the_tail(tmp_pa
     tried, belief, inbox = (prompt.index("## Already tried"), prompt.index(V2_SECTION),
                             prompt.index("## Operator suggestions"))
     assert tried < belief < inbox
+
+
+@pytest.mark.parametrize("named", [None, "missing-checkout"])
+def test_missing_root_preserves_prepare_refusal_and_receipt(tmp_path, monkeypatch, capsys, named):
+    monkeypatch.delenv("EPYC_ROOT_REPO", raising=False)
+    monkeypatch.delenv("EPYC_ROOT", raising=False)
+    if named is not None:
+        monkeypatch.setenv("EPYC_ROOT", str(tmp_path / named))
+    calls = []
+    def runner(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError("no child may run without a validated ROOT")
+    config = bc.BeliefConfig()
+    with pytest.raises(bc.BeliefContextRefused) as caught:
+        bc.prepare({}, config, runner=runner)
+    refusal = caught.value
+    assert refusal.reason == "reader_crash"
+    assert "CaptureUnavailable" in refusal.detail
+    assert refusal.alarm["invoked"] is False
+    assert refusal.alarm["fallback"]["invoked"] is False
+    assert "ALARM UNDELIVERABLE" in capsys.readouterr().err
+    receipt = bc.seal_receipt(None, prompt=None, workspace=tmp_path, seat_arm=None,
+                              outcome={}, refusal=refusal, config=config)
+    assert receipt["status"] == "refused"
+    assert receipt["reader"]["root_reader"] is None
+    assert receipt["reader"]["root_reader_error"]
+    assert receipt["refusal"]["reason"] == "reader_crash"
+    assert receipt["ledger_state"] is None
+    assert calls == []
+
+
+def test_standalone_autokernel_import_keeps_missing_root_diagnostic(tmp_path):
+    import os
+    import subprocess
+    import sys
+    research = Path(bc.__file__).resolve().parents[4]
+    env = {k: v for k, v in os.environ.items() if k not in {"EPYC_ROOT", "EPYC_ROOT_REPO"}}
+    env["PYTHONPATH"] = str(research / "scripts/kernel_rnd")
+    child = subprocess.run([sys.executable, "-c",
+        "from autokernel.loop import belief_context as bc; "
+        "from autokernel.loop.serving_beliefs import PlannerFeedback; "
+        "assert PlannerFeedback('.').context({})['status'] == 'unavailable'"],
+        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
+    assert child.returncode == 0, child.stderr
+    assert "EPYC_ROOT is not set" in child.stderr

@@ -80,7 +80,8 @@ class ExportTests(unittest.TestCase):
         from autokernel.loop.test_loop import _Critic, _Planner, _run
         from unittest.mock import patch
         with (
-            patch.object(archive, "_VIDYA_ROOT", Path(os.environ.get("AK_HISTORY_ROOT", "/workspace"))),
+            patch.object(archive, "_VIDYA_ROOT", (Path(os.environ["AK_HISTORY_ROOT"])
+                                                   if os.environ.get("AK_HISTORY_ROOT") else None)),
             tempfile.TemporaryDirectory() as t,
         ):
             t = Path(t)

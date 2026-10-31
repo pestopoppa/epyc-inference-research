@@ -29,6 +29,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import belief_capture
+
 
 RESEARCH_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BINARY = Path("/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server")
@@ -66,9 +68,9 @@ BASE_ENVIRONMENT = {"PATH": SAFE_PATH, "LANG": "C", "LC_ALL": "C"}
 PINNED_VISIBLE_DEVICE_ENVIRONMENT = {"HIP_VISIBLE_DEVICES": "0", "ROCR_VISIBLE_DEVICES": "0"}
 SCRUBBED_ENV_PREFIXES = ("GGML_", "HSA_", "HIP_", "ROCR_")
 SCRUBBED_ENV_NAMES = ("LD_PRELOAD",)
-GOVERNANCE_REPO = Path("/mnt/raid0/llm/epyc-root")
+GOVERNANCE_REPO = None
 PROMOTION_ATTESTATION_RELATIVE_PATH = Path("handoffs/active/v9-kernel-promotion-attestation.json")
-PROMOTION_ATTESTATION_PATH = GOVERNANCE_REPO / PROMOTION_ATTESTATION_RELATIVE_PATH
+PROMOTION_ATTESTATION_PATH = None
 TARGET_MODEL_BYTES = 29_047_084_160
 TARGET_MODEL_SHA256 = "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8"
 DRAFTER_MODEL_BYTES = 3_471_497_600
@@ -537,8 +539,15 @@ def git_ref_commit(repo: Path, ref: str) -> str | None:
 
 
 def verified_governance_attestation(path: Path) -> tuple[bytes | None, dict[str, Any] | None, str]:
-    if path != PROMOTION_ATTESTATION_PATH:
-        return None, None, f"attestation must use the exact canonical governance path: {PROMOTION_ATTESTATION_PATH}"
+    try:
+        governance_repo = (Path(GOVERNANCE_REPO) if GOVERNANCE_REPO is not None
+                           else belief_capture.root_checkout())
+    except belief_capture.CaptureUnavailable as exc:
+        return None, None, str(exc)
+    canonical_path = (Path(PROMOTION_ATTESTATION_PATH) if PROMOTION_ATTESTATION_PATH is not None
+                      else governance_repo / PROMOTION_ATTESTATION_RELATIVE_PATH)
+    if path != canonical_path:
+        return None, None, f"attestation must use the exact canonical governance path: {canonical_path}"
     try:
         leaf = path.lstat()
         if not stat.S_ISREG(leaf.st_mode) or stat.S_ISLNK(leaf.st_mode):
@@ -552,10 +561,10 @@ def verified_governance_attestation(path: Path) -> tuple[bytes | None, dict[str,
     except OSError as exc:
         return None, None, f"attestation governance provenance cannot be read: {exc}"
     relative = str(PROMOTION_ATTESTATION_RELATIVE_PATH)
-    tracked = run_capture(["git", "-C", str(GOVERNANCE_REPO), "ls-files", "--error-unmatch", "--", relative])
-    worktree = run_capture(["git", "-C", str(GOVERNANCE_REPO), "diff", "--quiet", "HEAD", "--", relative])
-    index = run_capture(["git", "-C", str(GOVERNANCE_REPO), "diff", "--cached", "--quiet", "--", relative])
-    head_blob = run_capture(["git", "-C", str(GOVERNANCE_REPO), "rev-parse", f"HEAD:{relative}"])
+    tracked = run_capture(["git", "-C", str(governance_repo), "ls-files", "--error-unmatch", "--", relative])
+    worktree = run_capture(["git", "-C", str(governance_repo), "diff", "--quiet", "HEAD", "--", relative])
+    index = run_capture(["git", "-C", str(governance_repo), "diff", "--cached", "--quiet", "--", relative])
+    head_blob = run_capture(["git", "-C", str(governance_repo), "rev-parse", f"HEAD:{relative}"])
     if any(command.get("returncode") != 0 or command.get("exec_error") for command in (tracked, worktree, index, head_blob)):
         return None, None, "attestation must be tracked, unstaged, unmodified, and present in governance HEAD"
     blob_header = f"blob {len(raw)}\0".encode()
