@@ -1713,6 +1713,13 @@ server_mode:
       #    51.694 GiB just after load vs the 51.90 derived (-0.21); B4i's two fresh launches
       #    read 50.77 at load. ONLY the KQ-mask term depends on -ub, and it scales linearly:
       #      KQ mask, 393216 cells x 2048 x 2 B = 1536 MiB  ->  x 512 x 2 B = 384 MiB   -1.125
+      #    Independent 2026-10-04 skip-OFF A/B (epyc-root,
+      #    /mnt/raid0/llm/epyc-root/artifacts/gpu-slot-ak-20261004/results/kvu_off_b512/replay/report.md)
+      #    recorded a 48.565 GiB
+      #    KFD runtime peak at -b/-ub 512 versus 51.69 GiB at -b/-ub 2048. The 512 arm
+      #    was capped with at most three requests decoding; its peak is not an isolated mask
+      #    measurement or a replacement for this load-time scalar. The mask sizes above are
+      #    derived from shape; the observed total difference includes other effects.
       #      FA F16 conversion scratch (1024 x n_kv x 2 B x K+V): sized by n_kv, NOT by -ub;
       #        gfx90a still takes the WMMA path at >=3 rows, so it stays             0
       #      other target activations (~0.3 GiB at -ub 2048) shrink ~4x: NOT credited  0
