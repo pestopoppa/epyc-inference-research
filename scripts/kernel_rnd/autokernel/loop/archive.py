@@ -473,6 +473,32 @@ def _with_trial_counters(store, attempt: Mapping[str, Any], epoch: str) -> Mappi
     return {**attempt, "trial_ordinal": ordinal, "cumulative_tokens": cumulative}
 
 
+_VIDYA_ROOT = Path("/workspace")
+
+
+def _publish_ak_history(store_root: Path, attempt: Mapping[str, Any], *,
+                        campaign_id: str, epoch: str, recorded_at: str) -> Path | None:
+    """Write the prospective AK-HR-3 receipt for a committed loop trial only."""
+    if "trial_id" not in attempt:
+        return None
+    expected = (_VIDYA_ROOT / "scripts/vidya/adapters/ak_history.py").resolve()
+    if not expected.is_file():
+        raise RuntimeError(f"AK history adapter absent: {expected}")
+    vidya_path = str(expected.parents[1])
+    if vidya_path not in sys.path:
+        sys.path.insert(0, vidya_path)
+    from adapters import ak_history
+    if Path(ak_history.__file__).resolve() != expected:
+        raise RuntimeError("AK history adapter differs from selected ROOT source")
+    fields = {key: attempt.get(key) for key in ak_history.FIELDS}
+    return ak_history.append_belief_measurement(
+        store_root / "beliefs", campaign_id=campaign_id,
+        store_id=str(store_root.resolve()), epoch=epoch,
+        producer="autokernel.loop.archive/akhr3-v1", trial=fields,
+        emitted_at=recorded_at,
+    )
+
+
 def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
            recorded_at: str, campaign_id: str, on_serving_export=None,
            journal_receipt_out: list[dict[str, Any]] | None = None) -> bool:
@@ -484,7 +510,8 @@ def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
     receipts = journal_receipt_out if journal_receipt_out is not None else []
     first_receipt = len(receipts)
     with experiments.ExperimentStore(store_root) as store:
-        added = store.record(_with_trial_counters(store, attempt, epoch),
+        stored_attempt = _with_trial_counters(store, attempt, epoch)
+        added = store.record(stored_attempt,
                              epoch=epoch, recorded_at=recorded_at,
                              campaign_id=campaign_id,
                              receipt_out=receipts,
@@ -492,6 +519,15 @@ def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
                              # beliefs (self-hashed capture), not retrofit reads.
                              belief_capture=True)
         store.write_markdown(epoch=epoch)
+        if added:
+            try:
+                _publish_ak_history(store_root, stored_attempt, campaign_id=campaign_id,
+                                    epoch=epoch, recorded_at=recorded_at)
+            except Exception as exc:
+                # The experiment committed first; this failure leaves no invented
+                # measurement and is visible to the next campaign repair pass.
+                print(f"warning: AK history capture failed after durable archive: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
         if added and len(receipts) > first_receipt:
             # DS41-C97: file the runtime treatment this row measured (if any) by WHAT
             # it changed, from the attempt in hand, so the formation guard never has

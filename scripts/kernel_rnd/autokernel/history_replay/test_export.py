@@ -76,9 +76,13 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(kept[0]["candidate"]["knob"]["kind"], "env")
 
     def test_reads_ak_hr3_fields_from_rows_written_by_the_real_code_path(self):
-        from autokernel.loop import actors, archive, loop
+        from autokernel.loop import actors, archive, history_fields, loop
         from autokernel.loop.test_loop import _Critic, _Planner, _run
-        with tempfile.TemporaryDirectory() as t:
+        from unittest.mock import patch
+        with (
+            patch.object(archive, "_VIDYA_ROOT", Path(os.environ.get("AK_HISTORY_ROOT", "/workspace"))),
+            tempfile.TemporaryDirectory() as t,
+        ):
             t = Path(t)
             root = t / "ak"
             (root / "loop-memory").mkdir(parents=True)
@@ -95,12 +99,33 @@ class ExportTests(unittest.TestCase):
                                            wall_s=2.0, timed_out=False, before_ids=set(),
                                            collect_metrics=False, schema=None, final_text=None,
                                            salvaged=False)
+                    # Controlled token-bearing fixture: exercise the actual
+                    # trial snapshot and campaign counter, not a guessed axis.
+                    history_fields.note_call(
+                        "planner", 0, None,
+                        {"totals": {"decoded_tokens": 50, "prompt_tokens": 50}},
+                    )
                     return super().propose(context)
 
             for i in range(2):
                 outcome, _ = _run(Planner([hyp]), _Critic([], []))
                 archive.record(camp / "store", outcome.to_attempt(), epoch="ep1",
                                recorded_at=f"2026-10-20T00:00:0{i}Z", campaign_id="ak-loop")
+            # The archive boundary must emit two distinct, re-openable native
+            # receipts before the closed-store exporter reads its source rows.
+            from adapters import ak_history
+            sidecar = camp / "store" / "beliefs" / ak_history.SIDECAR_NAME
+            captures = ak_history.native_rows(sidecar)
+            self.assertEqual(len(captures), 2)
+            self.assertTrue(all(row["attestation_present"] for row in captures))
+            self.assertEqual(
+                [row["row"]["extra"]["fields"]["trial_ordinal"] for row in captures],
+                [3, 4],
+            )
+            self.assertEqual(
+                [row["row"]["extra"]["fields"]["cumulative_tokens"] for row in captures],
+                [100, 200],
+            )
             # an actor call made outside any trial: null trial_id
             actors._record_metrics(camp / "ws", backend, role="critic", returncode=0, wall_s=1.0,
                                    timed_out=False, before_ids=set(), collect_metrics=False,
@@ -126,6 +151,7 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(post["calls_joined_to_an_attempt_by_trial_id"], 2)
             self.assertEqual(post["calls_with_null_trial_id"], 1)
             self.assertTrue(post["trial_ordinals_strictly_increasing"])
+            self.assertTrue(post["cumulative_tokens_monotone_non_decreasing"])
 
     def test_old_stores_produce_no_post_change_block(self):
         with tempfile.TemporaryDirectory() as t:
