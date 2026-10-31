@@ -15,8 +15,10 @@ import argparse
 from array import array
 from dataclasses import asdict
 from datetime import datetime, timezone
+import csv
 import difflib
 import hashlib
+import io
 import json
 import math
 import os
@@ -25,8 +27,10 @@ import random
 import re
 import secrets
 import shutil
+import stat
 import subprocess
 import sys
+from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Sequence
 
 from . import arena_adapter
@@ -50,6 +54,9 @@ CORRECTNESS_RTOL = 3.0e-6
 DEFAULT_ARENA_ROOT = hip.DEFAULT_ARENA_ROOT
 DEFAULT_TASK = hip.DEFAULT_TASK
 DEFAULT_CLAIM_JOURNAL = hip.DEFAULT_CLAIM_JOURNAL
+COUNTER_EXPECTATION_SCHEMA = "epyc.autokernel.gfx90a_counter_expectation.v1"
+COUNTER_EVIDENCE_SCHEMA = "epyc.autokernel.gfx90a_counter_evidence.v1"
+_MAX_COUNTER_CSV_BYTES = 64 * 1024 * 1024
 
 
 class HipDecisionGradeError(RuntimeError):
@@ -72,6 +79,265 @@ def _canonical_sha256(payload: object) -> str:
     return hashlib.sha256(json.dumps(
         payload, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")).hexdigest()
+
+
+def _read_counter_csv(path: Path) -> bytes:
+    flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("counter profile raw CSV is not a regular file")
+        if before.st_size < 0 or before.st_size > _MAX_COUNTER_CSV_BYTES:
+            raise ValueError("counter profile raw CSV exceeds the bounded read size")
+        chunks: list[bytes] = []
+        size = 0
+        while True:
+            block = os.read(descriptor, min(1024 * 1024,
+                                            _MAX_COUNTER_CSV_BYTES + 1 - size))
+            if not block:
+                break
+            chunks.append(block)
+            size += len(block)
+            if size > _MAX_COUNTER_CSV_BYTES:
+                raise ValueError("counter profile raw CSV exceeds the bounded read size")
+        after = os.fstat(descriptor)
+        linked_after = os.stat(path, follow_symlinks=False)
+        identity = lambda value: (
+            value.st_dev, value.st_ino, value.st_mode, value.st_nlink,
+            value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+        if (identity(before) != identity(after)
+                or identity(after) != identity(linked_after)
+                or size != after.st_size):
+            raise ValueError("counter profile raw CSV changed during bounded read")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def _counter_expectation(value: object) -> dict[str, str]:
+    required = {"schema", "counter_name", "expected_direction", "unit",
+                "candidate_kernel_name", "anchor_kernel_name", "normalization"}
+    if not isinstance(value, Mapping) or set(value) != required:
+        raise ValueError("counter expectation has unknown or missing fields")
+    if value.get("schema") != COUNTER_EXPECTATION_SCHEMA:
+        raise ValueError("counter expectation schema is invalid")
+    result: dict[str, str] = {}
+    for field in ("counter_name", "unit", "candidate_kernel_name", "anchor_kernel_name"):
+        item = value.get(field)
+        if not isinstance(item, str) or not item.strip() or "\0" in item:
+            raise ValueError(f"counter expectation {field} is invalid")
+        result[field] = item.strip()
+    direction = value.get("expected_direction")
+    if direction not in {"increase", "decrease"}:
+        raise ValueError("counter expectation direction must be increase or decrease")
+    result["expected_direction"] = str(direction)
+    if value.get("normalization") != "sum_exact_dispatches":
+        raise ValueError("counter expectation normalization is unsupported")
+    result["normalization"] = "sum_exact_dispatches"
+    return {"schema": COUNTER_EXPECTATION_SCHEMA, **result}
+
+
+def _counter_profile_sum(profile: object, *, kernel_name: str, counter_name: str,
+                         unit: str, workload_sha256: str,
+                         normalization: str, campaign_id: str) -> dict[str, Any]:
+    required = {"run_id", "campaign_id", "source_sha256", "workload_sha256", "csv_path",
+                "csv_sha256", "kernel_name", "dispatch_ids", "counter_name",
+                "unit", "normalization"}
+    if not isinstance(profile, Mapping) or set(profile) != required:
+        raise ValueError("counter profile has unknown or missing fields")
+    for field in ("run_id", "campaign_id", "kernel_name", "counter_name", "unit",
+                  "normalization"):
+        if not isinstance(profile.get(field), str) or not profile[field].strip():
+            raise ValueError(f"counter profile {field} is invalid")
+    for field in ("source_sha256", "workload_sha256", "csv_sha256"):
+        digest = profile.get(field)
+        if (not isinstance(digest, str) or len(digest) != 64
+                or any(c not in "0123456789abcdef" for c in digest)):
+            raise ValueError(f"counter profile {field} is invalid")
+    if (profile["kernel_name"] != kernel_name
+            or profile["campaign_id"] != campaign_id
+            or profile["counter_name"] != counter_name
+            or profile["unit"] != unit
+            or profile["normalization"] != normalization
+            or profile["workload_sha256"] != workload_sha256):
+        raise ValueError("counter profile identity, unit, workload, or normalization mismatch")
+    dispatch_ids = profile.get("dispatch_ids")
+    if (not isinstance(dispatch_ids, list) or not dispatch_ids
+            or any(isinstance(item, bool) or not isinstance(item, int) or item < 0
+                   for item in dispatch_ids)
+            or len(set(dispatch_ids)) != len(dispatch_ids)):
+        raise ValueError("counter profile dispatch_ids must be unique nonnegative integers")
+    path_value = profile.get("csv_path")
+    if not isinstance(path_value, str) or not path_value:
+        raise ValueError("counter profile csv_path is invalid")
+    path = Path(path_value)
+    raw_bytes = _read_counter_csv(path)
+    if hashlib.sha256(raw_bytes).hexdigest() != profile["csv_sha256"]:
+        raise ValueError("counter profile raw CSV is missing, unsafe, or hash-mismatched")
+
+    parsed: dict[int, Decimal] = {}
+    try:
+        raw_text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("counter profile raw CSV is not UTF-8") from exc
+    reader = csv.DictReader(line for line in io.StringIO(raw_text, newline="") if line.strip())
+    if reader.fieldnames is None:
+        raise ValueError("counter profile raw CSV has no header")
+    header_names = reader.fieldnames
+    if (any(not isinstance(name, str) or not name.strip() for name in header_names)
+            or len({name.strip().casefold() for name in header_names}) != len(header_names)):
+        raise ValueError("counter profile raw CSV has empty or ambiguous headers")
+    folded = {name.strip().casefold(): name for name in header_names}
+    dispatch_col = next((folded[key] for key in
+                         ("dispatch_id", "dispatchid", "dispatch_id ")
+                         if key in folded), None)
+    kernel_col = next((folded[key] for key in ("kernel_name", "kernelname", "name")
+                       if key in folded), None)
+    if dispatch_col is None or kernel_col is None:
+        raise ValueError("counter profile raw CSV lacks dispatch/kernel identity")
+    long_format = "counter_name" in folded and "counter_value" in folded
+    value_col = folded.get(counter_name.casefold()) if not long_format else None
+    if not long_format and value_col is None:
+        raise ValueError("counter profile raw CSV lacks the declared native counter")
+    for ordinal, row in enumerate(reader, 2):
+        if row.get(kernel_col) != kernel_name:
+            continue
+        try:
+            dispatch = int(row[dispatch_col])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"counter CSV row {ordinal} has invalid dispatch id") from exc
+        if long_format:
+            if row.get(folded["counter_name"]) != counter_name:
+                continue
+            raw_value = row.get(folded["counter_value"])
+        else:
+            raw_value = row.get(value_col)
+        if dispatch in parsed:
+            raise ValueError(f"counter CSV repeats selected dispatch {dispatch}")
+        try:
+            numeric = Decimal(str(raw_value))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValueError(f"counter CSV row {ordinal} has invalid counter value") from exc
+        if not numeric.is_finite() or numeric < 0:
+            raise ValueError(f"counter CSV row {ordinal} has non-finite or negative value")
+        parsed[dispatch] = numeric
+    if set(parsed) != set(dispatch_ids):
+        raise ValueError("counter CSV dispatch set differs from the declared exact dispatch set")
+    total = sum(parsed.values(), Decimal(0))
+    return {
+        "run_id": profile["run_id"], "campaign_id": campaign_id,
+        "source_sha256": profile["source_sha256"],
+        "workload_sha256": workload_sha256, "kernel_name": kernel_name,
+        "csv_sha256": profile["csv_sha256"], "counter_name": counter_name,
+        "unit": unit, "normalization": normalization,
+        "dispatch_ids": sorted(dispatch_ids), "dispatch_count": len(dispatch_ids),
+        "raw_dispatch_values": {str(key): str(parsed[key]) for key in sorted(parsed)},
+        "normalized_value": str(total),
+    }
+
+
+def evaluate_counter_gate(*, expectation: Mapping[str, Any] | None,
+                          evidence: Mapping[str, Any] | None,
+                          candidate_source_sha256: str, task_id: str, campaign_id: str,
+                          workload_sha256: str,
+                          anchor_identity_sha256: str) -> dict[str, Any]:
+    """Replay a predeclared gfx90a counter against hash-bound native PMC CSVs.
+
+    Missing or malformed evidence is UNKNOWN.  No counter value is inferred from
+    absence, and the reported totals are recomputed from the raw dispatch rows.
+    The CSV/receipt are caller-supplied: this function does not launch or attest
+    profiler capture, so this seam alone is not an end-to-end PMC gate or live
+    controller adoption.
+    """
+    if expectation is None:
+        return {"status": "NOT_REQUIRED", "required": False,
+                "capture_boundary": "external_receipt_replay_only",
+                "end_to_end_capture_proven": False,
+                "speedup_claim_allowed": True, "reason": "no explicit counter declaration"}
+    try:
+        expected = _counter_expectation(expectation)
+        if evidence is None:
+            raise ValueError("native counter receipt is missing")
+        required = {"schema", "task_id", "campaign_id", "candidate_source_sha256",
+                    "anchor_identity_sha256", "workload_sha256", "expectation_sha256",
+                    "counter_name", "unit", "normalization", "candidate", "anchor"}
+        if not isinstance(evidence, Mapping) or set(evidence) != required:
+            raise ValueError("native counter receipt has unknown or missing fields")
+        if (evidence.get("schema") != COUNTER_EVIDENCE_SCHEMA
+                or evidence.get("task_id") != task_id
+                or evidence.get("campaign_id") != campaign_id
+                or evidence.get("candidate_source_sha256") != candidate_source_sha256
+                or evidence.get("anchor_identity_sha256") != anchor_identity_sha256
+                or evidence.get("workload_sha256") != workload_sha256
+                or evidence.get("expectation_sha256") != _canonical_sha256(expected)
+                or evidence.get("counter_name") != expected["counter_name"]
+                or evidence.get("unit") != expected["unit"]
+                or evidence.get("normalization") != expected["normalization"]):
+            raise ValueError("native counter receipt does not match the sealed pair")
+        candidate = _counter_profile_sum(
+            evidence["candidate"], kernel_name=expected["candidate_kernel_name"],
+            counter_name=expected["counter_name"], unit=expected["unit"],
+            workload_sha256=workload_sha256, normalization=expected["normalization"],
+            campaign_id=campaign_id)
+        anchor = _counter_profile_sum(
+            evidence["anchor"], kernel_name=expected["anchor_kernel_name"],
+            counter_name=expected["counter_name"], unit=expected["unit"],
+            workload_sha256=workload_sha256, normalization=expected["normalization"],
+            campaign_id=campaign_id)
+        if candidate["run_id"] == anchor["run_id"]:
+            raise ValueError("candidate and anchor profile run ids must be distinct")
+        if (candidate["source_sha256"] != candidate_source_sha256
+                or anchor["source_sha256"] != anchor_identity_sha256):
+            raise ValueError("profile source identity does not match the sealed candidate/anchor")
+        candidate_value = Decimal(candidate["normalized_value"])
+        anchor_value = Decimal(anchor["normalized_value"])
+        fired = (candidate_value > anchor_value if expected["expected_direction"] == "increase"
+                 else candidate_value < anchor_value)
+        return {
+            "status": "PASS" if fired else "FAIL",
+            "required": True, "speedup_claim_allowed": fired,
+            "capture_boundary": "external_receipt_replay_only",
+            "end_to_end_capture_proven": False,
+            "expectation_sha256": _canonical_sha256(expected),
+            "expected_direction": expected["expected_direction"],
+            "counter_name": expected["counter_name"], "unit": expected["unit"],
+            "normalization": expected["normalization"],
+            "candidate": candidate, "anchor": anchor,
+            "direction_fired": fired,
+            "reason": None if fired else "native counter did not move in the predeclared direction",
+        }
+    except (OSError, ValueError, TypeError, KeyError, csv.Error) as exc:
+        return {"status": "UNKNOWN", "required": True,
+                "speedup_claim_allowed": False,
+                "capture_boundary": "external_receipt_replay_only",
+                "end_to_end_capture_proven": False, "reason": str(exc)}
+
+
+def candidate_decision(*, correctness_passed: bool, integrity_clean: bool,
+                       timing: Mapping[str, Any], counter_gate: Mapping[str, Any]
+                       ) -> dict[str, bool]:
+    counter_required = counter_gate.get("required") is True
+    counter_allowed = counter_gate.get("speedup_claim_allowed") is True
+    if not counter_required:
+        # Preserve legacy no-declaration behavior.  Existing callers keep their
+        # prior speedup observation and rankability rules until they opt in.
+        speedup_claim_allowed = True
+        candidate_beats = timing.get("candidate_beats_exact_provider") is True
+        rankable = bool(integrity_clean and candidate_beats)
+    else:
+        speedup_claim_allowed = bool(
+            correctness_passed and integrity_clean and counter_allowed)
+        candidate_beats = bool(
+            speedup_claim_allowed
+            and timing.get("candidate_beats_exact_provider") is True)
+        rankable = candidate_beats
+    return {
+        "speedup_claim_allowed": speedup_claim_allowed,
+        "candidate_beats_exact_provider": candidate_beats,
+        "rankable_against_exact_task_local_provider": rankable,
+    }
 
 
 def _self_hash(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -369,8 +635,13 @@ def run(
     arena_root: str | Path = DEFAULT_ARENA_ROOT, task_id: str = DEFAULT_TASK,
     claim_journal: str | Path = DEFAULT_CLAIM_JOURNAL,
     visible_device: str = "0", claim_timeout_s: float = 3600.0,
+    counter_expectation: Mapping[str, Any] | None = None,
+    counter_evidence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     started = _utc_now()
+    declared_counter_expectation = (
+        _counter_expectation(counter_expectation)
+        if counter_expectation is not None else None)
     if not re.fullmatch(r"[a-z][a-z0-9_.-]{2,95}", campaign_id):
         raise HipDecisionGradeError("campaign_id is not a safe governed identifier")
     root = Path(output_root).resolve()
@@ -397,6 +668,18 @@ def run(
     specification, expected = _create_suite(work, suite_seed)
     spec_path = work / "sealed-suite.json"
     _atomic_json(spec_path, specification)
+    counter_declaration = None
+    if declared_counter_expectation is not None:
+        counter_declaration = {
+            "schema": COUNTER_EXPECTATION_SCHEMA,
+            "declared_at": _utc_now(), "task_id": task_id,
+            "campaign_id": campaign_id, "candidate_source_sha256": source_sha,
+            "workload_sha256": specification["timing_input_sha256"],
+            "expectation": declared_counter_expectation,
+            "expectation_sha256": _canonical_sha256(declared_counter_expectation),
+        }
+        # Persist the direction before either native GPU measurement window opens.
+        _atomic_json(root / "counter-expectation.json", counter_declaration)
     compile_result, compile_sandbox = _run_sandboxed(
         mode="compile", source=source, root=root, work=work,
         spec_path=None, gpu_visible=False)
@@ -424,6 +707,12 @@ def run(
             spec_path=spec_path, gpu_visible=True))
     timing_payload, timing_sandbox = timing_child
     timing = _reduce_timing(timing_payload)
+    anchor_identity_sha256 = _canonical_sha256(timing_payload.get("provider"))
+    counter_gate = evaluate_counter_gate(
+        expectation=declared_counter_expectation, evidence=counter_evidence,
+        candidate_source_sha256=source_sha, task_id=task_id, campaign_id=campaign_id,
+        workload_sha256=str(specification["timing_input_sha256"]),
+        anchor_identity_sha256=anchor_identity_sha256)
     source_unchanged = _sha256(source) == source_sha
     integrity_clean = (
         source_unchanged and static_scan["clean"]
@@ -431,7 +720,25 @@ def run(
         and compile_sandbox["teardown"]["verified_empty"]
         and correctness_sandbox["teardown"]["verified_empty"]
         and timing_sandbox["teardown"]["verified_empty"])
-    rankable = bool(integrity_clean and timing["candidate_beats_exact_provider"])
+    decision = candidate_decision(
+        correctness_passed=correctness["all_passed"], integrity_clean=integrity_clean,
+        timing=timing, counter_gate=counter_gate)
+    belief_measurements = [
+        {"measurement_id": "hip_sealed_correctness_pass_rate",
+         "metric": "autokernel_hip_sealed_correctness_pass_rate",
+         "value": correctness["passed"] / correctness["total"], "unit": "fraction",
+         "metric_direction": "higher_better", "category": "CANDIDATE",
+         "claim": "Fraction of sealed hostile host-double SiLU cases passed",
+         "reps": correctness["total"], "reps_basis": "sealed_hostile_cases"},
+    ]
+    if decision["speedup_claim_allowed"]:
+        belief_measurements.append(
+            {"measurement_id": "hip_exact_provider_speedup",
+             "metric": "autokernel_hip_speedup_vs_exact_torch_rocm_compile",
+             "value": timing["median_speedup"], "unit": "ratio",
+             "metric_direction": "higher_better", "category": "CANDIDATE",
+             "claim": "Median paired-block speedup over exact Torch-ROCm-compile SiLU",
+             "reps": timing["block_count"], "reps_basis": "paired_randomized_blocks"})
     receipt = _self_hash({
         "schema": SCHEMA,
         "authority": AUTHORITY,
@@ -455,30 +762,21 @@ def run(
                                   "correctness": correctness_sandbox,
                                   "timing": timing_sandbox}},
         "timing": timing,
+        "counter_declaration": counter_declaration,
+        "counter_gate": counter_gate,
         "decision": {
-            "rankable_against_exact_task_local_provider": rankable,
-            "candidate_beats_exact_provider": timing["candidate_beats_exact_provider"],
+            **decision,
             "release_or_promotion_authority": False,
             "experimental_llama_integration_required_before_any_release": True,
         },
         "measurement_windows": [correctness_window, timing_window],
-        "belief_measurements": [
-            {"measurement_id": "hip_sealed_correctness_pass_rate",
-             "metric": "autokernel_hip_sealed_correctness_pass_rate",
-             "value": correctness["passed"] / correctness["total"], "unit": "fraction",
-             "metric_direction": "higher_better", "category": "CANDIDATE",
-             "claim": "Fraction of sealed hostile host-double SiLU cases passed",
-             "reps": correctness["total"], "reps_basis": "sealed_hostile_cases"},
-            {"measurement_id": "hip_exact_provider_speedup",
-             "metric": "autokernel_hip_speedup_vs_exact_torch_rocm_compile",
-             "value": timing["median_speedup"], "unit": "ratio",
-             "metric_direction": "higher_better", "category": "CANDIDATE",
-             "claim": "Median paired-block speedup over exact Torch-ROCm-compile SiLU",
-             "reps": timing["block_count"], "reps_basis": "paired_randomized_blocks"},
-        ],
+        "belief_measurements": belief_measurements,
         "constraints": {"production_tree_touched": False,
                         "frozen_kernel_built": False,
                         "promotion_authority": False,
+                        "counter_capture_performed": False,
+                        "end_to_end_counter_gate_adopted": False,
+                        "live_controller_activated": False,
                         "shared_rocm_mutated": False},
     })
     _atomic_json(root / "receipt.json", receipt)
@@ -495,19 +793,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--claim-journal", default=str(DEFAULT_CLAIM_JOURNAL))
     parser.add_argument("--visible-device", default="0")
     parser.add_argument("--claim-timeout-seconds", type=float, default=3600.0)
+    parser.add_argument(
+        "--counter-expectation",
+        help="JSON declaration of the pre-run native counter and expected direction")
+    parser.add_argument(
+        "--counter-evidence",
+        help="JSON receipt binding raw native counter CSVs for candidate and anchor")
     args = parser.parse_args(argv)
+    def load_json_object(path_value: str | None, label: str) -> Mapping[str, Any] | None:
+        if path_value is None:
+            return None
+        value = json.loads(Path(path_value).read_text(encoding="utf-8"))
+        if not isinstance(value, Mapping):
+            raise HipDecisionGradeError(f"{label} must be a JSON object")
+        return value
     with hip._graceful_signals():
         receipt = run(
             candidate_source=args.candidate_source, output_root=args.output_root,
             campaign_id=args.campaign_id, arena_root=args.arena_root,
             task_id=args.task_id, claim_journal=args.claim_journal,
             visible_device=args.visible_device,
-            claim_timeout_s=args.claim_timeout_seconds)
+            claim_timeout_s=args.claim_timeout_seconds,
+            counter_expectation=load_json_object(
+                args.counter_expectation, "counter expectation"),
+            counter_evidence=load_json_object(
+                args.counter_evidence, "counter evidence"))
+    speedup_allowed = receipt["decision"]["speedup_claim_allowed"]
     print(json.dumps({
         "status": receipt["status"], "campaign_id": receipt["campaign_id"],
         "receipt_sha256": receipt["receipt_sha256"],
         "rankable": receipt["decision"]["rankable_against_exact_task_local_provider"],
-        "median_speedup": receipt["timing"]["median_speedup"],
+        "speedup_claim_allowed": speedup_allowed,
+        "counter_gate_status": receipt["counter_gate"]["status"],
+        "median_speedup": (receipt["timing"]["median_speedup"]
+                           if speedup_allowed else None),
     }, sort_keys=True))
     return 0 if receipt["status"] == "complete" else 2
 
