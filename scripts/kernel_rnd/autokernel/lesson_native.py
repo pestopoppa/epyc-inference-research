@@ -109,8 +109,20 @@ def _read_capture(folder, expected_prompt, expected_argv, expected_exe_sha, prot
     return speedup
 
 
+def _cap_source_valid(provenance, task_id):
+    if not isinstance(task_id, str) or not isinstance(provenance, dict) or set(provenance) != {'kind', 'source'}:
+        return False
+    kind, source = provenance['kind'], provenance['source']
+    if not isinstance(source, str) or not source.strip():
+        return False
+    # A workload_roofline label and a source string are only assertions.
+    # Until there is an evidence verifier and a selected workload they cannot
+    # authorize an operational cap. Controls are explicitly isolated.
+    return kind == 'control' and task_id.startswith('CONTROL-')
+
+
 def produce(journal, *, artifact_root, task_id, task_prompt, candidate_id, commit,
-            lesson, reopen_when, upper_cap, argv, timeout, evaluator_sha256, protocol_id, source_repo=None, code_artifacts=None, environment=None):
+            lesson, reopen_when, upper_cap, argv, timeout, evaluator_sha256, protocol_id, source_repo=None, code_artifacts=None, environment=None, cap_provenance=None):
     """Execute baseline and injected same-task first turns and append the receipt.
 
     argv names the native task execution entry. Its stdout contract is exactly
@@ -122,6 +134,9 @@ def produce(journal, *, artifact_root, task_id, task_prompt, candidate_id, commi
     No subprocess is started if cap is absent. The task and lesson are captured
     before execution; no earlier, unbound result is promoted into this receipt.
     """
+    if not isinstance(task_id, str) or not _cap_source_valid(cap_provenance, task_id):
+        upper_cap = None
+        cap_provenance = None
     preliminary = {'schema': 'autokernel.lesson_admission.v1', 'task_id': task_id,
         'candidate_id': candidate_id, 'commit': commit, 'lesson': lesson,
         'reopen_when': reopen_when, 'r1': None, 'upper_cap': upper_cap,
@@ -160,7 +175,7 @@ def produce(journal, *, artifact_root, task_id, task_prompt, candidate_id, commi
         raise ValueError('non-empty protocol is required')
     manifest = {'task_id': task_id, 'task_prompt': task_prompt, 'candidate_id': candidate_id,
                 'commit': commit, 'lesson': lesson, 'reopen_when': reopen_when,
-                'upper_cap': upper_cap, 'argv': list(argv), 'executable_sha256': executable_sha, 'expected_evaluator_sha256': evaluator_sha256, 'protocol_id': protocol_id,
+                'upper_cap': upper_cap, 'cap_provenance': cap_provenance, 'argv': list(argv), 'executable_sha256': executable_sha, 'expected_evaluator_sha256': evaluator_sha256, 'protocol_id': protocol_id,
                 'environment_sha256': _sha(json.dumps(env, sort_keys=True).encode()),
                 'source_repo': source_repo, 'code_artifacts': code_artifacts}
     manifest_bytes = json.dumps(manifest, sort_keys=True).encode()
@@ -221,6 +236,8 @@ def verify_artifacts(payload):
             ('manifest', manifest_raw), ('baseline', baseline_raw), ('verification', verify_raw))):
         raise ValueError('native capture digest mismatch')
     m = json.loads(manifest_raw)
+    if not _cap_source_valid(m.get('cap_provenance'), m.get('task_id', '')):
+        raise ValueError('native cap provenance absent or invalid; legacy receipt is not qualified')
     for key in ('task_id', 'candidate_id', 'commit', 'lesson', 'reopen_when', 'upper_cap'):
         if m[key] != payload[key]:
             raise ValueError('native capture and journal binding mismatch')

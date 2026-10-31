@@ -5583,8 +5583,14 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     `0` means the campaign terminated cleanly and production is byte-identical —
     NOT that the candidate won. A REVERT is a successful campaign.
     """
+    # Lesson submissions are a separate explicit write path.  They never enter
+    # the kernel-candidate campaign or activate lesson retrieval.
+    raw_args = list(argv) if argv is not None else sys.argv[1:]
+    if raw_args and raw_args[0] == "submit-lesson":
+        from .lesson_submission import main as submit_lesson
+        return submit_lesson(raw_args[1:], out=out)
     stream = out if out is not None else sys.stdout
-    args = build_parser().parse_args(list(argv) if argv is not None else None)
+    args = build_parser().parse_args(raw_args)
     # ``--json`` is an automation contract: stdout (or the injected ``out``
     # stream) must contain exactly one parseable result document. Keep the
     # detailed composition trace, but move it to stderr in JSON mode.

@@ -1,0 +1,5 @@
+LESSON (injected before the first turn):
+No optimization is proposed; this is a pipeline control.
+
+TASK:
+Run the same integer sum twice and verify equality.

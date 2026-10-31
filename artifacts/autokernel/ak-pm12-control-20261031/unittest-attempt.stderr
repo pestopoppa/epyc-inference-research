@@ -1,0 +1,19 @@
+...............................................................................................................................E
+======================================================================
+ERROR: test_journal_validator_faults (unittest.loader._FailedTest.test_journal_validator_faults)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_journal_validator_faults
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/unittest/loader.py", line 137, in loadTestsFromName
+    module = __import__(module_name)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/tmp/codex3-akpm12-hook-repair-20261031/scripts/kernel_rnd/autokernel/test_journal_validator_faults.py", line 10, in <module>
+    import pytest
+ModuleNotFoundError: No module named 'pytest'
+
+
+----------------------------------------------------------------------
+Ran 128 tests in 8.277s
+
+FAILED (errors=1)
+guard samples=168 peak_tree_rss_bytes=89169920 exit=1

@@ -1,0 +1,29 @@
+{
+  "artifact_root": "/mnt/micron/codex3-lanes/research/artifacts/autokernel/ak-pm12-control-20261031/attempt",
+  "task_id": "CONTROL-ak-pm12-same-sum",
+  "task_prompt": "Run the same integer sum twice and verify equality.",
+  "candidate_id": "CONTROL-same-sum",
+  "commit": "93c217ec5d743da8f81b430630a03ad3638d106a",
+  "lesson": "No optimization is proposed; this is a pipeline control.",
+  "reopen_when": "control program or execution protocol changes",
+  "upper_cap": 2.0,
+  "cap_provenance": {
+    "kind": "control",
+    "source": "AK-PM-12 model-free same-sum pipeline control; arbitrary control-only bound"
+  },
+  "argv": [
+    "/usr/bin/python3",
+    "/mnt/micron/codex3-lanes/research/artifacts/autokernel/ak-pm12-control-20261031/control.py"
+  ],
+  "timeout": 20,
+  "evaluator_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+  "protocol_id": "ak-pm12-model-free-control/v1",
+  "source_repo": "/mnt/micron/codex3-lanes/research",
+  "code_artifacts": {
+    "/mnt/micron/codex3-lanes/research/artifacts/autokernel/ak-pm12-control-20261031/control.py": "5a57f5a9fae319e4e62ee57fe2d374737f33e60a7e1d8cfec654163d4fa88f9d"
+  },
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "OMP_NUM_THREADS": "1"
+  }
+}

@@ -28,9 +28,9 @@ class NativeTest(unittest.TestCase):
         self.exe = self.root / 'task.py'
         self.exe.write_text('#!/usr/bin/python3\nimport json,sys\np=sys.stdin.read()\nprint(json.dumps({"baseline_ns":1000,"candidate_ns":400 if p.startswith("LESSON (") else 500,"correctness":True,"protocol_id":"fixture/v1"}))\n')
         self.exe.chmod(0o755)
-        self.args = {'artifact_root': self.root/'run', 'task_id': 't1', 'task_prompt': 'solve task',
+        self.args = {'artifact_root': self.root/'run', 'task_id': 'CONTROL-t1', 'task_prompt': 'solve task',
             'candidate_id': 'c1', 'commit': self.commit, 'lesson': 'try this', 'reopen_when': 'changed',
-            'upper_cap': 10.0, 'argv': [str(self.exe)], 'timeout': 5,
+            'upper_cap': 10.0, 'cap_provenance': {'kind': 'control', 'source': 'fixture ceiling; not a workload policy'}, 'argv': [str(self.exe)], 'timeout': 5,
             'evaluator_sha256': hashlib.sha256(self.exe.read_bytes()).hexdigest(), 'protocol_id': 'fixture/v1',
             'source_repo': str(self.repo), 'code_artifacts': {}}
 

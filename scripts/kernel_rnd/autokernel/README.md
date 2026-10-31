@@ -1934,3 +1934,22 @@ implementation (deliberately — AK-D25 keeps cadence an operator policy).
 - `_parse_line` rejects any unknown `kind`, so a journal written by a newer
   version is entirely unreadable by an older reader — fail-closed by design, and
   a forward-compatibility wall.
+
+
+### Lesson submission (write side only)
+
+`python3 -m autokernel.campaign submit-lesson --config CONFIG --journal JOURNAL`
+invokes the native producer explicitly. The producer configuration includes a
+per-workload `upper_cap` and `cap_provenance` object with `kind` set to
+`workload_roofline` and `source` naming the source of the workload ceiling.
+The source string is a caller assertion, not a roofline calculation or independent
+validation: merely supplying a `workload_roofline` kind and source cannot qualify
+an operational cap. Until a verifier and real workload exist, operational
+submissions record UNKNOWN without executing. There is no operational default.
+The ceiling and its provenance are bound into the native attempt manifest.
+Legacy captured manifests without provenance remain historical records; they
+cannot be appended again as newly qualified receipts. Retrieval stays held.
+
+For isolated model-free controls only, pass `--control`, use a task id beginning
+`CONTROL-`, and `cap_provenance.kind` of `control`. The control-only cap is not
+a workload ceiling and a control receipt is not a scientific admission.
