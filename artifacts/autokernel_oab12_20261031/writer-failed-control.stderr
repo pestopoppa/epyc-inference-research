@@ -1,0 +1,20 @@
+..................E...............
+======================================================================
+ERROR: test_sections_and_unknowns_reach_collect_and_continued (autokernel.loop.test_actor_metrics.SectionPullWriter.test_sections_and_unknowns_reach_collect_and_continued)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/test_actor_metrics.py", line 485, in test_sections_and_unknowns_reach_collect_and_continued
+    (replies / "actor-calls.jsonl").read_text().splitlines()]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1029, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/tmpsmkvrirv/replies/actor-calls.jsonl'
+
+----------------------------------------------------------------------
+Ran 34 tests in 0.253s
+
+FAILED (errors=1)

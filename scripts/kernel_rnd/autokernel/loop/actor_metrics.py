@@ -385,6 +385,80 @@ def parse_export(path: Path) -> dict[str, Any]:
     return parse_export_data(json.loads(Path(path).read_text(encoding="utf-8")))
 
 
+# Recognise native section-file names only; aliases and directory greps stay unknown.
+_SECTION_KEYS = frozenset({"target", "program", "program_strategy", "superseded", "profile",
+    "node_profile", "long_context", "exhausted_families", "stagnant_families",
+    "characterised", "already_tried", "shared_history", "serving_observations",
+    "hypothesis_rejections", "patch_rejections", "inbox"})
+_SECTION_PATH = re.compile(r"^(?P<bundle>(?:.*/)?actor-context/[^/]+)/sections/"
+                           r"[0-9]+-(?P<section>[A-Za-z_]+)\.md$")
+
+
+def _section_pull_metrics(tools: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Count UTF-8 tool output including formatting, never file bytes read.
+
+    Section counts cover only exact conventional section-file paths. The all-read/grep
+    denominator includes unrecognised paths and aliases, including non-bundle paths;
+    it does not imply those attempts belong to any particular section. Truncation is
+    only what native metadata reports; the delivered output itself can be truncated.
+    """
+    bundles: dict[str, dict[str, dict[str, Any]]] = {}
+    attempts = unattributed = known_attempts = errors = truncated_total = truncation_unknown = 0
+    for part in tools:
+        tool = part.get("tool")
+        if tool not in ("read", "grep"):
+            continue
+        attempts += 1
+        state = part.get("state") if isinstance(part.get("state"), Mapping) else {}
+        args = state.get("input") if isinstance(state.get("input"), Mapping) else {}
+        metadata = state.get("metadata") if isinstance(state.get("metadata"), Mapping) else {}
+        truncated = metadata.get("truncated")
+        truncated_total += truncated is True
+        truncation_unknown += truncated is not True and truncated is not False
+        errors += state.get("status") == "error"
+        output = state.get("output")
+        size = None
+        if state.get("status") == "completed" and isinstance(output, str):
+            try:
+                size = len(output.encode("utf-8"))
+            except UnicodeEncodeError:
+                pass
+        known_attempts += size is not None
+        path = args.get("filePath" if tool == "read" else "path")
+        match = _SECTION_PATH.search(path) if isinstance(path, str) and "//" not in path and not any(
+            component in (".", "..") for component in path.split("/")) else None
+        key = match.group("section") if match else None
+        if key not in _SECTION_KEYS:
+            unattributed += 1
+            continue
+        sections = bundles.setdefault(match.group("bundle"), {})
+        row = sections.setdefault(key, {"attempts": 0, "known_output_attempts": 0,
+            "known_output_bytes": 0, "output_bytes": 0, "reads": 0, "greps": 0,
+            "unknown_output_attempts": 0, "error_attempts": 0, "truncation_reported": 0,
+            "truncation_unknown": 0})
+        row["attempts"] += 1
+        row["reads" if tool == "read" else "greps"] += 1
+        if state.get("status") == "error":
+            row["error_attempts"] += 1
+        if truncated is True:
+            row["truncation_reported"] += 1
+        elif truncated is not False:
+            row["truncation_unknown"] += 1
+        if size is None:
+            row["unknown_output_attempts"] += 1
+            row["output_bytes"] = None
+        else:
+            row["known_output_attempts"] += 1
+            row["known_output_bytes"] += size
+            if row["output_bytes"] is not None:
+                row["output_bytes"] += size
+    return {"unit": "utf8_tool_output_bytes_including_formatting", "attempts": attempts,
+            "known_output_attempts": known_attempts,
+            "unknown_output_attempts": attempts - known_attempts, "error_attempts": errors,
+            "truncation_reported": truncated_total, "truncation_unknown": truncation_unknown,
+            "unattributed_attempts": unattributed, "bundles": bundles}
+
+
 def parse_export_data(data: Mapping[str, Any]) -> dict[str, Any]:
     """`parse_export` on an already-loaded export object (`{"messages": [...]}`)."""
     msgs = data["messages"]
@@ -438,6 +512,7 @@ def parse_export_data(data: Mapping[str, Any]) -> dict[str, Any]:
         "bundle_tool_calls": sum(bundle_tools.values()),
         "bundle_tools": bundle_tools,
         "bundle_paths": sorted(bundle_paths),
+        "section_pulls": _section_pull_metrics(tools),
         **_reasoning_stats(msgs),
     }
 

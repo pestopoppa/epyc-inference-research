@@ -1,0 +1,13 @@
+..................F...............
+======================================================================
+FAIL: test_sections_and_unknowns_reach_collect_and_continued (autokernel.loop.test_actor_metrics.SectionPullWriter.test_sections_and_unknowns_reach_collect_and_continued)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/test_actor_metrics.py", line 484, in test_sections_and_unknowns_reach_collect_and_continued
+    self.assertEqual(section["truncation_reported"], 1)
+AssertionError: 2 != 1
+
+----------------------------------------------------------------------
+Ran 34 tests in 0.033s
+
+FAILED (failures=1)

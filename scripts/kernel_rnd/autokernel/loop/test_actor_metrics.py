@@ -429,6 +429,92 @@ class StoreBusyRetry(unittest.TestCase):
                 actor_metrics.export_session(self.workspace, "ses_a", out)
 
 
+class SectionPullWriter(unittest.TestCase):
+    """Use native-export parts, with targeted edits, through both collection paths."""
+
+    def test_sections_and_unknowns_reach_collect_and_continued(self):
+        data = json.loads(PLAIN_EXPORT.read_text())
+        reads = [p for m in data["messages"] for p in m.get("parts", [])
+                 if p.get("type") == "tool" and p.get("tool") == "read"]
+        first = reads[0]
+        base = "/tmp/actor-context/stamp-planner-id/sections/05-node_profile.md"
+        first["state"]["input"]["filePath"] = base
+        first["state"]["output"] = "L1: \u00e9"
+        first["state"]["metadata"] = {"truncated": True}
+        # The repeated read errored: do not convert the missing output to zero.
+        second = reads[1]
+        second["state"]["input"]["filePath"] = base
+        second["state"]["status"] = "error"
+        second["state"]["metadata"] = {}
+        second["state"].pop("output", None)
+        # An alias and a directory grep cannot be assigned to a section.
+        reads[2]["state"]["input"]["filePath"] = base.replace("/sections/", "/x/../sections/")
+        third = dict(first)
+        third["tool"] = "grep"
+        third["state"] = {"status": "completed",
+                          "input": {"path": base, "pattern": "x"},
+                          "output": "hit: \u03bb", "metadata": {"truncated": False}}
+        directory = dict(third)
+        directory["state"] = {"status": "completed",
+                              "input": {"path": "/tmp/actor-context/stamp-planner-id/sections",
+                                        "pattern": "x"}, "output": "unknown"}
+        other = dict(first)
+        other["state"] = {"status": "completed",
+                          "input": {"filePath": base.replace("stamp-planner-id", "other-id")},
+                          "output": "other", "metadata": {"truncated": False}}
+        slash_alias = dict(first)
+        slash_alias["state"] = {"status": "completed",
+                                "input": {"filePath": base.replace("/sections/", "//sections/")},
+                                "output": "alias"}
+        data["messages"][0]["parts"].extend([third, directory, other, slash_alias])
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "export.json"
+            source.write_text(json.dumps(data), encoding="utf-8")
+            replies = Path(tmp) / "replies"
+            def export(workspace, sid, out_path, **kwargs):
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_bytes(source.read_bytes())
+            with mock.patch.object(actor_metrics, "export_session", side_effect=export), \
+                 mock.patch.object(actor_metrics, "list_session_ids", return_value={"session"}):
+                collected = actor_metrics.collect(Path(tmp), set(), replies, stamp="new")
+                continued = actor_metrics.collect_continued(Path(tmp), "session", replies,
+                                                             stamp="continued")
+                from autokernel.loop import actors
+                lane = Path(tmp) / "lane"
+                lane.mkdir()
+                with mock.patch.object(actors.history_fields, "note_call"):
+                    for session in (None, "session"):
+                        actors._record_metrics(
+                            lane, actors.Backend("opencode", "fixture/model", "high", "unused"),
+                            role="planner", returncode=0, wall_s=1, timed_out=False,
+                            before_ids=set(), collect_metrics=True, schema=None, final_text=None,
+                            salvaged=False, continued_session=session)
+                rows = [json.loads(line) for line in
+                        (Path(tmp) / "actor-replies" / "actor-calls.jsonl").read_text().splitlines()]
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row["schema"] == actor_metrics.METRICS_SCHEMA for row in rows))
+        bundle = "/tmp/actor-context/stamp-planner-id"
+        self.assertTrue(all(row["opencode"]["sessions"][0]["section_pulls"]["bundles"]
+                            [bundle]["node_profile"]["known_output_attempts"] == 2 for row in rows))
+        for result in (collected, continued):
+            self.assertIsNone(result["metrics_error"])
+            pulls = result["sessions"][0]["section_pulls"]
+            section = pulls["bundles"][bundle]["node_profile"]
+            other_section = pulls["bundles"]["/tmp/actor-context/other-id"]["node_profile"]
+            self.assertEqual((other_section["attempts"], other_section["output_bytes"]), (1, 5))
+            self.assertEqual((section["attempts"], section["reads"], section["greps"]), (3, 2, 1))
+            self.assertEqual(section["known_output_attempts"], 2)
+            self.assertEqual(section["known_output_bytes"],
+                             len("L1: \u00e9".encode()) + len("hit: \u03bb".encode()))
+            self.assertIsNone(section["output_bytes"])
+            self.assertEqual(section["error_attempts"], 1)
+            self.assertEqual(section["unknown_output_attempts"], 1)
+            self.assertEqual(section["truncation_reported"], 1)
+            self.assertGreaterEqual(section["truncation_unknown"], 1)
+            self.assertEqual(pulls["attempts"], 17)
+            self.assertEqual(pulls["unattributed_attempts"], 13)
+
+
 class BundleAccess(unittest.TestCase):
     """Variable-mode context: which bundle files the actor's tools named."""
 
