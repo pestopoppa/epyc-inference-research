@@ -1,0 +1,4 @@
+selected_family=30 cpus=126,127
+.........                                                                [100%]
+9 passed in 0.09s
+{"schema": "bounded-r6-prep-supervisor/v1", "elapsed_s": 0.3127226959913969, "sampled_peak_tree_rss_bytes": 72241152, "samples": 4, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 3334467, "leader_birth": 158081638, "child_rc": 0, "children_drained": true, "failure": null}
