@@ -2539,6 +2539,16 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
         lines.append(program)
         lines.append("")
 
+    # R24-8: make the live pool alarm visible to the next planner call as evidence,
+    # not as a new objective or a hidden selection rule.
+    loop_health = context.get("loop_health_alarm")
+    if isinstance(loop_health, Mapping) and loop_health.get("operator_attention_required"):
+        evidence_line = loop_health.get("planner_evidence_line")
+        lines.append("## Pool health attention (observe-only)")
+        lines.append(str(evidence_line or "R24-8 alarm active; details unavailable."))
+        lines.append("This is diagnostic context only; it does not change grading, keeps, or stopping.")
+        lines.append("")
+
     # DS41 audit (2026-10): `program.md`'s settled-mechanisms list above is maintained
     # BY HAND and goes stale (the exact failure the comment above just described, for
     # the same reason: a document nobody is wired to keep current). This block is

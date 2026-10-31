@@ -8,6 +8,7 @@ producer previously rendered as a clean, empty, trusted page.
 """
 from datetime import datetime, timedelta, timezone
 import json
+import math
 from pathlib import Path
 import tempfile
 import unittest
@@ -26,6 +27,102 @@ def _outcomes():
 
 
 class Write(unittest.TestCase):
+
+    def test_r24_8_no_measurement_alarm_excludes_mid_formation_stops(self):
+        outcomes = ([{"status": "refused_at_formation", "reason": "no safe edit",
+                      "comparison": None}] * 10
+                    + [{"status": "stopped_mid_formation", "reason": "STOP"}])
+        signal = status.pool_health_signal(outcomes)
+        self.assertTrue(signal["operator_attention_required"])
+        self.assertEqual(signal["no_measurement_streak"], 10)
+        self.assertEqual(signal["alarms"][0]["kind"], "no_measurement_streak")
+        self.assertEqual(signal["alarms"][0]["refusal_reason_histogram"], {
+            "refused_at_formation: no safe edit": 10})
+        self.assertIn("no recorded native Comparison for 10 eligible pool iterations",
+                      signal["planner_evidence_line"])
+
+    def test_r24_8_comparison_resets_the_no_measurement_streak(self):
+        outcomes = ([{"status": "refused_at_formation", "reason": "none",
+                      "comparison": None}] * 10
+                    + [{"status": "measured_null", "comparison": {"effect": 0.0}}])
+        signal = status.pool_health_signal(outcomes)
+        self.assertEqual(signal["no_measurement_streak"], 0)
+        self.assertFalse(any(alarm["kind"] == "no_measurement_streak"
+                             for alarm in signal["alarms"]))
+
+    def test_r24_8_keep_rate_uses_comparisons_and_preserves_unknown_effects(self):
+        # The producer records normalized rate = candidate / anchor - 1.
+        measured_effect = (90.0 / 100.0) - 1.0
+        negatives = [{"status": "measured_null", "comparison": {"effect": measured_effect}}
+                     for _ in range(status.KEEP_RATE_ALARM_WINDOW)]
+        signal = status.pool_health_signal(negatives)
+        self.assertEqual({alarm["kind"] for alarm in signal["alarms"]},
+                         {"below_zero_streak", "no_keep_in_window"})
+
+        unknown = [{"status": "measured_null", "comparison": {"effect": None}}
+                   for _ in range(status.KEEP_RATE_ALARM_WINDOW)]
+        signal = status.pool_health_signal(unknown)
+        self.assertEqual(signal["below_zero_streak"], 0)
+        self.assertTrue(any(alarm["kind"] == "no_keep_in_window"
+                            for alarm in signal["alarms"]))
+        self.assertFalse(any(alarm["kind"] == "below_zero_streak"
+                             for alarm in signal["alarms"]))
+
+        nan = [{"status": "measured_null", "comparison": {"effect": math.nan}}
+               for _ in range(status.KEEP_RATE_ALARM_WINDOW)]
+        signal = status.pool_health_signal(nan)
+        self.assertEqual(signal["below_zero_streak"], 0)
+
+    def test_r24_8_only_counts_landed_keeps_not_positive_screen_or_effect(self):
+        candidates = [{"status": "keep_candidate", "comparison": {"effect": 0.02}}
+                      for _ in range(status.KEEP_RATE_ALARM_WINDOW)]
+        signal = status.pool_health_signal(candidates)
+        self.assertTrue(any(alarm["kind"] == "no_keep_in_window"
+                            for alarm in signal["alarms"]))
+        landed = [{"status": "kept", "comparison": {"effect": 0.02}}
+                  for _ in range(status.KEEP_RATE_ALARM_WINDOW)]
+        signal = status.pool_health_signal(landed)
+        self.assertFalse(any(alarm["kind"] == "no_keep_in_window"
+                             for alarm in signal["alarms"]))
+
+    def test_r24_8_legacy_missing_comparison_is_unknown_not_a_no_measurement(self):
+        signal = status.pool_health_signal(
+            [{"status": "refused_at_formation", "reason": "old row"}] * 20)
+        self.assertEqual(signal["no_measurement_streak"], 0)
+        self.assertFalse(any(alarm["kind"] == "no_measurement_streak"
+                             for alarm in signal["alarms"]))
+
+    def test_r24_8_legacy_unknown_breaks_measured_candidate_suffixes(self):
+        negatives = [{"status": "measured_null", "comparison": {"effect": -0.01}}
+                     for _ in range(5)]
+        for unknown in (
+                {"status": "measured_null"},
+                {"status": "measured_null", "comparison": "malformed"}):
+            with self.subTest(unknown=unknown):
+                signal = status.pool_health_signal(negatives + [unknown] + negatives)
+                self.assertEqual(signal["below_zero_streak"], 5)
+                self.assertEqual(signal["measured_window"], 5)
+                self.assertFalse(any(alarm["kind"] in {
+                    "below_zero_streak", "no_keep_in_window"}
+                    for alarm in signal["alarms"]))
+
+    def test_r24_8_explicit_no_comparison_is_skipped_for_measured_window(self):
+        negatives = [{"status": "measured_null", "comparison": {"effect": -0.01}}
+                     for _ in range(5)]
+        signal = status.pool_health_signal(
+            negatives + [{"status": "refused_at_formation", "comparison": None}]
+            + negatives)
+        self.assertEqual(signal["below_zero_streak"], 10)
+        self.assertEqual(signal["measured_window"], 10)
+        self.assertTrue(any(alarm["kind"] == "below_zero_streak"
+                            for alarm in signal["alarms"]))
+
+    def test_r24_8_does_not_invent_a_measurement_from_an_effect_field(self):
+        signal = status.pool_health_signal([
+            {"status": "measured_null", "effect_fraction": -0.5}]
+        )
+        self.assertEqual(signal["no_measurement_streak"], 0)
+        self.assertEqual(signal["below_zero_streak"], 0)
 
     def test_stagnation_is_per_target_observe_only_telemetry(self):
         outcomes = [
@@ -78,6 +175,21 @@ class Write(unittest.TestCase):
         self.assertEqual(body["iterations_done"], 5)
         self.assertEqual(body["measurements_reached"], 2)
         self.assertAlmostEqual(body["abstain_rate"], 0.2)
+
+    def test_operator_attention_field_is_observe_only_and_carries_the_histogram(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [{"status": "planner_transient", "reason": "provider timeout",
+                     "comparison": None}
+                    for _ in range(status.NO_MEASUREMENT_ALARM_N)]
+            status.write(Path(tmp), state="running", epoch="e" * 64,
+                         campaign_id="ak-loop", anchor_commit="a" * 40,
+                         surface="tg128", pairs=5, noise_floor_pct=1.0,
+                         outcomes=rows)
+            attention = status.read(Path(tmp))["operator_attention"]
+        self.assertTrue(attention["operator_attention_required"])
+        alarm, = attention["alarms"]
+        self.assertEqual(alarm["refusal_reason_histogram"], {
+            "planner_transient: provider timeout": status.NO_MEASUREMENT_ALARM_N})
 
     def test_decisive_regression_reaches_the_measurement_count(self):
         with tempfile.TemporaryDirectory() as tmp:

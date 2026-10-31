@@ -625,6 +625,9 @@ class Outcome:
             row.update({k: v for k, v in self.abstained_identity.items() if v})
         if self.reasons:
             row["reason"] = " | ".join(self.reasons)
+        # Explicit null is the native record that this outcome carried no
+        # Comparison. A missing key remains UNKNOWN for legacy rows.
+        row["comparison"] = None
         if self.comparison is not None:
             row["effect_fraction"] = self.comparison.effect
             row["comparison"] = self.comparison.to_dict()

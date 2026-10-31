@@ -2201,6 +2201,15 @@ def main(argv: list[str] | None = None) -> int:
                              "boundary (no further planner/critic call is drawn); "
                              "the lane holding the serialized tail finishes "
                              "build/oracle/A-B/commit and publishes first.")
+    parser.add_argument("--no-measurement-alarm-n", type=int,
+                        default=status.NO_MEASUREMENT_ALARM_N,
+                        help="operator-attention warning after this many consecutive pool "
+                             "outcomes with no recorded native Comparison; observe-only, "
+                             "default %(default)s")
+    parser.add_argument("--keep-rate-alarm-window", type=int,
+                        default=status.KEEP_RATE_ALARM_WINDOW,
+                        help="operator-attention warning window in measured candidates; "
+                             "observe-only, default %(default)s")
     parser.add_argument("--pairs", type=int, default=bench.MIN_PAIRS)
     parser.add_argument("--surface", choices=tuple(bench.SURFACES), default="pp512")
     parser.add_argument("--calibrate-surface", type=int, metavar="N", default=None,
@@ -2792,6 +2801,10 @@ def main(argv: list[str] | None = None) -> int:
             allow_stale=args.floor_allow_stale_upstream)
     if args.cpu_window_wait_bound_s <= 0:
         parser.error("--cpu-window-wait-bound-s must be > 0")
+    if args.no_measurement_alarm_n < 1:
+        parser.error("--no-measurement-alarm-n must be >= 1")
+    if args.keep_rate_alarm_window < 1:
+        parser.error("--keep-rate-alarm-window must be >= 1")
     if args.hypothesis_author_attempts < 1:
         parser.error("--hypothesis-author-attempts must be >= 1")
     if args.accumulate_bench_every_keeps < 1:
@@ -3888,8 +3901,16 @@ def main(argv: list[str] | None = None) -> int:
                 + ("Keeps remain on the explicit experimental branch, not the canonical champion. "
                    if experimental else "Canonical COR advancement retains the existing bundle gate. ")
                 + "\n\n" + program)
+        # The next actual planner call sees the pool's native, observe-only alarm
+        # projection. `latest` is appended by record_pooled before a lane draws again.
+        # No alarm changes the iteration budget, measurement, or keep rules.
+        loop_health = status.pool_health_signal(
+            [outcome.to_attempt() for outcome in list(latest)],
+            no_measurement_n=args.no_measurement_alarm_n,
+            keep_window=args.keep_rate_alarm_window)
         return {
             "program": program,
+            "loop_health_alarm": loop_health,
             "actor_provenance": {
                 "planner": planner_backend.describe(),
                 "critic": critic_backend.describe(),
@@ -6088,6 +6109,8 @@ def main(argv: list[str] | None = None) -> int:
             # heartbeat every HEARTBEAT_S below, so the envelope can be tight: silence now
             # means the PROCESS is gone, not that a build or a 20-pair bench is long.
             stale_after_s=HEARTBEAT_S * 6,
+            no_measurement_alarm_n=args.no_measurement_alarm_n,
+            keep_rate_alarm_window=args.keep_rate_alarm_window,
             actor_health=actor_health(outcomes),
             comparability=history_view[0],
             scratch=(scratch_registry[0].stats() if scratch_registry[0] is not None else None),

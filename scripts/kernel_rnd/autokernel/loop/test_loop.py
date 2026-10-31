@@ -48,6 +48,14 @@ def _comparison(effect, *, floor=1.0):
         noise_floor_pct=floor, residency={"invocations": 10, "resident": 10})
 
 
+class OutcomeAttempt(unittest.TestCase):
+
+    def test_native_no_comparison_is_explicit_null_for_legacy_unknown_split(self):
+        row = loop.Outcome("refused_at_formation", reasons=["no safe edit"]).to_attempt()
+        self.assertIn("comparison", row)
+        self.assertIsNone(row["comparison"])
+
+
 class _Planner:
     """Records what it was told, so a lost reason is visible."""
 

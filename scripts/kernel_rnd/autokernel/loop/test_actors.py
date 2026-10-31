@@ -125,6 +125,23 @@ class JsonExtraction(unittest.TestCase):
 class ContextBundle(unittest.TestCase):
     """Everything rendered here is something the old loop measured and discarded."""
 
+    def test_r24_8_pool_alarm_reaches_the_planner_as_observe_only_evidence(self):
+        text = actors.render_context({"loop_health_alarm": {
+            "operator_attention_required": True,
+            "planner_evidence_line": (
+                "R24-8 operator attention (observe-only): no keep among 10 measured candidates")}})
+        self.assertIn("## Pool health attention (observe-only)", text)
+        self.assertIn("no keep among 10 measured candidates", text)
+        self.assertIn("does not change grading, keeps, or stopping", text)
+
+    def test_r24_8_inactive_alarm_does_not_add_planner_text(self):
+        baseline = actors.render_context({})
+        text = actors.render_context({"loop_health_alarm": {
+            "operator_attention_required": False,
+            "planner_evidence_line": None}})
+        self.assertEqual(text, baseline)
+        self.assertNotIn("Pool health attention", text)
+
     def test_the_profile_reaches_the_actor(self):
         text = actors.render_context({"kernel_hotspots": [
             {"signature": "mul_mat_vec_q<Q4_K>", "total_duration_ns": 700000,

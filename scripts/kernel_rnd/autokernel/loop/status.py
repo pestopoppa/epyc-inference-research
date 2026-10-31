@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import math
 import os
 from pathlib import Path
 import tempfile
@@ -37,6 +38,11 @@ STATUS_FILENAME = "loop-status.json"
 #: not "the loop is quiet", it is "nobody has heard from the loop".
 DEFAULT_STALE_AFTER_S = 1800
 STAGNATION_WINDOW = 20
+# R24-8: configurable operational-warning defaults only. Callers may override
+# them; they do not grade a candidate, select a champion, or stop the pool.
+NO_MEASUREMENT_ALARM_N = 10
+KEEP_RATE_ALARM_WINDOW = 10
+KEEP_STATUSES = frozenset({"kept"})
 
 # `Comparison.to_dict()` deliberately carries the complete measurement lifecycle,
 # including every residency sample from both arms.  That belongs in experiments.db,
@@ -152,6 +158,123 @@ def stagnation_signal(outcomes: Sequence[Mapping[str, Any]], *,
     }
 
 
+def pool_health_signal(outcomes: Sequence[Mapping[str, Any]], *,
+                       no_measurement_n: int = NO_MEASUREMENT_ALARM_N,
+                       keep_window: int = KEEP_RATE_ALARM_WINDOW) -> dict[str, Any]:
+    """Project native pool outcomes into observe-only R24-8 attention alarms.
+
+    `comparison` is the measurement warrant. Status names and effect-shaped fields
+    alone never manufacture one. Its `effect` is the current reducer's normalized
+    candidate/anchor rate effect, so negative means worse; do not reverse direction
+    from raw latency or surface labels. A mid-formation stop is omitted from the
+    no-measurement streak; other outcomes with an explicit null comparison count.
+    A legacy row with no `comparison` key is UNKNOWN and breaks that streak.
+    Missing or non-finite effects remain unknown and break a below-zero streak.
+    """
+    no_measurement_n = max(1, int(no_measurement_n))
+    keep_window = max(1, int(keep_window))
+    no_measurement_streak: list[Mapping[str, Any]] = []
+    measured: list[Mapping[str, Any]] = []
+    for row in outcomes:
+        if not isinstance(row, Mapping):
+            continue
+        if row.get("status") == "stopped_mid_formation":
+            continue
+        if "comparison" not in row:
+            # Historical rows predate the explicit-null native marker added to
+            # Outcome.to_attempt(). Their measurement state cannot be recovered.
+            # They also break measured-candidate suffixes: otherwise negative
+            # effects on either side would be misreported as consecutive.
+            no_measurement_streak = []
+            measured = []
+            continue
+        comparison = row.get("comparison")
+        if isinstance(comparison, Mapping):
+            no_measurement_streak = []
+            measured.append(row)
+        elif comparison is None:
+            no_measurement_streak.append(row)
+        else:
+            # A malformed comparison object is not a native Comparison either,
+            # but it is not evidence that no Comparison was recorded. Like a
+            # missing legacy key, it breaks the known measured suffix/window.
+            no_measurement_streak = []
+            measured = []
+
+    histogram: dict[str, int] = {}
+    for row in no_measurement_streak:
+        status_name = str(row.get("status") or "unknown")
+        gate = row.get("refusal_gate")
+        reason = row.get("reason")
+        label = f"{status_name}/{gate}" if gate else status_name
+        label += f": {str(reason)[:240] if reason else '<reason unknown>'}"
+        histogram[label] = histogram.get(label, 0) + 1
+    histogram = dict(sorted(histogram.items()))
+
+    below_zero_streak = 0
+    for row in reversed(measured):
+        comparison = row.get("comparison")
+        effect = comparison.get("effect") if isinstance(comparison, Mapping) else None
+        if (isinstance(effect, (int, float)) and not isinstance(effect, bool)
+                and math.isfinite(float(effect)) and float(effect) < 0):
+            below_zero_streak += 1
+        else:
+            break
+
+    window = measured[-keep_window:]
+    keeps_in_window = sum(row.get("status") in KEEP_STATUSES for row in window)
+    alarms: list[dict[str, Any]] = []
+    if len(no_measurement_streak) >= no_measurement_n:
+        alarms.append({
+            "kind": "no_measurement_streak",
+            "count": len(no_measurement_streak),
+            "threshold": no_measurement_n,
+            "refusal_reason_histogram": histogram,
+        })
+    if below_zero_streak >= keep_window:
+        alarms.append({
+            "kind": "below_zero_streak",
+            "count": below_zero_streak,
+            "threshold": keep_window,
+        })
+    if len(window) >= keep_window and keeps_in_window == 0:
+        alarms.append({
+            "kind": "no_keep_in_window",
+            "measured_candidates": len(window),
+            "window": keep_window,
+            "keeps": keeps_in_window,
+        })
+
+    evidence_lines = []
+    for alarm in alarms:
+        if alarm["kind"] == "no_measurement_streak":
+            reasons = ", ".join(f"{label} ×{count}"
+                                 for label, count in histogram.items())
+            evidence_lines.append(
+                f"no recorded native Comparison for {alarm['count']} eligible pool iterations "
+                f"(threshold {no_measurement_n}); refusal reasons: {reasons or 'unknown'}")
+        elif alarm["kind"] == "below_zero_streak":
+            evidence_lines.append(
+                f"{alarm['count']} consecutive measured effects are below zero "
+                f"(threshold {keep_window})")
+        else:
+            evidence_lines.append(
+                f"no keep among the last {alarm['measured_candidates']} measured "
+                f"candidates (window {keep_window})")
+    return {
+        "mode": "observe_only",
+        "operator_attention_required": bool(alarms),
+        "no_measurement_streak": len(no_measurement_streak),
+        "no_measurement_threshold": no_measurement_n,
+        "measured_window": len(window),
+        "keep_window": keep_window,
+        "below_zero_streak": below_zero_streak,
+        "alarms": alarms,
+        "planner_evidence_line": ("R24-8 operator attention (observe-only): "
+                                  + "; ".join(evidence_lines) if evidence_lines else None),
+    }
+
+
 def write_json(store_root: Path, name: str, body: Any, *,
                prefix: str = ".status-") -> Path:
     """Publish one JSON document into the store, atomically.
@@ -227,7 +350,9 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           scratch: Mapping[str, Any] | None = None,
           comparability: Mapping[str, Any] | None = None,
           uncovered_gap: Mapping[str, Any] | None = None,
-          scope_gap_error: Mapping[str, str] | None = None) -> Path:
+          scope_gap_error: Mapping[str, str] | None = None,
+          no_measurement_alarm_n: int = NO_MEASUREMENT_ALARM_N,
+          keep_rate_alarm_window: int = KEEP_RATE_ALARM_WINDOW) -> Path:
     """Atomically publish the loop's current standing.
 
     `uncovered_gap` (2026-10-06 autonomy self-check, `roofline_coverage.py`): the
@@ -292,6 +417,12 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
                           or (target or {}).get("id")
                           or model or surface),
         },
+        # R24-8: observe-only alarms are visible to the operator, and the same
+        # projection is handed to the next planner turn. This is not run state and
+        # never alters a gate, keep, or pool budget.
+        "operator_attention": pool_health_signal(
+            outcomes, no_measurement_n=no_measurement_alarm_n,
+            keep_window=keep_rate_alarm_window),
         "champion_head": champion_head,
         # The last promotion A/A: did the binary in the anchor slot prove to BE the
         # champion. `null` means no promotion has happened on this run, which is a
@@ -393,6 +524,7 @@ def freshness(body: Mapping[str, Any] | None, *, now: datetime | None = None
     }
 
 
-__all__ = ["DEFAULT_STALE_AFTER_S", "STAGNATION_WINDOW", "STATUS_FILENAME",
-           "STATUS_SCHEMA", "freshness", "read", "stagnation_signal", "write",
-           "write_json"]
+__all__ = ["DEFAULT_STALE_AFTER_S", "KEEP_RATE_ALARM_WINDOW",
+           "NO_MEASUREMENT_ALARM_N", "STAGNATION_WINDOW", "STATUS_FILENAME",
+           "STATUS_SCHEMA", "freshness", "pool_health_signal", "read",
+           "stagnation_signal", "write", "write_json"]
