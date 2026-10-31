@@ -1,0 +1,31 @@
+{
+  "source": "historical 2026-10-04 E1 scratch originals; copied read-only 2026-10-31",
+  "records": [
+    {
+      "original_path": "/mnt/raid0/llm/tmp/yarn-e1-20261004/yarn_needle.py",
+      "sha256": "58ace1c75bdc6c692551f885d255661588a76295f4dc737ea255a1fb6d1c1cfb",
+      "size_bytes": 58317
+    },
+    {
+      "original_path": "/mnt/raid0/llm/tmp/yarn-e1-20261004/cpu_leg/yarn_cpu_leg.py",
+      "sha256": "db1384d6e7540f5e6eacbd5ea18aee89df5e36ab4766bd6e1469064a896abe78",
+      "size_bytes": 38976
+    },
+    {
+      "original_path": "/mnt/raid0/llm/tmp/yarn-e1-20261004/cpu_leg/cpu_window_gate.py",
+      "sha256": "f89ee54ee5a934b76e264ba2473a11d337e147463b0050546ca1e5d18ec0bcbb",
+      "size_bytes": 3892
+    },
+    {
+      "original_path": "/mnt/raid0/llm/tmp/yarn-e1-20261004/launch_arm.sh",
+      "sha256": "4d4eee8f1f2d648a126a23f84eccee6d974d0b51ccb637efb9841fbcd831c9cb",
+      "size_bytes": 5420
+    },
+    {
+      "original_path": "/mnt/raid0/llm/tmp/yarn-e1-20261004/results/A1.server.log",
+      "sha256": "e9dc5d764371fcdfbcda04e2bc06a1c9ddb2519b264d2c144560ca9d15789806",
+      "size_bytes": 462675
+    }
+  ],
+  "claim": "software proof-preflight conformance only; no fresh model/device experiment"
+}
