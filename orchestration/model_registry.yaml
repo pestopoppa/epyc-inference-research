@@ -529,7 +529,7 @@ runtime_defaults:
                           # 2026-07-31: that model is now architect_critic; 600 kept as the global ceiling.
     parallel_slots: 4
     flash_attention: true
-    ubatch_size: 8192
+    ubatch_size: 2048
     # KV cache quantization (updated 2026-03-28):
     # CRITICAL: V=q4_0 causes 71% prefill regression on pure-attention models.
     # q4_0 K / f16 V = quality-neutral (PPL +0.017 with Hadamard), zero prefill cost, 37% KV savings.
