@@ -3207,6 +3207,13 @@ def author_action_rule(gitnexus_repo: str | None = None) -> str:
             + AUTHOR_ACTION_RULE[len(_ACTION_RULE_HEAD):])
 
 
+ANTI_GAMING_RULE = (
+    "Do not cache outputs by input identity or pointer, reuse buffers across repetitions, "
+    "or use workload-specific shortcuts. If a deployable cache is proposed, declare it "
+    "and report its cold and warm effects separately. This advisory complements R24-1/2; "
+    "it never substitutes for those checks."
+)
+
 _HYPOTHESIS_TASK = """You are proposing ONE kernel optimisation for llama.cpp on {platform}.
 
 {context}
@@ -3776,6 +3783,7 @@ class AgentPlanner:
         if belief.section and belief.section not in prompt:
             prompt += "\n\n" + belief.section
         prompt = self._concise(prompt)
+        prompt += "\n\n" + ANTI_GAMING_RULE
         if self._answer_protocol_on():
             prompt = prompt + "\n\n" + ANSWER_JSON_FIRST_RULE
         prompt = self._guarded("planner", prompt, context)
@@ -4116,6 +4124,7 @@ class AgentPlanner:
             '{"abstain": "<specific reason the hypothesis is infeasible>"}')
         prompt = self._sandbox_rule(prompt, context)
         prompt = self._concise(prompt)
+        prompt += "\n\n" + ANTI_GAMING_RULE
         prompt = self._action_rule(prompt, context)
         prompt = self._guarded("author", prompt, context)
         backend, env = self._seated("author", context)

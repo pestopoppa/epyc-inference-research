@@ -43,6 +43,13 @@ CRITIC PASS 2 on the committed diff, before the build   · budget 2 rounds
     else → negative, with mechanism and sample vector, into experiments.md
 ```
 
+## Anti-gaming guidance (advisory)
+
+Do not cache outputs by input identity or pointer, reuse buffers across repetitions, or
+use workload-specific shortcuts. If a deployable cache is proposed, declare it and report
+its cold and warm effects separately. This guidance complements R24-1/2; it never
+substitutes for those checks.
+
 Every committed source keep (GPU or direct CPU) also gets a bounded diagnostic artifact at
 `<store>/codegen/<champion-commit>.<backend>.<build-frame-sha256>.json`; its contents are embedded in that
 keep's experiment row. The collector hashes up to eight standalone AMD
