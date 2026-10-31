@@ -158,6 +158,20 @@ def _floors(store: Path) -> dict[str, str]:
     return rows
 
 
+def _workload_cells(bundle):
+    """Use source cells; legacy recipes absent from the carrier stay unknown."""
+    cells = bundle.get("workload_vector")
+    if isinstance(cells, list):
+        return cells
+    return [{"gate": gate.get("gate"),
+             "workload": cell.get("surface") if group == "surfaces" else cell.get("workload"),
+             "recipe": cell.get("recipe"), "in_flight": cell.get("in_flight"),
+             "delta_pct": cell.get("delta_pct")}
+            for gate in bundle.get("gates", []) if isinstance(gate, dict)
+            for group in ("surfaces", "points")
+            for cell in (gate.get(group) or []) if isinstance(cell, dict)]
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     state = _state(Path(args.state))
     store = Path(args.store)
@@ -173,14 +187,14 @@ def cmd_report(args: argparse.Namespace) -> int:
     refresh_date = state.get("refresh_date", "")
     bundle_path = Path(args.surface_dir) / (f"operator_gate_bundle_{refresh_date}.json"
                                             if refresh_date else "operator_gate_bundle.json")
-    headline = "UNAVAILABLE (bundle missing or unreadable)"
+    workload_cells = "UNKNOWN (bundle missing or unreadable)"
     if bundle_path.is_file():
         try:
             bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-            head = bundle.get("headline") or {}
-            headline = head.get("summary", "bundle sealed, no headline field")
+            cells = _workload_cells(bundle)
+            workload_cells = json.dumps(cells, sort_keys=True) if cells else "UNKNOWN (no cells)"
         except Exception as exc:
-            headline = f"UNREADABLE ({exc})"
+            workload_cells = f"UNREADABLE ({exc})"
 
     floors = _floors(store)
     steps = []
@@ -272,7 +286,7 @@ kv_unified=1 paired control** (as `serving_evidence_refresh.py --minimal`
 defines it). Do NOT mistake this for the full 24-cell sweep; the full grid is
 reserved for promotion time, when the evidence is load-bearing.
 
-- Headline: {headline}
+- Workload cells (null means UNKNOWN): `{workload_cells}`
 - Path: `{bundle_path}` (canonical: `{args.surface_dir}/operator_gate_bundle.json`)
 
 ## OP-32 all-green verdict (operator ruling 2026-08-31: "pre-authorize run 22 if all boundary steps are green")

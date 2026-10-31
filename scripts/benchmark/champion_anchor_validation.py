@@ -54,6 +54,7 @@ from scripts.kernel_rnd.autokernel.loop import launch_affinity as la  # noqa: E4
 
 PIN_CPUS = "184-191"
 PIN_RECORDS: list[dict] = []  # per-task affinity read of every pinned run (GPS-PIN-2)
+BENCH_INVOCATIONS: list[dict] = []  # exact argv captured before each attempt
 
 
 def run_pinned(argv: list[str], env: dict[str, str], timeout: int, label: str,
@@ -98,6 +99,8 @@ def bench(build_bin: Path, *, pp: int, tg: int, env_extra: dict[str, str] | None
     env["LD_LIBRARY_PATH"] = f"{build_bin}:/opt/rocm/lib"
     env.pop("HSA_OVERRIDE_GFX_VERSION", None)
     env.update(env_extra or {})
+    BENCH_INVOCATIONS.append({"build_bin": str(build_bin), "argv": list(argv),
+                              "env_extra": dict(env_extra or {})})
     out = run_pinned(argv, env, 3600, f"champion_anchor:{build_bin.name}:pp{pp}tg{tg}")
     if out.returncode != 0:
         raise RuntimeError(f"llama-bench rc={out.returncode}: {out.stderr[-300:]}")
@@ -148,6 +151,7 @@ def main() -> int:
     for label, pp, tg in (("Qwen3.8-27B-Q8_0 pp512 (prefill)", 512, 0),
                           ("Qwen3.8-27B-Q8_0 tg128 (decode)", 0, 128)):
         anchor, cand, moe = [], [], []
+        first_invocation = len(BENCH_INVOCATIONS)
         print(f"\n[{time.strftime('%H:%M:%S')}] {label} — {args.reps} alternating pairs")
         for i in range(args.reps):
             for sink, b, extra in ((anchor, args.anchor_bin, None),
@@ -165,7 +169,20 @@ def main() -> int:
             if read_vram() < 0:
                 print("    (VRAM sysfs unreadable — residency not provable this rep)")
         if anchor and cand:
-            results.append(report(label, anchor, cand))
+            result = report(label, anchor, cand)
+            invocations = BENCH_INVOCATIONS[first_invocation:]
+            anchor_invocations = [r for r in invocations if r["build_bin"] == str(args.anchor_bin)]
+            champion_invocations = [r for r in invocations if r["build_bin"] == str(args.champion_bin)
+                                    and not r["env_extra"]]
+            if anchor_invocations and champion_invocations:
+                def models(records):
+                    return {r["argv"][r["argv"].index("-m") + 1] for r in records}
+                anchor_models, champion_models = models(anchor_invocations), models(champion_invocations)
+                result["models"] = {"anchor": sorted(anchor_models), "champion": sorted(champion_models)}
+                common = anchor_models | champion_models
+                result["model"] = next(iter(common)) if len(common) == 1 else None
+                result["recipe"] = {"anchor": anchor_invocations, "champion": champion_invocations}
+            results.append(result)
         if moe:
             mm, mc = st.median(moe), st.median(cand)
             print(f"    MoE-Spec budget={args.moe_spec_budget}: median {mm:9.2f} "

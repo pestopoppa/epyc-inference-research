@@ -1436,6 +1436,8 @@ def _write_serving_receipt(store: Path, *, legs: Mapping[str, dict],
         # and `_leg_headline_fragment`).
         "headline": _serving_headline(legs, order),
         "metrics": summary, "protocol": dict(protocols[primary]),
+        # Bind each measured leg to its own producer-captured recipe.
+        "protocols": {m: dict(protocols[m]) for m in order},
         "baseline_carryover": dict(carryover),
         "evidence": str(evidence), "mechanism_id": MECHANISM_ID,
         **({} if paired else {"host_drift_caveat_pct": HOST_DRIFT_CAVEAT_PCT,

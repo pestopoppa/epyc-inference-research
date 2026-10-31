@@ -92,7 +92,8 @@ def _anchor_validation(path: Path) -> dict:
             "artifact": str(path), "artifact_sha256": sha256_file(path)}
     if not data:
         return {**gate, "status": "MISSING", "surfaces": []}
-    surfaces = [{"surface": r["surface"], "anchor": r["anchor_median"],
+    surfaces = [{"surface": r["surface"], "model": r.get("model"), "models": r.get("models"),
+                 "recipe": r.get("recipe"), "anchor": r["anchor_median"],
                  "champion": r["champion_median"], "delta_pct": r["delta_pct"]}
                 for r in data.get("results", [])]
     # "No regression" is the claim, and it is deliberately not "a win": the sample
@@ -110,14 +111,23 @@ def _concurrency_gate(path: Path) -> dict:
             "artifact": str(path), "artifact_sha256": sha256_file(path)}
     if not cells:
         return {**gate, "status": "MISSING", "points": []}
-    by = {(c["arm"], c["concurrency"], c["kv_unified"]): c["aggregate_decode_tok_s"]
-          for c in cells}
+    by = {(c["arm"], c["concurrency"], c["kv_unified"]): c for c in cells}
     points = []
     for n in (1, 2, 4, 8):
-        mtp, df2 = by.get(("mtp", n, False)), by.get(("dflash2", n, False))
+        baseline, candidate = by.get(("mtp", n, False)), by.get(("dflash2", n, False))
+        mtp = baseline.get("aggregate_decode_tok_s") if baseline else None
+        df2 = candidate.get("aggregate_decode_tok_s") if candidate else None
         if mtp and df2:
+            bm, cm = baseline.get("model"), candidate.get("model")
+            bw, cw = baseline.get("workload"), candidate.get("workload")
+            br, cr = baseline.get("recipe"), candidate.get("recipe")
             points.append({"in_flight": n, "production_ceiling_tps": mtp,
                            "champion_tps": df2,
+                           "model": bm if bm is not None and bm == cm else None,
+                           "workload": bw if bw is not None and bw == cw else None,
+                           "models": {"anchor": bm, "champion": cm},
+                           "workloads": {"anchor": bw, "champion": cw},
+                           "recipe": {"anchor": br, "champion": cr} if br is not None or cr is not None else None,
                            "delta_pct": (df2 / mtp - 1.0) * 100.0})
     return {**gate, "status": "PASS" if points else "MISSING", "points": points,
             # The comparison arm is MTP because that is what production CAN run:
@@ -142,6 +152,24 @@ def _parity_gate(path: Path) -> dict:
             # speculative-verify path, not of DFlash2.
             "claim": ("not bit-exact, but NOT attributable to DFlash2 -- draft_simple "
                       "diverges identically with no DFlash code involved")}
+
+
+def _workload_vector(gates: list[dict]) -> list[dict]:
+    """Keep the sealed source's own per-cell identities, including unknowns."""
+    rows = []
+    for gate in gates:
+        for group in ("surfaces", "points"):
+            for cell in (gate.get(group) or []):
+                rows.append({"scope": "workload_cell", "whole_champion": False,
+                             "gate": gate.get("gate"),
+                             "workload": cell.get("surface") if group == "surfaces" else cell.get("workload"),
+                             "model": cell.get("model"), "models": cell.get("models"),
+                             "workloads": cell.get("workloads"), "recipe": cell.get("recipe"),
+                             "in_flight": cell.get("in_flight"),
+                             "delta_pct": cell.get("delta_pct"),
+                             "artifact": gate.get("artifact"),
+                             "artifact_sha256": gate.get("artifact_sha256")})
+    return rows
 
 
 def main() -> int:
@@ -188,6 +216,9 @@ def main() -> int:
     if points:
         best = max(points, key=lambda p: p["delta_pct"])
         headline = {
+            "scope": "reference_cell_only", "whole_champion": False,
+            "workload": best.get("workload"), "model": best.get("model"),
+            "recipe": best.get("recipe"),
             "effect_fraction": best["delta_pct"] / 100.0,
             "metric": "aggregate_decode_tok_s",
             "metric_direction": "higher_better",
@@ -215,6 +246,7 @@ def main() -> int:
         "gates": gates,
         "gates_missing": missing,
         "headline": headline,
+        "workload_vector": _workload_vector(gates),
         "caveat": ("Operator-gated manual research. Measured and attributable, but it "
                    "carries NO promotion authority and is not a campaign-sealed "
                    "cumulative receipt."),

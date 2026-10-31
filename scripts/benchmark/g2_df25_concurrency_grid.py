@@ -228,6 +228,13 @@ def run_cell(build_bin: Path, out_root: Path, arm: str, conc: int, kvu: bool,
             ]
             (cell_dir / "runner_command.txt").write_text(" ".join(run_argv) + "\n",
                                                          encoding="utf-8")
+            # Capture the actual invocation before the measured request is launched.
+            identity = {"model": argv[argv.index("-m") + 1],
+                        "workload": run_argv[run_argv.index("--suites") + 1],
+                        "recipe": {"server_argv": list(argv), "runner_argv": list(run_argv),
+                                   "server_cwd": str(build_bin.parent.parent),
+                                   "server_env": {k: env[k] for k in ("LD_LIBRARY_PATH", "GGML_CUDA_LOG_MMVQ_ROUTE")}}}
+            (cell_dir / "cell_recipe.json").write_text(json.dumps(identity, indent=2), encoding="utf-8")
             vram_mid = read_vram()
             rc = subprocess.run(run_argv, capture_output=True, text=True, timeout=14400)
             (cell_dir / "runner.stdout").write_text(rc.stdout or "", encoding="utf-8")
@@ -255,6 +262,7 @@ def run_cell(build_bin: Path, out_root: Path, arm: str, conc: int, kvu: bool,
 
     return {
         "cell": cell, "arm": arm, "concurrency": conc, "kv_unified": kvu,
+        **identity,
         "n_max": N_MAX, "aggregate_decode_tok_s": throughput,
         "slot_rows": slots, "distinct_slots": sorted({s["slot_index"] for s in slots}),
         "vram_loaded_bytes": vram_loaded, "vram_mid_bytes": vram_mid,
