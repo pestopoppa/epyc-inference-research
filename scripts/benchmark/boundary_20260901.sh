@@ -12,7 +12,7 @@
 # 20260831 driver's log-and-step-past policy, per the boundary spec):
 #
 #   step0  WAIT           sleep-loop until T0 (2026-09-01 22:00Z), resumable
-#   step1  STOP run 23    SIGTERM the recorded pid (cmdline-verified), 15 min grace,
+#   step1  STOP run 23    SIGTERM the recorded pid (cmdline-verified), rung-sized grace,
 #                         SIGKILL escalation, verify dead; record final tally
 #   step2  MERGE GATE     rung commits + review token required; merge
 #                         ak/rung-fixes-20260901 into lane/ak-rebuild-20260828 IN THE
@@ -53,7 +53,8 @@
 #   BOUNDARY_STUB_DIR      dir of executable stubs replacing heavy commands
 #   BOUNDARY_WORK_DIR / BOUNDARY_PID_FILE / BOUNDARY_STORE / BOUNDARY_LANE_ROOT
 #   BOUNDARY_T0            "YYYY-MM-DD HH:MM" UTC (default 2026-09-01 22:00)
-#   BOUNDARY_KILL_WAIT_S / BOUNDARY_KILL_GRACE_S / BOUNDARY_POLL_S
+#   BOUNDARY_DRAIN_WORKERS / BOUNDARY_DRAIN_MEASUREMENT_S (default: 7 x 1200 s)
+#   BOUNDARY_KILL_WAIT_S overrides the derived grace; KILL_GRACE_S / POLL_S unchanged
 #   BOUNDARY_CALIB_PAIRS / BOUNDARY_CALIB_ANCHOR
 #   BOUNDARY_LIB_ONLY=1    source the file for its functions, run nothing
 set -euo pipefail
@@ -95,7 +96,18 @@ DFLASH2_GGUF="${BOUNDARY_DFLASH2_GGUF:-/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2
 
 CHAMP_TREE="${BOUNDARY_CHAMP_TREE:-/mnt/raid0/llm/tmp/champ2}"
 T0_UTC="${BOUNDARY_T0:-2026-09-01 22:00}"
-KILL_WAIT_S="${BOUNDARY_KILL_WAIT_S:-900}"     # 15 min grace (drain-tier loop: ≤5 min historically)
+# Confirm-rung lanes serialize on the device claim and finish their measurement
+# before stopping. Run 25 needed ~87 min for seven lanes; the old 900s screen-rung
+# grace killed valid work. Budget one bounded 20-min measurement per worker.
+DRAIN_WORKERS="${BOUNDARY_DRAIN_WORKERS:-7}"
+DRAIN_MEASUREMENT_S="${BOUNDARY_DRAIN_MEASUREMENT_S:-1200}"
+for drain_value in "$DRAIN_WORKERS" "$DRAIN_MEASUREMENT_S"; do
+    if [[ ! "$drain_value" =~ ^[1-9][0-9]{0,5}$ ]]; then
+        echo "drain workers/measurement seconds must be positive integers (at most 6 digits)" >&2
+        return 2 2>/dev/null || exit 2
+    fi
+done
+KILL_WAIT_S="${BOUNDARY_KILL_WAIT_S:-$((10#$DRAIN_WORKERS * 10#$DRAIN_MEASUREMENT_S))}"
 KILL_GRACE_S="${BOUNDARY_KILL_GRACE_S:-60}"
 POLL_S="${BOUNDARY_POLL_S:-30}"
 LOOP_MATCH_A="autokernel.loop.run"
@@ -192,7 +204,7 @@ step0_wait() {
 step1_stop_run23() {
     if state_done step1; then log "step1: already done, skipping"; return 0; fi
     local lf="$WORK_DIR/step1-stop.log" pid pgid waited remnants tally="$WORK_DIR/step1-run23-final-tally.txt"
-    log "step1: stopping run 23 (log: $lf)"
+    log "step1: stopping run 23 (grace: ${KILL_WAIT_S}s; log: $lf)"
 
     [[ -f "$PID_FILE" ]] || refuse step1 "pid file $PID_FILE is missing — cannot VERIFY run 23 dead, and the step-2 lane merge is only legal over a verified-dead loop. If run 23 was stopped by hand, recreate the pid file with the old pid (a dead pid verifies clean) and relaunch."
     pid=$(tr -dc '0-9' < "$PID_FILE")
@@ -208,7 +220,7 @@ step1_stop_run23() {
         kill -TERM "$pid" 2>> "$lf" && log "step1: SIGTERM sent to $pid" \
             || log "step1: WARNING SIGTERM to $pid failed (raced exit?)"
 
-        waited=0   # graceful drain: loop stops at actor boundaries, historically ≤5 min
+        waited=0   # graceful drain: every queued confirm measurement may finish
         while (( waited < KILL_WAIT_S )) && pid_alive "$pid"; do
             sleep "$POLL_S"; waited=$(( waited + POLL_S ))
         done
@@ -644,6 +656,7 @@ dry_run_plan() {
     local pid="?" alive="n/a" cl="" rung_ok=1 rung_n=0 anchor prod_head prod_br lane_br
     echo "================ boundary_20260901 DRY RUN — nothing will be executed ================"
     echo "work dir   $WORK_DIR   (state: $STATE_FILE)   T0: ${T0_UTC}Z"
+    echo "drain grace ${KILL_WAIT_S}s (${DRAIN_WORKERS} workers x ${DRAIN_MEASUREMENT_S}s unless overridden)"
     echo
     echo "-- preconditions checkable now (UNSAT = would refuse tonight unless it appears) --"
     date -u -d "$T0_UTC" +%s > /dev/null 2>&1 && check "T0 parseable" 0 "${T0_UTC}Z" || check "T0 parseable" 1 "'$T0_UTC'"

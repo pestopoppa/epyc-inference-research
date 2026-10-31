@@ -125,11 +125,24 @@ class Sampler:
         self.own_pid_kfd_reads = 0
         self.own_pid_peak_rss = 0
         self.own_pid_rss_reads = 0
+        self._cpu_observer = None
+        self._cpu_observer_error = None
+        self._entered = False
 
     def watch_pid(self, pid: int) -> None:
         """Also sample this PID's own device memory and peak RSS. Additive: the proof
         gains `own_pid_*` keys only once a PID is watched."""
+        if self._watched_pid is not None:
+            raise ValueError("GPU observer PID already attached")
         self._watched_pid = int(pid)
+        try:
+            observer = CpuLifecycleSampler()
+            observer.attach_target(int(pid))
+            self._cpu_observer = observer
+            if self._entered:
+                observer.start("load")
+        except Exception as exc:
+            self._cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
 
     def _watch_once(self) -> None:
         pid = self._watched_pid
@@ -160,6 +173,12 @@ class Sampler:
             self._stop.wait(self.interval)
 
     def __enter__(self) -> "Sampler":
+        self._entered = True
+        if self._cpu_observer is not None:
+            try:
+                self._cpu_observer.start("load")
+            except Exception as exc:
+                self._cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
         return self
@@ -168,6 +187,11 @@ class Sampler:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=5)
+        if self._cpu_observer is not None:
+            try:
+                self._cpu_observer.finish()
+            except Exception as exc:
+                self._cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
 
     @property
     def proof(self) -> dict:
@@ -180,6 +204,13 @@ class Sampler:
             "own_pid_kfd_reads": self.own_pid_kfd_reads,
             "own_pid_peak_rss_bytes": self.own_pid_peak_rss,
             "own_pid_rss_reads": self.own_pid_rss_reads}
+        if self._cpu_observer is not None:
+            try:
+                watched["cpu_affinity_observation"] = self._cpu_observer.observation
+            except Exception as exc:
+                self._cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
+        if self._cpu_observer_error is not None:
+            watched["cpu_affinity_observation_error"] = self._cpu_observer_error
         return {**watched,
             "peak_vram_bytes": self.peak_vram,
             # The peak answers "did it ever get there"; the median answers "did it STAY
@@ -212,7 +243,8 @@ class CpuLifecycleSampler:
     def __init__(self, *, proc_root: Path = Path("/proc"), interval: float = 1.0,
                  max_samples: int = 8192, max_tasks: int = 512,
                  max_bytes: int = 32 << 20, max_sample_s: float = 0.1,
-                 max_processes: int = 2048):
+                 max_processes: int = 2048,
+                 sysfs_cpu_root: Path = Path("/sys/devices/system/cpu")):
         for value, limit in ((max_samples, 8192), (max_tasks, 512),
                              (max_bytes, 32 << 20), (max_processes, 2048)):
             if type(value) is not int or not 1 <= value <= limit:
@@ -227,6 +259,13 @@ class CpuLifecycleSampler:
         # Only the preceding bounded census, not another accumulated history.
         self._previous_processes = {}
         self._previous_census_at = None
+        self._topology = None
+        self._topology_error = None
+        try:
+            from .lifecycle_observation import read_topology
+            self._topology = read_topology(sysfs_cpu_root)
+        except Exception as exc:
+            self._topology_error = f"{type(exc).__name__}: {exc}"[:256]
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._wake = threading.Event()
@@ -339,25 +378,36 @@ class CpuLifecycleSampler:
                 row["errors"].append(f"{key}: {type(exc).__name__}: {exc}"[:256])
         return row
 
-    def _non_target_activity(self, target, deadline: float) -> dict:
+    def _non_target_activity(self, target, deadline: float, target_tasks=()) -> dict:
         """Bounded identity-stable CPU deltas. Names are facts, never a classifier.
 
         A non-target process may be our parent, an ordinary build, an idle server,
         or somebody else's work. Neither CPU ticks nor an executable name establishes
         competing model inference, held-region overlap, or permission to signal it.
         """
-        from .lifecycle_observation import parse_proc_stat
+        from .lifecycle_observation import parse_proc_stat, parse_cpu_list, physical_footprint
         started = time.monotonic()
         row = {"started_monotonic_s": started, "ended_monotonic_s": None,
                "previous_started_monotonic_s": self._previous_census_at,
                "entries_seen": 0, "processes_read": 0, "incomplete": False,
-               "errors": [], "active_intervals": [], "classification": "unproven"}
+               "errors": [], "active_intervals": [], "classification": "unproven",
+               "target_physical_affinity_footprint": None}
         current = {}
         def error(exc):
             row["incomplete"] = True
             if len(row["errors"]) < 8:
                 row["errors"].append(str(exc)[:256])
         try:
+            if self._topology is None:
+                error(self._topology_error or "CPU topology unavailable")
+            elif not target_tasks:
+                error("target task affinity unavailable")
+            else:
+                cpus = set()
+                for task in target_tasks:
+                    cpus.update(parse_cpu_list(task["Cpus_allowed_list"]))
+                row["target_physical_affinity_footprint"] = physical_footprint(
+                    sorted(cpus), self._topology)
             with os.scandir(self.proc_root) as entries:
                 for entry in entries:
                     row["entries_seen"] += 1
@@ -377,12 +427,17 @@ class CpuLifecycleSampler:
                         root = self.proc_root / entry.name
                         before = parse_proc_stat(self._text(root / "stat"), pid)
                         allowed = self._task(root, pid)
+                        try:
+                            executable = os.readlink(root / "exe")
+                        except OSError:
+                            executable = None  # e.g. kernel thread or inaccessible executable
                         after = parse_proc_stat(self._text(root / "stat"), pid)
                         if (before["start_ticks"] != after["start_ticks"]
                                 or allowed["start_ticks"] != after["start_ticks"]
                                 or after["cpu_ticks"] < before["cpu_ticks"]):
                             raise ValueError(f"PID {pid}: identity/counter changed during read")
-                        observed = {**after, "Cpus_allowed_list": allowed["Cpus_allowed_list"]}
+                        observed = {**after, "Cpus_allowed_list": allowed["Cpus_allowed_list"],
+                                    "exe": executable}
                         current[pid] = observed
                         previous = self._previous_processes.get(pid)
                         if previous is not None:
@@ -393,7 +448,13 @@ class CpuLifecycleSampler:
                             elif after["cpu_ticks"] > previous["cpu_ticks"]:
                                 row["active_intervals"].append({"before": previous,
                                     "after": observed,
-                                    "cpu_tick_delta": after["cpu_ticks"] - previous["cpu_ticks"]})
+                                    "cpu_tick_delta": after["cpu_ticks"] - previous["cpu_ticks"],
+                                    # Permission overlap is potential interference, not
+                                    # proof a foreign task actually ran on these cores.
+                                    "potential_physical_overlap": None if row[
+                                        "target_physical_affinity_footprint"] is None else sorted(
+                                            set(parse_cpu_list(observed["Cpus_allowed_list"]))
+                                            & set(row["target_physical_affinity_footprint"]))})
                     except Exception as exc:
                         error(f"PID {pid}: {type(exc).__name__}: {exc}")
         except Exception as exc:
@@ -488,7 +549,8 @@ class CpuLifecycleSampler:
                 raise ValueError("observer closed during sample")
         except Exception as exc:
             row["error"] = f"{type(exc).__name__}: {exc}"[:256]
-        row["non_target_activity"] = self._non_target_activity(target, started + self.max_sample_s)
+        row["non_target_activity"] = self._non_target_activity(
+            target, started + self.max_sample_s, () if row["error"] else row["tasks"])
         ended = time.monotonic()
         with self._lock:
             row.update(ended_monotonic_s=ended, phase_at_end=self._phase,
@@ -536,6 +598,7 @@ class CpuLifecycleSampler:
                 "scope": "process_and_task_allowed_lists_not_numa_page_placement",
                 "clock_domain": "serving_process_monotonic", "boot_id": self._boot_id,
                 "target": self._target, "markers": self._markers, "samples": self._samples,
+                "topology": self._topology, "topology_error": self._topology_error,
                 "errors": self._errors, "truncated": self._truncated,
                 "shutdown_resolved": not alive, "interval_s": self.interval,
                 "bounds": {"samples": self.max_samples, "tasks_per_sample": self.max_tasks,
