@@ -149,3 +149,187 @@ def test_compact_export_still_refuses_a_true_over_budget_body(tmp_path, monkeypa
         beliefs._write_exact(tmp_path / "beliefs", "capture.json", body)
 
     assert not (tmp_path / "beliefs").exists()
+
+
+def _strict_reader(monkeypatch, *, required=True):
+    import importlib
+    import os
+    from pathlib import Path
+    root = os.environ.get("EPYC_ROOT_REPO") or os.environ.get("EPYC_ROOT")
+    if not root:
+        if not required:
+            return None
+        pytest.skip("named ROOT required for producer/strict-reader integration")
+    expected = Path(root).resolve() / "scripts/vidya/adapters/autokernel_legacy_serving.py"
+    monkeypatch.syspath_prepend(str(expected.parents[1]))
+    reader = importlib.import_module("adapters.autokernel_legacy_serving")
+    assert Path(reader.__file__).resolve() == expected
+    return reader
+
+
+def _read_final(reader, path):
+    raw = path.read_bytes()
+    return reader.native_rows_v2(json.loads(raw), receipt_locator=f"autokernel:{path}",
+                                 receipt_sha256=hashlib.sha256(raw).hexdigest())
+
+
+def test_tripwire_final_boundary_exports_and_ingests_original_values(tmp_path, monkeypatch):
+    from . import run, same_code_tripwire
+    reader = _strict_reader(monkeypatch)
+    row, calls = comparison(monkeypatch)
+    original = copy.deepcopy(row)
+    observed = same_code_tripwire.inspect(tmp_path, run.ServingComparison(row),
+        anchor_build=tmp_path / "missing-a", candidate_build=tmp_path / "missing-c",
+        library="libggml-cpu.so", measurement_epoch="original-epoch", launch_identity={})
+    final = observed.to_dict()
+    assert final["same_code_tripwire"]["status"] == "unavailable"
+    assert row == original and len(calls) == 4
+    assert {k: final[k] for k in original if k != "belief_capture"} == {
+        k: v for k, v in original.items() if k != "belief_capture"}
+    capture = final["belief_capture"]
+    assert capture["inputs"] == original["belief_capture"]["inputs"]
+    assert capture["capture_id"] != original["belief_capture"]["capture_id"]
+    # Snapshot owns evidence and native bytes; to_dict cannot reseal or expose them.
+    observed.evidence["status"] = "changed-after-construction"
+    row["anchor_samples"][0] = 999.0
+    exposed = observed.to_dict()
+    exposed["same_code_tripwire"]["status"] = "changed-by-caller"
+    with monkeypatch.context() as patch:
+        patch.setattr(beliefs, "finish", lambda *a: pytest.fail("serialization resealed"))
+        assert observed.to_dict() == final
+    assert archive.record(tmp_path, {"status": "measured_null", "comparison": final},
+        epoch="original-epoch", recorded_at="2026-10-31T01:00:00Z", campaign_id="original-campaign")
+    path = tmp_path / "serving-beliefs" / f"{capture['capture_id']}.json"
+    projected, = _read_final(reader, path)
+    claim = reader.project_v2(projected)
+    from claim_tuple import grade
+    assert claim.value == 19.0 and claim.observation["anchor_value"] == 11.0
+    assert grade(claim)[:2] == ("Judged", "Located")
+    assert claim.measurement_id == f"legacy-serving-v2:{capture['capture_id']}"
+    feedback = reader.PlannerFeedback(tmp_path)
+    assert feedback.notes == []
+    frames = list(feedback.ledger.read_all())
+    assert len(frames) == 6
+    assert feedback.ingest(path) == 0
+    assert [x.frame for x in feedback.ledger.read_all()] == [x.frame for x in frames]
+    assert not (path.parent / f"{original['belief_capture']['capture_id']}.json").exists()
+
+
+@pytest.mark.parametrize("field", ["same_code_tripwire", "candidate_serving_profile", "longctx"])
+@pytest.mark.parametrize("fault", ["value", "input", "capture", "missing"])
+def test_diagnostic_boundary_never_repairs_bad_original(tmp_path, monkeypatch, capsys, field, fault):
+    row, calls = comparison(monkeypatch)
+    if fault == "value":
+        row["candidate_tok_s"] += 1
+    elif fault == "input":
+        row["belief_capture"]["inputs"]["recipe"]["model"] = "/tampered"
+    elif fault == "capture":
+        row["belief_capture"] = {"malformed": True}
+    else:
+        del row["belief_capture"]
+    original = copy.deepcopy(row)
+    final = beliefs.annotate(row, {field: {"status": "unavailable"}})
+    assert row == original and len(calls) == 4
+    assert final.get("belief_capture") == original.get("belief_capture")
+    assert "diagnostic annotation refused" in final["belief_capture_error"]
+    assert final["candidate_tok_s"] == original["candidate_tok_s"]
+    assert archive.record(tmp_path, {"status": "measured_null", "comparison": final},
+                          epoch="e", recorded_at="2026-10-31T01:00:00Z", campaign_id="c")
+    if fault != "missing":
+        assert "serving belief export failed after durable archive" in capsys.readouterr().err
+    assert not (tmp_path / "serving-beliefs").exists()
+
+
+@pytest.mark.parametrize("diagnostic", ["same_code_tripwire", "candidate_serving_profile", "longctx"])
+@pytest.mark.parametrize("field", ["candidate_tok_s", "recipe_hash", "diagnostic"])
+def test_final_native_and_diagnostic_tamper_refused_even_with_rehashed_file_reference(
+        tmp_path, monkeypatch, field, diagnostic):
+    reader = _strict_reader(monkeypatch)
+    row, _ = comparison(monkeypatch)
+    final = beliefs.annotate(row, {diagnostic: {"status": "unavailable"}})
+    path = beliefs.export(tmp_path, {"comparison": final}, campaign_id="c", epoch="e",
+                          recorded_at="2026-10-31T01:00:00Z")
+    assert len(_read_final(reader, path)) == 1
+    receipt = json.loads(path.read_bytes())
+    source_path = path.parent / receipt["native_reference"]["path"]
+    source = json.loads(source_path.read_bytes())
+    source["comparison"][diagnostic if field == "diagnostic" else field] = (20.0 if field == "candidate_tok_s" else
+                                    "changed" if field == "recipe_hash" else {"status": "within_floor"})
+    raw = json.dumps(source, sort_keys=True, separators=(",", ":")).encode()
+    source_path.write_bytes(raw)
+    receipt["native_reference"].update(size=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+    path.write_text(json.dumps(receipt))
+    from claim_tuple import ProjectionError
+    with pytest.raises(ProjectionError, match="native/input binding differs"):
+        _read_final(reader, path)
+    with pytest.raises(ValueError, match="does not rederive"):
+        beliefs.export(tmp_path / "tampered", {"comparison": source["comparison"]},
+                       campaign_id="c", epoch="e", recorded_at="2026-10-31T01:00:00Z")
+
+
+@pytest.mark.parametrize("annotations", [{"candidate_tok_s": 999.0},
+    {"longctx": float("nan")}, {"belief_capture": {}}, {}])
+def test_diagnostic_fault_cannot_overwrite_or_mint_a_capture(monkeypatch, annotations):
+    row, _ = comparison(monkeypatch)
+    original = copy.deepcopy(row)
+    final = beliefs.annotate(row, annotations)
+    assert row == original
+    assert final["belief_capture"] == original["belief_capture"]
+    assert {k: v for k, v in final.items() if k != "belief_capture_error"} == original
+    assert "diagnostic annotation refused" in final["belief_capture_error"]
+    with pytest.raises(ValueError, match="does not rederive"):
+        beliefs.export(None, {"comparison": final}, campaign_id="c", epoch="e", recorded_at="date")
+
+
+def test_nonwrapped_capture_keeps_original_id_and_strict_reader_contract(tmp_path, monkeypatch):
+    reader = _strict_reader(monkeypatch)
+    row, _ = comparison(monkeypatch)
+    original = copy.deepcopy(row)
+    path = beliefs.export(tmp_path, {"comparison": row}, campaign_id="c", epoch="e",
+                          recorded_at="2026-10-31T01:00:00Z")
+    projected, = _read_final(reader, path)
+    assert reader.project_v2(projected).measurement_id == (
+        "legacy-serving-v2:" + original["belief_capture"]["capture_id"])
+    assert row == original
+    assert beliefs.finish(row, row["belief_capture"]["inputs"]) == original["belief_capture"]
+
+
+def test_actual_tripwire_retains_tampered_capture_as_nonfatal_refusal(tmp_path, monkeypatch):
+    from . import run, same_code_tripwire
+    row, calls = comparison(monkeypatch)
+    row["candidate_samples"][0] = 500.0
+    original = copy.deepcopy(row)
+    observed = same_code_tripwire.inspect(tmp_path, run.ServingComparison(row),
+        anchor_build=tmp_path / "missing-a", candidate_build=tmp_path / "missing-c",
+        library="libggml-cpu.so", measurement_epoch="original-epoch", launch_identity={})
+    final = observed.to_dict()
+    assert final["belief_capture"] == original["belief_capture"]
+    assert "diagnostic annotation refused" in final["belief_capture_error"]
+    assert observed.effect == original["effect"] and observed.decisive == original["decisive"]
+    assert len(calls) == 4
+    with pytest.raises(ValueError, match="does not rederive"):
+        beliefs.export(tmp_path, {"comparison": final}, campaign_id="c", epoch="e", recorded_at="date")
+
+
+def test_final_annotation_seal_fault_keeps_original_warrant_and_numeric_result(monkeypatch):
+    row, _ = comparison(monkeypatch)
+    original = copy.deepcopy(row)
+    finish = beliefs.finish
+    calls = []
+
+    def fail_final(body, inputs):
+        calls.append(body)
+        if len(calls) == 2:
+            raise OSError("synthetic final seal fault")
+        return finish(body, inputs)
+
+    monkeypatch.setattr(beliefs, "finish", fail_final)
+    final = beliefs.annotate(row, {"longctx": {"passed": False}})
+    assert len(calls) == 2
+    assert row == original and final["belief_capture"] == original["belief_capture"]
+    assert final["candidate_tok_s"] == original["candidate_tok_s"]
+    assert final["longctx"] == {"passed": False}
+    assert "synthetic final seal fault" in final["belief_capture_error"]
+    monkeypatch.setattr(beliefs, "finish", finish)
+    with pytest.raises(ValueError, match="does not rederive"):
+        beliefs.export(None, {"comparison": final}, campaign_id="c", epoch="e", recorded_at="date")

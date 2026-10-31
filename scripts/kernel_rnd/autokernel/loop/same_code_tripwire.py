@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -30,12 +31,21 @@ class ObservedComparison:
 
     def __init__(self, original: Any, evidence: dict):
         self.original, self.evidence = original, evidence
+        native = original.to_dict()
+        if str(native.get("schema", "")).startswith("epyc.autokernel.serving_"):
+            from . import serving_beliefs
+            native = serving_beliefs.annotate(native, {"same_code_tripwire": evidence})
+        else:
+            native = {**native, "same_code_tripwire": evidence}
+        # Own a detached snapshot without imposing JSON types/finite-number rules
+        # on legacy bench diagnostics. Serialization never reseals or exposes it.
+        self._snapshot = deepcopy(native)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.original, name)
 
     def to_dict(self) -> dict:
-        return {**self.original.to_dict(), "same_code_tripwire": self.evidence}
+        return deepcopy(self._snapshot)
 
 
 def inspect(store_root: Path, comparison: Any, *, anchor_build: Path,

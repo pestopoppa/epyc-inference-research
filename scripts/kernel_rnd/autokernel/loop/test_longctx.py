@@ -251,6 +251,18 @@ def test_surface_compare_calibrates_the_target_floor_once_then_gates(tmp_path, m
     assert len(launches) == 1 + 48 + 10
     assert row["recipe"] == anchor.template.name and row["decisive"] is True
     assert row["longctx"]["passed"] is True and row["longctx"]["prefill_floor_pct"] > 0
+    from . import serving_beliefs
+    capture = row["belief_capture"]
+    assert serving_beliefs.finish(row, capture["inputs"]) == capture
+    assert "belief_capture_error" not in row
+    receipt = serving_beliefs.export(tmp_path / "exports", {"comparison": row},
+        campaign_id="synthetic-longctx", epoch="fixture", recorded_at="2026-10-31T01:00:00Z")
+    assert receipt.is_file()
+    from .test_serving_beliefs import _strict_reader, _read_final
+    reader = _strict_reader(monkeypatch, required=False)
+    if reader is not None:
+        projected, = _read_final(reader, receipt)
+        assert reader.project_v2(projected).value == row["candidate_tok_s"]
     # CH-27: sealed under the anchor's execution digest, never the flat per-target file
     assert list(surface.anchor_floor_store(anchor).glob("serving-floor.*.json"))
     assert not list(surface.floor_store.glob("serving-floor.*.json"))

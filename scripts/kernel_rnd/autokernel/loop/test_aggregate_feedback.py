@@ -27,12 +27,15 @@ def test_actual_aggregate_dispositions_export_original_capture_once(monkeypatch,
 
         def observe(*args, evidence, **kwargs):
             started = time.time()
+            before = len(evidence)
             result = measure(*args, evidence=evidence, **kwargs)
-            evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "gpu",
-                             "status": "unproven", "samples": 0,
-                             "window_start": started, "window_end": time.time(),
-                             "cpu_placement": "unproven", "contention": "unproven",
-                             "scope": "synthetic measurement; no hardware observed"})
+            if len(evidence) == before:
+                evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "gpu",
+                                 "status": "unproven", "samples": 0,
+                                 "window_start": started, "window_end": time.time(),
+                                 "cpu_placement": "unproven", "contention": "unproven",
+                                 "scope": "synthetic measurement; no hardware observed"})
+            assert len(evidence) == before + 1  # one original observation per launch
             return result
 
         with patch.object(serving, "_measure_once", observe):

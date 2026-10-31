@@ -511,11 +511,11 @@ def test_run_py_records_a_candidate_profile_after_timing_and_orders_the_tail():
     code path (`commit_pooled`) is not touched by either."""
     source = (Path(__file__).parent / "run.py").read_text()
     body = source[source.index("            if direct_launch:\n                compared = cpu_compare("):]
-    body = body[:body.index("return compared")]
+    body = body[:body.index("return _tripwire(compared)")]
     assert body.index("cpu_compare(") < body.index("record_candidate_serving_profile(")
     assert "if not cpu_launch:" in body
     helper = source[source.index("    def record_candidate_serving_profile("):]
     helper = helper[:helper.index("    def ensure_source_floor(")]
-    assert 'row["candidate_serving_profile"]' in helper
+    assert 'serving_beliefs.annotate(row, {"candidate_serving_profile": profile})' in helper
     assert "raise" not in helper.replace("raise loop", "")   # never refuses the comparison
     assert '"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(' in source

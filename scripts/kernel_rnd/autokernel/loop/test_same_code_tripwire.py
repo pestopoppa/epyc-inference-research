@@ -204,3 +204,23 @@ class Tripwire(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_snapshot_keeps_native_bench_unknowns_and_python_types():
+    import math
+    native = {"effect": float("nan"), "noise_floor_pct": float("inf"),
+              "optional": None, "identity": (Path("native-build"), None),
+              "nested": {"samples": [1.0]}}
+    original = type("Native", (), {"to_dict": lambda self: native})()
+    evidence = {"status": "unavailable", "reason": "valid native effect unavailable"}
+    observed = st.ObservedComparison(original, evidence)
+    native["nested"]["samples"].append(999.0)
+    evidence["status"] = "modified"
+    first = observed.to_dict()
+    assert math.isnan(first["effect"]) and math.isinf(first["noise_floor_pct"])
+    assert first["optional"] is None and first["identity"] == (Path("native-build"), None)
+    assert isinstance(first["identity"], tuple)
+    assert first["nested"]["samples"] == [1.0]
+    assert first["same_code_tripwire"]["status"] == "unavailable"
+    first["nested"]["samples"].clear()
+    assert observed.to_dict()["nested"]["samples"] == [1.0]

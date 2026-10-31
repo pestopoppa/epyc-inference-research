@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -108,6 +109,35 @@ def finish(comparison, inputs):
     if len(_canonical_bytes({"native": native, "capture": capture})) > MAX_BYTES:
         raise ValueError("belief capture byte budget exceeded")
     return capture
+
+
+def annotate(comparison, annotations):
+    """Seal append-only diagnostics at their prospective producer boundary.
+
+    The original seal must still rederive BEFORE adding anything. This is never
+    called by export or a reader, and cannot repair a missing or invalid warrant.
+    Capture faults remain diagnostic: retain the numeric result and original
+    capture so the strict export/reader refuses it rather than inventing one.
+    """
+    body = deepcopy(comparison)
+    additions = {}
+    try:
+        pending = json.loads(json.dumps(annotations, allow_nan=False))
+        if not isinstance(pending, dict) or not pending or set(pending) - {
+                "same_code_tripwire", "candidate_serving_profile", "longctx"}:
+            raise ValueError("unsupported serving diagnostic annotation")
+        if set(pending) & set(body):
+            raise ValueError("serving diagnostics cannot overwrite original fields")
+        additions = pending
+        capture = body["belief_capture"]
+        if capture != finish(body, capture["inputs"]):
+            raise ValueError("original prospective serving capture does not rederive")
+        body.update(additions)
+        body["belief_capture"] = finish(body, capture["inputs"])
+    except Exception as exc:
+        body.update(additions)
+        body["belief_capture_error"] = f"diagnostic annotation refused: {type(exc).__name__}: {exc}"[:256]
+    return body
 
 
 def _write_exact(root: Path, name: str, body):

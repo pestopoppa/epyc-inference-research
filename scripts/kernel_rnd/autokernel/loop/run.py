@@ -4553,6 +4553,8 @@ def main(argv: list[str] | None = None) -> int:
         row = getattr(compared, "row", None)
         if not isinstance(row, dict):
             return
+        def retain_profile(profile):
+            row.update(serving_beliefs.annotate(row, {"candidate_serving_profile": profile}))
         from . import gpu_serving_profile as gsp
         try:
             diff = archive._git(worker.worktree, "diff", "HEAD")
@@ -4564,16 +4566,14 @@ def main(argv: list[str] | None = None) -> int:
                     store=args.store, anchor_commit=identity,
                     long_context=gpu_long_context_hook[0])
         except loop.MeasurementInvalid as exc:
-            row["candidate_serving_profile"] = {"status": "measurement_invalid",
-                                                "reason": str(exc)[:512]}
+            retain_profile({"status": "measurement_invalid", "reason": str(exc)[:512]})
             return
         except (hotspots.ProfileFailed, OSError, ValueError, RuntimeError, ImportError,
                 subprocess.SubprocessError) as exc:
-            row["candidate_serving_profile"] = {"status": "unavailable",
-                                                "reason": f"{type(exc).__name__}: {exc}"[:512]}
+            retain_profile({"status": "unavailable", "reason": f"{type(exc).__name__}: {exc}"[:512]})
             return
         table = view.get("launch_weighted") or {}
-        row["candidate_serving_profile"] = {
+        retain_profile({
             "status": "observed", "record": view.get("record"), "key": view.get("key"),
             "cached": view.get("cached"), "candidate_identity": identity,
             "launch_weighted_status": table.get("status"),
@@ -4582,7 +4582,7 @@ def main(argv: list[str] | None = None) -> int:
                 gpu_profile_observation, hypothesis.target_symbol),
             "top_kernels": [{"kernel": k["kernel"],
                              "weighted_ns_per_token": k["weighted_ns_per_token"]}
-                            for k in (table.get("kernels") or [])[:8]]}
+                            for k in (table.get("kernels") or [])[:8]]})
 
     def ensure_source_floor(anchor_recipe, a_build) -> None:
         nonlocal floor, floor_request_digest, floor_record, calibrated

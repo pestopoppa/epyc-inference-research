@@ -834,8 +834,8 @@ class Surface:
             floor_request_digest=reading.request_digest,
             instrument=serving.MATCHED_INSTRUMENT, floor_record=reading.row,
             longctx=launch))
-        row["longctx"] = verdict(row, reading.row, pairs)
-        return row
+        from . import serving_beliefs
+        return serving_beliefs.annotate(row, {"longctx": verdict(row, reading.row, pairs)})
 
     def identity_targets(self, anchor_arm, candidate_arm) -> list[tuple]:
         """The `long_identity` route target (gates.check_model_identity_targets 6-tuple):

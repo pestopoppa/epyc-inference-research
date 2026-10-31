@@ -122,6 +122,9 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
             assert resolved_recipe.executable.sha256 == hashlib.sha256(
                 (Path(build) / "bin/llama-server").read_bytes()).hexdigest()
             measured.append((Path(build), resolved_recipe))
+            evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "gpu",
+                             "status": "unavailable", "window_start": 1.0, "window_end": 2.0,
+                             "reason": "synthetic observation boundary; no hardware sampled"})
             # These are explicitly synthetic rates, not invented GPU residency.
             if Path(build) == fixture.startup_anchor:
                 return 10.0
@@ -226,6 +229,18 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
         outcome = result["iterations"][0]
         assert outcome["status"] == "kept"
         row = outcome["comparison"]
+        assert "candidate_serving_profile" in row
+        capture = row["belief_capture"]
+        assert run.serving_beliefs.finish(row, capture["inputs"]) == capture
+        assert "belief_capture_error" not in row
+        export = fixture.store / "serving-beliefs" / f"{capture['capture_id']}.json"
+        assert export.is_file()
+        from .test_serving_beliefs import _strict_reader, _read_final
+        with pytest.MonkeyPatch.context() as integration_patch:
+            reader = _strict_reader(integration_patch, required=False)
+            if reader is not None:
+                projected, = _read_final(reader, export)
+                assert reader.project_v2(projected).value == row["candidate_tok_s"]
         assert row["request_digest"] == serving.request_digest(selected.template, requests)
         assert row["noise_floor_pct"] == 0.0  # never bench's 99%
         assert row["pairs"] == result["pairs"] == 2
@@ -446,3 +461,32 @@ def test_gpu_serving_without_fixture_actor_override_refuses_before_execution(cap
         assert not (fixture.store / "loop-run.json").exists()
     finally:
         fixture.doCleanups()
+
+
+@pytest.mark.parametrize("profile_status", ["observed", "measurement_invalid"])
+def test_gpu_profile_diagnostics_preserve_capture_and_numeric_outcome(monkeypatch, profile_status):
+    original = run.serving_beliefs.annotate
+    retained = []
+
+    def profile(*args, **kwargs):
+        if not str(kwargs.get("anchor_commit", "")).startswith("candidate:"):
+            raise run.hotspots.ProfileFailed("synthetic startup profile unavailable")
+        if profile_status == "measurement_invalid":
+            raise run.loop.MeasurementInvalid("synthetic invalid profile", {"fixture": True})
+        return {"record": "synthetic-trace", "key": "fixture",
+                "launch_weighted": {"status": "fixture", "kernels": []}}, []
+
+    def annotate(row, fields):
+        result = original(row, fields)
+        if "candidate_serving_profile" in fields:
+            retained.append(result)
+            assert result["candidate_serving_profile"]["status"] == profile_status
+            assert result["belief_capture"]["inputs"] == row["belief_capture"]["inputs"]
+            assert {k: result[k] for k in row if k != "belief_capture"} == {
+                k: v for k, v in row.items() if k != "belief_capture"}
+        return result
+
+    monkeypatch.setattr(run.hotspots, "serving_profile", profile)
+    monkeypatch.setattr(run.serving_beliefs, "annotate", annotate)
+    test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(True, False, False)
+    assert retained
