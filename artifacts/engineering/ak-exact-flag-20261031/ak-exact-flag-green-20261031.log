@@ -1,0 +1,16 @@
+ACTUAL TEST START attested= True
+ACTUAL TEST PASS attested= True
+ACTUAL TEST START attested= False
+ACTUAL TEST PASS attested= False
+{
+  "actual_main": true,
+  "exact_flag_both_cases": "--allow-unverified-anchor",
+  "cases": 2,
+  "fixture_kind": "synthetic-model-free-store",
+  "retained_directories": [
+    "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-9ezuur_p",
+    "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-c3rm52lz"
+  ],
+  "python_deletion_guard": "no_attempts",
+  "test_sha256": "feaf95b567d21ccfc8d9fbfa2908b161cf7cb62b167551dcf2b758e01fd84500"
+}

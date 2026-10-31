@@ -1,0 +1,8 @@
+{
+  "test_sha256": "feaf95b567d21ccfc8d9fbfa2908b161cf7cb62b167551dcf2b758e01fd84500",
+  "runner_sha256": "62a876383e27c3623e2a747c5b7673fb652ed697a7beb1088abf2ef180447841",
+  "owner_head": "57ec250b6ad7b9bd5b9c1059cac69ea3603440ef",
+  "actual_run_py_sha256": "357b3551f135c82451f7fc96ebd3ec751417719406b9a38a34b7503eaf14f761",
+  "status": "PREPARED_NOT_EXECUTED",
+  "constraints": "No our-family execution during C6 timing; NI must independently admit its own pair."
+}
