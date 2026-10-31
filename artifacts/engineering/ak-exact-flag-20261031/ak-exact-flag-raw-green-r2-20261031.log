@@ -1,0 +1,179 @@
+ACTUAL TEST START attested= True
+ACTUAL_MAIN_STDOUT attested= True
+ACTUAL_MAIN_EXACT_FLAG_ARGV ["--worktree", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/tree", "--anchor-build", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/store/cpu-synthetic-store", "--model", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf", "--store", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/store", "--iterations", "1", "--workers", "1", "--worker-root", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/lanes", "--worker-build-root", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/builds", "--cpu-serving-launch", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/launch.json", "--frozen-prompts", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/prompts.json", "--experimental-branch", "ak/experimental/cpu-serving-test", "--iterations", "5", "--serving-pairs", "2", "--cpu-calibrate-serving", "3", "--out", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/result", "--allow-untested-actor-seats", "synthetic fixture actors", "--dry-run", "--floor-registry", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/registry.yaml", "--floor-registry-role", "ds41_test_role", "--serving-instrument", "matched_process_v2", "--serving-pairs", "24", "--cpu-calibrate-serving", "24", "--allow-unverified-anchor"]
+anchor    store build /mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/store/cpu-synthetic-store attested: commit 3fa4bce3371e descends from champion head 3fa4bce3371e
+candidate  ak/experimental/cpu-serving-test @ 3fa4bce3371e — verified
+workload  DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf: n_embd=1536, dominant Q4_K
+recipe    native-openmp-gcc15-cpu-v1 f6a56ee6e2af  divergences=['GGML_HIP', 'GGML_NATIVE', 'GGML_OPENMP', 'CMAKE_C_COMPILER', 'CMAKE_CXX_COMPILER']
+anchor    3fa4bce3371e   epoch 56e14899f21e   measurement-epoch 56e14899f21e
+history   comparability on the measurement epoch: 0 row(s) same full epoch, 0 aliased, 0 unresolved (full-epoch only)
+surface   pp512, 5 alternating pairs, bench floor NOT USED — keeps are gated on the serving launch (see 'serving')
+serving   floor registry lookup: miss (no entry for this key) | registry /mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/registry.yaml @ None [explicit]
+serving   floor registry: miss (no entry for this key)
+serving   floor carry-forward refused: no floor lineage under runtime recipe 7b5762b7ea44
+serving   selected cpu workload: cpu-fixture [np1 draft-mtp aggregate_tok_s cpu=0-95 env=none #7b5762b7ea44]; request-bound floor None [absent]
+serving   prepare 48 original calibration launches (matched_process_v2) under the owning claim before source iterations
+actors    planner=codex:gpt-5.6-sol@high  critic=claude:claude-fable-5-1@medium  seat=plain fan-out steps=60 context=inline trim-instructions=on trim-tools=on lane-guard=on context-limit=180224 output-limit=planner:32000,critic:32000,author:40960 concise=on planner-budget=4500s author-budget=0s planner-salvage=900s author-thinking=medium author-action-rule=on planner-reasoning-history=keep serving-f1=on answer-protocol=f2@0.65 planner-think-budget=8000
+actors    WARNING --actor-planner-budget-s=4500 is not below --actor-timeout-s=1800: the hard timeout ends those calls first, so the budget never fires
+actors    authors: single author: best-of-2 races author thinking modes, which only an opencode author seat carries (planner backend: codex)
+accum     (dry) restored 0 keep(s), +0.00% vs cor 3fa4bce3371e from current_snapshot; keeps=[]
+cor       (dry) champion of record 3fa4bce3371e = current anchor
+resume    (dry) scanned 0 checkpoint(s): 0 queued, 0 rejected, 0 not resumable now, 0 already claimed; 0 row(s) with checkpoints in other epochs
+actors    UNTESTED: wire request (dry run; stdout only)
+{"actor_config_digest": "58357f924c10e309f26a2511725721b8455299a526b18f77ba901c0933fadd8a", "schema": "epyc.autokernel.actor_wire.v1", "seats": [{"backend": {"agent": "", "binary": "/workspace/repos/epyc-inference-research/.venv/bin/python", "effort": "medium", "kind": "claude", "model": "claude-fable-5-1"}, "client_sha256": "efb29ce53d36ebaeee80e3aa44fd6c7f9d71bbded5fe1665240b2ed8ecaeee0e", "launch_config": {"actor_answer_force_frac": 0.65, "actor_answer_protocol": "f2", "actor_author_budget_s": 0, "actor_author_output_limit": 40960, "actor_concise": "on", "actor_context_limit": 180224, "actor_lane_guard": "on", "actor_output_limit": 8192, "actor_planner_budget_s": 4500, "actor_planner_output_limit": 32000, "actor_planner_salvage_s": 900, "actor_planner_think_budget": 8000, "actor_seat": "plain", "actor_serving_f1": "on", "actor_timeout_s": 1800, "actor_trim_instructions": "on", "actor_trim_tools": "on", "author_action_rule": "on", "author_model": "gpt-5.6-sol", "author_thinking": "medium", "critic_effort": "medium", "critic_model": "claude-fable-5-1", "planner_effort": "high", "planner_model": "gpt-5.6-sol"}, "read_only": true, "role": "critic", "seat": {"answer_force_frac": 0.65, "answer_protocol": "off", "author_action_rule": false, "author_budget_s": 0, "author_output_limit": 40960, "author_sandbox": true, "author_thinking": "default", "bounded": false, "concise": false, "context_limit": 180224, "context_mode": "inline", "fan_out": true, "lane_guard": true, "output_limit": 8192, "planner_budget_s": 0, "planner_output_limit": 32000, "planner_reasoning_history": "keep", "planner_salvage_s": 0, "planner_think_budget": 0, "serving_f1": true, "steps": 60, "tools_python": "/mnt/raid0/llm/epyc-orchestrator/.venv/bin/python", "trim_instructions": true, "trim_tools": true}, "timeout_s": 1800}, {"backend": {"agent": "", "binary": "/workspace/repos/epyc-inference-research/.venv/bin/python", "effort": "high", "kind": "codex", "model": "gpt-5.6-sol"}, "client_sha256": "efb29ce53d36ebaeee80e3aa44fd6c7f9d71bbded5fe1665240b2ed8ecaeee0e", "launch_config": {"actor_answer_force_frac": 0.65, "actor_answer_protocol": "f2", "actor_author_budget_s": 0, "actor_author_output_limit": 40960, "actor_concise": "on", "actor_context_limit": 180224, "actor_lane_guard": "on", "actor_output_limit": 8192, "actor_planner_budget_s": 4500, "actor_planner_output_limit": 32000, "actor_planner_salvage_s": 900, "actor_planner_think_budget": 8000, "actor_seat": "plain", "actor_serving_f1": "on", "actor_timeout_s": 1800, "actor_trim_instructions": "on", "actor_trim_tools": "on", "author_action_rule": "on", "author_model": "gpt-5.6-sol", "author_thinking": "medium", "critic_effort": "medium", "critic_model": "claude-fable-5-1", "planner_effort": "high", "planner_model": "gpt-5.6-sol"}, "read_only": false, "role": "planner", "seat": {"answer_force_frac": 0.65, "answer_protocol": "f2", "author_action_rule": true, "author_budget_s": 0, "author_output_limit": 40960, "author_sandbox": true, "author_thinking": "medium", "bounded": false, "concise": true, "context_limit": 180224, "context_mode": "inline", "fan_out": true, "lane_guard": true, "output_limit": 8192, "planner_budget_s": 4500, "planner_output_limit": 32000, "planner_reasoning_history": "keep", "planner_salvage_s": 900, "planner_think_budget": 8000, "serving_f1": true, "steps": 60, "tools_python": "/mnt/raid0/llm/epyc-orchestrator/.venv/bin/python", "trim_instructions": true, "trim_tools": true}, "timeout_s": 1800}, {"backend": {"agent": "", "binary": "/workspace/repos/epyc-inference-research/.venv/bin/python", "effort": "high", "kind": "codex", "model": "gpt-5.6-sol"}, "client_sha256": "efb29ce53d36ebaeee80e3aa44fd6c7f9d71bbded5fe1665240b2ed8ecaeee0e", "launch_config": {"actor_answer_force_frac": 0.65, "actor_answer_protocol": "f2", "actor_author_budget_s": 0, "actor_author_output_limit": 40960, "actor_concise": "on", "actor_context_limit": 180224, "actor_lane_guard": "on", "actor_output_limit": 8192, "actor_planner_budget_s": 4500, "actor_planner_output_limit": 32000, "actor_planner_salvage_s": 900, "actor_planner_think_budget": 8000, "actor_seat": "plain", "actor_serving_f1": "on", "actor_timeout_s": 1800, "actor_trim_instructions": "on", "actor_trim_tools": "on", "author_action_rule": "on", "author_model": "gpt-5.6-sol", "author_thinking": "medium", "critic_effort": "medium", "critic_model": "claude-fable-5-1", "planner_effort": "high", "planner_model": "gpt-5.6-sol"}, "read_only": false, "role": "author", "seat": {"answer_force_frac": 0.65, "answer_protocol": "f2", "author_action_rule": true, "author_budget_s": 0, "author_output_limit": 40960, "author_sandbox": true, "author_thinking": "medium", "bounded": false, "concise": true, "context_limit": 180224, "context_mode": "inline", "fan_out": true, "lane_guard": true, "output_limit": 8192, "planner_budget_s": 4500, "planner_output_limit": 32000, "planner_reasoning_history": "keep", "planner_salvage_s": 900, "planner_think_budget": 8000, "serving_f1": true, "steps": 60, "tools_python": "/mnt/raid0/llm/epyc-orchestrator/.venv/bin/python", "trim_instructions": true, "trim_tools": true}, "timeout_s": 1800}], "suite": {"actor_metrics.py": "98d988076b3014eb2d4e2981d6cae2bdd52317fc7a13e0778474cd21eec58e28", "actor_opencode_config.py": "15cbbced1b424b325b366c06edcc0d0f1fa092d784763a29d69a6e39f4407a8c", "actor_passthrough.py": "54db74169eb58cdd33fcb002e0539cf0f3b74d41d2b0d3478efbf58d0d2f5cf2", "actor_serving.py": "9c9b64dd5817a567d8ebaf0e5a337f06a8981f16100a4bc5efbaee7e87955cb7", "actor_wire_gate.py": "aabc60851aba5abe7122dde2197b98f00718f6a973933891af2eec308efe85fe", "actor_wire_test.py": "b01b46c9af9f884a389889191bfc8dc47dc54fc7ba688f920f9685f10ed88286", "actors.py": "a52568c214f33c6d94d0faa21c3e0aac881713946de11720c11494c345101ae9", "procguard.py": "0d5710b0e7b7447aedca230a8ef685e62de31e7992fc6a57a8cd2af0ae1d7301", "run.py": "357b3551f135c82451f7fc96ebd3ec751417719406b9a38a34b7503eaf14f761", "test_actor_wire_gate.py": "624cf22b16c561880e60813117feb07ebc0cb28093eec8775a1b8e83691c95e5", "test_promotion_targets.py": "c4115dfcba74a5f98b4ec7dfe03e8c85af723c222320d7dfcc50bb2fb0988ae0"}}
+
+DRY RUN — wiring proven, nothing spent.
+ACTUAL_MAIN_STDERR attested= True
+WARNING   floor registry master OVERRIDDEN (explicit): /mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_/registry.yaml is NOT the registry of the code repo (/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/orchestration/model_registry.yaml); floors are read from a different file than this code's own commit carries
+
+
+ACTUAL TEST PASS attested= True
+ACTUAL TEST START attested= False
+ACTUAL_MAIN_STDERR attested= False
+WARNING   floor registry master OVERRIDDEN (explicit): /mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/registry.yaml is NOT the registry of the code repo (/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/orchestration/model_registry.yaml); floors are read from a different file than this code's own commit carries
+usage: run_retained.py [-h] --worktree WORKTREE --anchor-build ANCHOR_BUILD
+                       [--cor-build COR_BUILD] [--resume-run RESUME_RUN]
+                       [--source-anchor-continuation SOURCE_ANCHOR_CONTINUATION]
+                       [--source-anchor-sha256 SOURCE_ANCHOR_SHA256]
+                       [--validate-source-continuation]
+                       [--validate-source-loo]
+                       [--champion-branch CHAMPION_BRANCH]
+                       [--allow-unverified-anchor] [--model MODEL]
+                       [--resolved-campaign RESOLVED_CAMPAIGN]
+                       [--target-id TARGET_ID] --store STORE
+                       [--new-anchor-epoch COMMIT]
+                       [--belief-root-repo BELIEF_ROOT_REPO]
+                       [--belief-ledger BELIEF_LEDGER]
+                       [--belief-known-good BELIEF_KNOWN_GOOD]
+                       [--belief-escalate-after-s BELIEF_ESCALATE_AFTER_S]
+                       [--belief-reader-timeout-s BELIEF_READER_TIMEOUT_S]
+                       [--belief-focus-symbol SYMBOL]
+                       [--preseeded-hypotheses PRESEEDED_HYPOTHESES]
+                       [--iterations ITERATIONS]
+                       [--no-measurement-alarm-n NO_MEASUREMENT_ALARM_N]
+                       [--keep-rate-alarm-window KEEP_RATE_ALARM_WINDOW]
+                       [--pairs PAIRS]
+                       [--surface {pp512,tg128,dec-b2,dec-b4,dec-b8}]
+                       [--calibrate-surface N] [--confirm-model CONFIRM_MODEL]
+                       [--confirm-pairs CONFIRM_PAIRS]
+                       [--confirm-surfaces CONFIRM_SURFACES]
+                       [--serving-recipe SERVING_RECIPE]
+                       [--serving-pairs SERVING_PAIRS]
+                       [--keep-dimensions KEEP_DIMENSIONS]
+                       [--keep-capacity-limit-gib KEEP_CAPACITY_LIMIT_GIB]
+                       [--serving-instrument {legacy_v1,matched_process_v2}]
+                       [--no-floor-carry-forward]
+                       [--floor-registry MASTER.yaml|@code]
+                       [--floor-registry-role FLOOR_REGISTRY_ROLE]
+                       [--floor-allow-stale-upstream]
+                       [--floor-numerics-epoch FLOOR_NUMERICS_EPOCH]
+                       [--floor-require-grade {decision,indicative}]
+                       [--floor-co-tenancy {quiet,co-tenant}]
+                       [--require-serving-floor]
+                       [--cpu-serving-launch CPU_SERVING_LAUNCH]
+                       [--gpu-serving-launch GPU_SERVING_LAUNCH]
+                       [--frozen-prompts FROZEN_PROMPTS]
+                       [--heldout-frozen-prompts HELDOUT_FROZEN_PROMPTS]
+                       [--longctx-surface LONGCTX_SURFACE]
+                       [--cpu-calibrate-heldout CPU_CALIBRATE_HELDOUT]
+                       [--heldout-calibration-only]
+                       [--serving-calibration-only]
+                       [--experimental-branch EXPERIMENTAL_BRANCH]
+                       [--cpu-calibrate-serving CPU_CALIBRATE_SERVING]
+                       [--runtime-statistics RUNTIME_STATISTICS]
+                       [--runtime-calibration-max-launches RUNTIME_CALIBRATION_MAX_LAUNCHES]
+                       [--runtime-recipe-reference RUNTIME_RECIPE_REFERENCE]
+                       [--runtime-recovery-reference RUNTIME_RECOVERY_REFERENCE]
+                       [--runtime-arms RUNTIME_ARMS]
+                       [--runtime-arm-evidence {keep_grade,strict}]
+                       [--calibrate-runtime]
+                       [--runtime-control-escalation RUNTIME_CONTROL_ESCALATION]
+                       [--runtime-nominal-khz RUNTIME_NOMINAL_KHZ]
+                       [--cpu-profiler CPU_PROFILER] [--node-profile]
+                       [--node-profile-level {1,2}]
+                       [--cpu-screen-scope {quarter,half}]
+                       [--cpu-confirm-from CPU_CONFIRM_FROM]
+                       [--gpu-calibrate-serving GPU_CALIBRATE_SERVING]
+                       [--fire-multiple FIRE_MULTIPLE]
+                       [--accumulate-bench-every-keeps ACCUMULATE_BENCH_EVERY_KEEPS]
+                       [--anchor-guard-aa-window-s ANCHOR_GUARD_AA_WINDOW_S]
+                       [--out OUT] [--scheduler-selection SCHEDULER_SELECTION]
+                       [--dry-run]
+                       [--rank-prior-experiments | --no-rank-prior-experiments]
+                       [--shared-history-root SHARED_HISTORY_ROOT]
+                       [--operator-unblock-artifact OPERATOR_UNBLOCK_ARTIFACT]
+                       [--resume {on,off}]
+                       [--hypothesis-author-attempts HYPOTHESIS_AUTHOR_ATTEMPTS]
+                       [--planner-model PLANNER_MODEL]
+                       [--planner-effort PLANNER_EFFORT]
+                       [--critic-model CRITIC_MODEL]
+                       [--critic-effort CRITIC_EFFORT]
+                       [--actor-seat {bounded,plain}]
+                       [--actor-fan-out | --no-actor-fan-out]
+                       [--actor-context-mode {inline,variable,orchestrator-variable}]
+                       [--actor-context-print-cap-bytes ACTOR_CONTEXT_PRINT_CAP_BYTES]
+                       [--actor-context-pull-budget-bytes ACTOR_CONTEXT_PULL_BUDGET_BYTES]
+                       [--actor-trim-instructions {on,off}]
+                       [--actor-trim-tools {on,off}]
+                       [--actor-lane-guard {on,off}]
+                       [--actor-author-sandbox {on,off}]
+                       [--actor-belief-context {required}]
+                       [--actor-context-limit ACTOR_CONTEXT_LIMIT]
+                       [--actor-output-limit ACTOR_OUTPUT_LIMIT]
+                       [--actor-planner-output-limit ACTOR_PLANNER_OUTPUT_LIMIT]
+                       [--actor-author-output-limit ACTOR_AUTHOR_OUTPUT_LIMIT]
+                       [--actor-author-thinking {default,off,medium}]
+                       [--actor-author-action-rule {on,off}]
+                       [--actor-planner-reasoning-history {keep,drop}]
+                       [--actor-concise {on,off}]
+                       [--actor-planner-budget-s ACTOR_PLANNER_BUDGET_S]
+                       [--actor-planner-salvage-s ACTOR_PLANNER_SALVAGE_S]
+                       [--actor-serving-f1 {on,off}]
+                       [--actor-answer-protocol {off,f2}]
+                       [--actor-answer-force-frac ACTOR_ANSWER_FORCE_FRAC]
+                       [--actor-planner-think-budget ACTOR_PLANNER_THINK_BUDGET]
+                       [--actor-local-via-orchestrator {on,off}]
+                       [--actor-local-orchestrator-roles ACTOR_LOCAL_ORCHESTRATOR_ROLES]
+                       [--actor-author-budget-s ACTOR_AUTHOR_BUDGET_S]
+                       [--actor-steps ACTOR_STEPS]
+                       [--actor-wire-test-record ACTOR_WIRE_TEST_RECORD]
+                       [--allow-untested-actor-seats REASON]
+                       [--actor-timeout-s ACTOR_TIMEOUT_S] [--workers WORKERS]
+                       [--worker-root WORKER_ROOT]
+                       [--worker-build-root WORKER_BUILD_ROOT]
+                       [--lane-actor-models LANE_ACTOR_MODELS]
+                       [--scratch-min-free-gb SCRATCH_MIN_FREE_GB]
+                       [--scratch-keep {none,failed,all}]
+                       [--actor-authors ACTOR_AUTHORS]
+                       [--actor-authors-budget ACTOR_AUTHORS_BUDGET]
+                       [--actor-authors-wall ACTOR_AUTHORS_WALL]
+                       [--actor-authors-panel-wall ACTOR_AUTHORS_PANEL_WALL]
+                       [--actor-authors-cancel-factor ACTOR_AUTHORS_CANCEL_FACTOR]
+                       [--actor-pool-tokens ACTOR_POOL_TOKENS]
+                       [--actor-authors-check ACTOR_AUTHORS_CHECK]
+                       [--cpu-held-intervals-v2 {on,off}]
+                       [--cpu-window-yield {on,off}]
+                       [--cpu-measurement-gpu-quiet {off,lock}]
+                       [--gpu-cpu-region-claim {on,off}]
+                       [--cpu-window-wait-bound-s CPU_WINDOW_WAIT_BOUND_S]
+                       [--cpu-window-path CPU_WINDOW_PATH]
+                       [--lane-targets LANE_TARGETS] [--lane LANE]
+                       [--cpu-window-bus-agent CPU_WINDOW_BUS_AGENT]
+run_retained.py: error: REFUSED store anchor: git rev-parse --verify failed in /mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/tree: fatal: Needed a single revision
+
+ACTUAL_MAIN_STDOUT attested= False
+ACTUAL_MAIN_EXACT_FLAG_ARGV ["--worktree", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/tree", "--anchor-build", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/store/cpu-synthetic-store", "--model", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf", "--store", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/store", "--iterations", "1", "--workers", "1", "--worker-root", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/lanes", "--worker-build-root", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/builds", "--cpu-serving-launch", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/launch.json", "--frozen-prompts", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/prompts.json", "--experimental-branch", "ak/experimental/cpu-serving-test", "--iterations", "5", "--serving-pairs", "2", "--cpu-calibrate-serving", "3", "--out", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/result", "--allow-untested-actor-seats", "synthetic fixture actors", "--dry-run", "--floor-registry", "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj/registry.yaml", "--floor-registry-role", "ds41_test_role", "--serving-instrument", "matched_process_v2", "--serving-pairs", "24", "--cpu-calibrate-serving", "24", "--allow-unverified-anchor"]
+
+ACTUAL TEST PASS attested= False
+{
+  "actual_main": true,
+  "exact_flag_both_cases": "--allow-unverified-anchor",
+  "cases": 2,
+  "fixture_kind": "synthetic-model-free-store",
+  "retained_directories": [
+    "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-8mqpqja_",
+    "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-4qpl8_dj"
+  ],
+  "python_deletion_guard": "no_attempts",
+  "test_sha256": "51650790754941835fae30ed7fa7e85f43615fdfd98c6fac38c716dccf60ec64"
+}

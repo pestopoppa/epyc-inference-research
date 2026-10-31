@@ -1,0 +1,42 @@
+ACTUAL TEST START attested= True
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/run_retained.py", line 73, in <module>
+    run_cases([True])
+    ~~~~~~~~~^^^^^^^^
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/run_retained.py", line 45, in run_cases
+    tests.test_actual_main_store_anchor_dry_run_is_read_only_and_attested(attested)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/final/scripts/kernel_rnd/autokernel/loop/test_store_anchor_dry_run.py", line 125, in test_actual_main_store_anchor_dry_run_is_read_only_and_attested
+    cpu_fixture(dry_run=True, runtime_declaration=False)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/scripts/kernel_rnd/autokernel/loop/test_existing_cpu_run.py", line 266, in test_existing_main_cpu_five_iterations_preserves_canonical_champion
+    rc, _calls, _planners, _scratch, log = fixture._run_one_keep()
+                                           ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/scripts/kernel_rnd/autokernel/loop/test_promotion_targets.py", line 368, in _run_one_keep
+    rc = run_mod.main(argv)
+  File "/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/scripts/kernel_rnd/autokernel/loop/test_existing_cpu_run.py", line 263, in cpu_main
+    return real_main(argv)
+  File "/usr/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1234, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/final/scripts/kernel_rnd/autokernel/loop/test_store_anchor_dry_run.py", line 97, in invoke
+    assert 'UNATTESTED' not in text
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+EXPECTED SOURCE MUTATION RED: original store startup emits UNATTESTED under exact flag
+{
+  "actual_main": true,
+  "exact_flag_both_cases": "--allow-unverified-anchor",
+  "cases": 1,
+  "fixture_kind": "synthetic-model-free-store",
+  "retained_directories": [
+    "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-shrwx1sn"
+  ],
+  "python_deletion_guard": "no_attempts",
+  "test_sha256": "df41b99977f1285f336c9d7e5795fe5eeda50d5e45176076c76ddc58d96cb685"
+}

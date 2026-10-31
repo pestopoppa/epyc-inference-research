@@ -1,0 +1,60 @@
+ACTUAL TEST START attested= True
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/final/scripts/kernel_rnd/autokernel/loop/test_store_anchor_dry_run.py", line 87, in invoke
+    assert real_main(actual_argv) == 0
+           ~~~~~~~~~^^^^^^^^^^^^^
+  File "834bef12-parent-startup-mutation", line 1, in main
+    #!/usr/bin/env python3
+                    ^^^^^^
+    ...<3 lines>...
+            --worktree /mnt/raid0/llm/tmp/ak-loop-tree \
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/scripts/kernel_rnd/autokernel/loop/champion.py", line 236, in verify_startup
+    verify_anchor(anchor_build, worktree, head, allow_unverified=allow_unverified_anchor,
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  experimental_identity=experimental_identity)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/scripts/kernel_rnd/autokernel/loop/champion.py", line 181, in verify_anchor
+    raise StartupRefused(f"REFUSED: {anchor_build} carries no provenance.json,"
+                         f" which anchor-gen-* dirs write by contract "
+                         f"(pool.promote_anchor). {INCIDENT}")
+autokernel.loop.champion.StartupRefused: REFUSED: /mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-254sev92/store/anchor-gen-001 carries no provenance.json, which anchor-gen-* dirs write by contract (pool.promote_anchor). This guard exists because of the 2026-08-31 single-champion incident: runs 18-20 optimised bare v9 on a sibling branch while the real champion sat one branch over, unchecked.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/run_retained.py", line 73, in <module>
+    run_cases([True])
+    ~~~~~~~~~^^^^^^^^
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/run_retained.py", line 45, in run_cases
+    tests.test_actual_main_store_anchor_dry_run_is_read_only_and_attested(attested)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/final/scripts/kernel_rnd/autokernel/loop/test_store_anchor_dry_run.py", line 127, in test_actual_main_store_anchor_dry_run_is_read_only_and_attested
+    cpu_fixture(dry_run=True, runtime_declaration=False)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/scripts/kernel_rnd/autokernel/loop/test_existing_cpu_run.py", line 266, in test_existing_main_cpu_five_iterations_preserves_canonical_champion
+    rc, _calls, _planners, _scratch, log = fixture._run_one_keep()
+                                           ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/scripts/kernel_rnd/autokernel/loop/test_promotion_targets.py", line 368, in _run_one_keep
+    rc = run_mod.main(argv)
+  File "/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/scripts/kernel_rnd/autokernel/loop/test_existing_cpu_run.py", line 263, in cpu_main
+    return real_main(argv)
+  File "/usr/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1234, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/final/scripts/kernel_rnd/autokernel/loop/test_store_anchor_dry_run.py", line 89, in invoke
+    raise AssertionError(errors.getvalue().splitlines()[-1]) from exc
+AssertionError: WARNING   floor registry master OVERRIDDEN (explicit): /mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-254sev92/registry.yaml is NOT the registry of the code repo (/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/orchestration/model_registry.yaml); floors are read from a different file than this code's own commit carries
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/run_retained.py", line 76, in <module>
+    assert last.line and "'UNATTESTED' not in text" in last.line, (last, error)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: (<FrameSummary file /mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/final/scripts/kernel_rnd/autokernel/loop/test_store_anchor_dry_run.py, line 89 in invoke>, AssertionError("WARNING   floor registry master OVERRIDDEN (explicit): /mnt/raid0/llm/tmp/refactor-01a16fc3/ak-exact-flag-private-20261031/retained/fixture-254sev92/registry.yaml is NOT the registry of the code repo (/mnt/raid0/llm/worktrees/mains/refactor-research-code-01a16fc3/orchestration/model_registry.yaml); floors are read from a different file than this code's own commit carries"))
