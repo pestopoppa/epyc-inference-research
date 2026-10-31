@@ -6093,6 +6093,7 @@ def main(argv: list[str] | None = None) -> int:
             anchor_commit=current_anchor_commit[0], surface=args.surface,
             pairs=args.serving_pairs if direct_launch else args.pairs,
             noise_floor_pct=floor, model=str(args.model),
+            source_identity="scripts.kernel_rnd.autokernel.loop.run",
             outcomes=[o.to_attempt() for o in outcomes],
             iterations_planned=args.iterations, step=step,
             champion_head=_git(args.worktree, "rev-parse", "HEAD"),

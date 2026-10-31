@@ -9,6 +9,7 @@ producer previously rendered as a clean, empty, trusted page.
 from datetime import datetime, timedelta, timezone
 import json
 import math
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -27,6 +28,46 @@ def _outcomes():
 
 
 class Write(unittest.TestCase):
+
+    def test_loop_status_binds_process_generation_and_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "store"
+            status.write(root, state="starting", epoch="e" * 64,
+                         campaign_id="ak-loop", anchor_commit="a" * 40,
+                         surface="tg128", pairs=5, noise_floor_pct=1.0,
+                         source_identity="scripts.kernel_rnd.autokernel.loop.run")
+            identity = status.read(root)["process_identity"]
+        self.assertEqual(identity["schema"], status.PROCESS_IDENTITY_SCHEMA)
+        self.assertEqual(identity["pid"], os.getpid())
+        self.assertGreater(identity["start_ticks"], 0)
+        self.assertTrue(identity["boot_id"])
+        self.assertEqual(identity["source_identity"],
+                         "scripts.kernel_rnd.autokernel.loop.run")
+        self.assertEqual(identity["store_path"], str(root.resolve()))
+
+    def test_process_identity_parses_proc_stat_after_final_parenthesis(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            proc_root = root / "proc"
+            (proc_root / "42").mkdir(parents=True)
+            tail = ["R", *(["0"] * 18), "987654"]
+            (proc_root / "42" / "stat").write_text(
+                "42 (comm with ) embedded parens) " + " ".join(tail))
+            boot_id = root / "boot_id"
+            boot_id.write_text("boot-fixture\n")
+            identity = status.process_identity(
+                root / "store", "fixture-runner", pid=42,
+                proc_root=proc_root, boot_id_path=boot_id)
+        self.assertEqual(identity["start_ticks"], 987654)
+        self.assertEqual(identity["boot_id"], "boot-fixture")
+
+    def test_process_identity_failure_is_unknown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            identity = status.process_identity(
+                root / "store", "fixture-runner", pid=42,
+                proc_root=root / "missing-proc", boot_id_path=root / "missing-boot")
+        self.assertIsNone(identity)
 
     def test_r24_8_no_measurement_alarm_excludes_mid_formation_stops(self):
         outcomes = ([{"status": "refused_at_formation", "reason": "no safe edit",
