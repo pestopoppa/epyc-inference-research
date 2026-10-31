@@ -4,9 +4,15 @@ It is NOT a coherence or correctness judge. Every verdict carries `semantic: "un
 "is the answer right / is the text sensible" comes from tier 0 (paired identity), tier 1(a)
 (ground-truth graders) or tier 2 (an injected judge) of the gate, never from here.
 
-Two rule sets live side by side, so a verdict always names the rules that produced it:
+Three rule sets live side by side, so a verdict always names the rules that produced it:
 
-  degeneracy.v2        `classify`. Moved verbatim in logic from
+  degeneracy.v2.1      `classify`: v2 with the G2-CONC amendment 5 rules (2026-10-24).
+                       Accept printable ASCII (including math/code/markdown symbols) and
+                       newline/tab; low uniqueness needs top >= .20 or run >= 5.
+                       The v1 character statistic remains available as `ascii_ok_v1`.
+  degeneracy.v2        `classify_stats`: retained for legacy stored v1 statistics.
+                       Printable-ASCII share cannot be recovered from those statistics.
+                       Original rules moved verbatim in logic from
                        /mnt/raid0/llm/tmp/gpu-block-27b-20261003/degeneracy.py (`inf70-degeneracy.v2`,
                        2026-10-04, q38t7-rescore). The id is now `degeneracy.v2`; `lineage` names the
                        origin so a row scored by either is recognisably the same rules.
@@ -23,7 +29,7 @@ Two rule sets live side by side, so a verdict always names the rules that produc
                          uniq   uniq < uniq_floor(n) = 0.30 * (max(n,200)/200) ** -0.5 (length-aware);
                                 counts ONLY with top >= 0.10 or run >= 3. Alone it never fires.
                        1..15-token outputs are SHORT (not a failure). EARLY-EOS is n == 0 with eos.
-  inf70-degeneracy.v1  `classify_v1`. FROZEN for continuity (`v1_cls` on every v2 verdict). It is the
+  inf70-degeneracy.v1  `classify_v1`. FROZEN for continuity (`v1_cls` on every full-text verdict). It is the
                        lib_gpublock.classify reading of the INF-70 classify.py. Known defects: fixed
                        `uniq < 0.35` is length-insensitive (every 1000-1500-token reasoning trace is
                        SALAD), uniq fires alone, chat "stop" on a 1-token answer is EARLY-EOS.
@@ -37,7 +43,9 @@ import collections
 
 V1_ID = "inf70-degeneracy.v1"
 V2_ID = "degeneracy.v2"
+V21_ID = "degeneracy.v2.1"
 V2_LINEAGE = "inf70-degeneracy.v2 (gpu-block-27b-20261003/degeneracy.py, 2026-10-04)"
+V21_LINEAGE = V2_LINEAGE + "; G2-CONC amendment 5 (2026-10-24), shared adoption"
 MIN_N = 16
 EOS_MAX_N = 4
 TOP_MAX = 0.25
@@ -49,7 +57,8 @@ LOOP_MIN_LEN = 48
 LOOP_COPIES = 3
 LOOP_MATCH = 0.90
 UNIQ_A, UNIQ_N0, UNIQ_EXP = 0.30, 200, -0.5
-SOFT_TOP, SOFT_RUN = 0.10, 3
+SOFT_TOP, SOFT_RUN = 0.10, 3  # legacy stored-stat v2 replay
+V21_SOFT_TOP, V21_SOFT_RUN = 0.20, 5
 OK_PUNCT = " .,;:'\"-()!?\n"
 FAIL_CLASSES = ("DEGENERATE", "EMPTY", "EARLY-EOS", "HTTP-ERROR")
 
@@ -113,19 +122,21 @@ def classify_v1(text: str, toks: list[int], finish: str | None, http_ok: bool = 
 
 
 def _v2_reasons(n: int, uniq: float, top: float, run: int, words: int, ascii_ok: float,
-                loop: dict | None) -> tuple[list[str], list[str]]:
+                loop: dict | None, *, soft_top: float = SOFT_TOP,
+                soft_run: int = SOFT_RUN) -> tuple[list[str], list[str]]:
     hard = [r for r, bad in (("top", top >= TOP_MAX), ("run", run >= RUN_MAX), ("loop", bool(loop)),
                              ("words", words < WORDS_MIN * n), ("ascii", ascii_ok < ASCII_MIN)) if bad]
     soft = []
     if uniq < uniq_floor(n):
         soft.append("uniq_low")
-        if top >= SOFT_TOP or run >= SOFT_RUN:
+        if top >= soft_top or run >= soft_run:
             hard.append("uniq+stuck")
     return hard, soft
 
 
-def _v2_short(n: int, finish: str | None, http_ok: bool) -> dict | None:
-    base = {"classifier": V2_ID, "semantic": "unchecked"}
+def _v2_short(n: int, finish: str | None, http_ok: bool,
+              classifier: str = V2_ID) -> dict | None:
+    base = {"classifier": classifier, "semantic": "unchecked"}
     if not http_ok:
         return {**base, "cls": "HTTP-ERROR", "n": 0}
     eos = finish in ("stop", "eos")
@@ -137,19 +148,23 @@ def _v2_short(n: int, finish: str | None, http_ok: bool) -> dict | None:
 
 
 def classify(text: str, toks: list[int], finish: str | None, http_ok: bool = True) -> dict:
-    """degeneracy.v2 from the full text and its (real) token ids."""
+    """degeneracy.v2.1 from the full text and its (real) token ids."""
     n = len(toks) if http_ok else 0
-    early = _v2_short(n, finish, http_ok)
+    early = _v2_short(n, finish, http_ok, V21_ID)
     v1 = classify_v1(text, toks, finish, http_ok)["cls"]
     if early:
         return {**early, "v1_cls": v1}
     s = _stats(text, toks)
     loop = loop_evidence(toks)
-    hard, soft = _v2_reasons(n, s["uniq"], s["top"], s["run"], s["words"], s["ascii_ok"], loop)
-    return {"classifier": V2_ID, "semantic": "unchecked", "cls": "DEGENERATE" if hard else "OK",
+    ascii21 = sum(ch.isascii() and (ch.isprintable() or ch in "\n\t")
+                  for ch in text) / max(1, len(text))
+    hard, soft = _v2_reasons(n, s["uniq"], s["top"], s["run"], s["words"], ascii21, loop,
+                             soft_top=V21_SOFT_TOP, soft_run=V21_SOFT_RUN)
+    return {"classifier": V21_ID, "semantic": "unchecked", "cls": "DEGENERATE" if hard else "OK",
             "review": hard == ["ascii"], "reasons": hard, "soft": soft, "n": n, "finish": finish,
             "uniq": round(s["uniq"], 3), "uniq_floor": round(uniq_floor(n), 3), "top": round(s["top"], 3),
-            "run": s["run"], "words": s["words"], "ascii_ok": round(s["ascii_ok"], 3), "loop": loop or None,
+            "run": s["run"], "words": s["words"], "ascii_ok": round(ascii21, 3), "ascii_ok_v1": round(s["ascii_ok"], 3),
+            "loop": loop or None,
             "v1_cls": v1}
 
 

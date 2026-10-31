@@ -376,7 +376,7 @@ def test_cli_exit_codes_and_schema(tmp_path, capsys):
     out = tmp_path / "v.json"
     assert cli_main(["--base", b, "--cand", same, "--truth", t, "--text-only", "--out", str(out)]) == 0
     rec = json.loads(out.read_text())
-    assert rec["schema"] == CG.SCHEMA_ID and rec["degeneracy_classifier"] == "degeneracy.v2"
+    assert rec["schema"] == CG.SCHEMA_ID and rec["degeneracy_classifier"] == "degeneracy.v2.1"
     assert set(rec["aggregate"]) >= {"n", "identical", "regressions", "both_bad", "needs_review", "gate"}
     for it in rec["items"]:
         assert set(it) >= {"tier", "verdict", "reasons", "degeneracy", "answer_check", "texts"}

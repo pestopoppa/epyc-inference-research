@@ -110,6 +110,8 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_readme.py
 PYTEST_SMOKE += scripts/lib/test_qwen38_flash_next_recipe.py
 # Keep canonical kernel paths, launch prefixes, and linkage guards in the default gate.
 PYTEST_SMOKE += scripts/lib/test_canonical_recipe.py
+# G2-CONC: exercise native paired-gate rules and model-free retained fixtures.
+PYTEST_SMOKE += scripts/lib/coherence_gate/tests
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check evidence-check autopilot-gate'

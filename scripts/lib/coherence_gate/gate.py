@@ -5,7 +5,7 @@
             text AND equal token ids when both arms carry them. A row's own `sha256` is verified
             against its text, never trusted in place of it.
     tier 1  deterministic, for items that diverged:
-            (a) ground-truth answer checks (answers.py), (b) degeneracy.v2 (degeneracy.py) on real
+            (a) ground-truth answer checks (answers.py), (b) degeneracy.v2.1 (degeneracy.py) on real
             token ids (tokens.py refuses synthetic ones).
             PAIRED: a REGRESSION is the candidate doing worse than base on the same item: a higher
             degeneracy severity against a non-SHORT anchor, or correct -> wrong/unanswered.
@@ -33,7 +33,7 @@ from . import degeneracy as D
 from . import tokens as T
 
 SCHEMA_ID = "epyc.coherence_gate.v1"
-LIBRARY_VERSION = "coherence_gate 1.0.1"
+LIBRARY_VERSION = "coherence_gate 1.1.0"
 VERDICTS = ("PASS", "REGRESSION", "BOTH_BAD", "NEEDS_REVIEW")
 
 JudgeFn = Callable[[dict], Any]
@@ -143,7 +143,7 @@ def _identity(b: Output, c: Output) -> dict:
 
 
 def _degeneracy(b: Output, c: Output, tokenizer: T.Tokenizer | None, allow_text_only: bool) -> tuple[dict, dict]:
-    """degeneracy.v2 on both arms, with a SYMMETRIC token source: real ids where carried, the injected
+    """degeneracy.v2.1 on both arms, with a SYMMETRIC token source: real ids where carried, the injected
     tokenizer for an arm without them, else (declared) text-only for BOTH arms."""
     have = [o.token_ids is not None for o in (b, c) if o.http_ok]
     force = None
@@ -332,8 +332,8 @@ def evaluate(base_rows: Iterable[dict] | dict, cand_rows: Iterable[dict] | dict,
     items = [evaluate_pair(base.get(k), cand.get(k), tmap.get(k), judge_fn=judge_fn, tokenizer=tokenizer,
                            allow_text_only=allow_text_only, graders=graders)
              for k in order]
-    return {"schema": SCHEMA_ID, "library": LIBRARY_VERSION, "degeneracy_classifier": D.V2_ID,
-            "degeneracy_lineage": D.V2_LINEAGE, "graders": A.GRADERS_VERSION,
+    return {"schema": SCHEMA_ID, "library": LIBRARY_VERSION, "degeneracy_classifier": D.V21_ID,
+            "degeneracy_lineage": D.V21_LINEAGE, "graders": A.GRADERS_VERSION,
             "decoding": "greedy (asserted by the caller; tier 0 identity is only decisive under greedy)",
             "tokenizer": getattr(tokenizer, "tokenizer_id", None), "text_only_declared": allow_text_only,
             "judge": (getattr(judge_fn, "judge_id", getattr(judge_fn, "__name__", repr(judge_fn)))

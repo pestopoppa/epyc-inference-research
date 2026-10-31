@@ -22,7 +22,7 @@ def test_long_model_reasoning_is_ok_in_v2_and_salad_in_v1(n):
         text, ids = cut(r, n)
         v2 = D.classify(text, ids, "length")
         assert v2["cls"] == "OK", v2
-        assert v2["semantic"] == "unchecked" and v2["classifier"] == D.V2_ID
+        assert v2["semantic"] == "unchecked" and v2["classifier"] == D.V21_ID
         # the defect being fixed: v1 calls every one of these SALAD on uniq alone
         v1 = D.classify_v1(text, ids, "length")
         assert v1["cls"] == "SALAD" and v1["salad_reasons"] == ["uniq"], v1

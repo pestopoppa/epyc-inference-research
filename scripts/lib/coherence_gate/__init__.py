@@ -5,7 +5,7 @@ lib_gpublock re-implementation and ~15 client copies). No inference, no processe
 that a harness already captured and returns one verdict per item, naming the tier that decided it.
 
     tier 0  paired byte-identity vs the base/anchor arm (greedy)      -> PASS
-    tier 1  ground-truth answer checks + degeneracy.v2 on REAL token ids, compared PAIRED
+    tier 1  ground-truth answer checks + degeneracy.v2.1 on REAL token ids, compared PAIRED
             -> REGRESSION (candidate worse) | BOTH_BAD (reported, not failed) | PASS
             SHORT anchors cannot establish a degeneracy regression; flagged outputs need review.
     tier 2  injected judge_fn(item_pair), only for diverged items with no decisive ground truth;
@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from . import answers, degeneracy, tokens
 from .answers import GRADERS, GRADERS_VERSION, grade, grader_for, register_grader
-from .degeneracy import V1_ID, V2_ID, classify, classify_stats, classify_v1, severity
+from .degeneracy import V1_ID, V2_ID, V21_ID, classify, classify_stats, classify_v1, severity
 from .gate import (LIBRARY_VERSION, SCHEMA_ID, VERDICTS, GateInputError, aggregate, evaluate,
                    evaluate_pair, load_jsonl, normalize_row, sha256_text)
 from .tokens import (FnTokenizer, HFTokenizer, ServerTokenizer, TokenProvenanceError, fake_reason,
@@ -38,7 +38,7 @@ from .tokens import (FnTokenizer, HFTokenizer, ServerTokenizer, TokenProvenanceE
 __all__ = [
     "answers", "degeneracy", "tokens",
     "GRADERS", "GRADERS_VERSION", "grade", "grader_for", "register_grader",
-    "V1_ID", "V2_ID", "classify", "classify_stats", "classify_v1", "severity",
+    "V1_ID", "V2_ID", "V21_ID", "classify", "classify_stats", "classify_v1", "severity",
     "LIBRARY_VERSION", "SCHEMA_ID", "VERDICTS", "GateInputError", "aggregate", "evaluate",
     "evaluate_pair", "load_jsonl", "normalize_row", "sha256_text",
     "FnTokenizer", "HFTokenizer", "ServerTokenizer", "TokenProvenanceError", "fake_reason",
