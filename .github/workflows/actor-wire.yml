@@ -1,6 +1,7 @@
 name: actor native wire gate
 on:
   push:
+    branches: [main]
     paths: ['scripts/kernel_rnd/autokernel/loop/**', '.github/workflows/actor-wire.yml']
   pull_request:
     paths: ['scripts/kernel_rnd/autokernel/loop/**', '.github/workflows/actor-wire.yml']
@@ -21,7 +22,7 @@ jobs:
       - name: Install pinned native clients and test dependencies
         run: |
           npm install --global @openai/codex@0.163.0 @anthropic-ai/claude-code@2.1.310 opencode-ai@1.18.31
-          python -m pip install pytest mcp
+          python -m pip install pytest mcp pyyaml
       - name: Admission and failure controls
         env:
           PYTHONPATH: scripts/kernel_rnd
