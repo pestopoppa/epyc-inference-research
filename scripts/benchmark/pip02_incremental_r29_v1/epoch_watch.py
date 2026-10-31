@@ -141,8 +141,9 @@ def need(o):
  arm=o['arm'];n=o['shard'];eid=epoch_id(o);W=S/('paddle-watch-r29' if arm=='paddle' else 'watch');state=W/'epochs'/f's{n:03}'/eid
  if state.exists():return False
  shard_dir=state.parent
- if shard_dir.exists() and any(p.is_dir() for p in shard_dir.iterdir()):return True
+ prior_epochs=shard_dir.exists() and any(p.is_dir() for p in shard_dir.iterdir())
  rows=legacy(arm,n)
+ if prior_epochs and not complete_snapshot(rows):return True
  if not rows:
   if arm=='odl' and (W/f'refused-s{n:02}').exists():
    baselines=W/'epochs'/'legacy-refusal-baselines';baselines.mkdir(parents=True,exist_ok=True);baseline=baselines/f's{n:03}.json'
