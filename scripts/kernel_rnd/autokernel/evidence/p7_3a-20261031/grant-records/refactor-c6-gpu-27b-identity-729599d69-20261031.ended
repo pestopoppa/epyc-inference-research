@@ -1,0 +1,7 @@
+rc=2 time=2026-10-31T18:47:27Z reason=job-rc-2:exited
+job_id=refactor-c6-gpu-27b-identity-729599d69-20261031
+owner=refactor
+step=job-run
+estimated_wall_s=7200
+started=2026-10-31T18:09:41Z
+regions=mi210_0,72-79

@@ -258,12 +258,13 @@ class SharedRewardRuntimeTests(unittest.TestCase):
             identity = mock.Mock(to_dict=lambda: {"identity_sha256": "b" * 64})
             def verify_side_effect(*_args, **kwargs):
                 if kwargs["kfd_pid"] == 122:
-                    raise __import__(
-                        "scripts.kernel_rnd.autokernel.controller.split_runtime_verifier",
-                        fromlist=["RuntimeMapsIncomplete"]).RuntimeMapsIncomplete("wrapper")
+                    raise S.split_runtime_verifier.RuntimeMapsIncomplete("wrapper")
                 return identity
-            with mock.patch("scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime", return_value=manifest), \
-                 mock.patch("scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_runtime_maps", side_effect=verify_side_effect) as verify:
+            with mock.patch.object(
+                    S.split_runtime_verifier, "verify_split_runtime",
+                    return_value=manifest), mock.patch.object(
+                    S.split_runtime_verifier, "verify_runtime_maps",
+                    side_effect=verify_side_effect) as verify:
                 result = runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
             self.assertEqual(result, {"identity_sha256": "b" * 64})
             self.assertEqual(verify.call_args.kwargs["kfd_pid"], pid)
@@ -289,16 +290,12 @@ class SharedRewardRuntimeTests(unittest.TestCase):
                 "model": {"path": str(model)}, "model_sha256": "a" * 64,
                 "device_id": "mi210_0"})
             residency = mock.Mock(kfd_pids=(pid,))
-            split_module = __import__(
-                "scripts.kernel_rnd.autokernel.controller.split_runtime_verifier",
-                fromlist=["RuntimeMapsIncomplete"])
-            with mock.patch(
-                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
-                    "split_runtime_verifier.verify_split_runtime", return_value=mock.Mock()), \
-                 mock.patch(
-                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
-                    "split_runtime_verifier.verify_runtime_maps",
-                    side_effect=split_module.RuntimeMapsIncomplete("model not mapped yet")):
+            with mock.patch.object(
+                    S.split_runtime_verifier, "verify_split_runtime",
+                    return_value=mock.Mock()), mock.patch.object(
+                    S.split_runtime_verifier, "verify_runtime_maps",
+                    side_effect=S.split_runtime_verifier.RuntimeMapsIncomplete(
+                        "model not mapped yet")):
                 with self.assertRaisesRegex(E.RuntimeMapsNotReady,
                                             "not mapped the complete sealed arm"):
                     runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
@@ -323,16 +320,12 @@ class SharedRewardRuntimeTests(unittest.TestCase):
                 "model": {"path": str(model)}, "model_sha256": "a" * 64,
                 "device_id": "mi210_0"})
             residency = mock.Mock(kfd_pids=(pid,))
-            split_module = __import__(
-                "scripts.kernel_rnd.autokernel.controller.split_runtime_verifier",
-                fromlist=["SplitRuntimeError"])
-            with mock.patch(
-                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
-                    "split_runtime_verifier.verify_split_runtime", return_value=mock.Mock()), \
-                 mock.patch(
-                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
-                    "split_runtime_verifier.verify_runtime_maps",
-                    side_effect=split_module.SplitRuntimeError("opposite HIP arm")):
+            with mock.patch.object(
+                    S.split_runtime_verifier, "verify_split_runtime",
+                    return_value=mock.Mock()), mock.patch.object(
+                    S.split_runtime_verifier, "verify_runtime_maps",
+                    side_effect=S.split_runtime_verifier.SplitRuntimeError(
+                        "opposite HIP arm")):
                 with self.assertRaisesRegex(StaticRegistryError,
                                             "violate the sealed arm"):
                     runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
@@ -359,12 +352,11 @@ class SharedRewardRuntimeTests(unittest.TestCase):
                 "device_id": "mi210_0"})
             residency = mock.Mock(kfd_pids=(122, 123))
             identity = mock.Mock(to_dict=lambda: {"identity_sha256": "b" * 64})
-            with mock.patch(
-                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
-                    "split_runtime_verifier.verify_split_runtime", return_value=mock.Mock()), \
-                 mock.patch(
-                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
-                    "split_runtime_verifier.verify_runtime_maps", return_value=identity):
+            with mock.patch.object(
+                    S.split_runtime_verifier, "verify_split_runtime",
+                    return_value=mock.Mock()), mock.patch.object(
+                    S.split_runtime_verifier, "verify_runtime_maps",
+                    return_value=identity):
                 with self.assertRaisesRegex(StaticRegistryError,
                                             "exactly one owned KFD process"):
                     runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
@@ -736,10 +728,9 @@ class StaticBuildCacheTests(unittest.TestCase):
             yield
 
     def invoke(self, fixture, permit=None):
-        with mock.patch(
-                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.worktree.run_build",
-                side_effect=fixture.run_build), mock.patch(
-                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime",
+        with mock.patch.object(
+                S.worktree, "run_build", side_effect=fixture.run_build), mock.patch.object(
+                S.split_runtime_verifier, "verify_split_runtime",
                 side_effect=self.split_verifier):
             return fixture.builder.build(
                 fixture.candidate, object(), permit or fixture.permit)
@@ -820,8 +811,8 @@ class StaticBuildCacheTests(unittest.TestCase):
         changed["programs"]["cmake"]["sha256"] = "0" * 64
         changed["toolchain_sha256"] = E.schemas.content_hash(
             {key: value for key, value in changed.items() if key != "toolchain_sha256"})
-        with mock.patch(
-                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry._build_environment_and_toolchain",
+        with mock.patch.object(
+                S, "_build_environment_and_toolchain",
                 return_value=(environment, changed)), self.assertRaisesRegex(
                     StaticRegistryError, "ref differs"):
             self.invoke(fixture, {**fixture.permit, "operation_key": "a" * 64})
@@ -832,10 +823,9 @@ class StaticBuildCacheTests(unittest.TestCase):
         changed_proposal = json.loads(json.dumps(fixture.candidate.proposal))
         changed_proposal["change"]["estimated_diff_size"] = 8
         changed_candidate = replace(fixture.candidate, proposal=changed_proposal)
-        with mock.patch(
-                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.worktree.run_build",
-                side_effect=fixture.run_build), mock.patch(
-                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime",
+        with mock.patch.object(
+                S.worktree, "run_build", side_effect=fixture.run_build), mock.patch.object(
+                S.split_runtime_verifier, "verify_split_runtime",
                 side_effect=self.split_verifier):
             second = fixture.builder.build(
                 changed_candidate, object(),
@@ -1625,10 +1615,9 @@ class StaticBuildCacheTests(unittest.TestCase):
                     {**fixture.permit, "operation_key": key * 64}))
             except BaseException as exc:
                 errors.append(exc)
-        with mock.patch(
-                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.worktree.run_build",
-                side_effect=fixture.run_build), mock.patch(
-                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime",
+        with mock.patch.object(
+                S.worktree, "run_build", side_effect=fixture.run_build), mock.patch.object(
+                S.split_runtime_verifier, "verify_split_runtime",
                 side_effect=self.split_verifier):
             first = threading.Thread(target=invoke, args=("6",))
             second = threading.Thread(target=invoke, args=("7",))

@@ -1,0 +1,11 @@
+Focused controller tests resource-admission evidence
+
+Run elapsed interval reconstructed from focused log duration and command envelope:
+2026-10-31 18:49:13.9–18:51:46.8 UTC; CPUs 80–81; test runtime 152.97 s.
+Active exact CPU grants reviewed after the run:
+- codex3-pareval120-k20-gen-20261031: CPUs 0–23, 16:09–20:09 UTC
+- yarn-oolong-s2-host256-eligible26-v32-20261031: CPUs 24–47, 16:26–Nov 1 04:26 UTC
+- codex3-cs45-tail-rescore-20261031: CPUs 48–71, 17:57–Nov 1 03:57 UTC
+- refactor-a4a-c4-27b-pair-20261031: mi210_0 plus CPUs 184–191, 18:47–20:47 UTC
+- refactor-c6-gpu-27b-identity-729599d69-20261031: mi210_0 plus CPUs 72–79; ended 18:47:27 UTC
+Neither 80 nor 81 is in those active masks. /mnt/raid0/llm/tmp/compute-flags/prep-locks/32-33.lock and pair-32-33.lock were empty. The initial coarse-q3 interpretation was incorrect; no grant overlap is claimed.

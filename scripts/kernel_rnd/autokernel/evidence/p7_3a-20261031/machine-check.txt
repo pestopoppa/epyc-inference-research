@@ -1,0 +1,6 @@
+source_log=/mnt/raid0/llm/tmp/codex-ni-research-scoring-bug-20261031/P7.3a-current-tests.log
+unique_event_ids=71
+FAIL+SUBFAIL=61
+ERROR=10
+TOTAL=71
+per_signature_group={"arena_python_pin_drift": 12, "bytecode_disabled_invocation": 2, "malformed_negative_test_double": 1, "missing_pinned_model": 4, "missing_scipy": 1, "nested_subprocess_import_path": 2, "runtime_maps_mock_alias": 4, "sparse_checkout_provenance_sources": 1, "stale_v9_acceptance_bundle": 10, "stale_v9_instrument_path_expectation": 1, "static_build_cache_mock_alias": 33}
