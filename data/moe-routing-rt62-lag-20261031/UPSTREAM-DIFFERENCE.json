@@ -1,0 +1,59 @@
+{
+  "loads": [
+    [
+      2,
+      1,
+      3,
+      3
+    ],
+    [
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      2,
+      1,
+      1,
+      0
+    ]
+  ],
+  "reference": [
+    [
+      0,
+      1
+    ],
+    [
+      1
+    ],
+    [
+      0
+    ],
+    [
+      0,
+      1
+    ]
+  ],
+  "surrogate": [
+    [
+      0,
+      1,
+      0
+    ],
+    [
+      1
+    ],
+    [
+      0
+    ],
+    [
+      1
+    ]
+  ],
+  "torch_version": "2.13.0+cu130",
+  "upstream_commit": "774ce244b87cc0eb8d4b94ab9f5de2ab22049f01",
+  "upstream_policy_sha256": "52241603827a1a1d19a395d48f5d618a7336fd1ceee631127e6782c644f736dc",
+  "execution": "CPU tensor; no model or GPU execution",
+  "legacy_policy_sha256": "5c8b88e411a3834518d9138a88cf96ab71af9324364196e0c4d6908d3ce1b1a8"
+}
