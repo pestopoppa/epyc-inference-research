@@ -673,6 +673,8 @@ _SELF_CLEANING = "self-cleaning with-block temp; lands in the run scope's tmp (a
 #: `module:qualname:kind` -> (count, reason). Counts are exact: a NEW creating call in an
 #: allowlisted function fails too, so each one is reviewed.
 ALLOWLIST: dict[str, tuple[int, str]] = {
+    "stage_lifecycle.py:StageLifecycle.__init__:mkdir": (1, "evidence: parent of the durable stage receipt and CAS ledger"),
+    "stage_lifecycle.py:StageLifecycle.restore_native_custody:mkdir": (1, "evidence: restore the original CAS-bound native custody artifact directory"),
     "custody.py:write_json:mkdir": (1, "evidence: parent of a durable custody record"),
     "custody.py:write_json:open-write": (1, "evidence: exclusive durable custody record"),
     "custody.py:copy_reply_bundle:copytree": (1, "evidence: durable copy of raw reply bundle"),
