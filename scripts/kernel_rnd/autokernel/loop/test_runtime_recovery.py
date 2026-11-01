@@ -156,12 +156,12 @@ def test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix
     monkeypatch.setattr(sr, "_child_command", lambda row: [sys.executable, "-m", __name__, "--child", *row])
     with mock.patch.object(sr, "_scheduled_failure_account", side_effect=KeyboardInterrupt):
         with pytest.raises(KeyboardInterrupt):
-            sr.main(argv)
+            sr._main(argv)
     before = json.loads((state_root / "serial-state.json").read_text())
     assert before["active"] and before["next_batch"] == 0
     first = state_root / "batches/batch-000000"
     assert (first / "loop-runtime-interruption.json").exists(), (first / "stderr.log").read_text()
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     second = state_root / "batches/batch-000001"
     saved = json.loads((state_root / "serial-state.json").read_text())
     assert not saved["failed_targets"] and saved["next_batch"] == 2
@@ -191,7 +191,7 @@ def test_valid_closed_claim_does_not_retry_unrelated_failure(tmp_path, monkeypat
     (state_root / "fixture-pair.json").write_text(json.dumps(pair.to_dict()))
     monkeypatch.setenv("PYTHONPATH", str(Path(sr.__file__).resolve().parents[2]))
     monkeypatch.setattr(sr, "_child_command", lambda row: [sys.executable, "-m", __name__, "--child", *row])
-    assert sr.main(argv) == 1
+    assert sr._main(argv) == 1
     saved = json.loads((state_root / "serial-state.json").read_text())
     assert saved["next_batch"] == 1 and "0" in saved["failed_targets"]
     assert not saved["runtime_recovery"] and not saved.get("runtime_recovery_errors")

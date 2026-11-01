@@ -1319,7 +1319,7 @@ def _publish_current_run(pointer: Path, root: Path, run_id: str, phase: str) -> 
         return True
 
 
-def main(argv=None) -> int:
+def _main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--target-args", type=Path, action="append")
@@ -2643,10 +2643,18 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             process = None
             output_capture = None
             try:
+                from . import lane_watchdog
+                child_env = None
+                capability_fds = ()
+                if lane_watchdog._SUPERVISED:
+                    capability_env, capability_fds = lane_watchdog.serial_child_capability(
+                        option(child_argv, "--store"))
+                    child_env = dict(os.environ, **capability_env)
                 process = subprocess.Popen(
                     [*child_prefix, *_child_command(child_argv)],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    cwd=Path(__file__).resolve().parents[4])
+                    cwd=Path(__file__).resolve().parents[4], env=child_env,
+                    pass_fds=capability_fds)
                 output_capture = _BoundedChildOutput(process, directory)
                 active["pid"] = process.pid
                 try:
@@ -2745,6 +2753,35 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
         finally:
             for sig, handler in handlers.items():
                 signal.signal(sig, handler)
+
+
+def main(argv=None) -> int:
+    from . import lane_watchdog
+    actual = list(sys.argv[1:] if argv is None else argv)
+    states = lane_watchdog._option(actual, "--state-dir")
+    if (not states or lane_watchdog._SUPERVISED or any(flag in actual for flag in
+            ("--dry-run", "--retention-plan-only"))):
+        return _main(actual)
+    if option(actual, "--resolved-campaign"):
+        from .serial_roster import build_targets
+        targets, _, _ = build_targets(
+            option(actual, "--resolved-campaign"), option(actual, "--owned-targets"),
+            target_root=option(actual, "--target-root") or Path(states[-1]) / "targets",
+            common_path=option(actual, "--common-args"), state_root=states[-1])
+    else:
+        targets = [_target_args(Path(p)) for p in lane_watchdog._option(actual, "--target-args")]
+    if not targets:
+        return _main(actual)
+    stores = [option(row, "--store") for row in targets]
+    if any(not value for value in stores):
+        raise SerialRefused("every supervised target requires its canonical store")
+    documents = [option(row, flag) for row in targets for flag in _DOCUMENT_FLAGS
+                 if option(row, flag) is not None]
+    return lane_watchdog.supervise(
+        "scripts.kernel_rnd.autokernel.loop.serial_run", actual, keys=stores, extra_files=documents,
+        recovery_checkpoint=Path(states[-1]) / "serial-state.json",
+        file_options=("--target-args", "--resolved-campaign", "--owned-targets",
+        "--common-args", "--initial-continuation", "--scheduler-manifest"))
 
 
 if __name__ == "__main__":

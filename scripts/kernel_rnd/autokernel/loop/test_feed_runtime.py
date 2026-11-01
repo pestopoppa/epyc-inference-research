@@ -357,7 +357,7 @@ def test_v2_dry_run_never_constructs_feed_or_sqlite(tmp_path, monkeypatch, capsy
     path = tmp_path / "startup.json"
     path.write_text(json.dumps(doc))
     monkeypatch.setattr(evidence_feed, "EvidenceFeed", lambda **_: pytest.fail("feed opened"))
-    assert unified_driver.main(["--config", str(path), "--dry-run"]) == 0
+    assert unified_driver._main(["--config", str(path), "--dry-run"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert "evidence_feed:installed-feed:unavailable" in report["missing_prerequisites"]
     assert not report["execution_authorized"]
@@ -530,7 +530,7 @@ registry = S.ProviderRegistry({
     "fixture-lifecycle": S.ProviderBinding(lifecycle_provider=FullHeldProvider(root / "containers")),
     "fixture-readiness": S.ProviderBinding(readiness_check=lambda: (True, None)),
 }, evidence_feeds={"installed-feed": binding()})
-result = unified_driver.main(["--config", str(root / "startup.json"),
+result = unified_driver._main(["--config", str(root / "startup.json"),
     "--listen", "127.0.0.1:" + sys.argv[2]], provider_registry=registry)
 sys.setprofile(None)
 threading.setprofile(None)

@@ -1,0 +1,186 @@
+commit cbdf2e88a8bbee8389849ac8800989f0109d348d
+Author:     EPYC Codex <codex@local>
+AuthorDate: Sun Nov 1 02:05:46 2026 +0000
+Commit:     EPYC Codex <codex@local>
+CommitDate: Sun Nov 1 02:05:46 2026 +0000
+
+    instrument mtmd transcript completion and token trace
+
+diff --git a/tools/mtmd/mtmd-cli.cpp b/tools/mtmd/mtmd-cli.cpp
+index ba156f1c5..7541f23c2 100644
+--- a/tools/mtmd/mtmd-cli.cpp
++++ b/tools/mtmd/mtmd-cli.cpp
+@@ -14,6 +14,9 @@
+ #include <limits.h>
+ #include <cinttypes>
+ #include <clocale>
++#include <cstdio>
++#include <cstdlib>
++#include <string>
+ 
+ #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <signal.h>
+@@ -31,6 +34,37 @@
+ static volatile bool g_is_generating = false;
+ static volatile bool g_is_interrupted = false;
+ 
++// Scratch measurement instrument only: opt-in, exclusive, length-framed trace.
++// Missing end record or an unknown status is not a completed transcript.
++struct cs8_trace {
++    FILE * f = nullptr;
++    bool enabled = false;
++    bool failed = false;
++    explicit cs8_trace(const char * mode) {
++        const char * path = std::getenv("CS8_TRANSCRIPT_PATH");
++        if (!path || !*path) return;
++        enabled = true;
++        f = std::fopen(path, "wx");
++        if (!f || std::fprintf(f, "CS8TRACE 1 %s\n", mode) < 0) failed = true;
++    }
++    void token(llama_token id, const std::string & piece) {
++        if (!enabled || failed) return;
++        if (std::fprintf(f, "T %d %zu\n", (int) id, piece.size()) < 0 ||
++            std::fwrite(piece.data(), 1, piece.size(), f) != piece.size() ||
++            std::fputc('\n', f) == EOF) failed = true;
++    }
++    bool finish(const char * status, const char * reason) {
++        if (!enabled) return true;
++        if (!failed && std::fprintf(f, "E %s %s\n", status, reason) < 0) failed = true;
++        if (!failed && std::fflush(f) != 0) failed = true;
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
++        if (!failed && fsync(fileno(f)) != 0) failed = true;
++#endif
++        return !failed;
++    }
++    ~cs8_trace() { if (f) std::fclose(f); }
++};
++
+ /**
+  * Please note that this is NOT a production-ready binary.
+  * It is a playground for trying multimodal support in llama.cpp.
+@@ -216,9 +250,14 @@ struct mtmd_cli_context {
+ };
+ 
+ static int generate_response(mtmd_cli_context & ctx, int n_predict) {
++    cs8_trace trace("chat");
++    if (trace.failed) return 1;
++    const char * reason = "token_limit";
++    bool complete = false;
+     llama_tokens generated_tokens;
+     for (int i = 0; i < n_predict; i++) {
+         if (i > n_predict || !g_is_generating || g_is_interrupted) {
++            reason = "interrupted";
+             LOG("\n");
+             break;
+         }
+@@ -228,14 +267,20 @@ static int generate_response(mtmd_cli_context & ctx, int n_predict) {
+         common_sampler_accept(ctx.smpl, token_id, true);
+ 
+         if (llama_vocab_is_eog(ctx.vocab, token_id) || ctx.check_antiprompt(generated_tokens)) {
++            trace.token(token_id, "");
++            complete = llama_vocab_is_eog(ctx.vocab, token_id);
++            reason = complete ? "eog" : "antiprompt";
+             LOG("\n");
+             break; // end of generation
+         }
+ 
+-        LOG("%s", common_token_to_piece(ctx.lctx, token_id).c_str());
++        const std::string piece = common_token_to_piece(ctx.lctx, token_id);
++        trace.token(token_id, piece);
++        LOG("%s", piece.c_str());
+         fflush(stdout);
+ 
+         if (g_is_interrupted) {
++            reason = "interrupted";
+             LOG("\n");
+             break;
+         }
+@@ -255,11 +300,16 @@ static int generate_response(mtmd_cli_context & ctx, int n_predict) {
+     msg.content = generated_text;
+     ctx.chat_history.push_back(std::move(msg));
+ 
+-    return 0;
++    if (g_is_interrupted) { complete = false; reason = "interrupted"; }
++    return trace.finish(complete ? "complete" : "unknown", reason) ? 0 : 1;
+ }
+ 
+ // feed an audio file to a realtime model chunk by chunk, printing the transcript as it is produced
+ static int run_audio_stream(mtmd_cli_context & ctx, const std::string & fname, int n_predict) {
++    cs8_trace trace("stream");
++    if (trace.failed) return 1;
++    const char * reason = "interrupted";
++    bool complete = false;
+     auto res = mtmd_helper_bitmap_init_from_file(ctx.ctx_vision.get(), fname.c_str(), false, ctx.init_opt);
+     if (!res.bitmap) {
+         return 1; // error is already printed by libmtmd
+@@ -285,6 +335,7 @@ static int run_audio_stream(mtmd_cli_context & ctx, const std::string & fname, i
+     LOG("Transcribing %.1f s of audio, fed in chunks of %d ms\n\n", (double) n_samples / rate, sparams.step_ms);
+ 
+     size_t      n_fed  = 0;
++    bool        flushed = false;
+     int         n_gen  = 0;
+     llama_token tok    = LLAMA_TOKEN_NULL;
+     const int64_t t_start = ggml_time_us();
+@@ -299,15 +350,27 @@ static int run_audio_stream(mtmd_cli_context & ctx, const std::string & fname, i
+                 LOG_ERR("%s: stream error\n", __func__);
+                 return 1;
+             }
++            complete = n == -1 && flushed && n_fed == n_samples;
++            reason = complete ? "stream_end" : "unexpected_stream_end";
+             break; // end of stream
+         }
+         if (n == 0) {
+             if (n_fed < n_samples) {
+                 const size_t cnt = std::min(n_chunk, n_samples - n_fed);
+-                mtmd_audio_stream_push(stream.get(), samples + n_fed, cnt);
++                const int push_status = mtmd_audio_stream_push(stream.get(), samples + n_fed, cnt);
++                if (trace.enabled && push_status != 0) {
++                    reason = "push_error";
++                    break;
++                }
+                 n_fed += cnt;
+-            } else if (mtmd_audio_stream_flush(stream.get(), true) != 0) {
+-                break; // already ended
++            } else {
++                const int flush_status = mtmd_audio_stream_flush(stream.get(), true);
++                if (flush_status != 0) {
++                    complete = flush_status == 1 && flushed && n_fed == n_samples;
++                    reason = complete ? "stream_end" : "flush_error";
++                    break; // already ended
++                }
++                flushed = true;
+             }
+             continue;
+         }
+@@ -329,14 +392,20 @@ static int run_audio_stream(mtmd_cli_context & ctx, const std::string & fname, i
+         common_sampler_accept(ctx.smpl, tok, true);
+         t_dec += ggml_time_us() - t1;
+         if (llama_vocab_is_eog(ctx.vocab, tok)) {
++            trace.token(tok, "");
++            complete = flushed && n_fed == n_samples;
++            reason = complete ? "eog" : "early_eog";
+             break;
+         }
+         // the model emits pad and word-boundary tokens between words
++        const std::string piece = llama_vocab_is_control(ctx.vocab, tok) ? "" : common_token_to_piece(ctx.lctx, tok);
++        trace.token(tok, piece);
+         if (!llama_vocab_is_control(ctx.vocab, tok)) {
+-            LOG("%s", common_token_to_piece(ctx.lctx, tok).c_str());
++            LOG("%s", piece.c_str());
+             fflush(stdout);
+         }
+         if (++n_gen >= n_predict) {
++            reason = "token_limit";
+             break;
+         }
+     }
+@@ -348,7 +417,8 @@ static int run_audio_stream(mtmd_cli_context & ctx, const std::string & fname, i
+         t_enc / 1e6, t_dec / 1e6, (t_enc + t_dec) / 1e3 / std::max(n_gen, 1));
+     llama_perf_context_print(ctx.lctx);
+ 
+-    return 0;
++    if (g_is_interrupted) { complete = false; reason = "interrupted"; }
++    return trace.finish(complete ? "complete" : "unknown", reason) ? 0 : 1;
+ }
+ 
+ static std::string chat_add_and_format(mtmd_cli_context & ctx, common_chat_msg & new_msg) {

@@ -1,0 +1,99 @@
+{
+  "base": "92b5dee62f86808732a05138765a6fe28d98c90c",
+  "files": {
+    "scripts/kernel_rnd/autokernel/loop/WATCHDOG-PROVIDERS.md": {
+      "fixture": null,
+      "source": "cebb0cda0ef952e448365d1b1bb3ab43ed74f431788c39c76d6b2c1aa15504bd"
+    },
+    "scripts/kernel_rnd/autokernel/loop/campaign_service.py": {
+      "fixture": "7c07ffa258c3caf9df556d50b68468ff8b5ba74a50c1ccfffd9d690274e1c696",
+      "source": "7c07ffa258c3caf9df556d50b68468ff8b5ba74a50c1ccfffd9d690274e1c696"
+    },
+    "scripts/kernel_rnd/autokernel/loop/lane_watchdog.py": {
+      "fixture": "4fe4f484b56727a594d5b1ab33a63dbb7070525c56ec29c1e8577d0e17038706",
+      "source": "4fe4f484b56727a594d5b1ab33a63dbb7070525c56ec29c1e8577d0e17038706"
+    },
+    "scripts/kernel_rnd/autokernel/loop/lane_watchdog_child.py": {
+      "fixture": "c48fb277450efa9bd8c680a5dca5bbfdf65f77ec735989219f9cbe64771d9bfc",
+      "source": "c48fb277450efa9bd8c680a5dca5bbfdf65f77ec735989219f9cbe64771d9bfc"
+    },
+    "scripts/kernel_rnd/autokernel/loop/provider_factories.py": {
+      "fixture": "0b2dd1a54602760c08bbcce1086e9fc046b0671acf7c863ab6685ac5b5ecf012",
+      "source": "0b2dd1a54602760c08bbcce1086e9fc046b0671acf7c863ab6685ac5b5ecf012"
+    },
+    "scripts/kernel_rnd/autokernel/loop/run.py": {
+      "fixture": "f417f58706669523baaacb761fb70d040f79b18ff4fdd08e4493b0c9ed1cc7ac",
+      "source": "f417f58706669523baaacb761fb70d040f79b18ff4fdd08e4493b0c9ed1cc7ac"
+    },
+    "scripts/kernel_rnd/autokernel/loop/serial_run.py": {
+      "fixture": "8594683fa029fb3c88bd48570393bd826f58df56a3c92925f4aadb27d81abec0",
+      "source": "8594683fa029fb3c88bd48570393bd826f58df56a3c92925f4aadb27d81abec0"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_campaign_service.py": {
+      "fixture": "bd439c9e9c0b0f2fc997ae0ce5cb86fd0250c4e0de75aef8fae78634f71cb475",
+      "source": "bd439c9e9c0b0f2fc997ae0ce5cb86fd0250c4e0de75aef8fae78634f71cb475"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_campaign_worker_lifecycle.py": {
+      "fixture": "2dc88b30dded1b7753cc801ba2412d52b7664d95ab01e94caabdc06c63443adf",
+      "source": "2dc88b30dded1b7753cc801ba2412d52b7664d95ab01e94caabdc06c63443adf"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_cpu_screen_scheduling.py": {
+      "fixture": "3001cc2360b3b51384ba162c52ef934197def27570b1a1f55ac0d1aeeb07afa1",
+      "source": "3001cc2360b3b51384ba162c52ef934197def27570b1a1f55ac0d1aeeb07afa1"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_existing_cpu_run.py": {
+      "fixture": "f69ca6ca6498898ced7e445956447390b3102a9193808770053e374327bcd22e",
+      "source": "f69ca6ca6498898ced7e445956447390b3102a9193808770053e374327bcd22e"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_feed_runtime.py": {
+      "fixture": "e4996f8128f0e6545242c3c5b5c1194f57e32f78c21a12f2c6da0780f8987a0e",
+      "source": "e4996f8128f0e6545242c3c5b5c1194f57e32f78c21a12f2c6da0780f8987a0e"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_lane_watchdog.py": {
+      "fixture": "fb4f4113f9f1c284f34c3ee1a8ad066f027382a3b8a9f78093d311c63d2c9ba5",
+      "source": "fb4f4113f9f1c284f34c3ee1a8ad066f027382a3b8a9f78093d311c63d2c9ba5"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_matched_serving_roster.py": {
+      "fixture": "2ea114e0926954d088b2d3ac00e7a163409d729839548d2b1e95eaa7a7545d16",
+      "source": "2ea114e0926954d088b2d3ac00e7a163409d729839548d2b1e95eaa7a7545d16"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py": {
+      "fixture": "82579ba9e18f95033fb46010eaefc52f4c721a1d347fde34c10be40d7bb7dc23",
+      "source": "82579ba9e18f95033fb46010eaefc52f4c721a1d347fde34c10be40d7bb7dc23"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_serial_control.py": {
+      "fixture": "f36bd8b6029a490ca0ca2644ecb7818475bc1aa070612b50c4d1b68229940826",
+      "source": "f36bd8b6029a490ca0ca2644ecb7818475bc1aa070612b50c4d1b68229940826"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_serial_reconcile.py": {
+      "fixture": "d25243df30aff5f962db03fa57a9e88937fb13ed9d2fa106824b25f0ef319bce",
+      "source": "d25243df30aff5f962db03fa57a9e88937fb13ed9d2fa106824b25f0ef319bce"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_serial_roster.py": {
+      "fixture": "6fdddfdc6e09b84587de9e77e571eae99f614175ce014bd03705c47fe22d0732",
+      "source": "6fdddfdc6e09b84587de9e77e571eae99f614175ce014bd03705c47fe22d0732"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_serial_run.py": {
+      "fixture": "a772261727cca860ca1f2417ddf26a4fe92940caa6f3901686d4ef87cd4afb91",
+      "source": "a772261727cca860ca1f2417ddf26a4fe92940caa6f3901686d4ef87cd4afb91"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_serial_status.py": {
+      "fixture": "64c5a5ab1f4e966d7afdf6b37c49a26d0119b13a53cc28cf88e48e8d7b0d0131",
+      "source": "64c5a5ab1f4e966d7afdf6b37c49a26d0119b13a53cc28cf88e48e8d7b0d0131"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_standalone_inputs.py": {
+      "fixture": "2361c3e4f14ccf22ffc58098fb874f3af2196b8b5d4035b47d7296debfe42fb0",
+      "source": "2361c3e4f14ccf22ffc58098fb874f3af2196b8b5d4035b47d7296debfe42fb0"
+    },
+    "scripts/kernel_rnd/autokernel/loop/test_standalone_native_inputs.py": {
+      "fixture": "0e7fe81b8cf82f1c1dda0fa8e00baf69be149f44f0d919fc4dd3ca3fefd7891a",
+      "source": "0e7fe81b8cf82f1c1dda0fa8e00baf69be149f44f0d919fc4dd3ca3fefd7891a"
+    },
+    "scripts/kernel_rnd/autokernel/loop/unified_driver.py": {
+      "fixture": "aabd11b1d5cf860b675a81c90714044de77863b3edd9ced1c929bba5eeddd9c5",
+      "source": "aabd11b1d5cf860b675a81c90714044de77863b3edd9ced1c929bba5eeddd9c5"
+    }
+  },
+  "fixture_head": "92b5dee62f86808732a05138765a6fe28d98c90c",
+  "python_syntax": "pass"
+}

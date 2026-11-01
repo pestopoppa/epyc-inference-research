@@ -12,10 +12,11 @@ import pytest
 from . import actor_wire_gate, floor_registry, run
 from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion as cpu_fixture
 from .test_floor_registry import MASTER_TEXT
+from . import test_promotion_targets as promotion_fixture
 
 
 def snapshot(root):
-    result = {}
+    result = {'.': ('directory', root.lstat().st_mtime_ns)}
     for path in sorted(root.rglob('*')):
         stat = path.lstat()
         if path.is_symlink():
@@ -33,6 +34,20 @@ def test_actual_main_store_anchor_dry_run_is_read_only_and_attested(attested):
     real_main = run.main
     original_backend = run.actors.backend_for
     receipts = []
+    original_fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor
+
+    class StoreImageFixture(original_fixture):
+        def setUp(self):
+            super().setUp()
+            # A store image has a cpu-* name, not the pool's anchor-gen-* contract.
+            # Construct it directly, preserving the fixture's legacy anchor too.
+            previous = self.startup_anchor
+            self.startup_anchor = self.store / 'cpu-synthetic-store'
+            (self.startup_anchor / 'bin').mkdir(parents=True)
+            (self.startup_anchor / 'bin/libggml-cpu.so').write_bytes(
+                (previous / 'bin/libggml-cpu.so').read_bytes())
+            assert not (self.startup_anchor / 'provenance.json').exists()
+
     class AttestationRefused(Exception):
         pass
 
@@ -42,7 +57,8 @@ def test_actual_main_store_anchor_dry_run_is_read_only_and_attested(attested):
         store, anchor, tree = arg('--store'), arg('--anchor-build'), arg('--worktree')
         # Convert the fixture's synthetic build into a store image. All model,
         # kernel, timing and actor observations remain the fixture's doubles.
-        (anchor / 'provenance.json').unlink()
+        assert anchor.name.startswith('cpu-')
+        assert not (anchor / 'provenance.json').exists()
         head = run._git(tree, 'rev-parse', 'HEAD')
         (anchor / 'VERSION.txt').write_text(f'version: 1 ({head[:9] if attested else "0" * 9})\nbuilt with GNU 15.2.0 for Linux x86_64\n')
         (anchor / 'SHA256SUMS').write_text('fixture build inventory\n')
@@ -60,20 +76,28 @@ def test_actual_main_store_anchor_dry_run_is_read_only_and_attested(attested):
                         replace(original_backend(model, effort), binary=sys.executable)):
                 extra = ['--floor-registry', str(master), '--floor-registry-role', 'ds41_test_role',
                          '--serving-instrument', 'matched_process_v2', '--serving-pairs', '24',
-                         '--cpu-calibrate-serving', '24']
+                         '--cpu-calibrate-serving', '24', '--allow-unverified-anchor']
+                actual_argv = [*argv, *extra]
+                assert '--dry-run' in actual_argv
+                assert actual_argv.count('--allow-unverified-anchor') == 1
+                print('ACTUAL_MAIN_EXACT_FLAG_ARGV', json.dumps(actual_argv))
                 if attested:
                     try:
-                        assert real_main([*argv, *extra]) == 0
+                        assert real_main(actual_argv) == 0
                     except SystemExit as exc:
                         raise AssertionError(errors.getvalue().splitlines()[-1]) from exc
                 else:
                     with pytest.raises(SystemExit) as refused:
-                        real_main([*argv, *extra])
+                        real_main(actual_argv)
                     assert refused.value.code == 2
                     assert 'REFUSED store anchor' in errors.getvalue()
         finally:
             assert snapshot(store) == before
-            print(output.getvalue())
+            print(output.getvalue())  # preserve the enclosing legacy fixture contract
+            print("ACTUAL_MAIN_STDOUT attested=", attested, file=sys.__stdout__)
+            print(output.getvalue(), file=sys.__stdout__)
+            print("ACTUAL_MAIN_STDERR attested=", attested, file=sys.__stderr__)
+            print(errors.getvalue(), file=sys.__stderr__)
         text = output.getvalue()
         assert 'UNATTESTED' not in text
         if attested:
@@ -100,7 +124,8 @@ def test_actual_main_store_anchor_dry_run_is_read_only_and_attested(attested):
 
     old_registry = run._FLOOR_REGISTRY
     try:
-        with mock.patch.object(run, 'main', side_effect=invoke):
+        with mock.patch.object(promotion_fixture, 'TheKeepBuildsAProductionCompleteAnchor', StoreImageFixture), \
+                mock.patch.object(run, 'main', side_effect=invoke):
             if attested:
                 cpu_fixture(dry_run=True, runtime_declaration=False)
             else:

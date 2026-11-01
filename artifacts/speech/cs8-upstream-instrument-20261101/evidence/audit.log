@@ -1,0 +1,25 @@
+{
+  "diagnostic_only": true,
+  "exposure_sha256": "17f4755109db4a69c7f4cd32abcdd5136b11c392141d490470fa813c332f0e69",
+  "kfd_fd_seen": false,
+  "mapping_paths": [
+    "/mnt/raid0/llm/tmp/codex3-cs8-stt8-20261101/prefix-cpu/bin/libggml-base.so.0.28.0",
+    "/mnt/raid0/llm/tmp/codex3-cs8-stt8-20261101/prefix-cpu/bin/libggml-cpu.so.0.28.0",
+    "/mnt/raid0/llm/tmp/codex3-cs8-stt8-20261101/prefix-cpu/bin/libggml.so.0.28.0",
+    "/mnt/raid0/llm/tmp/codex3-cs8-stt8-20261101/prefix-cpu/bin/libllama-common.so.0.8.0",
+    "/mnt/raid0/llm/tmp/codex3-cs8-stt8-20261101/prefix-cpu/bin/libllama.so.0.8.0",
+    "/mnt/raid0/llm/tmp/codex3-cs8-stt8-20261101/prefix-cpu/bin/libmtmd.so.0.8.0"
+  ],
+  "nonempty_text": true,
+  "process": {
+    "birth_ticks": 162227419,
+    "pid": 797422,
+    "uid": 1000
+  },
+  "result_sha256": "f7b0e8761aa5d74f7c7c7f9ae1f7c98b51ee9bc5480293661140db9a1ec8e9bc",
+  "scientific_score": null,
+  "status": "complete",
+  "termination": "eog",
+  "token_count": 27
+}
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 0.12190141598694026, "sampled_peak_tree_rss_bytes": 21897216, "samples": 2, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 802369, "leader_birth": 162229668, "child_rc": 0, "children_drained": true, "failure": null}

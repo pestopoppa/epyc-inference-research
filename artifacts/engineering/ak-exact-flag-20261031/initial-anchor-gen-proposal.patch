@@ -1,0 +1,80 @@
+--- a/scripts/kernel_rnd/autokernel/loop/test_store_anchor_dry_run.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_store_anchor_dry_run.py
+@@ -12,10 +12,11 @@
+ from . import actor_wire_gate, floor_registry, run
+ from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion as cpu_fixture
+ from .test_floor_registry import MASTER_TEXT
++from . import test_promotion_targets as promotion_fixture
+ 
+ 
+ def snapshot(root):
+-    result = {}
++    result = {'.': ('directory', root.lstat().st_mtime_ns)}
+     for path in sorted(root.rglob('*')):
+         stat = path.lstat()
+         if path.is_symlink():
+@@ -33,6 +34,22 @@
+     real_main = run.main
+     original_backend = run.actors.backend_for
+     receipts = []
++    original_fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor
++
++    class StoreImageFixture(original_fixture):
++        def setUp(self):
++            # Construct a store image directly; do not delete a legacy receipt.
++            real_write = Path.write_text
++
++            def store_setup_write(path, text, *args, **kwargs):
++                if path.name == 'provenance.json' and path.parent.name == 'anchor-gen-001':
++                    return len(text)
++                return real_write(path, text, *args, **kwargs)
++
++            with mock.patch.object(Path, 'write_text', store_setup_write):
++                super().setUp()
++            assert not (self.startup_anchor / 'provenance.json').exists()
++
+     class AttestationRefused(Exception):
+         pass
+ 
+@@ -42,7 +59,7 @@
+         store, anchor, tree = arg('--store'), arg('--anchor-build'), arg('--worktree')
+         # Convert the fixture's synthetic build into a store image. All model,
+         # kernel, timing and actor observations remain the fixture's doubles.
+-        (anchor / 'provenance.json').unlink()
++        assert not (anchor / 'provenance.json').exists()
+         head = run._git(tree, 'rev-parse', 'HEAD')
+         (anchor / 'VERSION.txt').write_text(f'version: 1 ({head[:9] if attested else "0" * 9})\nbuilt with GNU 15.2.0 for Linux x86_64\n')
+         (anchor / 'SHA256SUMS').write_text('fixture build inventory\n')
+@@ -60,15 +77,19 @@
+                         replace(original_backend(model, effort), binary=sys.executable)):
+                 extra = ['--floor-registry', str(master), '--floor-registry-role', 'ds41_test_role',
+                          '--serving-instrument', 'matched_process_v2', '--serving-pairs', '24',
+-                         '--cpu-calibrate-serving', '24']
++                         '--cpu-calibrate-serving', '24', '--allow-unverified-anchor']
++                actual_argv = [*argv, *extra]
++                assert '--dry-run' in actual_argv
++                assert actual_argv.count('--allow-unverified-anchor') == 1
++                print('ACTUAL_MAIN_EXACT_FLAG_ARGV', json.dumps(actual_argv))
+                 if attested:
+                     try:
+-                        assert real_main([*argv, *extra]) == 0
++                        assert real_main(actual_argv) == 0
+                     except SystemExit as exc:
+                         raise AssertionError(errors.getvalue().splitlines()[-1]) from exc
+                 else:
+                     with pytest.raises(SystemExit) as refused:
+-                        real_main([*argv, *extra])
++                        real_main(actual_argv)
+                     assert refused.value.code == 2
+                     assert 'REFUSED store anchor' in errors.getvalue()
+         finally:
+@@ -100,7 +121,8 @@
+ 
+     old_registry = run._FLOOR_REGISTRY
+     try:
+-        with mock.patch.object(run, 'main', side_effect=invoke):
++        with mock.patch.object(promotion_fixture, 'TheKeepBuildsAProductionCompleteAnchor', StoreImageFixture), \
++                mock.patch.object(run, 'main', side_effect=invoke):
+             if attested:
+                 cpu_fixture(dry_run=True, runtime_declaration=False)
+             else:

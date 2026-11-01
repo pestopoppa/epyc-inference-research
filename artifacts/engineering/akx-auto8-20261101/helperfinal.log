@@ -1,0 +1,4 @@
+........................................................................ [ 90%]
+........                                                                 [100%]
+80 passed in 52.93s
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 53.34179902100004, "sampled_peak_tree_rss_bytes": 208322560, "samples": 522, "verified_exited_processes": 9, "verified_exited_threads": 9, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 1907334, "leader_birth": 162482586, "child_rc": 0, "children_drained": true, "failure": null}

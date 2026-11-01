@@ -265,7 +265,7 @@ def test_serial_child_wiring_persists_bounded_output_evidence(tmp_path, monkeypa
         "PYTHONPATH", os.pathsep.join((str(repo_root), str(repo_root / "scripts/kernel_rnd"))))
     # The hermetic GPU fixture has no CPU-screen dependency and still traverses
     # the real serial Popen, polling, continuation and capture wiring.
-    assert sr.main(argv[2:]) == 0
+    assert sr._main(argv[2:]) == 0
     batch = state / "batches/batch-000000"
     receipt = json.loads((batch / "child-output.json").read_text())
     maximum = sr.MAX_SERIAL_CHILD_LOG_BYTES_PER_STREAM
@@ -299,7 +299,7 @@ def test_retention_below_hard_floor_refuses_before_any_child(tmp_path, monkeypat
     _retention_policy(argv, 1, 2, 3)
     _free(monkeypatch, 0)
     with pytest.raises(sr.SerialRefused, match="hard safety floor"):
-        sr.main(argv)
+        sr._main(argv)
     assert not (state / "batches").exists()
     [record] = _decisions(state)
     assert record["verdict"] == "refused_below_hard_floor" and record["refuse"] is True
@@ -313,7 +313,7 @@ def test_retention_unreachable_target_above_floor_warns_and_drives(tmp_path, mon
     _free(monkeypatch, 2)
     driven = []
     monkeypatch.setattr(sr, "_drive", lambda *a, **k: driven.append(a) or 0)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     assert driven
     assert "WARNING: build retention could not reach" in capsys.readouterr().err
     [record] = _decisions(state)
@@ -327,7 +327,7 @@ def test_retention_above_trigger_is_logged_noop(tmp_path, monkeypatch):
     _retention_policy(argv, 1, 2, 3)
     _free(monkeypatch, 5)
     monkeypatch.setattr(sr, "_drive", lambda *a, **k: 0)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     [record] = _decisions(state)
     assert record["verdict"] == "noop_above_trigger" and record["removed"] == []
 
@@ -335,14 +335,14 @@ def test_retention_above_trigger_is_logged_noop(tmp_path, monkeypatch):
 def test_retention_floor_above_trigger_is_rejected(tmp_path):
     state = tmp_path / "state"
     with pytest.raises(SystemExit):
-        sr.main(["--state-dir", str(state), "--retention-plan-only",
+        sr._main(["--state-dir", str(state), "--retention-plan-only",
                  "--retention-hard-floor-free-gb", "300",
                  "--retention-trigger-free-gb", "250"])
 
 
 def test_retention_defaults_values(capsys, tmp_path):
     state = tmp_path / "state"
-    assert sr.main(["--state-dir", str(state), "--retention-plan-only"]) == 0
+    assert sr._main(["--state-dir", str(state), "--retention-plan-only"]) == 0
     plan = json.loads(capsys.readouterr().out)
     assert plan["trigger_free_bytes"] == 250 * 1024 ** 3
     assert plan["target_free_bytes"] == 320 * 1024 ** 3
@@ -351,7 +351,7 @@ def test_retention_defaults_values(capsys, tmp_path):
 
 def test_retention_plan_only_prints_and_never_drives(tmp_path, capsys):
     state = tmp_path / "state"
-    assert sr.main(["--state-dir", str(state), "--retention-plan-only",
+    assert sr._main(["--state-dir", str(state), "--retention-plan-only",
                     "--retention-hard-floor-free-gb", "0",
                     "--retention-trigger-free-gb", "0",
                     "--retention-target-free-gb", "0"]) == 0
@@ -390,7 +390,7 @@ def test_scheduled_actual_children_bind_fresh_selection_and_account_original_int
         tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, rounds=2)
     argv = _scheduled(tmp_path, argv)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     saved = json.loads((state / "serial-state.json").read_text())
     scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
     assert scheduler_state.campaign_attempts == 4
@@ -408,7 +408,7 @@ def test_new_serial_epoch_seeds_only_completed_prior_target_continuation(
         tmp_path, monkeypatch):
     old, argv = _inputs(tmp_path, monkeypatch, rounds=1)
     argv = _scheduled(tmp_path, argv[2:])  # one GPU target; no CPU screen or hardware
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     prior = old / "batches/batch-000000/loop-continuation.json"
     old_state_bytes = (old / "serial-state.json").read_bytes()
     old_receipt, old_sha = sr.load_completed(prior)
@@ -416,7 +416,7 @@ def test_new_serial_epoch_seeds_only_completed_prior_target_continuation(
     restarted = list(argv)
     restarted[restarted.index("--state-dir") + 1] = str(fresh)
     restarted += ["--initial-continuation", str(prior)]
-    assert sr.main(restarted) == 0
+    assert sr._main(restarted) == 0
     saved = json.loads((fresh / "serial-state.json").read_text())
     seen = [json.loads(line)["argv"] for line in (fresh / "seen.jsonl").read_text().splitlines()]
     assert len(seen) == 1
@@ -440,14 +440,14 @@ def test_new_serial_epoch_seeds_only_completed_prior_target_continuation(
 def test_seeded_dry_run_resumes_the_initial_continuation(tmp_path, monkeypatch):
     old, argv = _inputs(tmp_path, monkeypatch, rounds=1)
     argv = _scheduled(tmp_path, argv[2:])
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     prior = old / "batches/batch-000000/loop-continuation.json"
     fresh = tmp_path / "fresh-dry"
     restarted = list(argv)
     restarted[restarted.index("--state-dir") + 1] = str(fresh)
     calls = []
     monkeypatch.setattr(run, "main", lambda child: calls.append(list(child)) or 0)
-    assert sr.main([*restarted, "--initial-continuation", str(prior), "--dry-run"]) == 0
+    assert sr._main([*restarted, "--initial-continuation", str(prior), "--dry-run"]) == 0
     assert len(calls) == 1
     assert sr.option(calls[0], "--resume-run") == str(prior.resolve())
     assert calls[0][-1] == "--dry-run"
@@ -458,7 +458,7 @@ def test_initial_continuation_refuses_stopped_or_other_target_without_new_state(
         tmp_path, monkeypatch):
     old, argv = _inputs(tmp_path, monkeypatch, mode="stop", rounds=1)
     gpu = _scheduled(tmp_path, argv[2:])
-    assert sr.main(gpu) == 0
+    assert sr._main(gpu) == 0
     prior = old / "batches/batch-000000/loop-continuation.json"
     assert sr.load_completed(prior)[0]["terminal"] == "stopped"
     fresh = tmp_path / "fresh"
@@ -466,7 +466,7 @@ def test_initial_continuation_refuses_stopped_or_other_target_without_new_state(
     stopped[stopped.index("--state-dir") + 1] = str(fresh)
     stopped += ["--initial-continuation", str(prior)]
     with pytest.raises(SystemExit):
-        sr.main(stopped)
+        sr._main(stopped)
     assert not fresh.exists()
 
     # Reopen a complete GPU continuation against a CPU-only roster: exact
@@ -476,20 +476,20 @@ def test_initial_continuation_refuses_stopped_or_other_target_without_new_state(
     complete_dir = tmp_path / "complete"
     complete = list(gpu)
     complete[complete.index("--state-dir") + 1] = str(complete_dir)
-    assert sr.main(complete) == 0
+    assert sr._main(complete) == 0
     gpu_prior = complete_dir / "batches/batch-000000/loop-continuation.json"
     cpu = list(argv[:2] + argv[4:])
     cpu[cpu.index("--state-dir") + 1] = str(fresh)
     cpu += ["--initial-continuation", str(gpu_prior)]
     with pytest.raises(SystemExit):
-        sr.main(cpu)
+        sr._main(cpu)
     assert not fresh.exists()
 
 
 def test_scheduled_failed_child_accounts_only_original_released_claim(tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, mode="fail_held", rounds=1)
     argv = _scheduled(tmp_path, argv)
-    assert sr.main(argv) == 1
+    assert sr._main(argv) == 1
     saved = json.loads((state / "serial-state.json").read_text())
     scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
     assert scheduler_state.campaign_attempts == 2
@@ -502,7 +502,7 @@ def test_scheduled_lane_error_is_failed_accounting_and_remains_reschedulable(
         tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, mode="lane_error", rounds=2)
     argv = _scheduled(tmp_path, argv)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     saved = json.loads((state / "serial-state.json").read_text())
     scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
     assert saved["next_batch"] == 4 and saved["failed_targets"] == {}
@@ -519,7 +519,7 @@ def test_scheduled_fresh_children_account_science_abstention_without_comparison(
         tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, mode="abstained", rounds=1)
     argv = _scheduled(tmp_path, argv)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     saved = json.loads((state / "serial-state.json").read_text())
     scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
     assert saved["next_batch"] == 2 and saved["failed_targets"] == {}
@@ -539,7 +539,7 @@ def test_scheduled_restart_recovers_abstention_once_without_relaunching_child(
     argv = _scheduled(tmp_path, argv)
     with mock.patch.object(sr, "_scheduled_account", side_effect=KeyboardInterrupt):
         with pytest.raises(KeyboardInterrupt):
-            sr.main(argv)
+            sr._main(argv)
     crashed = json.loads((state / "serial-state.json").read_text())
     assert crashed["active"] is not None and crashed["next_batch"] == 0
     # The resumed owner is a new Python process, not merely another call on
@@ -548,7 +548,7 @@ def test_scheduled_restart_recovers_abstention_once_without_relaunching_child(
         "import json, sys\n"
         "from scripts.kernel_rnd.autokernel.loop import serial_run as sr\n"
         "sr._child_command = lambda argv: [sys.executable, sys.argv[2], *argv]\n"
-        "raise SystemExit(sr.main(json.loads(sys.argv[1])))\n"
+        "raise SystemExit(sr._main(json.loads(sys.argv[1])))\n"
     )
     restarted = sr.subprocess.run(
         (sr.sys.executable, "-c", runner, json.dumps(argv), str(tmp_path / "child.py")),
@@ -569,7 +569,7 @@ def test_scheduled_preclaim_failures_settle_each_selection_without_held_evidence
         tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, mode="fail_preclaim", rounds=1)
     argv = _scheduled(tmp_path, argv)
-    assert sr.main(argv) == 1
+    assert sr._main(argv) == 1
     saved = json.loads((state / "serial-state.json").read_text())
     scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
     assert scheduler_state.campaign_attempts == 0
@@ -579,7 +579,7 @@ def test_scheduled_preclaim_failures_settle_each_selection_without_held_evidence
     assert len(saved["failed_targets"]) == 2
     assert not list((state / "batches").glob("*/loop-held-claims.json"))
     seen = (state / "seen.jsonl").read_bytes()
-    assert sr.main(argv) == 1
+    assert sr._main(argv) == 1
     assert (state / "seen.jsonl").read_bytes() == seen
 
 
@@ -588,7 +588,7 @@ def test_postclaim_publication_failure_cannot_use_preclaim_settlement(tmp_path, 
     argv = _scheduled(tmp_path, argv)
     with pytest.raises(ss.SerialSchedulingRefused,
                        match="issued selection awaits settlement"):
-        sr.main(argv)
+        sr._main(argv)
     published = json.loads((state / "loop-status.json").read_text())
     assert published["state"] == "failed"
     assert published["step"].startswith("SerialSchedulingRefused: ")
@@ -611,7 +611,7 @@ def test_scheduler_refusal_between_batches_publishes_terminal_failure(tmp_path, 
 
     monkeypatch.setattr(ss, "select_target", refuse)
     with pytest.raises(ss.SerialSchedulingRefused, match="fixture scheduler refusal"):
-        sr.main(argv)
+        sr._main(argv)
     published = json.loads((state / "loop-status.json").read_text())
     assert published["state"] == "failed"
     assert published["step"] == "SerialSchedulingRefused: fixture scheduler refusal"
@@ -624,10 +624,10 @@ def test_scheduled_restart_accounts_original_completed_child_before_new_selectio
     argv = _scheduled(tmp_path, argv)
     with mock.patch.object(sr, "_scheduled_account", side_effect=KeyboardInterrupt):
         with pytest.raises(KeyboardInterrupt):
-            sr.main(argv)
+            sr._main(argv)
     crashed = json.loads((state / "serial-state.json").read_text())
     assert crashed["active"] is not None and crashed["next_batch"] == 0
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     recovered = json.loads((state / "serial-state.json").read_text())
     scheduler_state = scheduling.SchedulerState.from_dict(recovered["scheduler_state"])
     assert scheduler_state.campaign_attempts == 2
@@ -652,7 +652,7 @@ def test_original_child_cost_changes_next_selection_and_recovers_once(tmp_path, 
 
     with mock.patch.object(sr, "_scheduled_account", side_effect=crash_after_second_original_account):
         with pytest.raises(KeyboardInterrupt):
-            sr.main(argv)
+            sr._main(argv)
     first = json.loads((state / "batches/batch-000000/scheduler-selection.json").read_text())
     second = json.loads((state / "batches/batch-000001/scheduler-selection.json").read_text())
     crashed = json.loads((state / "serial-state.json").read_text())
@@ -660,7 +660,7 @@ def test_original_child_cost_changes_next_selection_and_recovers_once(tmp_path, 
     assert len(samples) == 1
     assert second["proposal"]["estimated_duration_seconds"] == samples[0]["held_seconds"]
     assert second["proposal"]["estimated_duration_seconds"] < first["proposal"]["estimated_duration_seconds"]
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     saved = json.loads((state / "serial-state.json").read_text())
     assert saved["scheduler_state"]["campaign_attempts"] == 3
     assert saved["last_reconciliation"]["batch_number"] == 1
@@ -668,14 +668,14 @@ def test_original_child_cost_changes_next_selection_and_recovers_once(tmp_path, 
     assert saved["cost_forecast"]["policy"] == ss.COST_FORECAST_POLICY
     seen = [json.loads(row) for row in (state / "seen.jsonl").read_text().splitlines()]
     assert len(seen) == 3 and all(not Path(f"/proc/{row['pid']}").exists() for row in seen)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     assert json.loads((state / "serial-state.json").read_text())["cost_forecast"] == saved["cost_forecast"]
     assert len((state / "seen.jsonl").read_text().splitlines()) == 3
 
 
 def test_actual_children_rotate_reuse_inputs_and_stop_at_finite_budget(tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     saved = json.loads((state / "serial-state.json").read_text())
     seen = [json.loads(line) for line in (state / "seen.jsonl").read_text().splitlines()]
     assert len(seen) == saved["next_batch"] == 4
@@ -686,7 +686,7 @@ def test_actual_children_rotate_reuse_inputs_and_stop_at_finite_budget(tmp_path,
     assert sr.option(seen[3]["argv"], "--resume-run").endswith("batch-000001/loop-continuation.json")
     assert len({sr.option(row["argv"], "--out") for row in seen}) == 4
     assert saved["active"] is None and not saved["failed_targets"]
-    assert sr.main(argv) == 0  # Completed restart does not replay four iterations.
+    assert sr._main(argv) == 0  # Completed restart does not replay four iterations.
     assert len((state / "seen.jsonl").read_text().splitlines()) == 4
     for row in seen:
         with pytest.raises(ProcessLookupError):
@@ -699,7 +699,7 @@ def test_gpu_full_result_recovers_missing_continuation_without_inventing_measure
                           mode="gpu_result_only_failure", rounds=1)
     argv = ["--target-args", argv[3], *argv[4:]]
     argv = _scheduled(tmp_path, argv)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     saved = json.loads((state / "serial-state.json").read_text())
     gpu_path = state / "batches/batch-000000/loop-continuation.json"
     gpu, gpu_sha = sr.load_completed(gpu_path)
@@ -717,7 +717,7 @@ def test_zero_exit_missing_gpu_terminal_settles_scheduler_failure(tmp_path, monk
     state, argv = _inputs(tmp_path, monkeypatch, mode="gpu_missing_zero", rounds=1)
     argv = ["--target-args", argv[3], *argv[4:]]
     argv = _scheduled(tmp_path, argv)
-    assert sr.main(argv) == 1
+    assert sr._main(argv) == 1
     saved = json.loads((state / "serial-state.json").read_text())
     assert saved["failed_targets"]
     assert {row["outcome"] for row in
@@ -728,7 +728,7 @@ def test_zero_exit_missing_gpu_terminal_settles_scheduler_failure(tmp_path, monk
 def test_runtime_recipe_reference_is_target_local_digest_bound_and_replay_stable(
         tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, mode="runtime_ref", rounds=2)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     seen = [json.loads(line)["argv"]
             for line in (state / "seen.jsonl").read_text().splitlines()]
     assert sr.option(seen[0], "--runtime-recipe-reference") is None
@@ -763,7 +763,7 @@ def test_serialized_targets_without_source_keeps_preserve_only_own_resume(
     first += ["--experimental-branch", sr.champion.CANONICAL_BRANCH]
     paths[0].write_text(json.dumps(first))
     paths[1].write_text(json.dumps(second))
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     seen = [json.loads(line)["argv"]
             for line in (state / "seen.jsonl").read_text().splitlines()]
     assert sr.option(seen[0], "--source-anchor-continuation") is None
@@ -778,7 +778,7 @@ def test_serialized_targets_without_source_keeps_preserve_only_own_resume(
 def test_no_success_without_matching_terminal_and_all_failed_continuous_exits(
         tmp_path, monkeypatch, mode):
     state, argv = _inputs(tmp_path, monkeypatch, mode=mode, rounds=0)
-    assert sr.main(argv) == 1
+    assert sr._main(argv) == 1
     saved = json.loads((state / "serial-state.json").read_text())
     assert len(saved["failed_targets"]) == 2
     assert not saved["last_results"] and saved["active"] is None
@@ -787,12 +787,12 @@ def test_no_success_without_matching_terminal_and_all_failed_continuous_exits(
 
 def test_stop_during_child_drains_captured_pid_and_persists_across_restart(tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, mode="stop", rounds=0)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     seen = [json.loads(line) for line in (state / "seen.jsonl").read_text().splitlines()]
     assert len(seen) == 1 and (state / "STOP").exists()
     row, _ = sr.load_completed(state / "batches/batch-000000/loop-continuation.json")
     assert row["terminal"] == "stopped" and row["iterations_completed"] == 0
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     assert len((state / "seen.jsonl").read_text().splitlines()) == 1
     with pytest.raises(ProcessLookupError):
         os.kill(seen[0]["pid"], 0)
@@ -822,7 +822,7 @@ def test_post_popen_status_failure_drains_before_another_child(tmp_path, monkeyp
 
     monkeypatch.setattr(sr.subprocess, "Popen", spawn)
     monkeypatch.setattr(sr.status, "write", write)
-    assert sr.main(argv) == 1
+    assert sr._main(argv) == 1
     assert len(spawned) == 1 and spawned[0].poll() is not None
     saved = json.loads((state / "serial-state.json").read_text())
     assert saved["active"] is None
@@ -830,7 +830,7 @@ def test_post_popen_status_failure_drains_before_another_child(tmp_path, monkeyp
 
 def test_continuation_does_not_read_large_original_measurement_result(tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, rounds=1)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     directory = state / "batches/batch-000000"
     with (directory / "loop-run.json").open("wb") as stream:
         stream.truncate(400 * 1024 * 1024)  # Sparse fixture, not a model or measurement.
@@ -848,7 +848,7 @@ def test_continuation_does_not_read_large_original_measurement_result(tmp_path, 
 @pytest.mark.parametrize("field", ["current_anchor", "selected_target", "binding", "terminal", "result_file"])
 def test_continuation_tampering_refused(tmp_path, monkeypatch, field):
     state, argv = _inputs(tmp_path, monkeypatch, rounds=1)
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     path = state / "batches/batch-000000/loop-continuation.json"
     row = json.loads(path.read_text())
     expected = row["binding"]
@@ -862,7 +862,7 @@ def test_existing_run_emits_actual_current_and_cor_then_resumes_without_anchor_r
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
-        real_main = run.main
+        real_main = run._main
 
         def original_main(argv):
             return real_main([*argv, "--allow-untested-actor-seats", "synthetic fixture actors"])
@@ -915,7 +915,7 @@ def test_existing_run_emits_actual_current_and_cor_then_resumes_without_anchor_r
 
 
 def test_actual_cpu_post_keep_resume_rebinds_original_launch_without_recalibration():
-    original_main = run.main
+    original_main = run._main
     resumed = []
 
     def first_then_resume_dry_run(argv):
@@ -954,7 +954,7 @@ def test_actual_cpu_experimental_keep_then_resumed_batch_restores_original_cor(
     refused ("restored champion of record differs from current anchor"). The
     resumed child must restore the ORIGINAL COR build, proven exact, reuse its
     calibrated floor frame, and still refuse a chain that names only the tip."""
-    original_main = run.main
+    original_main = run._main
     reached = []
 
     def first_then_resume(argv):
@@ -1068,7 +1068,7 @@ def test_continuation_cor_candidates_walk_legacy_chain_to_root(tmp_path):
 ])
 def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
         validation_failure, cross_worktree):
-    original_main = run.main
+    original_main = run._main
     observed = []
 
     def exercise(argv):
@@ -1999,7 +1999,7 @@ def test_c78_main_resume_block_advances_before_rebinding_the_anchor(tmp_path):
     dry run died in `_cpu_arm` on the pruned directory), and only for the same
     branch and a non-source resume."""
     import inspect
-    source = inspect.getsource(run.main)
+    source = inspect.getsource(run._main)
     advance = source.index("_advance_superseded_continuation(")
     bind = source.index('args.anchor_build = Path(resumed["current_anchor"]["path"])')
     first_arm = source.index("direct_launch = _cpu_arm(direct_launch, args.anchor_build)")

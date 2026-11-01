@@ -1,0 +1,43 @@
+{
+  "implementation_commit": "66085471f2af4020da9954606e5736cfb516725e",
+  "implementation_parent": "266c475946e62896131c19e702171321bd468baa",
+  "implementation_tree": "87eaad9dffe7412e706f860823e99cb2f5ac733b",
+  "original_20261031_1924_native_capture": "UNAVAILABLE; original code commit log retains that diagnostic",
+  "failure_cause": "trusted Git strips GIT_*; TOOL projection lacked discoverable .git and private core.worktree named HOST-only path",
+  "correction": "same private admin/index; discoverable TOOL .git pointer and private-only core.worktree; HOST explicit work-tree",
+  "fresh_source_delta_audit": {
+    "receipt_sha256": "d4cacfd8639ceec78099c51f391a2f2b931e5e43574775f831b4cf6f50934ddc",
+    "record_seal": "29e579169e5de9b78ea2d5c6b8cb4bf415ceb7c18acfa71398b338c5909c78ca",
+    "checks": {
+      "frozen_index_unchanged": true,
+      "head_unchanged": true,
+      "live_index_unchanged": true,
+      "logs_complete": true,
+      "policy_unchanged": true,
+      "proofs_valid": true
+    },
+    "counts": {
+      "blocked": 0,
+      "excluded": 0,
+      "scanned": 16,
+      "selected": 16
+    },
+    "selected_inputs": 16,
+    "comparison_head": "266c475946e62896131c19e702171321bd468baa",
+    "started_utc": "2026-11-01T01:15:09.835683Z",
+    "value": true
+  },
+  "audit_scope": "fresh 2026-11-01 audit of exact 16-path 266c47594-to-66085471 delta; not a retroactive original capture",
+  "source_sha256": {
+    "README.md": "cd009e25a3e6ef9fa7437bdc5e78692e6ee3d40ca0b66356d9e9fceba1ba9b9e",
+    "l1_scan.py": "22e02b07c37964a9aab36779f313237f1c1ad5aad18fbc066d006da569588819",
+    "library_substitution.py": "347893c71d529381a3d13770dab77b01f83b5180dcaeaafbd108eddc7c667573",
+    "run_falsification.py": "e847348864c2d7de21e502aed59c3345c25b6e661f01286bc6c21b2ea65ffa20",
+    "test_static.py": "3458a1ddee95e3f3a8e007ba787e11e17951e5f5662272be7ab7d6faef9efa85",
+    "mutants.py": "bbb7b6255c1c1b59c5588ab1bc8e133eccda245bfd5c0f8825905954ae09e14d"
+  },
+  "approved_patch_sha256": "3a178f33ff5f5c9983212ea57f8ddf18de9af4757ae18ecb2e232b72102c93f8",
+  "verification": "retained16 native controls and nativeCLI3/3flags; no rerun, GPU or performance claim",
+  "canonical_wrapper_sha256": "2385af56caa1b87cf3910144a6dc20193cead6ab1f8a2b1a2763d39c809c8a1e",
+  "canonical_extras_sha256": "cdad637dc3c05bc71f199b428012f592b09bab58e772843f9fa799fb0f4f047f"
+}

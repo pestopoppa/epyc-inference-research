@@ -1258,6 +1258,13 @@ def load_config(path: Path) -> DriverConfig:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--provider-factory", help="registered restartable provider constructor")
+    parser.add_argument("--owned-targets", type=Path,
+                        help="native serial ownership roster for shared target-store locks")
+    parser.add_argument("--target-root", type=Path,
+                        help="same target root used by the serial ownership roster")
+    parser.add_argument("--common-args", type=Path,
+                        help="same shared arguments used by the serial ownership roster")
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--once", action="store_true")
     modes.add_argument("--listen", metavar="HOST:PORT")
@@ -1265,7 +1272,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None, *, provider_registry: Any = None) -> int:
+def _main(argv: list[str] | None = None, *, provider_registry: Any = None) -> int:
     args = _parser().parse_args(argv)
     document = load_config_document(args.config)
     if document.get("schema") != CONFIG_SCHEMA:
@@ -1277,6 +1284,11 @@ def main(argv: list[str] | None = None, *, provider_registry: Any = None) -> int
             return 0
         if args.once:
             raise DriverRefused("standalone startup manifest requires --dry-run or --listen")
+        if args.provider_factory is not None:
+            from . import lane_watchdog, provider_factories
+            if not lane_watchdog._SUPERVISED or provider_registry is not None:
+                raise DriverRefused("provider factory requires the supervised fresh interpreter")
+            provider_registry = provider_factories.construct(args.provider_factory)
         if provider_registry is None:
             raise DriverRefused("standalone provider registry is unavailable")
         factory = standalone_inputs.runtime_factory(materialized, provider_registry)
@@ -1286,8 +1298,10 @@ def main(argv: list[str] | None = None, *, provider_registry: Any = None) -> int
             "--config-generation", str(manifest.driver_config.config_generation),
             "--snapshot-version", "3", "--listen", args.listen,
         ]
-        return campaign_service.main(service_args, runtime_factory=factory)
+        return campaign_service._main(service_args, runtime_factory=factory)
     config = DriverConfig.from_dict(document)
+    if args.provider_factory:
+        raise DriverRefused("provider factory requires a standalone startup manifest")
     if args.dry_run:
         raise DriverRefused("legacy driver config has no closed standalone dry-run schema")
     resolved = campaign_service.load_resolved(Path(config.resolved_campaign_path))
@@ -1329,9 +1343,58 @@ def main(argv: list[str] | None = None, *, provider_registry: Any = None) -> int
     return 0
 
 
+def main(argv: list[str] | None = None, *, provider_registry: Any = None) -> int:
+    import sys
+    from . import lane_watchdog
+    actual = list(sys.argv[1:] if argv is None else argv)
+    args = _parser().parse_args(actual)
+    if args.listen and provider_registry is not None:
+        raise DriverRefused("HELD: initialized runtime embedding cannot be restarted; migrate to a registered trusted provider factory before starting a supervised lane")
+    if not args.listen or lane_watchdog._SUPERVISED:
+        return _main(actual, provider_registry=provider_registry)
+    document = load_config_document(args.config)
+    if document.get("schema") == CONFIG_SCHEMA:
+        config = DriverConfig.from_dict(document)
+    else:
+        from . import standalone_inputs
+        config = standalone_inputs.StartupManifest.from_dict(document).driver_config
+    if args.owned_targets is None or args.target_root is None:
+        raise DriverRefused("standalone supervision requires the native owned-target roster and target root")
+    from . import campaign_cli, serial_roster, serial_run
+    targets, skipped, _ = serial_roster.build_targets(
+        config.resolved_campaign_path, args.owned_targets,
+        target_root=args.target_root, common_path=args.common_args,
+        state_root=args.target_root)
+    resolved = campaign_cli.load_previous(Path(config.resolved_campaign_path))
+    covered = {serial_run.option(row, "--target-id") for row in targets}
+    configured = (set(config.execution_inputs) | set(config.profile_requests)
+                  | set(config.profiles) | set(config.runtime_anchors)
+                  | set(config.runtime_dimensions))
+    missing = [target.target_ids for target in resolved.targets
+               if (target.status == "ready" or serial_run._digest(target.to_dict()) in configured)
+               and not covered.intersection(target.target_ids)]
+    if missing:
+        raise DriverRefused(f"owned-target roster does not cover every runnable/configured target: {missing}")
+    stores = [config.store_path, *[serial_run.option(row, "--store") for row in targets]]
+    if any(not store for store in stores):
+        raise DriverRefused("every supervised target requires its canonical store")
+    extra_files = [config.resolved_campaign_path, args.owned_targets]
+    extra_files.extend(serial_run.option(row, flag) for row in targets
+                       for flag in serial_run._DOCUMENT_FLAGS
+                       if serial_run.option(row, flag) is not None)
+    if args.provider_factory:
+        from . import provider_factories
+        factory_path, _ = provider_factories.source(args.provider_factory)
+        extra_files.append(factory_path)
+    return lane_watchdog.supervise(
+        "scripts.kernel_rnd.autokernel.loop.unified_driver", actual, keys=stores,
+        extra_files=extra_files,
+        recovery_checkpoint=Path(config.store_path) / "campaign-snapshot.json",
+        file_options=("--config", "--owned-targets", "--common-args"))
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
-
 
 __all__ = ["SELECTED_ACTOR_WORK_SCHEMA", "SelectedActorWork",
            "CATALOG_SCHEMA", "CONFIG_SCHEMA", "DriverConfig", "DriverOutcome", "DriverRefused",

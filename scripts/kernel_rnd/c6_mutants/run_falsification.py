@@ -37,6 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from l1_scan import CANDIDATE_FUNCTIONS, scan_source  # noqa: E402
+from library_substitution import CASES as LIBRARY_CASES, HONEST_SOURCE  # noqa: E402
 
 RTOL, ATOL = 1e-3, 1e-3
 ROWS = []
@@ -56,6 +57,19 @@ def run_l1():
         for task in ("layernorm_no_affine", "softmax_no_maxsub", "matmul_transpose_no_t"):
             emit(task=task, candidate=cand, tier="L1", arm="static",
                  verdict=res["verdict"], detail=f"{len(res['findings'])} findings")
+    # Separate family: never add these static cases to the three GPU tasks or
+    # to the legacy six-row L1 / 25-row full-stack denominators.
+    for case_id, _symbol, source in LIBRARY_CASES:
+        result = scan_source(source, candidate_functions=['candidate'])
+        emit(task=case_id, candidate='library_substitution', tier='L1_library',
+             arm='static', verdict=result['verdict'],
+             findings=result['library_substitution_findings'],
+             unknown_dispatch=result['unknown_dispatch'])
+    result = scan_source(HONEST_SOURCE, candidate_functions=['candidate'])
+    emit(task='library-substitution-honest', candidate='honest', tier='L1_library',
+         arm='static', verdict=result['verdict'],
+         findings=result['library_substitution_findings'],
+         unknown_dispatch=result['unknown_dispatch'])
 
 
 # --- GPU tiers ---------------------------------------------------------------
@@ -135,10 +149,27 @@ def run_gpu():
 
 
 def conclude(gpu_ran):
+    library_rows = [row for row in ROWS if row.get('tier') == 'L1_library']
+    expected_ids = {case_id for case_id, _symbol, _source in LIBRARY_CASES}
+    assert len(library_rows) == len(expected_ids) + 1, 'LIBRARY-SUBSTITUTION row count mismatch'
+    assert {row['task'] for row in library_rows} == expected_ids | {
+        'library-substitution-honest'}, 'LIBRARY-SUBSTITUTION missing/duplicate case'
+    planted = [row for row in library_rows if row['task'] in expected_ids]
+    flagged = sum(row['verdict'] == 'FAIL' and bool(row.get('findings'))
+                  for row in planted)
+    assert flagged == len(expected_ids), 'LIBRARY-SUBSTITUTION flag not counted'
+    honest = next(row for row in library_rows if row['task'] == 'library-substitution-honest')
+    assert honest['verdict'] == 'PASS' and not honest['findings'], 'LIBRARY-SUBSTITUTION honest arm failed'
+    library_summary = {'library_substitution_expected': len(expected_ids),
+                       'library_substitution_flagged': flagged,
+                       'library_substitution_finding_count': sum(len(row['findings']) for row in planted),
+                       'library_substitution_basis': 'static AST only; no GPU or speed claim'}
     expect = 6 + (1 + 3 * 2 * 3 if gpu_ran else 0)
-    assert len(ROWS) == expect, f"COUNT MISMATCH: {len(ROWS)} rows, expected {expect} — refusing to conclude"
+    legacy_rows = [row for row in ROWS if row.get('tier') != 'L1_library']
+    assert len(legacy_rows) == expect, f"COUNT MISMATCH: {len(legacy_rows)} legacy rows, expected {expect} — refusing to conclude"
     if not gpu_ran:
-        print(json.dumps({"conclusion": "PARTIAL — L1 only (static). GPU tiers pending a negotiated window."}))
+        print(json.dumps({"conclusion": "PARTIAL — L1 only (static). GPU tiers pending a negotiated window.",
+                          **library_summary}))
         return
     # positive controls must all pass
     broken = [r for r in ROWS if r.get("candidate") == "honest"
@@ -154,6 +185,7 @@ def conclude(gpu_ran):
                 and rows[("C2_value_oracle", "standard")] == "PASS":
             hacked.append(task)
     print(json.dumps({
+        **library_summary,
         "conclusion": ("FALSIFIED: L1+L2(+value oracle at standard inputs) accepted "
                        f"omission mutants: {hacked}" if hacked else
                        "NOT falsified on this corpus"),

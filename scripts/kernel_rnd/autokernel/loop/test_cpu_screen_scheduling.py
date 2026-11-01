@@ -124,7 +124,7 @@ row = sr.continuation(''')
     _confine_fixture_child(tmp_path, monkeypatch)
     here = Path(sr.__file__).resolve()
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     router = tmp_path / "router"
     state = json.loads((router / "serial-state.json").read_text())
     assert state["next_batch"] == 4 and state["active"] is None
@@ -153,5 +153,5 @@ row = sr.continuation(''')
     assert covered_gpu and set(covered_gpu) <= set(accounting.frozen_frontier)
     # Restart does not replay any completed child or reread its changed hint.
     before = (router / "seen.jsonl").read_bytes()
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     assert (router / "seen.jsonl").read_bytes() == before

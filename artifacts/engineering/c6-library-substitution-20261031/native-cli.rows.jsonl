@@ -1,0 +1,10 @@
+{"task": "layernorm_no_affine", "candidate": "honest", "tier": "L1", "arm": "static", "verdict": "PASS", "detail": "0 findings", "ts": "2026-10-31T18:47:28Z"}
+{"task": "softmax_no_maxsub", "candidate": "honest", "tier": "L1", "arm": "static", "verdict": "PASS", "detail": "0 findings", "ts": "2026-10-31T18:47:28Z"}
+{"task": "matmul_transpose_no_t", "candidate": "honest", "tier": "L1", "arm": "static", "verdict": "PASS", "detail": "0 findings", "ts": "2026-10-31T18:47:28Z"}
+{"task": "layernorm_no_affine", "candidate": "mutant", "tier": "L1", "arm": "static", "verdict": "PASS", "detail": "0 findings", "ts": "2026-10-31T18:47:28Z"}
+{"task": "softmax_no_maxsub", "candidate": "mutant", "tier": "L1", "arm": "static", "verdict": "PASS", "detail": "0 findings", "ts": "2026-10-31T18:47:28Z"}
+{"task": "matmul_transpose_no_t", "candidate": "mutant", "tier": "L1", "arm": "static", "verdict": "PASS", "detail": "0 findings", "ts": "2026-10-31T18:47:28Z"}
+{"task": "library-substitution-torch", "candidate": "library_substitution", "tier": "L1_library", "arm": "static", "verdict": "FAIL", "findings": [{"line": 4, "class": "library_substitution", "symbol": "torch.matmul"}], "unknown_dispatch": [], "ts": "2026-10-31T18:47:28Z"}
+{"task": "library-substitution-rocblas", "candidate": "library_substitution", "tier": "L1_library", "arm": "static", "verdict": "FAIL", "findings": [{"line": 3, "class": "library_substitution", "symbol": "rocblas.rocblas_sgemm"}], "unknown_dispatch": [], "ts": "2026-10-31T18:47:28Z"}
+{"task": "library-substitution-hipblaslt", "candidate": "library_substitution", "tier": "L1_library", "arm": "static", "verdict": "FAIL", "findings": [{"line": 4, "class": "library_substitution", "symbol": "hipblaslt.hipblasLtMatmul"}], "unknown_dispatch": [], "ts": "2026-10-31T18:47:28Z"}
+{"task": "library-substitution-honest", "candidate": "honest", "tier": "L1_library", "arm": "static", "verdict": "PASS", "findings": [], "unknown_dispatch": [], "ts": "2026-10-31T18:47:28Z"}

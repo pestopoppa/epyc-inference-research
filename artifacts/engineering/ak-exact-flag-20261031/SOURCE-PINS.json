@@ -1,0 +1,26 @@
+{
+  "status": "NEW_EXACT_REGRESSION_CONTROLS_PASS",
+  "test_sha256": "51650790754941835fae30ed7fa7e85f43615fdfd98c6fac38c716dccf60ec64",
+  "retained_runner_sha256": "b645ab191e7f465e18bef1f9dc5ad18f630e3b41a83e3bb503b7db45ff032701",
+  "actual_run_py_sha256": "357b3551f135c82451f7fc96ebd3ec751417719406b9a38a34b7503eaf14f761",
+  "original_production_implementation": "834bef12afab17ba6bbc3f6e240f72867d47a024",
+  "production_implementation_changed": false,
+  "base_test_still_matches_owner": true,
+  "final_green": "ak-repository-replay-green-20261031",
+  "final_expected_original_source_red": "ak-repository-replay-original-red-20261031",
+  "final_lint": "ak-repository-config-lint-20261031",
+  "earlier_failures_preserved": {
+    "ak-exact-flag-original-red-20261031": "anchor-gen fixture hit independent provenance refusal before expected warning; NOT a successful mutation",
+    "ak-exact-flag-final-raw-green-20261031": "raw-output strengthening bypassed enclosing fixture stdout contract; failed assertion; NOT a pass"
+  },
+  "gitnexus": {
+    "edited_test_symbols": "UNKNOWN: test target not found; snapshot/new nested fixture in same unindexed file",
+    "impact_log": "ak-exact-flag-impact-20261031.log",
+    "status_log": "ak-exact-index-status-20261031.log",
+    "no_low_risk_graph_proof_claimed": true,
+    "index_scope": "canonical registered clone indexed/current99301fa (up-to-date there); integration lane has later source/test absent from that index"
+  },
+  "portable_replay": "requires fresh absolute caller-owned AK_TEST_RETAIN_ROOT outside Git; source hashes enforced",
+  "repository_layout_replay": "PASS actual integrated artifact script; fresh non-Git roots",
+  "retain_guard_controls": "ak-repository-retain-guard-controls-20261031"
+}

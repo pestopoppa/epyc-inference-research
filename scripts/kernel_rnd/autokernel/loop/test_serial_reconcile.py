@@ -43,7 +43,7 @@ def _completed_before_router_save(tmp_path, monkeypatch, *, mode="good"):
     with monkeypatch.context() as local:
         local.setattr(sr.status, "write_json", crash)
         with pytest.raises(RouterCrash):
-            sr.main(argv)
+            sr._main(argv)
     state_path = root / "serial-state.json"
     state = json.loads(state_path.read_text())
     assert state["next_batch"] == 0 and state["active"]["pid"] is not None
@@ -62,7 +62,7 @@ def test_original_completed_child_reconciles_once_without_replay(tmp_path, monke
     if legacy:
         state["active"].pop("process_identity")
         state_path.write_text(json.dumps(state))
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     final = json.loads(state_path.read_text())
     assert final["next_batch"] == 2 and final["active"] is None
     assert final["last_reconciliation"]["target_index"] == 0
@@ -70,13 +70,13 @@ def test_original_completed_child_reconciles_once_without_replay(tmp_path, monke
     seen = [json.loads(row) for row in (root / "seen.jsonl").read_text().splitlines()]
     assert len(seen) == 2 and len({sr.option(row["argv"], "--out") for row in seen}) == 2
     assert (root / "batches/batch-000000/loop-continuation.json").read_bytes() == original_bytes
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     assert len((root / "seen.jsonl").read_text().splitlines()) == 2
 
 
 def test_original_stopped_completion_keeps_stop_across_reconciliation(tmp_path, monkeypatch):
     root, argv, state_path, _ = _completed_before_router_save(tmp_path, monkeypatch, mode="stop")
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     assert (root / "STOP").exists()
     assert json.loads(state_path.read_text())["last_reconciliation"]["terminal"] == "stopped"
     assert len((root / "seen.jsonl").read_text().splitlines()) == 1
@@ -97,7 +97,7 @@ def test_actually_live_child_is_not_adopted_signaled_or_relaunched(tmp_path, mon
         before = json.dumps(state)
         state_path.write_text(before)
         with pytest.raises(sr.SerialRefused, match="still (live|present)"):
-            sr.main(argv)
+            sr._main(argv)
         assert child.poll() is None
         assert state_path.read_text() == before
         assert len((root / "seen.jsonl").read_text().splitlines()) == 1
@@ -114,7 +114,7 @@ def test_changed_original_active_identity_cannot_reconcile(tmp_path, monkeypatch
     before = json.dumps(state)
     state_path.write_text(before)
     with pytest.raises(sr.SerialRefused):
-        sr.main(argv)
+        sr._main(argv)
     assert state_path.read_text() == before
     assert len((root / "seen.jsonl").read_text().splitlines()) == 1
 
@@ -129,7 +129,7 @@ def test_missing_terminal_artifact_retains_original_active_and_logs(tmp_path, mo
     (result.parent / "loop-run.json").write_text(json.dumps(malformed))
     result.rename(result.with_suffix(".retained-for-test"))
     with pytest.raises(sr.SerialRefused, match="durable full result is malformed"):
-        sr.main(argv)
+        sr._main(argv)
     assert state_path.read_bytes() == before
     assert (root / "batches/batch-000000/stdout.log").is_file()
     assert (root / "batches/batch-000000/stderr.log").is_file()
@@ -148,7 +148,7 @@ def test_restart_recovers_only_matching_embedded_failure_observation(tmp_path, m
     full_path.write_text(json.dumps(full))
     continuation_path.unlink()
 
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     recovered, _sha = sr.load_completed(continuation_path)
     assert recovered["outcome_counts"] == {"bench_failed": 1}
     assert recovered["recovered_result_sha256"] == sr._json(full_path)[1]
@@ -179,7 +179,7 @@ def test_restart_refuses_forged_embedded_receipt_without_losing_it_or_advancing(
     continuation_path.unlink()
 
     with pytest.raises(sr.SerialRefused, match="different actual child arguments"):
-        sr.main(argv)
+        sr._main(argv)
     assert state_path.read_bytes() == before
     assert full_path.read_bytes() == original_full
     assert not continuation_path.exists()
@@ -200,6 +200,24 @@ def test_recovery_accepts_every_key_run_py_writes(tmp_path, monkeypatch):
                 comparability={"epoch": "measurement", "rows_aliased": 3})
     (continuation_path.parent / "loop-run.json").write_text(json.dumps(full))
     continuation_path.unlink()
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     recovered, _sha = sr.load_completed(continuation_path)
     assert recovered["outcome_counts"] == {"bench_failed": 1}
+
+
+@pytest.mark.parametrize('corruption', ['stale-config', 'malformed-json'])
+def test_native_restart_refuses_stale_or_malformed_checkpoint_without_advancing(
+        tmp_path, monkeypatch, corruption):
+    root, argv, state_path, state = _completed_before_router_save(tmp_path, monkeypatch)
+    if corruption == 'stale-config':
+        state['config_digest'] = '0' * 64
+        state_path.write_text(json.dumps(state))
+    else:
+        state_path.write_text('{"schema":')
+    retained = state_path.read_bytes()
+    observed = (root / 'seen.jsonl').read_bytes()
+    with pytest.raises((ValueError, sr.SerialRefused)):
+        sr._main(argv)
+    assert state_path.read_bytes() == retained
+    assert (root / 'seen.jsonl').read_bytes() == observed
+    assert (root / 'batches/batch-000000/loop-continuation.json').is_file()

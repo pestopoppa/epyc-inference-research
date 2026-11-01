@@ -1,0 +1,124 @@
+{
+  "approved_patch_sha256": "3a178f33ff5f5c9983212ea57f8ddf18de9af4757ae18ecb2e232b72102c93f8",
+  "authority": "source controls only; no native performance or quiet-host/GPU warrant",
+  "commit_gate": "fresh approved R4 physical admission; original28 mutex; no model/R11 smoke",
+  "expected_total_staged_paths_with_this_manifest": 16,
+  "files_except_this_manifest": [
+    {
+      "bytes": 95,
+      "git_blob": "42bd86aa75c1032a170bd6d74bc55a8927d7c387",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/.gitattributes",
+      "sha256": "c3e91932f0d654441101132038fe9809b686109b7d83640790a58a431f6132c7"
+    },
+    {
+      "bytes": 28384,
+      "git_blob": "ef737f8aaf5191a6441c3abe6c90c2fc2e2aba91",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/PROPOSED.patch",
+      "sha256": "3a178f33ff5f5c9983212ea57f8ddf18de9af4757ae18ecb2e232b72102c93f8"
+    },
+    {
+      "bytes": 4967,
+      "git_blob": "d7a46697045441ca1f6ab4a31426ba380c2f713c",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/README.md",
+      "sha256": "cc503c8576644a5ab5491e8cf818e1e751c8c326a148d92c5912be5c4bc90dea"
+    },
+    {
+      "bytes": 632,
+      "git_blob": "3ea46daa0a5ae8fe0bcb7fddd388a5dfb57ed3da",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/admission-refusals/stale-smt.log",
+      "sha256": "6ba8dd69bdfbb73dd02b61b5af64d12e8fcac798f62f4e0ccfbb5de4e9bfcfed"
+    },
+    {
+      "bytes": 700,
+      "git_blob": "57febdb9e2c5f880a0f815e939697f1864e8d37c",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/admission-refusals/timing.log",
+      "sha256": "1913ccf49399bbfa9e59524f01c555ae464a2e263b7018cdb5b8f0046e88b7af"
+    },
+    {
+      "bytes": 2721,
+      "git_blob": "550361780f5c89a0046a95ceb7cecd13e48c2ef3",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/lane-strict.json",
+      "sha256": "adc0d94e4e706816efbb7759c580a6c32e83292c6c9fda013106bbe439771133"
+    },
+    {
+      "bytes": 2762,
+      "git_blob": "205753fc6329c75ae1d27afaf29a3a5a90f70036",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/native-cli.log",
+      "sha256": "ecbb13cd55441c1db112fee5dcf404352d9fba47389e57b215d36478a61ebb50"
+    },
+    {
+      "bytes": 1995,
+      "git_blob": "da759bd76e20bd30bc35fc5b1add1d74477a004b",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/native-cli.rows.jsonl",
+      "sha256": "3b933a66937c6961283308440e07cf71f5672593e7487fabb58d7259e0d667bc"
+    },
+    {
+      "bytes": 1561,
+      "git_blob": "34829076918f373bc709b3835709d164b2a3fa56",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/test-static.log",
+      "sha256": "a4a8dd13f253285ad3ee12403214c498564c34fc5798e7ab7b46b92f47f3e371"
+    },
+    {
+      "bytes": 3915,
+      "git_blob": "475170d7206a082af15dead87f22f159d7446da8",
+      "path": "artifacts/engineering/c6-library-substitution-20261031/verification.json",
+      "sha256": "7fe6f43d2d2f7a825bdf6661b075db70d9a7d560533ef94dbfbbd626889c9016"
+    },
+    {
+      "bytes": 4555,
+      "git_blob": "27224c89f57a54b802078cc252790badd340e132",
+      "path": "scripts/kernel_rnd/c6_mutants/README.md",
+      "sha256": "cd009e25a3e6ef9fa7437bdc5e78692e6ee3d40ca0b66356d9e9fceba1ba9b9e"
+    },
+    {
+      "bytes": 12555,
+      "git_blob": "f78f88c17227a64e14fcc165c6c7e3f474c4d0f6",
+      "path": "scripts/kernel_rnd/c6_mutants/l1_scan.py",
+      "sha256": "22e02b07c37964a9aab36779f313237f1c1ad5aad18fbc066d006da569588819"
+    },
+    {
+      "bytes": 1385,
+      "git_blob": "118fd36de174788c4ce0c6b9c2a8115992265230",
+      "path": "scripts/kernel_rnd/c6_mutants/library_substitution.py",
+      "sha256": "347893c71d529381a3d13770dab77b01f83b5180dcaeaafbd108eddc7c667573"
+    },
+    {
+      "bytes": 10140,
+      "git_blob": "68743ed7eb3f5f31cab0ce20ab53092468e171cd",
+      "path": "scripts/kernel_rnd/c6_mutants/run_falsification.py",
+      "sha256": "e847348864c2d7de21e502aed59c3345c25b6e661f01286bc6c21b2ea65ffa20"
+    },
+    {
+      "bytes": 13580,
+      "git_blob": "2b69677e078d3440707b174e7909393bf7f5c0ad",
+      "path": "scripts/kernel_rnd/c6_mutants/test_static.py",
+      "sha256": "3458a1ddee95e3f3a8e007ba787e11e17951e5f5662272be7ab7d6faef9efa85"
+    }
+  ],
+  "integration_base": "266c475946e62896131c19e702171321bd468baa",
+  "publication_guard": {
+    "path": "/mnt/raid0/llm/tmp/codex3-r4-physical-guard-20261031",
+    "prep_admission.py": "5215ca929cbc320b998a48c9e91c837417bc3c2314c34783ce992387a3499abe",
+    "prep_supervisor.py": "d0351bfc8577f3fa094d5d8f11061ec7c10f2805226c6ddb543a508886f18509"
+  },
+  "reuse": {
+    "canonical_common_inode": 96371209,
+    "host_worktree": "/mnt/micron/codex3-lanes/research",
+    "owner_reuse_authorization": true,
+    "private_common": "/mnt/raid0/llm/tmp/codex3-lane-git/research.git",
+    "private_common_inode": 188913341,
+    "strict_guard_exit": 3,
+    "strict_guard_result": "structural shared-clone classification; distinct private admin proven"
+  },
+  "scope": "C6_LIBRARY_SUBSTITUTION_SOURCE_AND_FINITE_CONTROLS",
+  "source_base": "57ec250b6ad7b9bd5b9c1059cac69ea3603440ef",
+  "source_pins": {
+    "README.md": "cd009e25a3e6ef9fa7437bdc5e78692e6ee3d40ca0b66356d9e9fceba1ba9b9e",
+    "l1_scan.py": "22e02b07c37964a9aab36779f313237f1c1ad5aad18fbc066d006da569588819",
+    "library_substitution.py": "347893c71d529381a3d13770dab77b01f83b5180dcaeaafbd108eddc7c667573",
+    "mutants.py": "bbb7b6255c1c1b59c5588ab1bc8e133eccda245bfd5c0f8825905954ae09e14d",
+    "run_falsification.py": "e847348864c2d7de21e502aed59c3345c25b6e661f01286bc6c21b2ea65ffa20",
+    "test_static.py": "3458a1ddee95e3f3a8e007ba787e11e17951e5f5662272be7ab7d6faef9efa85"
+  },
+  "verification": "16 native controls and actual native CLI 3 expected / 3 flagged / 3 findings"
+}

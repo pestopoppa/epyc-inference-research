@@ -1,0 +1,44 @@
+{
+  "scope": "MODEL_FREE_R6_ONLY",
+  "family": "26-27",
+  "actual_cpus": [
+    74,
+    75
+  ],
+  "grant_snapshot": [
+    {
+      "id": "codex3-cs45-tail-rescore-20261031",
+      "class": "block-correctness",
+      "regions": "48-71"
+    },
+    {
+      "id": "yarn-oolong-s2-host256-eligible26-v32-20261031",
+      "class": "block-correctness",
+      "regions": "24-47"
+    },
+    {
+      "id": "refactor-a4a-c4-27b-pair-20261031",
+      "class": "block-timing-pairable",
+      "regions": "mi210_0,184-191"
+    },
+    {
+      "id": "codex3-pareval120-k20-gen-20261031",
+      "class": "block-correctness",
+      "regions": "0-23"
+    }
+  ],
+  "returncode": 1,
+  "failure": null,
+  "elapsed_s": 1.368714459007606,
+  "sampled_peak_tree_rss_bytes": 97886208,
+  "kernel_childset_empty": true,
+  "captured": [
+    {
+      "pid": 1926160,
+      "birth": 159528493,
+      "ppid": 1926159,
+      "uid": 1000
+    }
+  ],
+  "native_or_GPU_execution": false
+}

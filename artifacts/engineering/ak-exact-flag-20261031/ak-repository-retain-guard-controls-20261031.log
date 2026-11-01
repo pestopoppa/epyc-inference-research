@@ -1,0 +1,20 @@
+[
+  {
+    "case": "relative",
+    "exit": 1,
+    "stderr": "AK_TEST_RETAIN_ROOT must name a fresh absolute caller-owned non-Git directory",
+    "rejected_before_fixture": true
+  },
+  {
+    "case": "existing",
+    "exit": 1,
+    "stderr": "retained root already exists; choose a fresh path, never delete it",
+    "rejected_before_fixture": true
+  },
+  {
+    "case": "git",
+    "exit": 1,
+    "stderr": "retained fixtures must be outside every Git worktree",
+    "rejected_before_fixture": true
+  }
+]

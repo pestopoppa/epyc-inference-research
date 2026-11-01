@@ -1,0 +1,79 @@
+{
+  "status": "PASS_AWAITING_PARENT_REVIEW",
+  "pid": 1638644,
+  "started_at": 1793471447.1359093,
+  "source_base": "57ec250b6ad7b9bd5b9c1059cac69ea3603440ef",
+  "checks": [
+    {
+      "label": "final-static",
+      "argv": [
+        "/usr/bin/python3",
+        "/mnt/raid0/llm/tmp/codex3-c6-library-20261031/source/scripts/kernel_rnd/c6_mutants/test_static.py"
+      ],
+      "returncode": 0,
+      "log": "/mnt/raid0/llm/tmp/codex3-c6-library-20261031/final-static-admitted.log",
+      "admission": {
+        "at": "2026-10-31T18:47:27.913318+00:00",
+        "cpus": [
+          76,
+          77
+        ],
+        "mutex": "/mnt/raid0/llm/tmp/compute-flags/prep-locks/28-29.lock",
+        "grants": {
+          "codex3-cs45-tail-rescore-20261031.grant": "regions=48-71 start=2026-10-31T17:57Z end=2026-11-01T03:57Z\n",
+          "yarn-oolong-s2-host256-eligible26-v32-20261031.grant": "regions=24-47 start=2026-10-31T16:26Z end=2026-11-01T04:26Z\n",
+          "codex3-pareval120-k20-gen-20261031.grant": "regions=0-23 start=2026-10-31T16:09Z end=2026-10-31T20:09Z\n"
+        }
+      },
+      "source_sha256": {
+        "README.md": "cd009e25a3e6ef9fa7437bdc5e78692e6ee3d40ca0b66356d9e9fceba1ba9b9e",
+        "l1_scan.py": "22e02b07c37964a9aab36779f313237f1c1ad5aad18fbc066d006da569588819",
+        "library_substitution.py": "347893c71d529381a3d13770dab77b01f83b5180dcaeaafbd108eddc7c667573",
+        "run_falsification.py": "e847348864c2d7de21e502aed59c3345c25b6e661f01286bc6c21b2ea65ffa20",
+        "test_static.py": "3458a1ddee95e3f3a8e007ba787e11e17951e5f5662272be7ab7d6faef9efa85",
+        "mutants.py": "bbb7b6255c1c1b59c5588ab1bc8e133eccda245bfd5c0f8825905954ae09e14d"
+      }
+    },
+    {
+      "label": "native-cli",
+      "argv": [
+        "/usr/bin/python3",
+        "/mnt/raid0/llm/tmp/codex3-c6-library-20261031/source/scripts/kernel_rnd/c6_mutants/run_falsification.py",
+        "--out",
+        "/mnt/raid0/llm/tmp/codex3-c6-library-20261031/native-cli.jsonl"
+      ],
+      "returncode": 0,
+      "log": "/mnt/raid0/llm/tmp/codex3-c6-library-20261031/native-cli-admitted.log",
+      "admission": {
+        "at": "2026-10-31T18:47:28.094961+00:00",
+        "cpus": [
+          76,
+          77
+        ],
+        "mutex": "/mnt/raid0/llm/tmp/compute-flags/prep-locks/28-29.lock",
+        "grants": {
+          "codex3-cs45-tail-rescore-20261031.grant": "regions=48-71 start=2026-10-31T17:57Z end=2026-11-01T03:57Z\n",
+          "yarn-oolong-s2-host256-eligible26-v32-20261031.grant": "regions=24-47 start=2026-10-31T16:26Z end=2026-11-01T04:26Z\n",
+          "codex3-pareval120-k20-gen-20261031.grant": "regions=0-23 start=2026-10-31T16:09Z end=2026-10-31T20:09Z\n"
+        }
+      },
+      "source_sha256": {
+        "README.md": "cd009e25a3e6ef9fa7437bdc5e78692e6ee3d40ca0b66356d9e9fceba1ba9b9e",
+        "l1_scan.py": "22e02b07c37964a9aab36779f313237f1c1ad5aad18fbc066d006da569588819",
+        "library_substitution.py": "347893c71d529381a3d13770dab77b01f83b5180dcaeaafbd108eddc7c667573",
+        "run_falsification.py": "e847348864c2d7de21e502aed59c3345c25b6e661f01286bc6c21b2ea65ffa20",
+        "test_static.py": "3458a1ddee95e3f3a8e007ba787e11e17951e5f5662272be7ab7d6faef9efa85",
+        "mutants.py": "bbb7b6255c1c1b59c5588ab1bc8e133eccda245bfd5c0f8825905954ae09e14d"
+      }
+    }
+  ],
+  "source_sha256": {
+    "README.md": "cd009e25a3e6ef9fa7437bdc5e78692e6ee3d40ca0b66356d9e9fceba1ba9b9e",
+    "l1_scan.py": "22e02b07c37964a9aab36779f313237f1c1ad5aad18fbc066d006da569588819",
+    "library_substitution.py": "347893c71d529381a3d13770dab77b01f83b5180dcaeaafbd108eddc7c667573",
+    "run_falsification.py": "e847348864c2d7de21e502aed59c3345c25b6e661f01286bc6c21b2ea65ffa20",
+    "test_static.py": "3458a1ddee95e3f3a8e007ba787e11e17951e5f5662272be7ab7d6faef9efa85",
+    "mutants.py": "bbb7b6255c1c1b59c5588ab1bc8e133eccda245bfd5c0f8825905954ae09e14d"
+  },
+  "ended_at": 1793472448.2600732
+}

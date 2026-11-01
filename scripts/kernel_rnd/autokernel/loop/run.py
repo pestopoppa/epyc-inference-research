@@ -2113,7 +2113,7 @@ def calibrate(args, run=subprocess.run) -> int:
                 "--write-calibration", str(args.store)]).returncode
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     # Publish can be reached by startup/refusal paths before campaign resolution.
     resolved_campaign = None
     original_argv = list(sys.argv[1:] if argv is None else argv)
@@ -8150,6 +8150,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         print(f"\nwrote {args.out / 'loop-run.json'}")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    from . import lane_watchdog, serial_run
+    actual = list(sys.argv[1:] if argv is None else argv)
+    stores = lane_watchdog._option(actual, "--store")
+    if lane_watchdog._SUPERVISED or "--dry-run" in actual or not stores:
+        return _main(actual)
+    if len(stores) != 1:
+        raise lane_watchdog.WatchdogRefused("exactly one canonical store is required")
+    if lane_watchdog.accept_serial_capability(stores[0]):
+        return _main(actual)
+    return lane_watchdog.supervise(
+        "scripts.kernel_rnd.autokernel.loop.run", actual, key=stores[0],
+        file_options=(*serial_run._DOCUMENT_FLAGS, "--resume-run"),
+        max_restarts=0)
 
 
 if __name__ == "__main__":

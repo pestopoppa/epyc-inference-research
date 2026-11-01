@@ -1,0 +1,78 @@
+{
+  "counts": {
+    "work": 5
+  },
+  "examined": 5,
+  "findings": [
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/README.md",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/README.md",
+      "rule": "work-prefix:scripts/"
+    },
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/l1_scan.py",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/l1_scan.py",
+      "rule": "work-prefix:scripts/"
+    },
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/run_falsification.py",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/run_falsification.py",
+      "rule": "work-prefix:scripts/"
+    },
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/test_static.py",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/test_static.py",
+      "rule": "work-prefix:scripts/"
+    },
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/library_substitution.py",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/library_substitution.py",
+      "rule": "work-prefix:scripts/"
+    }
+  ],
+  "location": {
+    "branch": "codex3-research-lane",
+    "common_dir": "/mnt/raid0/llm/tmp/codex3-lane-git/research.git",
+    "git_dir": "/mnt/raid0/llm/tmp/codex3-lane-git/research.git",
+    "kind": "shared-clone",
+    "lane": null,
+    "toplevel": "/mnt/micron/codex3-lanes/research"
+  },
+  "violations": [
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/README.md",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/README.md",
+      "rule": "work-prefix:scripts/"
+    },
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/l1_scan.py",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/l1_scan.py",
+      "rule": "work-prefix:scripts/"
+    },
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/run_falsification.py",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/run_falsification.py",
+      "rule": "work-prefix:scripts/"
+    },
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/test_static.py",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/test_static.py",
+      "rule": "work-prefix:scripts/"
+    },
+    {
+      "given": "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/c6_mutants/library_substitution.py",
+      "plane": "work",
+      "rel": "scripts/kernel_rnd/c6_mutants/library_substitution.py",
+      "rule": "work-prefix:scripts/"
+    }
+  ]
+}

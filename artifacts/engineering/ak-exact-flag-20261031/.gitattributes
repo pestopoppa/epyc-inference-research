@@ -1,0 +1,4 @@
+# Native stdout/stderr and literal historical patch data retain exact bytes.
+# Only these opaque evidence files bypass trailing-whitespace checks.
+*.log -whitespace
+*.patch -whitespace

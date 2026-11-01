@@ -23,7 +23,7 @@ def test_optional_fields_do_not_change_ordinary_status_shape(tmp_path):
 @pytest.mark.parametrize("mode,rounds", [("good", 1), ("fail", 0), ("stop", 0)])
 def test_actual_router_reports_configuration_cursor_and_terminal_facts(tmp_path, monkeypatch, mode, rounds):
     root, argv = test_serial_run._inputs(tmp_path, monkeypatch, mode=mode, rounds=rounds)
-    assert serial_run.main(argv) == (1 if mode == "fail" else 0)
+    assert serial_run._main(argv) == (1 if mode == "fail" else 0)
     body = status.read(root)
     state = json.loads((root / "serial-state.json").read_text())
     routing = body["routing"]
@@ -59,7 +59,7 @@ def test_serial_current_run_pointer_follows_finished_run(tmp_path, monkeypatch):
         assert starting["phase"] == "starting"
         return 0
     with mock.patch.object(serial_run, "_drive", side_effect=observe_start):
-        assert serial_run.main(argv) == 0
+        assert serial_run._main(argv) == 0
     current = json.loads(pointer.read_text())
     assert current["schema"] == serial_run.CURRENT_SERIAL_RUN_SCHEMA
     assert current["state_dir"] == str(root.resolve())
@@ -92,5 +92,5 @@ def test_serial_current_run_pointer_marks_startup_failure(tmp_path, monkeypatch)
     _root, argv = test_serial_run._inputs(tmp_path, monkeypatch, mode="good", rounds=1)
     with mock.patch.object(serial_run, "_drive", side_effect=serial_run.SerialRefused("fixture")):
         with pytest.raises(serial_run.SerialRefused, match="fixture"):
-            serial_run.main(argv)
+            serial_run._main(argv)
     assert json.loads(pointer.read_text())["phase"] == "failed"

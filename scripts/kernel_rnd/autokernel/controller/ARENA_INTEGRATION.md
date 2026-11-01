@@ -28,6 +28,21 @@ The registered controller IDs are `claude_codex_actor_critic`, `evoengineer`,
 means the same adapter contract can launch them and compare whole-agent task
 results. It does not imply that an unexecuted controller has an MI210 result.
 
+## Surveyed controller pattern: AutoKernel
+
+AutoKernel (`RightNow-AI/autokernel` at `78435821`, MIT; `intake-1246#record`)
+is the only surveyed kernel-controller pattern in this roster that needs no
+vendor profiler. Its Phase A uses `torch.profiler` for shape recording and does
+not require `ncu` or `nsys`. The transferable pattern is an Amdahl-ranked target
+selector with explicit move-on criteria, a fixed evaluation with a mutable
+single-file candidate, and a cheap-first gate order: smoke, shape sweep,
+stability, determinism, then edge cases.
+
+This is a surveyed design, not an executable `CONTROLLERS` entry or an MI210
+result. Do not carry over its hardware-spec database (the gfx90a roofline
+fabrication is tracked under AK-PM-15), TF32 accumulation, TMA/cp.async tiers,
+or CUDA C++ backend; these do not match the MI210 target.
+
 That last distinction is now machine-enforced by `arena_campaign.py`.
 `CONTROLLERS` is discovery metadata; it is not implementation coverage. The
 primary INF-03 comparison is exactly eight arms:

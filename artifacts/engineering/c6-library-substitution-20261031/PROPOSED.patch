@@ -1,0 +1,584 @@
+diff --git a/baseline/scripts/kernel_rnd/c6_mutants/README.md b/source/scripts/kernel_rnd/c6_mutants/README.md
+index e240f01..27224c8 100644
+--- a/baseline/scripts/kernel_rnd/c6_mutants/README.md
++++ b/source/scripts/kernel_rnd/c6_mutants/README.md
+@@ -37,3 +37,35 @@ partial row count or a broken honest arm.
+   before it gates anything — this corpus is its minimal validation set.
+ 
+ MEASUREMENT.md: observations only; nothing here gates a keep/revert/deploy/promote decision.
++
++## RVP-C6-15 — LIBRARY-SUBSTITUTION static hostile family
++
++`library_substitution.py` adds three owned candidate sources for Torch matmul,
++rocBLAS GEMM and hipBLASLt matmul. The native entry is each source's
++`candidate(...)`; `scan_source(..., candidate_functions=['candidate'])` follows
++same-module helpers and import/from-import, module and local callable aliases.
++Known Torch targets are matmul, mm, bmm, addmm, einsum, softmax, layer_norm,
++compile, `torch.ops.aten.*` and `torch.nn.functional.*`. Known vendor namespaces
++are rocblas, hipblas and hipblaslt, with GEMM/GEMV/matmul/TRSM/SYRK call names.
++This is a finite AST detector, not a whole-program dispatch proof.
++
++Allocation, `.to`/`.contiguous`, dtype metadata, and reference/validation code
++outside the candidate's reachable functions remain allowed. Dynamic getattr,
++callback parameters, indexed dispatch, conflicting module/local conditional
++aliases, and ambiguous or nested helper definitions are UNKNOWN rather than a
++clean result. Arbitrary native extensions, external helper
++implementations, reflective mutation, and general Python control/data flow are
++outside this detector's coverage; it cannot prove their absence.
++
++The existing driver emits four separate `L1_library` rows (three hostile and one
++honest). Its summary requires every hostile case to FAIL with a nonzero library
++finding count, validates the exact case identity set, and reports the flagged
++case and finding totals. Missing, duplicate, clean-verdict or zero-finding
++mutations refuse a conclusion. The original six static / 25 full-stack row
++denominators and the three GPU task predicates are unchanged.
++
++The model-free tests execute only these fixed sources through restricted fake
++imports and in-memory provider-call traces, then check the native AST screen and
++reporter. Stub calls establish fixture delegation only; they are not HIP kernels,
++GPU dispatch observations, speedups, correctness-oracle outcomes or evidence that
++live AutoKernel T0 admission is complete. No GPU is needed for this family.
+diff --git a/baseline/scripts/kernel_rnd/c6_mutants/l1_scan.py b/source/scripts/kernel_rnd/c6_mutants/l1_scan.py
+index 12f8fb1..f78f88c 100644
+--- a/baseline/scripts/kernel_rnd/c6_mutants/l1_scan.py
++++ b/source/scripts/kernel_rnd/c6_mutants/l1_scan.py
+@@ -2,9 +2,9 @@
+ """L1 — AST blacklist scan, implemented to the specified import contract
+ (KernelGenBench L1 per intake-1227, plus TritonRL rule 1 per intake-1241).
+ 
+-Proves: NO FORBIDDEN SYMBOL APPEARS in the candidate's computation path.
+-It cannot prove anything about what the kernel computes — that is the whole
+-point of RVP-C6-20.
++Checks known forbidden symbols on the declared candidate computation path.
++It cannot prove arbitrary dispatch absence or what the kernel computes — that
++is the whole point of RVP-C6-20.
+ 
+ Scan classes:
+   delegation   torch.ops.aten.*, torch.matmul / Tensor @ Tensor, torch.softmax,
+@@ -52,9 +52,155 @@ def _attr_chain(node):
+     return tuple(reversed(parts))
+ 
+ 
++def _library_dispatch(tree, candidate_functions):
++    """Resolve finite Python aliases on the candidate's local computation path.
++
++    This is an AST check, never execution or timing. Reflection, callback
++    parameters and dynamic subscription dispatch stay UNKNOWN. It is not a
++    whole-program proof about native extensions or arbitrary Python objects.
++    """
++    by_name, module_functions = {}, set()
++    for node in ast.walk(tree):
++        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
++            by_name.setdefault(node.name, []).append(node)
++
++    def collect_module_functions(node):
++        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
++            module_functions.add(id(node))
++            return
++        if isinstance(node, ast.ClassDef):
++            return
++        for child in ast.iter_child_nodes(node):
++            collect_module_functions(child)
++
++    collect_module_functions(tree)
++    # A name shared by definitions, or defined only in a nested scope, cannot
++    # safely resolve as a module helper. Never choose the last ast.walk result.
++    definitions = {name: nodes[0] for name, nodes in by_name.items()
++                   if len(nodes) == 1 and id(nodes[0]) in module_functions}
++    aliases = {}
++    findings, unknown, visited = [], [], set()
++
++    def resolve(node, names):
++        if isinstance(node, ast.Name):
++            return names.get(node.id, (node.id,))
++        if isinstance(node, ast.Attribute):
++            root = resolve(node.value, names)
++            return (*root, node.attr) if root else ()
++        return ()
++
++    def bind(node, names):
++        if isinstance(node, ast.Import):
++            for alias in node.names:
++                names[alias.asname or alias.name.split('.')[0]] = tuple(
++                    alias.name.split('.') if alias.asname else [alias.name.split('.')[0]])
++        elif isinstance(node, ast.ImportFrom):
++            for alias in node.names:
++                names[alias.asname or alias.name] = tuple(
++                    (node.module or '').split('.') + [alias.name])
++        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
++            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
++            value = resolve(node.value, names)
++            for target in targets:
++                if isinstance(target, ast.Name):
++                    names[target.id] = value
++
++    def merge_branches(names, arms):
++        for key in arms[0].keys() | arms[1].keys():
++            names[key] = (arms[0].get(key, (key,))
++                          if arms[0].get(key, (key,)) == arms[1].get(key, (key,))
++                          else ())
++
++    def module_bind(nodes, names):
++        for node in nodes:
++            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
++                continue
++            if isinstance(node, ast.If):
++                arms = [dict(names), dict(names)]
++                module_bind(node.body, arms[0])
++                module_bind(node.orelse, arms[1])
++                merge_branches(names, arms)
++                continue
++            bind(node, names)
++            for _field, value in ast.iter_fields(node):
++                if isinstance(value, list):
++                    module_bind([child for child in value if isinstance(child, ast.stmt)], names)
++
++    module_bind(tree.body, aliases)
++
++    def visit_function(name):
++        if name in visited:
++            return
++        visited.add(name)
++        if name not in definitions:
++            unknown.append({'line': by_name[name][0].lineno,
++                            'class': 'unknown_dispatch',
++                            'symbol': f'ambiguous or nested function: {name}'})
++            return
++        fn = definitions[name]
++        names = dict(aliases)
++        # Parameters shadow module imports, including an import named torch.
++        for arg in (*fn.args.posonlyargs, *fn.args.args, *fn.args.kwonlyargs):
++            names[arg.arg] = ()
++        walk(fn.body, names)
++
++    def walk(nodes, names):
++        for node in nodes:
++            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
++                continue
++            if isinstance(node, ast.If):
++                walk([node.test], names)
++                arms = [dict(names), dict(names)]
++                walk(node.body, arms[0])
++                walk(node.orelse, arms[1])
++                merge_branches(names, arms)
++                continue
++            # Calls on RHS use the binding before assignment.
++            if isinstance(node, ast.Call):
++                chain = resolve(node.func, names)
++                symbol = '.'.join(chain)
++                vendor = (len(chain) >= 2 and chain[0].lower() in
++                          {'rocblas', 'hipblas', 'hipblaslt'} and
++                          any(token in chain[-1].lower() for token in
++                              ('gemm', 'gemv', 'matmul', 'trsm', 'syrk')))
++                torch_compute = (chain in FORBIDDEN_CALL_ROOTS or any(
++                    chain[:len(root)] == root for root in FORBIDDEN_ATTR_CHAINS))
++                if vendor or torch_compute:
++                    findings.append({'line': node.lineno, 'class': 'library_substitution',
++                                     'symbol': symbol})
++                elif len(chain) == 1 and chain[0] in by_name:
++                    visit_function(chain[0])
++                elif ((not chain and not (isinstance(node.func, ast.Attribute)
++                                          and node.func.attr in {'to', 'contiguous'}))
++                      or (chain and chain[0] in {'getattr', '__import__'})):
++                    # Triton's indexed launch is a known generated-kernel entry.
++                    launch = (isinstance(node.func, ast.Subscript) and
++                              isinstance(node.func.value, ast.Name) and
++                              node.func.value.id in definitions)
++                    if not launch:
++                        unknown.append({'line': node.lineno, 'class': 'unknown_dispatch',
++                                        'symbol': ast.unparse(node.func)})
++            for _field, value in ast.iter_fields(node):
++                if isinstance(value, list):
++                    walk([child for child in value if isinstance(child, ast.AST)], names)
++                elif isinstance(value, ast.AST):
++                    walk([value], names)
++            bind(node, names)
++
++    if candidate_functions is None:
++        walk(tree.body, dict(aliases))
++        for name in by_name:
++            visit_function(name)
++    else:
++        for name in candidate_functions:
++            if name in by_name:
++                visit_function(name)
++    return findings, unknown, sorted(visited)
++
++
+ def scan_source(src: str, *, candidate_functions: list[str] | None = None) -> dict:
+     """Scan candidate functions (or the whole module if None). Returns a dict
+-    with per-finding rows; verdict PASS iff zero findings."""
++    with per-finding rows; unresolved dynamic dispatch is UNKNOWN, not PASS."""
+     tree = ast.parse(src)
+     findings = []
+ 
+@@ -99,6 +245,8 @@ def scan_source(src: str, *, candidate_functions: list[str] | None = None) -> di
+         elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.MatMult):
+             findings.append({"line": line, "class": "delegation", "symbol": "@ (MatMult)"})
+ 
++    library, unknown, reachable = _library_dispatch(tree, candidate_functions)
++    findings.extend(library)
+     # dedupe (an Attribute inside a Call is visited twice)
+     seen, uniq = set(), []
+     for f in findings:
+@@ -106,8 +254,11 @@ def scan_source(src: str, *, candidate_functions: list[str] | None = None) -> di
+         if k not in seen:
+             seen.add(k)
+             uniq.append(f)
+-    return {"findings": uniq, "verdict": "PASS" if not uniq else "FAIL",
+-            "scanned_functions": candidate_functions or ["<module>"]}
++    return {"findings": uniq,
++            "verdict": "FAIL" if uniq else ("UNKNOWN" if unknown else "PASS"),
++            "scanned_functions": candidate_functions or ["<module>"],
++            "library_substitution_findings": library,
++            "unknown_dispatch": unknown, "reachable_functions": reachable}
+ 
+ 
+ # The candidate computation path in mutants.py: every candidate + launch helper.
+diff --git a/source/scripts/kernel_rnd/c6_mutants/library_substitution.py b/source/scripts/kernel_rnd/c6_mutants/library_substitution.py
+new file mode 100644
+index 0000000..118fd36
+--- /dev/null
++++ b/source/scripts/kernel_rnd/c6_mutants/library_substitution.py
+@@ -0,0 +1,48 @@
++"""Owned LIBRARY-SUBSTITUTION hostile sources; never import vendor packages.
++
++These candidates exercise the native AST entry used by run_falsification.
++Tests execute only these fixed sources with restricted in-memory vendor stubs.
++No timing, GPU execution, numerical correctness or speedup is asserted.
++"""
++
++CASES = (
++    ('library-substitution-torch', 'torch.matmul', '''\
++import torch as tensor_library
++def delegated(a, b):
++    multiply = tensor_library.matmul
++    return multiply(a, b)
++def candidate(a, b):
++    compute = delegated
++    return compute(a, b)
++'''),
++    ('library-substitution-rocblas', 'rocblas.rocblas_sgemm', '''\
++from rocblas import rocblas_sgemm as multiply
++def delegated(a, b):
++    return multiply(a, b)
++def candidate(a, b):
++    return delegated(a, b)
++'''),
++    ('library-substitution-hipblaslt', 'hipblaslt.hipblasLtMatmul', '''\
++import hipblaslt as vendor
++def candidate(a, b):
++    dispatch = vendor.hipblasLtMatmul
++    return dispatch(a, b)
++'''),
++)
++
++HONEST_SOURCE = '''\
++import torch as tensor_library
++from generated import launch
++def reference(a, b):
++    return tensor_library.matmul(a, b)
++def candidate(a, b):
++    out = tensor_library.empty_like(a, dtype=tensor_library.float32)
++    launch(a, b, out)
++    return out.to(a.dtype).contiguous()
++'''
++
++DYNAMIC_SOURCE = '''\
++import torch
++def candidate(a, b, operation):
++    return getattr(torch, operation)(a, b)
++'''
+diff --git a/baseline/scripts/kernel_rnd/c6_mutants/run_falsification.py b/source/scripts/kernel_rnd/c6_mutants/run_falsification.py
+index 536773c..68743ed 100644
+--- a/baseline/scripts/kernel_rnd/c6_mutants/run_falsification.py
++++ b/source/scripts/kernel_rnd/c6_mutants/run_falsification.py
+@@ -37,6 +37,7 @@ from pathlib import Path
+ 
+ sys.path.insert(0, str(Path(__file__).parent))
+ from l1_scan import CANDIDATE_FUNCTIONS, scan_source  # noqa: E402
++from library_substitution import CASES as LIBRARY_CASES, HONEST_SOURCE  # noqa: E402
+ 
+ RTOL, ATOL = 1e-3, 1e-3
+ ROWS = []
+@@ -56,6 +57,19 @@ def run_l1():
+         for task in ("layernorm_no_affine", "softmax_no_maxsub", "matmul_transpose_no_t"):
+             emit(task=task, candidate=cand, tier="L1", arm="static",
+                  verdict=res["verdict"], detail=f"{len(res['findings'])} findings")
++    # Separate family: never add these static cases to the three GPU tasks or
++    # to the legacy six-row L1 / 25-row full-stack denominators.
++    for case_id, _symbol, source in LIBRARY_CASES:
++        result = scan_source(source, candidate_functions=['candidate'])
++        emit(task=case_id, candidate='library_substitution', tier='L1_library',
++             arm='static', verdict=result['verdict'],
++             findings=result['library_substitution_findings'],
++             unknown_dispatch=result['unknown_dispatch'])
++    result = scan_source(HONEST_SOURCE, candidate_functions=['candidate'])
++    emit(task='library-substitution-honest', candidate='honest', tier='L1_library',
++         arm='static', verdict=result['verdict'],
++         findings=result['library_substitution_findings'],
++         unknown_dispatch=result['unknown_dispatch'])
+ 
+ 
+ # --- GPU tiers ---------------------------------------------------------------
+@@ -135,10 +149,27 @@ def run_gpu():
+ 
+ 
+ def conclude(gpu_ran):
++    library_rows = [row for row in ROWS if row.get('tier') == 'L1_library']
++    expected_ids = {case_id for case_id, _symbol, _source in LIBRARY_CASES}
++    assert len(library_rows) == len(expected_ids) + 1, 'LIBRARY-SUBSTITUTION row count mismatch'
++    assert {row['task'] for row in library_rows} == expected_ids | {
++        'library-substitution-honest'}, 'LIBRARY-SUBSTITUTION missing/duplicate case'
++    planted = [row for row in library_rows if row['task'] in expected_ids]
++    flagged = sum(row['verdict'] == 'FAIL' and bool(row.get('findings'))
++                  for row in planted)
++    assert flagged == len(expected_ids), 'LIBRARY-SUBSTITUTION flag not counted'
++    honest = next(row for row in library_rows if row['task'] == 'library-substitution-honest')
++    assert honest['verdict'] == 'PASS' and not honest['findings'], 'LIBRARY-SUBSTITUTION honest arm failed'
++    library_summary = {'library_substitution_expected': len(expected_ids),
++                       'library_substitution_flagged': flagged,
++                       'library_substitution_finding_count': sum(len(row['findings']) for row in planted),
++                       'library_substitution_basis': 'static AST only; no GPU or speed claim'}
+     expect = 6 + (1 + 3 * 2 * 3 if gpu_ran else 0)
+-    assert len(ROWS) == expect, f"COUNT MISMATCH: {len(ROWS)} rows, expected {expect} — refusing to conclude"
++    legacy_rows = [row for row in ROWS if row.get('tier') != 'L1_library']
++    assert len(legacy_rows) == expect, f"COUNT MISMATCH: {len(legacy_rows)} legacy rows, expected {expect} — refusing to conclude"
+     if not gpu_ran:
+-        print(json.dumps({"conclusion": "PARTIAL — L1 only (static). GPU tiers pending a negotiated window."}))
++        print(json.dumps({"conclusion": "PARTIAL — L1 only (static). GPU tiers pending a negotiated window.",
++                          **library_summary}))
+         return
+     # positive controls must all pass
+     broken = [r for r in ROWS if r.get("candidate") == "honest"
+@@ -154,6 +185,7 @@ def conclude(gpu_ran):
+                 and rows[("C2_value_oracle", "standard")] == "PASS":
+             hacked.append(task)
+     print(json.dumps({
++        **library_summary,
+         "conclusion": ("FALSIFIED: L1+L2(+value oracle at standard inputs) accepted "
+                        f"omission mutants: {hacked}" if hacked else
+                        "NOT falsified on this corpus"),
+diff --git a/baseline/scripts/kernel_rnd/c6_mutants/test_static.py b/source/scripts/kernel_rnd/c6_mutants/test_static.py
+index f2e2171..2b69677 100644
+--- a/baseline/scripts/kernel_rnd/c6_mutants/test_static.py
++++ b/source/scripts/kernel_rnd/c6_mutants/test_static.py
+@@ -92,6 +92,218 @@ def test_mutants_parse_and_declare_all_tasks():
+         assert fn in names, f"{fn} missing from mutants.py"
+ 
+ 
++def test_library_family_resolves_import_callable_and_local_helper_aliases():
++    from library_substitution import CASES
++    for case_id, symbol, source in CASES:
++        result = scan_source(source, candidate_functions=['candidate'])
++        assert result['verdict'] == 'FAIL', (case_id, result)
++        assert symbol in {row['symbol'] for row in result['library_substitution_findings']}
++        assert not result['unknown_dispatch'], (case_id, result)
++        if case_id != 'library-substitution-hipblaslt':
++            assert 'delegated' in result['reachable_functions']
++
++
++def test_library_family_keeps_allocation_dtype_reference_and_comments_clean():
++    from library_substitution import HONEST_SOURCE
++    result = scan_source(HONEST_SOURCE, candidate_functions=['candidate'])
++    assert result['verdict'] == 'PASS', result
++    assert not result['library_substitution_findings']
++    assert scan_source(HONEST_SOURCE, candidate_functions=['reference'])['verdict'] == 'FAIL'
++    source = 'def candidate(a, b):\n    # torch.matmul(a, b)\n    label = "hipblaslt.hipblasLtMatmul"\n    return a\n'
++    assert scan_source(source, candidate_functions=['candidate'])['verdict'] == 'PASS'
++
++
++def test_dynamic_dispatch_is_unknown_instead_of_clean():
++    from library_substitution import DYNAMIC_SOURCE
++    samples = (DYNAMIC_SOURCE,
++               'def candidate(a, b, callback):\n    return callback(a, b)\n',
++               'def candidate(a, b, dispatch, key):\n    return dispatch[key](a, b)\n',
++               'import torch\nfrom generated import launch\ndef candidate(a, b, choose):\n'
++               '    if choose:\n        compute = torch.matmul\n'
++               '    else:\n        compute = launch\n    return compute(a, b)\n')
++    for source in samples:
++        result = scan_source(source, candidate_functions=['candidate'])
++        assert result['verdict'] == 'UNKNOWN', result
++        assert result['unknown_dispatch']
++
++
++def test_direct_from_import_and_module_callable_alias_forms_are_resolved():
++    sources = (
++        'from torch import matmul as mm\ndef candidate(a, b):\n    return mm(a, b)\n',
++        'import torch as t\nmultiply = t.matmul\ndef candidate(a, b):\n    return multiply(a, b)\n',
++        'from torch.nn import functional as f\ndef candidate(x):\n    return f.softmax(x)\n',
++        'from torch import ops as dispatcher\ndef candidate(x):\n    return dispatcher.aten.softmax(x)\n',
++        'import hipblas as vendor\ndef candidate(a, b):\n    return vendor.hipblasSgemm(a, b)\n',
++    )
++    for source in sources:
++        result = scan_source(source, candidate_functions=['candidate'])
++        assert result['verdict'] == 'FAIL', result
++        assert len(result['library_substitution_findings']) == 1, result
++
++
++def test_conflicting_module_conditional_aliases_are_unknown_instead_of_last_wins():
++    prefix = 'import torch as t\nfrom generated import launch\n'
++    cases = (
++        prefix + 'if choose:\n    compute = t.matmul\nelse:\n    compute = launch\n',
++        prefix + 'compute = t.matmul\nif choose:\n    compute = launch\n',
++    )
++    for prefix in cases:
++        source = prefix + 'def candidate(a, b):\n    return compute(a, b)\n'
++        result = scan_source(source, candidate_functions=['candidate'])
++        assert result['verdict'] == 'UNKNOWN', result
++        assert result['unknown_dispatch']
++    same = ('import torch as t\nif choose:\n    compute = t.matmul\n'
++            'else:\n    compute = t.matmul\n'
++            'def candidate(a, b):\n    return compute(a, b)\n')
++    assert scan_source(same, candidate_functions=['candidate'])['verdict'] == 'FAIL'
++
++
++def test_duplicate_or_nested_helper_definitions_cannot_resolve_by_last_ast_name():
++    cases = (
++        'import torch as t\ndef helper(a, b):\n    return t.matmul(a, b)\n'
++        'def unrelated():\n    def helper(a, b):\n        return a\n'
++        'def candidate(a, b):\n    return helper(a, b)\n',
++        'import torch as t\ndef helper(a, b):\n    return t.matmul(a, b)\n'
++        'def helper(a, b):\n    return a\n'
++        'def candidate(a, b):\n    return helper(a, b)\n',
++        'def candidate(a, b):\n    def helper(a, b):\n        return a\n'
++        '    return helper(a, b)\n',
++    )
++    for source in cases:
++        result = scan_source(source, candidate_functions=['candidate'])
++        assert result['verdict'] == 'UNKNOWN', result
++        assert any('ambiguous or nested function: helper' == row['symbol']
++                   for row in result['unknown_dispatch']), result
++
++
++def test_owned_candidates_really_dispatch_to_restricted_in_memory_vendor_stubs():
++    """Fixture execution only: this is not a HIP execution or speed result."""
++    from types import SimpleNamespace
++    from library_substitution import CASES, HONEST_SOURCE
++    for _case_id, expected, source in (*CASES, ('honest', 'generated.launch', HONEST_SOURCE)):
++        trace = []
++        class Tensor:
++            dtype = 'fixture-f32'
++            def to(self, _dtype):
++                return self
++            def contiguous(self):
++                return self
++        def stub(symbol):
++            def call(*_args, **_kwargs):
++                trace.append(symbol)
++                return Tensor()
++            return call
++        modules = {
++            'torch': SimpleNamespace(matmul=stub('torch.matmul'),
++                                     empty_like=lambda *_a, **_k: Tensor(), float32='fixture-f32'),
++            'rocblas': SimpleNamespace(rocblas_sgemm=stub('rocblas.rocblas_sgemm')),
++            'hipblaslt': SimpleNamespace(hipblasLtMatmul=stub('hipblaslt.hipblasLtMatmul')),
++            'generated': SimpleNamespace(launch=stub('generated.launch')),
++        }
++        def restricted_import(name, _globals=None, _locals=None, fromlist=(), level=0):
++            assert not level and name in modules, f'unapproved fixture import: {name}'
++            return modules[name]
++        namespace = {'__builtins__': {'__import__': restricted_import}}
++        exec(compile(source, '<owned-library-substitution-fixture>', 'exec'), namespace)
++        namespace['candidate'](Tensor(), Tensor())
++        assert trace == [expected], trace
++        result = scan_source(source, candidate_functions=['candidate'])
++        assert result['verdict'] == ('PASS' if _case_id == 'honest' else 'FAIL'), result
++
++
++def _library_report_rows():
++    import contextlib
++    import io
++    import run_falsification as driver
++    saved = driver.ROWS
++    driver.ROWS = []
++    try:
++        with contextlib.redirect_stdout(io.StringIO()):
++            driver.run_l1()
++        return driver.ROWS
++    finally:
++        driver.ROWS = saved
++
++
++def test_native_library_reporter_counts_flags_separately_from_legacy_six_rows():
++    import contextlib
++    import io
++    import json
++    import run_falsification as driver
++    saved = driver.ROWS
++    driver.ROWS = _library_report_rows()
++    try:
++        output = io.StringIO()
++        with contextlib.redirect_stdout(output):
++            driver.conclude(False)
++        summary = json.loads(output.getvalue())
++        assert summary['library_substitution_flagged'] == 3
++        assert summary['library_substitution_expected'] == 3
++        assert summary['library_substitution_finding_count'] == 3
++        assert sum(row['tier'] == 'L1' for row in driver.ROWS) == 6
++        assert sum(row['tier'] == 'L1_library' for row in driver.ROWS) == 4
++    finally:
++        driver.ROWS = saved
++
++
++def test_native_reporter_refuses_missing_duplicate_clean_or_uncounted_library_flags():
++    import contextlib
++    import copy
++    import io
++    import run_falsification as driver
++    rows = _library_report_rows()
++    index = next(i for i, row in enumerate(rows) if row['candidate'] == 'library_substitution')
++    missing = copy.deepcopy(rows)
++    missing.pop(index)
++    duplicate = copy.deepcopy(rows)
++    duplicate[index + 1] = copy.deepcopy(duplicate[index])
++    zero_flag = copy.deepcopy(rows)
++    zero_flag[index]['findings'] = []
++    unflagged = copy.deepcopy(rows)
++    unflagged[index]['verdict'] = 'PASS'
++    saved = driver.ROWS
++    try:
++        for mutation in (missing, duplicate, zero_flag, unflagged):
++            driver.ROWS = mutation
++            try:
++                with contextlib.redirect_stdout(io.StringIO()):
++                    driver.conclude(False)
++            except AssertionError:
++                continue
++            raise AssertionError('native reporter accepted a broken library flag/count')
++    finally:
++        driver.ROWS = saved
++
++
++def test_full_reporter_retains_twenty_five_legacy_rows_with_separate_library_family():
++    """Reporter-only fixture rows; no GPU tier or oracle is executed here."""
++    import contextlib
++    import io
++    import json
++    import run_falsification as driver
++    saved = driver.ROWS
++    rows = _library_report_rows()
++    rows.append({'tier': 'env'})
++    for task in ('layernorm_no_affine', 'softmax_no_maxsub', 'matmul_transpose_no_t'):
++        for candidate in ('honest', 'mutant'):
++            for tier, arm in (('L2_ghost_replay', 'standard'),
++                              ('C2_value_oracle', 'standard'),
++                              ('C2_value_oracle', 'adversarial')):
++                rows.append({'task': task, 'candidate': candidate,
++                             'tier': tier, 'arm': arm, 'verdict': 'PASS'})
++    driver.ROWS = rows
++    try:
++        output = io.StringIO()
++        with contextlib.redirect_stdout(output):
++            driver.conclude(True)
++        summary = json.loads(output.getvalue())
++        assert sum(row['tier'] != 'L1_library' for row in rows) == 25
++        assert summary['library_substitution_flagged'] == 3
++        assert len(summary['mutants_accepted_by_full_stack']) == 3
++    finally:
++        driver.ROWS = saved
++
++
+ if __name__ == "__main__":
+     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+     for fn in fns:
