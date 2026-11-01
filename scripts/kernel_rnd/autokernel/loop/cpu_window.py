@@ -69,7 +69,7 @@ import threading
 import time
 from typing import Any, Callable, Iterator, Mapping
 
-from . import status
+from . import belief_context, status
 
 WINDOW_SCHEMA = "epyc.autokernel.cpu_window.v1"
 EVENT_SCHEMA = "epyc.autokernel.cpu_window_event.v1"
@@ -274,7 +274,7 @@ class BusPublisher:
                  runner: Callable[..., Any] = subprocess.run, synchronous: bool = False,
                  timeout_s: float = 20.0, log=None) -> None:
         self.agent = agent or None
-        self.root = Path(root or os.environ.get("EPYC_ROOT_REPO", "/workspace"))
+        self.root = root
         self.runner = runner
         self.timeout_s = timeout_s
         self.disabled_reason: str | None = None if self.agent else "no bus agent configured"
@@ -284,7 +284,7 @@ class BusPublisher:
         self._thread: threading.Thread | None = None
 
     def argv(self, message: Mapping[str, Any]) -> list[str]:
-        return ["python3", str(self.root / "scripts" / "coordination" / "session_bus.py"),
+        return ["python3", str(belief_context.resolve_root_repo(self.root) / "scripts" / "coordination" / "session_bus.py"),
                 "append", "--agent", str(self.agent), "--target", "outbox",
                 "--json", json.dumps(message, sort_keys=True)]
 

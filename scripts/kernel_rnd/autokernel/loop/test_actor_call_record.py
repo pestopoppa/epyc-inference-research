@@ -55,11 +55,15 @@ class CallRecordV1(_Lane, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.capture = actors._seat_capture()
+        global_config = self.root / "global-opencode.jsonc"
+        global_config.write_text("{}")
+        self.enterContext(mock.patch.object(actors, "OPENCODE_CONFIG", global_config))
+        self.enterContext(mock.patch.object(actors, "_opencode_version", return_value="test-version"))
 
     def test_a_plain_opencode_planner_call_writes_a_valid_v1_record(self):
         row = self._call(actors.backend_for("qwen-gpu/qwen3.8-27b", "high"),
                          schema=actors.HYPOTHESIS_SCHEMA)
-        self.assertEqual(self.capture.validate_call_record(row), [])
+        self.assertEqual(self.capture.validate_call_record(row), [], row.get("v1_refused"))
         self.assertEqual(row["schema"], self.capture.CALL_SCHEMA)
         self.assertEqual((row["role"], row["seat"]["arm"], row["seat"]["bounded"]),
                          ("planner", "plain", False))
@@ -81,7 +85,7 @@ class CallRecordV1(_Lane, unittest.TestCase):
         row = self._call(actors.backend_for("qwen-gpu/qwen3.8-27b", "high"),
                          schema=actors.PATHS_SCHEMA, env=env,
                          stdout='{"paths": ["a.cpp"]}')
-        self.assertEqual(self.capture.validate_call_record(row), [])
+        self.assertEqual(self.capture.validate_call_record(row), [], row.get("v1_refused"))
         seat = row["seat"]
         self.assertEqual((row["role"], seat["arm"], seat["bounded"], seat["fan_out"],
                           seat["steps"]), ("author", "bounded", True, True, 60))
@@ -94,7 +98,7 @@ class CallRecordV1(_Lane, unittest.TestCase):
         row = self._call(actors.backend_for("qwen-gpu/qwen3.8-27b", "high"),
                          schema=actors.HYPOTHESIS_SCHEMA,
                          env={actors.SEAT_ENV_ARM: "plain+ctx-variable"})
-        self.assertEqual(self.capture.validate_call_record(row), [])
+        self.assertEqual(self.capture.validate_call_record(row), [], row.get("v1_refused"))
         self.assertEqual((row["seat"]["arm"], row["seat"]["bounded"], row["seat"]["config"]),
                          ("plain+ctx-variable", False, None))
 
@@ -108,7 +112,7 @@ class CallRecordV1(_Lane, unittest.TestCase):
                "OPENCODE_DISABLE_PROJECT_CONFIG": "1"}
         row = self._call(actors.backend_for("qwen-gpu/qwen3.8-27b", "high"),
                          schema=actors.HYPOTHESIS_SCHEMA, env=env)
-        self.assertEqual(self.capture.validate_call_record(row), [])
+        self.assertEqual(self.capture.validate_call_record(row), [], row.get("v1_refused"))
         self.assertEqual((row["seat"]["arm"], row["seat"]["bounded"], row["seat"]["config"]),
                          ("plain+trim-instr+lane-guard", False, None))
         metrics = self._rows()[-2]
@@ -118,7 +122,7 @@ class CallRecordV1(_Lane, unittest.TestCase):
     def test_a_hosted_critic_is_a_plain_seat_with_no_opencode_fields(self):
         row = self._call(actors.CRITIC_DEFAULT, schema=actors.REVIEW_SCHEMA,
                          stdout='{"accepted": true}')
-        self.assertEqual(self.capture.validate_call_record(row), [])
+        self.assertEqual(self.capture.validate_call_record(row), [], row.get("v1_refused"))
         self.assertEqual(row["role"], "critic")
         self.assertEqual(row["server"]["endpoint"], f"hosted:{actors.CRITIC_DEFAULT.kind}")
         self.assertIsNone(row["seat"]["opencode_version"])
@@ -126,7 +130,7 @@ class CallRecordV1(_Lane, unittest.TestCase):
     def test_a_failed_call_is_still_one_valid_record(self):
         row = self._call(actors.backend_for("qwen-gpu/qwen3.8-27b", "high"),
                          schema=actors.HYPOTHESIS_SCHEMA, rc=1, stdout="no json")
-        self.assertEqual(self.capture.validate_call_record(row), [])
+        self.assertEqual(self.capture.validate_call_record(row), [], row.get("v1_refused"))
         self.assertEqual(row["returncode"], 1)
 
 
@@ -137,7 +141,7 @@ class CallRecordFallsBackVisibly(_Lane, unittest.TestCase):
             row = self._call(actors.backend_for("qwen-gpu/qwen3.8-27b", "high"),
                              schema=actors.HYPOTHESIS_SCHEMA)
         self.assertNotIn("schema", row)            # pre-hook shape: projects no claim
-        self.assertIn("VB-AK-SEAT contract missing", row["v1_refused"])
+        self.assertIn("CaptureUnavailable", row["v1_refused"])
         self.assertEqual(row["prompt_chars"], len("the prompt"))
 
     def test_an_unknown_role_is_refused_not_guessed(self):
