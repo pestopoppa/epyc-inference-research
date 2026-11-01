@@ -123,6 +123,7 @@ class FakeBus:
 def _window(tmp_path, *, now=None, stop=None, bus=None, ttl_s=120.0, wait_bound_s=0.1,
             ledger=True, log_rows=None):
     clock = (lambda: now[0]) if now is not None else time.time
+    (tmp_path / "root/scripts/vidya/adapters").mkdir(parents=True, exist_ok=True)
     publisher = cpu_window.BusPublisher("autokernel", root=tmp_path / "root",
                                         runner=bus or FakeBus(), synchronous=True)
     estimator = cpu_window.PhaseEstimator(
@@ -484,7 +485,8 @@ def test_a_refused_bus_append_disables_the_bus_and_never_raises(tmp_path):
     def refused(argv, **_kw):
         return mock.Mock(returncode=2, stderr="session_bus: not a roster id 'autokernel'")
     logs = []
-    bus = cpu_window.BusPublisher("autokernel", runner=refused, synchronous=True,
+    (tmp_path / "scripts/vidya/adapters").mkdir(parents=True)
+    bus = cpu_window.BusPublisher("autokernel", root=tmp_path, runner=refused, synchronous=True,
                                   log=logs.append)
     bus.emit({"event": "x"})
     bus.emit({"event": "y"})

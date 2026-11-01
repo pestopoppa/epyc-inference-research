@@ -1395,7 +1395,7 @@ _V1_CACHE: dict[str, Any] = {}
 
 def _seat_capture():
     """ROOT's contract module, loaded by file (never via sys.path)."""
-    root = Path(os.environ.get(ROOT_REPO_ENV, "/workspace"))
+    root = belief_context.resolve_root_repo()
     path = (root / SEAT_CAPTURE_REL).resolve()
     key = f"capture:{path}"
     if key not in _V1_CACHE:

@@ -982,3 +982,25 @@ def test_standalone_autokernel_import_keeps_missing_root_diagnostic(tmp_path):
         cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
     assert child.returncode == 0, child.stderr
     assert "EPYC_ROOT is not set" in child.stderr
+
+
+def test_runtime_consumers_use_named_root_and_refuse_invalid_explicit(tmp_path, monkeypatch):
+    from . import cpu_window
+    workspace, view = _roots(tmp_path, monkeypatch, workspace_has=True, view_has=True,
+                             env=tmp_path / "view")
+    capture = view / actors.SEAT_CAPTURE_REL
+    capture.write_text("ORIGIN = \"named\"\n")
+    assert actors._seat_capture().ORIGIN == "named"
+    bus = cpu_window.BusPublisher("agent", synchronous=True)
+    assert bus.argv({})[1] == str(view / "scripts/coordination/session_bus.py")
+    explicit = cpu_window.BusPublisher("agent", root=workspace)
+    assert explicit.argv({})[1] == str(workspace / "scripts/coordination/session_bus.py")
+    bad = cpu_window.BusPublisher("agent", root=tmp_path / "missing", synchronous=True,
+                                  runner=lambda *a, **k: pytest.fail("must not run"),
+                                  log=lambda _: None)
+    bad.emit({})
+    assert "CaptureUnavailable" in bad.disabled_reason
+    monkeypatch.setenv(bc.ROOT_REPO_ENV, str(tmp_path / "missing"))
+    monkeypatch.setenv("EPYC_ROOT", str(view))
+    with pytest.raises(CaptureUnavailable):
+        actors._seat_capture()
