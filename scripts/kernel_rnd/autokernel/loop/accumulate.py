@@ -85,6 +85,8 @@ from . import status
 SERVING_GATE_EVERY_KEEPS = 8
 JOURNAL_DIRNAME = "journal"
 MEASUREMENT_CURRENT = "current_snapshot"
+# Derived from the existing shared COR authority; never serialized as a snapshot.
+MEASUREMENT_STALE_BASELINE = "stale_baseline"
 MEASUREMENT_UNKNOWN_LEGACY = "unknown_legacy"
 MEASUREMENT_STALE_TIP_ADVANCE = "stale_external_tip_advance"
 #: The loop adopted a runtime recipe after this magnitude was measured: tip vs COR
@@ -647,7 +649,8 @@ def _require_valid_ancestry(bundle: Bundle, anchor_commit: str, is_ancestor) -> 
 
 
 def _load_bundle_locked(store: Path, *, anchor_commit: str, is_ancestor,
-                        read_only: bool = False, surface: str | None = None) -> tuple:
+                        read_only: bool = False, surface: str | None = None,
+                        _stale_rebaseline: bool = False) -> tuple:
     """Restore authoritative journal state, importing legacy JSON only once.
 
     The JSON file is a projection. A write-capable caller may initialize an
@@ -675,6 +678,7 @@ def _load_bundle_locked(store: Path, *, anchor_commit: str, is_ancestor,
                 raise BundleRecoveryRequired(f"no accumulator state for surface {surface}")
             if store.is_symlink():
                 raise BundleRecoveryRequired("new explicit accumulator store cannot be a symlink")
+            new_authority = authority is None
             if authority is None:
                 other = "gpu" if surface == "cpu" else "cpu"
                 if ((store / f"accumulator-bundle-{other}.json").exists()
@@ -689,8 +693,9 @@ def _load_bundle_locked(store: Path, *, anchor_commit: str, is_ancestor,
                 authority = anchor_commit
             baseline = Bundle(
                 champion_of_record=authority, tip=anchor_commit, surface=surface,
-                measurement_validity=(MEASUREMENT_CURRENT if authority == anchor_commit
-                                      else MEASUREMENT_STALE_TIP_ADVANCE))
+                measurement_validity=(MEASUREMENT_CURRENT
+                                      if new_authority and authority == anchor_commit
+                                      else MEASUREMENT_UNKNOWN_LEGACY))
             _require_valid_ancestry(baseline, anchor_commit, is_ancestor)
             book = journal.Journal(str(journal_root))
             book.initialize()
@@ -783,11 +788,30 @@ def _load_bundle_locked(store: Path, *, anchor_commit: str, is_ancestor,
         if surface is not None and b.surface != surface:
             raise BundleRecoveryRequired("explicit surface journal contains wrong or missing surface")
         if surface is not None and b.champion_of_record != authority:
-            raise BundleRecoveryRequired(
-                f"shared COR mismatch: authority {authority[:12]} != surface "
-                f"{b.champion_of_record[:12]}")
+            if not _stale_rebaseline or saved is None:
+                raise BundleRecoveryRequired(
+                    f"shared COR mismatch: authority {authority[:12]} != surface "
+                    f"{b.champion_of_record[:12]}")
+            _require_valid_ancestry(b, anchor_commit, is_ancestor)
+            try:
+                compatible = bool(is_ancestor(authority, anchor_commit))
+            except Exception as exc:
+                raise BundleRecoveryRequired(f"commit ancestry check failed: {exc}") from exc
+            if not compatible:
+                raise BundleRecoveryRequired("new shared COR is not an ancestor of the surface tip")
+            b._rebaseline_snapshot = journal.loop_bundle_snapshot_digest(snapshot)
+            b.champion_of_record = authority
+            b.tip = anchor_commit
+            b.measurement_validity = MEASUREMENT_STALE_BASELINE
+            return b, "stale_baseline: own-surface measurement required"
 
         _require_valid_ancestry(b, anchor_commit, is_ancestor)
+        if (_stale_rebaseline and surface is not None and saved is not None
+                and b.measurement_validity == MEASUREMENT_UNKNOWN_LEGACY):
+            b._rebaseline_snapshot = journal.loop_bundle_snapshot_digest(snapshot)
+            b.tip = anchor_commit
+            b.measurement_validity = MEASUREMENT_STALE_BASELINE
+            return b, "stale_baseline: own-surface measurement required"
         if saved is None and not read_only:
             # An invalid legacy lineage must fail above without ever becoming
             # authoritative journal state.
@@ -808,9 +832,35 @@ def _load_bundle_locked(store: Path, *, anchor_commit: str, is_ancestor,
         if not read_only:
             status.write_json(store, filename, b.to_dict(),
                               prefix=".accumulator-bundle-")
+        if effective_measurement_validity(b, store) != MEASUREMENT_CURRENT:
+            return b, (f"restored {len(b.keeps)} keep(s) from {provenance}; "
+                       "compounded measurement is not current")
         return b, (f"restored {len(b.keeps)} keep(s), "
                    f"{b.compounded_bench_pct:+.2f}% vs cor "
                    f"{b.champion_of_record[:12]} from {provenance}")
+
+
+def load_stale_rebaseline(store: Path, *, anchor_commit: str, is_ancestor,
+                          surface: str) -> tuple:
+    """Inspect a stale peer for a native rebaseline without changing its journal."""
+    with _shared_cor_lock(Path(store)):
+        bundle, note = _load_bundle_locked(
+            store, anchor_commit=anchor_commit, is_ancestor=is_ancestor,
+            read_only=True, surface=surface, _stale_rebaseline=True)
+        if bundle.measurement_validity != MEASUREMENT_STALE_BASELINE:
+            raise BundleRecoveryRequired("surface does not require stale rebaseline")
+        return bundle, note
+
+
+def effective_measurement_validity(bundle: Bundle, store: Path | None = None) -> str:
+    """Fold the live shared COR into the stored measurement validity."""
+    if bundle.surface is not None:
+        if store is None:
+            raise BundleRecoveryRequired("surface validity requires its shared COR authority")
+        if (_read_shared_cor(Path(store)) != bundle.champion_of_record or
+                bundle.measurement_validity == MEASUREMENT_UNKNOWN_LEGACY):
+            return MEASUREMENT_STALE_BASELINE
+    return bundle.measurement_validity
 
 
 def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
@@ -945,7 +995,7 @@ def peek_refusal(store: Path, *, anchor_commit: str,
 
 
 def gate_trigger(bundle: Bundle, serving_floor_pct: float | None,
-                 policy: AccumulatorPolicy) -> str | None:
+                 policy: AccumulatorPolicy, *, store: Path | None = None) -> str | None:
     """WHY the serving gate should fire now, or None to keep accumulating.
 
     Two independent triggers (R23-54, operator 2026-09-08):
@@ -962,10 +1012,11 @@ def gate_trigger(bundle: Bundle, serving_floor_pct: float | None,
     (`classify_serving`). Cadence-firing there would spend hours of llama-server time on a
     reading that cannot promote anything -- that is not strictness the ruling removed, it
     is a gate that cannot judge, which R23-43's grammar has always refused to spend."""
-    if serving_floor_pct is None:
+    validity = effective_measurement_validity(bundle, store)
+    if serving_floor_pct is None or validity == MEASUREMENT_STALE_BASELINE:
         return None
     threshold = (
-        bundle.measurement_validity == MEASUREMENT_CURRENT
+        validity == MEASUREMENT_CURRENT
         and bundle.compounded_bench_pct >= policy.fire_threshold_pct(serving_floor_pct)
     )
     cadence = (policy.every_keeps > 0
@@ -1012,12 +1063,12 @@ def bench_due(bundle: Bundle, policy: AccumulatorPolicy,
 
 
 def decide_after_keep(bundle: Bundle, serving_floor_pct: float,
-                      policy: AccumulatorPolicy) -> Decision:
+                      policy: AccumulatorPolicy, *, store: Path | None = None) -> Decision:
     """After a keep lands: fire the serving gate, or keep batching? Fires when EITHER
     trigger in `gate_trigger` holds -- the compounded bench estimate clearing
     `fire_multiple` x floor, OR R23-54's mandatory every-`every_keeps` cadence."""
     return (Decision.FIRE_SERVING
-            if gate_trigger(bundle, serving_floor_pct, policy) is not None
+            if gate_trigger(bundle, serving_floor_pct, policy, store=store) is not None
             else Decision.ACCUMULATE)
 
 
@@ -1033,10 +1084,13 @@ def classify_serving(serving_row: dict) -> Outcome:
     return Outcome.PROMOTE
 
 
-def resolve(bundle: Bundle, serving_row: dict, policy: AccumulatorPolicy) -> dict:
+def resolve(bundle: Bundle, serving_row: dict, policy: AccumulatorPolicy,
+            *, store: Path | None = None) -> dict:
     """Fold the serving gate's verdict into a caller-actionable plan. Returns the outcome,
     the divergence action (only meaningful when DIVERGED), a one-line reason for the log,
     and the new champion of record the loop should record on a PROMOTE."""
+    if effective_measurement_validity(bundle, store) == MEASUREMENT_STALE_BASELINE:
+        raise BundleRecoveryRequired("stale_baseline: compounded gain cannot be quoted")
     outcome = classify_serving(serving_row)
     if outcome is Outcome.PROMOTE:
         return {

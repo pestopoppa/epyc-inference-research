@@ -2120,6 +2120,93 @@ def calibrate(args, run=subprocess.run) -> int:
                 "--write-calibration", str(args.store)]).returncode
 
 
+def _native_stale_rebaseline(store: Path, worktree: Path, bundle, harness: str,
+                             measure) -> None:
+    """Measure through the run-owned harness, then CAS the original surface snapshot."""
+    if bundle.measurement_validity != accumulate.MEASUREMENT_STALE_BASELINE:
+        raise champion.StartupRefused("rebaseline requires a stale surface")
+    intended_cor, intended_tip = bundle.champion_of_record, bundle.tip
+    intent = {"surface": bundle.surface, "harness": harness,
+              "champion_of_record": intended_cor, "measured_tip": intended_tip}
+    if _git(worktree, "rev-parse", "HEAD") != intended_tip:
+        raise champion.StartupRefused("rebaseline tip changed before measurement")
+    if accumulate._read_shared_cor(store) != intended_cor:
+        raise champion.StartupRefused("shared COR changed before rebaseline")
+    intent_body = {"schema": "epyc.autokernel.accumulator_comparison_intent.v1", **intent}
+    intent_bytes = json.dumps(intent_body, sort_keys=True, separators=(",", ":"),
+                              allow_nan=False).encode()
+    intent_path = status.write_json(
+        store / "accumulator-comparisons",
+        f"intent-{hashlib.sha256(intent_bytes).hexdigest()}.json", intent_body,
+        prefix=".accumulator-intent-")
+    try:
+        comparison = measure()
+        if not isinstance(comparison, (bench.Comparison, ServingComparison)):
+            raise ValueError("native comparison did not return its completed result type")
+        row = comparison.to_dict()
+        pairs = row.get("pairs")
+        if (not isinstance(pairs, int) or isinstance(pairs, bool) or pairs < 1 or
+                not isinstance(row.get("anchor_samples"), list) or
+                not isinstance(row.get("candidate_samples"), list) or
+                len(row["anchor_samples"]) != pairs or len(row["candidate_samples"]) != pairs):
+            raise ValueError("native comparison did not complete both arm sample vectors")
+        if (isinstance(comparison, ServingComparison) and row.get("schema") not in
+                ("epyc.autokernel.serving_ab.v1", "epyc.autokernel.serving_ab.v2")):
+            raise ValueError("native serving comparison did not return a completed serving record")
+        json.dumps(row, allow_nan=False)
+    except Exception as exc:
+        failure = {"schema": "epyc.autokernel.accumulator_comparison_failure.v1",
+                   "intent": str(intent_path), "warrant": "aborted_stale",
+                   "error": f"{type(exc).__name__}: {exc}",
+                   "native_record": getattr(exc, "record", None)}
+        encoded = json.dumps(failure, sort_keys=True, separators=(",", ":"),
+                             allow_nan=False).encode()
+        status.write_json(store / "accumulator-comparisons",
+                          f"failure-{hashlib.sha256(encoded).hexdigest()}.json", failure,
+                          prefix=".accumulator-failure-")
+        raise
+    body = {"schema": "epyc.autokernel.accumulator_comparison.v1",
+            "phase": "stale_rebaseline", "intent": str(intent_path),
+            **intent, "comparison": row}
+    with accumulate._shared_cor_lock(store):
+        reason = None
+        if (accumulate._read_shared_cor(store) != intended_cor or
+                _git(worktree, "rev-parse", "HEAD") != intended_tip):
+            reason = "COR or tip changed during rebaseline"
+        _, journal_dir = accumulate._surface_paths(store, bundle.surface)
+        book = accumulate.journal.Journal(str(store / journal_dir))
+        with book.write_lock():
+            latest_snapshot = accumulate._last_saved_snapshot(accumulate._read_entries(book))
+        if (latest_snapshot is None or
+                accumulate.journal.loop_bundle_snapshot_digest(latest_snapshot[0])
+                != bundle._rebaseline_snapshot):
+            reason = reason or "surface journal changed during rebaseline"
+        if reason:
+            body.update(warrant="aborted_stale", refusal_reason=reason)
+        canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                               allow_nan=False).encode()
+        evidence = status.write_json(
+            store / "accumulator-comparisons",
+            f"rebaseline-{hashlib.sha256(canonical).hexdigest()}.json", body,
+            prefix=".accumulator-comparison-")
+        if reason:
+            raise champion.StartupRefused(f"{reason}; aborted evidence: {evidence}")
+        previous_gain = bundle.compounded_bench_pct
+        previous_evidence = bundle.comparison_evidence
+        bundle.compounded_bench_pct = float(row["effect"]) * 100.0
+        bundle.comparison_evidence = {"path": str(evidence.resolve()),
+                                      "sha256": hashlib.sha256(evidence.read_bytes()).hexdigest()}
+        bundle.measurement_validity = accumulate.MEASUREMENT_CURRENT
+        try:
+            bundle.save(store, _shared_cor_lock_held=True)
+        except Exception:
+            # A failed durable write must not make an in-memory status current.
+            bundle.compounded_bench_pct = previous_gain
+            bundle.comparison_evidence = previous_evidence
+            bundle.measurement_validity = accumulate.MEASUREMENT_STALE_BASELINE
+            raise
+
+
 def _main(argv: list[str] | None = None) -> int:
     # Publish can be reached by startup/refusal paths before campaign resolution.
     resolved_campaign = None
@@ -2156,6 +2243,8 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bundle-surface", choices=accumulate.SURFACES,
                         help="opt in to isolated CPU/GPU bundle storage; omitted preserves the "
                              "legacy unscoped accumulator paths")
+    parser.add_argument("--rebaseline-stale", action="store_true",
+                        help="measure an existing stale surface against the shared COR")
     parser.add_argument("--new-anchor-epoch", metavar="COMMIT",
                         help="EXPLICIT opt-in (DS41-C126), bound to ONE commit: when the "
                         "persisted accumulator bundle's tip is not an ancestor of "
@@ -2798,6 +2887,10 @@ def _main(argv: list[str] | None = None) -> int:
                              "events as `status` broadcasts; 'off' (or empty) disables the bus "
                              "(the window file and its events.jsonl remain) (default: %(default)s)")
     args = parser.parse_args(argv)
+    if args.rebaseline_stale and args.bundle_surface is None:
+        parser.error("--rebaseline-stale requires --bundle-surface")
+    if args.rebaseline_stale and args.new_anchor_epoch:
+        parser.error("--rebaseline-stale and --new-anchor-epoch are mutually exclusive")
     global _FLOOR_REGISTRY
     _FLOOR_REGISTRY = None
     if args.floor_registry is not None:
@@ -4447,7 +4540,7 @@ def _main(argv: list[str] | None = None) -> int:
                 experiment_history = memory.count() > 0
         bundle_surface = args.bundle_surface
         bundle_filename, bundle_journal = accumulate._surface_paths(args.store, bundle_surface)
-        if (experimental and not (args.store / bundle_journal).exists()
+        if (experimental and bundle_surface is None and not (args.store / bundle_journal).exists()
                 and not (args.store / bundle_filename).exists()
                 and not experiment_history):
             restored = accumulate.Bundle(
@@ -4460,7 +4553,14 @@ def _main(argv: list[str] | None = None) -> int:
                 args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor,
                 surface=bundle_surface)
     except accumulate.BundleRecoveryRequired as exc:
-        if args.new_anchor_epoch:
+        if args.rebaseline_stale and bundle_surface is not None:
+            try:
+                restored, note = accumulate.load_stale_rebaseline(
+                    args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor,
+                    surface=bundle_surface)
+            except accumulate.BundleRecoveryRequired as recovery_exc:
+                raise champion.StartupRefused(str(recovery_exc)) from recovery_exc
+        elif args.new_anchor_epoch:
             # DS41-C126 gap (a): an EXPLICIT opt-in only, never a silent reset -- the
             # flag must not catch a genuinely corrupt journal (new_epoch narrows to the
             # ancestry-refusal kind and takes the store's journal lock itself), so it is
@@ -4483,6 +4583,15 @@ def _main(argv: list[str] | None = None) -> int:
                 "journal) -- it archives the old bundle/journal under the store and "
                 "starts fresh at the new anchor. No automatic rerun occurred and no "
                 "champion-of-record was inferred.") from exc
+    if (bundle_surface is not None and
+            accumulate.effective_measurement_validity(restored, args.store)
+            == accumulate.MEASUREMENT_STALE_BASELINE and
+            restored.measurement_validity != accumulate.MEASUREMENT_STALE_BASELINE):
+        if not args.rebaseline_stale:
+            raise champion.StartupRefused("stale_baseline requires --rebaseline-stale")
+        restored, note = accumulate.load_stale_rebaseline(
+            args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor,
+            surface=bundle_surface)
     bundle = [restored]
     cor_commit = [restored.champion_of_record]
     cor_build = [args.cor_build or args.anchor_build]
@@ -5533,6 +5642,9 @@ def _main(argv: list[str] | None = None) -> int:
                 "champion_of_record": bundle[0].champion_of_record,
                 "prior_tip": previous_tip,
                 "measured_tip": measured_tip,
+                "surface": bundle[0].surface,
+                "harness": (direct_launch.snapshot_digest if direct_launch else
+                            f"bench:{bench_surface}:{pp}:{tg}:{ubatch}:{args.pairs}"),
                 "comparison": row,
             }
             canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
@@ -5643,6 +5755,9 @@ def _main(argv: list[str] | None = None) -> int:
         bundle[0].save(args.store)   # durable BEFORE the gate decision, so a crash keeps it
         thr = (f"{accum_policy.fire_threshold_pct(serving_floor_pct):.2f}"
                if serving_floor_pct is not None else "uncalibrated")
+        if (accumulate.effective_measurement_validity(bundle[0], args.store)
+                != accumulate.MEASUREMENT_CURRENT):
+            raise loop.RunAborted("stale_baseline: compounded gain cannot be quoted")
         print(f"accum     bundle {len(bundle[0].keeps)} keep(s), "
               f"{bundle[0].compounded_bench_pct:+.2f}% compounded bench vs champion of record "
               f"(serving gate fires at {thr}%, or on cadence at "
@@ -5650,7 +5765,7 @@ def _main(argv: list[str] | None = None) -> int:
         # R23-54 (operator 2026-09-08): EITHER trigger fires the gate — the compounded bench
         # estimate clearing the threshold, or the mandatory every-4-keeps cadence. The
         # estimate keeps its early trigger but no longer holds a veto over the schedule.
-        trigger = accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy)
+        trigger = accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy, store=args.store)
         if trigger is None:
             return
         # The gate is being spent -- once, on the whole bundle.
@@ -5665,7 +5780,7 @@ def _main(argv: list[str] | None = None) -> int:
                                      **({"instrument": args.serving_instrument, "floor_record": floor_record}
                                         if source_instrument else {})}
                                     if direct_launch else {}))
-        plan = accumulate.resolve(bundle[0], sv_row, accum_policy)
+        plan = accumulate.resolve(bundle[0], sv_row, accum_policy, store=args.store)
         if plan["outcome"] is accumulate.Outcome.PROMOTE:
             # Layer (e) at fold (review 2026-10-06): a serving win is bench/throughput
             # evidence only. A bundle carrying a ppl_contract keep must also pass the
@@ -5700,7 +5815,10 @@ def _main(argv: list[str] | None = None) -> int:
                         "floor_provenance": serving_floor_provenance,
                         "floor_carry": serving_floor_carry, **_floor_registry_receipt(),
                         "at_commit": head, "keeps": len(bundle[0].keeps),
-                        "compounded_bench_pct": round(bundle[0].compounded_bench_pct, 3),
+                        "compounded_bench_pct": (
+                            round(bundle[0].compounded_bench_pct, 3)
+                            if accumulate.effective_measurement_validity(bundle[0], args.store)
+                            == accumulate.MEASUREMENT_CURRENT else None),
                         "serving_effect_pct": sv_row.get("effect_pct"),
                         "serving_decisive": sv_row.get("decisive"),
                         "at": loop._now()}
@@ -6046,7 +6164,7 @@ def _main(argv: list[str] | None = None) -> int:
             return None
         thr = (accum_policy.fire_threshold_pct(serving_floor_pct)
                if serving_floor_pct is not None else None)
-        validity = bundle[0].measurement_validity
+        validity = accumulate.effective_measurement_validity(bundle[0], args.store)
         measurement_current = validity == accumulate.MEASUREMENT_CURRENT
         historical_comp = (None if measurement_current
                            else round(bundle[0].compounded_bench_pct, 3))
@@ -6055,7 +6173,7 @@ def _main(argv: list[str] | None = None) -> int:
         # R23-54: the cadence half of the trigger, so the card can say "2/8 keeps to the
         # mandatory gate" and name the reason the last gate fired instead of leaving a
         # reader to infer it from the compounded number that 2026-09-08 proved unreliable.
-        trig = accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy)
+        trig = accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy, store=args.store)
         return {
             "champion_of_record": cor_commit[0],
             "accumulator_tip": bundle[0].tip,
@@ -7546,6 +7664,19 @@ def _main(argv: list[str] | None = None) -> int:
                          else "(gpu-quiet held EXCLUSIVE during GPU measurements only; "
                               "no CPU region claim)"))
             print()
+            if bundle[0].measurement_validity == accumulate.MEASUREMENT_STALE_BASELINE:
+                harness = (direct_launch.snapshot_digest if direct_launch else
+                           f"bench:{bench_surface}:{pp}:{tg}:{ubatch}:{args.pairs}:{args.model}")
+                def measure_rebaseline():
+                    return (cpu_compare(cor_build[0], anchor_build[0], rebind_feedback=False)
+                            if direct_launch else measured_bench_compare(
+                                bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
+                                bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
+                                args.model, pp=pp, tg=tg, pairs=args.pairs,
+                                noise_floor_pct=bench_floor, surface=bench_surface, ubatch=ubatch,
+                                calibrated=bench_floor is not None))
+                _native_stale_rebaseline(args.store, args.worktree, bundle[0], harness,
+                                         measure_rebaseline)
             # R23-44: snapshot the starting champion into the protected champion-of-record slot
             # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as
             # its A-arm; without this snapshot the first accumulator prune could delete it.

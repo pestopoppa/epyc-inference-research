@@ -354,7 +354,7 @@ def test_real_main_consumes_lifecycle_across_failures_and_artifact_write():
     source = (Path(__file__).resolve().parent / "run.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     main = next(node for node in tree.body
-                if isinstance(node, ast.FunctionDef) and node.name == "main")
+                if isinstance(node, ast.FunctionDef) and node.name == "_main")
     main_assignments = [node for node in main.body if isinstance(node, ast.Assign)]
     publisher_assignment = next(node for node in main_assignments
                                 if any(isinstance(target, ast.Name)
@@ -420,7 +420,7 @@ def test_accumulator_projection_is_validity_gated_and_recovery_refuses_startup()
     source = (Path(__file__).resolve().parent / "run.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     main = next(node for node in tree.body
-                if isinstance(node, ast.FunctionDef) and node.name == "main")
+                if isinstance(node, ast.FunctionDef) and node.name == "_main")
     accumulator = next(node for node in ast.walk(main)
                        if isinstance(node, ast.FunctionDef)
                        and node.name == "accumulator_state")
@@ -439,6 +439,8 @@ def test_accumulator_projection_is_validity_gated_and_recovery_refuses_startup()
     assignments = {target.id: node.value for node in ast.walk(accumulator)
                    if isinstance(node, ast.Assign)
                    for target in node.targets if isinstance(target, ast.Name)}
+    assert isinstance(assignments["validity"], ast.Call)
+    assert _ast_name(assignments["validity"].func) == "accumulate.effective_measurement_validity"
     validity_gate = assignments["measurement_current"]
     assert isinstance(validity_gate, ast.Compare)
     assert isinstance(validity_gate.left, ast.Name) and validity_gate.left.id == "validity"
@@ -463,7 +465,9 @@ def test_accumulator_projection_is_validity_gated_and_recovery_refuses_startup()
     assert len(recovery) == 1
     handler = next(handler for handler in recovery[0].handlers
                    if _ast_name(handler.type) == "accumulate.BundleRecoveryRequired")
-    explicit_epoch = next(node for node in handler.body if isinstance(node, ast.If)
+    assert any(_ast_name(call.func) == "accumulate.load_stale_rebaseline"
+               for call in _calls(handler))
+    explicit_epoch = next(node for node in ast.walk(handler) if isinstance(node, ast.If)
                           and _ast_name(node.test) == "args.new_anchor_epoch")
     assert any(_ast_name(call.func) == "new_epoch.start_new_anchor_epoch"
                for call in _calls(explicit_epoch.body))

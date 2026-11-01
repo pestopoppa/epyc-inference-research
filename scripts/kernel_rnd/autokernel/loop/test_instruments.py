@@ -347,7 +347,8 @@ class ServingGate(unittest.TestCase):
     def test_bundle_output_names_validity_without_inventing_measurement_source(self):
         source = Path(serving_gate.__file__).read_text(encoding="utf-8")
         self.assertNotIn("(MEASURED by seed_bundle)", source)
-        self.assertIn("validity={bundle.measurement_validity}", source)
+        self.assertIn("effective_measurement_validity(bundle, Path(args.store))", source)
+        self.assertIn("validity={validity}", source)
         self.assertIn("historical-only magnitude; threshold disabled", source)
 
     def test_dry_legacy_replay_does_not_import_or_rewrite(self):
@@ -573,6 +574,60 @@ class SeedBundle(unittest.TestCase):
         self.assertEqual(bundle.tip, self.tip)
         self.assertEqual(bundle.compounded_bench_pct, 6.13)
         self.assertEqual(sorted(bundle.keeps), ["akm-fast-dequant", "akm-tiled-gemv"])
+
+    def test_explicit_seed_is_initialization_only(self):
+        rc, calls = self._run("--surface", "gpu", "--apply")
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 1)
+        journal = self.store / "journal-gpu" / "events.jsonl"
+        before = journal.read_bytes()
+        rc, calls = self._run("--surface", "gpu", "--apply")
+        self.assertEqual(rc, instruments.REFUSED)
+        self.assertEqual(calls, [])
+        self.assertEqual(journal.read_bytes(), before)
+
+    def test_explicit_seed_refuses_concurrent_initialization_after_measurement(self):
+        def seam(*args, **kwargs):
+            # CONTROL_ONLY: simulate another owner creating the surface while measured.
+            accumulate.Bundle(champion_of_record=self.cor, tip=self.cor,
+                              surface="gpu").save(self.store)
+            return {"effect_pct": 6.13, "decisive": True, "drifting": False}
+
+        with mock.patch.object(seed_bundle, "measure", seam), \
+             mock.patch("builtins.print"):
+            rc = seed_bundle.main(self._argv("--surface", "gpu", "--apply"))
+        self.assertEqual(rc, instruments.REFUSED)
+        restored, _ = accumulate.load_bundle(self.store, anchor_commit=self.cor,
+                                               is_ancestor=lambda a, b: a == b,
+                                               surface="gpu")
+        self.assertEqual(restored.tip, self.cor)
+        self.assertEqual(restored.keeps, [])
+
+    def test_explicit_seed_refuses_late_surface_when_shared_cor_exists(self):
+        # CONTROL_ONLY: late surfaces need their own native rebaseline.
+        accumulate.Bundle(champion_of_record=self.cor, tip=self.cor,
+                          surface="cpu").save(self.store)
+        rc, calls = self._run("--surface", "gpu", "--apply")
+        self.assertEqual(rc, instruments.REFUSED)
+        self.assertEqual(calls, [])
+        self.assertFalse((self.store / "journal-gpu").exists())
+
+    def test_explicit_seed_cor_race_retains_aborted_result(self):
+        # CONTROL_ONLY: authority changes in a temporary store during a fake measurement.
+        def seam(*args, **kwargs):
+            accumulate.Bundle(champion_of_record=self.cor, tip=self.cor,
+                              surface="cpu").save(self.store)
+            with accumulate._shared_cor_lock(self.store):
+                accumulate._cas_shared_cor_locked(self.store, self.cor, self.tip)
+            return {"effect_pct": 6.13, "decisive": True, "drifting": False}
+        with mock.patch.object(seed_bundle, "measure", seam), \
+             mock.patch("builtins.print"):
+            rc = seed_bundle.main(self._argv("--surface", "gpu", "--apply"))
+        self.assertEqual(rc, instruments.REFUSED)
+        self.assertFalse((self.store / "journal-gpu").exists())
+        aborted = list(self.store.glob("seed-aborted-*.json"))
+        self.assertEqual(len(aborted), 1)
+        self.assertEqual(json.loads(aborted[0].read_text())["warrant"], "aborted_stale")
 
     def test_a_build_without_llama_bench_is_refused(self):
         empty = _build(self.root / "empty")

@@ -133,15 +133,15 @@ def main(argv: list[str] | None = None) -> int:
         thr = policy.fire_threshold_pct(floor)
         print(f"floor     {floor:.3f}% [{reading.provenance}] unit={reading.unit} "
               f"n={reading.n} from {reading.path.name} | fire threshold {thr:.2f}%")
-        magnitude_label = (
-            "current combined measurement"
-            if bundle.measurement_validity == accumulate.MEASUREMENT_CURRENT
-            else "historical-only magnitude; threshold disabled"
-        )
+        validity = accumulate.effective_measurement_validity(bundle, Path(args.store))
+        if validity == accumulate.MEASUREMENT_STALE_BASELINE:
+            raise accumulate.BundleRecoveryRequired("stale_baseline: compounded gain cannot be quoted")
+        magnitude_label = ("current combined measurement" if validity == accumulate.MEASUREMENT_CURRENT
+                           else "historical-only magnitude; threshold disabled")
         print(f"bundle    cor {bundle.champion_of_record[:12]} tip {bundle.tip[:12]} "
               f"keeps {len(bundle.keeps)} compounded {bundle.compounded_bench_pct:+.3f}% "
-              f"validity={bundle.measurement_validity} ({magnitude_label})")
-        decision = accumulate.decide_after_keep(bundle, floor, policy)
+              f"validity={validity} ({magnitude_label})")
+        decision = accumulate.decide_after_keep(bundle, floor, policy, store=Path(args.store))
         print(f"schedule  decide_after_keep -> {decision}  (fire_multiple x floor = "
               f"{thr:.2f}% is only the loop's SCHEDULING heuristic)")
         if decision is not accumulate.Decision.FIRE_SERVING and not args.force:
@@ -171,7 +171,11 @@ def main(argv: list[str] | None = None) -> int:
         # "no reading" from "a bad reading".
         print(f"REFUSED: {refusal}", file=sys.stderr)
         return instruments.REFUSED
-    plan = accumulate.resolve(bundle, row, policy)
+    try:
+        plan = accumulate.resolve(bundle, row, policy, store=Path(args.store))
+    except accumulate.BundleRecoveryRequired as refusal:
+        print(f"REFUSED: {refusal}", file=sys.stderr)
+        return instruments.REFUSED
     record = {"outcome": plan["outcome"].value, "reason": plan["reason"],
               "bundled_keeps": list(bundle.keeps),
               "planner_evidence": plan.get("planner_evidence"),

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -125,6 +126,172 @@ def test_surface_promotion_cas_advances_only_after_own_snapshot_and_stales_peer(
         A.Bundle(champion_of_record="c2", tip="c2", surface="gpu").promote_shared_cor(
             tmp_path, expected_cor="c0")
     assert (tmp_path / "journal-gpu" / "events.jsonl").read_bytes() == stale_bytes
+
+
+def test_control_only_loaded_surface_is_fenced_when_shared_cor_advances(tmp_path):
+    # CONTROL_ONLY: temporary journal, no production promotion or measurements.
+    gpu, _ = A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor,
+                           surface="gpu")
+    gpu.add_keep("gpu-keep", "c1", 42.0)
+    gpu.save(tmp_path)
+    A.Bundle(champion_of_record="c1", tip="c1", surface="cpu").promote_shared_cor(
+        tmp_path, expected_cor="c0")
+    assert A.effective_measurement_validity(gpu, tmp_path) == A.MEASUREMENT_STALE_BASELINE
+    assert A.gate_trigger(gpu, 1.0, A.AccumulatorPolicy(), store=tmp_path) is None
+    with pytest.raises(A.BundleRecoveryRequired, match="stale_baseline"):
+        A.resolve(gpu, {"decisive": True, "effect": 0.2},
+                  A.AccumulatorPolicy(), store=tmp_path)
+    recovered, _ = A.load_stale_rebaseline(tmp_path, anchor_commit="c1",
+                                            is_ancestor=_ancestor, surface="gpu")
+    assert recovered.measurement_validity == A.MEASUREMENT_STALE_BASELINE
+    assert recovered.champion_of_record == "c1"
+    assert recovered.keeps == ["gpu-keep"]
+    with pytest.raises(A.BundleRecoveryRequired, match="not an ancestor"):
+        A.load_stale_rebaseline(tmp_path, anchor_commit="c1", surface="gpu",
+                                is_ancestor=lambda older, newer: older == "c0")
+    with pytest.raises(A.BundleRecoveryRequired, match="shared COR mismatch"):
+        A.load_bundle(tmp_path, anchor_commit="c1", is_ancestor=_ancestor, surface="gpu")
+
+
+def test_control_only_late_surface_starts_stale_even_at_cor(tmp_path):
+    A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor, surface="cpu")
+    gpu, _ = A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor,
+                           surface="gpu")
+    assert A.effective_measurement_validity(gpu, tmp_path) == A.MEASUREMENT_STALE_BASELINE
+    pending, _ = A.load_stale_rebaseline(tmp_path, anchor_commit="c0",
+                                          is_ancestor=_ancestor, surface="gpu")
+    assert pending.tip == pending.champion_of_record == "c0"
+    assert pending.measurement_validity == A.MEASUREMENT_STALE_BASELINE
+
+
+def _control_comparison(run, effect=0.25):
+    return run.bench.Comparison(surface="tg128", anchor_samples=[100.0],
+                                candidate_samples=[100.0 * (1 + effect)], effect=effect,
+                                estimator="median_over_median", pairs=1,
+                                noise_floor_pct=None, residency={})
+
+
+def test_control_only_native_rebaseline_refuses_cor_change_during_measurement(tmp_path):
+    from . import run
+    A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor, surface="gpu")
+    A.Bundle(champion_of_record="c1", tip="c1", surface="cpu").promote_shared_cor(
+        tmp_path, expected_cor="c0")
+    pending, _ = A.load_stale_rebaseline(tmp_path, anchor_commit="c1",
+                                          is_ancestor=_ancestor, surface="gpu")
+    journal = tmp_path / "journal-gpu" / "events.jsonl"
+    before = journal.read_bytes()
+
+    def measure():
+        intents = list((tmp_path / "accumulator-comparisons").glob("intent-*.json"))
+        assert len(intents) == 1
+        assert json.loads(intents[0].read_text())["surface"] == "gpu"
+        with A._shared_cor_lock(tmp_path):
+            A._cas_shared_cor_locked(tmp_path, "c1", "c2")
+        return _control_comparison(run)
+
+    with mock.patch.object(run, "_git", return_value="c1"):
+        with pytest.raises(run.champion.StartupRefused, match="changed during rebaseline"):
+            run._native_stale_rebaseline(tmp_path, tmp_path, pending, "CONTROL_ONLY", measure)
+    assert journal.read_bytes() == before
+    assert pending.measurement_validity == A.MEASUREMENT_STALE_BASELINE
+    receipts = list((tmp_path / "accumulator-comparisons").glob("rebaseline-*.json"))
+    assert len(receipts) == 1
+    receipt = json.loads(receipts[0].read_text())
+    assert receipt["warrant"] == "aborted_stale"
+    assert receipt["surface"] == "gpu" and receipt["harness"] == "CONTROL_ONLY"
+
+
+def test_control_only_native_rebaseline_saves_measured_surface(tmp_path):
+    from . import run
+    A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor, surface="cpu")
+    A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor, surface="gpu")
+    pending, _ = A.load_stale_rebaseline(tmp_path, anchor_commit="c0",
+                                          is_ancestor=_ancestor, surface="gpu")
+    with mock.patch.object(run, "_git", return_value="c0"):
+        run._native_stale_rebaseline(tmp_path, tmp_path, pending, "CONTROL_ONLY",
+                                     lambda: _control_comparison(run, 0.125))
+    loaded, _ = A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor,
+                               surface="gpu")
+    assert loaded.measurement_validity == A.MEASUREMENT_CURRENT
+    assert loaded.compounded_bench_pct == 12.5
+    assert json.loads(Path(loaded.comparison_evidence["path"]).read_text())["surface"] == "gpu"
+
+
+def test_control_only_rebaseline_refuses_incomplete_native_result(tmp_path):
+    from . import run
+    A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor, surface="cpu")
+    A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor, surface="gpu")
+    pending, _ = A.load_stale_rebaseline(tmp_path, anchor_commit="c0",
+                                          is_ancestor=_ancestor, surface="gpu")
+    journal = tmp_path / "journal-gpu" / "events.jsonl"
+    before = journal.read_bytes()
+    with mock.patch.object(run, "_git", return_value="c0"):
+        with pytest.raises(ValueError, match="completed result type"):
+            run._native_stale_rebaseline(tmp_path, tmp_path, pending, "CONTROL_ONLY",
+                                         lambda: {"effect": 1.0})
+    assert journal.read_bytes() == before
+    assert pending.measurement_validity == A.MEASUREMENT_STALE_BASELINE
+    assert list((tmp_path / "accumulator-comparisons").glob("failure-*.json"))
+    assert list((tmp_path / "accumulator-comparisons").glob("intent-*.json"))
+
+
+def test_control_only_cpu_native_serving_result_and_incomplete_refusal(tmp_path):
+    from . import run, serving
+    from .test_serving import RECIPE
+    # CONTROL_ONLY: invoke the real serving reducer with mocked launch samples.
+    A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor, surface="gpu")
+    A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor, surface="cpu")
+    pending, _ = A.load_stale_rebaseline(tmp_path, anchor_commit="c0",
+                                          is_ancestor=_ancestor, surface="cpu")
+    with mock.patch.object(serving, "_measure_once", side_effect=[100.0, 120.0]):
+        comparison = run._serving_comparison(
+            lambda: serving.compare(RECIPE, Path("/a"), Path("/c"), pairs=1, floor_pct=None),
+            "CONTROL_ONLY")
+    assert isinstance(comparison, run.ServingComparison)
+    incomplete = run.ServingComparison({**comparison.row, "candidate_samples": []}, "CONTROL_ONLY")
+    with mock.patch.object(run, "_git", return_value="c0"):
+        with pytest.raises(ValueError, match="both arm sample vectors"):
+            run._native_stale_rebaseline(tmp_path, tmp_path, pending, "CONTROL_ONLY_CPU",
+                                         lambda: incomplete)
+        assert pending.measurement_validity == A.MEASUREMENT_STALE_BASELINE
+        failure = RuntimeError("CONTROL_ONLY native failure")
+        failure.record = {"status": "measurement_invalid", "anchor_raw_samples": [100.0]}
+        with pytest.raises(RuntimeError, match="CONTROL_ONLY native failure"):
+            run._native_stale_rebaseline(tmp_path, tmp_path, pending, "CONTROL_ONLY_CPU",
+                                         mock.Mock(side_effect=failure))
+        failure_receipts = [json.loads(path.read_text()) for path in
+                            (tmp_path / "accumulator-comparisons").glob("failure-*.json")]
+        assert any(receipt["native_record"] == failure.record for receipt in failure_receipts)
+        assert pending.measurement_validity == A.MEASUREMENT_STALE_BASELINE
+        run._native_stale_rebaseline(tmp_path, tmp_path, pending, "CONTROL_ONLY_CPU",
+                                     lambda: comparison)
+    restored, _ = A.load_bundle(tmp_path, anchor_commit="c0", is_ancestor=_ancestor,
+                                 surface="cpu")
+    assert restored.measurement_validity == A.MEASUREMENT_CURRENT
+    record = json.loads(Path(restored.comparison_evidence["path"]).read_text())
+    assert record["surface"] == "cpu"
+    assert record["comparison"]["schema"] == "epyc.autokernel.serving_ab.v1"
+    assert len(record["comparison"]["anchor_samples"]) == 1
+    assert len(record["comparison"]["candidate_samples"]) == 1
+
+
+def test_control_only_rebaseline_and_anchor_epoch_are_exclusive(tmp_path, capsys):
+    from . import run
+    with pytest.raises(SystemExit) as error:
+        run._main(["--worktree", str(tmp_path), "--anchor-build", str(tmp_path),
+                   "--store", str(tmp_path), "--bundle-surface", "cpu",
+                   "--rebaseline-stale", "--new-anchor-epoch", "c0"])
+    assert error.value.code == 2
+    assert "mutually exclusive" in capsys.readouterr().err
+
+
+def test_control_only_rebaseline_flag_requires_surface(tmp_path, capsys):
+    from . import run
+    with pytest.raises(SystemExit) as error:
+        run._main(["--worktree", str(tmp_path), "--anchor-build", str(tmp_path),
+                   "--store", str(tmp_path), "--rebaseline-stale"])
+    assert error.value.code == 2
+    assert "--rebaseline-stale requires --bundle-surface" in capsys.readouterr().err
 
 
 def test_concurrent_surface_writes_do_not_cross_overwrite(tmp_path):

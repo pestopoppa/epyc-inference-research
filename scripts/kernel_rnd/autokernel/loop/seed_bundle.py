@@ -26,6 +26,7 @@ additionally writes the bundle into the store.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -100,6 +101,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _require_uninitialized_surface(store: Path, surface: str) -> None:
+    """Seed only a new surface; existing journal history requires recovery."""
+    filename, journal_dir = accumulate._surface_paths(store, surface)
+    if ((store / filename).exists() or (store / journal_dir).exists() or
+            accumulate._read_shared_cor(store) is not None):
+        raise accumulate.BundleRecoveryRequired(
+            f"surface {surface} or shared COR already exists; seed is initialization only")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     posture = instruments.resolve_posture(args)
@@ -112,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"the bundle would describe a lineage this tree does not contain")
         if args.surface is not None:
             accumulate.require_shared_cor(Path(args.store), args.cor, args.surface)
+            if posture.apply:
+                _require_uninitialized_surface(Path(args.store), args.surface)
         keeps = keeps_between(worktree, args.cor, tip)
         instruments.require_binary(args.cor_build, "llama-bench")
         instruments.require_binary(args.tip_build, "llama-bench")
@@ -132,6 +144,20 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         comparison = measure(args.cor_build, args.tip_build, args.model,
                              pairs=args.pairs, floor_pct=args.floor)
+        if args.surface is not None:
+            try:
+                accumulate.require_shared_cor(Path(args.store), args.cor, args.surface)
+            except accumulate.BundleRecoveryRequired as exc:
+                aborted = {"schema": "epyc.autokernel.seed_aborted.v1",
+                           "warrant": "aborted_stale", "reason": str(exc),
+                           "surface": args.surface, "champion_of_record": args.cor,
+                           "tip": tip, "comparison": comparison}
+                data = json.dumps(aborted, sort_keys=True, separators=(",", ":"),
+                                  allow_nan=False).encode()
+                status.write_json(Path(args.store),
+                                  f"seed-aborted-{hashlib.sha256(data).hexdigest()}.json",
+                                  aborted, prefix=".seed-aborted-")
+                raise
     except (instruments.InstrumentRefusal, serving.FloorUnitMismatch,
             accumulate.BundleRecoveryRequired) as refusal:
         print(f"REFUSED: {refusal}", file=sys.stderr)
@@ -149,7 +175,17 @@ def main(argv: list[str] | None = None) -> int:
                                compounded_bench_pct=comparison["effect_pct"],
                                surface=args.surface)
     if posture.apply:
-        path = bundle.save(Path(args.store), surface=args.surface)
+        try:
+            if args.surface is None:
+                path = bundle.save(Path(args.store))
+            else:
+                with accumulate._shared_cor_lock(Path(args.store)):
+                    _require_uninitialized_surface(Path(args.store), args.surface)
+                    path = bundle.save(Path(args.store), surface=args.surface,
+                                       _shared_cor_lock_held=True)
+        except accumulate.BundleRecoveryRequired as refusal:
+            print(f"REFUSED: {refusal}", file=sys.stderr)
+            return instruments.REFUSED
         print("bundle written:", path, json.dumps(bundle.to_dict()))
     else:
         print("DRY (no --apply). Would write:", json.dumps(bundle.to_dict()))

@@ -1585,7 +1585,7 @@ class TwoTierChampionWiring(unittest.TestCase):
         # it fires only on a named trigger (R23-54: threshold OR the keep cadence, 8 since 2026-09-28), and
         # the trigger is recorded — never left for a reader to infer from the compounded
         # number the 2026-09-08 divergence discredited.
-        self.assertIn("accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy)",
+        self.assertIn("accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy, store=args.store)",
                       accum)
         self.assertIn("if trigger is None:", accum)
         self.assertIn('"trigger": trigger', accum)
@@ -1639,7 +1639,8 @@ class TwoTierChampionWiring(unittest.TestCase):
         src = self._source()
         self.assertIn("def accumulator_state(", src)
         pub = src.split("def publish(", 1)[1].split("\n    def ", 1)[0]
-        self.assertIn("accumulator=accumulator_state()", pub)
+        self.assertIn("current_accumulator = accumulator_state()", pub)
+        self.assertIn("accumulator=current_accumulator", pub)
         acc = src.split("def accumulator_state(", 1)[1].split("\n    def ", 1)[0]
         for field in ("compounded_bench_pct", "fire_threshold_pct", "n_keeps",
                       "progress_fraction", "champion_of_record"):
