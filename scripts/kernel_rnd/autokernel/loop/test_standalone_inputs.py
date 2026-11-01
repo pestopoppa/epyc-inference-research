@@ -106,7 +106,7 @@ def test_dry_run_uses_installed_main_without_store_or_provider(tmp_path, capsys)
         def get(self, _identifier):
             raise AssertionError("dry-run consulted provider registry")
 
-    assert unified_driver.main(
+    assert unified_driver._main(
         ["--config", str(path), "--dry-run"], provider_registry=Explodes()) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "unavailable"
@@ -350,8 +350,8 @@ def test_listen_entrypoint_delegates_exact_factory_to_existing_service(
         observed["factory"] = runtime_factory
         return 7
 
-    monkeypatch.setattr(unified_driver.campaign_service, "main", service)
-    assert unified_driver.main(
+    monkeypatch.setattr(unified_driver.campaign_service, "_main", service)
+    assert unified_driver._main(
         ["--config", str(path), "--listen", "127.0.0.1:0"],
         provider_registry=registry) == 7
     assert observed["argv"][-2:] == ["--listen", "127.0.0.1:0"]
@@ -377,7 +377,7 @@ registry = standalone_inputs.ProviderRegistry({
     "fixture-readiness": standalone_inputs.ProviderBinding(
         readiness_check=lambda: (True, None)),
 }, evidence_verifiers={"fixture-evidence": _verifier()})
-raise SystemExit(unified_driver.main([
+raise SystemExit(unified_driver._main([
     "--config", str(root / "startup.json"),
     "--listen", f"127.0.0.1:{sys.argv[2]}",
 ], provider_registry=registry))

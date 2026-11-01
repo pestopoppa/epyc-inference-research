@@ -464,7 +464,7 @@ def test_constructor_refuses_malformed_transport_values_before_binding(
 def test_cli_dry_inspection_does_not_create_store_or_offer_execution(tmp_path, capsys):
     source = _resolved_file(tmp_path)
     store = tmp_path / "absent-store"
-    assert service.main(["--resolved-campaign", str(source), "--store", str(store)]) == 0
+    assert service._main(["--resolved-campaign", str(source), "--store", str(store)]) == 0
     body = json.loads(capsys.readouterr().out)
     assert body["execution_authorized"] is False
     assert not store.exists()
@@ -473,7 +473,7 @@ def test_cli_dry_inspection_does_not_create_store_or_offer_execution(tmp_path, c
 def test_cli_once_materializes_one_snapshot_without_launching(tmp_path, capsys):
     source = _resolved_file(tmp_path)
     store = tmp_path / "service"
-    assert service.main(["--resolved-campaign", str(source), "--store", str(store),
+    assert service._main(["--resolved-campaign", str(source), "--store", str(store),
                          "--once"]) == 0
     body = json.loads(capsys.readouterr().out)
     assert body["active_worker"] is None
@@ -494,7 +494,7 @@ def test_bad_generation_or_listener_refuses_before_store_mutation(tmp_path, extr
     source = _resolved_file(tmp_path)
     store = tmp_path / "must-stay-absent"
     with pytest.raises(control.ControlRefused):
-        service.main(["--resolved-campaign", str(source), "--store", str(store), *extra])
+        service._main(["--resolved-campaign", str(source), "--store", str(store), *extra])
     assert not store.exists()
 
 
@@ -539,7 +539,7 @@ def test_runtime_factory_recovers_before_non_http_worker_and_closes_in_order(
         assert Path(args.store).absolute() == controller.store
         return controller, runtime
 
-    assert service.main([
+    assert service._main([
         "--resolved-campaign", str(source), "--store", str(controller.store),
         "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         "--shutdown-deadline", "1",
@@ -572,7 +572,7 @@ def test_runtime_factory_pending_restart_accepts_settled_recovery_without_resele
     monkeypatch.setattr(runtime, "recover", tracked_recover)
     monkeypatch.setattr(runtime, "run", lambda _event: runtime_module.RuntimeTickResult(
         "stopped", "restart fixture complete", 0, controller.snapshot()))
-    assert service.main([
+    assert service._main([
         "--resolved-campaign", str(source), "--store", str(controller.store),
         "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         "--shutdown-deadline", "1",
@@ -589,7 +589,7 @@ def test_pipe_creation_failure_closes_proven_typed_owner(tmp_path, monkeypatch):
     monkeypatch.setattr(service.os, "pipe2", lambda _flags: (
         _ for _ in ()).throw(OSError("fixture pipe failure")))
     with pytest.raises(OSError, match="fixture pipe failure"):
-        service.main([
+        service._main([
             "--resolved-campaign", str(source), "--store", str(controller.store),
             "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         ], runtime_factory=lambda _resolved, _args: (controller, runtime))
@@ -615,7 +615,7 @@ def test_signal_install_failure_restores_handler_then_closes_descriptors_and_own
     monkeypatch.setattr(service.os, "pipe2", pipe)
     monkeypatch.setattr(service.signal, "signal", install)
     with pytest.raises(OSError, match="signal install failure"):
-        service.main([
+        service._main([
             "--resolved-campaign", str(source), "--store", str(controller.store),
             "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         ], runtime_factory=lambda _resolved, _args: (controller, runtime))
@@ -630,7 +630,7 @@ def test_signal_install_failure_restores_handler_then_closes_descriptors_and_own
 def test_typed_factory_identity_rejection_closes_only_proven_pair(tmp_path, monkeypatch):
     runtime, controller, source = _runtime_service_owner(tmp_path, monkeypatch)
     with pytest.raises(control.ControlRefused, match="identity differs"):
-        service.main([
+        service._main([
             "--resolved-campaign", str(source), "--store", str(tmp_path / "wrong-store"),
             "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         ], runtime_factory=lambda _resolved, _args: (controller, runtime))
@@ -642,7 +642,7 @@ def test_untyped_factory_rejection_leaves_cleanup_with_factory(tmp_path, monkeyp
     runtime, controller, source = _runtime_service_owner(tmp_path, monkeypatch)
     try:
         with pytest.raises(control.ControlRefused, match="factory retains cleanup authority"):
-            service.main([
+            service._main([
                 "--resolved-campaign", str(source), "--store", str(controller.store),
                 "--snapshot-version", "3", "--listen", "127.0.0.1:0",
             ], runtime_factory=lambda _resolved, _args: (controller, object()))
@@ -658,7 +658,7 @@ def test_snapshot_v3_listener_without_runtime_factory_refuses_before_store(
     source = _resolved_file(tmp_path)
     store = tmp_path / "v3-must-stay-absent"
     with pytest.raises(control.ControlRefused, match="connected runtime_factory"):
-        service.main([
+        service._main([
             "--resolved-campaign", str(source), "--store", str(store),
             "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         ])
@@ -685,7 +685,7 @@ def test_sigterm_notification_during_recovery_stops_before_listener_or_worker(
     monkeypatch.setattr(service.signal, "signal", fake_signal)
     monkeypatch.setattr(runtime, "recover", interrupted_recover)
     monkeypatch.setattr(runtime, "run", lambda _event: started.append(True))
-    assert service.main([
+    assert service._main([
         "--resolved-campaign", str(source), "--store", str(controller.store),
         "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         "--shutdown-deadline", "1",
@@ -703,7 +703,7 @@ def test_runtime_worker_failure_drains_then_reports_without_leaking_owner(
 
     monkeypatch.setattr(runtime, "run", fail_run)
     with pytest.raises(control.ControlRefused, match="runtime worker failed: RuntimeError"):
-        service.main([
+        service._main([
             "--resolved-campaign", str(source), "--store", str(controller.store),
             "--snapshot-version", "3", "--listen", "127.0.0.1:0",
             "--shutdown-deadline", "1",
@@ -718,7 +718,7 @@ def test_runtime_recovery_refusal_closes_partial_owner_before_listener(
         "recovery_required", "fixture held receipt is unavailable", 0.01,
         controller.snapshot()))
     with pytest.raises(control.ControlRefused, match="runtime recovery unavailable"):
-        service.main([
+        service._main([
             "--resolved-campaign", str(source), "--store", str(controller.store),
             "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         ], runtime_factory=lambda _resolved, _args: (controller, runtime))
@@ -735,7 +735,7 @@ def test_runtime_partial_listener_startup_failure_closes_runtime_then_controller
 
     monkeypatch.setattr(service, "CampaignHTTPService", fail_transport)
     with pytest.raises(OSError, match="listener construction"):
-        service.main([
+        service._main([
             "--resolved-campaign", str(source), "--store", str(controller.store),
             "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         ], runtime_factory=lambda _resolved, _args: (controller, runtime))
@@ -779,7 +779,7 @@ def test_runtime_join_deadline_retains_controller_until_worker_really_stops(
 
     monkeypatch.setattr(service.CampaignHTTPService, "start", start_failed_publisher)
     monkeypatch.setattr(runtime, "run", slow_run)
-    assert service.main([
+    assert service._main([
         "--resolved-campaign", str(source), "--store", str(controller.store),
         "--snapshot-version", "3", "--listen", "127.0.0.1:0",
         "--shutdown-deadline", "0.02",
@@ -808,7 +808,7 @@ runtime, controller, _lifecycle, _engine = _runtime(root, patch)
 source = root / "resolved.json"
 source.write_text(json.dumps(controller.resolved.to_dict()), encoding="utf-8")
 try:
-    raise SystemExit(campaign_service.main([
+    raise SystemExit(campaign_service._main([
         "--resolved-campaign", str(source), "--store", str(controller.store),
         "--snapshot-version", "3", "--listen", f"127.0.0.1:{sys.argv[2]}",
         "--shutdown-deadline", "2", "--refresh-interval", "0.02",

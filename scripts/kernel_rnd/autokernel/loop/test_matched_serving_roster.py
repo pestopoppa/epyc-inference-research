@@ -96,5 +96,5 @@ def test_actual_serial_writer_pins_before_first_child_and_reuses_on_restart(tmp_
     _confine_fixture_child(tmp_path, monkeypatch)
     here = Path(sr.__file__).resolve()
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
-    assert sr.main(argv) == 0 and len(captured) == 2
-    assert sr.main(argv) == 0 and len(captured) == 2
+    assert sr._main(argv) == 0 and len(captured) == 2
+    assert sr._main(argv) == 0 and len(captured) == 2

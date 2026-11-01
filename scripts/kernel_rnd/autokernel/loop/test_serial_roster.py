@@ -290,7 +290,7 @@ def test_generated_dry_run_reaches_actual_owner_without_side_effects(
     backend_for = run.actors.backend_for
     monkeypatch.setattr(run.actors, "backend_for",
                         lambda model, effort: replace(backend_for(model, effort), binary="/nonexistent/fixture-cli"))
-    assert sr.main(argv + ["--dry-run"]) == 0
+    assert sr._main(argv + ["--dry-run"]) == 0
     assert len(starts) == 1 and starts[0]["experimental_identity"] is experimental
     assert starts[0]["anchor_build"] == Path(owners[f"{backend}-0"]["anchor_build"])
     output = capsys.readouterr().out
@@ -305,7 +305,7 @@ def test_resolved_campaign_refuses_batched_scheduled_child_before_launch(tmp_pat
     argv[argv.index("--batch-iterations") + 1] = "2"
     _forbid_execution(monkeypatch)
     with pytest.raises(SystemExit) as caught:
-        sr.main(argv + ["--dry-run"])
+        sr._main(argv + ["--dry-run"])
     assert caught.value.code == 2
     err = capsys.readouterr().err
     assert "scheduled serial mode requires one iteration per child" in err
@@ -320,7 +320,7 @@ def test_single_target_derived_schedule_admits_a_batched_child_and_scales_its_bo
     _forbid_execution(monkeypatch)
     monkeypatch.setattr(run, "main", lambda child: 0 if "--dry-run" in child else
                         pytest.fail("a dry run launched a child"))
-    assert sr.main(argv + ["--dry-run"]) == 0
+    assert sr._main(argv + ["--dry-run"]) == 0
     out = capsys.readouterr().out
     printed = json.JSONDecoder().raw_decode(out)[0]
     one = (3 * resolved.resources.build_timeout_s + 8 * resolved.resources.stage_timeout_s)
@@ -354,7 +354,7 @@ def test_batched_schedule_refuses_an_explicit_manifest_and_a_pending_screen_seed
     monkeypatch.setattr(sr, "load_completed", lambda path, **_kw: (
         {"cpu_screen": {"candidate": {"hypothesis": {}}}}, "0" * 64))
     with pytest.raises(SystemExit) as caught:
-        sr.main(argv + ["--initial-continuation", str(seed), "--dry-run"])
+        sr._main(argv + ["--initial-continuation", str(seed), "--dry-run"])
     assert caught.value.code == 2
     assert "pending CPU-screen candidate" in capsys.readouterr().err
 
@@ -369,7 +369,7 @@ def test_single_target_batched_schedule_drives_children_and_accounts_each_stage(
     _confine_fixture_child(tmp_path, monkeypatch)
     here = Path(sr.__file__).resolve()
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     state_dir = tmp_path / "router"
     seen = [json.loads(line)["argv"] for line in (state_dir / "seen.jsonl").read_text().splitlines()]
     assert len(seen) == 2 and all(sr.option(row, "--iterations") == "2" for row in seen)
@@ -384,7 +384,7 @@ def test_single_target_batched_schedule_drives_children_and_accounts_each_stage(
             state_dir / "batches" / f"batch-{number:06d}" / "loop-continuation.json")
         assert body["iterations_completed"] == 2 and body["outcome_counts"] == {"measured_null": 2}
     # A completed restart replays nothing.
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     assert len((state_dir / "seen.jsonl").read_text().splitlines()) == 2
 
 
@@ -436,7 +436,7 @@ def test_generated_roster_drives_actual_children_and_completed_restart(
     _confine_fixture_child(tmp_path, monkeypatch)
     here = Path(sr.__file__).resolve()
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     state = Path(sr.option(argv, "--state-dir"))
     seen = [json.loads(line) for line in (state / "seen.jsonl").read_text().splitlines()]
     # Distinct recipe artifacts keep these as two distinct enrolled targets.
@@ -461,7 +461,7 @@ def test_generated_roster_drives_actual_children_and_completed_restart(
     for row in resumed:
         assert sr.option(row["argv"], "--cpu-calibrate-serving") is None
         assert sr.option(row["argv"], "--gpu-calibrate-serving") is None
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     assert len((state / "seen.jsonl").read_text().splitlines()) == 4
 
 
@@ -477,7 +477,7 @@ def test_multiple_cpu_targets_serialize_one_owned_source_without_fabricating_sha
     _confine_fixture_child(tmp_path, monkeypatch)
     here = Path(sr.__file__).resolve()
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
-    assert sr.main(argv) == 0
+    assert sr._main(argv) == 0
     seen = [json.loads(line)["argv"] for line in (
         tmp_path / "router" / "seen.jsonl").read_text().splitlines()]
     assert len(seen) == 4
@@ -546,7 +546,7 @@ def test_actual_target_args_dry_run_refuses_calibration_before_owner(tmp_path, m
     args_path.write_text(json.dumps(targets[0] + ["--calibrate-surface=5"]))
     monkeypatch.setattr(run, "main", lambda *_a: pytest.fail("calibration reached owner"))
     with pytest.raises(SystemExit) as caught:
-        sr.main(["--target-args", str(args_path), "--batch-iterations", "1",
+        sr._main(["--target-args", str(args_path), "--batch-iterations", "1",
                  "--state-dir", str(tmp_path / "state"), "--dry-run"])
     assert caught.value.code == 2
 
@@ -592,7 +592,7 @@ def test_invalid_generated_inputs_refuse_before_launch(tmp_path, monkeypatch, ca
     path.write_text(json.dumps(owners))
     monkeypatch.setattr(sr, "_drive", lambda *_a, **_kw: pytest.fail("invalid roster reached launch"))
     with pytest.raises(SystemExit) as caught:
-        sr.main(argv)
+        sr._main(argv)
     assert caught.value.code == 2
     assert not (tmp_path / "router").exists()
 
@@ -665,7 +665,7 @@ def test_shared_author_sandbox_reaches_owner_parser_with_default_unchanged(
         return result
 
     monkeypatch.setattr(argparse.ArgumentParser, "parse_args", capture_owner_parse)
-    assert sr.main([*argv, "--common-args", str(common), "--dry-run"]) == 0
+    assert sr._main([*argv, "--common-args", str(common), "--dry-run"]) == 0
     assert len(parsed) == 1
     assert parsed[0].actor_author_sandbox == (sandbox or "on")
     assert run._actor_sandbox(parsed[0]) == {"author_sandbox": sandbox != "off"}
@@ -693,7 +693,7 @@ def test_shared_author_sandbox_does_not_admit_unknown_or_missing_option(
     common.write_text(json.dumps(extra))
     _forbid_execution(monkeypatch)
     with pytest.raises(SystemExit) as refused:
-        sr.main([*argv, "--common-args", str(common), "--dry-run"])
+        sr._main([*argv, "--common-args", str(common), "--dry-run"])
     assert refused.value.code == 2
     assert not (tmp_path / "router").exists()
 
@@ -723,7 +723,7 @@ def test_shared_author_sandbox_reaches_real_authenticated_control_startup(
         snapshots.append(_http(f"http://127.0.0.1:{service.server.server_address[1]}"))
 
     monkeypatch.setattr(serial_control.SerialHTTPService, "start", start_and_read)
-    assert sr.main([*argv, "--common-args", str(common),
+    assert sr._main([*argv, "--common-args", str(common),
                     "--control-listen", "127.0.0.1:0",
                     "--control-origin", "http://localhost:8100"]) == 0
     assert len(snapshots) == 1 and snapshots[0]["owner_id"]

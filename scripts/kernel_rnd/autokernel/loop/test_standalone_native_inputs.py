@@ -153,7 +153,7 @@ def test_v3_dry_run_labels_instrument_unpublished_without_store_io(
     path.write_text(json.dumps(document))
     monkeypatch.setattr(mc.ArtifactStore, "__init__",
                         lambda *_args, **_kwargs: pytest.fail("dry run opened artifact store"))
-    assert unified_driver.main(["--config", str(path), "--dry-run"]) == 0
+    assert unified_driver._main(["--config", str(path), "--dry-run"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["schema"] == inputs.NATIVE_PREFLIGHT_SCHEMA
     assert report["native_instrument_runtime_status"] == "planned_unpublished"

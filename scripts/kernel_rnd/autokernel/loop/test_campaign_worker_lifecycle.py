@@ -576,7 +576,7 @@ def test_cli_v2_selection_changes_projection_but_creates_no_authority(tmp_path, 
     resolved = _resolved("campaign-v2-cli")
     resolved_path = tmp_path / "resolved.json"
     resolved_path.write_text(json.dumps(resolved.to_dict()), encoding="utf-8")
-    assert service.main([
+    assert service._main([
         "--resolved-campaign", str(resolved_path), "--store", str(tmp_path / "store"),
         "--snapshot-version", "2", "--once",
     ]) == 0

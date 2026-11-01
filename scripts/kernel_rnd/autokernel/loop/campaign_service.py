@@ -576,7 +576,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None, *, runtime_factory: RuntimeFactory | None = None) -> int:
+def _main(argv: list[str] | None = None, *, runtime_factory: RuntimeFactory | None = None) -> int:
     args = _parser().parse_args(argv)
     resolved = load_resolved(args.resolved_campaign)
     if args.config_generation < 1:
@@ -776,9 +776,21 @@ def main(argv: list[str] | None = None, *, runtime_factory: RuntimeFactory | Non
                 "SIGTERM handler restoration failed; self-pipe ownership retained")
 
 
+def main(argv: list[str] | None = None, *, runtime_factory: RuntimeFactory | None = None) -> int:
+    from . import lane_watchdog
+    actual = list(sys.argv[1:] if argv is None else argv)
+    args = _parser().parse_args(actual)
+    if runtime_factory is not None and not lane_watchdog._SUPERVISED:
+        raise ControlRefused("HELD: initialized runtime factory cannot be restarted; migrate to unified_driver with a registered trusted provider factory")
+    if args.once or not args.listen or lane_watchdog._SUPERVISED:
+        return _main(actual, runtime_factory=runtime_factory)
+    return lane_watchdog.supervise(
+        "scripts.kernel_rnd.autokernel.loop.campaign_service", actual,
+        key=args.store, file_options=("--resolved-campaign",))
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
-
 
 __all__ = ["CampaignHTTPService", "DEFAULT_REFRESH_INTERVAL_S", "HEALTH_SCHEMA",
            "MAX_BODY", "MAX_HEADERS", "TOTAL_REQUEST_DEADLINE_S",

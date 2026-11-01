@@ -1,0 +1,47 @@
+F.......                                                                 [100%]
+=================================== FAILURES ===================================
+_ test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix _
+
+tmp_path = PosixPath('/mnt/raid0/llm/tmp/codex3-code-research-20261101/auto8/baseline-tmp/test_real_serial_interruption_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7673821ddc40>
+
+    def test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix(tmp_path, monkeypatch):
+        from .test_runtime_treatment import _fixture
+        state_root, argv = _inputs(tmp_path, monkeypatch, rounds=2)
+        # One declared CPU target. Selection attempts, original held evidence and the
+        # existing serial state are real; measurements are explicit fixture providers.
+        del argv[2:4]
+        argv = _scheduled(tmp_path, argv)
+        fixture_dir = tmp_path / "original-fixture"
+        fixture_dir.mkdir()
+        pair, _log, _pids = _fixture(fixture_dir)
+        (state_root / "fixture-pair.json").write_text(json.dumps(pair.to_dict()))
+        monkeypatch.setenv("PYTHONPATH", str(Path(sr.__file__).resolve().parents[2]))
+        monkeypatch.setattr(sr, "_child_command", lambda row: [sys.executable, "-m", __name__, "--child", *row])
+        with mock.patch.object(sr, "_scheduled_failure_account", side_effect=KeyboardInterrupt):
+            with pytest.raises(KeyboardInterrupt):
+                sr.main(argv)
+        before = json.loads((state_root / "serial-state.json").read_text())
+        assert before["active"] and before["next_batch"] == 0
+        first = state_root / "batches/batch-000000"
+>       assert (first / "loop-runtime-interruption.json").exists(), (first / "stderr.log").read_text()
+E       AssertionError: Traceback (most recent call last):
+E           File "<frozen runpy>", line 198, in _run_module_as_main
+E           File "<frozen runpy>", line 88, in _run_code
+E           File "/mnt/raid0/llm/tmp/codex3-code-research-20261101/auto8/fixture-baseline/scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py", line 266, in <module>
+E             raise SystemExit(_child(sys.argv[2:]))
+E                              ^^^^^^^^^^^^^^^^^^^^
+E           File "/mnt/raid0/llm/tmp/codex3-code-research-20261101/auto8/fixture-baseline/scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py", line 80, in _child
+E             assert not observed.ran and observed.could_not_run_reason.startswith("HistoricalLaunchBudgetExhausted:")
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E         AssertionError
+E         
+E       assert False
+E        +  where False = exists()
+E        +    where exists = (PosixPath('/mnt/raid0/llm/tmp/codex3-code-research-20261101/auto8/baseline-tmp/test_real_serial_interruption_0/router/batches/batch-000000') / 'loop-runtime-interruption.json').exists
+
+scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py:163: AssertionError
+=========================== short test summary info ============================
+FAILED scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py::test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix
+1 failed, 7 passed, 71 deselected in 23.59s
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 23.97745628701523, "sampled_peak_tree_rss_bytes": 234733568, "samples": 235, "verified_exited_processes": 3, "verified_exited_threads": 3, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 1864965, "leader_birth": 162475447, "child_rc": 1, "children_drained": true, "failure": null}

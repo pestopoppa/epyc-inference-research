@@ -1,0 +1,3 @@
+.                                                                        [100%]
+1 passed, 21 deselected in 0.37s
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 0.6142214590217918, "sampled_peak_tree_rss_bytes": 86061056, "samples": 7, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 1938519, "leader_birth": 162488231, "child_rc": 0, "children_drained": true, "failure": null}

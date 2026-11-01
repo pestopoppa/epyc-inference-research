@@ -15,6 +15,9 @@ from .test_glm_frozen_requests import _canonical_launch, _manifest, _request
 from .test_campaign import _manifest as _campaign_manifest, _registry, _target
 from . import test_promotion_targets as promotion_fixture
 
+# Exercise the native in-process seam unless a caller intentionally patches main.
+_PUBLIC_RUN_MAIN = run.main
+
 
 @pytest.mark.parametrize("dry_run", [True, False])
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
@@ -100,7 +103,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         invalidated = []
         builds_at_invalid = []
         feedback_contexts = []
-        real_main = run.main
+        real_main = run._main if run.main is _PUBLIC_RUN_MAIN else run.main
 
         @contextmanager
         def cpu_hold(cpu_list, **_quiet):
@@ -375,7 +378,7 @@ def test_gpu_actor_program_and_epoch_inputs_remain_legacy_exact():
     fixture.setUp()
     try:
         original_epoch = run.archive.epoch_for
-        original_main = run.main
+        original_main = run._main if run.main is _PUBLIC_RUN_MAIN else run.main
 
         def run_with_synthetic_actors(argv):
             return original_main(argv + ["--allow-untested-actor-seats", "synthetic fixture actors"])

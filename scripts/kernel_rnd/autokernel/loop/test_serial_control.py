@@ -98,7 +98,7 @@ def test_authenticated_pause_finishes_batch_resume_drain_settles_original_child(
     thread = threading.Thread(target=operator)
     thread.start()
     try:
-        assert sr.main([*argv, "--control-listen", "127.0.0.1:0",
+        assert sr._main([*argv, "--control-listen", "127.0.0.1:0",
                         "--control-origin", "http://localhost:8100"]) == 0
     finally:
         thread.join(20)
@@ -174,7 +174,7 @@ def test_retained_pause_without_listener_is_actionable_not_auto_resume(tmp_path,
         "active": None, "last_results": {}, "source_results": {}, "failed_targets": {},
         "control": {"revision": 1, "desired_state": "paused", "commands": []}}))
     with pytest.raises(sr.SerialRefused, match="retained serial pause requires --control-listen"):
-        sr.main(argv)
+        sr._main(argv)
     assert not (root / "seen.jsonl").exists()
     assert json.loads((root / "serial-state.json").read_text())["control"]["desired_state"] == "paused"
 
@@ -183,8 +183,8 @@ def test_loopback_token_and_dry_run_preserve_existing_boundary(tmp_path, monkeyp
     root, argv = _inputs(tmp_path, monkeypatch)
     monkeypatch.setenv("AUTOKERNEL_CONTROL_TOKEN", "fixture-token")
     with pytest.raises(SystemExit):
-        sr.main([*argv, "--control-listen", "0.0.0.0:8911"])
+        sr._main([*argv, "--control-listen", "0.0.0.0:8911"])
     monkeypatch.setattr(sr.run if hasattr(sr, "run") else __import__(
         sr.__package__ + ".run", fromlist=["main"]), "main", lambda _argv: 0)
-    assert sr.main([*argv, "--control-listen", "127.0.0.1:0", "--dry-run"]) == 0
+    assert sr._main([*argv, "--control-listen", "127.0.0.1:0", "--dry-run"]) == 0
     assert not (root / "serial-state.json").exists()
