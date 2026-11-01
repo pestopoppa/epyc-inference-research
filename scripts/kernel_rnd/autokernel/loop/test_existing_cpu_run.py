@@ -25,7 +25,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         invalid_once=False, enrolled_pair=False, runtime_transition=None,
         expected_claim_cycles=None, result_expectation=None, runtime_declaration=True,
         reference_verdict=None, route_verdict=None, repeat_runtime_treatment=False,
-        expected_actor_calls=None, expected_oracle_calls=None):
+        expected_actor_calls=None, expected_oracle_calls=None, bundle_surface=None):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -263,10 +263,13 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                     mock.patch.object(pool, "prune_anchor_generations",
                         side_effect=pool.prune_anchor_generations if runtime_transition else None,
                         return_value=pool.PruneReport("complete")):
+                if bundle_surface is not None:
+                    argv = [*argv, "--bundle-surface", bundle_surface]
                 return real_main(argv)
 
         with mock.patch.object(run, "main", cpu_main):
-            rc, _calls, _planners, _scratch, log = fixture._run_one_keep()
+            rc, _calls, _planners, _scratch, log = fixture._run_one_keep(
+                surface=bundle_surface)
         assert rc == 0, log
         assert run._git(fixture.repo, "rev-parse", run.champion.CANONICAL_BRANCH) == original_head
         if reference_verdict is not None or route_verdict is not None:
@@ -369,8 +372,18 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 last_null = next(row for row in recovered["rows"] if row["mechanism_id"] == "cpu-5")
                 assert last_null["anchor_tok_s"] == 9.0 and last_null["candidate_tok_s"] == 8.1
                 assert last_null["anchor_execution_digest"] == after_keep["scope"]["anchor_execution_digest"]
+        if bundle_surface is not None:
+            assert (fixture.store / "accumulator-bundle-cpu.json").exists()
+            assert (fixture.store / "journal-cpu").is_dir()
+            assert (fixture.store / run.accumulate.SHARED_COR_FILENAME).exists()
+            assert not (fixture.store / "accumulator-bundle.json").exists()
     finally:
         fixture.doCleanups()
+
+
+def test_explicit_cpu_bundle_uses_surface_scoped_files():
+    test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+        dry_run=False, runtime_declaration=False, bundle_surface="cpu")
 
 
 def test_gpu_actor_program_and_epoch_inputs_remain_legacy_exact():

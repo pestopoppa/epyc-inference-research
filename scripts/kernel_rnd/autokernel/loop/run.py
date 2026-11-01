@@ -334,7 +334,8 @@ def _verify_before_claim(action, *, out, scheduler_selection, target):
         raise
 
 
-def _recover_legacy_cor_build(args, head: str, candidates, *, experimental: bool):
+def _recover_legacy_cor_build(args, head: str, candidates, *, experimental: bool,
+                              surface: str | None = None):
     """The exact champion-of-record build of a legacy experimental continuation.
 
     Experimental continuations recorded ``cor_anchor: null`` until 2026-09-26, so
@@ -346,7 +347,9 @@ def _recover_legacy_cor_build(args, head: str, candidates, *, experimental: bool
     commit's build. The current anchor is never a candidate: the tip is never
     relabelled. None leaves the existing refusal in place.
     """
-    if not (Path(args.store) / accumulate.JOURNAL_DIRNAME).exists():
+    _bundle_filename, bundle_journal = accumulate._surface_paths(args.store, surface)
+    if not ((Path(args.store) / bundle_journal).exists()
+            or (Path(args.store) / _bundle_filename).exists()):
         return None
 
     def is_ancestor(a: str, b: str) -> bool:
@@ -355,7 +358,8 @@ def _recover_legacy_cor_build(args, head: str, candidates, *, experimental: bool
 
     try:
         peek, _note = accumulate.load_bundle(args.store, anchor_commit=head,
-                                             is_ancestor=is_ancestor, read_only=True)
+                                             is_ancestor=is_ancestor, read_only=True,
+                                             surface=surface)
     except (accumulate.BundleRecoveryRequired, OSError, ValueError) as exc:
         print(f"cor       legacy champion-of-record recovery unavailable: {exc}",
               file=sys.stderr)
@@ -467,7 +471,8 @@ def _advance_superseded_continuation(args, resumed: dict, *,
     if cor is not None:
         try:
             peek, _note = accumulate.load_bundle(args.store, anchor_commit=head,
-                                                 is_ancestor=is_ancestor, read_only=True)
+                                                 is_ancestor=is_ancestor, read_only=True,
+                                                 surface=getattr(args, "bundle_surface", None))
             cor_commit = serial_run.full_commit(args.worktree, peek.champion_of_record)
         except (accumulate.BundleRecoveryRequired, OSError, ValueError) as exc:
             print(f"cor       superseded continuation cannot be advanced: {exc}",
@@ -540,7 +545,8 @@ def _verify_cor_build(path, worktree, commit: str, *, experimental: bool,
 
 def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: bool,
                                     epoch: str, measurement_epoch: str,
-                                    actor_config, carry=None) -> None:
+                                    actor_config, carry=None,
+                                    surface: str | None = None) -> None:
     """Read-only: what the live child would restore before its claim.
 
     The dry run used to return before the durable accumulator was reopened, so a
@@ -551,15 +557,16 @@ def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: b
     """
     from . import serial_run
     store = Path(args.store)
-    if ((store / accumulate.JOURNAL_DIRNAME).exists()
-            or (store / accumulate.Bundle.FILENAME).exists()):
+    bundle_filename, bundle_journal = accumulate._surface_paths(store, surface)
+    if ((store / bundle_journal).exists() or (store / bundle_filename).exists()):
         def is_ancestor(a: str, b: str) -> bool:
             return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
                                    "--is-ancestor", a, b],
                                   capture_output=True).returncode == 0
         try:
             peek, note = accumulate.load_bundle(args.store, anchor_commit=anchor_commit,
-                                                is_ancestor=is_ancestor, read_only=True)
+                                                is_ancestor=is_ancestor, read_only=True,
+                                                surface=surface)
         except accumulate.BundleRecoveryRequired as exc:
             if args.new_anchor_epoch:
                 # DS41-C126 gap (4): a dry run with the flag reports what the live run
@@ -568,7 +575,7 @@ def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: b
                 try:
                     _, dry_note = new_epoch.start_new_anchor_epoch(
                         args.store, anchor_commit=anchor_commit, is_ancestor=is_ancestor,
-                        dry_run=True)
+                        dry_run=True, surface=surface)
                 except ValueError as new_epoch_exc:
                     raise champion.StartupRefused(
                         f"REFUSED (dry run): {new_epoch_exc}") from new_epoch_exc
@@ -2146,12 +2153,15 @@ def _main(argv: list[str] | None = None) -> int:
                         help="existing resolved campaign or campaign_cli output; selects inputs only")
     parser.add_argument("--target-id", help="exact enrolled target ID/alias; requires --resolved-campaign")
     parser.add_argument("--store", type=Path, required=True)
+    parser.add_argument("--bundle-surface", choices=accumulate.SURFACES,
+                        help="opt in to isolated CPU/GPU bundle storage; omitted preserves the "
+                             "legacy unscoped accumulator paths")
     parser.add_argument("--new-anchor-epoch", metavar="COMMIT",
                         help="EXPLICIT opt-in (DS41-C126), bound to ONE commit: when the "
                         "persisted accumulator bundle's tip is not an ancestor of "
                         "--anchor-build's commit (a champion-branch new epoch, never a "
                         "corrupt journal -- any OTHER refusal reason still refuses even "
-                        "with this flag), archive the existing accumulator-bundle.json + "
+                        "with this flag), archive the current bundle projection + matching "
                         "journal under the store (timestamped, never deleted) and "
                         "initialize a fresh bundle with champion_of_record = tip = "
                         "anchor. The value MUST resolve to the exact anchor commit this "
@@ -3373,6 +3383,13 @@ def _main(argv: list[str] | None = None) -> int:
             except (floor_registry.RegistryBehindUpstream,
                     floor_registry.RegistryUpstreamUnknown) as refusal:
                 parser.error(f"REFUSED: {refusal}")
+    if args.bundle_surface is not None:
+        configured_backend = (direct_launch.backend if direct_launch is not None else
+                              selected_target.execution.backend if selected_target is not None
+                              else "gpu")
+        if args.bundle_surface != configured_backend:
+            parser.error(f"--bundle-surface {args.bundle_surface} differs from runtime backend "
+                         f"{configured_backend}")
     if ((resumed is not None and not historical_target)
             or (source_resumed is not None and not cross_tree_source)):
         anchor_source = source_resumed if source_resumed is not None else resumed
@@ -3398,7 +3415,8 @@ def _main(argv: list[str] | None = None) -> int:
         # Before the floor lookup: the COR arm is also the calibrated floor frame a
         # source keep reuses (no fresh 48-launch calibration per keep).
         recovered_cor = _recover_legacy_cor_build(
-            args, verified_head, legacy_cor_candidates, experimental=experimental)
+            args, verified_head, legacy_cor_candidates, experimental=experimental,
+            surface=args.bundle_surface)
         if recovered_cor is not None:
             args.cor_build = recovered_cor
     if args.cpu_confirm_from:
@@ -3780,7 +3798,8 @@ def _main(argv: list[str] | None = None) -> int:
             _dry_run_accumulator_and_resume(
                 args, anchor_commit=anchor_commit, experimental=experimental,
                 epoch=epoch, measurement_epoch=measurement_epoch,
-                actor_config=launch_actor_config, carry=resume_carry)
+                actor_config=launch_actor_config, carry=resume_carry,
+                surface=args.bundle_surface)
         # Export a wire request without claiming admission or running any client.
         from . import actor_wire_gate
         wire_request = actor_wire_gate.request(_actor_wire_seats(
@@ -4426,15 +4445,20 @@ def _main(argv: list[str] | None = None) -> int:
         if (args.store / "experiments.db").is_file():
             with experiments.ExperimentStore(args.store, read_only=True) as memory:
                 experiment_history = memory.count() > 0
-        if (experimental and not (args.store / accumulate.JOURNAL_DIRNAME).exists()
+        bundle_surface = args.bundle_surface
+        bundle_filename, bundle_journal = accumulate._surface_paths(args.store, bundle_surface)
+        if (experimental and not (args.store / bundle_journal).exists()
+                and not (args.store / bundle_filename).exists()
                 and not experiment_history):
             restored = accumulate.Bundle(
-                champion_of_record=anchor_commit, tip=anchor_commit)
-            restored.save(args.store)
+                champion_of_record=anchor_commit, tip=anchor_commit,
+                surface=bundle_surface)
+            restored.save(args.store, surface=bundle_surface)
             note = "initialized first durable experimental serving accumulator"
         else:
             restored, note = accumulate.load_bundle(
-                args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor)
+                args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor,
+                surface=bundle_surface)
     except accumulate.BundleRecoveryRequired as exc:
         if args.new_anchor_epoch:
             # DS41-C126 gap (a): an EXPLICIT opt-in only, never a silent reset -- the
@@ -4444,7 +4468,8 @@ def _main(argv: list[str] | None = None) -> int:
             # asked for it, AND named this exact anchor commit (checked above).
             try:
                 restored, note = new_epoch.start_new_anchor_epoch(
-                    args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor)
+                    args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor,
+                    surface=bundle_surface)
             except ValueError as new_epoch_exc:
                 raise champion.StartupRefused(str(new_epoch_exc)) from new_epoch_exc
         else:
@@ -5713,15 +5738,25 @@ def _main(argv: list[str] | None = None) -> int:
         if plan["outcome"] is accumulate.Outcome.PROMOTE:
             # The champion of record advances to the accumulator tip. Snapshot its build into
             # the protected slot, publish the headline against it, and start a fresh bundle.
+            promoted_bundle = accumulate.Bundle(
+                champion_of_record=head, tip=head, surface=bundle[0].surface)
+            promoted_bundle.mark_serving_gate_fired()
+            try:
+                if promoted_bundle.surface is None:
+                    promoted_bundle.save(args.store)
+                else:
+                    promoted_bundle.promote_shared_cor(
+                        args.store, expected_cor=bundle[0].champion_of_record)
+            except accumulate.BundleRecoveryRequired as refusal:
+                raise loop.RunAborted(
+                    f"shared COR promotion refused before publishing the new champion: {refusal}") from refusal
             cor_commit[0] = plan["new_champion_of_record"]
             cor_build[0] = anchor_build[0]  # point at the verified gen; prune protects it
             publish_headline()
             # Fresh bundle: no keeps, and the R23-54 cadence counter starts at 0 because the
             # gate just ran (a fresh Bundle defaults to 0; mark it anyway so the reset is not
             # an accident of the constructor).
-            bundle[0] = accumulate.Bundle(champion_of_record=head, tip=head)
-            bundle[0].mark_serving_gate_fired()
-            bundle[0].save(args.store)
+            bundle[0] = promoted_bundle
         else:
             # DIVERGED + HOLD: hand the divergence to the planner as journal evidence so it can
             # revert/revise a bundled keep or re-aim; the champion of record and the bundle hold.
