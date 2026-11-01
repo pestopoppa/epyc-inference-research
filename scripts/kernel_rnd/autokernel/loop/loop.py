@@ -32,7 +32,7 @@ import subprocess
 import sys
 from contextlib import nullcontext
 from .stage_lifecycle import IdentityMismatch
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -710,6 +710,44 @@ RESUMABLE_STATUSES = frozenset({"stopped_mid_formation", "planner_transient"})
 _OWNER_BOUND = frozenset({"anchor_commit", "epoch_sha256", "target"})
 
 
+def _encode_outcome(outcome):
+    """Closed JSON reconstruction for a committed keep awaiting archive disposition."""
+    comparison = outcome.comparison
+    return {"schema": "epyc.autokernel.stage_outcome.v1",
+        "fields": {item.name: getattr(outcome, item.name) for item in fields(Outcome)
+                   if item.name not in {"hypothesis", "comparison", "gate_verdicts"}},
+        "hypothesis": (None if outcome.hypothesis is None else {
+            **outcome.hypothesis.to_dict(), "declared_runtime_arm": outcome.hypothesis.declared_runtime_arm}),
+        "comparison": (None if comparison is None else
+            {"kind": "serving", "row": comparison.row, "baseline_scope": comparison.baseline_scope}
+            if hasattr(comparison, "row") else {"kind": "bench", "value": comparison.to_dict()}),
+        "gate_verdicts": [{item.name: getattr(verdict, item.name) for item in fields(gates.Verdict)}
+                          for verdict in outcome.gate_verdicts]}
+
+
+def _decode_outcome(row):
+    if row.get("schema") != "epyc.autokernel.stage_outcome.v1":
+        raise IdentityMismatch("unknown durable outcome schema")
+    comparison = row["comparison"]
+    if comparison is not None:
+        if comparison["kind"] == "serving":
+            from .run import ServingComparison
+            comparison = ServingComparison(comparison["row"], comparison["baseline_scope"])
+        elif comparison["kind"] == "bench":
+            body = comparison["value"]
+            kwargs = {item.name: body[item.name] for item in fields(bench.Comparison) if item.name in body}
+            if "fresh_correctness" in kwargs:
+                kwargs["fresh_correctness"] = tuple(kwargs["fresh_correctness"])
+            comparison = bench.Comparison(**kwargs)
+        else:
+            raise IdentityMismatch("unknown durable comparison type")
+    verdicts = [gates.Verdict(**{**value, "case_records": (None if value["case_records"] is None
+                                          else tuple(value["case_records"]))})
+                for value in row["gate_verdicts"]]
+    hypothesis = None if row["hypothesis"] is None else Hypothesis(**row["hypothesis"])
+    return Outcome(**row["fields"], hypothesis=hypothesis, comparison=comparison, gate_verdicts=verdicts)
+
+
 def gate_rules_fingerprint() -> str:
     """Digest of the deterministic gate rules a refusal was made under.
 
@@ -1235,7 +1273,7 @@ def iterate(*, planner: Planner, critic: Critic,
                         resume=resume, next_resume=next_resume, progress=progress,
                         author_lane=author_lane,
                         author_panel=author_panel, stage_lifecycle=stage_lifecycle,
-                        stage_trial_id=stage_trial_id))
+                        stage_trial_id=stage_trial_id, finalize_outcome=observed))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -1293,7 +1331,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              validator_provenance=None, record_abandoned=None,
              abandoned=None, resume=None, next_resume=None, progress=None,
              author_lane=None, author_panel=None, stage_lifecycle=None,
-             stage_trial_id=None) -> Outcome:
+             stage_trial_id=None, finalize_outcome=lambda value: value) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
@@ -2233,7 +2271,21 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         # commit never raises ConfirmVetoed and this is the same
                         # single-rung keep as ever.
                         try:
-                            head = commit(hypothesis, paths, comparison)
+                            if stage_lifecycle is None:
+                                head = commit(hypothesis, paths, comparison)
+                            else:
+                                def encode_keep(head):
+                                    kept = finalize_outcome(Outcome(
+                                        "kept", hypothesis, [], comparison, verdicts, head,
+                                        integrity_screen=integrity_screen))
+                                    kept.spawn_parent = author_lane[1] if author_lane else None
+                                    return {"head": head, "outcome": _encode_outcome(kept)}
+                                head = stage_lifecycle.perform(
+                                    stage="classification", stage_key=f"{stage_trial_id}:commit",
+                                    inputs={"hypothesis": hypothesis_stage_input(hypothesis),
+                                            "paths": list(paths), "comparison": comparison.to_dict()},
+                                    operation=lambda: commit(hypothesis, paths, comparison),
+                                    encode=encode_keep, decode=lambda row: row["head"])
                         except RunAborted as aborted:
                             # commit landed, then a guard (anchor A/A, build) aborted the
                             # run: attach the keep's evidence so it is auditable. Not a keep.

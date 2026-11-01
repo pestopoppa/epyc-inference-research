@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 from autokernel.loop.stage_lifecycle import (
     CARRY_SCHEMA, IdentityMismatch, StageLifecycle, UncertainStage, digest,
@@ -88,6 +89,9 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
             _git(lane, "commit", "-qm", "fixture anchor")
         lanes.append(pipeline.Worker(f"lane{index}", lane, root / f"build{index}"))
     base = _git(lanes[0].worktree, "rev-parse", "HEAD")
+    champion_file = root / "champion-head"
+    if not champion_file.exists():
+        champion_file.write_text(base)
 
     class Planner:
         def __init__(self, worker):
@@ -177,14 +181,19 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
 
     def commit(worker, hypothesis, paths, comparison):
         effect("commit", worker=worker.name)
-        # This offline fixture's source promotion is an external effect counter;
-        # production's frozen kernel trees and refs are never addressed.
+        if workers == 1:
+            _git(worker.worktree, "add", "kernel.c", "new.h")
+            _git(worker.worktree, "commit", "-qm", "fixture source keep")
+            head = _git(worker.worktree, "rev-parse", "HEAD")
+            champion_file.write_text(head)
+            return head
         return base
 
     def record(outcome):
         effect("classification", status=outcome.status)
         with (root / "archive.jsonl").open("a") as stream:
             stream.write(json.dumps({"status": outcome.status,
+                                     "head": outcome.champion_head,
                                      "hypothesis": outcome.hypothesis.to_dict() if outcome.hypothesis else None,
                                      "comparison": outcome.comparison.to_dict() if outcome.comparison else None}) + "\n")
         outcome.journal_receipt = {"native_fixture_row": "row-1"}
@@ -193,7 +202,7 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
         outcomes = pipeline.run_pool(workers=lanes, iterations=workers,
                     make_planner=Planner, make_critic=Critic, build_context=lambda: {"pinned": "context"},
                     make_gate=gate_for, make_measure=measure_for, commit=commit,
-                    champion_head=lambda: base, reset_to_champion=reset,
+                    champion_head=lambda: champion_file.read_text(), reset_to_champion=reset,
                     reserve_candidate=authorize, record=record, stage_lifecycle=ledger)
         print(json.dumps({"statuses": [outcome.status for outcome in outcomes],
                           "stop_receipt": ledger.stop_receipt}))
@@ -275,6 +284,89 @@ class StageLifecycleTests(unittest.TestCase):
                 self.assertEqual(counts["planner"], 1)
                 self.assertEqual(counts["runner"], 1)
             self.assertEqual(self.child(root, workers=2)["statuses"], [])
+
+    def test_native_driver_stopped_keep_resumes_without_bootstrap_or_trial_repeats(self):
+        from autokernel.loop import run, test_promotion_targets
+        fixture = test_promotion_targets.TheKeepBuildsAProductionCompleteAnchor()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        config = fixture.root / "lifecycle-config.json"
+        declared = {"schema": "epyc.autokernel.stage_lifecycle_config.v1",
+                    "identity": dict(IDENTITY), "graph_version": "g1"}
+        config.write_text(json.dumps(declared))
+        original_complete = StageLifecycle.complete
+        def stop_after_disposition(ledger, receipt, output):
+            sha = original_complete(ledger, receipt, output)
+            key, = ledger._db.execute("SELECT stage_key FROM stage_receipts WHERE stage_id=?",
+                                      (receipt.stage_id,)).fetchone()
+            if key.endswith(":record"):
+                ledger.request_stop("native fixture operator boundary")
+            return sha
+        reached = []
+        def native(argv):
+            actual = [*argv, "--stage-lifecycle-config", str(config),
+                      "--out", str(fixture.root / "result"),
+                      "--allow-untested-actor-seats", "synthetic fixture actors",
+                      "--cpu-measurement-gpu-quiet", "off"]
+            # First-launch configuration refusal supplies concrete immutable pins;
+            # it occurs before a profile, build, oracle or measurement is dispatched.
+            with self.assertRaises(IdentityMismatch) as refused:
+                run._main(actual)
+            self.assertTrue(hasattr(refused.exception, "expected_identity"))
+            declared["identity"] = refused.exception.expected_identity
+            config.write_text(json.dumps(declared))
+            with mock.patch.object(run.gates, "compiles", wraps=run.gates.compiles) as builds, \
+                    mock.patch.object(run.bench, "compare", wraps=run.bench.compare) as comparisons, \
+                    mock.patch.object(StageLifecycle, "complete", stop_after_disposition):
+                self.assertEqual(run._main(actual), 0)
+                completed_counts = builds.call_count, comparisons.call_count
+            self.assertGreater(completed_counts[0], 0)
+            self.assertGreater(completed_counts[1], 0)
+            continuation = fixture.root / "result" / "loop-continuation.json"
+            original_native = continuation.read_bytes()
+            native_row = json.loads(original_native)
+            self.assertEqual(native_row["terminal"], "stopped")
+            self.assertNotEqual(native_row["current_anchor"]["commit"], fixture.tip)
+            db = fixture.store / "stage-lifecycle.sqlite3"
+            with StageLifecycle(db, identity=declared["identity"], graph_version="g1") as ledger:
+                declared["resume_ack"] = {"schema": "epyc.autokernel.stage_resume.v1",
+                    "identity": {**declared["identity"], "graph_version": "g1"},
+                    "stop_receipt": ledger.stop_receipt}
+            config.write_text(json.dumps(declared))
+            resumed = [*actual, "--resume-run", str(continuation)]
+            with mock.patch.object(run.gates, "compiles", wraps=run.gates.compiles) as builds, \
+                    mock.patch.object(run.bench, "compare", wraps=run.bench.compare) as comparisons:
+                # A real native keep without the native continuation cannot rebind
+                # deployment identity to whatever HEAD happens to name now.
+                with self.assertRaises((IdentityMismatch, SystemExit)):
+                    run._main(actual)
+                self.assertEqual((builds.call_count, comparisons.call_count), (0, 0))
+                # Corrupt promotion context is refused before any external effect.
+                with sqlite3.connect(db) as conn:
+                    original = conn.execute("SELECT * FROM stage_receipts WHERE stage_key LIKE '%:commit'").fetchone()
+                    self.assertIsNotNone(original)
+                    conn.execute("DELETE FROM stage_receipts WHERE stage_id=?", (original[0],))
+                with self.assertRaises(IdentityMismatch):
+                    run._main(resumed)
+                with sqlite3.connect(db) as conn:
+                    conn.execute("INSERT INTO stage_receipts VALUES(?,?,?,?,?,?,?,?,?,?,?)", original)
+                self.assertEqual((builds.call_count, comparisons.call_count), (0, 0))
+                # The original continuation reader checks its own content and exact
+                # anchor proof. A tampered arm never becomes a fresh assignment.
+                bad_native = {**native_row, "current_anchor": {**native_row["current_anchor"], "commit": "f" * 40}}
+                continuation.write_text(json.dumps(bad_native))
+                with self.assertRaises((SystemExit, ValueError, RuntimeError)):
+                    run._main(resumed)
+                continuation.write_bytes(original_native)
+                self.assertEqual((builds.call_count, comparisons.call_count), (0, 0))
+                self.assertEqual(run._main(resumed), 0)
+                self.assertEqual((builds.call_count, comparisons.call_count), (0, 0),
+                                 "completed keep/bootstrap rebuilt or remeasured during native resume")
+            reached.append(True)
+            return 0
+        with mock.patch.object(run, "main", native):
+            fixture._run_one_keep()
+        self.assertEqual(reached, [True])
 
     def test_prepared_is_uncertain_after_reopen_and_no_effect_is_repeated(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -387,7 +479,8 @@ class StageLifecycleTests(unittest.TestCase):
                 stage_id, stage, key, input_sha, output_json, output_sha = row
                 bound = json.loads(ledger.payload(input_sha))
                 old = json.loads(output_json)
-                if any(parent["stage_id"] not in nodes for parent in old["predecessors"]):
+                if any(parent["stage_id"] not in nodes for parent in
+                       [*old["predecessors"], *old.get("children", [])]):
                     continue
                 parents = [{"stage_id": nodes[parent["stage_id"]]["target_stage_id"],
                             "output_digest": nodes[parent["stage_id"]]["target_output_sha256"]}
@@ -395,7 +488,11 @@ class StageLifecycleTests(unittest.TestCase):
                 target_id = digest({"identity": {**target, "graph_version": new_graph}, "stage": stage, "key": key})
                 new_bound = {**bound, "identity": {**target, "graph_version": new_graph}, "predecessors": parents}
                 new_input = digest(new_bound)
-                new_output = digest({**old, "stage_id": target_id, "input_digest": new_input, "predecessors": parents})
+                children = [{"stage_id": nodes[parent["stage_id"]]["target_stage_id"],
+                             "output_digest": nodes[parent["stage_id"]]["target_output_sha256"]}
+                            for parent in old.get("children", [])]
+                new_output = digest({**old, "stage_id": target_id, "input_digest": new_input,
+                                     "predecessors": parents, "children": children})
                 interface = bound["interface_sha256"]
                 nodes[stage_id] = {"stage": stage, "stage_key": key, "input_scope_sha256": digest(bound["inputs"]),
                  "source_input_sha256": input_sha, "source_output_sha256": output_sha,

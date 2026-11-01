@@ -30,9 +30,9 @@ NODE_OUTPUTS = {
     "critic": "closed-review.v1", "authorization": "dispatch-reservation.v1",
     "build": "full-verdict-with-binary-artifact-digests.v1",
     "correctness": "full-verdict-with-case-records.v1",
-    "attribution": "exact-candidate-and-instrument-scope.v1",
+    "attribution": "exact-candidate-and-instrument-scope-or-retained-profile.v2",
     "runner": "bench-or-serving-comparison.v1",
-    "classification": "commit-head-or-native-journal-disposition.v1",
+    "classification": "commit-head-with-typed-outcome-or-native-journal-disposition.v2",
 }
 
 
@@ -117,6 +117,7 @@ class StageLifecycle:
         self._db_lock = threading.RLock()
         self._subject = contextvars.ContextVar(f"ak_stage_subject_{id(self)}", default=None)
         self._predecessor = contextvars.ContextVar(f"ak_stage_parent_{id(self)}", default=None)
+        self._effects = contextvars.ContextVar(f"ak_stage_children_{id(self)}", default=())
         self._db = sqlite3.connect(self.path, timeout=30, isolation_level=None,
                                    check_same_thread=False)
         try:
@@ -141,6 +142,8 @@ class StageLifecycle:
                 CREATE TABLE IF NOT EXISTS pool_draws (
                   worker TEXT NOT NULL, ordinal INTEGER NOT NULL, finished INTEGER NOT NULL DEFAULT 0,
                   PRIMARY KEY(worker,ordinal));
+                CREATE TABLE IF NOT EXISTS deployment_pin (
+                  singleton INTEGER PRIMARY KEY CHECK(singleton=1), payload_sha256 TEXT NOT NULL);
             """)
             self._validate_startup()
         except (ValueError, TypeError, KeyError, sqlite3.DatabaseError) as exc:
@@ -255,7 +258,7 @@ class StageLifecycle:
                 raise IdentityMismatch("receipt input CAS differs from node identity")
             for sha in body["payloads"]:
                 self.payload(sha)
-            for parent in body["predecessors"]:
+            for parent in [*body["predecessors"], *body.get("children", [])]:
                 previous = self._db.execute(
                     "SELECT output_digest FROM stage_receipts WHERE stage_id=? AND state='done'",
                     (parent["stage_id"],)).fetchone()
@@ -267,6 +270,25 @@ class StageLifecycle:
 
     def _advance(self, stage_id, output_digest):
         self._predecessor.set({"stage_id": stage_id, "output_digest": output_digest})
+
+    def _track(self, stage_id, output_digest):
+        row = {"stage_id": stage_id, "output_digest": output_digest}
+        for parent_id, children in self._effects.get():
+            if parent_id != stage_id and row not in children:
+                children.append(row)
+
+    @_db_synchronized
+    def completed(self, *, stage, stage_key):
+        stage_id = self._stage_id(stage, stage_key)
+        row = self._db.execute("SELECT state FROM stage_receipts WHERE stage_id=?", (stage_id,)).fetchone()
+        if row is None:
+            return None
+        if row[0] != "done":
+            raise UncertainStage("commit/disposition intent requires exact native reconciliation")
+        body, sha = self._read_done(stage_id)
+        self._advance(stage_id, sha)
+        self._track(stage_id, sha)
+        return Prepared(stage_id, "done", body["value"])
 
     @_db_synchronized
     def prepare(self, *, stage, stage_key, inputs):
@@ -295,6 +317,7 @@ class StageLifecycle:
                 body, output_sha = self._read_done(stage_id)
                 self._db.execute("COMMIT")
                 self._advance(stage_id, output_sha)
+                self._track(stage_id, output_sha)
                 return Prepared(stage_id, "done", body["value"])
             # Persist the exact input envelope too; a naked hash cannot be carried.
             self.store_payload(_canonical(bound))
@@ -325,9 +348,15 @@ class StageLifecycle:
                         and "payload_sha256" in output else [])
             for sha in payloads:
                 self.payload(sha)
+            children = [row for parent_id, rows in self._effects.get()
+                        if parent_id == prepared.stage_id for row in rows]
+            if self._predecessor.get() and self._predecessor.get() not in bound["predecessors"] \
+                    and self._predecessor.get() not in children:
+                children.append(self._predecessor.get())
             body = {"schema": RECEIPT_SCHEMA, "stage_id": prepared.stage_id,
                     "input_digest": row[0], "predecessors": bound["predecessors"],
-                    "payloads": payloads, "value": output}
+                    "payloads": payloads, "value": output,
+                    "children": children}
             output_sha = digest(body)
             self._db.execute(
                 "UPDATE stage_receipts SET state='done',output_json=?,output_digest=?,completed_at=? "
@@ -341,6 +370,7 @@ class StageLifecycle:
                 self._db.execute("UPDATE pool_draws SET finished=1 WHERE worker=? AND ordinal=?", (worker, ordinal))
             self._db.execute("COMMIT")
             self._advance(prepared.stage_id, output_sha)
+            self._track(prepared.stage_id, output_sha)
             return output_sha
         except BaseException:
             if self._db.in_transaction:
@@ -349,23 +379,38 @@ class StageLifecycle:
 
     def perform(self, *, stage, stage_key, inputs, operation,
                 encode=lambda value: value, decode=lambda value: value,
-                cas_payload=None, rehydrate=None):
+                cas_payload=None, rehydrate=None, isolated=False):
+        if isolated:
+            token = self._predecessor.set(None)
+            try:
+                return self.perform(stage=stage, stage_key=stage_key, inputs=inputs,
+                    operation=operation, encode=encode, decode=decode,
+                    cas_payload=cas_payload, rehydrate=rehydrate)
+            finally:
+                completed = self._predecessor.get()
+                self._predecessor.reset(token)
+                if completed is not None:
+                    self._advance(completed["stage_id"], completed["output_digest"])
         receipt = self.prepare(stage=stage, stage_key=stage_key, inputs=inputs)
         if receipt.state == "done":
             value = decode(receipt.output)
             if rehydrate is not None and rehydrate() != value:
                 raise StageAnchorMoved("restored assignment differs from pinned completed assignment")
             return value
-        value = operation()
-        output = encode(value)
-        if cas_payload is not None:
-            # Capture AFTER the successful operation, before the done transaction.
-            raw = cas_payload() if callable(cas_payload) else cas_payload
-            if not isinstance(output, dict):
-                raise TypeError("CAS-bearing output must be a closed JSON object")
-            output = {**output, "payload_sha256": self.store_payload(raw)}
-        self.complete(receipt, output)
-        return value
+        token = self._effects.set((*self._effects.get(), (receipt.stage_id, [])))
+        try:
+            value = operation()
+            output = encode(value)
+            if cas_payload is not None:
+                # Capture AFTER the successful operation, before the done transaction.
+                raw = cas_payload() if callable(cas_payload) else cas_payload
+                if not isinstance(output, dict):
+                    raise TypeError("CAS-bearing output must be a closed JSON object")
+                output = {**output, "payload_sha256": self.store_payload(raw)}
+            self.complete(receipt, output)
+            return value
+        finally:
+            self._effects.reset(token)
 
     @_db_synchronized
     def store_payload(self, payload):
@@ -435,6 +480,47 @@ class StageLifecycle:
         self._db.execute("UPDATE pool_draws SET finished=1 WHERE worker=? AND ordinal=?", (worker, ordinal))
 
     @_db_synchronized
+    def bind_deployment(self, *, contract, frontier, native_continuation=None):
+        """Keep controller/deployment pins immutable while native keeps advance source.
+
+        A new experimental frontier needs BOTH a completed commit in this graph's
+        predecessor chain and the driver's already-verified native continuation.
+        Neither an arbitrary new HEAD nor an unrecorded promotion can rebind it.
+        """
+        row = self._db.execute("SELECT payload_sha256 FROM deployment_pin").fetchone()
+        if row is None:
+            descriptor = {"schema": "epyc.autokernel.stage_deployment.v1",
+                          "contract": contract, "initial_frontier": frontier}
+            if digest(descriptor) != self.identity["deployment_id"] \
+                    or frontier["commit"] != self.identity["anchor_commit"]:
+                raise IdentityMismatch("initial deployment descriptor differs from declared pins")
+            sha = self.store_payload(_canonical(descriptor))
+            self._db.execute("INSERT INTO deployment_pin VALUES(1,?)", (sha,))
+            return
+        descriptor = json.loads(self.payload(row[0]))
+        if digest(descriptor) != self.identity["deployment_id"] or descriptor["contract"] != contract:
+            raise IdentityMismatch("controller deployment/model/policy/measurement contract changed")
+        if frontier == descriptor["initial_frontier"]:
+            return
+        commit = frontier["commit"]
+        if not isinstance(native_continuation, dict) \
+                or native_continuation.get("current_anchor", {}).get("commit") != commit:
+            raise IdentityMismatch("advanced kernel source requires exact native continuation evidence")
+        for stage_id, in self._db.execute(
+                "SELECT stage_id FROM stage_receipts WHERE identity_json=? AND stage='classification' "
+                "AND stage_key LIKE '%:commit' AND state='done'", (_canonical(self._identity()).decode(),)):
+            body, _ = self._read_done(stage_id)
+            value = body["value"]
+            if (value.get("head") if isinstance(value, dict) else value) == commit:
+                # Retain exact verified native evidence on the write side. No
+                # changes to any old stage identity, inputs or deployment pins.
+                self.store_payload(_canonical({"schema": "epyc.autokernel.stage_frontier.v1",
+                    "deployment_id": self.identity["deployment_id"], "commit_receipt": stage_id,
+                    "frontier": frontier, "native_continuation": native_continuation}))
+                return
+        raise IdentityMismatch("advanced kernel source has no completed promotion receipt")
+
+    @_db_synchronized
     def request_stop(self, reason):
         self._db.execute("BEGIN IMMEDIATE")
         try:
@@ -470,14 +556,19 @@ class StageLifecycle:
         return self.stop_receipt is not None
 
     @_db_synchronized
-    def acknowledge_resume(self, acknowledgement):
-        """Fence clearing to one exact current stop and graph. Never auto-clear."""
+    def check_resume_ack(self, acknowledgement):
         expected = {"schema": "epyc.autokernel.stage_resume.v1",
                     "identity": self._identity(), "stop_receipt": self.stop_receipt}
         if expected["stop_receipt"] is None or dict(acknowledgement) != expected:
             raise IdentityMismatch("resume acknowledgement does not match current stop/identity")
+        return expected
+
+    @_db_synchronized
+    def acknowledge_resume(self, acknowledgement):
+        """Fence clearing to one exact current stop and graph. Never auto-clear."""
         self._db.execute("BEGIN IMMEDIATE")
         try:
+            expected = self.check_resume_ack(acknowledgement)
             count = self._db.execute("UPDATE stop_events SET acknowledged=1 WHERE receipt=? AND acknowledged=0",
                                      (expected["stop_receipt"],)).rowcount
             if count != 1:
@@ -554,7 +645,8 @@ class StageLifecycle:
                 progressed = False
                 for old_id, row in list(pending.items()):
                     body, _ = self._read_done(old_id)
-                    if any(p["stage_id"] not in carried for p in body["predecessors"]):
+                    if any(p["stage_id"] not in carried for p in
+                           [*body["predecessors"], *body.get("children", [])]):
                         continue
                     bound = json.loads(self.payload(row[3]))
                     parents = [{"stage_id": mapping[p["stage_id"]],
@@ -564,7 +656,10 @@ class StageLifecycle:
                              "predecessors": parents}
                     new_input = digest(bound)
                     new_body = {**body, "stage_id": mapping[old_id], "input_digest": new_input,
-                                "predecessors": parents}
+                                "predecessors": parents,
+                                "children": [{"stage_id": mapping[p["stage_id"]],
+                                              "output_digest": carried[p["stage_id"]][1]}
+                                             for p in body.get("children", [])]}
                     new_output = digest(new_body)
                     nodes[old_id].update(target_input_sha256=new_input, target_output_sha256=new_output)
                     carried[old_id] = (bound, new_output, new_body)

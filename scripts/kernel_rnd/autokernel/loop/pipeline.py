@@ -458,6 +458,17 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             # lanes that way, silently, while the run carried on looking healthy at
             # reduced capacity. Everything an iteration does must be containable.
             try:
+                if stage_lifecycle is not None:
+                    committed = stage_lifecycle.completed(
+                        stage="classification", stage_key=f"{worker.name}:{depth}:commit")
+                    if committed is not None:
+                        saved = loop_mod._decode_outcome(committed.output["outcome"])
+                        if champion_head() != committed.output["head"]:
+                            raise StageAnchorMoved("completed keep no longer matches the native champion")
+                        base = saved.spawn_parent
+                        close_iteration(saved)
+                        keep_lane(saved)
+                        continue
                 if stage_lifecycle is None:
                     base = reset_to_champion(worker)
                 else:
@@ -498,13 +509,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 return make_measure(_w)(hypothesis, paths)
 
             def commit_one(hypothesis, paths, comparison, _w=worker):
-                if stage_lifecycle is None:
-                    return commit(_w, hypothesis, paths, comparison)
-                return stage_lifecycle.perform(
-                    stage="classification", stage_key=f"{worker.name}:{depth}:commit",
-                    inputs={"hypothesis": hypothesis.to_dict(), "paths": list(paths),
-                            "comparison": comparison.to_dict()},
-                    operation=lambda: commit(_w, hypothesis, paths, comparison))
+                return commit(_w, hypothesis, paths, comparison)
 
             def step(label, _w=worker):
                 if on_step is not None:

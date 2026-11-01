@@ -159,7 +159,10 @@ def _stage_measurement(lifecycle, *, key, inputs, operation):
         fields = ("surface", "anchor_samples", "candidate_samples", "effect", "estimator", "pairs",
                   "noise_floor_pct", "residency", "device_seconds", "anchor_drift_pct",
                   "candidate_drift_pct", "calibrated", "model", "fresh_correctness")
-        return bench.Comparison(**{field: value[field] for field in fields if field in value})
+        kwargs = {field: value[field] for field in fields if field in value}
+        if "fresh_correctness" in kwargs:
+            kwargs["fresh_correctness"] = tuple(kwargs["fresh_correctness"])
+        return bench.Comparison(**kwargs)
     # Attribution is the exact pre-run instrument/candidate scope, persisted before
     # measurement. The archive write is part of the final classification stage.
     lifecycle.perform(stage="attribution", stage_key=f"{lifecycle.subject}:attribution:{key}",
@@ -178,6 +181,61 @@ def _stage_dispatch(lifecycle, *, key, inputs, operation):
         encode=lambda value: {"identity": value.identity, "dispatch_count": value.dispatch_count,
                               "candidate_diff_sha256": value.candidate_diff_sha256},
         decode=lambda row: dispatch_guard.Reservation(**row))
+
+
+def _stage_preflight_config(path, store):
+    """Validate the stop fence before actor admission or any bootstrap measurement."""
+    declared = json.loads(Path(path).read_text())
+    if declared.get("schema") != "epyc.autokernel.stage_lifecycle_config.v1":
+        raise ValueError("unsupported stage lifecycle config schema")
+    identity = declared.get("identity")
+    if not isinstance(identity, dict):
+        raise ValueError("stage lifecycle config requires an identity object")
+    carry = declared.get("carry_forward")
+    if carry is not None and not isinstance(carry, dict):
+        raise ValueError("carry_forward must be a proof object")
+    graph = str(declared.get("graph_version") or "")
+    db = Path(store) / "stage-lifecycle.sqlite3"
+    opening_identity, opening_graph = identity, graph
+    if carry is not None and not stage_lifecycle_mod.contains_graph(db, graph):
+        opening_identity = carry.get("from_identity", {})
+        opening_graph = str(carry.get("from_graph_version") or "")
+    with stage_lifecycle_mod.StageLifecycle(db, identity=opening_identity,
+                                           graph_version=opening_graph) as ledger:
+        ack = declared.get("resume_ack")
+        if ack is not None:
+            ledger.check_resume_ack(ack)
+        elif ledger.stop_requested:
+            raise stage_lifecycle_mod.LifecycleError(
+                f"campaign stopped at {ledger.stop_receipt}; exact versioned resume_ack required")
+    return declared
+
+
+def _stage_source_digest():
+    root = Path(__file__).parent
+    return stage_lifecycle_mod.digest({name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+        for name in ("stage_lifecycle.py", "loop.py", "pipeline.py", "pool.py", "run.py", "resume.py")})
+
+
+def _stage_model_digest(path):
+    sha = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+            sha.update(block)
+    return sha.hexdigest()
+
+
+def _stage_serving_contract(launch):
+    if launch is None:
+        return None
+    body = launch._normalized_execution_dict()
+    for name in ("argv", "command_argv"):
+        if name in body:
+            body[name] = ["<candidate-kernel-executable>" if value.startswith("<executable:") else value
+                          for value in body[name]]
+    body["artifacts"] = {name: value for name, value in body["artifacts"].items()
+                         if name in {"model", "drafter"}}
+    return {"recipe": launch.template.to_dict(), "execution": body}
 
 
 @dataclass(frozen=True)
@@ -3071,6 +3129,8 @@ def _main(argv: list[str] | None = None) -> int:
         if (lane_binding.lane.cpu_window_path is not None
                 and args.cpu_window_path == cpu_window.DEFAULT_PATH):
             args.cpu_window_path = lane_binding.lane.cpu_window_path
+    stage_declared = (_stage_preflight_config(args.stage_lifecycle_config, args.store)
+                      if args.stage_lifecycle_config is not None and not args.dry_run else None)
     if not args.dry_run:
         # Launch-stderr kernel markers for the keep gate's runtime layer
         # (kernel_coverage.py). Auxiliary: compacted per launch, capped per shape.
@@ -3086,7 +3146,8 @@ def _main(argv: list[str] | None = None) -> int:
         try:
             prior, _sha = serial_run.load_resume(args.resume_run, original_argv)
             resumed = prior
-            if resumed["terminal"] == "stopped":
+            if resumed["terminal"] == "stopped" and not (
+                    stage_declared is not None and stage_declared.get("resume_ack") is not None):
                 refusal = ValueError(
                     "preceding batch was stopped; explicit new session required")
                 try:
@@ -5290,7 +5351,7 @@ def _main(argv: list[str] | None = None) -> int:
         node_profile.retain_observation(observed, store_root=args.store, **key)
 
     @counter_phase("profile")
-    def reprofile() -> None:
+    def reprofile_impl() -> None:
         """Re-derive the hotspots from the CURRENT champion.
 
         A profile names where the time goes in one binary. Once a patch is kept that
@@ -5381,6 +5442,34 @@ def _main(argv: list[str] | None = None) -> int:
         print(f"profile   {len(rows)} hotspots; top: "
               f"{rows[0].signature[:60] if rows else '(none)'}")
 
+    def reprofile() -> None:
+        lifecycle = stage_lifecycle_ref[0]
+        if lifecycle is None or lifecycle.subject is None:
+            return reprofile_impl()
+        if lifecycle.stop_requested:
+            return None
+        def capture():
+            reprofile_impl()
+            return {"hotspots": [row.to_dict() for row in hotspot_rows],
+                    "cpu": dict(cpu_profile_observation), "gpu": dict(gpu_profile_observation),
+                    "node": dict(node_profile_observation), "long_context": dict(longctx_observation),
+                    "uncovered_gap": uncovered_gap_state[0]}
+        def restore(row):
+            hotspot_rows[:] = [hotspots.Hotspot(**value) for value in row["hotspots"]]
+            for target, key in ((cpu_profile_observation, "cpu"), (gpu_profile_observation, "gpu"),
+                                (node_profile_observation, "node"), (longctx_observation, "long_context")):
+                target.clear()
+                target.update(row[key])
+            uncovered_gap_state[0] = row["uncovered_gap"]
+            return None
+        lifecycle.perform(stage="attribution",
+            stage_key=f"anchor:{current_anchor_commit[0]}:profile",
+            inputs={"anchor_commit": current_anchor_commit[0],
+                    "build_artifacts": _stage_binary_snapshot(anchor_build[0]),
+                    "surface": args.surface,
+                    "execution_digest": direct_launch.execution_digest if direct_launch else None},
+            operation=capture, decode=restore, isolated=True)
+
     # SCRATCH (operator 2026-09-26): this run's ONE scratch registry, rooted in the
     # store; created when the run body starts (below) and read by status/loop-run.
     scratch_registry: list = [None]
@@ -5403,13 +5492,20 @@ def _main(argv: list[str] | None = None) -> int:
         signal.signal(_sig, _ask_stop)
 
     def should_stop() -> bool:
-        return stopping["asked"] or pool.stop_requested(args.store)
+        asked = stopping["asked"] or pool.stop_requested(args.store)
+        lifecycle = stage_lifecycle_ref[0]
+        if lifecycle is not None:
+            if asked:
+                lifecycle.request_stop("native driver stop predicate observed")
+            lifecycle_stopped[0] = lifecycle_stopped[0] or lifecycle.stop_requested
+        return asked or lifecycle_stopped[0]
 
     #: Per-thread nesting depth of the quiet window: a measurement called from inside
     #: another's window must not re-acquire a flock this process already holds (flock
     #: conflicts between open file descriptions of ONE process: a self-deadlock).
     quiet_depth = threading.local()
     stage_lifecycle_ref = [None]
+    lifecycle_stopped = [False]
     from .gpu_phases import LocalPhases
     gpu_local = (LocalPhases(
         cpu_list=build_cpu_list,
@@ -5580,7 +5676,7 @@ def _main(argv: list[str] | None = None) -> int:
                               cmake_defines=recipe.cmake_defines(),
                               jobs=build_jobs, cpu_list=build_cpu_list)
 
-    def publish_headline() -> None:
+    def publish_headline_impl() -> None:
         """Refresh the dashboard headline for the current verified anchor.
 
         The champion arm is `anchor_build[0]`: verified at startup, then rebuilt
@@ -5619,6 +5715,18 @@ def _main(argv: list[str] | None = None) -> int:
         print(f"headline  {outcome.reason}")
         if outcome.carryover:
             print(f"headline  carry-over: {outcome.carryover}")
+
+    def publish_headline() -> None:
+        lifecycle = stage_lifecycle_ref[0]
+        if lifecycle is None or lifecycle.subject is None:
+            return publish_headline_impl()
+        if lifecycle.stop_requested:
+            return None
+        lifecycle.perform(stage="classification",
+            stage_key=f"anchor:{current_anchor_commit[0]}:headline",
+            inputs={"anchor_commit": current_anchor_commit[0], "model": str(headline_model),
+                    "surface": bench_surface, "build_artifacts": _stage_binary_snapshot(anchor_build[0])},
+            operation=publish_headline_impl, isolated=True)
 
     def verify_anchor(*, guard_floor=None) -> None:
         """Prove the promoted binary IS the champion; `RunAborted` if not. Runs in the
@@ -6516,70 +6624,64 @@ def _main(argv: list[str] | None = None) -> int:
 
     codegen_by_head: dict[str, dict] = {}
 
-    def run_pooled() -> pool.PoolResult:
-        """Drive the loop across N detached lanes. THE run path -- the sequential
-        `loop.run` wiring was deleted 2026-08-31, and the `loop.run` seam itself on
-        2026-09-01 (R21-7): `iterate` under `pipeline.run_pool` is the only loop.
-
-        WHAT IS PER-LANE
-          * the worktree and the candidate build directory (`pipeline.Worker`);
-          * the planner and the critic, because each holds a workspace path;
-          * the saved patch filename, which carries the lane;
-          * the phase clock -- `pool.PhaseClock`, whose totals are LANE-seconds and
-            can legitimately sum to more than the wall clock.
-
-        WHAT STAYS GLOBAL
-          * the GPU claim: one `flock` for the process. A second `hold()` on a second
-            descriptor in this same process would refuse itself.
-          * the anchor build, which is only ever read;
-          * `build_context`, `args.store` and the status file. `record` and the status
-            publish both happen under the pipeline's outcomes lock, so they are
-            serialized -- at the cost of a slow status write briefly blocking every
-            lane's recording.
-          * `epoch`: pinned to the champion the run STARTED from, which is what makes
-            the archive rows comparable across the run.
-        """
+    def initialize_stage_lifecycle():
+        """Bind the controller before bootstrap; candidate kernel pins stay per trial."""
+        if stage_declared is None:
+            return None
         stage_lifecycle = None
         resume_target = resume_mod.target_identity(measurement_surface=args.surface,
                                                    model=args.model)
-        if args.stage_lifecycle_config is not None:
-            declared = json.loads(args.stage_lifecycle_config.read_text())
-            if declared.get("schema") != "epyc.autokernel.stage_lifecycle_config.v1":
-                raise ValueError("unsupported stage lifecycle config schema")
+        if stage_declared is not None:
+            declared = stage_declared
             identity = declared.get("identity")
             if not isinstance(identity, dict):
                 raise ValueError("stage lifecycle config requires an identity object")
+            stable_measurement_inputs = {key: value for key, value in measurement_inputs.items()
+                if key not in {"cpu_execution_digest", "gpu_execution_digest"}}
+            serving_contract = _stage_serving_contract(direct_launch)
             scope_id = stage_lifecycle_mod.digest({
                 "surface": args.surface, "model": str(args.model),
                 "target": (selected_identity.to_dict() if hasattr(selected_identity, "to_dict")
                            else str(selected_identity)),
                 "recipe": recipe.to_dict(), "pp": pp, "tg": tg, "ubatch": ubatch,
-                "measurement_epoch": measurement_epoch})
-            deployment_id = stage_lifecycle_mod.digest({
-                "anchor_build": str(anchor_build[0]), "recipe": recipe.to_dict(),
-                "anchor_artifacts": _stage_binary_snapshot(anchor_build[0]),
-                "serving": (direct_launch._normalized_execution_dict()
-                            if direct_launch is not None else None)})
+                "measurement_inputs": stable_measurement_inputs,
+                "serving_contract": serving_contract})
+            source_digest = _stage_source_digest()
+            model_digest = (direct_launch.model.sha256 if direct_launch is not None
+                            else _stage_model_digest(args.model))
+            actor_contract = {key: value for key, value in launch_actor_config.items()
+                              if key != "actor_wire_gate"}
+            contract = {"scope_id": scope_id, "controller_source_digest": source_digest,
+                        "model_digest": model_digest, "build_recipe": recipe.to_dict(),
+                        "actors": actor_contract,
+                        "serving": serving_contract}
+            frontier = {"commit": current_anchor_commit[0],
+                        "tree": integrity.candidate_tree(args.worktree),
+                        "build": str(anchor_build[0]),
+                        "artifacts": _stage_binary_snapshot(anchor_build[0])}
             live_identity = {
-                "deployment_id": deployment_id,
-                "anchor_commit": current_anchor_commit[0],
                 "scope_id": scope_id,
-                "source_digest": stage_lifecycle_mod.digest({
-                    "head": _git(args.worktree, "rev-parse", "HEAD"),
-                    "tree": integrity.candidate_tree(args.worktree)}),
-                "model_id": (direct_launch.model.sha256 if direct_launch is not None
-                             else str(args.model)),
+                "source_digest": source_digest,
+                "model_id": model_digest,
                 "policy_graph_id": stage_lifecycle_mod.digest({
-                    "actor_config": launch_actor_config,
-                    "measurement_epoch": measurement_epoch,
-                    "deployment_id": deployment_id,
+                    "actor_config": actor_contract,
+                    "measurement_inputs": stable_measurement_inputs,
+                    "controller_source_digest": source_digest,
                     "graph_version": str(declared.get("graph_version") or "")}),
             }
             mismatches = [key for key, value in live_identity.items()
                           if identity.get(key) != value]
             if mismatches:
-                raise ValueError("stage lifecycle identity does not match this launch: "
-                                 + ", ".join(mismatches))
+                expected = {"campaign_id": identity.get("campaign_id"),
+                    "anchor_commit": current_anchor_commit[0],
+                    "deployment_id": stage_lifecycle_mod.digest({
+                        "schema": "epyc.autokernel.stage_deployment.v1",
+                        "contract": contract, "initial_frontier": frontier}), **live_identity}
+                refused = stage_lifecycle_mod.IdentityMismatch(
+                    "stage lifecycle identity does not match this launch; first-launch pins: "
+                    + json.dumps(expected, sort_keys=True))
+                refused.expected_identity = expected
+                raise refused
             stage_db = args.store / "stage-lifecycle.sqlite3"
             carry = declared.get("carry_forward")
             if carry is not None and not stage_lifecycle_mod.contains_graph(
@@ -6590,6 +6692,8 @@ def _main(argv: list[str] | None = None) -> int:
                     stage_db, identity=carry.get("from_identity", {}),
                     graph_version=str(carry.get("from_graph_version") or ""))
                 try:
+                    if declared.get("resume_ack") is not None:
+                        old.acknowledge_resume(declared["resume_ack"])
                     verifier_receipt = carry.get("verifier_receipt", {})
                     evidence_file = carry.get("verifier_evidence_file")
                     if not evidence_file:
@@ -6598,7 +6702,7 @@ def _main(argv: list[str] | None = None) -> int:
                     if evidence_sha != verifier_receipt.get("evidence_sha256"):
                         raise ValueError("graph carry verifier evidence digest does not match file")
                     scope = resume_mod.carry_scope(
-                        args.store, resume_carry, anchor_commit=current_anchor_commit[0],
+                        args.store, resume_carry, anchor_commit=identity["anchor_commit"],
                         epoch=epoch, measurement_epoch=measurement_epoch,
                         target=resume_target, claim_rows=[])
                     resume_mod.carry_stage_graph(
@@ -6610,9 +6714,27 @@ def _main(argv: list[str] | None = None) -> int:
             stage_lifecycle = stage_lifecycle_mod.StageLifecycle(
                 stage_db, identity=identity,
                 graph_version=str(declared.get("graph_version") or ""))
-            if declared.get("resume_ack") is not None:
-                stage_lifecycle.acknowledge_resume(declared["resume_ack"])
+            try:
+                # Existing native loader already checks argv/documents, source
+                # lineage and exact anchor provenance; require its current arm too.
+                if resumed is not None:
+                    serial_run.verify_exact_anchor(anchor_build[0], args.worktree,
+                        current_anchor_commit[0], experimental=experimental)
+                stage_lifecycle.bind_deployment(contract=contract, frontier=frontier,
+                                                native_continuation=resumed)
+                if declared.get("resume_ack") is not None and carry is None:
+                    stage_lifecycle.acknowledge_resume(declared["resume_ack"])
+            except BaseException:
+                stage_lifecycle.close()
+                raise
             stage_lifecycle_ref[0] = stage_lifecycle
+        return stage_lifecycle
+
+    def run_pooled() -> pool.PoolResult:
+        """Drive the production pipeline; lanes own actors, the pool serializes tails."""
+        stage_lifecycle = stage_lifecycle_ref[0]
+        resume_target = resume_mod.target_identity(measurement_surface=args.surface,
+                                                   model=args.model)
         candidate_integrity = {}
         integrity_evidence = {}
         # What a checkpoint is bound to, and matched against on the next launch.
@@ -7546,12 +7668,7 @@ def _main(argv: list[str] | None = None) -> int:
                     gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
                if direct_launch and not cpu_launch else {}),
             **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}))
-        try:
-            return execute_pool()
-        finally:
-            if stage_lifecycle is not None:
-                stage_lifecycle_ref[0] = None
-                stage_lifecycle.close()
+        return execute_pool()
 
     claim_started = None
     original_claims = []
@@ -7916,6 +8033,16 @@ def _main(argv: list[str] | None = None) -> int:
                         os.environ[CHILD_PHASE_DIR] = prior_phase_dir
                 ownership.callback(restore_child_phase_environment)
             claim_started = time.monotonic()
+            lifecycle = initialize_stage_lifecycle()
+            if lifecycle is not None:
+                def close_stage_lifecycle():
+                    lifecycle_stopped[0] = lifecycle_stopped[0] or lifecycle.stop_requested
+                    stage_lifecycle_ref[0] = None
+                    lifecycle.close()
+                ownership.callback(close_stage_lifecycle)
+                ownership.enter_context(lifecycle.bind_subject(
+                    f"bootstrap:{current_anchor_commit[0]}"))
+                should_stop()  # Persist a stop already observed during claim acquisition.
             if selected_target is not None:
                 # Same original invocation bound used by serial scheduling. This
                 # stops NEW runtime launches, never claims to kill an in-flight arm.
