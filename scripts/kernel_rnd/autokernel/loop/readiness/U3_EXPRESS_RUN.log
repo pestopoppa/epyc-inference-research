@@ -1,0 +1,242 @@
+test_cache_types_control (__main__.Readiness.test_cache_types_control) ... ok
+test_control_vector (__main__.Readiness.test_control_vector) ... FAIL
+test_control_vector_content_identity (__main__.Readiness.test_control_vector_content_identity) ... ERROR
+test_draft_n_min (__main__.Readiness.test_draft_n_min) ... FAIL
+test_draft_own_cache (__main__.Readiness.test_draft_own_cache) ... FAIL
+test_draft_p_min (__main__.Readiness.test_draft_p_min) ... FAIL
+test_draft_p_min_extra_flag_control (__main__.Readiness.test_draft_p_min_extra_flag_control) ... ok
+test_frozen_request_grammar_and_sampler_control (__main__.Readiness.test_frozen_request_grammar_and_sampler_control) ... ok
+test_grammar (__main__.Readiness.test_grammar) ... FAIL
+test_lora (__main__.Readiness.test_lora) ... FAIL
+test_lora_content_identity (__main__.Readiness.test_lora_content_identity) ... ERROR
+test_multienv_control (__main__.Readiness.test_multienv_control) ... ok
+test_multigpu (__main__.Readiness.test_multigpu) ... FAIL
+test_no_kv_offload_cache_combination (__main__.Readiness.test_no_kv_offload_cache_combination) ... FAIL
+test_no_speculation_absence_control (__main__.Readiness.test_no_speculation_absence_control) ... ok
+test_per_device_ngl (__main__.Readiness.test_per_device_ngl) ... ERROR
+test_rpc (__main__.Readiness.test_rpc) ... FAIL
+test_runtime_arm_multi_env (__main__.Readiness.test_runtime_arm_multi_env) ... ERROR
+test_runtime_arm_single_env_control (__main__.Readiness.test_runtime_arm_single_env_control) ... ok
+test_sampler_variant (__main__.Readiness.test_sampler_variant) ... FAIL
+test_selfdraft_absence_control (__main__.Readiness.test_selfdraft_absence_control) ... ok
+test_split_mode (__main__.Readiness.test_split_mode) ... FAIL
+test_tensor_split (__main__.Readiness.test_tensor_split) ... FAIL
+test_unset_differs_from_inherit_control (__main__.Readiness.test_unset_differs_from_inherit_control) ... ok
+
+======================================================================
+ERROR: test_control_vector_content_identity (__main__.Readiness.test_control_vector_content_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 92, in test_control_vector_content_identity
+    one = resolve(r, {"control_vectors": [artifact("control_vector", "/models/control.gguf", "e")]})
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 25, in resolve
+    return rr.resolve_recipe(r, build_dir=BUILD, artifact_identities=arts, backend="gpu",
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/resolved_recipe.py", line 1493, in resolve_recipe
+    model, drafter, executable, dsos = _artifact_set(artifact_identities)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/resolved_recipe.py", line 956, in _artifact_set
+    _keys(row, {"model", "drafter", "executable", "dsos"}, "artifact identities")
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/resolved_recipe.py", line 80, in _keys
+    raise ResolutionError(f"{label}: " + "; ".join(details))
+scripts.kernel_rnd.autokernel.loop.resolved_recipe.ResolutionError: artifact identities: unknown ['control_vectors']
+
+======================================================================
+ERROR: test_lora_content_identity (__main__.Readiness.test_lora_content_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 85, in test_lora_content_identity
+    one = resolve(r, {"loras": [artifact("lora", "/models/adapter.gguf", "e")]})
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 25, in resolve
+    return rr.resolve_recipe(r, build_dir=BUILD, artifact_identities=arts, backend="gpu",
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/resolved_recipe.py", line 1493, in resolve_recipe
+    model, drafter, executable, dsos = _artifact_set(artifact_identities)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/resolved_recipe.py", line 956, in _artifact_set
+    _keys(row, {"model", "drafter", "executable", "dsos"}, "artifact identities")
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/resolved_recipe.py", line 80, in _keys
+    raise ResolutionError(f"{label}: " + "; ".join(details))
+scripts.kernel_rnd.autokernel.loop.resolved_recipe.ResolutionError: artifact identities: unknown ['loras']
+
+======================================================================
+ERROR: test_per_device_ngl (__main__.Readiness.test_per_device_ngl)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 67, in test_per_device_ngl
+    r = serving.Recipe.from_dict({**recipe().to_dict(), "per_device_ngl": placement})
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/serving.py", line 440, in from_dict
+    return cls(**d)
+           ^^^^^^^^
+TypeError: Recipe.__init__() got an unexpected keyword argument 'per_device_ngl'
+
+======================================================================
+ERROR: test_runtime_arm_multi_env (__main__.Readiness.test_runtime_arm_multi_env)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 112, in test_runtime_arm_multi_env
+    pair = env_pair(env_arm({"set":{"U3_A":"1", "U3_B":"2"}}))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 39, in env_arm
+    return runtime_arms.RuntimeArm.from_dict({"arm_id":"u3_env", "kind":"env",
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/runtime_arms.py", line 163, in from_dict
+    return cls(value["arm_id"], value["kind"], value["candidate"], value["numerics"],
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 9, in __init__
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/runtime_arms.py", line 145, in __post_init__
+    raise ArmDeclarationRefused(
+scripts.kernel_rnd.autokernel.loop.runtime_arms.ArmDeclarationRefused: arm u3_env: env candidate must be {key: <str>, value: <str|null>}
+
+======================================================================
+FAIL: test_control_vector (__main__.Readiness.test_control_vector)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 81, in test_control_vector
+    def test_control_vector(self): checked(recipe(extra_flags=("--control-vector", "/models/control.gguf")), ["--control-vector", "/models/control.gguf"])
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 55, in checked
+    assert resolved.capability.supported, [(x.code, x.detail) for x in resolved.capability.reasons]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('extra_flags_unsupported', 'resolved execution does not normalize arbitrary extension flags')]
+
+======================================================================
+FAIL: test_draft_n_min (__main__.Readiness.test_draft_n_min)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 99, in test_draft_n_min
+    def test_draft_n_min(self): checked(recipe(spec_decode={"type":"draft-mtp", "draft_n_min":1}), ["--spec-draft-n-min", "1"])
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 50, in checked
+    assert token in argv, (token, argv)
+           ^^^^^^^^^^^^^
+AssertionError: ('--spec-draft-n-min', ['/build/bin/llama-server', '-m', '/models/main.gguf', '-np', '4', '-c', '16384', '-t', '8', '-tb', '8', '-b', '2048', '-ub', '2048', '-ctk', 'f16', '-ctv', 'f16', '--device', 'ROCm0', '-ngl', '99', '-fa', 'on', '--host', '127.0.0.1', '--port', '18311', '--metrics', '--slots', '--spec-type', 'draft-mtp', '--no-kv-unified'])
+
+======================================================================
+FAIL: test_draft_own_cache (__main__.Readiness.test_draft_own_cache)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 100, in test_draft_own_cache
+    def test_draft_own_cache(self): checked(recipe(spec_decode={"type":"draft-dflash", "drafter":"/models/draft.gguf", "ctk":"q8_0"}), ["--spec-draft-type-k", "q8_0"])
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 50, in checked
+    assert token in argv, (token, argv)
+           ^^^^^^^^^^^^^
+AssertionError: ('--spec-draft-type-k', ['/build/bin/llama-server', '-m', '/models/main.gguf', '-np', '4', '-c', '16384', '-t', '8', '-tb', '8', '-b', '2048', '-ub', '2048', '-ctk', 'f16', '-ctv', 'f16', '--device', 'ROCm0', '-ngl', '99', '-fa', 'on', '--host', '127.0.0.1', '--port', '18311', '--metrics', '--slots', '-md', '/models/draft.gguf', '-ngld', '99', '--spec-type', 'draft-dflash', '--no-kv-unified'])
+
+======================================================================
+FAIL: test_draft_p_min (__main__.Readiness.test_draft_p_min)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 98, in test_draft_p_min
+    def test_draft_p_min(self): checked(recipe(spec_decode={"type":"draft-mtp", "draft_p_min":0.5}), ["--spec-draft-p-min", "0.5"])
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 50, in checked
+    assert token in argv, (token, argv)
+           ^^^^^^^^^^^^^
+AssertionError: ('--spec-draft-p-min', ['/build/bin/llama-server', '-m', '/models/main.gguf', '-np', '4', '-c', '16384', '-t', '8', '-tb', '8', '-b', '2048', '-ub', '2048', '-ctk', 'f16', '-ctv', 'f16', '--device', 'ROCm0', '-ngl', '99', '-fa', 'on', '--host', '127.0.0.1', '--port', '18311', '--metrics', '--slots', '--spec-type', 'draft-mtp', '--no-kv-unified'])
+
+======================================================================
+FAIL: test_grammar (__main__.Readiness.test_grammar)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 101, in test_grammar
+    def test_grammar(self): checked(recipe(extra_flags=("--grammar", 'root ::= "x"')), ["--grammar", 'root ::= "x"'])
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 55, in checked
+    assert resolved.capability.supported, [(x.code, x.detail) for x in resolved.capability.reasons]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('extra_flags_unsupported', 'resolved execution does not normalize arbitrary extension flags')]
+
+======================================================================
+FAIL: test_lora (__main__.Readiness.test_lora)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 80, in test_lora
+    def test_lora(self): checked(recipe(extra_flags=("--lora", "/models/adapter.gguf")), ["--lora", "/models/adapter.gguf"])
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 55, in checked
+    assert resolved.capability.supported, [(x.code, x.detail) for x in resolved.capability.reasons]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('extra_flags_unsupported', 'resolved execution does not normalize arbitrary extension flags')]
+
+======================================================================
+FAIL: test_multigpu (__main__.Readiness.test_multigpu)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 61, in test_multigpu
+    def test_multigpu(self): checked(recipe(device="ROCm0,ROCm1"), ["ROCm0,ROCm1"])
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 55, in checked
+    assert resolved.capability.supported, [(x.code, x.detail) for x in resolved.capability.reasons]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('multi_device_unsupported', 'multi-device launch is not implemented'), ('unsupported_gpu_device', 'GPU device must name one explicit ROCm device')]
+
+======================================================================
+FAIL: test_no_kv_offload_cache_combination (__main__.Readiness.test_no_kv_offload_cache_combination)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 103, in test_no_kv_offload_cache_combination
+    def test_no_kv_offload_cache_combination(self): checked(recipe(ctk="q8_0", ctv="q4_0", extra_flags=("--no-kv-offload",)), ["-ctk", "q8_0", "-ctv", "q4_0", "--no-kv-offload"])
+                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 55, in checked
+    assert resolved.capability.supported, [(x.code, x.detail) for x in resolved.capability.reasons]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('extra_flags_unsupported', 'resolved execution does not normalize arbitrary extension flags')]
+
+======================================================================
+FAIL: test_rpc (__main__.Readiness.test_rpc)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 97, in test_rpc
+    def test_rpc(self): checked(recipe(extra_flags=("--rpc", "127.0.0.1:50052")), ["--rpc", "127.0.0.1:50052"])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 55, in checked
+    assert resolved.capability.supported, [(x.code, x.detail) for x in resolved.capability.reasons]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('extra_flags_unsupported', 'resolved execution does not normalize arbitrary extension flags'), ('rpc_unsupported', 'RPC launch is not implemented')]
+
+======================================================================
+FAIL: test_sampler_variant (__main__.Readiness.test_sampler_variant)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 102, in test_sampler_variant
+    def test_sampler_variant(self): checked(recipe(extra_flags=("--samplers", "top_k;temperature")), ["--samplers", "top_k;temperature"])
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 55, in checked
+    assert resolved.capability.supported, [(x.code, x.detail) for x in resolved.capability.reasons]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('extra_flags_unsupported', 'resolved execution does not normalize arbitrary extension flags')]
+
+======================================================================
+FAIL: test_split_mode (__main__.Readiness.test_split_mode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 62, in test_split_mode
+    def test_split_mode(self): checked(recipe(extra_flags=("--split-mode", "row")), ["--split-mode", "row"])
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 55, in checked
+    assert resolved.capability.supported, [(x.code, x.detail) for x in resolved.capability.reasons]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('extra_flags_unsupported', 'resolved execution does not normalize arbitrary extension flags')]
+
+======================================================================
+FAIL: test_tensor_split (__main__.Readiness.test_tensor_split)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 63, in test_tensor_split
+    def test_tensor_split(self): checked(recipe(extra_flags=("--tensor-split", "1,1")), ["--tensor-split", "1,1"])
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/readiness/u3_express.py", line 55, in checked
+    assert resolved.capability.supported, [(x.code, x.detail) for x in resolved.capability.reasons]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('extra_flags_unsupported', 'resolved execution does not normalize arbitrary extension flags')]
+
+----------------------------------------------------------------------
+Ran 24 tests in 0.051s
+
+FAILED (failures=12, errors=4)
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 0.5088051399216056, "sampled_peak_tree_rss_bytes": 77508608, "samples": 6, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 4191828, "leader_birth": 163050457, "child_rc": 1, "children_drained": true, "failure": null}
