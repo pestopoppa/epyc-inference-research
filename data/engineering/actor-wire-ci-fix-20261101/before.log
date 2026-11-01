@@ -1,0 +1,425 @@
+.......................F................................................ [ 92%]
+......                                                                   [100%]
+=================================== FAILURES ===================================
+____________ test_actual_main_refuses_before_actor_factory[missing] ____________
+
+args = ()
+kwargs = {'workspace': PosixPath('/tmp/tmpmd5flh9r/lane0'), 'backend': Backend(kind='codex', model='gpt-5.6-sol', effort='high'...in/python3', agent=''), 'timeout_s': 1800, 'should_stop': <function _main.<locals>.should_stop at 0x7da25f039e40>, ...}
+
+    def forbidden_factory(*args, **kwargs):
+        factories.append(True)
+>       raise AssertionError("actor factory reached before admission")
+E       AssertionError: actor factory reached before admission
+
+scripts/kernel_rnd/autokernel/loop/test_actor_wire_gate.py:137: AssertionError
+
+The above exception was the direct cause of the following exception:
+
+record_state = 'missing'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7da25f746600>
+
+    @pytest.mark.parametrize("record_state", ["missing", "stale"])
+    def test_actual_main_refuses_before_actor_factory(record_state, monkeypatch):
+        # Reuse the model-free main integration fixture: its compile/benchmark/claim
+        # boundaries are synthetic, while run.main and wire admission remain real.
+        from . import run, test_promotion_targets as fixtures
+        fixture = fixtures.TheKeepBuildsAProductionCompleteAnchor()
+        fixture.setUp()
+        # This test targets the real run core's admission ordering. The public
+        # entrypoint wraps that core in lane_watchdog.supervise(), which starts a
+        # child process; the synthetic fixture patches below intentionally live in
+        # this process and are not inherited by that child. Watchdog ownership and
+        # child supervision have separate tests.
+        original_main, original_backend = run._main, actors.backend_for
+        factories = []
+        try:
+            stale = fixture.root / "stale-wire.json"
+            stale.write_text(json.dumps({"schema": gate.SCHEMA, "status": "PASS",
+                                         "actor_config_digest": "0" * 64}))
+            def invoke(argv):
+                def forbidden_factory(*args, **kwargs):
+                    factories.append(True)
+                    raise AssertionError("actor factory reached before admission")
+                with mock.patch.object(actors, "AgentPlanner", forbidden_factory), \
+                        mock.patch.object(actors, "AgentCritic", forbidden_factory), \
+                        mock.patch.object(actors, "backend_for", side_effect=lambda model, effort:
+                            dataclasses.replace(original_backend(model, effort), binary=sys.executable)):
+                    extra = ["--actor-wire-test-record", str(stale)] if record_state == "stale" else []
+                    return original_main([*argv, *extra])
+            monkeypatch.setattr(run, "main", invoke)
+            with pytest.raises(SystemExit) as refused:
+>               fixture._run_one_keep()
+
+scripts/kernel_rnd/autokernel/loop/test_actor_wire_gate.py:146: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/kernel_rnd/autokernel/loop/test_promotion_targets.py:401: in _run_one_keep
+    rc = run_mod.main(argv)
+         ^^^^^^^^^^^^^^^^^^
+scripts/kernel_rnd/autokernel/loop/test_actor_wire_gate.py:143: in invoke
+    return original_main([*argv, *extra])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/kernel_rnd/autokernel/loop/run.py:8361: in _main
+    pooled = run_pooled()
+             ^^^^^^^^^^^^
+scripts/kernel_rnd/autokernel/loop/run.py:7431: in run_pooled
+    return pool.drive(
+scripts/kernel_rnd/autokernel/loop/pool.py:438: in drive
+    outcomes = pipeline.run_pool(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+workers = [Worker(name='lane0', worktree=PosixPath('/tmp/tmpmd5flh9r/lane0'), build_dir=PosixPath('/tmp/tmpmd5flh9r/lane0-build'))]
+make_planner = <function _main.<locals>.run_pooled.<locals>.make_planner at 0x7da25f04cc20>
+make_critic = <function _main.<locals>.run_pooled.<locals>.<lambda> at 0x7da25f04cd60>
+build_context = <function _main.<locals>.build_context at 0x7da25f038d60>
+make_gate = <function _main.<locals>.gate_for at 0x7da25f038f40>
+make_measure = <function _main.<locals>.measure_for at 0x7da25f039120>
+commit = <function _main.<locals>.run_pooled.<locals>.commit_pooled at 0x7da25f065f80>
+champion_head = <function drive.<locals>.<lambda> at 0x7da25f04d260>
+reset_to_champion = <function _main.<locals>.run_pooled.<locals>.reset_retained at 0x7da25f0660c0>
+record = <function _main.<locals>.run_pooled.<locals>.record_pooled at 0x7da25f065d00>
+iterations = 1, on_step = <function drive.<locals>.step at 0x7da25f04d1c0>
+tail = <autokernel.loop.pipeline.SerializedTail object at 0x7da25f2fd8b0>
+should_stop = <function _main.<locals>.should_stop at 0x7da25f039e40>
+accumulate_valid_positive = False, author_attempts = 3
+validate_candidate = <function _main.<locals>.run_pooled.<locals>.validate_pooled at 0x7da25f065940>
+formation_guard = <function _main.<locals>.run_pooled.<locals>.<lambda> at 0x7da25f04ce00>
+reserve_candidate = <function _main.<locals>.run_pooled.<locals>.reserve_pooled at 0x7da25f0659e0>
+make_author_panel = None
+record_abandoned = <function _main.<locals>.run_pooled.<locals>.record_abandoned_pooled at 0x7da25f065da0>
+next_resume = <bound method ResumeQueue.take of <autokernel.loop.resume.ResumeQueue object at 0x7da25f2ff2c0>>
+begin_author_custody = <function _main.<locals>.run_pooled.<locals>.<lambda> at 0x7da25f04cea0>
+finish_author_custody = <function _main.<locals>.run_pooled.<locals>.<lambda> at 0x7da25f04cf40>
+
+    def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_context,
+                 make_gate, make_measure, commit, champion_head: Callable[[], str],
+                 reset_to_champion: Callable[[Worker], str],
+                 record: Callable[[loop_mod.Outcome], None],
+                 iterations: int | None,
+                 on_step: Callable[[str, str], None] | None = None,
+                 tail: SerializedTail | None = None,
+                 should_stop: Callable[[], bool] | None = None,
+                 accumulate_valid_positive: bool = False,
+                 author_attempts: int = loop_mod.HYPOTHESIS_AUTHOR_ATTEMPTS,
+                 validate_candidate=None, formation_guard=None,
+                 reserve_candidate=None,
+                 make_author_panel: Callable[[Worker], Any] | None = None,
+                 record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
+                 next_resume: Callable[[Worker, str], Any] | None = None,
+                 begin_author_custody=None, finish_author_custody=None
+                 ) -> list[loop_mod.Outcome]:
+        """Drive `iterations` iterations across `workers` concurrent lanes.
+    
+        Every side effect is injected, exactly as in `loop.iterate`, so the whole pool is
+        testable with no GPU, no build toolchain and no API key.
+    
+        `record_abandoned(worker, outcome)` records a candidate an iteration abandoned
+        before its final outcome. It is NOT an iteration: it neither draws budget nor
+        enters the returned outcomes (whose count the serial driver checks against the
+        batch), but it carries the lane lineage and, for a gate refusal, the dispatch
+        reservation taken for that exact diff -- which the final outcome must then not
+        inherit.
+    
+        `next_resume(worker, base)` is asked once per draw, after the lane is reset and
+        before any fresh hypothesis: it CLAIMS and returns resumable work (a
+        `resume.ResumePoint`) or None. A resumed candidate is an ordinary iteration --
+        it draws budget and produces exactly one final outcome. A resume refused at
+        re-validation asks it again within the same draw (`loop.iterate(next_resume=)`).
+    
+        `make_author_panel(worker)` builds the lane's best-of-N author panel
+        (`bestof.AuthorPanel`) once, like its planner; None from it, or no factory, is the
+        single-author path (N=1), unchanged. The panel authors in scratch worktrees and
+        lands the selected diff on this lane at the base `reset_to_champion` returned.
+        """
+        budget = Budget(iterations, should_stop=should_stop)
+        tail = tail or SerializedTail(champion_head)
+        # SCRATCH (operator 2026-09-26): one `batch` scope for this pool, one `iteration`
+        # scope per draw (on the lane's own thread, so actor calls nest under it), and a
+        # sweep at the start of each. The installed run registry, else the fallback.
+        registry = scratch.registry_for()
+        batch_scope = registry.scope("batch", name=f"pool-{len(workers)}")
+        outcomes: list[loop_mod.Outcome] = []
+        outcomes_lock = threading.Lock()
+        aborted: list[BaseException] = []
+        consecutive_errors = [0]
+    
+        def keep(outcome: loop_mod.Outcome) -> None:
+            """Append, record, and arm THE breaker -- one place, under one lock.
+    
+            The count is pool-wide because the thing it detects is pool-wide: a broken
+            SETUP errors every lane, while a fault that belongs to one hypothesis is
+            interleaved with other lanes' healthy outcomes and resets the count. Tripping
+            zeroes the budget so every lane stops at its next draw, and the `RunAborted`
+            re-raised after the join makes the run exit non-zero, publishing why --
+            exactly the anchor-guard abort's path.
+            """
+            with outcomes_lock:
+                outcomes.append(outcome)
+                record(outcome)
+                # `lane_error` is the only error status left: `iteration_error` was the
+                # deleted sequential driver's spelling of the same containment (R21-7).
+                if outcome.status == "lane_error":
+                    consecutive_errors[0] += 1
+                    if consecutive_errors[0] >= MAX_CONSECUTIVE_ERRORS and not aborted:
+                        budget.remaining = 0
+                        aborted.append(loop_mod.RunAborted(
+                            f"{consecutive_errors[0]} consecutive iterations failed "
+                            f"across the pool (last: "
+                            f"{outcome.reasons[0] if outcome.reasons else 'unknown'}); "
+                            f"the setup is broken, not any one hypothesis — stopping "
+                            f"rather than spending the budget re-proving it"))
+                else:
+                    consecutive_errors[0] = 0
+    
+        def lane(worker: Worker) -> None:
+            planner, critic = make_planner(worker), make_critic(worker)
+            author_panel = make_author_panel(worker) if make_author_panel is not None else None
+            depth = 0
+            base: str | None = None
+            iteration_scope: scratch.Scope | None = None
+            belief_refusals = 0
+    
+            def close_iteration(outcome: loop_mod.Outcome | None) -> None:
+                nonlocal iteration_scope
+                if iteration_scope is None:
+                    return
+                if outcome is None or outcome.status not in MEASURED_STATUSES:
+                    iteration_scope.mark_failed()
+                iteration_scope.__exit__(None, None, None)
+                iteration_scope = None
+    
+            def keep_lane(outcome: loop_mod.Outcome) -> None:
+                # A lane is detached, so this is a logical branch identifier rather
+                # than an invented Git ref. The parent is the commit actually returned
+                # by reset_to_champion for this draw, not a later champion snapshot.
+                outcome.spawn_parent = base
+                outcome.branch_id = f"detached:{worker.name}"
+                outcome.width = len(workers)
+                outcome.depth = depth
+                keep(outcome)
+    
+            while budget.take():
+                depth += 1
+                base = None
+                reservation = None
+                resumed = None
+                close_iteration(None)  # never left open across draws
+                iteration_scope = registry.scope("iteration", name=f"{worker.name}-{depth}",
+                                                 parent=batch_scope).__enter__()
+                registry.sweep()
+                # INSIDE the try. This sat outside it, so a failure here killed the whole
+                # thread rather than costing one iteration -- run 16 lost four of seven
+                # lanes that way, silently, while the run carried on looking healthy at
+                # reduced capacity. Everything an iteration does must be containable.
+                try:
+                    base = reset_to_champion(worker)
+                except Exception as exc:      # noqa: BLE001
+                    failed = loop_mod.Outcome(
+                        "lane_error", None,
+                        [f"lane {worker.name} could not reach the champion: "
+                         f"{type(exc).__name__}: {exc}",
+                         traceback.format_exc()[-1500:]])
+                    close_iteration(failed)
+                    keep_lane(failed)
+                    continue
+    
+                # All three run INSIDE one `tail.session`, so they need no lock of their
+                # own: the session is the atomic unit and the staleness check happens once,
+                # at its start, while the lock is held.
+                def gate(hypothesis, paths, _w=worker):
+                    return make_gate(_w)(hypothesis, paths)
+    
+                def measure(hypothesis, paths, _w=worker):
+                    return make_measure(_w)(hypothesis, paths)
+    
+                def commit_one(hypothesis, paths, comparison, _w=worker):
+                    return commit(_w, hypothesis, paths, comparison)
+    
+                def step(label, _w=worker):
+                    if on_step is not None:
+                        on_step(_w.name, label)
+    
+                def record_reschedule(invalid):
+                    nonlocal depth
+                    # The first draw belongs to the original invalid attempt. A
+                    # reschedule consumes the NEXT draw, and its result uses the
+                    # ordinary keep(outcome) below. Never reset the retained lane.
+                    if not budget.take():
+                        return False
+                    keep_lane(invalid)  # durable before the next owned server is launched
+                    depth += 1
+                    return True
+    
+                try:
+                    # `should_abandon` is the stop predicate itself: once a stop is asked,
+                    # a lane still FORMING abandons at its next stage boundary instead of
+                    # completing multi-minute actor calls for results nobody will use
+                    # (run 20 drained for ~50 min at 0% GPU that way). A lane holding the
+                    # tail is unaffected -- `iterate` never polls inside the tail session.
+                    def reserve(hypothesis, paths, _w=worker):
+                        nonlocal reservation
+                        if _resumed_build(resumed, hypothesis):
+                            # The exact bytes of a claimed checkpoint: the resume claim
+                            # ledger, not the one-retry dispatch bound, governs re-dispatch.
+                            reservation = reserve_candidate(_w, hypothesis, paths,
+                                                            resume_point=resumed)
+                        else:
+                            reservation = reserve_candidate(_w, hypothesis, paths)
+                        return reservation
+    
+                    def abandoned(candidate, _w=worker):
+                        nonlocal reservation
+                        candidate.spawn_parent = base
+                        candidate.branch_id = f"detached:{_w.name}"
+                        candidate.width = len(workers)
+                        candidate.depth = depth
+                        if reservation is not None:
+                            candidate.attempt_identity = reservation.identity
+                            candidate.exact_repeat_dispatch_count = reservation.dispatch_count
+                            candidate.candidate_diff_sha256 = reservation.candidate_diff_sha256
+                            reservation = None
+                        if record_abandoned is None:
+                            raise loop_mod.RunAborted("candidate disposition has no recorder")
+                        if record_abandoned is not None:
+                            with outcomes_lock:
+                                record_abandoned(_w, candidate)
+    
+                    def draw_resume(_w=worker, _b=base):
+                        # `iterate` asks again when it refuses `resumed` at re-validation.
+                        # A drawn point is rebound here too, so `reserve` and a lane_error
+                        # row name the checkpoint actually in flight.
+                        nonlocal resumed
+                        point = next_resume(_w, _b)
+                        if point is not None:
+                            resumed = point
+                        return point
+    
+                    resumed = next_resume(worker, base) if next_resume is not None else None
+                    outcome = loop_mod.iterate(
+                        planner=planner, critic=critic, context=build_context(),
+                        measure=measure, gate=gate, commit=commit_one, on_step=step,
+                        tail_session=_TailSession(tail, base),
+                        should_abandon=should_stop, record_reschedule=record_reschedule,
+                        accumulate_valid_positive=accumulate_valid_positive,
+                        # Per-hypothesis authoring budget across iterations (loop.py).
+                        author_attempts=author_attempts,
+                        validate_candidate=(
+                            (lambda hypothesis, paths, _w=worker:
+                             validate_candidate(_w, hypothesis, paths))
+                            if validate_candidate is not None else None),
+                        formation_guard=formation_guard,
+                        reserve_candidate=reserve if reserve_candidate is not None else None,
+                        record_abandoned=abandoned, resume=resumed,
+                        next_resume=draw_resume if next_resume is not None else None,
+                        **({"author_panel": author_panel} if author_panel is not None else {}),
+                        # The lane and the commit reset_to_champion put it on for THIS
+                        # draw: the only lane an empty author report may be derived from.
+                        author_lane=(worker.worktree, base),
+                        **({"begin_author_custody": lambda h, checkpoint:
+                            begin_author_custody(worker, h, checkpoint)}
+                           if begin_author_custody is not None else {}),
+                        **({"finish_author_custody": lambda ticket, h, failure:
+                            finish_author_custody(worker, ticket, h, failure)}
+                           if finish_author_custody is not None else {}),
+                        iteration_scope=iteration_scope)
+                except Superseded as exc:
+                    # `iterate` already converted this into an Outcome carrying the
+                    # hypothesis; reaching here means it escaped before one was formed.
+                    outcome = loop_mod.Outcome(
+                        "superseded", getattr(exc, "hypothesis", None), [str(exc)])
+                except loop_mod.RunAborted as exc:
+                    # Run-ending, not lane-ending: the anchor is SHARED, so a refused anchor
+                    # voids every lane's next measurement. Zeroing the budget stops them all
+                    # at their next draw -- continuous runs too: `remaining` is no longer None.
+                    aborted.append(exc)
+                    budget.remaining = 0
+                    outcome = loop_mod.Outcome(
+                        "run_aborted", None, [str(exc)],
+                        abort_evidence=getattr(exc, "inflight_keep", None))
+                except Exception as exc:      # noqa: BLE001 -- deliberate, see below
+                    # A lane used to die on ANY exception that was not Superseded:
+                    # RatchetRefused, a git timeout, an OSError. The thread ended with a
+                    # traceback on stderr, the budget draw was lost, and nothing was
+                    # published -- probed, a commit raising on 3 of 20 iterations returned
+                    # 17 outcomes for a budget of 20. At seven lanes that loses work seven
+                    # times as fast. The traceback is recorded so it cannot hide.
+                    outcome = loop_mod.Outcome(
+                        "lane_error", None,
+                        [f"lane {worker.name}: {type(exc).__name__}: {exc}",
+                         traceback.format_exc()[-1500:]])
+                    if resumed is not None and getattr(resumed, "stale", None) is None:
+                        # Lineage, so the owner can classify the claim: a harness fault
+                        # during a resumed round releases it (bounded), never consumes it.
+                        # DS41 run 9d lost 9c's hoist this way -- the row named nothing.
+                        outcome.resumed_from = resumed.checkpoint_id
+                        outcome.resume_stage = resumed.stage
+                    # An authored patch still waiting on critic pass 2 when the lane
+                    # faulted (`loop.iterate` hands it over on the exception): the owner
+                    # retains the lane's diff while recording this row, so the next launch
+                    # resumes AT critic pass 2 instead of re-running the author.
+                    pending = getattr(exc, "resume_checkpoints", None)
+                    if isinstance(pending, list) and pending:
+                        outcome.resume_checkpoints = [dict(entry) for entry in pending]
+                if reservation is not None:
+                    outcome.attempt_identity = reservation.identity
+                    outcome.exact_repeat_dispatch_count = reservation.dispatch_count
+                    outcome.candidate_diff_sha256 = reservation.candidate_diff_sha256
+                close_iteration(outcome)
+                keep_lane(outcome)
+                if outcome.status == loop_mod.BELIEF_REFUSED:
+                    # No planning possible: back off (bounded, stop-aware) instead of
+                    # re-asking the reader in a hot loop; other lanes' tails keep running.
+                    belief_refusals += 1
+                    wait = belief_backoff_s(belief_refusals)
+                    if on_step is not None:
+                        on_step(worker.name, f"belief context refused: no planning possible; "
+                                             f"next draw in {wait:.0f}s")
+                    _belief_wait(wait, should_stop)
+                else:
+                    belief_refusals = 0
+            close_iteration(None)
+    
+        def guarded_lane(worker: Worker) -> None:
+            try:
+                lane(worker)
+            except Exception as exc:
+                # Never silently lose a lane when recording or cleanup fails.
+                with outcomes_lock, budget._lock:
+                    budget.remaining = 0
+                    failure = loop_mod.RunAborted(
+                        f"lane {worker.name} could not persist its outcome: "
+                        f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}")
+                    failure.__cause__ = exc
+                    aborted.append(failure)
+    
+        threads = [threading.Thread(target=guarded_lane, args=(w,), name=w.name, daemon=True)
+                   for w in workers]
+        with batch_scope:
+            registry.sweep()
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        if aborted:
+            # Re-raised after every lane has published, so the run ends the way a crashed
+            # run does -- `run.py` publishes `failed` -- rather than returning a normal
+            # result list that reads as a completed run.
+>           raise aborted[0]
+E           autokernel.loop.loop.RunAborted: lane lane0 could not persist its outcome: AssertionError: actor factory reached before admission
+E           Traceback (most recent call last):
+E             File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/pipeline.py", line 584, in guarded_lane
+E               lane(worker)
+E             File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/pipeline.py", line 375, in lane
+E               planner, critic = make_planner(worker), make_critic(worker)
+E                                 ^^^^^^^^^^^^^^^^^^^^
+E             File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/run.py", line 7329, in make_planner
+E               ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=lane_backend(worker),
+E                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E             File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/test_actor_wire_gate.py", line 137, in forbidden_factory
+E               raise AssertionError("actor factory reached before admission")
+E           AssertionError: actor factory reached before admission
+
+scripts/kernel_rnd/autokernel/loop/pipeline.py:607: RunAborted
+=========================== short test summary info ============================
+FAILED scripts/kernel_rnd/autokernel/loop/test_actor_wire_gate.py::test_actual_main_refuses_before_actor_factory[missing]
+1 failed, 77 passed in 14.06s
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 14.401303163031116, "sampled_peak_tree_rss_bytes": 146399232, "samples": 143, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 1480081, "leader_birth": 165535734, "child_rc": 1, "children_drained": true, "failure": null}

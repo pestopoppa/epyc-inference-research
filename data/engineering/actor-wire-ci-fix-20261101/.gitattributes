@@ -1,0 +1,2 @@
+# Preserve native captured log bytes, including traceback whitespace.
+*.log -whitespace

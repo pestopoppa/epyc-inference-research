@@ -1,0 +1,17 @@
+NATIVE SEAT PASS 001c384aa0c659494727a6668f65b56212b8c3a3bfa22caf387e8156ca8dd7bf codex author 2026-11-01T11:40:09Z
+NATIVE SEAT PASS 121300f0e69efbd11d62ee6833a310231699e0ec0ca106a4c93d49265ad2dddc opencode author 2026-11-01T11:40:16Z
+NATIVE SEAT PASS 13a5ce0d4011222572d7fa393d02686bd5fc12e57fdbbc70f6b351a460bba312 claude author 2026-11-01T11:40:20Z
+NATIVE SEAT PASS 1e6dfdfea07fc4c13a108efedcda26778f4ee30ab84cc1dba75ceee83d47a803 opencode author 2026-11-01T11:40:27Z
+NATIVE SEAT PASS 3577fd78a1ff7e4d4daa59fe63d60af6b73132833b384df74e296527aa8777c3 opencode planner 2026-11-01T11:40:35Z
+NATIVE SEAT PASS 3618f87832cca279191d38f0687ceb98e8ca0c1d254903608ecdb22a60b0b18e claude author 2026-11-01T11:40:38Z
+NATIVE SEAT PASS 39967296256cc594337f55107b36d75ca75f373118dbadcc0805ff8a4c516c58 codex author 2026-11-01T11:40:42Z
+NATIVE SEAT PASS 410abac58a627adba7afef6b0aad0cfd77e431cdbd26a0e67c0d03b42691a862 claude planner 2026-11-01T11:40:46Z
+NATIVE SEAT PASS 432c83850a5ad6e363a5f0946ba80b4ba456c197018f92af717a95940e2effee opencode author 2026-11-01T11:40:53Z
+NATIVE SEAT PASS 6d8126d67c7f8bc68b2fc1be740901de2fd8d7f3c12b38785e09d5d6bde61540 codex planner 2026-11-01T11:40:57Z
+NATIVE SEAT PASS a104b7d2f20109e14292d5436ae6feda370b1bb7aaf708050a92c8143f27017c claude critic 2026-11-01T11:41:02Z
+NATIVE SEAT PASS ca2a8581e9c26c03ee8b368868df59eeaf2b31344dd569b3fdca6a6dab3be400 opencode planner 2026-11-01T11:41:09Z
+NATIVE SEAT PASS ce45d6f49471f50bdefa87c54259460eb486d8e6ba55acf33249bafa0dd1c688 codex critic 2026-11-01T11:41:14Z
+NATIVE SEAT PASS dbf70305e38b2762aa0d071bc000369041da466e6eda801497f102b824a3fba2 opencode author 2026-11-01T11:41:21Z
+NATIVE SEAT PASS e153ad7f0f002b044c626102a7b941e1deb4fb438ef3cd770eb99cf7381c56bc opencode critic 2026-11-01T11:41:33Z
+PASS 0daa39911e5e612f72e7c160d7d15239a9ed63fecfd6a3eef73f419a4297f359 actor-wire-pass.json
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 92.5198810400907, "sampled_peak_tree_rss_bytes": 739487744, "samples": 902, "verified_exited_processes": 1, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 1528841, "leader_birth": 165567546, "child_rc": 0, "children_drained": true, "failure": null}

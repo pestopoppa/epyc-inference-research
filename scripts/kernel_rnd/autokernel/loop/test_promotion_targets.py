@@ -251,7 +251,7 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
 
     def _run_one_keep(self, *, candidate_symbols=None, surface=None, refuse_first=False,
                       fail_disposition=False, no_edit=False, refuse_all=False,
-                      dirty_extra=False):
+                      dirty_extra=False, allow_untested_actors=True):
         """Drive `run.main` through exactly one kept iteration; return the record."""
         accumulate.Bundle(champion_of_record=self.tip, tip=self.tip,
                           surface=surface).save(self.store, surface=surface)
@@ -364,9 +364,10 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
                 "--anchor-build", str(self.startup_anchor),
                 "--model", str(self.root / f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"), "--store", str(self.store),
                 "--iterations", "1", "--workers", "1",
-                "--allow-untested-actor-seats", "synthetic fixture actors",
                 "--worker-root", str(self.root / "lanes"),
                 "--worker-build-root", str(self.root / "builds")]
+        if allow_untested_actors:
+            argv += ["--allow-untested-actor-seats", "synthetic fixture actors"]
         out = io.StringIO()
         # CONTROL_ONLY: exercise the in-process core so fake actors/builds remain installed;
         # separate watchdog tests cover the subprocess supervision boundary.

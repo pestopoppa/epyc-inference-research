@@ -143,7 +143,7 @@ def test_actual_main_refuses_before_actor_factory(record_state, monkeypatch):
                 return original_main([*argv, *extra])
         monkeypatch.setattr(run, "main", invoke)
         with pytest.raises(SystemExit) as refused:
-            fixture._run_one_keep()
+            fixture._run_one_keep(allow_untested_actors=False)
         assert refused.value.code == 2
         assert factories == []
         assert (fixture.store / "actor-wire-request.json").is_file()
