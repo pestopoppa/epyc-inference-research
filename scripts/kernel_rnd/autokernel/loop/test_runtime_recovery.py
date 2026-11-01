@@ -148,6 +148,14 @@ def test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix
     # existing serial state are real; measurements are explicit fixture providers.
     del argv[2:4]
     argv = _scheduled(tmp_path, argv)
+    # Real child work and artifact verification can exceed the generic 10 s
+    # scheduler fixture. Declare a bounded budget before selection; accounting
+    # still uses the actual held intervals and enforces this same bound.
+    manifest_path = Path(sr.option(argv, "--scheduler-manifest"))
+    manifest = json.loads(manifest_path.read_text())
+    manifest["config"]["max_stage_seconds"] = 300.0
+    manifest["config"]["campaign_charged_seconds_cap"] = 1000.0
+    manifest_path.write_text(json.dumps(manifest))
     fixture_dir = tmp_path / "original-fixture"
     fixture_dir.mkdir()
     pair, _log, _pids = _fixture(fixture_dir)

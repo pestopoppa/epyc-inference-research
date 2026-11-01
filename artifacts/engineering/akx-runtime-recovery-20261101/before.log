@@ -1,0 +1,97 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix _
+
+tmp_path = PosixPath('/mnt/raid0/llm/tmp/codex3-runtime-red-native-recheck-20261101/test_real_serial_interruption_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7b331017d7f0>
+
+    def test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix(tmp_path, monkeypatch):
+        from .test_runtime_treatment import _fixture
+        state_root, argv = _inputs(tmp_path, monkeypatch, rounds=2)
+        # One declared CPU target. Selection attempts, original held evidence and the
+        # existing serial state are real; measurements are explicit fixture providers.
+        del argv[2:4]
+        argv = _scheduled(tmp_path, argv)
+        fixture_dir = tmp_path / "original-fixture"
+        fixture_dir.mkdir()
+        pair, _log, _pids = _fixture(fixture_dir)
+        (state_root / "fixture-pair.json").write_text(json.dumps(pair.to_dict()))
+        monkeypatch.setenv("PYTHONPATH", str(Path(sr.__file__).resolve().parents[2]))
+        monkeypatch.setattr(sr, "_child_command", lambda row: [sys.executable, "-m", __name__, "--child", *row])
+        with mock.patch.object(sr, "_scheduled_failure_account", side_effect=KeyboardInterrupt):
+            with pytest.raises(KeyboardInterrupt):
+                sr._main(argv)
+        before = json.loads((state_root / "serial-state.json").read_text())
+        assert before["active"] and before["next_batch"] == 0
+        first = state_root / "batches/batch-000000"
+        assert (first / "loop-runtime-interruption.json").exists(), (first / "stderr.log").read_text()
+>       assert sr._main(argv) == 0
+               ^^^^^^^^^^^^^^
+
+scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/kernel_rnd/autokernel/loop/serial_run.py:1531: in _main
+    result = _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
+scripts/kernel_rnd/autokernel/loop/serial_run.py:2589: in _drive
+    scheduler_state, selection, available_index = serial_scheduling.select_target(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+manifest = SerialSchedulerManifest(scheduler_id='serial-integration', config=SchedulerConfig(config_id='provisional-v1', max_stag...g_declared=False, schema='epyc.autokernel.stage_proposal.v1')}), schema='epyc.autokernel.serial_scheduler_manifest.v1')
+state = SchedulerState(scheduler_id='serial-integration', config_digest='a6f16aa8df6a412c693f0ff114b2e1c7db2d885314a2024eac7f3...lus-teardown D',), issued_selection_digests=(), existing_stage_until=None, schema='epyc.autokernel.scheduler_state.v1')
+selected_ids = ('cpu',), now = 1793504166.642396, stage_number = 1
+scope_previews = {'cpu': {'scope': 'full', 'candidate': None, 'reason': 'original pending full-target runtime pair'}}
+validation_ids = frozenset(), duration_forecasts = {}
+
+    def select_target(manifest: SerialSchedulerManifest, state: scheduling.SchedulerState,
+                      selected_ids: Sequence[str], *, now: float, stage_number: int,
+                      scope_previews: Mapping[str, dict] | None = None,
+                      validation_ids: frozenset[str] = frozenset(),
+                      duration_forecasts: Mapping[str, dict] | None = None
+                      ) -> tuple[scheduling.SchedulerState, scheduling.Selection, int]:
+        if type(stage_number) is not int or stage_number < 0:
+            raise SerialSchedulingRefused("serial stage number must be nonnegative")
+        if scope_previews is not None and set(scope_previews) != set(selected_ids):
+            raise SerialSchedulingRefused("CPU scope previews differ from available selected targets")
+        if not validation_ids <= set(selected_ids):
+            raise SerialSchedulingRefused("validation targets differ from available selected targets")
+        indexed = []
+        for index, selected_id in enumerate(selected_ids):
+            proposal = manifest.proposals[selected_id]
+            identity = {"manifest": manifest.digest, "selected_id": selected_id,
+                        "stage_number": stage_number}
+            if scope_previews is not None:
+                from .cpu_screen import scoped_proposal
+                preview = scope_previews[selected_id]
+                proposal = scoped_proposal(proposal, preview)
+                identity["cpu_scope"] = _digest(preview)
+            if selected_id in validation_ids:
+                proposal = replace(proposal, stage_class="validation",
+                                   reservation_kind="validation")
+                identity["source_validation"] = True
+            forecast = (duration_forecasts or {}).get(selected_id)
+            if forecast is not None:
+                # A serial-owner estimate, never a new bound, grant, weight or grade.
+                # Another stage (e.g. source validation) must retain its own estimate.
+                if forecast["stage_class"] == proposal.stage_class:
+                    duration = _number(forecast["estimated_duration_seconds"], "duration forecast")
+                    if not 0 < duration <= manifest.config.max_stage_seconds:
+                        raise SerialSchedulingRefused("duration forecast is outside the original stage bound")
+                    proposal = replace(proposal, estimated_duration_seconds=duration)
+                    identity["duration_forecast"] = _digest(forecast)
+            indexed.append((index, replace(proposal, proposal_id=_digest(identity), submitted_at=now)))
+        proposals = tuple(proposal for _index, proposal in indexed)
+        next_state, selection = scheduling.select_stage(
+            manifest.config, state, proposals, now=now)
+        if selection.status == "complete":
+            return next_state, selection, -1
+        if selection.status != "selected" or selection.proposal is None:
+>           raise SerialSchedulingRefused(
+                f"scheduler did not select executable work: {selection.status}: "
+                f"{'; '.join(selection.reasons)}")
+E           autokernel.loop.serial_scheduling.SerialSchedulingRefused: scheduler did not select executable work: refused: actual held interval exceeded configured stage-plus-teardown D
+
+scripts/kernel_rnd/autokernel/loop/serial_scheduling.py:156: SerialSchedulingRefused
+=========================== short test summary info ============================
+FAILED scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py::test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix
+1 failed in 14.78s
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 15.139333096100017, "sampled_peak_tree_rss_bytes": 251174912, "samples": 150, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 2734826, "leader_birth": 162662503, "child_rc": 1, "children_drained": true, "failure": null}

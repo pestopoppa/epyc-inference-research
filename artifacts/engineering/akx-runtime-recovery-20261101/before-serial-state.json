@@ -1,0 +1,108 @@
+{
+  "active": null,
+  "batch_iterations": 1,
+  "config_digest": "2abb4b326d53ef1ef0490d060476beda7c09db883c49cb0926fee2db39a5228b",
+  "failed_targets": {},
+  "last_reconciliation": {
+    "batch_number": 0,
+    "process_terminal_basis": "original_pid_absent; exit_status_unavailable",
+    "result": null,
+    "runtime_recovery": {
+      "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-recheck-20261101/test_real_serial_interruption_0/router/batches/batch-000000/runtime-recovery.json",
+      "sha256": "106f700e0903301646137f97a5c0d2fe85d7ddc8f9982097425670ed43d8ff1f"
+    },
+    "target_index": 0,
+    "terminal": "failed"
+  },
+  "last_results": {},
+  "next_batch": 1,
+  "required_source_validation": null,
+  "rounds": 2,
+  "runtime_recovery": {
+    "0": {
+      "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-recheck-20261101/test_real_serial_interruption_0/router/batches/batch-000000/runtime-recovery.json",
+      "sha256": "106f700e0903301646137f97a5c0d2fe85d7ddc8f9982097425670ed43d8ff1f"
+    }
+  },
+  "scheduler_state": {
+    "accounted_receipts": [
+      {
+        "outcome": "failed",
+        "receipt_digest": "c94837aff72a988b0d5d159d002a4070a4fdd543280f0daab414486efa55a5fd",
+        "receipt_id": "1aa9b367500dac1c6cda33681dbfa4b7d9a17e4430b8e525b35ca3155ad5e772",
+        "schema": "epyc.autokernel.accounted_receipt.v1",
+        "selection_digest": "3c8c52afc1742d00083c6ad7451eecc3996da92faf0afb19a36242fa3f7dcebe"
+      }
+    ],
+    "accounting_epoch": 1,
+    "campaign_attempts": 1,
+    "campaign_charged_seconds": 13.485572330886498,
+    "capacity": {
+      "gpu_devices": [
+        "mi210_0"
+      ],
+      "memory_reservation_bytes": 10000,
+      "physical_region_fraction": 1.0,
+      "schema": "epyc.autokernel.resource_vector.v1"
+    },
+    "capacity_digest": "5a5293dab5d3ce10c97cf14eb73e9d43cfbf79866e615289e0a5eaa65915009e",
+    "config_digest": "a6f16aa8df6a412c693f0ff114b2e1c7db2d885314a2024eac7f38160ccbc054",
+    "coverage_debt": {},
+    "deficits": {
+      "cpu": 6.742786165443249
+    },
+    "existing_stage_until": null,
+    "frozen_frontier": [],
+    "issued_selection_digests": [],
+    "policy_digest": "2eebd2c4e173308965723457c4c938a8bb9b75166f1324643c607008b8ca8dd1",
+    "receipts": [
+      {
+        "affinity_cores": [
+          "0"
+        ],
+        "allocation_generation": 1,
+        "backend": "cpu",
+        "beneficiary_shares": {
+          "d95e2b7b40806fb29f8aa19227879ae18b604a82d93e733eb311ea37af0b9f00": 1.0
+        },
+        "ended_at": 1626639.727562296,
+        "gpu_device_ids": [],
+        "memory_reservation_bytes": 0,
+        "ownership_generation": 1,
+        "physical_claim_ids": [
+          "3be2fb1a-7293-4c34-b733-c85d772b9474:flock:2431:195723913"
+        ],
+        "physical_region_fraction": 0.5,
+        "proposal_id": "d95e2b7b40806fb29f8aa19227879ae18b604a82d93e733eb311ea37af0b9f00",
+        "receipt_id": "1aa9b367500dac1c6cda33681dbfa4b7d9a17e4430b8e525b35ca3155ad5e772",
+        "schema": "epyc.autokernel.held_claim_receipt.v1",
+        "stage_class": "search",
+        "started_at": 1626626.241989965
+      }
+    ],
+    "round_number": 1,
+    "round_reservations": {},
+    "round_seed_used": false,
+    "scheduler_id": "serial-integration",
+    "schema": "epyc.autokernel.scheduler_state.v1",
+    "seed_accounts": [],
+    "skipped_noncoverage": [],
+    "successor_fences": [
+      "actual held interval exceeded configured stage-plus-teardown D"
+    ],
+    "used_coverage": {},
+    "used_noncoverage": [
+      "d95e2b7b40806fb29f8aa19227879ae18b604a82d93e733eb311ea37af0b9f00"
+    ]
+  },
+  "schema": "epyc.autokernel.serial_run.v1",
+  "scope_debt": {},
+  "serving_instruments": {
+    "cpu": "legacy_v1"
+  },
+  "source_loo": {},
+  "source_results": {},
+  "source_search_counts": {},
+  "source_validations": {},
+  "target_count": 1
+}

@@ -1,0 +1,1521 @@
+{
+  "candidate_id": "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d",
+  "frame": {
+    "calculation_source": {
+      "callables": [
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "3003333d9980eae5d529f28d99f70bc8d2201fe0a972462218fbb7c769505c90",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "_solve"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "19c6bc793bc57316413dc5ad45627764c71b70be71562cf600bdf1bd29eb08b1",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.evaluator.controls",
+          "qualname": "run_calibration_block"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "294b71529d0dd8d1364c4a771c955bc664f3ee28f0500f22f260b80b43c98e49",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.evaluator.statistics",
+          "qualname": "solve_calibration"
+        },
+        {
+          "configuration_sha256": "57b195e8e220b264805d0de6a1e4776ef9bf532318df5ad21ddccb76271c7970",
+          "configuration_status": "pinned",
+          "implementation_sha256": "71d71c23960c00582f337f4e7a38e648554bd72e91b3b87898ce04a540ebc54e",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectCalibration._launch"
+        },
+        {
+          "configuration_sha256": "57b195e8e220b264805d0de6a1e4776ef9bf532318df5ad21ddccb76271c7970",
+          "configuration_status": "pinned",
+          "implementation_sha256": "1c5883118599f9481c107056ec5d55e6973b79a1d9f88c5fc7befda7e34d27c7",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectCalibration._reopen_launch"
+        },
+        {
+          "configuration_sha256": "78864f511a1edb17d952c821cc7f6b8603f2feb78f0ff1a4f8fda119ba6ecc0e",
+          "configuration_status": "pinned",
+          "implementation_sha256": "6636487bcdff5d35bfdffa1827519c2174ad6432b66dd06cbd4fd7c27ceb7f5a",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectCalibration._material"
+        },
+        {
+          "configuration_sha256": null,
+          "configuration_status": "unproven",
+          "implementation_sha256": "10b9856ab6435049a8e0375a2f9a2e8cfad35a0e939789dd7a9b90072ffff1b9",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.test_runtime_admission",
+          "qualname": "installed_fixture.<locals>.reopen"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "d098ef1cb4bbe2c5adabb720f2faadc4cc2c8cd194467869192a499011389f84",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.test_runtime_admission",
+          "qualname": "installed_fixture.<locals>.<lambda>"
+        },
+        {
+          "configuration_sha256": "a4d968a6fef21a9cb6a8f08c7110273904253779230bab2fe5f076296d40335b",
+          "configuration_status": "pinned",
+          "implementation_sha256": "7e19923204f3bb90c3b52bf70a98d92a9546dfa9aae468bf61e44526816029c2",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectPairWindow.__init__"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "4fb44fa3141d2728c489f62f028eed0ae181aaac2ca00f22463856d04b8595ce",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectPairWindow.collect_to"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "49ca152c739cb8d3cb9ec175787ea42febebdaa333114eccd3f26054ea853b66",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectPairWindow.reopen"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "21cf281b7bae18bbca000f0ea657400cb59a754f255d81b7646396235463f9a6",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectPairWindow._context"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "574af2edab75d20fca17ab5d58fc07d11aa3bac9a327ea61a48125ebe3821a1e",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectPairWindow._checkpoint"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "2233e25a38eb45984939001745dc431f572b93c3d76a8a29d6a3f83d64bcb955",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectPairWindow.finish"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "ec64f43fc142238236da417f6da2df0284776ef8084ae30d1f87645048dede38",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "DirectPairWindow._prompts_for"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "61d19f140ddb8828ad40578556a3249328c7d20b58e5e9e8db621d8287fae238",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "positive_control_pair"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "f937fbfb2cd8e7553e3b0587912416c0979efdc102cec9a1b7bdd19b7f5f92cf",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_calibration",
+          "qualname": "degraded_work_control"
+        }
+      ],
+      "recovery": {
+        "loaded": [
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "2c96cd3368dc7488d8c397b98c530753d73e9877c51bfd4bf75538895c688e61",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.runtime_recovery",
+            "qualname": "holder_identity"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "d540785adfa81a37d7277977ea24dffc8c1e2957c89094e5301f47567112c276",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.runtime_recovery",
+            "qualname": "_verify"
+          },
+          {
+            "configuration_sha256": "733b848f721e1cb42491a68b86d483f8c64140c41aac24d77f7fc3b81cee53d9",
+            "configuration_status": "pinned",
+            "implementation_sha256": "ec7b443606bcb1a977361513dd9d6ba5975c610b5671a6273e4c83a44564fc6c",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.runtime_recovery",
+            "qualname": "reopen"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "2b04f4fdc9771ce6ffcbab23abf403f55cd4149ec6d48eff0f003da2e9ef3fff",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.runtime_recovery",
+            "qualname": "pending"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "06e8bac405da5d6bad132fd8777484c7b485885fcefdb097498bb9e0cbe0b97c",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.runtime_recovery",
+            "qualname": "replacement"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "3c1b72df9a605c3d97cdf0038e8eff450ed9b51c79005c5dba4f57919e08d94e",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.runtime_recovery",
+            "qualname": "replace_window"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "e78d6b885ae3774835edeb2c30a424da7ddb8aa6f661c832d74bf52490e7df68",
+            "implementation_status": "unproven",
+            "kind": "python",
+            "module": "autokernel.loop.serial_run",
+            "qualname": "_original_child_terminal"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "46442cb14b2504e862c5d689e606adc7492c9b22aa7a8e2be62d709c398f200d",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.serial_scheduling",
+            "qualname": "reopen_held_receipts"
+          }
+        ],
+        "module_sha256": "c78f479daf2dad2c4638d3cadd23aff8a2eeb93189576c7952a0f0fff28ef4cf"
+      },
+      "statistics_module": "autokernel.evaluator.statistics/v1"
+    },
+    "calibration": {
+      "locator": "5ea31c3b1d2aa38c49efab6c3ed30edf92d46033b8313a0d5ffd3d2fff16cc5f-29aa1a996be166a142bcfeca50250a7dbf877badace6689276a732e4e37e1d5b.json",
+      "sha256": "690d70464e3c42fda6adce42c117879c9d27553b85a74fb6cd2b1fbde8684e16",
+      "verified": true
+    },
+    "campaign_id": "ak-calibration-fixture",
+    "candidate_id": "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d",
+    "epoch": "fixture",
+    "host_window_source": {
+      "default_nominal_khz": 2500000,
+      "functions": [
+        {
+          "configuration_sha256": "c348ad6fefdd7073f020df6e5db3428811e639a743c014bab4e88f8fb5a78394",
+          "configuration_status": "pinned",
+          "implementation_sha256": "61e22e9ae8f0c47ccfc60f42675db9ea9cf79d1592da4a1a5a4ce961c83e98ee",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "configuration"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "13320cd3a1155df7befa723490091130b61f922a683320ece67fc6c9ff168730",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "snapshot"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "7827c7e2bd5572d0eeedd5f58b71a21f7e4f987afba8730261998475fcb3eaa0",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.test_runtime_admission",
+          "qualname": "installed_fixture.<locals>.boundaries"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "578f8f93201348b18b665565e38a887d691307012bfec75a2b2db22b45a4f93a",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "artifacts"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "efe4b9f8699537f8129bb008c44e8ca1501a9b3714db15e91358cd314ebd657a",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork.__init__"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "a23c26e048831c6001464b35af810afff38f86c9c168700576e50c270e6939db",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork._collect"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "6271a0127b714a865313622d4018c405eb3736e94c4e5f6ea36a95dc6eff0bd1",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DirectHeldClaimAdapter.__init__"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "1129462cf72fee4e66b2f3d4649f35aa6d636984f778743a36dbf03e813faadb",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DirectHeldClaimAdapter.attest"
+        },
+        {
+          "configuration_sha256": "98fe8ae478d72c14453645ea380eb1a3555ce615131b2d997a42494d1062333a",
+          "configuration_status": "pinned",
+          "implementation_sha256": "4e4cb5da50422f8777453fa96ca0c7857cf5fcc20f009c5e1dc906cbe9326903",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork.start"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "7d6f0c7f53ad9b8f17a9ab13b1ea6364d1dbee38bca58f21e6cd4e033682fe4f",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork.attach_target"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "a6d5d08d5c29f1679a1bcecd27cf6f6547c14041619c750909e07d7c398a7b1c",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork.checkpoint"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "4c54451d70fdbf386d1c3f4a277129e890883dd30eddefd1b95a3863bfde8224",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork.note_hook_failure"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "64d91bc825ef310fdd0685e26c9fcf6774cad9798779f081ab421e2b9473e55b",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork.shutdown_resolved"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "04722d30e968b5626b6e98c19abe0072babfb21eeb15c08c4b7574f7b9486f50",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork.phase"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "1c58b7c3a0276139138b14c2e01b84277409c9e26f8ed4b6d28890713b360301",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork.finish"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "60bfe1ed7e03f38515fe13bfe2fdda419d4a9c404bc8a52c8e362d60c2c9ed7f",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "DuringWork.body"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "e76e75bb02390dc329a74af063a658e7f0e67198d7d19803a0eb196ff898d77c",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "health"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "7b4905773c2ab1adaf7ee97ed535d61ddba15d05c3efb1aa61b7c9958df59450",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.test_runtime_admission",
+          "qualname": "installed_fixture.<locals>.<lambda>"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "309932ab38f691a2f1db028ea281a398a427f4269ee176cdfa1d5631683f7f34",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "validate_gpu_claim"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "6bc1ca71e48321daa6743aa48f86d1d41672c31fbdae954e607010fbeea06272",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "same_claim"
+        },
+        {
+          "configuration_sha256": null,
+          "configuration_status": "unproven",
+          "implementation_sha256": "b835c7fa1c8ca2506e2382dfb7d080358f81e6e3a41a79fa906fd54bfcdc02cf",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "GpuDuringWork.__init__"
+        },
+        {
+          "configuration_sha256": null,
+          "configuration_status": "unproven",
+          "implementation_sha256": "f0f1700fcfb6d8007158f9e958bd335b03b8de2005bd8d622002b940a66d64a3",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "GpuDuringWork.phase"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "c8be1c715e56fe5d31b680bb53559ea6e6e0b2c51cee1f5842394d72420ad605",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "GpuDuringWork._stop_device"
+        },
+        {
+          "configuration_sha256": null,
+          "configuration_status": "unproven",
+          "implementation_sha256": "4faf6b18c857ef0788da51b50a56d5dc63d6d42d7ab57dc246792d8a3c05852b",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "GpuDuringWork.finish"
+        },
+        {
+          "configuration_sha256": null,
+          "configuration_status": "unproven",
+          "implementation_sha256": "5539af360a7b8d380d62d8db058208617245910859cb40342c6af00b4b3073d3",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "GpuDuringWork.body"
+        },
+        {
+          "configuration_sha256": null,
+          "configuration_status": "unproven",
+          "implementation_sha256": "8999c98895eac9c8c5b2f3201b471c9ebd83d9e82a4dc320604090c2cd0ad7e7",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "GpuDuringWork.shutdown_resolved"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "7a38409f9e8a442fb9527e5b5ffd1d859fdfef87022ce4e313966df6ddd4bda9",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.runtime_window",
+          "qualname": "gpu_device_state"
+        },
+        {
+          "configuration_sha256": null,
+          "configuration_status": "unproven",
+          "implementation_sha256": "dd6c63499981b82e2fb1e96012743b8987489828b15f9009ff3a81faa839e119",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.execution.device_sampler",
+          "qualname": "RocmSmiSampler.__init__"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "9b71936ef246811073508ddf63869afd2fcf205c7a55399bd9a87b1ac5b270d1",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.execution.device_sampler",
+          "qualname": "RocmSmiSampler.start"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "a0ab2ec89b9ba9d4b592232354a53bbfbaad11806cf1a31291efc0d6ef64005b",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.execution.device_sampler",
+          "qualname": "RocmSmiSamplingSession._sample_loop"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "3a238e97a848b78243572c12bb34338c94207d88c90c06cc93d369a096a8fe14",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.execution.device_sampler",
+          "qualname": "RocmSmiSamplingSession.stop"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "010d561dcaac86595e3a79af878a16de25776aad3b82444758d63eff135897f0",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.execution.device_sampler",
+          "qualname": "AmdgpuHwmonSnapshotRunner.__call__"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "36722810b9b1fcab279f69c6a53ea1398d33b81b6d513b5d30c553aa99b1cd00",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.evaluator.devices",
+          "qualname": "parse_rocm_smi_snapshot"
+        },
+        {
+          "configuration_sha256": "74d0d5a5c53926e5747d291a0984be30167b71c2098921eb288214650729a024",
+          "configuration_status": "pinned",
+          "implementation_sha256": "ef58879b9603c4072bf769e087c7e76b7744460f860d5885977efbfd6690c5d6",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.execution.microbench",
+          "qualname": "HostStatePolicy.frequency_verdict"
+        }
+      ],
+      "gpu_device_sources": {
+        "autokernel.evaluator.devices": "af8ee4813a4a80535f2628604bd53257259ef1aad5173c96863db68b1e990c3b",
+        "autokernel.execution.device_sampler": "13f86ed2854d095241b609290e21318e426bd2a3e6b21ea56fb8a74e21c768f0"
+      },
+      "nominal_reference": "autokernel.execution.live_controls:NOMINAL_KHZ=2500000",
+      "snapshot_source": {
+        "callables": [
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "6fd161e2fb56c6c591db38eff6f5ce1c74319c5c69104c0f02fdac2b355487fb",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "read_raw_file"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "aa0e2d55fdde4effa091f59f0958f56326e22f81659747a7849551ec03a64d58",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "_raw"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "611923dbb119c9638e3f4656c76de5c8fec19f8b52df7ed83c27c5266dad58f0",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "_text"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "d5ac14eb9417e526bfdeb45d87c0aadf6a8cad65350dd36243349c2d5c3fb721",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "_cgroup"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "cc940c645153cd3765a09af0f4e1282c68c7e8dbae6800083303d74dc27674fb",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "host_state"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "06bdb5b3ab59468c85f3bd52bc7c34eb07a186e010a0fe1818891ae7f7d52092",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "captured_preflight"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "6609c68859766c6416a3ac6e4601f293d38624d034575eb886b0d5a86b1d8589",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "lifecycle_window_facts"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "f8fca1f161f4dbc444d4ba3c2da82394022811f7139d614ba2e08bdaba9b8340",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.lifecycle_observation",
+            "qualname": "_intervals"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "dd95c1d96ab464faeb7fa9ade78b6354c26f7b11f449c6518a196fdb99126ef7",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.lifecycle_observation",
+            "qualname": "validate_observation"
+          },
+          {
+            "configuration_sha256": "79eeb257a6eb28b357d453e07010854fa637b15b7706f53bba848d40408c93c4",
+            "configuration_status": "pinned",
+            "implementation_sha256": "d8cb284a61dd39a98fe3dcb355a25fe2be1080035a7b0752649d4bdb5cf72262",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.observation_binding",
+            "qualname": "validate_reopened_observation"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "db1e082ba4b776bc8cd8118b55c2d3584158cbc28381ed67e255eebeb5b93ffe",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "_metadata"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "2ef89d8c924fba2683d61be1de966d306e3fb95a0b93b3366df047603f78fc8e",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "InstalledSearchWindowConfiguration.__post_init__"
+          },
+          {
+            "configuration_sha256": null,
+            "configuration_status": "unproven",
+            "implementation_sha256": "2b4c427bc58c005a2d715b77d088f772ad77a1964aa755228f84febeb2288e4d",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "InstalledSearchWindowConfiguration.from_dict"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "14bf6040282ead665526464dd60d69bab13fdd6c99571dbcce6ab0668f02c788",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "WindowLimits.__post_init__"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "11a357b8565ae344ce6571fc3f4b0d69fbefde0d718cb98d855bc6adf4f50e1b",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "BoundedWindowSnapshot.__init__"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "111a02b9655ffe1c69e55d9ba70026bbd39bc47de6df38a79040f9674b5218d9",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "BoundedWindowSnapshot.step"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "51d58702a44f5d4a8a784d30239454deb693c3b66eaa53d5743e0f65add4f539",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "BoundedWindowSnapshot.cancel"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "38f04a2ac95ecc872714f56528eeb1fe5494a848c4b5ae74c7305ac953034b8e",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "SameAttemptWindowOwner.__init__"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "48e7c8855919b8ea9f207983ddf0aaa5d1f4b2748f0a4ffe4772d96d77161b8a",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "SameAttemptWindowOwner._owned_thread"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "92b3e5eff5ee78cf6828105836adbf371bf401263cb8f78d0333ecac2553fac3",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "SameAttemptWindowOwner._boundary"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "f4479d4270e91de1a0ecd957e8f133c09afed696a754b4de76537ce2362d7dcd",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "SameAttemptWindowOwner.poll_delay"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "038ac77cf77685ac9a26ce70fffcfb096382b016845c0dde1fe61d344f4a70fc",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "SameAttemptWindowOwner.open_unit"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "87da03bcdadc2c0e914f5366828c9773e1557e5da7a84196f4775a904eb02fd0",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "SameAttemptWindowOwner.marker"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "bdf4ba568a28d0b181f594cc1ea0d359d1bd280b28453a394e09abedfeae1f48",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "SameAttemptWindowOwner.poll"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "f9074572908b1e0d9e490484d4f89bce9fe0fc93145e7acc2d716e5b6bcbbfcc",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "SameAttemptWindowOwner.seal"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "d2daa70f6125f78c9f2eb095e26236559f6a22ec7ccf8f9af7f9b5c8863dc650",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.loop.search_window",
+            "qualname": "SameAttemptWindowOwner.reopen"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "0acbea8ba3ce246aacc39ae4baf3527a51305dfa436e28aa4bba0aa89b1deb02",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.resource.preflight",
+            "qualname": "reduce_claim_witness"
+          },
+          {
+            "configuration_sha256": "f3fd324802512ea6e2a0a43111f48eebd20938888c7cc7ae1938c55afc621088",
+            "configuration_status": "pinned",
+            "implementation_sha256": "a419d66c188161708200109f8ff19fca39ea41d07ebb3845bffbd3280d94d01e",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.resource.preflight",
+            "qualname": "reduce_owned_scope"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "d3e4a45f7ea1fbbb78d2c0f870a3e9909f1545fa440a6473b80e1bf0991694a3",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.resource.preflight",
+            "qualname": "parse_proc_locks"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "bcf2c452a283828a527d2d1077f89fb726829c29a1217e984d7df010993ec8b5",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.resource.preflight",
+            "qualname": "parse_region_claim"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "528d7e302abe31d50d6af0fb13b545ba422eb4ccb03f415504b626b7e1523443",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.resource.preflight",
+            "qualname": "_parse_stat"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "27dbfc39f742b8beef6dc93e87914b8360397981f237258fe258ca0be8e564fa",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.resource.preflight",
+            "qualname": "combine_verdicts"
+          },
+          {
+            "configuration_sha256": "74d0d5a5c53926e5747d291a0984be30167b71c2098921eb288214650729a024",
+            "configuration_status": "pinned",
+            "implementation_sha256": "ef58879b9603c4072bf769e087c7e76b7744460f860d5885977efbfd6690c5d6",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.execution.microbench",
+            "qualname": "HostStatePolicy.frequency_verdict"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "69e1b71f78da61abfe35bfa848ef65b64ae4029d80cab9cf44274ba09a03b2f8",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.execution.microbench",
+            "qualname": "HostStatePolicy.check_load"
+          },
+          {
+            "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+            "configuration_status": "pinned",
+            "implementation_sha256": "66f078bff5865cd6420c7134e154655c2adbb9463487854a214442b22300ee3a",
+            "implementation_status": "pinned",
+            "kind": "python",
+            "module": "autokernel.execution.microbench",
+            "qualname": "derive_package_power_attestation"
+          }
+        ],
+        "schema": "epyc.autokernel.search_window_source.v1"
+      }
+    },
+    "pair": {
+      "anchor": {
+        "absent_environment": [],
+        "argv": [
+          "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/not-a-model",
+          "-np",
+          "1",
+          "-c",
+          "16384",
+          "-t",
+          "8",
+          "-tb",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "2048",
+          "-ctk",
+          "f16",
+          "-ctv",
+          "f16",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "-fa",
+          "on",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "48415",
+          "--metrics",
+          "--slots",
+          "--no-kv-unified"
+        ],
+        "backend": "cpu",
+        "build_dir": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build",
+        "capability": {
+          "backend": "cpu",
+          "contention": "unproven",
+          "cpu_placement": "unproven",
+          "gpu_residency": "not_applicable",
+          "reasons": [],
+          "schema": "epyc.autokernel.recipe_capability.v1",
+          "speculation": "none",
+          "supported": true,
+          "witnesses": [
+            {
+              "expected": null,
+              "field": null,
+              "key": "GGML_IQK",
+              "kind": "runtime_set",
+              "reason": "witness_sampler_not_implemented",
+              "status": "unknown"
+            }
+          ]
+        },
+        "command_argv": [
+          "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/not-a-model",
+          "-np",
+          "1",
+          "-c",
+          "16384",
+          "-t",
+          "8",
+          "-tb",
+          "8",
+          "-b",
+          "2048",
+          "-ub",
+          "2048",
+          "-ctk",
+          "f16",
+          "-ctv",
+          "f16",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "-fa",
+          "on",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "48415",
+          "--metrics",
+          "--slots",
+          "--no-kv-unified"
+        ],
+        "drafter": null,
+        "dsos": [
+          {
+            "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin/libggml.so",
+            "role": "dso",
+            "schema": "epyc.autokernel.launch_artifact.v1",
+            "sha256": "45c7a873e52ff461eeb60cdfe24ed77e8ed13ed4b347c0ca19cac797b87f415f"
+          }
+        ],
+        "environment_policy": {
+          "allowed_inherit_keys": [],
+          "measurement_keys": [
+            "GGML_IQK"
+          ],
+          "schema": "epyc.autokernel.environment_policy.v1",
+          "version": "policy-v1",
+          "witnesses": {
+            "GGML_IQK": "runtime_set"
+          }
+        },
+        "executable": {
+          "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin/llama-server",
+          "role": "executable",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "5b561c63f238a0a9a2ea03a6624ef1188da99028fc6708e18d06509651078dba"
+        },
+        "execution_digest": "a88eaf315428d99e5f5a5066f5e126088d22db365ba0d164a0733e7652879d34",
+        "launch_contract": "orchestrator-production/v1",
+        "launch_env": {
+          "GGML_IQK": "1",
+          "LD_LIBRARY_PATH": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin"
+        },
+        "model": {
+          "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/not-a-model",
+          "role": "model",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "314b281b58317d57d3500737745b3e925aa1cbde439649a55129ccf36bc04f37"
+        },
+        "port": 48415,
+        "provenance": {
+          "export_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "instance_mode": "full",
+          "source:fixture": "synthetic"
+        },
+        "readback_expectations": [],
+        "relevant_environment": {
+          "GGML_IQK": {
+            "state": "value",
+            "value": "1"
+          }
+        },
+        "runtime_binary_dir": null,
+        "runtime_ld_paths": [],
+        "schema": "epyc.autokernel.canonical_launch.v1",
+        "snapshot_digest": "0c42ce1b6173120d86104c0f7567efcf4d8769b4001db55d282bbe71a98ba6fa",
+        "template": {
+          "batch": 2048,
+          "cpu_list": null,
+          "ctk": "f16",
+          "ctv": "f16",
+          "ctx": 16384,
+          "device": "none",
+          "env": {},
+          "env_readback": [],
+          "extra_flags": [],
+          "fa": "on",
+          "kv_unified": false,
+          "metric": "aggregate_tok_s",
+          "model": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/not-a-model",
+          "n_predict": 8,
+          "name": "runtime-http",
+          "ngl": 0,
+          "np": 1,
+          "schema": "epyc.autokernel.canonical_recipe.v1",
+          "spec_decode": {
+            "type": "none"
+          },
+          "temperature": 0.0,
+          "threads": 8,
+          "top_k": 1,
+          "top_p": 0.95,
+          "ubatch": 2048
+        },
+        "template_hash": "476d9da7f5cafa6b993ae342eed7f40509c39f8e948f5717cac6ce7497ae9da7",
+        "topology_prefix": [],
+        "workload": {
+          "metric": "aggregate_tok_s",
+          "n_predict": 8,
+          "temperature": 0.0,
+          "top_k": 1,
+          "top_p": 0.95
+        }
+      },
+      "candidate": {
+        "absent_environment": [],
+        "argv": [
+          "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/not-a-model",
+          "-np",
+          "1",
+          "-c",
+          "16384",
+          "-t",
+          "9",
+          "-tb",
+          "9",
+          "-b",
+          "2048",
+          "-ub",
+          "2048",
+          "-ctk",
+          "f16",
+          "-ctv",
+          "f16",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "-fa",
+          "on",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "48415",
+          "--metrics",
+          "--slots",
+          "--no-kv-unified"
+        ],
+        "backend": "cpu",
+        "build_dir": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build",
+        "capability": {
+          "backend": "cpu",
+          "contention": "unproven",
+          "cpu_placement": "unproven",
+          "gpu_residency": "not_applicable",
+          "reasons": [],
+          "schema": "epyc.autokernel.recipe_capability.v1",
+          "speculation": "none",
+          "supported": true,
+          "witnesses": [
+            {
+              "expected": null,
+              "field": null,
+              "key": "GGML_IQK",
+              "kind": "runtime_set",
+              "reason": "witness_sampler_not_implemented",
+              "status": "unknown"
+            }
+          ]
+        },
+        "command_argv": [
+          "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/not-a-model",
+          "-np",
+          "1",
+          "-c",
+          "16384",
+          "-t",
+          "9",
+          "-tb",
+          "9",
+          "-b",
+          "2048",
+          "-ub",
+          "2048",
+          "-ctk",
+          "f16",
+          "-ctv",
+          "f16",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "-fa",
+          "on",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "48415",
+          "--metrics",
+          "--slots",
+          "--no-kv-unified"
+        ],
+        "drafter": null,
+        "dsos": [
+          {
+            "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin/libggml.so",
+            "role": "dso",
+            "schema": "epyc.autokernel.launch_artifact.v1",
+            "sha256": "45c7a873e52ff461eeb60cdfe24ed77e8ed13ed4b347c0ca19cac797b87f415f"
+          }
+        ],
+        "environment_policy": {
+          "allowed_inherit_keys": [],
+          "measurement_keys": [
+            "GGML_IQK"
+          ],
+          "schema": "epyc.autokernel.environment_policy.v1",
+          "version": "policy-v1",
+          "witnesses": {
+            "GGML_IQK": "runtime_set"
+          }
+        },
+        "executable": {
+          "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin/llama-server",
+          "role": "executable",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "5b561c63f238a0a9a2ea03a6624ef1188da99028fc6708e18d06509651078dba"
+        },
+        "execution_digest": "e71d6ba07009b18a1ace727beab6599121a1cbb1c6d73e429cf547f1cb6ba1ab",
+        "launch_contract": "orchestrator-production/v1",
+        "launch_env": {
+          "GGML_IQK": "1",
+          "LD_LIBRARY_PATH": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/same-build/bin"
+        },
+        "model": {
+          "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/not-a-model",
+          "role": "model",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "314b281b58317d57d3500737745b3e925aa1cbde439649a55129ccf36bc04f37"
+        },
+        "port": 48415,
+        "provenance": {
+          "export_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "instance_mode": "full",
+          "source:fixture": "synthetic"
+        },
+        "readback_expectations": [],
+        "relevant_environment": {
+          "GGML_IQK": {
+            "state": "value",
+            "value": "1"
+          }
+        },
+        "runtime_binary_dir": null,
+        "runtime_ld_paths": [],
+        "schema": "epyc.autokernel.canonical_launch.v1",
+        "snapshot_digest": "4a4090dadc4083f51c9d0b4c30b94da81b80e15e7704520e428ea2698e5d2313",
+        "template": {
+          "batch": 2048,
+          "cpu_list": null,
+          "ctk": "f16",
+          "ctv": "f16",
+          "ctx": 16384,
+          "device": "none",
+          "env": {},
+          "env_readback": [],
+          "extra_flags": [],
+          "fa": "on",
+          "kv_unified": false,
+          "metric": "aggregate_tok_s",
+          "model": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/original-fixture/not-a-model",
+          "n_predict": 8,
+          "name": "runtime-http",
+          "ngl": 0,
+          "np": 1,
+          "schema": "epyc.autokernel.canonical_recipe.v1",
+          "spec_decode": {
+            "type": "none"
+          },
+          "temperature": 0.0,
+          "threads": 9,
+          "top_k": 1,
+          "top_p": 0.95,
+          "ubatch": 2048
+        },
+        "template_hash": "5488b745527d7ed0c0c7567b5c3e8649077708cef990ce452fe38aaaed4dee0e",
+        "topology_prefix": [],
+        "workload": {
+          "metric": "aggregate_tok_s",
+          "n_predict": 8,
+          "temperature": 0.0,
+          "top_k": 1,
+          "top_p": 0.95
+        }
+      },
+      "dimension": {
+        "anchor": 8,
+        "authority_ref": "fixture original treatment",
+        "candidate": 9,
+        "dimension_id": "threads",
+        "kind": "threads",
+        "schema": "epyc.autokernel.runtime_dimension.v1"
+      },
+      "schema": "epyc.autokernel.runtime_arm_pair.v1"
+    },
+    "prompt_manifest": {
+      "digest": "00214de5d67f8e4f0b4c4810c6223e2260335d7da70b95a86ead05cd355ba5d4",
+      "prompts": [
+        {
+          "prompt_id": "glm-fixed2029",
+          "request": {
+            "cache_prompt": false,
+            "ignore_eos": true,
+            "n_predict": 8,
+            "prompt": [
+              1,
+              2,
+              3
+            ],
+            "return_tokens": true,
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "top_k": 1
+          },
+          "request_digest": "be54e9f57dcc741a8b46636be2cca18b42de494d48a4904a0a5137b327e416a5"
+        }
+      ],
+      "schema": "epyc.autokernel.frozen_prompt_manifest.v2",
+      "version": "glm-fixed2029-depth3"
+    },
+    "response_source": {
+      "callables": [
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "3983d036cf2ffe392ea1b2eeafcf861c9e9938e0180387220c9a440835288c7f",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.test_runtime_admission",
+          "qualname": "fixture_measure"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "3cdc703e04a2722b8939e1648cbd3847eb61436dc7960bda0fbe9dba0c287042",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "RawServerResponse.__init__"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "aa430a2cf758346968bb8be70676ffd53b58a81c2b5cfdce35979420c4ee7265",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "RawServerResponse.__post_init__"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "2c727e66eed5f923db2158f1ea2dfddbc059126f0489a4b3daa6ea0ebd760560",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "ServerResponseCapture.__init__"
+        },
+        {
+          "configuration_sha256": "164216817c27bfd64d5652c0e11d05a96f42bd2385589808b696a814c71e23d9",
+          "configuration_status": "pinned",
+          "implementation_sha256": "2ca9dc185035c386008c3cf5c3754c6c12daaf17cd4d3e5050e629086bc2ecf5",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "json",
+          "qualname": "loads"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "a67b115fb060ed5e47d6289e893b130604a2d9b1e49793f6ed6240fb7ad1f6d0",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "ServerResponseCapture.seal"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "e8b4dfcd6f7029e39c33f3211c8ac669afda74ff07ea2f7b82fe5b842056b8d7",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "ServerResponseCapture.validate_launch"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "b0dd5f5273d8d5e3abc1a4602bd538b558c3259c04d550d9011f9ad8265b8fcf",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "reopen_unit"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "ef489b28185eea65bcb55648d7bc8c9f6549dd9adf37ae39bfcec8a9e6ae656d",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "_bytes"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "9df0c5cbcaa92352f4c5785056bd37991a3414bee6bed1853dd47dbd41603ea6",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "_clock"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "7afd6b4ac2c53d71cde98cc6c09c0525e3621eb9e26f5486c55abeea728efdd4",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "_same"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "6f23683f63583f12562c63fb1f1428f5646057ebf93076cb4d82c81c49101f2b",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "_frame"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "ffd0a33b893eb0952aeb7391c32c73463ff55424945e12642cdc0a55e57e8966",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "_instrument_source"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "f65c6ee70aad2ff4fe6474c07680d2ae6489c5b2846207fcd8004e03fd6cc02c",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "source_identity"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "e0801db7ec34011f810e06ed635bb444fbb79d6e79acad81a0cd52b78fba9e9b",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "ServerResponseCapture.for_direct"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "cf58fd55c25e38f3e2c683423aae796ea5f3dc13d13dba0c5321829f18af8f5a",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "_direct_frame"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "80333e7c4b77aa4e94922d762f20e36401e7d27eb05715a56e6f99d62ee1e21b",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "reopen_direct_unit"
+        },
+        {
+          "configuration_sha256": "b07f87f14bcdd220a668843e9c82681ebadc0916518b326768a8c08060ef5077",
+          "configuration_status": "pinned",
+          "implementation_sha256": "aa3256edf38eb7ec8de219f27e8adcaa6f4ec4658443d90fcaaf991971e86b78",
+          "implementation_status": "pinned",
+          "kind": "python",
+          "module": "autokernel.loop.native_server_response",
+          "qualname": "_reopen_rows"
+        }
+      ],
+      "direct_schemas": [
+        "epyc.autokernel.direct_server_response_frame.v1",
+        "epyc.autokernel.direct_server_response.v1",
+        "epyc.autokernel.direct_server_response_unit.v1"
+      ],
+      "max_request_bytes": 1048576,
+      "max_response_bytes": 4194304,
+      "max_slots": 1024,
+      "max_total_raw_bytes": 67108864,
+      "schema": "epyc.autokernel.native_server_response_source.v2"
+    },
+    "stratum": "selection",
+    "units": [
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:1",
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:2",
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:3",
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:4",
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:5",
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:6",
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:7",
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:8",
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:9",
+      "akc-runtime-67d51f0e71ca1ef54a23a985d581bfc193c1b6998efa2a6de2d1a3556ab9959d:selection:10"
+    ]
+  },
+  "holder": {
+    "context_id": "211cb32da2e86f21882d8ce2363f654cc2013a89c2ce1ffd6aafa8bafb3c8bda",
+    "domain": {
+      "boot_id": "3be2fb1a-7293-4c34-b733-c85d772b9474",
+      "clock": "monotonic",
+      "error": null,
+      "kind": "direct_loop",
+      "pid": 2711041,
+      "process_start_ticks": 162655891
+    }
+  },
+  "identity": "f76f00979bfe2c8d936991cfd7c5864c4035237b4ebdb1d3ba1ac6b5271d878d",
+  "launch_count": 102,
+  "launches": [
+    {
+      "artifact": {
+        "locator": "0981685217bae689cd837272d48cdb2fdb7da59eb6be0082fc008dc50cb1acdf-11002391dbddb57cc1c159b19daa230f5fea6082aa362ac098fc105d01e2af93.json",
+        "sha256": "c7da8948e7a04551c99f478948ef7e9c22348e91be3073d6f6982f37ccbedbcd",
+        "verified": true
+      },
+      "membership": [
+        "anchor_gate",
+        0,
+        "anchor"
+      ]
+    },
+    {
+      "artifact": {
+        "locator": "0981685217bae689cd837272d48cdb2fdb7da59eb6be0082fc008dc50cb1acdf-ebcf1b2c594c57f2ffcce66080e50441bf7d796e8144d829bcef553a59a2bd1f.json",
+        "sha256": "227f4b1d3a3ff20826cd67f02d4ea5bf7dd39e96b2ef453018648379469ffee2",
+        "verified": true
+      },
+      "membership": [
+        "anchor_gate",
+        1,
+        "anchor"
+      ]
+    }
+  ],
+  "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/cpu/store/runtime-preparation/direct-pair-window-f76f00979bfe2c8d936991cfd7c5864c4035237b4ebdb1d3ba1ac6b5271d878d.json",
+  "sha256": "1726bf272a490004dcb9d5695b1cd4c0c5d260db50be4ef025c9eb41fd762d2a"
+}

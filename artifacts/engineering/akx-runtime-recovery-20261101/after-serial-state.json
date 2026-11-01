@@ -1,0 +1,139 @@
+{
+  "active": null,
+  "batch_iterations": 1,
+  "config_digest": "afae6175b7c2dfde87e7ac411af4a61d58f7714250845048c7988b5f03932d8b",
+  "failed_targets": {},
+  "last_reconciliation": {
+    "batch_number": 0,
+    "process_terminal_basis": "original_pid_absent; exit_status_unavailable",
+    "result": null,
+    "runtime_recovery": {
+      "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/router/batches/batch-000000/runtime-recovery.json",
+      "sha256": "249ded796a3b53c0b439cb769bf29f1e5aabde0aa59168fe967dd5cfa2b715bd"
+    },
+    "target_index": 0,
+    "terminal": "failed"
+  },
+  "last_results": {
+    "0": {
+      "path": "/mnt/raid0/llm/tmp/codex3-runtime-red-native-after-20261101/test_real_serial_interruption_0/router/batches/batch-000001/loop-continuation.json",
+      "sha256": "aab1115c5d39c561e85e27fe7d45e1e285d285f54b7e6d6c24d589ac09781470"
+    }
+  },
+  "next_batch": 2,
+  "required_source_validation": null,
+  "rounds": 2,
+  "runtime_recovery": {},
+  "scheduler_state": {
+    "accounted_receipts": [
+      {
+        "outcome": "failed",
+        "receipt_digest": "33068e0ab47d2924e73d357b5d81675590201002d336e9e49a7f2d1a9c044c5e",
+        "receipt_id": "5b7ad7915707008941fe2c99a61be3e2a07dd40522c7f69d23adfcea995585d0",
+        "schema": "epyc.autokernel.accounted_receipt.v1",
+        "selection_digest": "a420bc7fc56e3a0b1ec98b39234c38754d2ff5ff287bb2f75ab0b27b6a104de4"
+      },
+      {
+        "outcome": "invalid",
+        "receipt_digest": "964b3130add1a1c2378b5ddaf6adf2b7ed3160b2dcb0127f3ef188bbb3bb916e",
+        "receipt_id": "55303d3d01f06b7e8f43007a03683ab4db67aeea20274c30de67c2b189be69e5",
+        "schema": "epyc.autokernel.accounted_receipt.v1",
+        "selection_digest": "d89d57d88aef160ec2c37e6ce0647195771810fa30422f91763fcdb3cc21544c"
+      }
+    ],
+    "accounting_epoch": 1,
+    "campaign_attempts": 2,
+    "campaign_charged_seconds": 36.05904939305037,
+    "capacity": {
+      "gpu_devices": [
+        "mi210_0"
+      ],
+      "memory_reservation_bytes": 10000,
+      "physical_region_fraction": 1.0,
+      "schema": "epyc.autokernel.resource_vector.v1"
+    },
+    "capacity_digest": "5a5293dab5d3ce10c97cf14eb73e9d43cfbf79866e615289e0a5eaa65915009e",
+    "config_digest": "032085f8655bcc8941b1625ca0da3aba5b44b4f55f3e61a8a0a376501abcd123",
+    "coverage_debt": {},
+    "deficits": {
+      "cpu": 18.029524696525186
+    },
+    "existing_stage_until": null,
+    "frozen_frontier": [],
+    "issued_selection_digests": [],
+    "policy_digest": "af021ffaa2627f47e5821506740b4706f8b75e3a3e605f179035d5e6501475aa",
+    "receipts": [
+      {
+        "affinity_cores": [
+          "0"
+        ],
+        "allocation_generation": 1,
+        "backend": "cpu",
+        "beneficiary_shares": {
+          "b7c9acaadfc97c819ca066106795eb391655191a79ca23a27c382b3240cf0397": 1.0
+        },
+        "ended_at": 1626572.894359225,
+        "gpu_device_ids": [],
+        "memory_reservation_bytes": 0,
+        "ownership_generation": 1,
+        "physical_claim_ids": [
+          "3be2fb1a-7293-4c34-b733-c85d772b9474:flock:2431:190982935"
+        ],
+        "physical_region_fraction": 0.5,
+        "proposal_id": "b7c9acaadfc97c819ca066106795eb391655191a79ca23a27c382b3240cf0397",
+        "receipt_id": "5b7ad7915707008941fe2c99a61be3e2a07dd40522c7f69d23adfcea995585d0",
+        "schema": "epyc.autokernel.held_claim_receipt.v1",
+        "stage_class": "search",
+        "started_at": 1626559.496738728
+      },
+      {
+        "affinity_cores": [
+          "0"
+        ],
+        "allocation_generation": 1,
+        "backend": "cpu",
+        "beneficiary_shares": {
+          "211b81e4f76394929248c53fa81f98f594290e4b653dcc1ab4f0c38ebfc0bb3e": 1.0
+        },
+        "ended_at": 1626596.301534103,
+        "gpu_device_ids": [],
+        "memory_reservation_bytes": 0,
+        "ownership_generation": 1,
+        "physical_claim_ids": [
+          "3be2fb1a-7293-4c34-b733-c85d772b9474:flock:2431:190982935"
+        ],
+        "physical_region_fraction": 0.5,
+        "proposal_id": "211b81e4f76394929248c53fa81f98f594290e4b653dcc1ab4f0c38ebfc0bb3e",
+        "receipt_id": "55303d3d01f06b7e8f43007a03683ab4db67aeea20274c30de67c2b189be69e5",
+        "schema": "epyc.autokernel.held_claim_receipt.v1",
+        "stage_class": "search",
+        "started_at": 1626573.640105207
+      }
+    ],
+    "round_number": 1,
+    "round_reservations": {},
+    "round_seed_used": false,
+    "scheduler_id": "serial-integration",
+    "schema": "epyc.autokernel.scheduler_state.v1",
+    "seed_accounts": [],
+    "skipped_noncoverage": [],
+    "successor_fences": [],
+    "used_coverage": {},
+    "used_noncoverage": [
+      "b7c9acaadfc97c819ca066106795eb391655191a79ca23a27c382b3240cf0397",
+      "211b81e4f76394929248c53fa81f98f594290e4b653dcc1ab4f0c38ebfc0bb3e"
+    ]
+  },
+  "schema": "epyc.autokernel.serial_run.v1",
+  "scope_debt": {},
+  "serving_instruments": {
+    "cpu": "legacy_v1"
+  },
+  "source_loo": {},
+  "source_results": {},
+  "source_search_counts": {
+    "0": 1
+  },
+  "source_validations": {},
+  "target_count": 1
+}

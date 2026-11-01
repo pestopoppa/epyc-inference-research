@@ -1,0 +1,92 @@
+{
+  "affinity": [
+    26,
+    27
+  ],
+  "after_fences": [],
+  "after_held_intervals": [
+    {
+      "affinity_cores": [
+        "0"
+      ],
+      "allocation_generation": 1,
+      "backend": "cpu",
+      "beneficiary_shares": {
+        "b7c9acaadfc97c819ca066106795eb391655191a79ca23a27c382b3240cf0397": 1.0
+      },
+      "ended_at": 1626572.894359225,
+      "gpu_device_ids": [],
+      "memory_reservation_bytes": 0,
+      "ownership_generation": 1,
+      "physical_claim_ids": [
+        "3be2fb1a-7293-4c34-b733-c85d772b9474:flock:2431:190982935"
+      ],
+      "physical_region_fraction": 0.5,
+      "proposal_id": "b7c9acaadfc97c819ca066106795eb391655191a79ca23a27c382b3240cf0397",
+      "receipt_id": "5b7ad7915707008941fe2c99a61be3e2a07dd40522c7f69d23adfcea995585d0",
+      "schema": "epyc.autokernel.held_claim_receipt.v1",
+      "stage_class": "search",
+      "started_at": 1626559.496738728
+    },
+    {
+      "affinity_cores": [
+        "0"
+      ],
+      "allocation_generation": 1,
+      "backend": "cpu",
+      "beneficiary_shares": {
+        "211b81e4f76394929248c53fa81f98f594290e4b653dcc1ab4f0c38ebfc0bb3e": 1.0
+      },
+      "ended_at": 1626596.301534103,
+      "gpu_device_ids": [],
+      "memory_reservation_bytes": 0,
+      "ownership_generation": 1,
+      "physical_claim_ids": [
+        "3be2fb1a-7293-4c34-b733-c85d772b9474:flock:2431:190982935"
+      ],
+      "physical_region_fraction": 0.5,
+      "proposal_id": "211b81e4f76394929248c53fa81f98f594290e4b653dcc1ab4f0c38ebfc0bb3e",
+      "receipt_id": "55303d3d01f06b7e8f43007a03683ab4db67aeea20274c30de67c2b189be69e5",
+      "schema": "epyc.autokernel.held_claim_receipt.v1",
+      "stage_class": "search",
+      "started_at": 1626573.640105207
+    }
+  ],
+  "after_source_sha256": "51dcfb11d8f46318db0302de3fb821a96da91e11d70a8c8ce4acabc91ac2752f",
+  "after_supervisor_birth": 162655831,
+  "after_supervisor_pid": 2710783,
+  "before_fences": [
+    "actual held interval exceeded configured stage-plus-teardown D"
+  ],
+  "before_held_intervals": [
+    {
+      "affinity_cores": [
+        "0"
+      ],
+      "allocation_generation": 1,
+      "backend": "cpu",
+      "beneficiary_shares": {
+        "d95e2b7b40806fb29f8aa19227879ae18b604a82d93e733eb311ea37af0b9f00": 1.0
+      },
+      "ended_at": 1626639.727562296,
+      "gpu_device_ids": [],
+      "memory_reservation_bytes": 0,
+      "ownership_generation": 1,
+      "physical_claim_ids": [
+        "3be2fb1a-7293-4c34-b733-c85d772b9474:flock:2431:195723913"
+      ],
+      "physical_region_fraction": 0.5,
+      "proposal_id": "d95e2b7b40806fb29f8aa19227879ae18b604a82d93e733eb311ea37af0b9f00",
+      "receipt_id": "1aa9b367500dac1c6cda33681dbfa4b7d9a17e4430b8e525b35ca3155ad5e772",
+      "schema": "epyc.autokernel.held_claim_receipt.v1",
+      "stage_class": "search",
+      "started_at": 1626626.241989965
+    }
+  ],
+  "before_source_sha256": "82579ba9e18f95033fb46010eaefc52f4c721a1d347fde34c10be40d7bb7dc23",
+  "before_supervisor_birth": 162662503,
+  "before_supervisor_pid": 2734826,
+  "fixture": "native child processes and synthetic measurement providers; no hardware inference",
+  "head": "daed7b39f3aeab5294e9f5d705b812884ffab933",
+  "omp_threads": 1
+}
