@@ -15,9 +15,9 @@
 > | B6 | Merges: still open. |
 > | B7 | pyarrow and pandas are both already declared in the `benchmark` extra and locked (pyarrow 24.0.0, pandas 3.0.3). The research `.venv` has pyarrow 25.0.1 and **no pandas**, so M-12a's Tulving adapter still needs pandas in that venv: `uv sync --extra benchmark`, or add pandas alone. |
 
-**Status: NOT RUN.** Everything below comes from reading source code and from
-planning estimates, not from measurement. The first 10 minutes of the M-12 window
-are the smoke test in §4, and the plan stands or falls on it.
+**Status (2026-10-26):** The C5 reader prefix-reuse smoke passed for both readers (nine requests across two arms); the full M-12 experiment and judge remain unrun by this smoke. The other costs and fit figures below are planning estimates unless identified as observations. Repeat the smoke in §4 before a future M-12 window.
+
+The 35B reader's warm requests B/C/E/F reused 98.05%/99.996%/98.93%/98.04% of their prompt tokens, with 2045/4/2052/2048 tokens processed; the 27B reader's B/C reused 98.05%/99.996%, with 2045/4 processed. The predeclared requirements were at least 95% reused and at most 4100 processed tokens. Each leg was observed once; these are not throughput or quality claims. The 35B cold A/D processed 104698/191447 tokens; 27B cold A processed 104698. Receipts: `/mnt/raid0/llm/tmp/cal-1026/ch26a-m12-c5-longctx/out/{35b,27b}/receipt.json`; aggregate `out/VERDICT.json` (PASS, 2 arms, 9 requests), `out/linkage.txt`, and overlapping residency samples in `out/residency.jsonl`. The 200-chapter book request resolved to 196 chapters on disk.
 
 Owning handoff: `epyc-root:handoffs/active/episodic-memory-integrity.md` → M-12 (blocker B5, plus B3 and B4).
 The token-length and fit analysis this doc builds on is
@@ -32,18 +32,18 @@ Who runs what:
 
 | Item | Value |
 |---|---|
-| Binary | `/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server` (autokernel champion fold `dd3d9721c`, build 10345, kernel-STORE build with SHA256SUMS + LINKAGE.txt; was the tmp build `ef81196d5` until 2026-10-21; HIP build: `GGML_HIP=ON`, `GGML_HIP_GRAPHS=ON`) |
-| Source | `/mnt/raid0/llm/worktrees/slotdraft-30574-20261020` (commit dd3d9721c; see the build's PROVENANCE.md) |
+| Binary | `/mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5/bin/llama-server` (autokernel champion C5 `c72ec82f5`, build 10419, kernel-STORE build with SHA256SUMS + LINKAGE.txt; HIP build: `GGML_HIP=ON`, `GGML_HIP_GRAPHS=ON`) |
+| Source | `/mnt/raid0/llm/worktrees/c5-fold-20261024` (commit c72ec82f5417bb2937310326120f149b665e8400; see the build's PROVENANCE.md) |
 | Device | `--device ROCm0 -ngl 99` (the MI210 is `/sys/class/drm/card2`, 64 GiB) |
-| Loader env | `LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin`, `HSA_OVERRIDE_GFX_VERSION` unset (from `Recipe.server_env`) |
+| Loader env | `LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5/bin`, `HSA_OVERRIDE_GFX_VERSION` unset (from `Recipe.server_env`) |
 
 Before trusting any number, prove the binary loads its own ggml. The HIP backend
 is dlopen'ed, so `ldd` alone proves nothing.
 
 ```bash
-LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin \
-  scripts/utils/verify_ggml_linkage.sh /mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server \
-  /mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c
+LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5/bin \
+  scripts/utils/verify_ggml_linkage.sh /mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5/bin/llama-server \
+  /mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5
 ```
 
 GPU residency is proved separately: the smoke test samples MI210 VRAM
@@ -63,7 +63,8 @@ floor, and `test_resolved_recipe.py` does not scan them.
 Print the exact launch line (the helper prints it and never launches anything):
 
 ```bash
-python scripts/benchmark/m12_launch_argv.py artifacts/serving-recipes/eval/<recipe>.json --port <port>
+python scripts/benchmark/m12_launch_argv.py artifacts/serving-recipes/eval/<recipe>.json --port <port> \
+  --build /mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5
 ```
 
 **`-c` is the TOTAL context.** With `kv_unified=false` each slot gets `ctx / np`.
@@ -85,19 +86,19 @@ enforces this):
 - `taskset -c 184-191`;
 - `--metrics --slots`.
 
-Reader launch lines as printed by the helper (`--port 8199`):
+Reader launch lines as printed by the helper (`--port 8199` and the explicit C5 `--build` above). The helper default may point to an older image:
 
 ```bash
 # 35B-A3B-MTP, np=4
-env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin \
-  taskset -c 184-191 /mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server \
+env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5/bin \
+  taskset -c 184-191 /mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5/bin/llama-server \
   -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf -np 4 -c 786432 -t 8 -tb 8 -b 2048 -ub 2048 \
   -ctk f16 -ctv f16 --device ROCm0 -ngl 99 -fa on --host 127.0.0.1 --port 8199 --metrics --slots \
   --spec-type draft-mtp --spec-draft-n-max 4 --no-kv-unified --ctx-checkpoints 8 --cache-ram 16384
 
 # 27B + DFlash2, np=1
-env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin \
-  taskset -c 184-191 /mnt/raid0/llm/kernels/builds/gpu-20261020-dd3d9721c/bin/llama-server \
+env -uHSA_OVERRIDE_GFX_VERSION LD_LIBRARY_PATH=/mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5/bin \
+  taskset -c 184-191 /mnt/raid0/llm/kernels/builds/gpu-20261024-c72ec82f5-c5/bin/llama-server \
   -m /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf -np 1 -c 196608 -t 8 -tb 8 -b 2048 -ub 2048 \
   -ctk f16 -ctv f16 --device ROCm0 -ngl 99 -fa on --host 127.0.0.1 --port 8199 --metrics --slots \
   -md /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf -ngld 99 --spec-type draft-dflash \
@@ -350,8 +351,8 @@ python scripts/benchmark/score_beam_run.py <judged_<arm>.json> --out-json <score
 
 ## 8. Caveats
 
-- **Nothing here has been measured.**
-  - VRAM fits, prefill times and per-question costs are extrapolations from
+- **The reader smoke was measured once per leg on C5; the full experiment was not.**
+  - The tabled VRAM fits, prefill times and per-question costs are historical extrapolations from
     bench-class rows (MEASUREMENT.md INSTRUMENT-CLASS-1).
   - MTP and DFlash2 acceptance at a depth of 100K+ has never been measured.
   - Spec-decode leaves greedy output unchanged up to batch-split numerics, so it
