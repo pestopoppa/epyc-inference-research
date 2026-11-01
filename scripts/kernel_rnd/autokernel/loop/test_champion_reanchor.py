@@ -68,6 +68,47 @@ def test_unreadable_and_diverged_are_never_actionable(world, tmp_path):
     assert cr.detect(world["store"], world["repo"], BRANCH)["state"] == "diverged"
 
 
+def test_read_campaign_keeps_legacy_bundle_fallback(world):
+    campaign = cr.read_campaign(world["store"])
+    assert campaign["cor"] == world["old"][:8]
+    assert campaign["tip"] == world["old"]
+
+
+def test_read_campaign_uses_shared_cor_for_explicit_only_store_with_stale_peer(world):
+    new = advance(world)
+    store = world["store"]
+    (store / "accumulator-bundle.json").unlink()
+    (store / "accumulator-shared-cor.json").write_text(json.dumps(
+        {"schema": "epyc.autokernel.shared_cor.v1", "champion_of_record": new}))
+    (store / "accumulator-bundle-cpu.json").write_text(json.dumps(
+        {"champion_of_record": new, "tip": new}))
+    # A peer surface may remain at the previous COR until its own explicit rebaseline.
+    (store / "accumulator-bundle-gpu.json").write_text(json.dumps(
+        {"champion_of_record": world["old"], "tip": world["old"]}))
+
+    campaign = cr.read_campaign(store)
+    assert campaign["cor"] == new
+    detected = cr.detect(store, world["repo"], BRANCH)
+    assert detected["state"] == "current"
+    assert detected["campaign"]["cor_full"] == new
+
+
+@pytest.mark.parametrize("authority", [None, "corrupt"])
+def test_read_campaign_refuses_explicit_layout_without_valid_authority(world, authority):
+    store = world["store"]
+    (store / "accumulator-bundle-cpu.json").write_text(json.dumps(
+        {"champion_of_record": world["old"]}))
+    authority_path = store / "accumulator-shared-cor.json"
+    if authority == "corrupt":
+        authority_path.write_text(json.dumps(
+            {"schema": "wrong", "champion_of_record": world["old"]}))
+
+    detected = cr.detect(store, world["repo"], BRANCH)
+    assert detected["state"] == "unreadable"
+    assert not detected["campaign"]["cor"]
+    assert any("shared COR" in error for error in detected["campaign"]["errors"])
+
+
 def store_build_for_champion(world):
     return build(world["builds"].parent, world["repo"], "builds/cpu-new",
                  git(world["repo"], "rev-parse", "HEAD"))

@@ -21,7 +21,8 @@ floor half is `floor_registry.check_launch`, called here so ONE recalibration ha
 (or none when a registered decision-grade floor exists).
 
 THE FOUR STEPS
-1. DETECT (read-only). The campaign's champion_of_record (store `accumulator-bundle.json`, short
+1. DETECT (read-only). The campaign's champion_of_record (legacy store
+   `accumulator-bundle.json`, or explicit-surface store `accumulator-shared-cor.json`; short
    hashes resolved in the worktree's repo) is compared with the CURRENT `ak/champion/...` ref by
    SOURCE-TREE HASH with tests/docs paths excluded (`floor_registry.source_tree_hash`), so a
    tests-only advance is NOT an advance. States:
@@ -67,6 +68,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from . import accumulate
 from . import floor_registry as fr
 
 SPEC_SCHEMA = "epyc.autokernel.reanchor_spec.v1"
@@ -97,16 +99,34 @@ def _iso_epoch(text: Any) -> float | None:
 
 
 def read_campaign(store: Path | str) -> dict:
-    """The campaign's own account of its champion: bundle COR, status anchor and liveness."""
+    """Read campaign COR, preferring validated shared surface authority when present.
+
+    A shared COR is global to the store; another surface may intentionally retain an older
+    snapshot after promotion and is not consulted to infer or overwrite the authority. If any
+    surface-specific files exist without shared authority, they cannot be safely interpreted as
+    legacy state. Legacy stores with no explicit-surface files keep the historical projection path.
+    """
     store = Path(store)
     out: dict[str, Any] = {"store": str(store), "cor": None, "status_anchor": None, "live": False,
                            "state": None, "errors": []}
     try:
-        bundle = json.loads((store / "accumulator-bundle.json").read_text(encoding="utf-8"))
-        out["cor"] = bundle.get("champion_of_record")
-        out["tip"] = bundle.get("tip")
-    except (OSError, ValueError) as exc:
-        out["errors"].append(f"accumulator-bundle.json: {exc}")
+        surface_paths = (
+            "accumulator-bundle-cpu.json", "accumulator-bundle-gpu.json",
+            "journal-cpu", "journal-gpu",
+        )
+        has_surface_state = any((store / name).exists() for name in surface_paths)
+        shared_cor_path = store / accumulate.SHARED_COR_FILENAME
+        if shared_cor_path.exists():
+            out["cor"] = accumulate._read_shared_cor(store)
+        elif has_surface_state:
+            raise accumulate.BundleRecoveryRequired(
+                "explicit surface state has no shared COR authority; refusing legacy fallback")
+        else:
+            bundle = json.loads((store / "accumulator-bundle.json").read_text(encoding="utf-8"))
+            out["cor"] = bundle.get("champion_of_record")
+            out["tip"] = bundle.get("tip")
+    except (accumulate.BundleRecoveryRequired, OSError, ValueError) as exc:
+        out["errors"].append(f"accumulator COR: {exc}")
     try:
         status = json.loads((store / "loop-status.json").read_text(encoding="utf-8"))
         out["status_anchor"] = status.get("anchor_commit")
