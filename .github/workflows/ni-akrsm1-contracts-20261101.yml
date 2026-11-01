@@ -1,0 +1,232 @@
+name: NI AK-RSM-1 offline controller contracts
+on:
+  push:
+    branches: [codex/ni-akrsm1-contracts-20261101]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: scripts/kernel_rnd:.
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      AKRSM1_EVIDENCE_DIR: evidence/native-cases
+      EPYC_ROOT: ${{ github.workspace }}/dependency-source/epyc-root
+      EPYC_ROOT_REPO: ${{ github.workspace }}/dependency-source/epyc-root
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.15'
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: pestopoppa/epyc-root
+          ref: 3ce2a7381979c5b6802dd03848b5eb1148e6c7ca
+          path: dependency-source/epyc-root
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: pestopoppa/epyc-orchestrator
+          ref: 29fdfc5a7cc229f1dcafee327f193b1623de0d32
+          path: dependency-source/epyc-root/repos/epyc-orchestrator
+          persist-credentials: false
+      - name: Capture source and runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/source
+          git rev-parse HEAD > evidence/git-head.txt
+          git status --porcelain=v1 > evidence/git-status.txt
+          python --version > evidence/python-version.txt
+          git -C dependency-source/epyc-root rev-parse HEAD > evidence/root-head.txt
+          git -C dependency-source/epyc-root/repos/epyc-orchestrator rev-parse HEAD > evidence/orchestrator-head.txt
+          git -C dependency-source/epyc-root archive --format=tar.gz HEAD scripts/vidya > evidence/root-belief-source.tar.gz
+          git -C dependency-source/epyc-root/repos/epyc-orchestrator archive --format=tar.gz HEAD src/runtime > evidence/orchestrator-runtime-source.tar.gz
+          cp --parents pyproject.toml .github/workflows/ni-akrsm1-contracts-20261101.yml scripts/kernel_rnd/autokernel/loop/{stage_lifecycle.py,loop.py,pipeline.py,pool.py,resume.py,run.py,test_stage_lifecycle.py,test_loop.py,test_pipeline.py,test_resume.py,test_resume_carry.py,test_resume_critic2.py,test_resume_infra.py,test_runtime_identity.py,test_no_undefined_runtime_names.py,test_existing_cpu_run.py,test_existing_gpu_serving_run.py,test_run_paired_serving_ab.py,test_lane_watchdog.py} evidence/source/
+          git archive --format=tar.gz HEAD scripts/kernel_rnd/autokernel scripts/lib/canonical_recipe.py scripts/benchmark/belief_capture.py > evidence/original-autokernel-source-closure.tar.gz
+      - name: Install declared project dependency closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[test]' > evidence/install.stdout.txt 2>&1
+          python -m pip freeze --all > evidence/dependency-freeze.txt
+          python -m pip inspect > evidence/dependency-inspect.json
+      - name: Matched raw baseline and candidate GPU driver diagnostics
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          baseline_sha=c17d0d0b7ae5d697875e67fb2799426b69d65800
+          baseline_dir="$RUNNER_TEMP/akrsm1-baseline"
+          mkdir -p "$baseline_dir" evidence/baseline-source
+          git archive "$baseline_sha" | tar -x -C "$baseline_dir"
+          archive_rc=$?
+          if [ "$archive_rc" -ne 0 ]; then exit "$archive_rc"; fi
+          printf '%s\n' "$baseline_sha" > evidence/baseline-head.txt
+          (cd "$baseline_dir" && cp --parents pyproject.toml scripts/kernel_rnd/autokernel/loop/{loop.py,pipeline.py,pool.py,resume.py,run.py,test_existing_gpu_serving_run.py,test_lane_watchdog.py} "$GITHUB_WORKSPACE/evidence/baseline-source/")
+          (cd "$baseline_dir" && PYTHONPATH="$baseline_dir/scripts/kernel_rnd:$baseline_dir" python -m pytest -q scripts/kernel_rnd/autokernel/loop/test_existing_gpu_serving_run.py --junitxml="$GITHUB_WORKSPACE/evidence/baseline-gpu-raw.junit.xml") > evidence/baseline-gpu-raw.stdout.txt 2>&1
+          printf '%s\n' "$?" > evidence/baseline-gpu-raw.exit.txt
+          python -m pytest -q scripts/kernel_rnd/autokernel/loop/test_existing_gpu_serving_run.py --junitxml=evidence/candidate-gpu-raw.junit.xml > evidence/candidate-gpu-raw.stdout.txt 2>&1
+          printf '%s\n' "$?" > evidence/candidate-gpu-raw.exit.txt
+          python - <<'PY' > evidence/gpu-raw-match.json
+          import json
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          def failures(path):
+              rows = {}
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  failure = case.find("failure")
+                  if failure is not None:
+                      message = failure.get("message", "")
+                      category = ("missing_continuation" if "FileNotFoundError" in message else
+                                  "watchdog_mock_seam" if "WatchdogRefused" in message else message.splitlines()[0])
+                      rows[case.get("classname") + "::" + case.get("name")] = category
+              return rows
+          baseline = failures("evidence/baseline-gpu-raw.junit.xml")
+          candidate = failures("evidence/candidate-gpu-raw.junit.xml")
+          baseline_rc = int(Path("evidence/baseline-gpu-raw.exit.txt").read_text())
+          candidate_rc = int(Path("evidence/candidate-gpu-raw.exit.txt").read_text())
+          matched = baseline == candidate and baseline_rc == candidate_rc and (bool(baseline) or baseline_rc == 0)
+          print(json.dumps({"baseline": baseline, "candidate": candidate, "matched": matched}, indent=2))
+          assert matched, "raw GPU diagnostics differ from exact baseline; no harness waiver"
+          PY
+          exit "$?"
+      - name: Collect and execute offline contracts
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          files=(scripts/kernel_rnd/autokernel/loop/{test_stage_lifecycle.py,test_loop.py,test_pipeline.py,test_resume.py,test_resume_carry.py,test_resume_critic2.py,test_resume_infra.py,test_runtime_identity.py,test_no_undefined_runtime_names.py,test_existing_cpu_run.py,test_existing_gpu_serving_run.py,test_run_paired_serving_ab.py,test_lane_watchdog.py})
+          files+=(scripts/kernel_rnd/autokernel/loop/{test_actor_budgets.py,test_actor_reply_custody.py,test_actors.py,test_bestof.py,test_author_wall_budget.py,test_campaign_stub_continuation.py,test_candidate_dispositions.py,test_custody_hold.py,test_discard_invariant.py,test_scratch.py,test_promotion_targets.py})
+          files+=(scripts/kernel_rnd/autokernel/test_check_regrowth_guards.py)
+          python -m pytest --collect-only -q "${files[@]}" > evidence/collection.stdout.txt 2>&1
+          collection_rc=$?
+          printf '%s\n' "$collection_rc" > evidence/collection.exit.txt
+          if [ "$collection_rc" -ne 0 ]; then cat evidence/collection.stdout.txt; exit "$collection_rc"; fi
+          cat > evidence/gpu_inprocess_harness.py <<'PY'
+          """Only mock-intended GPU driver cases use the native _main seam.
+
+          This does not cover watchdog supervision. test_lane_watchdog.py runs
+          unchanged and without this patch; raw baseline/candidate originals remain
+          separate FAILURE artifacts, never xfailed or reclassified as passing.
+          """
+          import sys
+          from unittest.mock import patch
+          import pytest
+          class DriverSeam:
+              def pytest_runtest_setup(self, item):
+                  if item.module.__name__.endswith(".test_existing_gpu_serving_run"):
+                      item._akrsm1_patch = patch.object(item.module.run, "main", item.module.run._main)
+                      item._akrsm1_patch.start()
+              def pytest_runtest_teardown(self, item):
+                  guard = getattr(item, "_akrsm1_patch", None)
+                  if guard is not None:
+                      guard.stop()
+          raise SystemExit(pytest.main(sys.argv[1:], plugins=[DriverSeam()]))
+          PY
+          # All newly selected peer modules also run unchanged at the exact current
+          # main revision in the same dependency/root environment. Keep every raw
+          # baseline failure; candidate failures below remain failures.
+          baseline_files=()
+          for path in "${files[@]}"; do
+            if [[ "$path" != */test_stage_lifecycle.py ]]; then baseline_files+=("$path"); fi
+          done
+          baseline_dir="$RUNNER_TEMP/akrsm1-baseline"
+          (cd "$baseline_dir" && PYTHONPATH="$baseline_dir/scripts/kernel_rnd:$baseline_dir" python "$GITHUB_WORKSPACE/evidence/gpu_inprocess_harness.py" -q "${baseline_files[@]}" --junitxml="$GITHUB_WORKSPACE/evidence/baseline-all.junit.xml") > evidence/baseline-all.stdout.txt 2>&1
+          printf '%s\n' "$?" > evidence/baseline-all.exit.txt
+          python evidence/gpu_inprocess_harness.py -q "${files[@]}" --junitxml=evidence/junit.xml > evidence/pytest.stdout.txt 2>&1
+          test_rc=$?
+          printf '%s\n' "$test_rc" > evidence/pytest.exit.txt
+          cat evidence/pytest.stdout.txt
+          exit "$test_rc"
+      - name: Preserve original evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: akrsm1-contracts-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
+  budget:
+    name: Current guard evidence (approval pending; no baseline rewrite)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.15'
+      - name: Preserve exact current guard and compute bounded proposal
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/git-head.txt
+          python --version > evidence/python-version.txt
+          baseline_dir="$RUNNER_TEMP/akrsm1-budget-baseline"
+          mkdir "$baseline_dir"
+          git archive c17d0d0b7ae5d697875e67fb2799426b69d65800 scripts/kernel_rnd/autokernel | tar -x -C "$baseline_dir"
+          git show c17d0d0b7ae5d697875e67fb2799426b69d65800:scripts/kernel_rnd/autokernel/loop_code_budget_baseline.json > evidence/upstream-approved-baseline.json
+          cp scripts/kernel_rnd/autokernel/loop_code_budget_baseline.json evidence/actual-approved-baseline.json
+          cmp evidence/upstream-approved-baseline.json evidence/actual-approved-baseline.json
+          cmp_rc=$?
+          printf '%s\n' "$cmp_rc" > evidence/approval-baseline-byte-equality.exit.txt
+          if [ "$cmp_rc" -ne 0 ]; then exit "$cmp_rc"; fi
+          cp scripts/kernel_rnd/autokernel/check_regrowth_guards.py evidence/original-check-regrowth-guards.py
+          python -m scripts.kernel_rnd.autokernel.check_regrowth_guards > evidence/current-guard.stdout.txt 2> evidence/current-guard.stderr.txt
+          guard_rc=$?
+          printf '%s\n' "$guard_rc" > evidence/current-guard.exit.txt
+          export AKRSM1_UPSTREAM_PACKAGE="$baseline_dir/scripts/kernel_rnd/autokernel"
+          python - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          from scripts.kernel_rnd.autokernel import check_regrowth_guards as guard
+          package = Path("scripts/kernel_rnd/autokernel")
+          baseline = package / "loop_code_budget_baseline.json"
+          manifest = json.loads(baseline.read_text())
+          current = guard.composition_by_file(package / "loop")
+          upstream = guard.composition_by_file(Path(os.environ["AKRSM1_UPSTREAM_PACKAGE"]) / "loop")
+          changes, proposal = [], []
+          for name in sorted(set(current) | set(upstream)):
+              if current.get(name) == upstream.get(name):
+                  continue
+              entry = manifest["exceptions"].get(name)
+              ceiling = entry["ceiling"] if entry else manifest["files"].get(name)
+              source = package / "loop" / name
+              change = {"file": name, "upstream_count": upstream.get(name), "candidate_count": current.get(name),
+                        "approved_ceiling": ceiling, "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest() if source.exists() else None}
+              changes.append(change)
+              if name in current and (ceiling is None or current[name] > ceiling):
+                  proposal.append({"op": "replace" if entry else "add", "path": "/exceptions/" + name,
+                                   "value": {"ceiling": current[name], "approval": "DRAFT ONLY: operator decision REQUIRED; not approved or applied"}})
+          report = {"status": "DRAFT_NOT_APPLIED", "candidate": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+                    "upstream": "c17d0d0b7ae5d697875e67fb2799426b69d65800", "metric": guard.LOOP_CODE_METRIC,
+                    "manifest_sha256": hashlib.sha256(baseline.read_bytes()).hexdigest(), "changed_files": changes,
+                    "candidate_guard_errors": guard.check_code_baseline(baseline, current),
+                    "upstream_guard_errors": guard.check_code_baseline(baseline, upstream), "draft_minimum_exception_patch": proposal}
+          Path("evidence/bounded-budget-proposal.json").write_text(json.dumps(report, indent=2) + "\n")
+          PY
+          proposal_rc=$?
+          printf '%s\n' "$proposal_rc" > evidence/proposal.exit.txt
+          cat evidence/current-guard.stdout.txt
+          cat evidence/current-guard.stderr.txt
+          if [ "$proposal_rc" -ne 0 ]; then exit "$proposal_rc"; fi
+          exit "$guard_rc"
+      - name: Preserve original guard failure and unapplied proposal
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: akrsm1-budget-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
