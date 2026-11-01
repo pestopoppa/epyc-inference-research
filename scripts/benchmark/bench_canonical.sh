@@ -295,6 +295,14 @@ fi
 
 mkdir -p "$LOG_DIR"
 
+# Reserve the log without clobbering an earlier run. The host snapshot is
+# captured inside region-lock, immediately before the benchmark command.
+HOST_ATTESTATION="${LOG_DIR}/host-health.json"
+if ! (set -o noclobber; : > "$BENCH_LOG"); then
+    echo "ERROR: cannot reserve benchmark log; refusing benchmark." >&2
+    exit 1
+fi
+
 # --- INF-70/C7 step 1: pre-load NUMA eviction --------------------------------
 # `numactl --interleave=all` is a per-allocation HINT the kernel abandons for
 # any node with no free pages, silently. Measured 2026-09-02: a 98 GB artifact
@@ -445,6 +453,8 @@ sample_placement_in_window() {
 }
 
 # --- INF-70/C7 step 3: run, sampling placement in-window ---------------------
+CLAIM_MODE=cpu_region_claim
+[[ -z "$LOCK_PREFIX" ]] && CLAIM_MODE=explicit_unlocked_override
 if [[ "$USE_PERF" -eq 1 ]]; then
     PERF_BIN="${PERF_BIN:-perf}"
     if ! command -v "$PERF_BIN" >/dev/null 2>&1; then
@@ -457,12 +467,12 @@ if [[ "$USE_PERF" -eq 1 ]]; then
     # AFTER perf's -- (so perf sees the env-prefix, not its own argv).
     # region-lock is OUTERMOST so the regions stay held for the whole measured
     # run, perf wrapper included.
-    RUN_CMD="$LOCK_PREFIX sudo $PERF_BIN stat -e $CANONICAL_PERF_EVENTS -- env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
+    RUN_CMD="$LOCK_PREFIX python3 ${SCRIPT_DIR@Q}/canonical_host_attestation.py ${HOST_ATTESTATION@Q} ${BENCH_LOG@Q} $CLAIM_MODE -- sudo $PERF_BIN stat -e $CANONICAL_PERF_EVENTS -- env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
 else
-    RUN_CMD="$LOCK_PREFIX env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
+    RUN_CMD="$LOCK_PREFIX python3 ${SCRIPT_DIR@Q}/canonical_host_attestation.py ${HOST_ATTESTATION@Q} ${BENCH_LOG@Q} $CLAIM_MODE -- env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
 fi
 
-eval "$RUN_CMD" > >(tee "$BENCH_LOG") 2>&1 &
+eval "$RUN_CMD" > >(tee -a "$BENCH_LOG") 2>&1 &
 RUN_PID=$!
 sample_placement_in_window "$RUN_PID" || true
 wait "$RUN_PID"
