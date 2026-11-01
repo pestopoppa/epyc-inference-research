@@ -79,3 +79,7 @@ Research main `266c475946e62896131c19e702171321bd468baa` was fast-forwarded and
 preserved; its full C6 input directory is unchanged from the control base `57ec`.
 
 [no-belief: software source implementation and finite regression controls; no measurement]
+
+## Publication recovery — 2026-11-01
+
+The original 19:24 native PII capture was unavailable; that diagnostic remains in `code-commit.log`. A fresh full canonical wrapper audit checks the exact retained implementation delta after correcting only private Git discovery. `code-commit-proof.json` binds its new native receipt and all index/HEAD/policy/proof checks; it does not assert a retrospective pass for the original capture. Source/test pins are unchanged and the 16 controls were not rerun.

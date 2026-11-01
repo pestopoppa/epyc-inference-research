@@ -1,0 +1,15 @@
+PII native capture unavailable; no finding may be inferred
+[codex3-research-lane 66085471f] Add counted library substitution cases to the native C6 suite
+ 16 files changed, 1490 insertions(+), 8 deletions(-)
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/.gitattributes
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/PROPOSED.patch
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/README.md
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/admission-refusals/stale-smt.log
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/admission-refusals/timing.log
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/lane-strict.json
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/native-cli.log
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/native-cli.rows.jsonl
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/publication-manifest.json
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/test-static.log
+ create mode 100644 artifacts/engineering/c6-library-substitution-20261031/verification.json
+ create mode 100644 scripts/kernel_rnd/c6_mutants/library_substitution.py
