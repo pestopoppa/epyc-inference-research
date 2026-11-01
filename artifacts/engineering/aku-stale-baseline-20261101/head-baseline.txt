@@ -1,0 +1,9 @@
+1421b578ae4d5c9afbf3b2199f89893b093a0819:scripts/kernel_rnd/autokernel/loop/run.py:2123: def _main(argv: list[str] | None = None) -> int:
+1421b578ae4d5c9afbf3b2199f89893b093a0819:scripts/kernel_rnd/autokernel/loop/run.py:6038:     def accumulator_state() -> dict | None:
+1421b578ae4d5c9afbf3b2199f89893b093a0819:scripts/kernel_rnd/autokernel/loop/run.py:6129:         current_accumulator = accumulator_state()
+1421b578ae4d5c9afbf3b2199f89893b093a0819:scripts/kernel_rnd/autokernel/loop/run.py:6158:             accumulator=current_accumulator,
+1421b578ae4d5c9afbf3b2199f89893b093a0819:scripts/kernel_rnd/autokernel/loop/run.py:6181:     status_publisher = heartbeat.WorkerStatusPublisher(
+1421b578ae4d5c9afbf3b2199f89893b093a0819:scripts/kernel_rnd/autokernel/loop/run.py:8190: def main(argv: list[str] | None = None) -> int:
+1421b578ae4d5c9afbf3b2199f89893b093a0819:scripts/kernel_rnd/autokernel/loop/test_heartbeat.py:357:                 if isinstance(node, ast.FunctionDef) and node.name == "main")
+1421b578ae4d5c9afbf3b2199f89893b093a0819:scripts/kernel_rnd/autokernel/loop/test_heartbeat.py:423:                 if isinstance(node, ast.FunctionDef) and node.name == "main")
+1421b578ae4d5c9afbf3b2199f89893b093a0819:scripts/kernel_rnd/autokernel/loop/test_gates.py:1642:         self.assertIn("accumulator=accumulator_state()", pub)
