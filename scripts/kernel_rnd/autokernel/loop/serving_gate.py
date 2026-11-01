@@ -95,6 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="build of the accumulator TIP (the candidate arm)")
     parser.add_argument("--tip", required=True,
                         help="source commit exactly represented by --tip-build")
+    parser.add_argument("--surface", choices=accumulate.SURFACES,
+                        help="explicit CPU/GPU bundle surface; omitted preserves the legacy store")
     parser.add_argument("--champion-worktree", type=Path, default=pool.CHAMPION_TREE,
                         help="read-only source topology for Bundle ancestry checks")
     parser.add_argument("--pairs", type=int, default=5)
@@ -126,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.store), anchor_commit=args.tip,
             is_ancestor=lambda older, newer: _is_ancestor(
                 args.champion_worktree, older, newer),
-            read_only=posture.dry_run)
+            read_only=posture.dry_run, surface=args.surface)
         policy = accumulate.AccumulatorPolicy(fire_multiple=args.fire_multiple)
         thr = policy.fire_threshold_pct(floor)
         print(f"floor     {floor:.3f}% [{reading.provenance}] unit={reading.unit} "
@@ -188,7 +190,6 @@ def main(argv: list[str] | None = None) -> int:
           f"{row['candidate_tok_s']:.2f} tok/s -> {row['effect_pct']:+.2f}% "
           f"(floor {floor:.3f}%, decisive={row['decisive']})")
     if plan["outcome"] is accumulate.Outcome.PROMOTE:
-        print("PROMOTE: champion of record advances to", bundle.tip[:12])
         if posture.apply and _ppl_contract_fold_blocked(args, bundle):
             # Review 2026-10-06 (layer e): this hand-run gate measures throughput only. A
             # bundle carrying a ppl_contract keep may fold only through the loop, whose
@@ -197,10 +198,21 @@ def main(argv: list[str] | None = None) -> int:
                   "quality eval -- champion of record NOT advanced", file=sys.stderr)
             return instruments.REFUSED
         if posture.apply:
-            fresh = accumulate.Bundle(champion_of_record=bundle.tip, tip=bundle.tip)
-            fresh.save(Path(args.store))
+            fresh = accumulate.Bundle(champion_of_record=bundle.tip, tip=bundle.tip,
+                                      surface=bundle.surface)
+            try:
+                if fresh.surface is None:
+                    fresh.save(Path(args.store))
+                else:
+                    fresh.promote_shared_cor(
+                        Path(args.store), expected_cor=bundle.champion_of_record)
+            except accumulate.BundleRecoveryRequired as refusal:
+                print(f"REFUSED: shared COR promotion failed: {refusal}", file=sys.stderr)
+                return instruments.REFUSED
             print("bundle reset and saved:", json.dumps(fresh.to_dict()))
+            print("PROMOTE: champion of record advances to", bundle.tip[:12])
         else:
+            print("PROMOTE (dry): champion of record would advance to", bundle.tip[:12])
             print("(dry: pass --apply to advance the champion of record)")
     else:
         print("HOLD: champion of record unchanged; bundle kept; divergence is planner "

@@ -66,7 +66,7 @@ def test_current_snapshots_require_v2_and_explicit_validity():
         A._saved_payload(v1, provenance="current_snapshot"))
     assert any("only as imported legacy" in reason for reason in violations)
     with pytest.raises(ValueError, match="unknown bundle schema"):
-        A.Bundle.from_dict(dict(snapshot, schema="epyc.autokernel.accumulator_bundle.v3"))
+        A.Bundle.from_dict(dict(snapshot, schema="epyc.autokernel.accumulator_bundle.vFuture"))
 
 
 def test_v2_rejects_null_cadence():

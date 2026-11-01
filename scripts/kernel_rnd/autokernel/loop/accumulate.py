@@ -46,7 +46,7 @@ injects the compounded-bench number and the serving-gate row; `accumulate` decid
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 import enum
@@ -109,6 +109,118 @@ MEASUREMENT_DEFERRED_BENCH = "stale_deferred_accumulate_bench"
 ACCUMULATE_BENCH_EVERY_KEEPS = 3
 BUNDLE_SCHEMA_V1 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1
 BUNDLE_SCHEMA_V2 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2
+BUNDLE_SCHEMA_V3 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V3
+SURFACES = ("cpu", "gpu")
+SHARED_COR_FILENAME = "accumulator-shared-cor.json"
+
+
+def _surface_paths(store: Path, surface: str | None) -> tuple[str, str]:
+    """Return projection and journal names; None is the byte-compatible legacy store."""
+    if surface is None:
+        return Bundle.FILENAME, JOURNAL_DIRNAME
+    if surface not in SURFACES:
+        raise ValueError(f"surface must be one of {SURFACES}, got {surface!r}")
+    return f"accumulator-bundle-{surface}.json", f"journal-{surface}"
+
+
+def _read_shared_cor(store: Path) -> str | None:
+    path = Path(store) / SHARED_COR_FILENAME
+    try:
+        payload = json.loads(path.read_text())
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BundleRecoveryRequired(f"shared COR authority is unreadable: {exc}") from exc
+    if not isinstance(payload, dict) or set(payload) != {"schema", "champion_of_record"}:
+        raise BundleRecoveryRequired("shared COR authority has an invalid shape")
+    cor = payload.get("champion_of_record")
+    if payload.get("schema") != "epyc.autokernel.shared_cor.v1" or not isinstance(cor, str) or not cor:
+        raise BundleRecoveryRequired("shared COR authority is invalid")
+    return cor
+
+
+@contextmanager
+def _shared_cor_lock(store: Path):
+    store = Path(store)
+    store.mkdir(parents=True, exist_ok=True)
+    with (store / ".shared-cor.lock").open("a+b") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
+def _write_shared_cor(store: Path, cor: str) -> None:
+    """Create the authority only for an explicitly initialized empty surface store."""
+    with _shared_cor_lock(store):
+        _write_shared_cor_locked(store, cor)
+
+
+def _write_shared_cor_locked(store: Path, cor: str) -> None:
+    existing = _read_shared_cor(store)
+    if existing is not None:
+        if existing != cor:
+            raise BundleRecoveryRequired(
+                f"shared COR mismatch: authority {existing[:12]} != bundle {cor[:12]}")
+        return
+    status.write_json(Path(store), SHARED_COR_FILENAME,
+                      {"schema": "epyc.autokernel.shared_cor.v1",
+                       "champion_of_record": cor}, prefix=".shared-cor-")
+
+
+def _cas_shared_cor_locked(store: Path, expected: str, cor: str) -> None:
+    existing = _read_shared_cor(store)
+    if existing != expected:
+        raise BundleRecoveryRequired(
+            f"shared COR compare-and-swap failed: expected {expected[:12]}, "
+            f"found {str(existing)[:12]}")
+    status.write_json(Path(store), SHARED_COR_FILENAME,
+                      {"schema": "epyc.autokernel.shared_cor.v1",
+                       "champion_of_record": cor}, prefix=".shared-cor-")
+
+
+def _has_experiment_history(store: Path) -> bool:
+    database = Path(store) / "experiments.db"
+    if not database.exists():
+        return False
+    try:
+        from ..controller import experiments
+        with experiments.ExperimentStore(Path(store), read_only=True,
+                                         bounded=False) as memory:
+            return memory.count() > 0
+    except Exception as exc:
+        raise BundleRecoveryRequired(
+            f"experiment history is unreadable; explicit baseline initialization refused: {exc}") from exc
+
+
+def require_shared_cor(store: Path, cor: str, surface: str) -> str | None:
+    """Read-only admission check used before surface-specific evidence is produced."""
+    _surface_paths(Path(store), surface)
+    authority = _read_shared_cor(Path(store))
+    if authority is not None:
+        if authority != cor:
+            raise BundleRecoveryRequired(
+                f"shared COR mismatch: authority {authority[:12]} != requested {cor[:12]}")
+        return authority
+    if Path(store).is_symlink():
+        raise BundleRecoveryRequired("new explicit accumulator store cannot be a symlink")
+    if _has_experiment_history(Path(store)):
+        raise BundleRecoveryRequired(
+            "explicit surface has no shared COR authority in a store with experiment history")
+    legacy_path = Path(store) / Bundle.FILENAME
+    legacy_snapshots = _has_legacy_bundle_snapshot(Path(store))
+    existing_surface_paths = [name for name in
+                              ("accumulator-bundle-cpu.json", "accumulator-bundle-gpu.json",
+                               "journal-cpu", "journal-gpu")
+                              if (Path(store) / name).exists()]
+    if legacy_path.exists() or legacy_snapshots or existing_surface_paths:
+        raise BundleRecoveryRequired(
+            "surface state exists without shared COR authority; refusing to infer it "
+            f"(legacy_projection={legacy_path.exists()}, "
+            f"legacy_journal_snapshot={legacy_snapshots}, "
+            f"surface_paths={existing_surface_paths})")
+    return None
 
 
 def negative_beyond_floor(comparison: dict, fallback_floor_pct: float | None = None) -> bool:
@@ -216,6 +328,7 @@ class Bundle:
     #: snapshot; a later external tip advance makes the magnitude stale.
     measurement_validity: str = MEASUREMENT_CURRENT
     comparison_evidence: dict | None = None
+    surface: str | None = None
 
     def add_keep(self, mechanism_id: str, tip: str, compounded_bench_pct: float,
                  comparison_evidence: dict | None = None) -> None:
@@ -262,27 +375,31 @@ class Bundle:
     SCHEMA = BUNDLE_SCHEMA_V2
 
     def to_dict(self) -> dict:
-        return {"schema": self.SCHEMA, "champion_of_record": self.champion_of_record,
+        schema = BUNDLE_SCHEMA_V3 if self.surface is not None else self.SCHEMA
+        return {"schema": schema, "champion_of_record": self.champion_of_record,
                 "tip": self.tip, "keeps": list(self.keeps),
                 "compounded_bench_pct": self.compounded_bench_pct,
                 "keeps_since_serving_gate": int(self.keeps_since_serving_gate),
                 "measurement_validity": self.measurement_validity,
                 **({"comparison_evidence": dict(self.comparison_evidence)}
-                   if self.comparison_evidence is not None else {})}
+                   if self.comparison_evidence is not None else {}),
+                **({"surface": self.surface} if self.surface is not None else {})}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Bundle":
         if not isinstance(d, dict):
             raise ValueError("bundle must be a JSON object")
         schema = d.get("schema")
-        if schema not in (cls.LEGACY_SCHEMA, cls.SCHEMA):
+        if schema not in (cls.LEGACY_SCHEMA, cls.SCHEMA, BUNDLE_SCHEMA_V3):
             raise ValueError(f"unknown bundle schema {d.get('schema')!r}")
         common = {"schema", "champion_of_record", "tip", "keeps",
                   "compounded_bench_pct"}
         allowed = (common | {"keeps_since_serving_gate"}
                    if schema == cls.LEGACY_SCHEMA else
                    common | {"keeps_since_serving_gate", "measurement_validity",
-                             "comparison_evidence"})
+                             "comparison_evidence"} if schema == cls.SCHEMA else
+                   common | {"keeps_since_serving_gate", "measurement_validity",
+                             "comparison_evidence", "surface"})
         required = (common if schema == cls.LEGACY_SCHEMA else
                     allowed - {"comparison_evidence"})
         extra = sorted(set(d) - allowed)
@@ -314,6 +431,9 @@ class Bundle:
         if validity not in journal.LOOP_BUNDLE_MEASUREMENT_VALIDITIES:
             raise ValueError(f"unknown measurement_validity {validity!r}")
         evidence = d.get("comparison_evidence")
+        surface = d.get("surface")
+        if schema == BUNDLE_SCHEMA_V3 and surface not in SURFACES:
+            raise ValueError(f"surface must be one of {SURFACES}")
         if evidence is not None:
             if (not isinstance(evidence, dict)
                     or set(evidence) != {"path", "sha256"}
@@ -326,17 +446,76 @@ class Bundle:
                    keeps=list(keeps), compounded_bench_pct=float(gain),
                    keeps_since_serving_gate=cadence,
                    measurement_validity=validity,
-                   comparison_evidence=(dict(evidence) if evidence is not None else None))
+                   comparison_evidence=(dict(evidence) if evidence is not None else None),
+                   surface=surface)
 
-    def save(self, store: Path) -> Path:
+    def save(self, store: Path, *, surface: str | None = None,
+             _shared_cor_lock_held: bool = False) -> Path:
         store = Path(store)
-        book = journal.Journal(str(store / JOURNAL_DIRNAME))
-        book.initialize()
-        snapshot = self.to_dict()
-        with book.write_lock():
-            _append_snapshot_locked(book, snapshot, provenance="current_snapshot")
-            return status.write_json(store, self.FILENAME, snapshot,
-                                     prefix=".accumulator-bundle-")
+        surface = self.surface if surface is None else surface
+        if surface is not None and store.is_symlink():
+            raise BundleRecoveryRequired("explicit accumulator store cannot be a symlink")
+        if surface is not None and self.surface != surface:
+            raise BundleRecoveryRequired(
+                "explicit save requires a Bundle already typed for that surface")
+        filename, journal_dir = _surface_paths(store, surface)
+        lock = (_shared_cor_lock(store)
+                if surface is not None and not _shared_cor_lock_held else nullcontext())
+        with lock:
+            if surface is not None:
+                authority = _read_shared_cor(store)
+                if authority is None:
+                    require_shared_cor(store, self.champion_of_record, surface)
+                    _write_shared_cor_locked(store, self.champion_of_record)
+                elif authority != self.champion_of_record:
+                    raise BundleRecoveryRequired(
+                        f"shared COR mismatch: authority {authority[:12]} != bundle "
+                        f"{self.champion_of_record[:12]}")
+            book = journal.Journal(str(store / journal_dir))
+            book.initialize()
+            snapshot = self.to_dict()
+            if surface is not None:
+                snapshot.update(schema=BUNDLE_SCHEMA_V3, surface=surface)
+            with book.write_lock():
+                _append_snapshot_locked(book, snapshot, provenance="current_snapshot")
+                return status.write_json(store, filename, snapshot,
+                                         prefix=".accumulator-bundle-")
+
+    def promote_shared_cor(self, store: Path, *, expected_cor: str) -> Path:
+        """Persist an already-approved PROMOTE and CAS the shared COR under one lock.
+
+        The promoted surface snapshot is durable before the shared authority changes.
+        Writers use the same shared lock; lock-free readers that race this
+        transaction see a mismatch and refuse rather than relabeling old evidence.
+        Other surface snapshots remain at their old COR and therefore refuse until a
+        separate rebaseline action writes current evidence there.
+        """
+        if self.surface is None:
+            return self.save(store)
+        store = Path(store)
+        if store.is_symlink():
+            raise BundleRecoveryRequired("explicit accumulator store cannot be a symlink")
+        filename, journal_dir = _surface_paths(store, self.surface)
+        with _shared_cor_lock(store):
+            authority = _read_shared_cor(store)
+            if authority != expected_cor:
+                raise BundleRecoveryRequired(
+                    f"shared COR compare-and-swap failed: expected {expected_cor[:12]}, "
+                    f"found {str(authority)[:12]}")
+            if self.champion_of_record == expected_cor:
+                raise BundleRecoveryRequired("promotion must advance the shared COR")
+            if self.tip != self.champion_of_record or not self.is_empty():
+                raise BundleRecoveryRequired(
+                    "shared COR promotion requires a fresh empty bundle at the promoted tip")
+            book = journal.Journal(str(store / journal_dir))
+            book.initialize()
+            snapshot = self.to_dict()
+            with book.write_lock():
+                _append_snapshot_locked(book, snapshot, provenance="current_snapshot")
+                projection = status.write_json(
+                    store, filename, snapshot, prefix=".accumulator-bundle-")
+                _cas_shared_cor_locked(store, expected_cor, self.champion_of_record)
+                return projection
 
 
 def _saved_payload(snapshot: dict, *, provenance: str) -> dict:
@@ -373,6 +552,15 @@ def _read_entries(book: journal.Journal) -> list:
         raise BundleRecoveryRequired(
             f"journal read failure prevents authoritative recovery: {exc}"
         ) from exc
+
+
+def _has_legacy_bundle_snapshot(store: Path) -> bool:
+    """Whether the shared legacy journal actually contains accumulator snapshots."""
+    root = Path(store) / JOURNAL_DIRNAME
+    if not root.exists():
+        return False
+    entries = _read_entries(journal.Journal(str(root)))
+    return any(entry.kind == journal.KIND_LOOP_BUNDLE_SAVED for entry in entries)
 
 
 @contextmanager
@@ -458,8 +646,8 @@ def _require_valid_ancestry(bundle: Bundle, anchor_commit: str, is_ancestor) -> 
         )
 
 
-def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
-                read_only: bool = False) -> tuple:
+def _load_bundle_locked(store: Path, *, anchor_commit: str, is_ancestor,
+                        read_only: bool = False, surface: str | None = None) -> tuple:
     """Restore authoritative journal state, importing legacy JSON only once.
 
     The JSON file is a projection. A write-capable caller may initialize an
@@ -469,8 +657,52 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
     consumers cannot invent a baseline for missing historical state.
     """
     store = Path(store)
-    p = store / Bundle.FILENAME
-    journal_root = store / JOURNAL_DIRNAME
+    filename, journal_dir = _surface_paths(store, surface)
+    p = store / filename
+    journal_root = store / journal_dir
+    authority = None
+    if surface is not None:
+        if store.is_symlink():
+            raise BundleRecoveryRequired("explicit accumulator store cannot be a symlink")
+        legacy_projection = (store / Bundle.FILENAME).exists()
+        legacy_journal = _has_legacy_bundle_snapshot(store)
+        if (legacy_projection or legacy_journal) and not (p.exists() or journal_root.exists()):
+            raise BundleRecoveryRequired(
+                "explicit surface cannot adopt ambiguous legacy accumulator state")
+        authority = _read_shared_cor(store)
+        if not journal_root.exists() and not p.exists():
+            if read_only:
+                raise BundleRecoveryRequired(f"no accumulator state for surface {surface}")
+            if store.is_symlink():
+                raise BundleRecoveryRequired("new explicit accumulator store cannot be a symlink")
+            if authority is None:
+                other = "gpu" if surface == "cpu" else "cpu"
+                if ((store / f"accumulator-bundle-{other}.json").exists()
+                        or (store / f"journal-{other}").exists()):
+                    raise BundleRecoveryRequired("other surface exists without shared COR authority")
+                if legacy_projection or legacy_journal:
+                    raise BundleRecoveryRequired("legacy state cannot establish explicit shared COR")
+                if _has_experiment_history(store):
+                    raise BundleRecoveryRequired(
+                        "explicit surface has no shared COR authority in a store with experiment history")
+                _write_shared_cor_locked(store, anchor_commit)
+                authority = anchor_commit
+            baseline = Bundle(
+                champion_of_record=authority, tip=anchor_commit, surface=surface,
+                measurement_validity=(MEASUREMENT_CURRENT if authority == anchor_commit
+                                      else MEASUREMENT_STALE_TIP_ADVANCE))
+            _require_valid_ancestry(baseline, anchor_commit, is_ancestor)
+            book = journal.Journal(str(journal_root))
+            book.initialize()
+            with book.write_lock():
+                if _read_entries(book) or p.exists():
+                    raise BundleRecoveryRequired("surface changed during initialization; retry recovery")
+                snapshot = baseline.to_dict()
+                _append_snapshot_locked(book, snapshot, provenance="current_snapshot")
+                status.write_json(store, filename, snapshot, prefix=".accumulator-bundle-")
+            return baseline, "initialized explicit surface at shared COR"
+        if authority is None:
+            raise BundleRecoveryRequired("explicit surface has no shared COR authority")
     legacy, legacy_error = _read_legacy_projection(p)
 
     journal_exists = journal_root.exists()
@@ -500,7 +732,7 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
                 raise BundleRecoveryRequired("accumulator store changed during initialization; retry recovery")
             snapshot = baseline.to_dict()
             _append_snapshot_locked(book, snapshot, provenance="current_snapshot")
-            status.write_json(store, Bundle.FILENAME, snapshot,
+            status.write_json(store, filename, snapshot,
                               prefix=".accumulator-bundle-")
         return baseline, "no persisted bundle — initialized a new empty baseline"
 
@@ -511,6 +743,10 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
             b = Bundle.from_dict(legacy)
         except (TypeError, ValueError) as exc:  # defensive; reader validated it
             raise BundleRecoveryRequired(f"legacy snapshot cannot be restored: {exc}") from exc
+        if surface is not None and b.surface != surface:
+            raise BundleRecoveryRequired("explicit surface projection has wrong or missing surface")
+        if surface is not None and b.champion_of_record != authority:
+            raise BundleRecoveryRequired("shared COR mismatch; refusing stale surface snapshot")
         _require_valid_ancestry(b, anchor_commit, is_ancestor)
         if b.tip != anchor_commit:
             b.tip = anchor_commit
@@ -544,6 +780,13 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
                 f"authoritative journal snapshot cannot be restored: {exc}"
             ) from exc
 
+        if surface is not None and b.surface != surface:
+            raise BundleRecoveryRequired("explicit surface journal contains wrong or missing surface")
+        if surface is not None and b.champion_of_record != authority:
+            raise BundleRecoveryRequired(
+                f"shared COR mismatch: authority {authority[:12]} != surface "
+                f"{b.champion_of_record[:12]}")
+
         _require_valid_ancestry(b, anchor_commit, is_ancestor)
         if saved is None and not read_only:
             # An invalid legacy lineage must fail above without ever becoming
@@ -558,20 +801,35 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
             b.measurement_validity = MEASUREMENT_STALE_TIP_ADVANCE
             if not read_only:
                 _append_snapshot_locked(book, b.to_dict(), provenance="current_snapshot")
-                status.write_json(store, Bundle.FILENAME, b.to_dict(),
+                status.write_json(store, filename, b.to_dict(),
                                   prefix=".accumulator-bundle-")
             return b, (f"restored {len(b.keeps)} keep(s) from {provenance}; tip advanced "
                        "to the anchor and compounded measurement marked stale")
         if not read_only:
-            status.write_json(store, Bundle.FILENAME, b.to_dict(),
+            status.write_json(store, filename, b.to_dict(),
                               prefix=".accumulator-bundle-")
         return b, (f"restored {len(b.keeps)} keep(s), "
                    f"{b.compounded_bench_pct:+.2f}% vs cor "
                    f"{b.champion_of_record[:12]} from {provenance}")
 
 
+def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
+                read_only: bool = False, surface: str | None = None) -> tuple:
+    """Restore a legacy bundle or one explicit surface, serializing writes globally."""
+    if surface is not None and not read_only:
+        if Path(store).is_symlink():
+            raise BundleRecoveryRequired("explicit accumulator store cannot be a symlink")
+        with _shared_cor_lock(Path(store)):
+            return _load_bundle_locked(store, anchor_commit=anchor_commit,
+                                       is_ancestor=is_ancestor, read_only=False,
+                                       surface=surface)
+    return _load_bundle_locked(store, anchor_commit=anchor_commit,
+                               is_ancestor=is_ancestor, read_only=read_only,
+                               surface=surface)
+
+
 def would_refuse_anchor(store: Path, *, anchor_commit: str,
-                        is_ancestor) -> tuple[bool, str, str]:
+                        is_ancestor, surface: str | None = None) -> tuple[bool, str, str]:
     """Pre-flight: would `load_bundle` refuse this anchor against the store's persisted
     bundle? Pure and read-only -- never claims the journal lock for write, never
     initializes a store, never mutates anything on disk. Usable before any build or CPU
@@ -588,8 +846,17 @@ def would_refuse_anchor(store: Path, *, anchor_commit: str,
     for a store `load_bundle` would initialize fresh (a genuinely new/empty store never
     refuses)."""
     store = Path(store)
-    p = store / Bundle.FILENAME
-    journal_root = store / JOURNAL_DIRNAME
+    filename, journal_dir = _surface_paths(store, surface)
+    p = store / filename
+    journal_root = store / journal_dir
+    if surface is not None and not p.exists() and not journal_root.exists():
+        legacy, _ = _read_legacy_projection(store / Bundle.FILENAME)
+        if ((store / Bundle.FILENAME).exists()
+                or _has_legacy_bundle_snapshot(store)):
+            return True, "explicit surface cannot adopt ambiguous legacy accumulator state", REFUSAL_KIND_OTHER
+        _read_shared_cor(store)  # Validate authority if present; absence is an allowed first surface.
+        return (False, "no explicit surface state; a write-capable run may initialize it",
+                REFUSAL_KIND_OTHER)
     legacy, legacy_error = _read_legacy_projection(p)
     journal_exists = journal_root.exists()
     if not journal_exists and legacy is None:
@@ -611,14 +878,14 @@ def would_refuse_anchor(store: Path, *, anchor_commit: str,
                         "fresh baseline at this anchor"), REFUSAL_KIND_OTHER)
     try:
         _, note = load_bundle(store, anchor_commit=anchor_commit, is_ancestor=is_ancestor,
-                              read_only=True)
+                              read_only=True, surface=surface)
         return False, note, REFUSAL_KIND_OTHER
     except BundleRecoveryRequired as exc:
         return True, exc.reason, exc.kind
 
 
 def peek_refusal(store: Path, *, anchor_commit: str,
-                 is_ancestor) -> "BundleRecoveryRequired | None":
+                 is_ancestor, surface: str | None = None) -> BundleRecoveryRequired | None:
     """Classify a refusal WITHOUT acquiring any lock and WITHOUT mutating anything.
 
     For a caller that already holds the store's journal write lock exclusively (so a
@@ -634,10 +901,17 @@ def peek_refusal(store: Path, *, anchor_commit: str,
     case (a caller re-verifying under its own lock already knows the store is populated,
     since only a populated store's refusal is worth re-checking)."""
     store = Path(store)
-    p = store / Bundle.FILENAME
-    journal_root = store / JOURNAL_DIRNAME
+    filename, journal_dir = _surface_paths(store, surface)
+    p = store / filename
+    journal_root = store / journal_dir
     legacy, legacy_error = _read_legacy_projection(p)
     journal_exists = journal_root.exists()
+    if surface is not None and not journal_exists and legacy is None:
+        if ((store / Bundle.FILENAME).exists()
+                or _has_legacy_bundle_snapshot(store)):
+            return BundleRecoveryRequired(
+                "explicit surface cannot adopt ambiguous legacy accumulator state")
+        return None
     try:
         if journal_exists:
             book = journal.Journal(str(journal_root))
@@ -656,6 +930,12 @@ def peek_refusal(store: Path, *, anchor_commit: str,
         else:
             return None  # a genuinely new/empty store never refuses
         b = Bundle.from_dict(snapshot)
+        if surface is not None:
+            authority = _read_shared_cor(store)
+            if b.surface != surface:
+                return BundleRecoveryRequired("explicit surface snapshot has wrong or missing surface")
+            if authority is None or b.champion_of_record != authority:
+                return BundleRecoveryRequired("shared COR mismatch; refusing explicit surface snapshot")
         _require_valid_ancestry(b, anchor_commit, is_ancestor)
         return None
     except BundleRecoveryRequired as exc:

@@ -76,6 +76,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cor-build", type=Path, required=True)
     parser.add_argument("--tip-build", type=Path, required=True)
     parser.add_argument("--store", type=Path, default=instruments.DEFAULT_STORE)
+    parser.add_argument("--surface", choices=("gpu",),
+                        help="record this tg128 seed on the explicit GPU surface")
     parser.add_argument("--model", type=Path, default=instruments.DEFAULT_MODEL)
     parser.add_argument("--champion-worktree", type=Path, default=pool.CHAMPION_TREE,
                         help="tree whose topology names the keeps (default: the loop's "
@@ -108,6 +110,8 @@ def main(argv: list[str] | None = None) -> int:
             raise instruments.InstrumentRefusal(
                 f"cor {args.cor} is not an ancestor of the tip {tip[:12]} in {worktree}: "
                 f"the bundle would describe a lineage this tree does not contain")
+        if args.surface is not None:
+            accumulate.require_shared_cor(Path(args.store), args.cor, args.surface)
         keeps = keeps_between(worktree, args.cor, tip)
         instruments.require_binary(args.cor_build, "llama-bench")
         instruments.require_binary(args.tip_build, "llama-bench")
@@ -128,7 +132,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         comparison = measure(args.cor_build, args.tip_build, args.model,
                              pairs=args.pairs, floor_pct=args.floor)
-    except (instruments.InstrumentRefusal, serving.FloorUnitMismatch) as refusal:
+    except (instruments.InstrumentRefusal, serving.FloorUnitMismatch,
+            accumulate.BundleRecoveryRequired) as refusal:
         print(f"REFUSED: {refusal}", file=sys.stderr)
         return instruments.REFUSED
     print(f"MEASURED compounded tip-vs-cor: {comparison['effect_pct']:+.3f}%  "
@@ -141,9 +146,10 @@ def main(argv: list[str] | None = None) -> int:
         written = status.write_json(out.parent, out.name, comparison, prefix=".seed-")
     print("measurement recorded:", written)
     bundle = accumulate.Bundle(champion_of_record=args.cor, tip=tip, keeps=keeps,
-                               compounded_bench_pct=comparison["effect_pct"])
+                               compounded_bench_pct=comparison["effect_pct"],
+                               surface=args.surface)
     if posture.apply:
-        path = bundle.save(Path(args.store))
+        path = bundle.save(Path(args.store), surface=args.surface)
         print("bundle written:", path, json.dumps(bundle.to_dict()))
     else:
         print("DRY (no --apply). Would write:", json.dumps(bundle.to_dict()))

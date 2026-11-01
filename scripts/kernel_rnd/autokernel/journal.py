@@ -317,6 +317,7 @@ A2_RUNTIME_EXECUTION_SCHEMA = "epyc.autokernel.a2_runtime_execution_transition.v
 LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
+LOOP_BUNDLE_SNAPSHOT_SCHEMA_V3 = "epyc.autokernel.accumulator_bundle.v3"
 LOOP_BUNDLE_PROVENANCES = frozenset({
     "current_snapshot", "imported_legacy_state",
 })
@@ -466,11 +467,19 @@ def validate_loop_bundle_saved_payload(payload: Mapping[str, Any]) -> list:
         required_snapshot = allowed_snapshot - {"comparison_evidence"}
         if provenance != "current_snapshot":
             out.append("snapshot.schema: v2 must use current_snapshot provenance")
+    elif schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V3:
+        allowed_snapshot = common | {
+            "keeps_since_serving_gate", "measurement_validity",
+            "comparison_evidence", "surface",
+        }
+        required_snapshot = allowed_snapshot - {"comparison_evidence"}
+        if provenance != "current_snapshot":
+            out.append("snapshot.schema: v3 must use current_snapshot provenance")
     else:
         allowed_snapshot = set(snapshot)
         required_snapshot = set()
         out.append(
-            "snapshot.schema: unsupported; expected legacy v1 or current v2"
+            "snapshot.schema: unsupported; expected legacy v1 or current v2/v3"
         )
     extra_snapshot = sorted(set(snapshot) - allowed_snapshot)
     missing_snapshot = sorted(required_snapshot - set(snapshot))
@@ -492,7 +501,8 @@ def validate_loop_bundle_saved_payload(payload: Mapping[str, Any]) -> list:
             or not math.isfinite(float(gain))):
         out.append("snapshot.compounded_bench_pct: required finite number")
     cadence = snapshot.get("keeps_since_serving_gate")
-    if schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 and cadence is None:
+    if schema in (LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2,
+                  LOOP_BUNDLE_SNAPSHOT_SCHEMA_V3) and cadence is None:
         out.append(
             "snapshot.keeps_since_serving_gate: required non-negative integer in v2"
         )
@@ -503,7 +513,8 @@ def validate_loop_bundle_saved_payload(payload: Mapping[str, Any]) -> list:
             "snapshot.keeps_since_serving_gate: must be a non-negative integer"
         )
     validity = snapshot.get("measurement_validity")
-    if schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2:
+    if schema in (LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2,
+                  LOOP_BUNDLE_SNAPSHOT_SCHEMA_V3):
         if validity not in LOOP_BUNDLE_MEASUREMENT_VALIDITIES:
             out.append(
                 "snapshot.measurement_validity: required, one of "
@@ -511,6 +522,9 @@ def validate_loop_bundle_saved_payload(payload: Mapping[str, Any]) -> list:
             )
     elif validity is not None:
         out.append("snapshot.measurement_validity: not defined by legacy v1")
+    if schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V3 \
+            and snapshot.get("surface") not in {"cpu", "gpu"}:
+        out.append("snapshot.surface: required CPU or GPU surface")
     evidence = snapshot.get("comparison_evidence")
     if evidence is not None:
         if not isinstance(evidence, Mapping):

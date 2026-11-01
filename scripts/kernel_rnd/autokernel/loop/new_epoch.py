@@ -74,10 +74,12 @@ def _not_ancestry_refusal(reason: str, kind: str) -> ValueError:
         "--new-anchor-epoch is not a repair for a corrupt or unreadable journal.")
 
 
-def _classify_or_raise(store: Path, *, anchor_commit: str, is_ancestor) -> str:
+def _classify_or_raise(store: Path, *, anchor_commit: str, is_ancestor,
+                       surface: str | None = None) -> str:
     """Lock-free classification shared by the pre-check and the under-lock re-check.
     Returns the ancestry-refusal reason, or raises the matching refusal ValueError."""
-    exc = accumulate.peek_refusal(store, anchor_commit=anchor_commit, is_ancestor=is_ancestor)
+    exc = accumulate.peek_refusal(store, anchor_commit=anchor_commit,
+                                  is_ancestor=is_ancestor, surface=surface)
     if exc is None:
         raise ValueError(
             "--new-anchor-epoch refused: the store does not refuse this anchor; this "
@@ -90,7 +92,8 @@ def _classify_or_raise(store: Path, *, anchor_commit: str, is_ancestor) -> str:
 
 def start_new_anchor_epoch(store: Path, *, anchor_commit: str, is_ancestor,
                            stamp: str | None = None,
-                           dry_run: bool = False) -> tuple[accumulate.Bundle | None, str]:
+                           dry_run: bool = False,
+                           surface: str | None = None) -> tuple[accumulate.Bundle | None, str]:
     """Archive the store's current bundle projection + journal, then initialize a fresh
     bundle at ``champion_of_record = tip = anchor_commit``.
 
@@ -99,27 +102,37 @@ def start_new_anchor_epoch(store: Path, *, anchor_commit: str, is_ancestor,
     for a corrupt/unreadable journal reported under any other kind. Takes the store's
     journal write lock (non-blocking) for the whole check-under-lock + archive + init and
     refuses if the store has a live owner (the lock is already held); nothing is ever
-    deleted -- the prior ``accumulator-bundle.json`` and ``journal/`` are moved (renamed),
-    never removed, under ``store/archived-epochs/<UTC timestamp>/``.
+    deleted -- the prior bundle projection and matching journal (legacy or surface-scoped)
+    are moved (renamed), never removed, under ``store/archived-epochs/<UTC timestamp>/``.
 
     ``dry_run=True`` only re-confirms the ancestry-refusal classification (lock-free,
     via `accumulate.peek_refusal`) and returns the action it WOULD take as a note, with
     ``bundle=None`` -- it never takes the lock and never touches disk.
     """
     store = Path(store)
-    reason = _classify_or_raise(store, anchor_commit=anchor_commit, is_ancestor=is_ancestor)
+    if surface is not None and store.is_symlink():
+        raise ValueError("--new-anchor-epoch refused: explicit accumulator store is a symlink")
+    filename, journal_dir = accumulate._surface_paths(store, surface)
+    reason = _classify_or_raise(store, anchor_commit=anchor_commit,
+                                is_ancestor=is_ancestor, surface=surface)
 
     if dry_run:
         return None, (
             f"would start new anchor epoch at {anchor_commit[:12]}, archiving "
-            f"{accumulate.Bundle.FILENAME} + {accumulate.JOURNAL_DIRNAME}/ under "
+            f"{filename} + {journal_dir}/ under "
             f"{store / ARCHIVE_DIRNAME} ({reason})")
 
-    book = journal.Journal(str(store / accumulate.JOURNAL_DIRNAME))
+    shared_lock_cm = (accumulate._shared_cor_lock(store)
+                      if surface is not None else None)
+    if shared_lock_cm is not None:
+        shared_lock_cm.__enter__()
+    book = journal.Journal(str(store / journal_dir))
     lock_cm = book.write_lock(blocking=False)
     try:
         lock_cm.__enter__()
     except (BlockingIOError, OSError) as exc:
+        if shared_lock_cm is not None:
+            shared_lock_cm.__exit__(None, None, None)
         raise ValueError(
             "--new-anchor-epoch refused: the store has a live owner (its journal write "
             f"lock is held): {exc}. Stop the owning process, or wait for it to release "
@@ -131,31 +144,41 @@ def start_new_anchor_epoch(store: Path, *, anchor_commit: str, is_ancestor,
         # lock file (a different open file description) could otherwise deadlock the
         # process against itself, since flock ownership is per open-file-description,
         # not per-process.
-        reason = _classify_or_raise(store, anchor_commit=anchor_commit, is_ancestor=is_ancestor)
+        reason = _classify_or_raise(store, anchor_commit=anchor_commit,
+                                    is_ancestor=is_ancestor, surface=surface)
 
         archive_root = store / ARCHIVE_DIRNAME / (stamp or _archive_stamp())
         archive_root.mkdir(parents=True, exist_ok=False)
 
         archived = []
-        bundle_path = store / accumulate.Bundle.FILENAME
+        bundle_path = store / filename
         if bundle_path.exists():
             shutil.move(str(bundle_path),
-                       str(archive_root / accumulate.Bundle.FILENAME))
-            archived.append(accumulate.Bundle.FILENAME)
-        journal_path = store / accumulate.JOURNAL_DIRNAME
+                       str(archive_root / filename))
+            archived.append(filename)
+        journal_path = store / journal_dir
         if journal_path.exists():
             # Renames the directory our own open lock fd lives under; flock
             # operates on the fd, not the path, so the lock we hold is unaffected
             # and is released cleanly when this function returns.
             shutil.move(str(journal_path),
-                       str(archive_root / accumulate.JOURNAL_DIRNAME))
-            archived.append(accumulate.JOURNAL_DIRNAME)
+                       str(archive_root / journal_dir))
+            archived.append(journal_dir)
 
-        fresh = accumulate.Bundle(champion_of_record=anchor_commit, tip=anchor_commit)
-        fresh.save(store)
+        cor = (accumulate._read_shared_cor(store) if surface is not None else anchor_commit)
+        if surface is not None and cor is None:
+            raise ValueError("explicit new-anchor epoch has no shared COR authority")
+        fresh = accumulate.Bundle(
+            champion_of_record=cor, tip=anchor_commit, surface=surface,
+            measurement_validity=(accumulate.MEASUREMENT_STALE_TIP_ADVANCE
+                                  if cor != anchor_commit else accumulate.MEASUREMENT_CURRENT))
+        fresh.save(store, surface=surface,
+                   _shared_cor_lock_held=surface is not None)
         note = (f"new anchor epoch at {anchor_commit[:12]}: archived "
                 f"{', '.join(archived) if archived else 'nothing (store had no prior state)'} "
                 f"to {archive_root} ({reason})")
         return fresh, note
     finally:
         lock_cm.__exit__(None, None, None)
+        if shared_lock_cm is not None:
+            shared_lock_cm.__exit__(None, None, None)

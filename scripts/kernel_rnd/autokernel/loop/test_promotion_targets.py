@@ -248,9 +248,10 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         (inbox_dir / "bad-utf8.md").write_bytes(b"\xff\xfe\xfa")
         (inbox_dir / "dangling.md").symlink_to(inbox_dir / "no-such-target")
 
-    def _run_one_keep(self, *, candidate_symbols=None):
+    def _run_one_keep(self, *, candidate_symbols=None, surface=None):
         """Drive `run.main` through exactly one kept iteration; return the record."""
-        accumulate.Bundle(champion_of_record=self.tip, tip=self.tip).save(self.store)
+        accumulate.Bundle(champion_of_record=self.tip, tip=self.tip,
+                          surface=surface).save(self.store, surface=surface)
         compile_calls: list[dict] = []
         planners: list = []
         scratch = self.root / "scratch-verify"
