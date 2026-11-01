@@ -52,6 +52,7 @@ from typing import Any, Callable, Sequence
 
 from . import loop as loop_mod
 from . import scratch
+from .stage_lifecycle import LifecycleError, StageAnchorMoved
 
 #: Outcomes that reached a measurement: an iteration ending any other way counts as
 #: FAILED for `--scratch-keep failed` (its scratch is retained, still marked).
@@ -305,7 +306,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              reserve_candidate=None,
              make_author_panel: Callable[[Worker], Any] | None = None,
              record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
-             next_resume: Callable[[Worker, str], Any] | None = None
+             next_resume: Callable[[Worker, str], Any] | None = None,
+             stage_lifecycle=None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -330,6 +332,14 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     single-author path (N=1), unchanged. The panel authors in scratch worktrees and
     lands the selected diff on this lane at the base `reset_to_champion` returned.
     """
+    if stage_lifecycle is not None:
+        stage_lifecycle.configure_pool([worker.name for worker in workers], iterations)
+        prior_should_stop = should_stop
+        def should_stop():
+            observed = bool(prior_should_stop is not None and prior_should_stop())
+            if observed:
+                stage_lifecycle.request_stop("run stop predicate observed")
+            return stage_lifecycle.stop_requested or observed
     budget = Budget(iterations, should_stop=should_stop)
     tail = tail or SerializedTail(champion_head)
     # SCRATCH (operator 2026-09-26): one `batch` scope for this pool, one `iteration`
@@ -377,6 +387,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
         base: str | None = None
         iteration_scope: scratch.Scope | None = None
         belief_refusals = 0
+        binding = None
 
         def close_iteration(outcome: loop_mod.Outcome | None) -> None:
             nonlocal iteration_scope
@@ -395,10 +406,46 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             outcome.branch_id = f"detached:{worker.name}"
             outcome.width = len(workers)
             outcome.depth = depth
-            keep(outcome)
+            if stage_lifecycle is None:
+                keep(outcome)
+            else:
+                def persist():
+                    keep(outcome)
+                    return {"status": outcome.status,
+                            "journal_receipt": getattr(outcome, "journal_receipt", None)}
+                if outcome.status == "stopped_mid_formation":
+                    stage_lifecycle.perform(
+                        stage="classification",
+                        stage_key=f"{worker.name}:{depth}:stop:{stage_lifecycle.stop_receipt}",
+                        inputs={"status": outcome.status, "stop_receipt": stage_lifecycle.stop_receipt},
+                        operation=persist)
+                else:
+                    stage_lifecycle.perform(
+                        stage="classification", stage_key=f"{worker.name}:{depth}:record",
+                        inputs={"status": outcome.status, "finish_draw": [worker.name, depth]},
+                        operation=persist)
 
-        while budget.take():
-            depth += 1
+        def take_draw():
+            nonlocal depth, binding
+            if binding is not None:
+                binding.__exit__(None, None, None)
+                binding = None
+            if stage_lifecycle is None:
+                if not budget.take():
+                    return False
+                depth += 1
+                return True
+            if aborted or should_stop():
+                return False
+            ordinal = stage_lifecycle.next_draw(worker.name, iterations)
+            if ordinal is None:
+                return False
+            depth = ordinal
+            binding = stage_lifecycle.bind_subject(f"{worker.name}:{depth}")
+            binding.__enter__()
+            return True
+
+        while take_draw():
             base = None
             reservation = None
             resumed = None
@@ -411,7 +458,37 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             # lanes that way, silently, while the run carried on looking healthy at
             # reduced capacity. Everything an iteration does must be containable.
             try:
-                base = reset_to_champion(worker)
+                if stage_lifecycle is not None:
+                    committed = stage_lifecycle.completed(
+                        stage="classification", stage_key=f"{worker.name}:{depth}:commit")
+                    if committed is not None:
+                        saved = loop_mod._decode_outcome(committed.output["outcome"])
+                        if champion_head() != committed.output["head"]:
+                            raise StageAnchorMoved("completed keep no longer matches the native champion")
+                        base = saved.spawn_parent
+                        close_iteration(saved)
+                        keep_lane(saved)
+                        continue
+                if stage_lifecycle is None:
+                    base = reset_to_champion(worker)
+                else:
+                    base = stage_lifecycle.perform(
+                        stage="assignment", stage_key=f"{worker.name}:{depth}",
+                        inputs={"worker": worker.name, "draw": depth},
+                        operation=lambda: reset_to_champion(worker),
+                        encode=lambda value: str(value), decode=lambda value: value,
+                        # Recreate local checkout state, while verifying the durable
+                        # assignment still names the same champion.
+                        rehydrate=lambda: reset_to_champion(worker))
+            except StageAnchorMoved as exc:
+                moved = loop_mod.Outcome("superseded", None, [str(exc)])
+                close_iteration(moved)
+                keep_lane(moved)
+                continue
+            except LifecycleError as exc:
+                aborted.append(exc)
+                close_iteration(None)
+                break
             except Exception as exc:      # noqa: BLE001
                 failed = loop_mod.Outcome(
                     "lane_error", None,
@@ -440,6 +517,10 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
 
             def record_reschedule(invalid):
                 nonlocal depth
+                if stage_lifecycle is not None:
+                    # A retry needs its own durable assignment, not an unjournaled
+                    # in-place mutation of this trial's ordinal and receipt chain.
+                    return False
                 # The first draw belongs to the original invalid attempt. A
                 # reschedule consumes the NEXT draw, and its result uses the
                 # ordinary keep(outcome) below. Never reset the retained lane.
@@ -492,6 +573,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     return point
 
                 resumed = next_resume(worker, base) if next_resume is not None else None
+                trial_id = f"{worker.name}:{depth}"
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
@@ -508,11 +590,17 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     reserve_candidate=reserve if reserve_candidate is not None else None,
                     record_abandoned=abandoned, resume=resumed,
                     next_resume=draw_resume if next_resume is not None else None,
+                    **({"stage_lifecycle": stage_lifecycle, "stage_trial_id": trial_id}
+                       if stage_lifecycle is not None else {}),
                     **({"author_panel": author_panel} if author_panel is not None else {}),
                     # The lane and the commit reset_to_champion put it on for THIS
                     # draw: the only lane an empty author report may be derived from.
                     author_lane=(worker.worktree, base),
                     iteration_scope=iteration_scope)
+            except LifecycleError as exc:
+                aborted.append(exc)
+                close_iteration(None)
+                break
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.
@@ -556,7 +644,11 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 outcome.exact_repeat_dispatch_count = reservation.dispatch_count
                 outcome.candidate_diff_sha256 = reservation.candidate_diff_sha256
             close_iteration(outcome)
-            keep_lane(outcome)
+            try:
+                keep_lane(outcome)
+            except LifecycleError as exc:
+                aborted.append(exc)
+                break
             if outcome.status == loop_mod.BELIEF_REFUSED:
                 # No planning possible: back off (bounded, stop-aware) instead of
                 # re-asking the reader in a hot loop; other lanes' tails keep running.
@@ -569,8 +661,19 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             else:
                 belief_refusals = 0
         close_iteration(None)
+        if binding is not None:
+            binding.__exit__(None, None, None)
 
-    threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)
+    def durable_lane(worker):
+        # A receipt/ordinal/final-recorder failure outside iterate is run-ending.
+        # A dead worker can never turn a durable campaign into an empty success.
+        try:
+            lane(worker)
+        except Exception as exc:  # noqa: BLE001 -- propagated after all tails drain
+            aborted.append(exc)
+
+    threads = [threading.Thread(target=(durable_lane if stage_lifecycle is not None else lane),
+                                args=(w,), name=w.name, daemon=True)
                for w in workers]
     with batch_scope:
         registry.sweep()

@@ -1196,6 +1196,30 @@ def carry_scope(store_root: Path, carry: CarryContext, *, anchor_commit: str, ep
                       claim_rows=[dict(row) for row in claim_rows])
 
 
+def carry_stage_graph(lifecycle, scope: CarryScope, *, new_graph_version: str,
+                      new_identity: Mapping[str, str],
+                      output_proofs: Mapping[str, Mapping[str, str]],
+                      verifier_receipt: Mapping[str, str]) -> str:
+    """Carry stage receipts only inside the already validated resume carry scope.
+
+    This does not authorize deployment or measurement work. The new graph must keep
+    the same anchor, measurement target and immutable runtime identity; lifecycle
+    then validates the remaining pinned fields and per-output proof.
+    """
+    if scope.carry is None or scope.carry.family is None:
+        raise ResumeRejected("carry_family", "stage graph carry requires a verified carry family")
+    if scope.anchor_commit != lifecycle.identity.get("anchor_commit"):
+        raise ResumeRejected("anchor", "stage graph carry anchor differs from the pinned stage identity")
+    if scope.measurement_epoch is None:
+        raise ResumeRejected("measurement_epoch", "stage graph carry requires a verified measurement epoch")
+    if not isinstance(scope.target, Mapping) or not scope.target:
+        raise ResumeRejected("target", "stage graph carry requires the exact enrolled target")
+    return lifecycle.carry_forward(new_graph_version=new_graph_version,
+                                   new_identity=new_identity,
+                                   output_proofs=output_proofs,
+                                   verifier_receipt=verifier_receipt)
+
+
 def checkpoint_family(checkpoint: Mapping[str, Any],
                       families: Mapping[str, str]) -> str | None:
     """A checkpoint's carry family: its own stamp (`bind_checkpoints(carry_family=)`),
@@ -3662,6 +3686,7 @@ __all__ = ["BACKFILL_SCHEMA", "CLAIMS_FILE", "CRITIC2_BACKFILL_SCHEMA", "Candida
            "CARRY_SCHEMA", "CARRY_FAMILY_SCHEMA", "CARRY_TOOL_SCHEMA", "CARRY_VOLATILE_HOST_KEYS",
            "CarryContext", "CarryScope", "alias_families", "carry_checkpoint", "carry_family",
            "carry_forward_apply", "carry_forward_plan", "carry_refusal", "carry_scope",
+           "carry_stage_graph",
            "checkpoint_family", "consumed_elsewhere", "is_ancestor", "scan_all",
            "target_family",
            "CRITIC1_BACKFILL_SCHEMA", "CRITIC1_SOURCE_STATUSES", "backfill_critic1_apply",
