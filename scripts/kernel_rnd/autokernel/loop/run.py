@@ -105,42 +105,146 @@ from . import resume as resume_mod
 from . import bestof
 from . import gpu_serving_profile as gpu_serving_profile_mod
 from . import gpu_counter
+from . import stage_lifecycle as stage_lifecycle_mod
 
 
-@dataclass(frozen=True)
-class ServingComparison:
-    """Expose the existing serving verdict to iterate without regrading it."""
-    row: dict
-    baseline_scope: str = "experimental_candidate_not_champion"
+def _stage_binary_snapshot(root):
+    root = Path(root) / "bin"
+    if not root.is_dir():
+        return {}
+    return {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob("*")) if path.is_file()
+            and (path.name in {"test-backend-ops", "llama-bench", "llama-server"}
+                 or path.name.startswith("libggml"))}
 
-    @property
-    def effect(self):
-        return self.row["effect"]
 
-    @property
-    def decisive(self):
-        return self.row["decisive"]
+def _stage_verdict(lifecycle, stage, *, key, inputs, operation, artifact_root=None):
+    """Run adapter shared by the real driver and offline controller contracts."""
+    if lifecycle is None or lifecycle.subject is None:
+        return operation()
+    def encode(verdict):
+        # Verdict.to_dict truncates detail for UI; durable replay needs all fields.
+        return {"verdict": {**verdict.to_dict(), "detail": verdict.detail},
+                "artifacts": (_stage_binary_snapshot(artifact_root)
+                              if artifact_root is not None else None)}
+    def decode(row):
+        if artifact_root is not None and _stage_binary_snapshot(artifact_root) != row["artifacts"]:
+            raise stage_lifecycle_mod.IdentityMismatch("completed stage binaries absent or changed")
+        value = row["verdict"]
+        return gates.Verdict(value["gate"], value["passed"], value.get("reason") or "",
+                             value.get("detail") or "",
+                             case_records=(None if value.get("case_records") is None
+                                           else tuple(value["case_records"])),
+                             elapsed_s=value.get("elapsed_s"))
+    return lifecycle.perform(stage=stage, stage_key=f"{lifecycle.subject}:{stage}:{key}",
+                             inputs=inputs, operation=operation, encode=encode, decode=decode)
 
-    @property
-    def noise_floor_pct(self):
-        return self.row["noise_floor_pct"]
 
-    @property
-    def surface(self):
-        return "serving:" + self.row["recipe"]
+def _stage_measurement(lifecycle, *, key, inputs, operation):
+    if lifecycle is None or lifecycle.subject is None:
+        return operation()
+    # Attribution is the exact pre-run instrument/candidate scope, persisted before
+    # measurement. The archive write is part of the final classification stage.
+    lifecycle.perform(stage="attribution", stage_key=f"{lifecycle.subject}:attribution:{key}",
+                      inputs=inputs, operation=lambda: {"scope": inputs})
+    return lifecycle.perform(stage="runner", stage_key=f"{lifecycle.subject}:runner:{key}",
+                             inputs=inputs, operation=operation,
+                             encode=loop._encode_comparison, decode=loop._decode_comparison)
 
-    @property
-    def pairs(self):
-        return self.row["pairs"]
 
-    @property
-    def drifting(self):
-        # Serving's existing reducer does not implement the bench trend veto.
-        return False
+def _stage_dispatch(lifecycle, *, key, inputs, operation):
+    """Persist historical dispatch identity; the caller retains current claim gates."""
+    if lifecycle is None or lifecycle.subject is None:
+        return operation()
+    return lifecycle.perform(
+        stage="authorization", stage_key=f"{lifecycle.subject}:authorization:{key}",
+        inputs=inputs, operation=operation,
+        encode=lambda value: {"identity": value.identity, "dispatch_count": value.dispatch_count,
+                              "candidate_diff_sha256": value.candidate_diff_sha256},
+        decode=lambda row: dispatch_guard.Reservation(**row))
 
-    def to_dict(self):
-        return {**self.row, "surface": self.surface,
-                "baseline_scope": self.baseline_scope}
+
+def _stage_checks(lifecycle, checks):
+    """Journal external route/model oracle leaves, preserving wrapped build/op leaves."""
+    if lifecycle is None or lifecycle.subject is None:
+        return gates.run_all(*checks)
+    def guarded(check, ordinal):
+        code = getattr(check, "__code__", None)
+        if code is None:
+            raise stage_lifecycle_mod.IdentityMismatch("gate leaf has no declared source node")
+        if {"local_compiles", "local_op_correctness"}.intersection(code.co_names):
+            return check()
+        node = f"{Path(code.co_filename).name}:{code.co_qualname}:{code.co_firstlineno}:{ordinal}"
+        predecessor = lifecycle.predecessor_digest
+        return _stage_verdict(lifecycle, "correctness", key=f"leaf:{node}:{predecessor}",
+            inputs={"node": node, "predecessor": predecessor}, operation=check)
+    return gates.run_all(*(lambda check=check, ordinal=ordinal: guarded(check, ordinal)
+                           for ordinal, check in enumerate(checks)))
+
+
+def _stage_preflight_config(path, store):
+    """Validate the stop fence before actor admission or any bootstrap measurement."""
+    declared = json.loads(Path(path).read_text())
+    if declared.get("schema") != "epyc.autokernel.stage_lifecycle_config.v1":
+        raise ValueError("unsupported stage lifecycle config schema")
+    identity = declared.get("identity")
+    if not isinstance(identity, dict):
+        raise ValueError("stage lifecycle config requires an identity object")
+    carry = declared.get("carry_forward")
+    if carry is not None and not isinstance(carry, dict):
+        raise ValueError("carry_forward must be a proof object")
+    graph = str(declared.get("graph_version") or "")
+    db = Path(store) / "stage-lifecycle.sqlite3"
+    opening_identity, opening_graph = identity, graph
+    if carry is not None and not stage_lifecycle_mod.contains_graph(db, graph):
+        opening_identity = carry.get("from_identity", {})
+        opening_graph = str(carry.get("from_graph_version") or "")
+    with stage_lifecycle_mod.StageLifecycle(db, identity=opening_identity,
+                                           graph_version=opening_graph) as ledger:
+        ack = declared.get("resume_ack")
+        if ack is not None:
+            ledger.check_resume_ack(ack)
+        elif ledger.stop_requested:
+            raise stage_lifecycle_mod.LifecycleError(
+                f"campaign stopped at {ledger.stop_receipt}; exact versioned resume_ack required")
+        declared["_deployment_pin"] = ledger.deployment_descriptor()
+    return declared
+
+
+def _stage_source_blobs():
+    root = Path(__file__).parent.parent
+    return {path.relative_to(root).as_posix(): path.read_bytes() for path in sorted(root.rglob("*.py"))
+            if not path.name.startswith("test_")}
+
+
+def _stage_source_digest():
+    return stage_lifecycle_mod.digest({name: hashlib.sha256(raw).hexdigest()
+                                     for name, raw in _stage_source_blobs().items()})
+
+
+def _stage_model_digest(path):
+    sha = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+            sha.update(block)
+    return sha.hexdigest()
+
+
+def _stage_serving_contract(launch):
+    if launch is None:
+        return None
+    body = launch._normalized_execution_dict()
+    for name in ("argv", "command_argv"):
+        if name in body:
+            body[name] = ["<candidate-kernel-executable>" if value.startswith("<executable:") else value
+                          for value in body[name]]
+    body["artifacts"] = {name: value for name, value in body["artifacts"].items()
+                         if name in {"model", "drafter"}}
+    return {"recipe": launch.template.to_dict(), "execution": body}
+
+
+# Preserve the public API while __main__ and package imports share one type.
+ServingComparison = loop.ServingComparison
 
 
 @contextmanager
@@ -2353,6 +2457,9 @@ def _main(argv: list[str] | None = None) -> int:
                         help="existing resolved campaign or campaign_cli output; selects inputs only")
     parser.add_argument("--target-id", help="exact enrolled target ID/alias; requires --resolved-campaign")
     parser.add_argument("--store", type=Path, required=True)
+    parser.add_argument("--stage-lifecycle-config", type=Path, default=None,
+                        help="opt in a new campaign to durable stage receipts using a declared "
+                             "JSON identity and graph_version; omitted leaves legacy runs off")
     parser.add_argument("--bundle-surface", choices=accumulate.SURFACES,
                         help="opt in to isolated CPU/GPU bundle storage; omitted preserves the "
                              "legacy unscoped accumulator paths")
@@ -3084,6 +3191,8 @@ def _main(argv: list[str] | None = None) -> int:
         if (lane_binding.lane.cpu_window_path is not None
                 and args.cpu_window_path == cpu_window.DEFAULT_PATH):
             args.cpu_window_path = lane_binding.lane.cpu_window_path
+    stage_declared = (_stage_preflight_config(args.stage_lifecycle_config, args.store)
+                      if args.stage_lifecycle_config is not None and not args.dry_run else None)
     if not args.dry_run:
         # Launch-stderr kernel markers for the keep gate's runtime layer
         # (kernel_coverage.py). Auxiliary: compacted per launch, capped per shape.
@@ -3099,7 +3208,8 @@ def _main(argv: list[str] | None = None) -> int:
         try:
             prior, _sha = serial_run.load_resume(args.resume_run, original_argv)
             resumed = prior
-            if resumed["terminal"] == "stopped":
+            if resumed["terminal"] == "stopped" and not (
+                    stage_declared is not None and stage_declared.get("resume_ack") is not None):
                 refusal = ValueError(
                     "preceding batch was stopped; explicit new session required")
                 try:
@@ -4281,7 +4391,7 @@ def _main(argv: list[str] | None = None) -> int:
                         pair.candidate.template.cpu_list).issubset(parse_cpu_list(build_cpu_list)):
                     return False, [gates.Verdict("runtime_treatment", False,
                                                 "runtime treatment exceeds the owned CPU allocation")]
-                return gates.run_all(lambda: local_op_correctness(
+                return local_run_all(lambda: local_op_correctness(
                     anchor_build[0], backend="CPU" if cpu_launch else direct_launch.template.device,
                     resolved_recipe=pair.candidate))
             # The diff first: a build that fails still leaves a patch worth reading,
@@ -4519,7 +4629,7 @@ def _main(argv: list[str] | None = None) -> int:
                     checks.extend(lambda ref=ref: ref(arm) for ref in route_references)
                 if repack_extra:
                     checks.append(lambda: repack_check(arm))
-                return gates.run_all(*checks)
+                return local_run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
             # this patch.
@@ -4577,9 +4687,9 @@ def _main(argv: list[str] | None = None) -> int:
                 if not compiled.passed:
                     return False, [compiled]
                 with cpu_measurement_window():
-                    passed, verdicts = gates.run_all(*checks)
+                    passed, verdicts = local_run_all(*checks)
                 return passed, [compiled, *verdicts]
-            return gates.run_all(*checks)
+            return local_run_all(*checks)
         return _recorded_gate(gate)
 
     #: The anchor ADVANCES with the champion. It used to be a fixed binary while the
@@ -4769,7 +4879,7 @@ def _main(argv: list[str] | None = None) -> int:
                                  "declared_pairs": (args.serving_pairs if direct_launch
                                                     else args.pairs)})
 
-        def measure(hypothesis, paths):
+        def measure_impl(hypothesis, paths):
             nonlocal runtime_enabled
             if hypothesis.runtime_pair is not None:
                 pair = hypothesis.runtime_pair
@@ -4829,6 +4939,21 @@ def _main(argv: list[str] | None = None) -> int:
                 bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
                 surface=args.surface, ubatch=ubatch, calibrated=calibrated))
+        def measure(hypothesis, paths):
+            lifecycle = stage_lifecycle_ref[0]
+            if lifecycle is None or lifecycle.subject is None:
+                return measure_impl(hypothesis, paths)
+            diff = archive._git(worker.worktree, "diff", "HEAD")
+            candidate_digest = hashlib.sha256(diff.encode()).hexdigest()
+            return _stage_measurement(lifecycle,
+                key=f"{hypothesis.mechanism_id}:{candidate_digest}",
+                inputs={"hypothesis": {**hypothesis.to_dict(),
+                                        "declared_runtime_arm": hypothesis.declared_runtime_arm},
+                        "candidate_digest": candidate_digest,
+                        "anchor": current_anchor_commit[0], "model": str(args.model),
+                        "surface": args.surface, "pairs": args.pairs,
+                        "recipe": recipe.to_dict()},
+                operation=lambda: measure_impl(hypothesis, paths))
         return measure
 
     def record_candidate_serving_profile(compared, worker, hypothesis) -> None:
@@ -5288,7 +5413,7 @@ def _main(argv: list[str] | None = None) -> int:
         node_profile.retain_observation(observed, store_root=args.store, **key)
 
     @counter_phase("profile")
-    def reprofile() -> None:
+    def reprofile_impl() -> None:
         """Re-derive the hotspots from the CURRENT champion.
 
         A profile names where the time goes in one binary. Once a patch is kept that
@@ -5379,6 +5504,34 @@ def _main(argv: list[str] | None = None) -> int:
         print(f"profile   {len(rows)} hotspots; top: "
               f"{rows[0].signature[:60] if rows else '(none)'}")
 
+    def reprofile() -> None:
+        lifecycle = stage_lifecycle_ref[0]
+        if lifecycle is None or lifecycle.subject is None:
+            return reprofile_impl()
+        if lifecycle.stop_requested:
+            return None
+        def capture():
+            reprofile_impl()
+            return {"hotspots": [row.to_dict() for row in hotspot_rows],
+                    "cpu": dict(cpu_profile_observation), "gpu": dict(gpu_profile_observation),
+                    "node": dict(node_profile_observation), "long_context": dict(longctx_observation),
+                    "uncovered_gap": uncovered_gap_state[0]}
+        def restore(row):
+            hotspot_rows[:] = [hotspots.Hotspot(**value) for value in row["hotspots"]]
+            for target, key in ((cpu_profile_observation, "cpu"), (gpu_profile_observation, "gpu"),
+                                (node_profile_observation, "node"), (longctx_observation, "long_context")):
+                target.clear()
+                target.update(row[key])
+            uncovered_gap_state[0] = row["uncovered_gap"]
+            return None
+        lifecycle.perform(stage="attribution",
+            stage_key=f"anchor:{current_anchor_commit[0]}:profile",
+            inputs={"anchor_commit": current_anchor_commit[0],
+                    "build_artifacts": _stage_binary_snapshot(anchor_build[0]),
+                    "surface": args.surface,
+                    "execution_digest": direct_launch.execution_digest if direct_launch else None},
+            operation=capture, decode=restore, isolated=True)
+
     # SCRATCH (operator 2026-09-26): this run's ONE scratch registry, rooted in the
     # store; created when the run body starts (below) and read by status/loop-run.
     scratch_registry: list = [None]
@@ -5401,12 +5554,20 @@ def _main(argv: list[str] | None = None) -> int:
         signal.signal(_sig, _ask_stop)
 
     def should_stop() -> bool:
-        return stopping["asked"] or pool.stop_requested(args.store)
+        asked = stopping["asked"] or pool.stop_requested(args.store)
+        lifecycle = stage_lifecycle_ref[0]
+        if lifecycle is not None:
+            if asked:
+                lifecycle.request_stop("native driver stop predicate observed")
+            lifecycle_stopped[0] = lifecycle_stopped[0] or lifecycle.stop_requested
+        return asked or lifecycle_stopped[0]
 
     #: Per-thread nesting depth of the quiet window: a measurement called from inside
     #: another's window must not re-acquire a flock this process already holds (flock
     #: conflicts between open file descriptions of ONE process: a self-deadlock).
     quiet_depth = threading.local()
+    stage_lifecycle_ref = [None]
+    lifecycle_stopped = [False]
     from .gpu_phases import LocalPhases
     gpu_local = (LocalPhases(
         cpu_list=build_cpu_list,
@@ -5415,20 +5576,66 @@ def _main(argv: list[str] | None = None) -> int:
         on_wait=lambda kind: publish("running", latest, step=f"GPU {kind} waiting for claim"))
         if gpu_skip_cpu_claim else None)
 
+    def _lifecycle_verdict(stage, *, key, inputs, operation, artifact_root=None):
+        return _stage_verdict(stage_lifecycle_ref[0], stage, key=key, inputs=inputs,
+                              operation=operation, artifact_root=artifact_root)
+
+    def local_run_all(*checks):
+        return _stage_checks(stage_lifecycle_ref[0], checks)
+
     def local_compiles(*positional, **keyword):
-        if gpu_local is None:
-            return gates.compiles(*positional, **keyword)
-        with gpu_local.build() if gpu_local is not None else nullcontext():
-            paths = (*positional[:2], *(keyword[name] for name in ("source_root", "build_dir")
-                                        if name in keyword))
-            with gpu_local.compile_env(keyword.get("env"), paths=paths) as child_env:
-                keyword["env"] = child_env
+        def build():
+            if gpu_local is None:
                 return gates.compiles(*positional, **keyword)
+            with gpu_local.build():
+                paths = (*positional[:2], *(keyword[name] for name in
+                                            ("source_root", "build_dir") if name in keyword))
+                with gpu_local.compile_env(keyword.get("env"), paths=paths) as child_env:
+                    build_keyword = dict(keyword)
+                    build_keyword["env"] = child_env
+                    return gates.compiles(*positional, **build_keyword)
+        if stage_lifecycle_ref[0] is None or stage_lifecycle_ref[0].subject is None:
+            return build()
+        source_root = positional[0] if positional else keyword.get("source_root")
+        build_dir = positional[1] if len(positional) > 1 else keyword.get("build_dir")
+        diff_digest = (integrity.candidate_tree(Path(source_root))
+                       if source_root is not None else hashlib.sha256(b"").hexdigest())
+        build_env = keyword.get("env") or {}
+        build_env_facts = {key: str(build_env[key]) for key in
+                           ("CC", "CXX", "CFLAGS", "CXXFLAGS", "HIP_PATH", "ROCM_PATH")
+                           if key in build_env}
+        stage_inputs = {"source_digest": diff_digest, "source_root": str(source_root),
+                    "build_dir": str(build_dir),
+                    "defines": list(keyword.get("cmake_defines", ())),
+                    "targets": list(keyword.get("targets", ())),
+                    "cmake": keyword.get("cmake", "cmake"),
+                    "build_environment": build_env_facts}
+        return _lifecycle_verdict(
+            "build", key=stage_lifecycle_mod.digest(stage_inputs),
+            inputs=stage_inputs, operation=build,
+            artifact_root=build_dir)
 
     @counter_phase("oracle")
     def local_op_correctness(*positional, **keyword):
-        with cpu_measurement_window() if not cpu_launch else nullcontext():
-            return gates.op_correctness(*positional, **keyword)
+        def check():
+            with cpu_measurement_window() if not cpu_launch else nullcontext():
+                return gates.op_correctness(*positional, **keyword)
+        if stage_lifecycle_ref[0] is None or stage_lifecycle_ref[0].subject is None:
+            return check()
+        build_dir = positional[0] if positional else keyword.get("build_dir")
+        stage_inputs = {"build_dir": str(build_dir), "op": keyword.get("op"),
+                    "backend": keyword.get("backend"),
+                    "require_reference": bool(keyword.get("require_reference", False)),
+                    "params_filter": keyword.get("params_filter"),
+                    "expected_cases": keyword.get("expected_cases"),
+                    "environment_overrides": list(keyword.get("environment_overrides", ())),
+                    "resolved_recipe": (keyword["resolved_recipe"].to_dict()
+                                         if hasattr(keyword.get("resolved_recipe"), "to_dict")
+                                         else keyword.get("resolved_recipe")),
+                    "build_artifacts": _stage_binary_snapshot(build_dir)}
+        return _lifecycle_verdict(
+            "correctness", key=stage_lifecycle_mod.digest(stage_inputs),
+            inputs=stage_inputs, operation=check)
 
     def cpu_measurement_window():
         """The measurement window of THIS run, CPU or GPU (quiet-window ruling above).
@@ -5536,7 +5743,7 @@ def _main(argv: list[str] | None = None) -> int:
                               cmake_defines=recipe.cmake_defines(),
                               jobs=build_jobs, cpu_list=build_cpu_list)
 
-    def publish_headline() -> None:
+    def publish_headline_impl() -> None:
         """Refresh the dashboard headline for the current verified anchor.
 
         The champion arm is `anchor_build[0]`: verified at startup, then rebuilt
@@ -5575,6 +5782,18 @@ def _main(argv: list[str] | None = None) -> int:
         print(f"headline  {outcome.reason}")
         if outcome.carryover:
             print(f"headline  carry-over: {outcome.carryover}")
+
+    def publish_headline() -> None:
+        lifecycle = stage_lifecycle_ref[0]
+        if lifecycle is None or lifecycle.subject is None:
+            return publish_headline_impl()
+        if lifecycle.stop_requested:
+            return None
+        lifecycle.perform(stage="classification",
+            stage_key=f"anchor:{current_anchor_commit[0]}:headline",
+            inputs={"anchor_commit": current_anchor_commit[0], "model": str(headline_model),
+                    "surface": bench_surface, "build_artifacts": _stage_binary_snapshot(anchor_build[0])},
+            operation=publish_headline_impl, isolated=True)
 
     def verify_anchor(*, guard_floor=None) -> None:
         """Prove the promoted binary IS the champion; `RunAborted` if not. Runs in the
@@ -6472,34 +6691,125 @@ def _main(argv: list[str] | None = None) -> int:
 
     codegen_by_head: dict[str, dict] = {}
 
+    def initialize_stage_lifecycle():
+        """Bind the controller before bootstrap; candidate kernel pins stay per trial."""
+        if stage_declared is None:
+            return None
+        stage_lifecycle = None
+        resume_target = resume_mod.target_identity(measurement_surface=args.surface,
+                                                   model=args.model)
+        if stage_declared is not None:
+            declared = stage_declared
+            identity = declared.get("identity")
+            if not isinstance(identity, dict):
+                raise ValueError("stage lifecycle config requires an identity object")
+            stable_measurement_inputs = {key: value for key, value in measurement_inputs.items()
+                if key not in {"cpu_execution_digest", "gpu_execution_digest"}}
+            serving_contract = _stage_serving_contract(direct_launch)
+            scope_id = stage_lifecycle_mod.digest({
+                "surface": args.surface, "model": str(args.model),
+                "target": (selected_identity.to_dict() if hasattr(selected_identity, "to_dict")
+                           else str(selected_identity)),
+                "recipe": recipe.to_dict(), "pp": pp, "tg": tg, "ubatch": ubatch,
+                "measurement_inputs": stable_measurement_inputs,
+                "serving_contract": serving_contract})
+            source_digest = _stage_source_digest()
+            model_digest = (direct_launch.model.sha256 if direct_launch is not None
+                            else _stage_model_digest(args.model))
+            actor_contract = {key: value for key, value in launch_actor_config.items()
+                              if key != "actor_wire_gate"}
+            contract = {"scope_id": scope_id,
+                        "model_digest": model_digest, "build_recipe": recipe.to_dict(),
+                        "serving": serving_contract}
+            frontier = {"commit": current_anchor_commit[0],
+                        "tree": integrity.candidate_tree(args.worktree),
+                        "build": str(anchor_build[0]),
+                        "artifacts": _stage_binary_snapshot(anchor_build[0])}
+            live_identity = {
+                "scope_id": scope_id,
+                "source_digest": source_digest,
+                "model_id": model_digest,
+                "policy_graph_id": stage_lifecycle_mod.digest({
+                    "actor_config": actor_contract,
+                    "measurement_inputs": stable_measurement_inputs,
+                    "controller_source_digest": source_digest,
+                    "graph_version": str(declared.get("graph_version") or "")}),
+            }
+            mismatches = [key for key, value in live_identity.items()
+                          if identity.get(key) != value]
+            if mismatches:
+                expected = {"campaign_id": identity.get("campaign_id"),
+                    "anchor_commit": current_anchor_commit[0],
+                    "deployment_id": stage_lifecycle_mod.digest({
+                        "schema": "epyc.autokernel.stage_deployment.v1",
+                        "contract": contract, "initial_frontier": frontier}), **live_identity}
+                if declared.get("_deployment_pin") is not None:
+                    expected.update(anchor_commit=identity["anchor_commit"],
+                                    deployment_id=identity["deployment_id"])
+                refused = stage_lifecycle_mod.IdentityMismatch(
+                    "stage lifecycle identity does not match this launch; first-launch pins: "
+                    + json.dumps(expected, sort_keys=True))
+                refused.expected_identity = expected
+                raise refused
+            stage_db = args.store / "stage-lifecycle.sqlite3"
+            carry = declared.get("carry_forward")
+            if carry is not None and not stage_lifecycle_mod.contains_graph(
+                    stage_db, str(declared.get("graph_version") or "")):
+                if not isinstance(carry, dict):
+                    raise ValueError("carry_forward must be a proof object")
+                old = stage_lifecycle_mod.StageLifecycle(
+                    stage_db, identity=carry.get("from_identity", {}),
+                    graph_version=str(carry.get("from_graph_version") or ""))
+                try:
+                    old.register_controller_source(_stage_source_blobs(),
+                                                   expected_digest=identity["source_digest"])
+                    if declared.get("resume_ack") is not None:
+                        old.acknowledge_resume(declared["resume_ack"])
+                    verifier_receipt = carry.get("verifier_receipt", {})
+                    evidence_file = carry.get("verifier_evidence_file")
+                    if not evidence_file:
+                        raise ValueError("graph carry requires verifier_evidence_file")
+                    evidence_sha = old.store_payload(Path(evidence_file).read_bytes())
+                    if evidence_sha != verifier_receipt.get("evidence_sha256"):
+                        raise ValueError("graph carry verifier evidence digest does not match file")
+                    scope = resume_mod.carry_scope(
+                        args.store, resume_carry, anchor_commit=identity["anchor_commit"],
+                        epoch=epoch, measurement_epoch=measurement_epoch,
+                        target=resume_target, claim_rows=[])
+                    resume_mod.carry_stage_graph(
+                        old, scope, new_graph_version=str(declared.get("graph_version") or ""),
+                        new_identity=identity, output_proofs=carry.get("output_proofs", {}),
+                        verifier_receipt=verifier_receipt)
+                finally:
+                    old.close()
+            stage_lifecycle = stage_lifecycle_mod.StageLifecycle(
+                stage_db, identity=identity,
+                graph_version=str(declared.get("graph_version") or ""))
+            try:
+                stage_lifecycle.register_controller_source(_stage_source_blobs())
+                # Existing native loader already checks argv/documents, source
+                # lineage and exact anchor provenance; require its current arm too.
+                if resumed is not None:
+                    serial_run.verify_exact_anchor(anchor_build[0], args.worktree,
+                        current_anchor_commit[0], experimental=experimental)
+                stage_lifecycle.bind_deployment(contract=contract, frontier=frontier,
+                                                native_continuation=resumed)
+                if declared.get("resume_ack") is not None and carry is None:
+                    stage_lifecycle.acknowledge_resume(declared["resume_ack"])
+            except BaseException:
+                stage_lifecycle.close()
+                raise
+            stage_lifecycle_ref[0] = stage_lifecycle
+        return stage_lifecycle
+
     def run_pooled() -> pool.PoolResult:
-        """Drive the loop across N detached lanes. THE run path -- the sequential
-        `loop.run` wiring was deleted 2026-08-31, and the `loop.run` seam itself on
-        2026-09-01 (R21-7): `iterate` under `pipeline.run_pool` is the only loop.
-
-        WHAT IS PER-LANE
-          * the worktree and the candidate build directory (`pipeline.Worker`);
-          * the planner and the critic, because each holds a workspace path;
-          * the saved patch filename, which carries the lane;
-          * the phase clock -- `pool.PhaseClock`, whose totals are LANE-seconds and
-            can legitimately sum to more than the wall clock.
-
-        WHAT STAYS GLOBAL
-          * the GPU claim: one `flock` for the process. A second `hold()` on a second
-            descriptor in this same process would refuse itself.
-          * the anchor build, which is only ever read;
-          * `build_context`, `args.store` and the status file. `record` and the status
-            publish both happen under the pipeline's outcomes lock, so they are
-            serialized -- at the cost of a slow status write briefly blocking every
-            lane's recording.
-          * `epoch`: pinned to the champion the run STARTED from, which is what makes
-            the archive rows comparable across the run.
-        """
+        """Drive the production pipeline; lanes own actors, the pool serializes tails."""
+        stage_lifecycle = stage_lifecycle_ref[0]
+        resume_target = resume_mod.target_identity(measurement_surface=args.surface,
+                                                   model=args.model)
         candidate_integrity = {}
         integrity_evidence = {}
         # What a checkpoint is bound to, and matched against on the next launch.
-        resume_target = resume_mod.target_identity(measurement_surface=args.surface,
-                                                   model=args.model)
         resume_queue = [None]
 
         def settle_resume(outcome) -> None:
@@ -6565,15 +6875,19 @@ def _main(argv: list[str] | None = None) -> int:
                 bench_recipe={"pairs": args.serving_pairs if direct_launch else args.pairs,
                               "pp": pp, "tg": tg, "ubatch": ubatch},
                 model=str(args.model), surface=args.surface)
-            registry = dispatch_guard.Registry(args.store)
-            try:
-                # A resumed BUILD re-dispatches a claimed checkpoint's exact bytes;
-                # its claim, not the one-retry bound, governs (dispatch_guard.reserve).
-                reservation = registry.reserve(identity, resumed=resume_point is not None)
-                return dispatch_guard.Reservation(
-                    reservation.identity, reservation.dispatch_count, diff_sha256)
-            finally:
-                registry.close()
+            lifecycle = stage_lifecycle_ref[0]
+            def dispatch():
+                registry = dispatch_guard.Registry(args.store)
+                try:
+                    # A native BUILD checkpoint uses its claim's retry contract.
+                    reservation = registry.reserve(identity, resumed=resume_point is not None)
+                    return dispatch_guard.Reservation(
+                        reservation.identity, reservation.dispatch_count, diff_sha256)
+                finally:
+                    registry.close()
+            return _stage_dispatch(lifecycle, key=identity,
+                inputs={"attempt_identity": identity, "diff_sha256": diff_sha256,
+                        "anchor": current_anchor_commit[0]}, operation=dispatch)
 
         # The provisioned lanes by name, so the recorder can retain a lane's diff.
         lanes_by_name: dict = {}
@@ -6638,6 +6952,8 @@ def _main(argv: list[str] | None = None) -> int:
             resume_mod.stamp_actor_diff(attempt, resume_queue[0])
             journal_receipts = []
             try:
+                # pipeline's classification receipt is prepared before this entire
+                # recorder and completed only after native archive/lineage writes.
                 archive.record(args.store, attempt, epoch=epoch,
                                recorded_at=loop._now(), campaign_id="ak-loop",
                                on_serving_export=feedback.exported,
@@ -6726,8 +7042,13 @@ def _main(argv: list[str] | None = None) -> int:
                                         actor_config=launch_actor_config,
                                         carry_family=resume_carry.family)
             resume_mod.stamp_actor_diff(attempt, resume_queue[0])
+            disposition_receipts = []
             archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
-                           campaign_id="ak-loop")
+                           campaign_id="ak-loop",
+                           **({"journal_receipt_out": disposition_receipts}
+                              if stage_lifecycle is not None else {}))
+            if stage_lifecycle is not None:
+                candidate.journal_receipt = disposition_receipts[0] if disposition_receipts else None
             settle_resume(candidate)
             if candidate.attempt_identity is not None:
                 registry = dispatch_guard.Registry(args.store)
@@ -7428,7 +7749,8 @@ def _main(argv: list[str] | None = None) -> int:
                                       build_root=args.worker_build_root,
                                       execute=True)
         lanes_by_name.update({lane.name: lane for lane in pooled_lanes})
-        return pool.drive(
+        def execute_pool():
+            return pool.drive(
             # A best-of panel's winner check runs ak-check even with the author sandbox
             # off; beside ANOTHER lane's tail (--workers > 1, `--lane-actor-models`)
             # that is a compile during a measurement unless the tail takes the fence.
@@ -7449,6 +7771,7 @@ def _main(argv: list[str] | None = None) -> int:
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,
+            **({"stage_lifecycle": stage_lifecycle} if stage_lifecycle is not None else {}),
             # Reduced positives remain KEEP_CANDIDATE until original full-target
             # confirmation; full-confirmed sub-floor positives may then enter the
             # same working accumulator as unscreened experimental source keeps.
@@ -7476,6 +7799,7 @@ def _main(argv: list[str] | None = None) -> int:
                     gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
                if direct_launch and not cpu_launch else {}),
             **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}))
+        return execute_pool()
 
     claim_started = None
     original_claims = []
@@ -7840,6 +8164,16 @@ def _main(argv: list[str] | None = None) -> int:
                         os.environ[CHILD_PHASE_DIR] = prior_phase_dir
                 ownership.callback(restore_child_phase_environment)
             claim_started = time.monotonic()
+            lifecycle = initialize_stage_lifecycle()
+            if lifecycle is not None:
+                def close_stage_lifecycle():
+                    lifecycle_stopped[0] = lifecycle_stopped[0] or lifecycle.stop_requested
+                    stage_lifecycle_ref[0] = None
+                    lifecycle.close()
+                ownership.callback(close_stage_lifecycle)
+                ownership.enter_context(lifecycle.bind_subject(
+                    f"bootstrap:{current_anchor_commit[0]}"))
+                should_stop()  # Persist a stop already observed during claim acquisition.
             if selected_target is not None:
                 # Same original invocation bound used by serial scheduling. This
                 # stops NEW runtime launches, never claims to kill an in-flight arm.
@@ -8058,7 +8392,7 @@ def _main(argv: list[str] | None = None) -> int:
                     if checked_tree != source_tree:
                         raise surface_validation.SurfaceValidationRefused(
                             "shared source tree changed before target build")
-                    build_ok, build_verdicts = gates.run_all(
+                    build_ok, build_verdicts = local_run_all(
                         lambda: local_compiles(
                             checked_source, validation_candidate_build,
                             cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
@@ -8071,7 +8405,7 @@ def _main(argv: list[str] | None = None) -> int:
                                if direct_launch.backend == "cpu" else {})))
                     if build_ok and direct_launch.backend == "cpu":
                         validation_arm = _cpu_arm(direct_launch, validation_candidate_build)
-                        gdn_ok, gdn_verdicts = gates.run_all(
+                        gdn_ok, gdn_verdicts = local_run_all(
                             lambda: local_op_correctness(
                                 validation_candidate_build, op="GATED_DELTA_NET",
                                 backend="CPU", resolved_recipe=validation_arm),
@@ -8525,7 +8859,7 @@ def main(argv: list[str] | None = None) -> int:
         return _main(actual)
     return lane_watchdog.supervise(
         "scripts.kernel_rnd.autokernel.loop.run", actual, key=stores[0],
-        file_options=(*serial_run._DOCUMENT_FLAGS, "--resume-run"),
+        file_options=(*serial_run._DOCUMENT_FLAGS, "--resume-run", "--stage-lifecycle-config"),
         max_restarts=0)
 
 
