@@ -1,0 +1,5 @@
+Transcribed from the guarded supervisor tool output (2026-11-01); no GPU workload.
+Command: flock pair76-77.lock; taskset -c 76,77; prep_supervisor.py 900 -- env PYTHONPATH=scripts/kernel_rnd python3 -m unittest autokernel.loop.test_gpu_counter autokernel.loop.test_r18e_observation autokernel.loop.test_gates.TheShortCircuitMustBeReal autokernel.loop.test_history_fields.TrialFields autokernel.loop.test_status.Write autokernel.loop.test_status.TheUtilizationLegMustBeWired
+Ran 56 tests in 0.461s
+OK
+{"schema":"bounded-r11-native-profile-supervisor/v1","elapsed_s":0.8082202740479261,"sampled_peak_tree_rss_bytes":106110976,"samples":9,"child_rc":0,"children_drained":true,"failure":null}

@@ -1,0 +1,2 @@
+768cdaec793ec18f4de3c944fc31c978d93f38106a1953ad874448a997ff2ae0  /opt/rocm-6.2.0/include/rocm_smi/rocm_smi.h
+26d634f892e301aabb109105729037b64d63bcbe91a5ad6ea9a0ef774428eeb7  /opt/rocm-6.2.0/lib/librocm_smi64.so.7.3.60200

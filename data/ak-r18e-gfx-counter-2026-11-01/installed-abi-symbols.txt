@@ -1,0 +1,6 @@
+00000000000eb160 T rsmi_dev_pci_id_get
+00000000000d2350 T rsmi_init
+00000000000d2700 T rsmi_num_monitor_devices
+00000000000d2430 T rsmi_shut_down
+00000000000d29d0 T rsmi_utilization_count_get
+00000000000d2aa0 T rsmi_version_get

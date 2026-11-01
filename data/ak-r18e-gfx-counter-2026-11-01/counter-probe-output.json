@@ -1,0 +1,1 @@
+{"counter": {"rc": 0, "timestamp_ns": 1639865082159862, "type": 0, "value": 2043658576}, "devices": [{"bdfid": "0x4300", "index": 0, "pci_rc": 0}], "enumerate_rc": 0, "init_rc": 0, "library": "/opt/rocm-6.2.0/lib/librocm_smi64.so.7", "shutdown_rc": 0}

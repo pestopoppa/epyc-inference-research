@@ -1,0 +1,126 @@
+ * @brief The utilization counter type
+ */
+typedef enum {
+  RSMI_UTILIZATION_COUNTER_FIRST = 0,
+  //!< GFX Activity
+  RSMI_COARSE_GRAIN_GFX_ACTIVITY  = RSMI_UTILIZATION_COUNTER_FIRST,
+  RSMI_COARSE_GRAIN_MEM_ACTIVITY,    //!< Memory Activity
+  RSMI_UTILIZATION_COUNTER_LAST = RSMI_COARSE_GRAIN_MEM_ACTIVITY
+} RSMI_UTILIZATION_COUNTER_TYPE;
+
+/**
+ * @brief Power types
+ */
+typedef enum {
+  RSMI_AVERAGE_POWER = 0,            //!< Average Power
+  RSMI_CURRENT_POWER,                //!< Current / Instant Power
+  RSMI_INVALID_POWER = 0xFFFFFFFF    //!< Invalid / Undetected Power
+} RSMI_POWER_TYPE;
+
+/**
+ * @brief The utilization counter data
+ */
+typedef struct  {
+  RSMI_UTILIZATION_COUNTER_TYPE type;   //!< Utilization counter type
+  uint64_t value;                       //!< Utilization counter value
+} rsmi_utilization_counter_t;
+} rsmi_activity_metric_counter_t;
+
+/**
+ * @brief This structure holds version information.
+ */
+typedef struct {
+    uint32_t major;     //!< Major version
+    uint32_t minor;     //!< Minor version
+    uint32_t patch;     //!< Patch, build  or stepping version
+    const char *build;  //!< Build string
+} rsmi_version_t;
+/**
+ *  @brief Get the unique PCI device identifier associated for a device
+ *
+ *  @details Give a device index @p dv_ind and a pointer to a uint64_t @p
+ *  bdfid, this function will write the Bus/Device/Function PCI identifier
+ *  (BDFID) associated with device @p dv_ind to the value pointed to by
+ *  @p bdfid.
+ *
+ *  The format of @p bdfid will be as follows:
+ *
+ *      BDFID = ((DOMAIN & 0xFFFFFFFF) << 32) | ((Partition & 0xF) << 28)
+ *              | ((BUS & 0xFF) << 8) | ((DEVICE & 0x1F) <<3 )
+ *              | (FUNCTION & 0x7)
+ *
+ *  | Name         | Field   | KFD property       KFD -> PCIe ID (uint64_t)
+ *  -------------- | ------- | ---------------- | ---------------------------- |
+ *  | Domain       | [63:32] | "domain"         | (DOMAIN & 0xFFFFFFFF) << 32  |
+ *  | Partition id | [31:28] | "location id"    | (LOCATION & 0xF0000000)      |
+ *  | Reserved     | [27:16] | "location id"    | N/A                          |
+ *  | Bus          | [15: 8] | "location id"    | (LOCATION & 0xFF00)          |
+ *  | Device       | [ 7: 3] | "location id"    | (LOCATION & 0xF8)            |
+ *  | Function     | [ 2: 0] | "location id"    | (LOCATION & 0x7)             |
+ *
+ *  @param[in] dv_ind a device index
+ *
+ *  @param[inout] bdfid a pointer to uint64_t to which the device bdfid value
+ *  will be written
+ *  If this parameter is nullptr, this function will return
+ *  ::RSMI_STATUS_INVALID_ARGS if the function is supported with the provided,
+ *  arguments and ::RSMI_STATUS_NOT_SUPPORTED if it is not supported with the
+ *  provided arguments.
+ *
+ *  @retval ::RSMI_STATUS_SUCCESS call was successful
+ *  @retval ::RSMI_STATUS_NOT_SUPPORTED installed software or hardware does not
+ *  support this function with the given arguments
+ *  @retval ::RSMI_STATUS_INVALID_ARGS the provided arguments are not valid
+ */
+rsmi_status_t rsmi_dev_pci_id_get(uint32_t dv_ind, uint64_t *bdfid);
+rsmi_dev_busy_percent_get(uint32_t dv_ind, uint32_t *busy_percent);
+
+/**
+ *  @brief Get coarse grain utilization counter of the specified device
+ *
+ *  @details Given a device index @p dv_ind, the array of the utilization counters,
+ *  the size of the array, this function returns the coarse grain utilization counters
+ *  and timestamp.
+ *  The counter is the accumulated percentages. Every milliseconds the firmware calculates
+ *  % busy count and then accumulates that value in the counter. This provides minimally
+ *  invasive coarse grain GPU usage information.
+ *
+ *  @param[in] dv_ind a device index
+ *
+ *  @param[inout] utilization_counters Multiple utilization counters can be retreived with a single
+ *  call. The caller must allocate enough space to the utilization_counters array. The caller also
+ *  needs to set valid RSMI_UTILIZATION_COUNTER_TYPE type for each element of the array.
+ *  ::RSMI_STATUS_NOT_SUPPORTED if it is not supported with the provided arguments.
+ *
+ *  If the function reutrns RSMI_STATUS_SUCCESS, the counter will be set in the value field of
+ *  the rsmi_utilization_counter_t.
+ *
+ *  @param[in] count The size of utilization_counters array.
+ *
+ *  @param[inout] timestamp The timestamp when the counter is retreived. Resolution: 1 ns.
+ *  @retval ::RSMI_STATUS_SUCCESS call was successful
+ *  @retval ::RSMI_STATUS_NOT_SUPPORTED installed software or hardware does not
+ *  support this function with the given arguments
+ *  @retval ::RSMI_STATUS_INVALID_ARGS the provided arguments are not valid
+ *
+ */
+rsmi_status_t
+rsmi_utilization_count_get(uint32_t dv_ind,
+                rsmi_utilization_counter_t utilization_counters[],
+                uint32_t count,
+                uint64_t *timestamp);
+
+ * @brief Get the build version information for the currently running build of
+ * RSMI.
+ *
+ * @details  Get the major, minor, patch and build string for RSMI build
+ * currently in use through @p version
+ *
+ * @param[inout] version A pointer to an ::rsmi_version_t structure that will
+ * be updated with the version information upon return.
+ *
+ * @retval ::RSMI_STATUS_SUCCESS is returned upon successful call
+ *
+ */
+rsmi_status_t
+rsmi_version_get(rsmi_version_t *version);
