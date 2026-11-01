@@ -2089,41 +2089,14 @@ server_mode:
       recipe_id: qwen38-flash-next-cpu-mtp
       module: epyc-inference-research/scripts/lib/qwen38_flash_next_recipe.py
       surface: cpu-decode
-      threads: 48        # NOT 96, on a 0-95 cpuset. This is the SERVED decode optimum for this
-                         # model (scripts/lib/qwen38_flash_next_recipe.py THREADS, "NOT 96: the
-                         # served decode optimum on this model").
-      cpu_shape: NUMA_FULL_T48
-      # ── C3 RESOLVED (operator ruling: "add the needed cpu shape") ─────────────────
-      # An earlier draft recorded -t 48 on a 0-95 cpuset as an UNRESOLVED CONFLICT with
-      # stack_numa._assert_instance_invariants, which raises at import when a non-GPU
-      # instance's `-t` does not equal its cpuset's physical core count. The existing
-      # NUMA_FULL shape is ("0-95", 96), so this role could not be wired at its measured
-      # optimum. The ruling is to describe the instance honestly rather than document an
-      # exception, so epyc-orchestrator gains a NEW SHAPE:
-      #     NUMA_FULL_T48 = ("0-95", 48)      class "full"
-      # ⚠ THIS ROW IS A POINTER, NOT THE DEFINITION. Shapes are Python constants in
-      # epyc-orchestrator/scripts/server/stack_numa.py and the file says so in terms:
-      # "Adding one is a change to the description of this machine and belongs HERE, not in
-      # the YAML" (:324-325). stack_topology.yaml may only NAME a shape; `-t` is never
-      # declared in YAML, it comes from the shape tuple. The orchestrator-side change is
-      # OUT OF SCOPE for this registry patch and is carried verbatim in the companion .md.
-      # ⚠ IT IS A DELIBERATE UNDER-SUBSCRIPTION, NOT AN OVERSUBSCRIPTION. The invariant's
-      # stated reason is SMT oversubscription (measured -13% per-stream, -8.5% aggregate at
-      # np=4); 48 threads on 96 physical cores is the opposite of that. The invariant's
-      # `threads != phys` is an equality standing in for an inequality, which is why it also
-      # rejects the honest case. The companion .md's diff narrows it for shapes that
-      # explicitly register as under-subscribed, and leaves `threads > phys` fatal for every
-      # shape including this one — the deleted NUMA_NODE0 (48 physical / 96 threads) stays
-      # rejected. It is a corrected proxy, not a bypass.
-      # ✓ THE REGION-LOCK FACT IS UNCHANGED: the cpuset is still 0-95, so this instance still
-      # derives regions {q0,q1,q2,q3} and still holds all four CPU region locks. The new
-      # shape changes the thread count and nothing else.
+      # DAR-LAT-3h signed result (2026-09-27): v10 served shape chose T96;
+      # this supersedes the older T48 C3 claim and does not adopt the THP shim.
+      # /mnt/raid0/llm/epyc-root/artifacts/operator/stack-change-dar-lat-3h-20260926/RESULT.md
+      threads: 96
+      cpu_shape: NUMA_FULL
       no_mmap: true
       flash_attn: on
       env:
-        GGML_NOHUGEPAGE_PROCESS: "1"   # CHAMP-2, ADOPTED 2026-09-08 (operator-ruled).
-                                       # UNIT = SESSION, set AT LAUNCH. cpu-decode ONLY —
-                                       # R23-58 measured a bounded null on the GPU surface.
         GGML_FA_SPLIT_KV: "0"          # BE-2: makes 1-row decode and n-row verify row-exact
       measured_at_context: 8192        # ⚠ CONTEXT = 8192 in the recipe. serving_shape above
                                        # declares 262144 — a 32x extrapolation of a shape that
