@@ -710,6 +710,38 @@ RESUMABLE_STATUSES = frozenset({"stopped_mid_formation", "planner_transient"})
 _OWNER_BOUND = frozenset({"anchor_commit", "epoch_sha256", "target"})
 
 
+def _encode_comparison(comparison):
+    from .same_code_tripwire import ObservedComparison
+    from .run import ServingComparison
+    if isinstance(comparison, ObservedComparison):
+        return {"kind": "observed", "original": _encode_comparison(comparison.original),
+                "evidence": comparison.evidence, "snapshot": comparison.to_dict()}
+    if isinstance(comparison, ServingComparison):
+        return {"kind": "serving", "row": comparison.row, "baseline_scope": comparison.baseline_scope}
+    if isinstance(comparison, bench.Comparison):
+        return {"kind": "bench", "value": comparison.to_dict()}
+    raise TypeError(f"no closed stage comparison codec for {type(comparison).__name__}")
+
+
+def _decode_comparison(row):
+    if row["kind"] == "observed":
+        from .same_code_tripwire import ObservedComparison
+        result = ObservedComparison(_decode_comparison(row["original"]), row["evidence"])
+        if result.to_dict() != row["snapshot"]:
+            raise IdentityMismatch("native tripwire comparison snapshot changed during reconstruction")
+        return result
+    if row["kind"] == "serving":
+        from .run import ServingComparison
+        return ServingComparison(row["row"], row["baseline_scope"])
+    if row["kind"] == "bench":
+        body = row["value"]
+        kwargs = {item.name: body[item.name] for item in fields(bench.Comparison) if item.name in body}
+        if "fresh_correctness" in kwargs:
+            kwargs["fresh_correctness"] = tuple(kwargs["fresh_correctness"])
+        return bench.Comparison(**kwargs)
+    raise IdentityMismatch("unknown durable comparison type")
+
+
 def _encode_outcome(outcome):
     """Closed JSON reconstruction for a committed keep awaiting archive disposition."""
     comparison = outcome.comparison
@@ -718,9 +750,7 @@ def _encode_outcome(outcome):
                    if item.name not in {"hypothesis", "comparison", "gate_verdicts"}},
         "hypothesis": (None if outcome.hypothesis is None else {
             **outcome.hypothesis.to_dict(), "declared_runtime_arm": outcome.hypothesis.declared_runtime_arm}),
-        "comparison": (None if comparison is None else
-            {"kind": "serving", "row": comparison.row, "baseline_scope": comparison.baseline_scope}
-            if hasattr(comparison, "row") else {"kind": "bench", "value": comparison.to_dict()}),
+        "comparison": None if comparison is None else _encode_comparison(comparison),
         "gate_verdicts": [{item.name: getattr(verdict, item.name) for item in fields(gates.Verdict)}
                           for verdict in outcome.gate_verdicts]}
 
@@ -730,17 +760,7 @@ def _decode_outcome(row):
         raise IdentityMismatch("unknown durable outcome schema")
     comparison = row["comparison"]
     if comparison is not None:
-        if comparison["kind"] == "serving":
-            from .run import ServingComparison
-            comparison = ServingComparison(comparison["row"], comparison["baseline_scope"])
-        elif comparison["kind"] == "bench":
-            body = comparison["value"]
-            kwargs = {item.name: body[item.name] for item in fields(bench.Comparison) if item.name in body}
-            if "fresh_correctness" in kwargs:
-                kwargs["fresh_correctness"] = tuple(kwargs["fresh_correctness"])
-            comparison = bench.Comparison(**kwargs)
-        else:
-            raise IdentityMismatch("unknown durable comparison type")
+        comparison = _decode_comparison(comparison)
     verdicts = [gates.Verdict(**{**value, "case_records": (None if value["case_records"] is None
                                           else tuple(value["case_records"]))})
                 for value in row["gate_verdicts"]]

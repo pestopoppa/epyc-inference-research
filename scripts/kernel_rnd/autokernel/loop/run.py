@@ -143,32 +143,13 @@ def _stage_verdict(lifecycle, stage, *, key, inputs, operation, artifact_root=No
 def _stage_measurement(lifecycle, *, key, inputs, operation):
     if lifecycle is None or lifecycle.subject is None:
         return operation()
-    def encode(value):
-        if isinstance(value, ServingComparison):
-            return {"kind": "serving", "row": value.row, "baseline_scope": value.baseline_scope}
-        if not isinstance(value, bench.Comparison):
-            raise TypeError("stage runner requires a typed bench or serving comparison")
-        return {"kind": "bench", "value": value.to_dict()}
-    def decode(row):
-        if row["kind"] == "serving":
-            return ServingComparison(row["row"], row["baseline_scope"])
-        if row["kind"] != "bench":
-            raise stage_lifecycle_mod.IdentityMismatch("unknown measurement receipt kind")
-        value = row["value"]
-        # Comparison.to_dict includes derived display fields. Keep its actual constructor fields.
-        fields = ("surface", "anchor_samples", "candidate_samples", "effect", "estimator", "pairs",
-                  "noise_floor_pct", "residency", "device_seconds", "anchor_drift_pct",
-                  "candidate_drift_pct", "calibrated", "model", "fresh_correctness")
-        kwargs = {field: value[field] for field in fields if field in value}
-        if "fresh_correctness" in kwargs:
-            kwargs["fresh_correctness"] = tuple(kwargs["fresh_correctness"])
-        return bench.Comparison(**kwargs)
     # Attribution is the exact pre-run instrument/candidate scope, persisted before
     # measurement. The archive write is part of the final classification stage.
     lifecycle.perform(stage="attribution", stage_key=f"{lifecycle.subject}:attribution:{key}",
                       inputs=inputs, operation=lambda: {"scope": inputs})
     return lifecycle.perform(stage="runner", stage_key=f"{lifecycle.subject}:runner:{key}",
-                             inputs=inputs, operation=operation, encode=encode, decode=decode)
+                             inputs=inputs, operation=operation,
+                             encode=loop._encode_comparison, decode=loop._decode_comparison)
 
 
 def _stage_dispatch(lifecycle, *, key, inputs, operation):

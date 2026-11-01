@@ -49,6 +49,7 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
     instead of calling production control flow.
     """
     from autokernel.loop import bench, dispatch_guard, gates, loop, pipeline, run
+    from autokernel.loop.same_code_tripwire import ObservedComparison
 
     trace = root / "effects.jsonl"
     def effect(name, **fields):
@@ -174,13 +175,16 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
         def measure(hypothesis, paths):
             def device():
                 effect("runner", worker=worker.name)
-                return bench.Comparison("tg128", [100.0], [110.0], .10,
+                native = bench.Comparison("tg128", [100.0], [110.0], .10,
                             "median_over_median", 5, 1.0, {"resident": 10, "invocations": 10},
                             fresh_correctness=({"passed": True, "case": "fixture"},))
+                return ObservedComparison(native, {"status": "fixture_unknown", "scope": "offline"})
             result = run._stage_measurement(ledger, key="fixture",
                         inputs={"model": "fixture", "candidate": "authored", "scope": "offline"},
                         operation=device)
-            assert isinstance(result, bench.Comparison)
+            assert isinstance(result, ObservedComparison)
+            assert isinstance(result.original, bench.Comparison)
+            assert result.to_dict()["same_code_tripwire"]["status"] == "fixture_unknown"
             assert result.fresh_correctness[0]["passed"] is True
             return result
         return measure
