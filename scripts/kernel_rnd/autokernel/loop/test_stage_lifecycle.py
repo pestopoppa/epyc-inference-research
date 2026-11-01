@@ -43,7 +43,7 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
     happens AFTER the real SQLite done transaction, never by returning a constant
     instead of calling production control flow.
     """
-    from autokernel.loop import bench, gates, loop, pipeline, run
+    from autokernel.loop import bench, dispatch_guard, gates, loop, pipeline, run
 
     trace = root / "effects.jsonl"
     def effect(name, **fields):
@@ -131,9 +131,11 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
         if (root / "expired-grant").exists():
             raise RuntimeError("current grant expired")
         effect("current_authority", worker=worker.name)
-        return ledger.perform(stage="authorization", stage_key=f"{ledger.subject}:dispatch",
-                              inputs={"model": "fixture", "anchor": base},
-                              operation=lambda: (effect("dispatch", worker=worker.name) or "dispatch-id"))
+        def dispatch():
+            effect("dispatch", worker=worker.name)
+            return dispatch_guard.Reservation("dispatch-id", 1, "fixture-patch")
+        return run._stage_dispatch(ledger, key="dispatch",
+                                   inputs={"model": "fixture", "anchor": base}, operation=dispatch)
 
     def gate_for(worker):
         def gate(hypothesis, paths):
@@ -286,6 +288,35 @@ class StageLifecycleTests(unittest.TestCase):
                                    operation=lambda: calls.append(1))
             self.assertEqual(calls, [])
 
+    def test_completed_call_is_idempotent_but_changed_input_or_predecessor_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with StageLifecycle(Path(tmp) / "ledger", identity=IDENTITY, graph_version="g1") as ledger:
+                def forbidden():
+                    self.fail("completed effect repeated")
+                result = ledger.perform(stage="planner", stage_key="p", inputs={"context": 1},
+                                        operation=lambda: {"typed": "hypothesis"})
+                self.assertEqual(ledger.perform(stage="planner", stage_key="p", inputs={"context": 1},
+                                                 operation=forbidden), result)
+                with self.assertRaises(IdentityMismatch):
+                    ledger.perform(stage="planner", stage_key="p", inputs={"context": 2}, operation=forbidden)
+                ledger.perform(stage="critic", stage_key="c", inputs={}, operation=lambda: "review")
+                with self.assertRaises(IdentityMismatch):
+                    ledger.perform(stage="planner", stage_key="p", inputs={"context": 1}, operation=forbidden)
+
+    def test_actual_pipeline_corrupt_authored_payload_refuses_before_even_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.child(root, "runner", expect=75)
+            before = (root / "effects.jsonl").read_text()
+            with sqlite3.connect(root / "stages.sqlite3") as conn:
+                output = json.loads(conn.execute("SELECT output_json FROM stage_receipts "
+                                                "WHERE stage_key LIKE '%:author:%'").fetchone()[0])
+                sha = output["value"]["payload_sha256"]
+                conn.execute("UPDATE stage_payloads SET payload=? WHERE payload_sha256=?", (b"tampered", sha))
+            proc = self.child(root, expect=1)
+            self.assertIn("IdentityMismatch", proc.stderr)
+            self.assertEqual((root / "effects.jsonl").read_text(), before)
+
     def test_corrupt_completed_receipt_or_missing_payload_refuses_before_any_effect(self):
         for mutation in ("output_json", "output_digest", "input_digest", "payload", "identity_json"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
@@ -344,26 +375,38 @@ class StageLifecycleTests(unittest.TestCase):
                 with self.assertRaises(IdentityMismatch):
                     ledger.acknowledge_resume(ack)
 
-    def _carry_evidence(self, ledger, target):
+    def _carry_evidence(self, ledger, target, new_graph="g2"):
         """Independent evidence producer for the byte-preserving interface contract."""
         rows = ledger._db.execute("SELECT stage_id,stage,stage_key,input_digest,output_json,output_digest "
-                                  "FROM stage_receipts WHERE graph_version='g1'").fetchall()
+                                  "FROM stage_receipts WHERE graph_version=?", (ledger.graph_version,)).fetchall()
         nodes = {}
-        for stage_id, stage, key, input_sha, output_json, output_sha in rows:
-            bound = json.loads(ledger.payload(input_sha))
-            old = json.loads(output_json)
-            target_id = digest({"identity": {**target, "graph_version": "g2"}, "stage": stage, "key": key})
-            new_bound = {**bound, "identity": {**target, "graph_version": "g2"}}
-            new_input = digest(new_bound)
-            new_output = digest({**old, "stage_id": target_id, "input_digest": new_input})
-            interface = digest({"stage": stage, "input_schema": "fixture-v1", "output_schema": "fixture-v1"})
-            nodes[stage_id] = {"stage": stage, "stage_key": key, "input_scope_sha256": digest(bound["inputs"]),
+        pending = list(rows)
+        while pending:
+            ready = []
+            for row in pending:
+                stage_id, stage, key, input_sha, output_json, output_sha = row
+                bound = json.loads(ledger.payload(input_sha))
+                old = json.loads(output_json)
+                if any(parent["stage_id"] not in nodes for parent in old["predecessors"]):
+                    continue
+                parents = [{"stage_id": nodes[parent["stage_id"]]["target_stage_id"],
+                            "output_digest": nodes[parent["stage_id"]]["target_output_sha256"]}
+                           for parent in old["predecessors"]]
+                target_id = digest({"identity": {**target, "graph_version": new_graph}, "stage": stage, "key": key})
+                new_bound = {**bound, "identity": {**target, "graph_version": new_graph}, "predecessors": parents}
+                new_input = digest(new_bound)
+                new_output = digest({**old, "stage_id": target_id, "input_digest": new_input, "predecessors": parents})
+                interface = bound["interface_sha256"]
+                nodes[stage_id] = {"stage": stage, "stage_key": key, "input_scope_sha256": digest(bound["inputs"]),
                  "source_input_sha256": input_sha, "source_output_sha256": output_sha,
                  "output_scope_sha256": digest(old["value"]), "source_interface_sha256": interface,
                  "target_interface_sha256": interface, "target_stage_id": target_id,
                  "target_input_sha256": new_input, "target_output_sha256": new_output}
-        evidence = {"schema": CARRY_SCHEMA, "source_identity": IDENTITY, "target_identity": target,
-                    "from": "g1", "to": "g2", "nodes": nodes}
+                ready.append(row)
+            self.assertTrue(ready, "native receipt graph is cyclic")
+            pending = [row for row in pending if row not in ready]
+        evidence = {"schema": CARRY_SCHEMA, "source_identity": ledger.identity, "target_identity": target,
+                    "from": ledger.graph_version, "to": new_graph, "nodes": nodes}
         sha = ledger.store_payload(_json_bytes(evidence))
         return nodes, {"verifier": "offline-interface-verifier-v1", "evidence_sha256": sha}
 
@@ -397,6 +440,27 @@ class StageLifecycleTests(unittest.TestCase):
                 ledger.perform(stage="planner", stage_key="trial", inputs={}, operation=lambda: "typed")
             with self.assertRaises(IdentityMismatch):
                 StageLifecycle(db, identity={**IDENTITY, "policy_graph_id": "new"}, graph_version="g2")
+
+    def test_multi_node_graph_can_upgrade_twice_without_copying_or_weakening_pins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "ledger"
+            with StageLifecycle(db, identity=IDENTITY, graph_version="g1") as ledger:
+                ledger.perform(stage="planner", stage_key="p", inputs={"context": 1}, operation=lambda: "proposal")
+                ledger.perform(stage="critic", stage_key="c", inputs={"proposal": "proposal"}, operation=lambda: "accepted")
+                target = {**IDENTITY, "policy_graph_id": "policy-v2"}
+                nodes, verifier = self._carry_evidence(ledger, target)
+                ledger.carry_forward(new_graph_version="g2", new_identity=target,
+                                     output_proofs=nodes, verifier_receipt=verifier)
+            with StageLifecycle(db, identity=target, graph_version="g2") as ledger:
+                final = {**IDENTITY, "policy_graph_id": "policy-v3"}
+                nodes, verifier = self._carry_evidence(ledger, final, "g3")
+                ledger.carry_forward(new_graph_version="g3", new_identity=final,
+                                     output_proofs=nodes, verifier_receipt=verifier)
+            with StageLifecycle(db, identity=final, graph_version="g3") as ledger:
+                ledger.perform(stage="planner", stage_key="p", inputs={"context": 1},
+                               operation=lambda: self.fail("carried planner repeated"))
+                self.assertEqual(ledger.perform(stage="critic", stage_key="c", inputs={"proposal": "proposal"},
+                                                operation=lambda: self.fail("carried critic repeated")), "accepted")
 
 
 if __name__ == "__main__":

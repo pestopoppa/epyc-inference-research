@@ -7,6 +7,7 @@ Authorization receipts describe historical dispatches; current resource gates st
 from __future__ import annotations
 
 import contextvars
+from contextlib import closing
 from dataclasses import dataclass
 from functools import wraps
 import hashlib
@@ -23,6 +24,16 @@ IDENTITY_FIELDS = ("campaign_id", "deployment_id", "anchor_commit", "scope_id",
                    "source_digest", "model_id", "policy_graph_id")
 RECEIPT_SCHEMA = "epyc.autokernel.stage_receipt.v2"
 CARRY_SCHEMA = "epyc.autokernel.stage_graph_carry.v2"
+NODE_OUTPUTS = {
+    "assignment": "pinned-anchor-string.v1",
+    "planner": "hypothesis-or-abstention-or-authored-paths-with-patch-cas.v1",
+    "critic": "closed-review.v1", "authorization": "dispatch-reservation.v1",
+    "build": "full-verdict-with-binary-artifact-digests.v1",
+    "correctness": "full-verdict-with-case-records.v1",
+    "attribution": "exact-candidate-and-instrument-scope.v1",
+    "runner": "bench-or-serving-comparison.v1",
+    "classification": "commit-head-or-native-journal-disposition.v1",
+}
 
 
 class LifecycleError(RuntimeError):
@@ -63,6 +74,27 @@ def _canonical(value: Any) -> bytes:
 
 def digest(value: Any) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
+
+
+def interface_digest(stage):
+    return digest({"schema": RECEIPT_SCHEMA, "stage": stage,
+                   "input": "pinned-json-input-and-predecessor-envelope.v2",
+                   "output": NODE_OUTPUTS[stage]})
+
+
+def contains_graph(path, graph_version):
+    """Read-only bootstrap discriminator; constructor still validates all evidence."""
+    path = Path(path)
+    if not path.exists():
+        return False
+    try:
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            return bool(conn.execute(
+                "SELECT 1 FROM stage_receipts WHERE graph_version=? UNION ALL "
+                "SELECT 1 FROM graph_carry WHERE new_graph=? LIMIT 1",
+                (graph_version, graph_version)).fetchone())
+    except sqlite3.DatabaseError as exc:
+        raise IdentityMismatch("existing stage ledger cannot identify its graph") from exc
 
 
 class StageLifecycle:
@@ -111,6 +143,9 @@ class StageLifecycle:
                   PRIMARY KEY(worker,ordinal));
             """)
             self._validate_startup()
+        except (ValueError, TypeError, KeyError, sqlite3.DatabaseError) as exc:
+            self._db.close()
+            raise IdentityMismatch("stage ledger metadata is malformed") from exc
         except BaseException:
             self._db.close()
             raise
@@ -139,34 +174,53 @@ class StageLifecycle:
             if graph == self.graph_version:
                 if old != current:
                     raise IdentityMismatch("pinned campaign identity changed")
+                if state == "done":
+                    bound = json.loads(self.payload(self._read_done(stage_id)[0]["input_digest"]))
+                    if bound["interface_sha256"] != interface_digest(stage):
+                        raise IdentityMismatch("same graph changed its node interface")
             else:
                 if any(old.get(k) != current[k] for k in stable):
                     raise IdentityMismatch("graph upgrade changes deployment/source/model/scope/anchor")
                 if state != "done":
                     raise UncertainStage("graph carry cannot cross unresolved intent")
-                # Require an evidence-validated carry edge into this exact identity.
-                edges = self._db.execute(
-                    "SELECT carry_id,proof_json FROM graph_carry WHERE old_graph=? AND new_graph=?",
-                    (graph, self.graph_version)).fetchall()
-                covered = False
-                for carry_id, proof_json in edges:
-                    proof = json.loads(proof_json)
-                    if digest(proof) != carry_id:
-                        raise IdentityMismatch("corrupt graph carry receipt")
-                    if proof.get("target_identity") != self.identity:
-                        continue
-                    self._validate_carry_evidence(proof)
-                    target = self._stage_id(stage, key)
-                    node = proof["nodes"].get(stage_id)
-                    if node and node["target_stage_id"] == target:
-                        target_row = self._db.execute(
-                            "SELECT output_digest FROM stage_receipts WHERE stage_id=? AND state='done'",
-                            (target,)).fetchone()
-                        covered = target_row == (node["target_output_sha256"],)
-                if not covered:
+                if not self._carried_to_current(stage_id, graph, set()):
                     raise IdentityMismatch("graph upgrade requires a verified carry for each receipt")
             if state == "done":
                 self._read_done(stage_id)
+
+    def _carried_to_current(self, source_id, graph, visited):
+        if (source_id, graph) in visited:
+            return False
+        visited = {*visited, (source_id, graph)}
+        for carry_id, proof_json in self._db.execute(
+                "SELECT carry_id,proof_json FROM graph_carry WHERE old_graph=?", (graph,)).fetchall():
+            proof = json.loads(proof_json)
+            if digest(proof) != carry_id:
+                raise IdentityMismatch("corrupt graph carry receipt")
+            self._validate_carry_evidence(proof)
+            node = proof["nodes"].get(source_id)
+            if node is None:
+                continue
+            source, source_sha = self._read_done(source_id)
+            target, target_sha = self._read_done(node["target_stage_id"])
+            source_bound = json.loads(self.payload(source["input_digest"]))
+            target_bound = json.loads(self.payload(target["input_digest"]))
+            if (source_sha != node["source_output_sha256"]
+                    or target_sha != node["target_output_sha256"]
+                    or source["input_digest"] != node["source_input_sha256"]
+                    or target["input_digest"] != node["target_input_sha256"]
+                    or source_bound["interface_sha256"] != node["source_interface_sha256"]
+                    or target_bound["interface_sha256"] != node["target_interface_sha256"]
+                    or source_bound["inputs"] != target_bound["inputs"]
+                    or source["value"] != target["value"]
+                    or source_bound["identity"] != {**proof["source_identity"], "graph_version": proof["from"]}
+                    or target_bound["identity"] != {**proof["target_identity"], "graph_version": proof["to"]}):
+                raise IdentityMismatch("carried node differs from its exact CAS evidence")
+            if proof["to"] == self.graph_version and proof["target_identity"] == self.identity:
+                return True
+            if self._carried_to_current(node["target_stage_id"], proof["to"], visited):
+                return True
+        return False
 
     def close(self):
         with self._db_lock:
@@ -184,7 +238,7 @@ class StageLifecycle:
 
     def _read_done(self, stage_id):
         row = self._db.execute(
-            "SELECT output_json,output_digest,input_digest FROM stage_receipts "
+            "SELECT output_json,output_digest,input_digest,stage,stage_key,identity_json FROM stage_receipts "
             "WHERE stage_id=? AND state='done'", (stage_id,)).fetchone()
         if row is None:
             raise IdentityMismatch("completed predecessor receipt is absent")
@@ -196,6 +250,9 @@ class StageLifecycle:
             bound = json.loads(self.payload(row[2]))
             if digest(bound) != row[2] or bound["predecessors"] != body["predecessors"]:
                 raise IdentityMismatch("receipt input CAS or predecessor scope changed")
+            if bound["stage"] != row[3] or bound["key"] != row[4] \
+                    or bound["identity"] != json.loads(row[5]):
+                raise IdentityMismatch("receipt input CAS differs from node identity")
             for sha in body["payloads"]:
                 self.payload(sha)
             for parent in body["predecessors"]:
@@ -217,9 +274,12 @@ class StageLifecycle:
             raise ValueError("known stage and non-empty stage_key required")
         stage_id = self._stage_id(stage, stage_key)
         parents = [self._predecessor.get()] if self._predecessor.get() else []
+        if parents and parents[0]["stage_id"] == stage_id:
+            previous, _ = self._read_done(stage_id)
+            parents = previous["predecessors"]
         bound = {"schema": RECEIPT_SCHEMA, "identity": self._identity(),
                  "stage": stage, "key": stage_key, "inputs": inputs,
-                 "predecessors": parents}
+                 "predecessors": parents, "interface_sha256": interface_digest(stage)}
         input_sha = digest(bound)
         identity_json = _canonical(self._identity()).decode()
         self._db.execute("BEGIN IMMEDIATE")
@@ -431,7 +491,10 @@ class StageLifecycle:
     def _validate_carry_evidence(self, proof):
         if proof.get("schema") != CARRY_SCHEMA:
             raise IdentityMismatch("unsupported graph carry schema")
-        evidence = json.loads(self.payload(proof["verifier"]["evidence_sha256"]))
+        try:
+            evidence = json.loads(self.payload(proof["verifier"]["evidence_sha256"]))
+        except (ValueError, KeyError, TypeError) as exc:
+            raise IdentityMismatch("graph compatibility evidence is malformed") from exc
         required = {k: proof[k] for k in ("schema", "source_identity", "target_identity", "from", "to", "nodes")}
         if evidence != required:
             raise IdentityMismatch("compatibility evidence does not bind exact graph/node interfaces and pins")
@@ -472,7 +535,7 @@ class StageLifecycle:
                 bound = json.loads(self.payload(input_sha))
                 node = dict(output_proofs[old_id])
                 interface = node.get("source_interface_sha256")
-                if not isinstance(interface, str) or len(interface) != 64 \
+                if interface != bound["interface_sha256"] or interface != interface_digest(stage) \
                         or node.get("target_interface_sha256") != interface:
                     raise IdentityMismatch("carry requires unchanged declared node interface")
                 expected = {"stage": stage, "stage_key": key, "input_scope_sha256": digest(bound["inputs"]),

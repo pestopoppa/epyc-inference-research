@@ -17,6 +17,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.13.15'
@@ -28,7 +29,7 @@ jobs:
           git rev-parse HEAD > evidence/git-head.txt
           git status --porcelain=v1 > evidence/git-status.txt
           python --version > evidence/python-version.txt
-          cp --parents pyproject.toml .github/workflows/ni-akrsm1-contracts-20261101.yml scripts/kernel_rnd/autokernel/loop/{stage_lifecycle.py,loop.py,pipeline.py,pool.py,resume.py,run.py,test_stage_lifecycle.py,test_loop.py,test_pipeline.py,test_resume.py,test_resume_carry.py,test_resume_critic2.py,test_resume_infra.py,test_runtime_identity.py,test_no_undefined_runtime_names.py,test_existing_cpu_run.py,test_existing_gpu_serving_run.py,test_run_paired_serving_ab.py} evidence/source/
+          cp --parents pyproject.toml .github/workflows/ni-akrsm1-contracts-20261101.yml scripts/kernel_rnd/autokernel/loop/{stage_lifecycle.py,loop.py,pipeline.py,pool.py,resume.py,run.py,test_stage_lifecycle.py,test_loop.py,test_pipeline.py,test_resume.py,test_resume_carry.py,test_resume_critic2.py,test_resume_infra.py,test_runtime_identity.py,test_no_undefined_runtime_names.py,test_existing_cpu_run.py,test_existing_gpu_serving_run.py,test_run_paired_serving_ab.py,test_lane_watchdog.py} evidence/source/
       - name: Install declared project dependency closure
         shell: bash
         run: |
@@ -36,16 +37,76 @@ jobs:
           python -m pip install -e '.[test]' > evidence/install.stdout.txt 2>&1
           python -m pip freeze --all > evidence/dependency-freeze.txt
           python -m pip inspect > evidence/dependency-inspect.json
+      - name: Matched raw baseline and candidate GPU driver diagnostics
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          baseline_sha=94b1dd64c163d915eb1347b118f57e44e981bf78
+          baseline_dir="$RUNNER_TEMP/akrsm1-baseline"
+          mkdir -p "$baseline_dir" evidence/baseline-source
+          git archive "$baseline_sha" | tar -x -C "$baseline_dir"
+          archive_rc=$?
+          if [ "$archive_rc" -ne 0 ]; then exit "$archive_rc"; fi
+          printf '%s\n' "$baseline_sha" > evidence/baseline-head.txt
+          (cd "$baseline_dir" && cp --parents pyproject.toml scripts/kernel_rnd/autokernel/loop/{loop.py,pipeline.py,pool.py,resume.py,run.py,test_existing_gpu_serving_run.py,test_lane_watchdog.py} "$GITHUB_WORKSPACE/evidence/baseline-source/")
+          (cd "$baseline_dir" && PYTHONPATH="$baseline_dir/scripts/kernel_rnd:$baseline_dir" python -m pytest -q scripts/kernel_rnd/autokernel/loop/test_existing_gpu_serving_run.py --junitxml="$GITHUB_WORKSPACE/evidence/baseline-gpu-raw.junit.xml") > evidence/baseline-gpu-raw.stdout.txt 2>&1
+          printf '%s\n' "$?" > evidence/baseline-gpu-raw.exit.txt
+          python -m pytest -q scripts/kernel_rnd/autokernel/loop/test_existing_gpu_serving_run.py --junitxml=evidence/candidate-gpu-raw.junit.xml > evidence/candidate-gpu-raw.stdout.txt 2>&1
+          printf '%s\n' "$?" > evidence/candidate-gpu-raw.exit.txt
+          python - <<'PY' > evidence/gpu-raw-match.json
+          import json
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          def failures(path):
+              rows = {}
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  failure = case.find("failure")
+                  if failure is not None:
+                      message = failure.get("message", "")
+                      category = ("missing_continuation" if "FileNotFoundError" in message else
+                                  "watchdog_mock_seam" if "WatchdogRefused" in message else message.splitlines()[0])
+                      rows[case.get("classname") + "::" + case.get("name")] = category
+              return rows
+          baseline = failures("evidence/baseline-gpu-raw.junit.xml")
+          candidate = failures("evidence/candidate-gpu-raw.junit.xml")
+          matched = bool(baseline) and baseline == candidate
+          print(json.dumps({"baseline": baseline, "candidate": candidate, "matched": matched}, indent=2))
+          assert matched, "raw GPU diagnostics differ from exact baseline; no harness waiver"
+          PY
+          exit "$?"
       - name: Collect and execute offline contracts
         shell: bash
         run: |
           set -uo pipefail
-          files=(scripts/kernel_rnd/autokernel/loop/{test_stage_lifecycle.py,test_loop.py,test_pipeline.py,test_resume.py,test_resume_carry.py,test_resume_critic2.py,test_resume_infra.py,test_runtime_identity.py,test_no_undefined_runtime_names.py,test_existing_cpu_run.py,test_existing_gpu_serving_run.py,test_run_paired_serving_ab.py})
+          set +e
+          files=(scripts/kernel_rnd/autokernel/loop/{test_stage_lifecycle.py,test_loop.py,test_pipeline.py,test_resume.py,test_resume_carry.py,test_resume_critic2.py,test_resume_infra.py,test_runtime_identity.py,test_no_undefined_runtime_names.py,test_existing_cpu_run.py,test_existing_gpu_serving_run.py,test_run_paired_serving_ab.py,test_lane_watchdog.py})
           python -m pytest --collect-only -q "${files[@]}" > evidence/collection.stdout.txt 2>&1
           collection_rc=$?
           printf '%s\n' "$collection_rc" > evidence/collection.exit.txt
           if [ "$collection_rc" -ne 0 ]; then cat evidence/collection.stdout.txt; exit "$collection_rc"; fi
-          python -m pytest -q "${files[@]}" --junitxml=evidence/junit.xml > evidence/pytest.stdout.txt 2>&1
+          cat > evidence/gpu_inprocess_harness.py <<'PY'
+          """Only mock-intended GPU driver cases use the native _main seam.
+
+          This does not cover watchdog supervision. test_lane_watchdog.py runs
+          unchanged and without this patch; raw baseline/candidate originals remain
+          separate FAILURE artifacts, never xfailed or reclassified as passing.
+          """
+          import sys
+          from unittest.mock import patch
+          import pytest
+          class DriverSeam:
+              def pytest_runtest_setup(self, item):
+                  if item.module.__name__.endswith(".test_existing_gpu_serving_run"):
+                      item._akrsm1_patch = patch.object(item.module.run, "main", item.module.run._main)
+                      item._akrsm1_patch.start()
+              def pytest_runtest_teardown(self, item):
+                  guard = getattr(item, "_akrsm1_patch", None)
+                  if guard is not None:
+                      guard.stop()
+          raise SystemExit(pytest.main(sys.argv[1:], plugins=[DriverSeam()]))
+          PY
+          python evidence/gpu_inprocess_harness.py -q "${files[@]}" --junitxml=evidence/junit.xml > evidence/pytest.stdout.txt 2>&1
           test_rc=$?
           printf '%s\n' "$test_rc" > evidence/pytest.exit.txt
           cat evidence/pytest.stdout.txt

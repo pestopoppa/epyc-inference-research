@@ -1830,7 +1830,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 try:
                     verdict, halted = actor_call(
                         critic.review_hypothesis, hypothesis, working, stage="critic",
-                        stage_key=f"{stage_trial_id}:critic1:{hypothesis.mechanism_id}",
+                        stage_key=f"{stage_trial_id}:critic1:{hypothesis_index}:{hypothesis.mechanism_id}",
                         inputs={"hypothesis": hypothesis_stage_input(hypothesis), "pass": 1,
                                 "context": working},
                         encode=encode_actor_result, decode=decode_actor_result)
@@ -1982,7 +1982,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 
                         paths, halted = actor_call(
                             author, hypothesis, working, stage="planner",
-                            stage_key=(f"{stage_trial_id}:author:{hypothesis.mechanism_id}:"
+                            stage_key=(f"{stage_trial_id}:author:{hypothesis_index}:{hypothesis.mechanism_id}:"
                                        f"{patch_index}"),
                             inputs={"hypothesis": hypothesis_stage_input(hypothesis),
                                     "prior_rejections": list(patch_reasons),
@@ -2053,7 +2053,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 on_step("critic pass 2: reviewing the diff")
                 patch_verdict, halted = actor_call(
                     critic.review_patch, hypothesis, paths, working, stage="critic",
-                    stage_key=(f"{stage_trial_id}:critic2:{hypothesis.mechanism_id}:"
+                    stage_key=(f"{stage_trial_id}:critic2:{hypothesis_index}:{hypothesis.mechanism_id}:"
                                f"{patch_index}"),
                     inputs={"hypothesis": hypothesis_stage_input(hypothesis),
                             "paths": list(paths),

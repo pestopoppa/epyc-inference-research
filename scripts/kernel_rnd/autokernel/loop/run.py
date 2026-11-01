@@ -114,7 +114,7 @@ def _stage_binary_snapshot(root):
         return {}
     return {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in sorted(root.rglob("*")) if path.is_file()
-            and (path.name in {"test-backend-ops", "llama-bench"}
+            and (path.name in {"test-backend-ops", "llama-bench", "llama-server"}
                  or path.name.startswith("libggml"))}
 
 
@@ -166,6 +166,18 @@ def _stage_measurement(lifecycle, *, key, inputs, operation):
                       inputs=inputs, operation=lambda: {"scope": inputs})
     return lifecycle.perform(stage="runner", stage_key=f"{lifecycle.subject}:runner:{key}",
                              inputs=inputs, operation=operation, encode=encode, decode=decode)
+
+
+def _stage_dispatch(lifecycle, *, key, inputs, operation):
+    """Persist historical dispatch identity; the caller retains current claim gates."""
+    if lifecycle is None or lifecycle.subject is None:
+        return operation()
+    return lifecycle.perform(
+        stage="authorization", stage_key=f"{lifecycle.subject}:authorization:{key}",
+        inputs=inputs, operation=operation,
+        encode=lambda value: {"identity": value.identity, "dispatch_count": value.dispatch_count,
+                              "candidate_diff_sha256": value.candidate_diff_sha256},
+        decode=lambda row: dispatch_guard.Reservation(**row))
 
 
 @dataclass(frozen=True)
@@ -6545,14 +6557,18 @@ def _main(argv: list[str] | None = None) -> int:
                 "measurement_epoch": measurement_epoch})
             deployment_id = stage_lifecycle_mod.digest({
                 "anchor_build": str(anchor_build[0]), "recipe": recipe.to_dict(),
+                "anchor_artifacts": _stage_binary_snapshot(anchor_build[0]),
                 "serving": (direct_launch._normalized_execution_dict()
                             if direct_launch is not None else None)})
             live_identity = {
                 "deployment_id": deployment_id,
                 "anchor_commit": current_anchor_commit[0],
                 "scope_id": scope_id,
-                "source_digest": _git(args.worktree, "rev-parse", "HEAD"),
-                "model_id": str(args.model),
+                "source_digest": stage_lifecycle_mod.digest({
+                    "head": _git(args.worktree, "rev-parse", "HEAD"),
+                    "tree": integrity.candidate_tree(args.worktree)}),
+                "model_id": (direct_launch.model.sha256 if direct_launch is not None
+                             else str(args.model)),
                 "policy_graph_id": stage_lifecycle_mod.digest({
                     "actor_config": launch_actor_config,
                     "measurement_epoch": measurement_epoch,
@@ -6566,7 +6582,8 @@ def _main(argv: list[str] | None = None) -> int:
                                  + ", ".join(mismatches))
             stage_db = args.store / "stage-lifecycle.sqlite3"
             carry = declared.get("carry_forward")
-            if carry is not None:
+            if carry is not None and not stage_lifecycle_mod.contains_graph(
+                    stage_db, str(declared.get("graph_version") or "")):
                 if not isinstance(carry, dict):
                     raise ValueError("carry_forward must be a proof object")
                 old = stage_lifecycle_mod.StageLifecycle(
@@ -6665,33 +6682,18 @@ def _main(argv: list[str] | None = None) -> int:
                               "pp": pp, "tg": tg, "ubatch": ubatch},
                 model=str(args.model), surface=args.surface)
             lifecycle = stage_lifecycle_ref[0]
-            lifecycle_receipt = None
-            if lifecycle is not None and lifecycle.subject is not None:
-                lifecycle_receipt = lifecycle.prepare(
-                    stage="authorization",
-                    stage_key=f"{lifecycle.subject}:authorization:{identity}",
-                    inputs={"attempt_identity": identity,
-                            "diff_sha256": diff_sha256,
-                            "anchor": current_anchor_commit[0]})
-                if lifecycle_receipt.state == "done":
-                    # Historical dispatch identity is reusable; current resource
-                    # claims and all gate checks are still acquired by this launch.
-                    return dispatch_guard.Reservation(**lifecycle_receipt.output)
-            registry = dispatch_guard.Registry(args.store)
-            try:
-                # A resumed BUILD re-dispatches a claimed checkpoint's exact bytes;
-                # its claim, not the one-retry bound, governs (dispatch_guard.reserve).
-                reservation = registry.reserve(identity, resumed=resume_point is not None)
-                result = dispatch_guard.Reservation(
-                    reservation.identity, reservation.dispatch_count, diff_sha256)
-                if lifecycle_receipt is not None and lifecycle_receipt.state == "prepared":
-                    lifecycle.complete(lifecycle_receipt, {
-                        "identity": result.identity,
-                        "dispatch_count": result.dispatch_count,
-                        "candidate_diff_sha256": result.candidate_diff_sha256})
-                return result
-            finally:
-                registry.close()
+            def dispatch():
+                registry = dispatch_guard.Registry(args.store)
+                try:
+                    # A native BUILD checkpoint uses its claim's retry contract.
+                    reservation = registry.reserve(identity, resumed=resume_point is not None)
+                    return dispatch_guard.Reservation(
+                        reservation.identity, reservation.dispatch_count, diff_sha256)
+                finally:
+                    registry.close()
+            return _stage_dispatch(lifecycle, key=identity,
+                inputs={"attempt_identity": identity, "diff_sha256": diff_sha256,
+                        "anchor": current_anchor_commit[0]}, operation=dispatch)
 
         # The provisioned lanes by name, so the recorder can retain a lane's diff.
         lanes_by_name: dict = {}
@@ -8599,7 +8601,7 @@ def main(argv: list[str] | None = None) -> int:
         return _main(actual)
     return lane_watchdog.supervise(
         "scripts.kernel_rnd.autokernel.loop.run", actual, key=stores[0],
-        file_options=(*serial_run._DOCUMENT_FLAGS, "--resume-run"),
+        file_options=(*serial_run._DOCUMENT_FLAGS, "--resume-run", "--stage-lifecycle-config"),
         max_restarts=0)
 
 
