@@ -13,7 +13,9 @@ fixture/source/mutation/instruction pins, candidate raw and normalized SHA-256, 
 SHA-256, formatter identity/configuration, UTC timestamp, verdict, and cause when undecided. Missing
 values stay null when they were not observed. It formats the candidate and hidden expected source
 with Ruff 0.16.3 in isolated mode with line length 100, checks the pinned executable SHA-256, and
-compares formatted text exactly. Ambient Ruff config is ignored. Formatter absence, mismatch,
+compares formatted text exactly. Decided records bind `decided_proposition` to the candidate and
+expected normalized hashes and the formatter identity; out-of-coverage records leave the
+proposition null. Ambient Ruff config is ignored. Formatter absence, mismatch,
 failure, or timeout is `out-of-coverage` with its registered cause. No candidate source is imported
 or executed; there is no model judge or network path.
 
@@ -21,8 +23,9 @@ These fixtures measure mechanical edit application only. They do not measure sof
 general coding ability, quality, or a representative task distribution. The source's published
 fixture-mix caveat remains: only about 6/106 tasks fall in its named “representative” categories.
 No external dataset or costed task reproduction is included.
-The bounded native control receipts, including source/candidate/reference hashes and run-resource
-envelope, are retained in `fixtures/native_control_proof.json`.
+The bounded native control receipts, including source/candidate/reference hashes, are retained in
+`fixtures/native_control_proof.json`; refresh them with `python3 -m
+scripts.benchmark.inverse_mutation_v1.control_proof` inside the approved bounded run.
 
 Run the bounded native controls with:
 

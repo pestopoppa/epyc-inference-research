@@ -33,9 +33,13 @@ def test_correct_inverse_and_format_only_variants_pass(fixture: fixtures.Fixture
 
 @pytest.mark.parametrize("fixture", fixtures.generate_fixtures(), ids=lambda f: f.mutation)
 def test_mutant_and_wrong_inverse_fail(fixture: fixtures.Fixture) -> None:
-    assert scorer.score(fixture.fixture_id, fixture.mutated_source)["verdict"] == VERDICT_FAIL
+    mutated = scorer.score(fixture.fixture_id, fixture.mutated_source)
+    assert mutated["verdict"] == VERDICT_FAIL
+    assert mutated["decided_proposition"]
     wrong = fixture.expected_source.replace("b + c", "b - c", 1)
-    assert scorer.score(fixture.fixture_id, wrong)["verdict"] == VERDICT_FAIL
+    wrong_result = scorer.score(fixture.fixture_id, wrong)
+    assert wrong_result["verdict"] == VERDICT_FAIL
+    assert wrong_result["decided_proposition"]
 
 
 def test_actor_payload_does_not_expose_reference_or_provenance() -> None:
@@ -56,6 +60,9 @@ def test_score_record_captures_decision_pins_and_hashes() -> None:
     assert result["candidate_raw_sha256"]
     assert result["candidate_normalized_sha256"]
     assert result["expected_normalized_sha256"]
+    assert result["decided_proposition"].startswith(
+        "candidate normalized SHA-256 equals the pinned inverse normalized SHA-256"
+    )
     assert result["formatter"] == {
         "version": scorer.RUFF_VERSION,
         "configuration": scorer.FORMAT_CONFIG,
@@ -82,6 +89,7 @@ def test_formatter_unavailable_is_not_a_pass(monkeypatch: pytest.MonkeyPatch) ->
     assert result["candidate_raw_sha256"]
     assert result["candidate_normalized_sha256"] is None
     assert result["expected_normalized_sha256"] is None
+    assert result["decided_proposition"] is None
     assert result["formatter"]["executable_sha256"] is None
 
 

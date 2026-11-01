@@ -128,6 +128,7 @@ def score(fixture_id: str, candidate: str | None) -> dict:
         "candidate_raw_sha256": candidate_raw_sha256,
         "candidate_normalized_sha256": None,
         "expected_normalized_sha256": None,
+        "decided_proposition": None,
         "formatter": {
             "version": None,
             "configuration": FORMAT_CONFIG,
@@ -163,4 +164,9 @@ def score(fixture_id: str, candidate: str | None) -> dict:
     base["candidate_normalized_sha256"] = _sha256_text(actual)
     base["expected_normalized_sha256"] = _sha256_text(expected)
     verdict = VERDICT_PASS if actual == expected else VERDICT_FAIL
+    base["decided_proposition"] = (
+        "candidate normalized SHA-256 equals the pinned inverse normalized SHA-256 "
+        f"under Ruff {formatter['version']} ({formatter['configuration']}): "
+        f"{base['candidate_normalized_sha256']} == {base['expected_normalized_sha256']}"
+    )
     return {**base, **verdict_of(fixture_id, verdict)}
