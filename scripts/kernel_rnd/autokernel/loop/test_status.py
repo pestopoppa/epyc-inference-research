@@ -14,7 +14,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from autokernel.loop import status
+from autokernel.loop import keep_screen, status
 
 
 def _outcomes():
@@ -28,6 +28,35 @@ def _outcomes():
 
 
 class Write(unittest.TestCase):
+
+    def test_keep_screen_projection_is_carried_without_regrading(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "store"
+            signature = "1" * 64
+            projection = keep_screen.project(
+                root, keeps=["real-keep"],
+                resolved_targets=[{"target_ids": ["w1"],
+                    "workload_signature": signature, "status": "ready"}],
+                campaign_id="campaign-1", manifest_digest="2" * 64,
+                manifest_path="/campaign/resolved.json")
+            status.write(root, state="running", epoch="e" * 64,
+                campaign_id="ak-loop", anchor_commit="a" * 40,
+                surface="tg128", pairs=5, noise_floor_pct=1.0,
+                accumulator={"keeps": ["real-keep"]}, keep_screen=projection)
+            body = status.read(root)
+        self.assertEqual(body["keep_screen"], projection)
+        self.assertEqual(body["keep_screen"]["keeps"][0]["keep_id"], "real-keep")
+        self.assertEqual(body["keep_screen"]["keeps"][0]["rows"][0]["classification"],
+                         "UNKNOWN")
+
+    def test_legacy_status_write_does_not_add_new_field_when_unsupplied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "store"
+            status.write(root, state="starting", epoch="e" * 64,
+                campaign_id="ak-loop", anchor_commit="a" * 40,
+                surface="tg128", pairs=5, noise_floor_pct=1.0)
+            body = status.read(root)
+        self.assertNotIn("keep_screen", body)
 
     def test_loop_status_binds_process_generation_and_store(self):
         with tempfile.TemporaryDirectory() as tmp:

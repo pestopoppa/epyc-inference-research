@@ -387,6 +387,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           pending_hypotheses: Sequence[Mapping[str, Any]] | None = None,
           anchor_guard: Mapping[str, Any] | None = None,
           accumulator: Mapping[str, Any] | None = None,
+          keep_screen: Mapping[str, Any] | None = None,
           stale_after_s: int = DEFAULT_STALE_AFTER_S,
           actor_health: dict | None = None,
           scratch: Mapping[str, Any] | None = None,
@@ -490,6 +491,11 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
              "reason": (row.get("reason") or "")[:240]}
             for row in list(outcomes)[-10:][::-1]],
     }
+
+    if keep_screen is not None:
+        # AKX per-keep structural screen projection. Its producer envelope is
+        # independent of the champion and accumulated bench fields above.
+        body["keep_screen"] = dict(keep_screen)
 
     if pending_hypotheses is not None:
         # Critic-ACCEPTED hypotheses still pending authoring (resume.pending_hypotheses):

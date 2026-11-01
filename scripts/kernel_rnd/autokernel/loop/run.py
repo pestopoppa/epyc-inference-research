@@ -2114,6 +2114,8 @@ def calibrate(args, run=subprocess.run) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Publish can be reached by startup/refusal paths before campaign resolution.
+    resolved_campaign = None
     original_argv = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -6088,6 +6090,21 @@ def main(argv: list[str] | None = None) -> int:
             if scope_gap_error[0] is None:
                 print(f"profile   scope-gap stagnation hook skipped ({type(exc).__name__}: {exc})")
             scope_gap_error[0] = error
+        from . import keep_screen as akx_keep_screen
+        current_accumulator = accumulator_state()
+        keep_screen = akx_keep_screen.project(
+            args.store,
+            keeps=(current_accumulator or {}).get("keeps", ()),
+            resolved_targets=(
+                [target.to_dict() for target in resolved_campaign.targets]
+                if resolved_campaign is not None else None),
+            campaign_id=(resolved_campaign.campaign_id
+                         if resolved_campaign is not None else None),
+            manifest_digest=(resolved_campaign.manifest_digest
+                             if resolved_campaign is not None else None),
+            manifest_path=(str(Path(args.resolved_campaign).resolve())
+                           if resolved_campaign is not None else None),
+            stale_after_s=HEARTBEAT_S * 6)
         status.write(
             args.store, state=state, epoch=epoch, campaign_id="ak-loop",
             anchor_commit=current_anchor_commit[0], surface=args.surface,
@@ -6103,7 +6120,8 @@ def main(argv: list[str] | None = None) -> int:
             **({"baseline_scope": "experimental_candidate_not_champion"} if experimental else {}),
             **({"runtime_preparation": runtime_status[0]} if runtime_status[0] is not None else {}),
             anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
-            accumulator=accumulator_state(),
+            accumulator=current_accumulator,
+            keep_screen=keep_screen,
             pending_hypotheses=pending_view[0],
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
             hotspots=[row.to_dict() for row in hotspot_rows],
