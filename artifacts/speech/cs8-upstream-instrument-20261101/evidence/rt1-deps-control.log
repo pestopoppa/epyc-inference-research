@@ -1,0 +1,2 @@
+openai 2.46.0 websockets 15.0.1 realtime_connect True
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 1.567655276041478, "sampled_peak_tree_rss_bytes": 108912640, "samples": 16, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 589599, "leader_birth": 162173237, "child_rc": 0, "children_drained": true, "failure": null}

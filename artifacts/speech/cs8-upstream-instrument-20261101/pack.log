@@ -1,0 +1,3 @@
+d768ed4b17ad757cb63cc5c92aaf6d80d99207d1b3a0b0e946f342f3fdb10838  README.md
+039194dc2691fa4f8264d3b1922bedf7529fe2c920877959cf8f4331f2eb6d4d  SHA256SUMS
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 0.006696049124002457, "sampled_peak_tree_rss_bytes": 17707008, "samples": 1, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 831721, "leader_birth": 162237610, "child_rc": 0, "children_drained": true, "failure": null}

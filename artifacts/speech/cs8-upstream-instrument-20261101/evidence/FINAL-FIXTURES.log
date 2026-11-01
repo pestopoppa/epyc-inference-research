@@ -1,0 +1,38 @@
+test_audio_after_claimed_silence_is_unknown (test_rt1_client.TestClient.test_audio_after_claimed_silence_is_unknown) ... ok
+test_cancel_measured_sink_and_unknown_sink (test_rt1_client.TestClient.test_cancel_measured_sink_and_unknown_sink) ... ok
+test_error_does_not_pass (test_rt1_client.TestClient.test_error_does_not_pass) ... ok
+test_journaled_normal_and_cutoff_no_redraw (test_rt1_client.TestClient.test_journaled_normal_and_cutoff_no_redraw) ... ok
+test_null_detection_acknowledged (test_rt1_client.TestClient.test_null_detection_acknowledged) ... ok
+test_null_detection_refusal (test_rt1_client.TestClient.test_null_detection_refusal) ... ok
+test_text_before_audio_and_order (test_rt1_client.TestClient.test_text_before_audio_and_order) ... ok
+test_bad_key (test_exposure_journal.JournalTests.test_bad_key) ... ok
+test_cutoff_and_tamper_fail_closed (test_exposure_journal.JournalTests.test_cutoff_and_tamper_fail_closed) ... ok
+test_normal_then_no_redraw (test_exposure_journal.JournalTests.test_normal_then_no_redraw) ... ok
+test_empty_refused (test_alsa_sink.ALSATest.test_empty_refused) ... ok
+test_real_alsa_null_pcm_drop (test_alsa_sink.ALSATest.test_real_alsa_null_pcm_drop) ... ok
+test_openai_sdk_real_websocket_contract (test_rt1_websocket.SDKWebsocketControl.test_openai_sdk_real_websocket_contract) ... Executing <Task pending name='Task-47' coro=<SDKWebsocketControl.test_openai_sdk_real_websocket_contract() running at /mnt/raid0/llm/tmp/codex3-cs8-stt8-20261101/test_rt1_websocket.py:84> wait_for=<_GatheringFuture pending cb=[Task.task_wakeup()] created at /usr/lib/python3.12/asyncio/tasks.py:712> cb=[_run_until_complete_cb() at /usr/lib/python3.12/asyncio/base_events.py:182] created at /usr/lib/python3.12/asyncio/runners.py:100> took 0.366 seconds
+Executing <Task pending name='Task-47' coro=<SDKWebsocketControl.test_openai_sdk_real_websocket_contract() running at /mnt/raid0/llm/tmp/codex3-cs8-stt8-20261101/test_rt1_websocket.py:87> wait_for=<Future pending cb=[BaseSelectorEventLoop._sock_write_done(7, handle=<Handle BaseS...events.py:317>)(), Task.task_wakeup()] created at /usr/lib/python3.12/asyncio/base_events.py:449> cb=[_run_until_complete_cb() at /usr/lib/python3.12/asyncio/base_events.py:182] created at /usr/lib/python3.12/asyncio/runners.py:100> took 0.265 seconds
+ok
+test_same_entry_real_websocket_and_null_pcm (test_rt1_websocket.WebsocketControl.test_same_entry_real_websocket_and_null_pcm) ... ok
+test_same_entry_websocket_cutoff_unknown_no_redraw (test_rt1_websocket.WebsocketControl.test_same_entry_websocket_cutoff_unknown_no_redraw) ... ok
+test_commands_pin_language_and_projector (test_stt8_prepare.TestSTT8.test_commands_pin_language_and_projector) ... ok
+test_framed_completion_empty_and_mutations (test_stt8_prepare.TestSTT8.test_framed_completion_empty_and_mutations) ... ok
+test_refuse_mutations (test_sidecar_reader.SidecarTests.test_refuse_mutations) ... ok
+test_text_and_empty (test_sidecar_reader.SidecarTests.test_text_and_empty) ... ok
+test_binding_required (test_stt8_producer.ProducerTests.test_binding_required) ... ok
+test_cutoff_and_missing_sidecar (test_stt8_producer.ProducerTests.test_cutoff_and_missing_sidecar) ... ok
+test_normal_empty_and_failure (test_stt8_producer.ProducerTests.test_normal_empty_and_failure) ... ok
+test_actual_job_local_stop_reaps_and_retains_partial (test_stt8_engine.FakeEngineTests.test_actual_job_local_stop_reaps_and_retains_partial) ... ok
+test_existing_sidecar_refused (test_stt8_engine.FakeEngineTests.test_existing_sidecar_refused) ... ok
+test_same_entry_normal_and_cutoff (test_stt8_engine.FakeEngineTests.test_same_entry_normal_and_cutoff) ... ok
+test_canonical_scoring_failure_and_unknown (test_stt8_compare.CompareTests.test_canonical_scoring_failure_and_unknown) ... ok
+test_frozen_validation_cannot_accept_a_subset (test_stt8_compare.CompareTests.test_frozen_validation_cannot_accept_a_subset) ... ok
+test_paired_direction_and_noninferiority (test_stt8_compare.CompareTests.test_paired_direction_and_noninferiority) ... ok
+test_refuse_mismatch_unknown_and_duplicate (test_stt8_compare.CompareTests.test_refuse_mismatch_unknown_and_duplicate) ... ok
+
+----------------------------------------------------------------------
+Ran 29 tests in 1.479s
+
+OK
+native trace writer: text/control IDs, known empty, unknown footer, exclusive create, truncation PASS
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 2.0222877939231694, "sampled_peak_tree_rss_bytes": 129847296, "samples": 21, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 824631, "leader_birth": 162235797, "child_rc": 0, "children_drained": true, "failure": null}

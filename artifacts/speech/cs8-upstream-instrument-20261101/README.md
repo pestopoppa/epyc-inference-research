@@ -1,0 +1,9 @@
+# CS-8 upstream audio instrument and JFK engineering control
+
+Review package for a prospective Research checkpoint. Source files are host-bound research prototypes, not a general-purpose release, canonical engine, qualified READY or production kernel. Native RT1 entry intentionally refuses until canonical qualification and playback/cascade enrollment. The C++ patch is restricted to an opt-in scratch llama.cpp CLI; production trees and kernel store remain frozen.
+
+Base upstream a91eab67d8389d979d29fdf6633b2edd0718eb4b; scratch sidecar commit cbdf2e88a8bbee8389849ac8800989f0109d348d. CPU/HIP prefixes and full model and binary SHA-256 pins are in evidence/INSTRUMENT-STATUS.md. Both prefix libraries passed linkage, but no MI210 execution or residency has been claimed. UI actual archive hash is pinned; requested tag fell back to latest at build time.
+
+One public noncohort JFK LFM3 CPU ASR engineering control ran under standing R11. Evidence records strict reread, pinned source/model/binary/audio, sampled CPU library maps, PID/birth/UID and cleanup; the run is not a WER/quality/latency result, a canonical qualifier, or READY. Audio hash disjointness from the retained LEX/FLEURS manifests is the referenced LEX proof. Raw local record lives at the retained path in evidence/INSTRUMENT-STATUS.md; this package does not manufacture a new measurement warrant. No cohort utterance was exposed.
+
+The sources include per-case write-once exposure/result records, no-redraw, exact framed trace, canonical scorer adapter, RT1 clock/audio/journal and local ALSA digital-sink preparation. The 29-test model-free suite plus the native trace-class control is evidence/FINAL-FIXTURES.log. Fake and null-sink controls are not native qualifier or acoustic-silence evidence. The prospective paired gate and same-sink cascade definition are in evidence/EXECUTION-DRAFT.md; genuine keeper-issued HARD qualification and actual target runs remain outstanding.
