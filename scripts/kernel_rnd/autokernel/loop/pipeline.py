@@ -664,7 +664,16 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
         if binding is not None:
             binding.__exit__(None, None, None)
 
-    threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)
+    def durable_lane(worker):
+        # A receipt/ordinal/final-recorder failure outside iterate is run-ending.
+        # A dead worker can never turn a durable campaign into an empty success.
+        try:
+            lane(worker)
+        except Exception as exc:  # noqa: BLE001 -- propagated after all tails drain
+            aborted.append(exc)
+
+    threads = [threading.Thread(target=(durable_lane if stage_lifecycle is not None else lane),
+                                args=(w,), name=w.name, daemon=True)
                for w in workers]
     with batch_scope:
         registry.sweep()

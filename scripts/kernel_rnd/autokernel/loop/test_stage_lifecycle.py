@@ -3,14 +3,18 @@ from __future__ import annotations
 
 from collections import Counter
 import concurrent.futures
+from contextlib import redirect_stdout
+import io
 import json
 import os
 from pathlib import Path
 import sqlite3
+import shutil
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -53,6 +57,10 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
 
     class FaultLedger(StageLifecycle):
         def complete(self, prepared, output):
+            pending_stage, = self._db.execute(
+                "SELECT stage FROM stage_receipts WHERE stage_id=?", (prepared.stage_id,)).fetchone()
+            if fault == "uncertain:runner" and pending_stage == "runner":
+                os._exit(75)
             sha = super().complete(prepared, output)
             stage, key = self._db.execute(
                 "SELECT stage,stage_key FROM stage_receipts WHERE stage_id=?", (prepared.stage_id,)).fetchone()
@@ -158,10 +166,8 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
                 effect("correctness", worker=worker.name)
                 return gates.Verdict("op_correctness", True,
                                      case_records=({"case": "fixture", "passed": True},))
-            checked = run._stage_verdict(ledger, "correctness", key="fixture",
-                        inputs={"binary": run._stage_binary_snapshot(worker.build_dir)},
-                        operation=oracle)
-            return built.passed and checked.passed, [built, checked]
+            passed, checked = run._stage_checks(ledger, (oracle,))
+            return built.passed and passed, [built, *checked]
         return gate
 
     def measure_for(worker):
@@ -197,6 +203,8 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
                                      "hypothesis": outcome.hypothesis.to_dict() if outcome.hypothesis else None,
                                      "comparison": outcome.comparison.to_dict() if outcome.comparison else None}) + "\n")
         outcome.journal_receipt = {"native_fixture_row": "row-1"}
+        if fault == "record-failure":
+            raise OSError("native fixture archive tail failed after its external append")
 
     try:
         outcomes = pipeline.run_pool(workers=lanes, iterations=workers,
@@ -211,6 +219,25 @@ def _pipeline_child(root: Path, fault: str, ack: bool, workers: int = 1):
 
 
 class StageLifecycleTests(unittest.TestCase):
+    def retain(self, root, label, *, stdout="", stderr="", result=None):
+        destination = os.environ.get("AKRSM1_EVIDENCE_DIR")
+        if not destination:
+            return
+        target = Path(destination) / root.name / f"{time.time_ns()}-{label}"
+        target.mkdir(parents=True, exist_ok=False)
+        (target / "stdout.txt").write_text(stdout)
+        (target / "stderr.txt").write_text(stderr)
+        (target / "result.json").write_text(json.dumps(result))
+        for relative in ("effects.jsonl", "archive.jsonl", "champion-head", "stages.sqlite3",
+                         "stages.sqlite3-wal", "stages.sqlite3-shm", "lifecycle-config.json",
+                         "store/stage-lifecycle.sqlite3", "store/stage-lifecycle.sqlite3-wal",
+                         "store/stage-lifecycle.sqlite3-shm", "result/loop-run.json",
+                         "result/loop-continuation.json"):
+            source = root / relative
+            if source.is_file():
+                (target / relative).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target / relative)
+
     def child(self, root, fault="", *, ack=False, workers=1, expect=0):
         env = dict(os.environ)
         # CI and ordinary pytest both expose the production autokernel package.
@@ -218,6 +245,8 @@ class StageLifecycleTests(unittest.TestCase):
         proc = subprocess.run([sys.executable, "-m", "autokernel.loop.test_stage_lifecycle",
                                "--pipeline-child", str(root), fault, str(int(ack)), str(workers)],
                               capture_output=True, text=True, env=env, timeout=45)
+        self.retain(root, "pipeline", stdout=proc.stdout, stderr=proc.stderr,
+                    result={"returncode": proc.returncode, "fault": fault, "ack": ack, "workers": workers})
         self.assertEqual(proc.returncode, expect, proc.stdout + proc.stderr)
         return json.loads(proc.stdout.splitlines()[-1]) if expect == 0 else proc
 
@@ -274,6 +303,29 @@ class StageLifecycleTests(unittest.TestCase):
             self.assertEqual(effects.count("runner"), 1)
             self.assertNotIn("commit", effects)
 
+    def test_actual_pipeline_uncertain_measurement_stops_without_repeating_any_expensive_effect(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.child(root, "uncertain:runner", expect=75)
+            proc = self.child(root, expect=1)
+            self.assertIn("UncertainStage", proc.stderr)
+            counts = Counter(json.loads(line)["effect"]
+                             for line in (root / "effects.jsonl").read_text().splitlines())
+            for effect in ("planner", "author", "critic", "critic2", "dispatch", "build", "correctness", "runner"):
+                self.assertEqual(counts[effect], 1)
+            self.assertEqual(counts["commit"], 0)
+            self.assertFalse((root / "archive.jsonl").exists())
+
+    def test_native_record_failure_is_not_empty_success_and_its_uncertain_append_is_not_repeated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            proc = self.child(root, "record-failure", expect=1)
+            self.assertIn("archive tail failed", proc.stderr)
+            before = (root / "effects.jsonl").read_text()
+            proc = self.child(root, expect=1)
+            self.assertIn("UncertainStage", proc.stderr)
+            self.assertEqual((root / "effects.jsonl").read_text(), before)
+
     def test_concurrent_workers_keep_distinct_subject_chains(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -304,6 +356,18 @@ class StageLifecycleTests(unittest.TestCase):
             return sha
         reached = []
         def native(argv):
+            def execute(arguments):
+                stdout = io.StringIO()
+                result = None
+                try:
+                    with redirect_stdout(stdout):
+                        result = run._main(arguments)
+                    return result
+                except BaseException as exc:
+                    result = {"error": type(exc).__name__, "message": str(exc)}
+                    raise
+                finally:
+                    self.retain(fixture.root, "native-driver", stdout=stdout.getvalue(), result=result)
             actual = [*argv, "--stage-lifecycle-config", str(config),
                       "--out", str(fixture.root / "result"),
                       "--allow-untested-actor-seats", "synthetic fixture actors",
@@ -311,20 +375,23 @@ class StageLifecycleTests(unittest.TestCase):
             # First-launch configuration refusal supplies concrete immutable pins;
             # it occurs before a profile, build, oracle or measurement is dispatched.
             with self.assertRaises(IdentityMismatch) as refused:
-                run._main(actual)
+                execute(actual)
             self.assertTrue(hasattr(refused.exception, "expected_identity"))
             declared["identity"] = refused.exception.expected_identity
             config.write_text(json.dumps(declared))
             with mock.patch.object(run.gates, "compiles", wraps=run.gates.compiles) as builds, \
                     mock.patch.object(run.bench, "compare", wraps=run.bench.compare) as comparisons, \
                     mock.patch.object(StageLifecycle, "complete", stop_after_disposition):
-                self.assertEqual(run._main(actual), 0)
+                self.assertEqual(execute(actual), 0)
                 completed_counts = builds.call_count, comparisons.call_count
             self.assertGreater(completed_counts[0], 0)
             self.assertGreater(completed_counts[1], 0)
             continuation = fixture.root / "result" / "loop-continuation.json"
             original_native = continuation.read_bytes()
             native_row = json.loads(original_native)
+            native_result = json.loads((fixture.root / "result" / "loop-run.json").read_text())
+            self.assertEqual([row["status"] for row in native_result["iterations"]], ["kept"],
+                             json.dumps(native_result["iterations"], indent=2))
             self.assertEqual(native_row["terminal"], "stopped")
             self.assertNotEqual(native_row["current_anchor"]["commit"], fixture.tip)
             db = fixture.store / "stage-lifecycle.sqlite3"
@@ -339,7 +406,7 @@ class StageLifecycleTests(unittest.TestCase):
                 # A real native keep without the native continuation cannot rebind
                 # deployment identity to whatever HEAD happens to name now.
                 with self.assertRaises((IdentityMismatch, SystemExit)):
-                    run._main(actual)
+                    execute(actual)
                 self.assertEqual((builds.call_count, comparisons.call_count), (0, 0))
                 # Corrupt promotion context is refused before any external effect.
                 with sqlite3.connect(db) as conn:
@@ -347,7 +414,7 @@ class StageLifecycleTests(unittest.TestCase):
                     self.assertIsNotNone(original)
                     conn.execute("DELETE FROM stage_receipts WHERE stage_id=?", (original[0],))
                 with self.assertRaises(IdentityMismatch):
-                    run._main(resumed)
+                    execute(resumed)
                 with sqlite3.connect(db) as conn:
                     conn.execute("INSERT INTO stage_receipts VALUES(?,?,?,?,?,?,?,?,?,?,?)", original)
                 self.assertEqual((builds.call_count, comparisons.call_count), (0, 0))
@@ -356,10 +423,10 @@ class StageLifecycleTests(unittest.TestCase):
                 bad_native = {**native_row, "current_anchor": {**native_row["current_anchor"], "commit": "f" * 40}}
                 continuation.write_text(json.dumps(bad_native))
                 with self.assertRaises((SystemExit, ValueError, RuntimeError)):
-                    run._main(resumed)
+                    execute(resumed)
                 continuation.write_bytes(original_native)
                 self.assertEqual((builds.call_count, comparisons.call_count), (0, 0))
-                self.assertEqual(run._main(resumed), 0)
+                self.assertEqual(execute(resumed), 0)
                 self.assertEqual((builds.call_count, comparisons.call_count), (0, 0),
                                  "completed keep/bootstrap rebuilt or remeasured during native resume")
             reached.append(True)
@@ -379,6 +446,20 @@ class StageLifecycleTests(unittest.TestCase):
                     ledger.perform(stage="runner", stage_key="trial", inputs={"pairs": 5},
                                    operation=lambda: calls.append(1))
             self.assertEqual(calls, [])
+
+    def test_disabled_run_adapters_preserve_values_without_hashing_or_serializing(self):
+        from autokernel.loop import run
+        sentinel = object()
+        calls = []
+        def operation():
+            calls.append(1)
+            return sentinel
+        with mock.patch.object(run, "_stage_binary_snapshot", side_effect=AssertionError("disabled artifact IO")):
+            self.assertIs(run._stage_verdict(None, "build", key="unused", inputs={},
+                                             operation=operation, artifact_root="/not-read"), sentinel)
+            self.assertIs(run._stage_measurement(None, key="unused", inputs={}, operation=operation), sentinel)
+            self.assertIs(run._stage_dispatch(None, key="unused", inputs={}, operation=operation), sentinel)
+        self.assertEqual(calls, [1, 1, 1])
 
     def test_completed_call_is_idempotent_but_changed_input_or_predecessor_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -558,6 +639,52 @@ class StageLifecycleTests(unittest.TestCase):
                                operation=lambda: self.fail("carried planner repeated"))
                 self.assertEqual(ledger.perform(stage="critic", stage_key="c", inputs={"proposal": "proposal"},
                                                 operation=lambda: self.fail("carried critic repeated")), "accepted")
+
+    def test_native_config_carries_attested_controller_source_without_changing_deployment(self):
+        from autokernel.loop import run
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = root / "store"
+            store.mkdir()
+            db = store / "stage-lifecycle.sqlite3"
+            old_source, new_source = {"controller.py": b"old controller source"}, {"controller.py": b"new controller source"}
+            def source_digest(sources):
+                import hashlib
+                return digest({name: hashlib.sha256(raw).hexdigest() for name, raw in sources.items()})
+            contract = {"model": "fixture", "scope": "pinned", "measurement": "unchanged"}
+            frontier = {"commit": IDENTITY["anchor_commit"], "tree": "original", "build": "original", "artifacts": {}}
+            descriptor = {"schema": "epyc.autokernel.stage_deployment.v1", "contract": contract,
+                          "initial_frontier": frontier}
+            old_identity = {**IDENTITY, "source_digest": source_digest(old_source), "deployment_id": digest(descriptor)}
+            target = {**old_identity, "source_digest": source_digest(new_source), "policy_graph_id": "policy-v2"}
+            with StageLifecycle(db, identity=old_identity, graph_version="g1") as ledger:
+                ledger.register_controller_source(old_source)
+                ledger.bind_deployment(contract=contract, frontier=frontier)
+                ledger.perform(stage="planner", stage_key="p", inputs={"scope": "pinned"}, operation=lambda: "proposal")
+                nodes, verifier = self._carry_evidence(ledger, target)
+                with self.assertRaises(IdentityMismatch):
+                    ledger.carry_forward(new_graph_version="g2", new_identity=target,
+                                         output_proofs=nodes, verifier_receipt=verifier)
+                ledger.register_controller_source(new_source, expected_digest=target["source_digest"])
+            config = root / "config.json"
+            declared = {"schema": "epyc.autokernel.stage_lifecycle_config.v1", "identity": target,
+                        "graph_version": "g2", "carry_forward": {"from_identity": old_identity,
+                        "from_graph_version": "g1", "output_proofs": nodes, "verifier_receipt": verifier}}
+            config.write_text(json.dumps(declared))
+            preflight = run._stage_preflight_config(config, store)
+            self.assertEqual(preflight["_deployment_pin"], descriptor)
+            with StageLifecycle(db, identity=old_identity, graph_version="g1") as ledger:
+                ledger.carry_forward(new_graph_version="g2", new_identity=target,
+                                     output_proofs=nodes, verifier_receipt=verifier)
+            self.assertEqual(run._stage_preflight_config(config, store)["identity"], target)
+            with StageLifecycle(db, identity=target, graph_version="g2") as ledger:
+                ledger.bind_deployment(contract=contract, frontier=frontier)
+                self.assertEqual(ledger.identity["deployment_id"], old_identity["deployment_id"])
+                self.assertEqual(ledger.perform(stage="planner", stage_key="p", inputs={"scope": "pinned"},
+                                                operation=lambda: self.fail("source-upgraded planner repeated")), "proposal")
+                identities = [json.loads(row[0]) for row in ledger._db.execute(
+                    "SELECT identity_json FROM stage_receipts WHERE graph_version='g1'")]
+                self.assertTrue(all(row["source_digest"] == old_identity["source_digest"] for row in identities))
 
 
 if __name__ == "__main__":

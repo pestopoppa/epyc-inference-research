@@ -13,6 +13,7 @@ jobs:
       PYTHONPATH: scripts/kernel_rnd:.
       PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      AKRSM1_EVIDENCE_DIR: evidence/native-cases
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:

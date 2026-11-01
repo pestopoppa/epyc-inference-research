@@ -183,6 +183,24 @@ def _stage_dispatch(lifecycle, *, key, inputs, operation):
         decode=lambda row: dispatch_guard.Reservation(**row))
 
 
+def _stage_checks(lifecycle, checks):
+    """Journal external route/model oracle leaves, preserving wrapped build/op leaves."""
+    if lifecycle is None or lifecycle.subject is None:
+        return gates.run_all(*checks)
+    def guarded(check, ordinal):
+        code = getattr(check, "__code__", None)
+        if code is None:
+            raise stage_lifecycle_mod.IdentityMismatch("gate leaf has no declared source node")
+        if {"local_compiles", "local_op_correctness"}.intersection(code.co_names):
+            return check()
+        node = f"{Path(code.co_filename).name}:{code.co_qualname}:{code.co_firstlineno}:{ordinal}"
+        predecessor = lifecycle.predecessor_digest
+        return _stage_verdict(lifecycle, "correctness", key=f"leaf:{node}:{predecessor}",
+            inputs={"node": node, "predecessor": predecessor}, operation=check)
+    return gates.run_all(*(lambda check=check, ordinal=ordinal: guarded(check, ordinal)
+                           for ordinal, check in enumerate(checks)))
+
+
 def _stage_preflight_config(path, store):
     """Validate the stop fence before actor admission or any bootstrap measurement."""
     declared = json.loads(Path(path).read_text())
@@ -208,13 +226,19 @@ def _stage_preflight_config(path, store):
         elif ledger.stop_requested:
             raise stage_lifecycle_mod.LifecycleError(
                 f"campaign stopped at {ledger.stop_receipt}; exact versioned resume_ack required")
+        declared["_deployment_pin"] = ledger.deployment_descriptor()
     return declared
 
 
+def _stage_source_blobs():
+    root = Path(__file__).parent.parent
+    return {path.relative_to(root).as_posix(): path.read_bytes() for path in sorted(root.rglob("*.py"))
+            if not path.name.startswith("test_")}
+
+
 def _stage_source_digest():
-    root = Path(__file__).parent
-    return stage_lifecycle_mod.digest({name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-        for name in ("stage_lifecycle.py", "loop.py", "pipeline.py", "pool.py", "run.py", "resume.py")})
+    return stage_lifecycle_mod.digest({name: hashlib.sha256(raw).hexdigest()
+                                     for name, raw in _stage_source_blobs().items()})
 
 
 def _stage_model_digest(path):
@@ -4329,7 +4353,7 @@ def _main(argv: list[str] | None = None) -> int:
                         pair.candidate.template.cpu_list).issubset(parse_cpu_list(build_cpu_list)):
                     return False, [gates.Verdict("runtime_treatment", False,
                                                 "runtime treatment exceeds the owned CPU allocation")]
-                return gates.run_all(lambda: local_op_correctness(
+                return local_run_all(lambda: local_op_correctness(
                     anchor_build[0], backend="CPU" if cpu_launch else direct_launch.template.device,
                     resolved_recipe=pair.candidate))
             # The diff first: a build that fails still leaves a patch worth reading,
@@ -4567,7 +4591,7 @@ def _main(argv: list[str] | None = None) -> int:
                     checks.extend(lambda ref=ref: ref(arm) for ref in route_references)
                 if repack_extra:
                     checks.append(lambda: repack_check(arm))
-                return gates.run_all(*checks)
+                return local_run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
             # this patch.
@@ -4625,9 +4649,9 @@ def _main(argv: list[str] | None = None) -> int:
                 if not compiled.passed:
                     return False, [compiled]
                 with cpu_measurement_window():
-                    passed, verdicts = gates.run_all(*checks)
+                    passed, verdicts = local_run_all(*checks)
                 return passed, [compiled, *verdicts]
-            return gates.run_all(*checks)
+            return local_run_all(*checks)
         return _recorded_gate(gate)
 
     #: The anchor ADVANCES with the champion. It used to be a fixed binary while the
@@ -5518,6 +5542,9 @@ def _main(argv: list[str] | None = None) -> int:
         return _stage_verdict(stage_lifecycle_ref[0], stage, key=key, inputs=inputs,
                               operation=operation, artifact_root=artifact_root)
 
+    def local_run_all(*checks):
+        return _stage_checks(stage_lifecycle_ref[0], checks)
+
     def local_compiles(*positional, **keyword):
         def build():
             if gpu_local is None:
@@ -5539,14 +5566,15 @@ def _main(argv: list[str] | None = None) -> int:
         build_env_facts = {key: str(build_env[key]) for key in
                            ("CC", "CXX", "CFLAGS", "CXXFLAGS", "HIP_PATH", "ROCM_PATH")
                            if key in build_env}
-        return _lifecycle_verdict(
-            "build", key=diff_digest,
-            inputs={"source_digest": diff_digest, "source_root": str(source_root),
+        stage_inputs = {"source_digest": diff_digest, "source_root": str(source_root),
                     "build_dir": str(build_dir),
                     "defines": list(keyword.get("cmake_defines", ())),
                     "targets": list(keyword.get("targets", ())),
                     "cmake": keyword.get("cmake", "cmake"),
-                    "build_environment": build_env_facts}, operation=build,
+                    "build_environment": build_env_facts}
+        return _lifecycle_verdict(
+            "build", key=stage_lifecycle_mod.digest(stage_inputs),
+            inputs=stage_inputs, operation=build,
             artifact_root=build_dir)
 
     @counter_phase("oracle")
@@ -5557,9 +5585,7 @@ def _main(argv: list[str] | None = None) -> int:
         if stage_lifecycle_ref[0] is None or stage_lifecycle_ref[0].subject is None:
             return check()
         build_dir = positional[0] if positional else keyword.get("build_dir")
-        return _lifecycle_verdict(
-            "correctness", key=str(build_dir),
-            inputs={"build_dir": str(build_dir), "op": keyword.get("op"),
+        stage_inputs = {"build_dir": str(build_dir), "op": keyword.get("op"),
                     "backend": keyword.get("backend"),
                     "require_reference": bool(keyword.get("require_reference", False)),
                     "params_filter": keyword.get("params_filter"),
@@ -5568,7 +5594,10 @@ def _main(argv: list[str] | None = None) -> int:
                     "resolved_recipe": (keyword["resolved_recipe"].to_dict()
                                          if hasattr(keyword.get("resolved_recipe"), "to_dict")
                                          else keyword.get("resolved_recipe")),
-                    "build_artifacts": _stage_binary_snapshot(build_dir)}, operation=check)
+                    "build_artifacts": _stage_binary_snapshot(build_dir)}
+        return _lifecycle_verdict(
+            "correctness", key=stage_lifecycle_mod.digest(stage_inputs),
+            inputs=stage_inputs, operation=check)
 
     def cpu_measurement_window():
         """The measurement window of THIS run, CPU or GPU (quiet-window ruling above).
@@ -6651,9 +6680,8 @@ def _main(argv: list[str] | None = None) -> int:
                             else _stage_model_digest(args.model))
             actor_contract = {key: value for key, value in launch_actor_config.items()
                               if key != "actor_wire_gate"}
-            contract = {"scope_id": scope_id, "controller_source_digest": source_digest,
+            contract = {"scope_id": scope_id,
                         "model_digest": model_digest, "build_recipe": recipe.to_dict(),
-                        "actors": actor_contract,
                         "serving": serving_contract}
             frontier = {"commit": current_anchor_commit[0],
                         "tree": integrity.candidate_tree(args.worktree),
@@ -6677,6 +6705,9 @@ def _main(argv: list[str] | None = None) -> int:
                     "deployment_id": stage_lifecycle_mod.digest({
                         "schema": "epyc.autokernel.stage_deployment.v1",
                         "contract": contract, "initial_frontier": frontier}), **live_identity}
+                if declared.get("_deployment_pin") is not None:
+                    expected.update(anchor_commit=identity["anchor_commit"],
+                                    deployment_id=identity["deployment_id"])
                 refused = stage_lifecycle_mod.IdentityMismatch(
                     "stage lifecycle identity does not match this launch; first-launch pins: "
                     + json.dumps(expected, sort_keys=True))
@@ -6692,6 +6723,8 @@ def _main(argv: list[str] | None = None) -> int:
                     stage_db, identity=carry.get("from_identity", {}),
                     graph_version=str(carry.get("from_graph_version") or ""))
                 try:
+                    old.register_controller_source(_stage_source_blobs(),
+                                                   expected_digest=identity["source_digest"])
                     if declared.get("resume_ack") is not None:
                         old.acknowledge_resume(declared["resume_ack"])
                     verifier_receipt = carry.get("verifier_receipt", {})
@@ -6715,6 +6748,7 @@ def _main(argv: list[str] | None = None) -> int:
                 stage_db, identity=identity,
                 graph_version=str(declared.get("graph_version") or ""))
             try:
+                stage_lifecycle.register_controller_source(_stage_source_blobs())
                 # Existing native loader already checks argv/documents, source
                 # lineage and exact anchor provenance; require its current arm too.
                 if resumed is not None:
@@ -8261,7 +8295,7 @@ def _main(argv: list[str] | None = None) -> int:
                     if checked_tree != source_tree:
                         raise surface_validation.SurfaceValidationRefused(
                             "shared source tree changed before target build")
-                    build_ok, build_verdicts = gates.run_all(
+                    build_ok, build_verdicts = local_run_all(
                         lambda: local_compiles(
                             checked_source, validation_candidate_build,
                             cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
@@ -8274,7 +8308,7 @@ def _main(argv: list[str] | None = None) -> int:
                                if direct_launch.backend == "cpu" else {})))
                     if build_ok and direct_launch.backend == "cpu":
                         validation_arm = _cpu_arm(direct_launch, validation_candidate_build)
-                        gdn_ok, gdn_verdicts = gates.run_all(
+                        gdn_ok, gdn_verdicts = local_run_all(
                             lambda: local_op_correctness(
                                 validation_candidate_build, op="GATED_DELTA_NET",
                                 backend="CPU", resolved_recipe=validation_arm),

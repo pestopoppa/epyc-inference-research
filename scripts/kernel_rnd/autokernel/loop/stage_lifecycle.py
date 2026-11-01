@@ -63,7 +63,10 @@ def _db_synchronized(method):
     @wraps(method)
     def guarded(self, *args, **kwargs):
         with self._db_lock:
-            return method(self, *args, **kwargs)
+            try:
+                return method(self, *args, **kwargs)
+            except sqlite3.Error as exc:
+                raise LifecycleError("durable stage ledger IO failed; no replay authority") from exc
     return guarded
 
 
@@ -163,7 +166,7 @@ class StageLifecycle:
 
     def _validate_startup(self):
         current = self._identity()
-        stable = set(IDENTITY_FIELDS) - {"policy_graph_id"}
+        stable = set(IDENTITY_FIELDS) - {"policy_graph_id", "source_digest"}
         for stage_id, stage, key, identity_json, graph, state in self._db.execute(
                 "SELECT stage_id,stage,stage_key,identity_json,graph_version,state FROM stage_receipts"):
             try:
@@ -444,6 +447,10 @@ class StageLifecycle:
     def subject(self):
         return self._subject.get()
 
+    @property
+    def predecessor_digest(self):
+        return digest(self._predecessor.get())
+
     @_db_synchronized
     def configure_pool(self, workers, iterations):
         body = _canonical({"workers": sorted(workers), "iterations": iterations}).decode()
@@ -478,6 +485,27 @@ class StageLifecycle:
     @_db_synchronized
     def finish_draw(self, worker, ordinal):
         self._db.execute("UPDATE pool_draws SET finished=1 WHERE worker=? AND ordinal=?", (worker, ordinal))
+
+    @_db_synchronized
+    def deployment_descriptor(self):
+        row = self._db.execute("SELECT payload_sha256 FROM deployment_pin").fetchone()
+        if row is None:
+            return None
+        value = json.loads(self.payload(row[0]))
+        if digest(value) != self.identity["deployment_id"]:
+            raise IdentityMismatch("immutable deployment pin changed")
+        return value
+
+    @_db_synchronized
+    def register_controller_source(self, sources, *, expected_digest=None):
+        manifest = {str(name): hashlib.sha256(bytes(raw)).hexdigest() for name, raw in sources.items()}
+        source_sha = digest(manifest)
+        if source_sha != (expected_digest or self.identity["source_digest"]):
+            raise IdentityMismatch("executing controller source differs from declared graph source")
+        for raw in sources.values():
+            self.store_payload(raw)
+        self.store_payload(_canonical(manifest))
+        return source_sha
 
     @_db_synchronized
     def bind_deployment(self, *, contract, frontier, native_continuation=None):
@@ -591,6 +619,13 @@ class StageLifecycle:
             raise IdentityMismatch("compatibility evidence does not bind exact graph/node interfaces and pins")
         if not proof["verifier"].get("verifier"):
             raise IdentityMismatch("graph carry requires a named verifier")
+        if proof["source_identity"]["source_digest"] != proof["target_identity"]["source_digest"]:
+            for identity in (proof["source_identity"], proof["target_identity"]):
+                manifest = json.loads(self.payload(identity["source_digest"]))
+                if not isinstance(manifest, dict) or not manifest:
+                    raise IdentityMismatch("graph source upgrade lacks its original source manifest")
+                for source_sha in manifest.values():
+                    self.payload(source_sha)
 
     @_db_synchronized
     def carry_forward(self, *, new_graph_version, new_identity=None, output_proofs,
@@ -606,9 +641,9 @@ class StageLifecycle:
             raise IdentityMismatch("carry target identity is incomplete")
         if not new_graph_version or new_graph_version == self.graph_version:
             raise ValueError("carry requires a distinct graph version")
-        stable = set(IDENTITY_FIELDS) - {"policy_graph_id"}
+        stable = set(IDENTITY_FIELDS) - {"policy_graph_id", "source_digest"}
         if any(target[k] != self.identity[k] for k in stable):
-            raise IdentityMismatch("carry changes deployment/source/model/scope/anchor")
+            raise IdentityMismatch("carry changes deployment/model/scope/anchor")
         if self.stop_requested:
             raise IdentityMismatch("acknowledge the exact old stop before upgrading")
         self._db.execute("BEGIN IMMEDIATE")
