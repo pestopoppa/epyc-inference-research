@@ -710,9 +710,42 @@ RESUMABLE_STATUSES = frozenset({"stopped_mid_formation", "planner_transient"})
 _OWNER_BOUND = frozenset({"anchor_commit", "epoch_sha256", "target"})
 
 
+@dataclass(frozen=True)
+class ServingComparison:
+    """Canonical serving view, shared by package imports and the __main__ driver."""
+    row: dict
+    baseline_scope: str = "experimental_candidate_not_champion"
+
+    @property
+    def effect(self):
+        return self.row["effect"]
+
+    @property
+    def decisive(self):
+        return self.row["decisive"]
+
+    @property
+    def noise_floor_pct(self):
+        return self.row["noise_floor_pct"]
+
+    @property
+    def surface(self):
+        return "serving:" + self.row["recipe"]
+
+    @property
+    def pairs(self):
+        return self.row["pairs"]
+
+    @property
+    def drifting(self):
+        return False
+
+    def to_dict(self):
+        return {**self.row, "surface": self.surface, "baseline_scope": self.baseline_scope}
+
+
 def _encode_comparison(comparison):
     from .same_code_tripwire import ObservedComparison
-    from .run import ServingComparison
     if isinstance(comparison, ObservedComparison):
         return {"kind": "observed", "original": _encode_comparison(comparison.original),
                 "evidence": comparison.evidence, "snapshot": comparison.to_dict()}
@@ -731,7 +764,6 @@ def _decode_comparison(row):
             raise IdentityMismatch("native tripwire comparison snapshot changed during reconstruction")
         return result
     if row["kind"] == "serving":
-        from .run import ServingComparison
         return ServingComparison(row["row"], row["baseline_scope"])
     if row["kind"] == "bench":
         body = row["value"]

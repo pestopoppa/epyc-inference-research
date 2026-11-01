@@ -243,40 +243,8 @@ def _stage_serving_contract(launch):
     return {"recipe": launch.template.to_dict(), "execution": body}
 
 
-@dataclass(frozen=True)
-class ServingComparison:
-    """Expose the existing serving verdict to iterate without regrading it."""
-    row: dict
-    baseline_scope: str = "experimental_candidate_not_champion"
-
-    @property
-    def effect(self):
-        return self.row["effect"]
-
-    @property
-    def decisive(self):
-        return self.row["decisive"]
-
-    @property
-    def noise_floor_pct(self):
-        return self.row["noise_floor_pct"]
-
-    @property
-    def surface(self):
-        return "serving:" + self.row["recipe"]
-
-    @property
-    def pairs(self):
-        return self.row["pairs"]
-
-    @property
-    def drifting(self):
-        # Serving's existing reducer does not implement the bench trend veto.
-        return False
-
-    def to_dict(self):
-        return {**self.row, "surface": self.surface,
-                "baseline_scope": self.baseline_scope}
+# Preserve the public API while __main__ and package imports share one type.
+ServingComparison = loop.ServingComparison
 
 
 @contextmanager

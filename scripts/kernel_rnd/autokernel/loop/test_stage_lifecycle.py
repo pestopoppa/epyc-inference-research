@@ -465,6 +465,47 @@ class StageLifecycleTests(unittest.TestCase):
             self.assertIs(run._stage_dispatch(None, key="unused", inputs={}, operation=operation), sentinel)
         self.assertEqual(calls, [1, 1, 1])
 
+    def test_real_main_module_serving_comparison_has_one_canonical_closed_codec(self):
+        script = r'''
+import argparse, importlib, json, runpy, sys
+class Captured(Exception):
+    pass
+results = []
+def intercept(_parser, *_args, **_kwargs):
+    namespace = vars(sys.modules["__main__"])
+    loop = namespace["loop"]
+    canonical = namespace["ServingComparison"]
+    assert canonical is loop.ServingComparison
+    row = {"schema": "epyc.autokernel.serving_ab.v1", "recipe": "fixture-only",
+           "effect": .1, "decisive": True, "noise_floor_pct": 1., "pairs": 5}
+    original = canonical(row, "synthetic_not_measurement")
+    encoded = loop._encode_comparison(original)
+    restored = loop._decode_comparison(json.loads(json.dumps(encoded)))
+    assert type(restored) is canonical and restored.to_dict() == original.to_dict()
+    tripwire = importlib.import_module(namespace["__package__"] + ".same_code_tripwire")
+    observed = tripwire.ObservedComparison(original, {"status": "fixture_unknown"})
+    restored_observed = loop._decode_comparison(json.loads(json.dumps(loop._encode_comparison(observed))))
+    assert isinstance(restored_observed, tripwire.ObservedComparison)
+    assert type(restored_observed.original) is canonical
+    assert restored_observed.to_dict() == observed.to_dict()
+    results.append({"module": sys.argv[0], "canonical_type": canonical.__module__, "restored": True})
+    raise Captured()
+argparse.ArgumentParser.parse_args = intercept
+sys.argv = [sys.argv[1], "--help"]
+try:
+    runpy.run_module(sys.argv[0], run_name="__main__", alter_sys=True)
+except Captured:
+    pass
+assert len(results) == 1
+print(json.dumps(results[0]))
+'''
+        for module in ("scripts.kernel_rnd.autokernel.loop.run", "autokernel.loop.run"):
+            with self.subTest(module=module):
+                proc = subprocess.run([sys.executable, "-c", script, module],
+                                      capture_output=True, text=True, timeout=30)
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertTrue(json.loads(proc.stdout.splitlines()[-1])["restored"])
+
     def test_completed_call_is_idempotent_but_changed_input_or_predecessor_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:
             with StageLifecycle(Path(tmp) / "ledger", identity=IDENTITY, graph_version="g1") as ledger:
