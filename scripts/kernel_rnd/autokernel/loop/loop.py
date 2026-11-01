@@ -28,8 +28,10 @@ a ROCm toolchain.
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from contextlib import nullcontext
+from .stage_lifecycle import IdentityMismatch
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1072,7 +1074,7 @@ def iterate(*, planner: Planner, critic: Critic,
             next_resume: Callable[[], Any] | None = None,
             author_lane: tuple[Path, str] | None = None,
             iteration_scope=None,
-            author_panel=None
+            author_panel=None, stage_lifecycle=None, stage_trial_id: str | None = None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -1232,7 +1234,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         record_abandoned=record_abandoned, abandoned=abandoned,
                         resume=resume, next_resume=next_resume, progress=progress,
                         author_lane=author_lane,
-                        author_panel=author_panel))
+                        author_panel=author_panel, stage_lifecycle=stage_lifecycle,
+                        stage_trial_id=stage_trial_id))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -1289,7 +1292,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              author_attempts=HYPOTHESIS_AUTHOR_ATTEMPTS,
              validator_provenance=None, record_abandoned=None,
              abandoned=None, resume=None, next_resume=None, progress=None,
-             author_lane=None, author_panel=None) -> Outcome:
+             author_lane=None, author_panel=None, stage_lifecycle=None,
+             stage_trial_id=None) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
@@ -1554,14 +1558,81 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         return Outcome("stopped_mid_formation", last_proposed,
                        [STOPPED_MID_FORMATION])
 
-    def actor_call(call, *args):
+    def actor_call(call, *args, stage: str | None = None, stage_key: str | None = None,
+                   inputs: Any = None, encode=lambda value: value,
+                   decode=lambda value: value, cas_payload=None):
         # A stop asked DURING an actor call ends the call (the actor module TERMs its
         # child) and surfaces here as ActorStopped: the same outcome the boundary poll
         # gives, still naming whatever was in flight -- never a provider transient.
         try:
-            return call(*args), None
+            if stage_lifecycle is None or stage is None:
+                result = call(*args)
+            else:
+                result = stage_lifecycle.perform(
+                    stage=stage, stage_key=stage_key or f"{stage_trial_id}:{stage}",
+                    inputs=inputs if inputs is not None else {"trial": stage_trial_id},
+                    operation=lambda: call(*args), encode=encode, decode=decode,
+                    cas_payload=cas_payload)
+            return result, None
         except ActorStopped:
             return None, stopped()
+
+    def encode_actor_result(value):
+        if isinstance(value, Hypothesis):
+            return {"kind": "hypothesis", "value": {
+                **value.to_dict(), "declared_runtime_arm": value.declared_runtime_arm}}
+        if isinstance(value, Abstain):
+            fields = ("reason", "mechanism_id", "mechanism_family", "target_surface",
+                      "target_symbol")
+            body = {key: getattr(value, key) for key in fields}
+            if isinstance(value, AuthoringFailure):
+                body["members"] = list(value.members)
+            return {"kind": "abstain", "class": type(value).__name__,
+                    "value": body}
+        if isinstance(value, Review):
+            return {"kind": "review", "value": {
+                "accepted": value.accepted, "reason": value.reason,
+                "validator_identity": value.validator_identity,
+                "validator_kind": value.validator_kind,
+                "independence": value.independence,
+                "evidence_inspected": list(value.evidence_inspected),
+                "scope_rule": value.scope_rule}}
+        if isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
+            return {"kind": "paths", "value": list(value)}
+        raise TypeError(f"stage lifecycle has no closed serializer for {type(value).__name__}")
+
+    def hypothesis_stage_input(value):
+        return {**value.to_dict(), "declared_runtime_arm": value.declared_runtime_arm}
+
+    def decode_actor_result(row, *, restore_patch=False):
+        kind, value = row["kind"], row["value"]
+        if kind == "hypothesis":
+            return Hypothesis(**value)
+        if kind == "abstain":
+            cls = AuthoringFailure if row.get("class") == "AuthoringFailure" else Abstain
+            return cls(**value)
+        if kind == "review":
+            return Review(**value)
+        if kind == "paths":
+            if restore_patch:
+                payload = stage_lifecycle.payload(row["payload_sha256"])
+                if payload:
+                    if author_lane is None:
+                        raise IdentityMismatch("authored patch has no pinned source lane")
+                    already = subprocess.run(["git", "apply", "--reverse", "--check", "--binary", "-"],
+                                             input=payload, cwd=author_lane[0],
+                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                             check=False)
+                    if already.returncode == 0:
+                        return tuple(value)
+                    proc = subprocess.run(["git", "apply", "--binary", "-"], input=payload,
+                                          cwd=author_lane[0], stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE, check=False)
+                    if proc.returncode:
+                        raise IdentityMismatch(
+                            "completed author patch no longer applies to the pinned lane")
+            return tuple(value)
+        raise IdentityMismatch(f"unknown stored actor result kind {kind!r}")
 
     # A resumed candidate is one EXTRA round ahead of the fresh ones: it replaces no
     # fresh round, so a rejected resume still leaves the iteration its full budget.
@@ -1658,7 +1729,12 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             if progress.get("belief_refused") is None:
                 on_step("proposing a hypothesis")
                 try:
-                    hypothesis, halted = actor_call(planner.propose, working)
+                    hypothesis, halted = actor_call(
+                        planner.propose, working, stage="planner",
+                        stage_key=f"{stage_trial_id}:planner:{hypothesis_index}",
+                        inputs={"trial": stage_trial_id, "round": hypothesis_index,
+                                "context": working},
+                        encode=encode_actor_result, decode=decode_actor_result)
                 except belief_context.BeliefContextRefused as refused:
                     # NO new hypothesis this iteration: degraded mode below, never blind.
                     progress["belief_refused"] = refused.summary()
@@ -1752,7 +1828,12 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             retried = False
             while True:
                 try:
-                    verdict, halted = actor_call(critic.review_hypothesis, hypothesis, working)
+                    verdict, halted = actor_call(
+                        critic.review_hypothesis, hypothesis, working, stage="critic",
+                        stage_key=f"{stage_trial_id}:critic1:{hypothesis.mechanism_id}",
+                        inputs={"hypothesis": hypothesis_stage_input(hypothesis), "pass": 1,
+                                "context": working},
+                        encode=encode_actor_result, decode=decode_actor_result)
                     break
                 except ActorStopped:
                     raise
@@ -1871,7 +1952,44 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                                                 record=_panel_recorder(progress))
                     log_offset = _call_log_offset(author_lane)
                     try:
-                        paths, halted = actor_call(author, hypothesis, working)
+                        def authored_patch_payload():
+                            if author_lane is None:
+                                return b""
+                            root = author_lane[0]
+                            tracked = subprocess.run(
+                                ["git", "diff", "--binary", "HEAD", "--"],
+                                cwd=root, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, check=False)
+                            if tracked.returncode:
+                                raise RuntimeError("could not persist authored patch payload")
+                            untracked = subprocess.run(
+                                ["git", "ls-files", "--others", "--exclude-standard"],
+                                cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                check=False, text=True)
+                            if untracked.returncode:
+                                raise RuntimeError("could not enumerate authored patch files")
+                            chunks = [tracked.stdout]
+                            for relative in untracked.stdout.splitlines():
+                                added = subprocess.run(
+                                    ["git", "diff", "--no-index", "--binary", "--",
+                                     "/dev/null", relative], cwd=root,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    check=False)
+                                if added.returncode not in (0, 1):
+                                    raise RuntimeError("could not persist an authored new file")
+                                chunks.append(added.stdout)
+                            return b"".join(chunks)
+
+                        paths, halted = actor_call(
+                            author, hypothesis, working, stage="planner",
+                            stage_key=(f"{stage_trial_id}:author:{hypothesis.mechanism_id}:"
+                                       f"{patch_index}"),
+                            inputs={"hypothesis": hypothesis_stage_input(hypothesis),
+                                    "prior_rejections": list(patch_reasons),
+                                    "context": working},
+                            encode=encode_actor_result,
+                            decode=lambda row: decode_actor_result(row, restore_patch=True),
+                            cas_payload=authored_patch_payload)
                     except AuthorReportMissing as missing:
                         try:
                             paths, halted = _recover_author_report(
@@ -1933,8 +2051,14 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 on_step("critic pass 2: carried verdict (resumed at build)")
             elif hypothesis.runtime_pair is None:
                 on_step("critic pass 2: reviewing the diff")
-                patch_verdict, halted = actor_call(critic.review_patch, hypothesis, paths,
-                                                   working)
+                patch_verdict, halted = actor_call(
+                    critic.review_patch, hypothesis, paths, working, stage="critic",
+                    stage_key=(f"{stage_trial_id}:critic2:{hypothesis.mechanism_id}:"
+                               f"{patch_index}"),
+                    inputs={"hypothesis": hypothesis_stage_input(hypothesis),
+                            "paths": list(paths),
+                            "pass": 2, "context": working},
+                    encode=encode_actor_result, decode=decode_actor_result)
                 if halted is not None:
                     return halted
                 # A verdict came back: the critic2 checkpoint is answered either way.

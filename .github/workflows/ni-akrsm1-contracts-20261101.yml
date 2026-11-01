@@ -1,0 +1,60 @@
+name: NI AK-RSM-1 offline controller contracts
+on:
+  push:
+    branches: [codex/ni-akrsm1-contracts-20261101]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: scripts/kernel_rnd:.
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.15'
+      - name: Capture source and runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/source
+          git rev-parse HEAD > evidence/git-head.txt
+          git status --porcelain=v1 > evidence/git-status.txt
+          python --version > evidence/python-version.txt
+          cp --parents pyproject.toml .github/workflows/ni-akrsm1-contracts-20261101.yml scripts/kernel_rnd/autokernel/loop/{stage_lifecycle.py,loop.py,pipeline.py,pool.py,resume.py,run.py,test_stage_lifecycle.py,test_loop.py,test_pipeline.py,test_resume.py,test_resume_carry.py,test_resume_critic2.py,test_resume_infra.py,test_runtime_identity.py,test_no_undefined_runtime_names.py,test_existing_cpu_run.py,test_existing_gpu_serving_run.py,test_run_paired_serving_ab.py} evidence/source/
+      - name: Install declared project dependency closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[test]' > evidence/install.stdout.txt 2>&1
+          python -m pip freeze --all > evidence/dependency-freeze.txt
+          python -m pip inspect > evidence/dependency-inspect.json
+      - name: Collect and execute offline contracts
+        shell: bash
+        run: |
+          set -uo pipefail
+          files=(scripts/kernel_rnd/autokernel/loop/{test_stage_lifecycle.py,test_loop.py,test_pipeline.py,test_resume.py,test_resume_carry.py,test_resume_critic2.py,test_resume_infra.py,test_runtime_identity.py,test_no_undefined_runtime_names.py,test_existing_cpu_run.py,test_existing_gpu_serving_run.py,test_run_paired_serving_ab.py})
+          python -m pytest --collect-only -q "${files[@]}" > evidence/collection.stdout.txt 2>&1
+          collection_rc=$?
+          printf '%s\n' "$collection_rc" > evidence/collection.exit.txt
+          if [ "$collection_rc" -ne 0 ]; then cat evidence/collection.stdout.txt; exit "$collection_rc"; fi
+          python -m pytest -q "${files[@]}" --junitxml=evidence/junit.xml > evidence/pytest.stdout.txt 2>&1
+          test_rc=$?
+          printf '%s\n' "$test_rc" > evidence/pytest.exit.txt
+          cat evidence/pytest.stdout.txt
+          exit "$test_rc"
+      - name: Preserve original evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: akrsm1-contracts-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
