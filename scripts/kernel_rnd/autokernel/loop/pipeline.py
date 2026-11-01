@@ -188,7 +188,15 @@ class SerializedTail:
         #: thread lock above is invisible to an author's `ak-check` subprocess.
         self._fence = fence
         self.tail_seconds = 0.0
+        self._accounting_lock = threading.Lock()
+        self._active_tail = None
         self.superseded = 0
+
+    def elapsed_seconds(self) -> float:
+        """Completed tail time plus the current session, without waiting on the tail."""
+        with self._accounting_lock:
+            active = self._active_tail
+            return self.tail_seconds + (active[1]() - active[0] if active else 0.0)
 
     def _check_base(self, base_head: str) -> None:
         """Caller MUST hold the lock: a staleness check made outside it is racy."""
@@ -257,6 +265,8 @@ class SerializedTail:
         with self._lock:
             self._check_base(base_head)
             started = clock()
+            with self._accounting_lock:
+                self._active_tail = (started, clock)
             try:
                 if self._fence is None:
                     yield
@@ -264,7 +274,9 @@ class SerializedTail:
                     with self._fence():
                         yield
             finally:
-                self.tail_seconds += clock() - started
+                with self._accounting_lock:
+                    self.tail_seconds += clock() - started
+                    self._active_tail = None
 
 class _TailSession:
     """`tail_session` for `loop.iterate`: called with the candidate's hypothesis, so a

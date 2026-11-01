@@ -382,6 +382,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           serial_control: Mapping[str, Any] | None = None,
           runtime_preparation: Mapping[str, Any] | None = None,
           gpu: Mapping[str, Any] | None = None,
+          tail_seconds: float | None = None,
           hotspots: Sequence[Mapping[str, Any]] = (),
           step: str | None = None,
           pending_hypotheses: Sequence[Mapping[str, Any]] | None = None,
@@ -482,6 +483,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         # gate's fire threshold. `null` on a run with no serving recipe (no second tier).
         "accumulator": dict(accumulator) if accumulator else None,
         "gpu": dict(gpu or {}),
+        "tail_seconds": round(tail_seconds, 1) if tail_seconds is not None else None,
         "hotspots": [dict(row) for row in hotspots][:12],
         # Newest first: the operator reads the top of the list.
         "recent": [

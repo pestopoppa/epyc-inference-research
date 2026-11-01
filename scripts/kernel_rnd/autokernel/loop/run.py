@@ -18,6 +18,7 @@ import argparse
 from collections.abc import Mapping
 from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, replace
+from functools import wraps
 import hashlib
 import json
 import os
@@ -27,6 +28,7 @@ import subprocess
 import sys
 import threading
 import time
+import math
 from typing import Any
 
 from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
@@ -102,6 +104,7 @@ from . import cpu_repack_cases
 from . import resume as resume_mod
 from . import bestof
 from . import gpu_serving_profile as gpu_serving_profile_mod
+from . import gpu_counter
 
 
 @dataclass(frozen=True)
@@ -2208,6 +2211,27 @@ def _native_stale_rebaseline(store: Path, worktree: Path, bundle, harness: str,
 
 
 def _main(argv: list[str] | None = None) -> int:
+    live_tail = [None]
+    gfx_counter = [None]
+    def counter_phase(label):
+        """Observe phase boundaries without changing the wrapped outcome."""
+        def decorate(function):
+            @wraps(function)
+            def observed(*args, **kwargs):
+                def sample(boundary):
+                    try:
+                        if gfx_counter[0] is not None:
+                            gfx_counter[0].sample(f"{label}:{boundary}")
+                    except Exception as exc:
+                        print(f"GPU counter observation unavailable: {type(exc).__name__}: {exc}",
+                              file=sys.stderr)
+                sample("start")
+                try:
+                    return function(*args, **kwargs)
+                finally:
+                    sample("end")
+            return observed
+        return decorate
     # Publish can be reached by startup/refusal paths before campaign resolution.
     resolved_campaign = None
     original_argv = list(sys.argv[1:] if argv is None else argv)
@@ -4846,6 +4870,7 @@ def _main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
         return comparison
 
+    @counter_phase("serving_with_warmup")
     def cpu_compare(a_build, c_build, *, rebind_feedback=True):
         anchor_recipe = _cpu_arm(direct_launch, a_build)
         candidate_recipe = _cpu_arm(direct_launch, c_build)
@@ -5173,6 +5198,7 @@ def _main(argv: list[str] | None = None) -> int:
         longctx_observation["node_profile"] = observed
         node_profile.retain_observation(observed, store_root=args.store, **key)
 
+    @counter_phase("profile")
     def reprofile() -> None:
         """Re-derive the hotspots from the CURRENT champion.
 
@@ -5310,6 +5336,7 @@ def _main(argv: list[str] | None = None) -> int:
                 keyword["env"] = child_env
                 return gates.compiles(*positional, **keyword)
 
+    @counter_phase("oracle")
     def local_op_correctness(*positional, **keyword):
         with cpu_measurement_window() if not cpu_launch else nullcontext():
             return gates.op_correctness(*positional, **keyword)
@@ -5338,6 +5365,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     calibration_stopped = [False]
 
+    @counter_phase("calibration_with_warmup")
     def measured_serving_calibrate(*args_, **kwargs_):
         kwargs_.setdefault("should_stop", should_stop)
         try:
@@ -5349,11 +5377,13 @@ def _main(argv: list[str] | None = None) -> int:
             stopping["asked"] = True
             raise
 
+    @counter_phase("benchmark_with_warmup")
     def measured_bench_compare(*args_, **kwargs_):
         # Legacy GPU bench A/Bs are GPU measurements too: same q3 window.
         with cpu_measurement_window():
             return bench.compare(*args_, **kwargs_)
 
+    @counter_phase("benchmark_with_warmup")
     def measured_bench_measure(*args_, **kwargs_):
         with cpu_measurement_window():
             return bench.measure(*args_, **kwargs_)
@@ -6128,30 +6158,40 @@ def _main(argv: list[str] | None = None) -> int:
                                  f"bundle quality check errored: {type(exc).__name__}: {exc}")
 
     def gpu_reading(outcomes=()) -> dict:
-        """Held versus busy. Both halves, or the number means nothing.
+        """Report claim hold and comparison wall time; device utilization is unknown.
 
-        Held comes from the claim, busy from the comparisons that actually ran. The
-        superseded loop held the MI210 for 1.403 hours across its entire life while
-        compiling for 29.0, and nothing reported it -- because the surface reported
-        iterations and receipts and had no number for "am I using what I hold".
+        Comparison.device_seconds includes spawn, model loading and CPU gaps. It is
+        retained as wall time only and cannot support a physical idle fraction.
         """
         if claim_started is None or cpu_launch:
             return {}
-        held = time.time() - claim_started
-        if direct_launch:
-            # Serving reports rates/windows, not measured device busy seconds.
-            # Missing bench-only accounting must not become "GPU idle all run".
-            return {"claim_held_s": round(held, 1), "device_seconds_under_load": None,
-                    "gpu_seconds_idle_while_claimed": None, "idle_fraction_while_claimed": None}
-        busy = sum(float((o.comparison.to_dict() or {}).get("device_seconds") or 0.0)
-                   for o in outcomes if o.comparison is not None)
-        return {
-            "claim_held_s": round(held, 1),
-            "device_seconds_under_load": round(busy, 1),
-            "gpu_seconds_idle_while_claimed": round(max(0.0, held - busy), 1),
-            "idle_fraction_while_claimed": (
-                round(max(0.0, 1.0 - busy / held), 4) if held > 0 else None),
-        }
+        held = time.monotonic() - claim_started
+        walls = ([] if direct_launch else
+                 [(o.comparison.to_dict() or {}).get("device_seconds")
+                  for o in outcomes if o.comparison is not None])
+        try:
+            if not walls or any(not isinstance(v, (int, float)) or isinstance(v, bool)
+                                for v in walls):
+                wall_total = None
+            else:
+                values = [float(v) for v in walls]
+                total = sum(values)
+                wall_total = (round(total, 1) if all(math.isfinite(v) and v >= 0
+                                                       for v in values)
+                              and math.isfinite(total) else None)
+        except OverflowError:
+            wall_total = None
+        if gfx_counter[0] is not None:
+            gfx_counter[0].sample("live_status")
+        counter = gfx_counter[0].snapshot() if gfx_counter[0] is not None else None
+        counter_view = ({key: value for key, value in counter.items() if key != "samples"}
+                        if counter is not None else None)
+        return {"claim_held_s": round(held, 1),
+                "gfx_counter": counter_view,
+                "comparison_wall_seconds": wall_total,
+                "device_seconds_under_load": None,
+                "gpu_seconds_idle_while_claimed": None,
+                "idle_fraction_while_claimed": None}
 
     def accumulator_state() -> dict | None:
         """Project the two-tier bundle without upgrading a stale measurement.
@@ -6277,6 +6317,7 @@ def _main(argv: list[str] | None = None) -> int:
             keep_screen=keep_screen,
             pending_hypotheses=pending_view[0],
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
+            tail_seconds=live_tail[0].elapsed_seconds() if live_tail[0] else None,
             hotspots=[row.to_dict() for row in hotspot_rows],
             # heartbeat every HEARTBEAT_S below, so the envelope can be tight: silence now
             # means the PROCESS is gone, not that a build or a 20-pair bench is long.
@@ -6587,6 +6628,8 @@ def _main(argv: list[str] | None = None) -> int:
                   f"({attempt.get('resumed_from')}): {attempt.get('reason')}", flush=True)
 
         def step_pooled(worker_name: str, label: str) -> None:
+            if gfx_counter[0] is not None:
+                gfx_counter[0].sample(f"{worker_name}: {label}")
             # The step line names the lane: an unattributed "building and gating" on a
             # pooled run says nothing about which of N lanes is where.
             if label.startswith("resuming "):
@@ -7283,6 +7326,7 @@ def _main(argv: list[str] | None = None) -> int:
             **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled,
+            on_tail_ready=lambda tail: live_tail.__setitem__(0, tail),
             # AKX-ALL-29.2a: a GPU serving run times waiting candidates in descending
             # launch-weighted order of the anchor profile's kernel they target.
             **({"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(
@@ -7622,6 +7666,12 @@ def _main(argv: list[str] | None = None) -> int:
                         raise claim.ClaimRefused(
                             "GPU-only run: gpu-quiet is not held EXCLUSIVE by this process "
                             "or its launcher at device-claim open; no host resource receipt")
+                    def retain_gfx_counter(trace):
+                        status.write_json(args.out or args.store / "gpu-counter-traces",
+                                          f"{scratch_run_id}.json", trace,
+                                          prefix=".gfx-counter-")
+                    gfx_counter[0] = gpu_counter.attach(
+                        ownership, receipt["device_id"], retain_gfx_counter)
                 if cpu_win is not None and args.cpu_held_intervals_v2 != "on":
                     # V1 only: the envelope close observation needs it held.
                     ownership.callback(cpu_win.teardown)
@@ -7646,7 +7696,7 @@ def _main(argv: list[str] | None = None) -> int:
                     else:
                         os.environ[CHILD_PHASE_DIR] = prior_phase_dir
                 ownership.callback(restore_child_phase_environment)
-            claim_started = time.time()
+            claim_started = time.monotonic()
             if selected_target is not None:
                 # Same original invocation bound used by serial scheduling. This
                 # stops NEW runtime launches, never claims to kill an in-flight arm.
@@ -8209,6 +8259,8 @@ def _main(argv: list[str] | None = None) -> int:
                 "surface": args.surface, "pairs": args.serving_pairs if direct_launch else args.pairs,
                 "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
                 "workers": args.workers,
+                "gfx_counter_trace": (gfx_counter[0].snapshot()
+                                      if gfx_counter[0] is not None else None),
                 "iterations": [outcome.to_attempt() for outcome in outcomes],
                 # Ordered completion points, not a proposed/adaptive policy. The
                 # same facts are captured in each attempt's durable journal row.

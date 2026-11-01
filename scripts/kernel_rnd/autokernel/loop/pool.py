@@ -335,7 +335,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           make_author_panel=None,
           reserve_candidate=None, record_abandoned=None,
           next_resume=None, author_sandbox: bool = False,
-          cpu_window=None, tail_priority=None) -> PoolResult:
+          cpu_window=None, tail_priority=None, on_tail_ready=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
     Everything device-shaped is still injected; this only binds the git side and the
@@ -369,6 +369,8 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
     # next (launch-weighted kernel estimate); None keeps the plain lock.
     tail = pipeline.SerializedTail(lambda: champion_head(champion_tree, branch), fence=fence,
                                    priority=tail_priority)
+    if on_tail_ready is not None:
+        on_tail_ready(tail)
 
     def step(worker_name: str, label: str) -> None:
         clock.note(worker_name, label)

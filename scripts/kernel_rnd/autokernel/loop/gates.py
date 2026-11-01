@@ -179,10 +179,13 @@ class Verdict:
     #: never read by any gate, and `to_dict` omits the key when it is None so rows
     #: written before this field existed, and verdicts that carry none, keep their shape.
     case_records: "tuple | None" = dataclasses.field(default=None, compare=False)
+    elapsed_s: float | None = dataclasses.field(default=None, compare=False)
 
     def to_dict(self) -> dict:
         row = {"gate": self.gate, "passed": self.passed,
                "reason": self.reason or None, "detail": self.detail[:2000] or None}
+        if self.elapsed_s is not None:
+            row["elapsed_s"] = self.elapsed_s
         if self.case_records is not None:
             row["case_records"] = list(self.case_records)
         return row
@@ -3028,7 +3031,9 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
         verdict = check()
         # Build verdicts are timed by `compiles` itself (so the GPU gate's out-of-chain
         # build is counted too); every other check is correctness.
-        history_fields.note_check(getattr(verdict, "gate", None), _time.monotonic() - started)
+        elapsed = _time.monotonic() - started
+        verdict = dataclasses.replace(verdict, elapsed_s=elapsed)
+        history_fields.note_check(getattr(verdict, "gate", None), elapsed)
         collected.append(verdict)
         if not verdict.passed:
             return False, collected
