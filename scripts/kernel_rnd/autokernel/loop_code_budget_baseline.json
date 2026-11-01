@@ -204,5 +204,30 @@
   "worker_bootstrap.py": 238,
   "worker_lifecycle.py": 2259
 }
-  ,"exceptions": {}
+  ,"exceptions": {
+    "actors.py": {
+      "ceiling": 3037,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+    },
+    "bestof.py": {
+      "ceiling": 1135,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+    },
+    "loop.py": {
+      "ceiling": 1427,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+    },
+    "pipeline.py": {
+      "ceiling": 355,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+    },
+    "pool.py": {
+      "ceiling": 488,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+    },
+    "run.py": {
+      "ceiling": 6588,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+    }
+  }
 }

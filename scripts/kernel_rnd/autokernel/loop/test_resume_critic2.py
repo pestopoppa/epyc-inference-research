@@ -139,15 +139,15 @@ class ACriticFailureLeavesACritic2Checkpoint(Fixture):
                                record_abandoned=self.owner.record_abandoned)
         self.assertEqual([ck["stage"] for ck in outcome.resume_checkpoints], ["author"])
 
-    def test_an_empty_lane_drops_the_critic2_checkpoint_and_keeps_the_author_one(self):
+    def test_an_empty_lane_refuses_to_drop_the_critic2_checkpoint(self):
         outcome = loop.iterate(
             planner=base.Planner(self.repo, [base.hyp()]), critic=TransientCritic(),
             context={}, measure=lambda h, p: None, gate=base.passing_gate,
             commit=lambda h, p, c: None, hypothesis_rounds=1)
         base.reset(self.repo)                  # the lane lost its diff before recording
-        self.owner.record(outcome)
-        (row,) = base.rows_with(self.store, "planner_transient")
-        self.assertEqual([ck["stage"] for ck in row["resume_checkpoints"]], ["author"])
+        with self.assertRaisesRegex(RuntimeError, "critic2 has no retained patch"):
+            self.owner.record(outcome)
+        self.assertFalse((self.store / "experiments.db").exists())
 
     def test_a_report_path_failure_over_a_real_edit_checkpoints_critic2(self):
         """Run 10d: the author edited the lane; its report was unusable and the lane
@@ -197,7 +197,9 @@ class ACriticFailureLeavesACritic2Checkpoint(Fixture):
         (outcome,) = outcomes
         self.assertEqual(outcome.status, "lane_error")
         (row,) = base.rows_with(self.store, "lane_error")
-        (checkpoint,) = row["resume_checkpoints"]
+        self.assertEqual([entry["stage"] for entry in row["resume_checkpoints"]],
+                         ["author", "critic2"])
+        checkpoint = row["resume_checkpoints"][1]
         self.assertEqual(checkpoint["stage"], "critic2")
         self.assertTrue(checkpoint["retained_patch"]["patch_sha256"])
         base.reset(self.repo)
@@ -296,7 +298,8 @@ class ResumesAtCritic2(Fixture):
         outcome = loop.iterate(planner=fresh, critic=critic, context={},
                                measure=lambda h, p: base.comparison(0.0),
                                gate=base.passing_gate, commit=lambda h, p, c: None,
-                               hypothesis_rounds=1, resume=point)
+                               hypothesis_rounds=1, resume=point,
+                               record_abandoned=self.owner.record_abandoned)
         # The restored bytes are reversed, and the resumed hypothesis -- still
         # ACCEPTED, only its patch was refused -- stays pending at the author instead
         # of the planner being asked for fresh work.

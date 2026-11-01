@@ -1,4 +1,5 @@
 """Stubbed CPU campaign continuation through the installed iterator, without inference."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,24 @@ def test_experimental_keep_continues_into_a_completed_next_batch():
 
     def first_then_next(argv):
         assert original_main(argv) == 0
+        store = Path(sr.option(argv, "--store"))
+        dispositions = [json.loads(path.read_text()) for path in
+                        (store / "patches").glob("author-disposition-*.json")]
+        retained = [row for row in dispositions if row.get("retained_patch")]
+        assert retained
+        for item in retained:
+            patch = item["retained_patch"]
+            assert item["reason"]
+            assert hashlib.sha256(Path(patch["patch_file"]).read_bytes()).hexdigest() == patch["patch_sha256"]
+            hypothesis = json.loads(Path(item["hypothesis_record"]).read_text())
+            assert hypothesis["hypothesis"]["mechanism_id"]
+        kept_rows = resume_fixture.rows_with(store, "kept")
+        assert kept_rows
+        for kept_row in kept_rows:
+            hypothesis_path = Path(kept_row["hypothesis_custody_record"])
+            hypothesis = json.loads(hypothesis_path.read_text())
+            assert hypothesis["reason"] and hypothesis["status"] == "kept"
+            assert hypothesis["hypothesis"]["mechanism_id"] == kept_row["mechanism_id"]
         first = Path(sr.option(argv, "--out"))
         continuation = first / "loop-continuation.json"
         row, _ = sr.load_completed(continuation)

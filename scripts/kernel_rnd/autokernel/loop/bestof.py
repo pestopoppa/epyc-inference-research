@@ -95,9 +95,10 @@ import threading
 import time
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
-from . import actor_metrics, archive, integrity
+from .. import custody
+from . import actor_metrics, archive, integrity, scratch
 from .loop import (MEMBER_BUDGET_EXHAUSTED, Abstain, ActorStopped, ActorTransient,
-                   AuthoringFailure, AuthorReportMissing, author_failure_record)
+                   AuthoringFailure, AuthorReportMissing, RunAborted, author_failure_record)
 
 #: :8083's unified KV pool (np4, --kv-unified, MTP draft) and the tokens that always stay
 #: free for the other slots (operator 2026-09-26).
@@ -654,6 +655,7 @@ def ak_check_validator(script: Path | str, *, python: str | None = None,
 class _Member:
     spec: AuthorSpec
     workspace: Path | None = None
+    base: str | None = None
     started: float | None = None
     finished: float | None = None
     outcome: str = "pending"      # diff | abstained | transient | report_missing | stopped | error
@@ -671,6 +673,8 @@ class _Member:
     lane_log: Path | None = None
     released: bool = False
     retained: bool = False
+    custody_manifest: str | None = None
+    custody_error: BaseException | None = None
     #: The member's other marked dirs, released with its tree, newest first (its
     #: ak-check dir, then its home dir holding the per-call opencode config).
     extra: list = field(default_factory=list)
@@ -830,15 +834,45 @@ class AuthorPanel:
         started_stats = _stats(self.scratch)
         try:
             with self.scratch.scope("call", name=f"{self.lane}-authors-{panel_id}") as scope:
+                token = f"panel-custody-{panel_id}"
+                fenced = False
                 try:
                     self._allocate(scope, members, worktree, base, seed, panel_id)
-                    return self._race(hypothesis, context, scope, members, worktree, base,
-                                      lane_tree, row)
-                finally:
-                    # Every path: retain what exists, release what is still held (the
-                    # scope exit releases anything this misses), describe every member.
+                    # Fence every member before any author starts. A crash or failed
+                    # disposition leaves its original scratch for reconciliation.
+                    for member in members:
+                        paths = (member.workspace, *member.extra)
+                        scope.block_release("panel artifact custody incomplete",
+                                            token + "-" + member.spec.label, paths=paths)
+                        if isinstance(scope, scratch.Scope):
+                            from .actors import _sync_path
+                            for path in paths:
+                                kind = "worktree" if path == member.workspace else "dir"
+                                _sync_path(scratch._marker_path(kind, path))
+                                _sync_path(Path(path).parent)
+                    fenced = True
+                    failure = None
+                    try:
+                        result = self._race(hypothesis, context, scope, members, worktree, base,
+                                            lane_tree, row)
+                    except RunAborted:
+                        raise
+                    except Exception as exc:
+                        failure = exc
                     for member in members:
                         self._retire(scope, member, hypothesis)
+                    row["members"] = [self._describe(member, row) for member in members]
+                    fenced = False
+                    if failure is not None:
+                        raise failure
+                    return result
+                except BaseException as exc:
+                    if fenced:
+                        scope.retain("panel artifact custody incomplete")
+                        if isinstance(exc, Exception) and not isinstance(exc, RunAborted):
+                            raise RunAborted(f"panel custody failed: {exc}") from exc
+                    raise
+                finally:
                     row["members"] = [self._describe(member, row) for member in members]
         finally:
             # After the scope closed: the registry's own created/removed/sweep counters.
@@ -867,6 +901,7 @@ class AuthorPanel:
                 raise _FallBack(f"scratch worktree for {member.spec.label} refused: "
                                 f"{type(exc).__name__}: {exc}") from None
             member.workspace = path
+            member.base = base
             # The actor writes its per-call opencode config and its actor-replies beside
             # the workspace (`workspace.parent`): two members under one parent would
             # overwrite each other's config, i.e. run the wrong thinking mode.
@@ -958,6 +993,8 @@ class AuthorPanel:
                     except ValidationStopped as exc:
                         member.validation = Validation(False, -1, str(exc), {"stopped": True},
                                                        "stopped")
+                    except RunAborted as exc:
+                        member.custody_error = exc
                     except Exception as exc:      # noqa: BLE001 -- a validator fault is a failure
                         member.validation = Validation(
                             False, -1, f"validator failed: {type(exc).__name__}: {exc}"[:500],
@@ -966,7 +1003,10 @@ class AuthorPanel:
                         member.validating = False
             finally:
                 member.finished = elapsed()
-                self._harvest_metrics(member)
+                try:
+                    self._harvest_metrics(member)
+                except Exception as exc:
+                    member.custody_error = RunAborted(f"panel reply harvest failed: {exc}")
                 with lock:
                     order.append(member)
                     # A passing diff wins even under a run stop: it lands on the lane
@@ -987,7 +1027,10 @@ class AuthorPanel:
                     losers = ([m for m in order if m is not member] if won else
                               [member] if winner and winner[0] is not member else [])
                 for loser in losers:
-                    self._retire(scope, loser, hypothesis)
+                    try:
+                        self._retire(scope, loser, hypothesis)
+                    except RunAborted as exc:
+                        loser.custody_error = exc
 
         # AK-HR-3: each member thread runs in a COPY of this lane's context so its actor
         # calls carry the lane's `trial_id` (one Context cannot be entered by two threads,
@@ -999,6 +1042,10 @@ class AuthorPanel:
             thread.start()
         for thread in threads:
             thread.join()
+        failures = [m.custody_error or m.error for m in members
+                    if m.custody_error is not None or isinstance(m.error, RunAborted)]
+        if failures:
+            raise failures[0]
         row["finished_at"] = _now()
         spans = [(m.started, m.finished) for m in members
                  if m.started is not None and m.finished is not None]
@@ -1265,55 +1312,79 @@ class AuthorPanel:
     def _retire(self, scope, member: _Member, hypothesis) -> None:
         """Retain a finished member's patch, then release its tree (once, any thread)."""
         with self._book:
+            if member.released or member.custody_manifest is not None:
+                return
+            if member.custody_error is not None:
+                raise member.custody_error
+            if isinstance(member.error, RunAborted):
+                raise member.error
             self._retain(member, hypothesis)
-            self._release(scope, member)
+            if member.workspace is None:
+                return
+            try:
+                member.custody_manifest = self._record_custody(
+                    member.lane_log.parent, member, hypothesis)
+                scope.clear_release_block(f"panel-custody-{member.panel_id}-{member.spec.label}")
+                self._release(scope, member)
+            except Exception as exc:
+                if isinstance(exc, RunAborted):
+                    raise
+                raise RunAborted(f"panel member disposition failed: {exc}") from exc
 
     def _retain(self, member: _Member, hypothesis) -> None:
         if member.retained or member.workspace is None or member.released \
                 or member.started is None:
             return
-        member.retained = True
         try:
-            captured = archive.capture_patch(member.workspace)
-        except Exception as exc:      # noqa: BLE001 -- evidence, never a failure
-            member.patch = {"error": f"capture failed: {type(exc).__name__}: {exc}"[:300]}
-            return
-        if captured is None:
+            patch, additions = custody.capture_from_base(
+                member.workspace, member.base, archive.capture_patch, archive._git_env)
+        except Exception as exc:
+            raise RunAborted(f"panel patch capture failed: {exc}") from exc
+        if not patch:
             member.patch = None
+            member.retained = True
             return
-        head, patch, additions = captured
+        head = member.base
         member.patch_bytes = patch
         member.patch = {"patch_sha256": hashlib.sha256(patch).hexdigest(),
                         "bytes": len(patch), "head": head}
-        if self.retain is None:
-            return
         try:
+            if self.retain is None:
+                raise RuntimeError("no panel patch retainer")
             kept = self.retain(patch=patch, head=head, lane=f"{self.lane}.{member.spec.label}",
                                mechanism_id=getattr(hypothesis, "mechanism_id", None) or "unnamed",
                                worktree=str(member.workspace), untracked_source_paths=additions)
-            if kept is not None:
-                member.patch["patch_file"] = str(Path(kept).resolve())
-        except Exception as exc:      # noqa: BLE001
-            member.patch["retain_error"] = f"{type(exc).__name__}: {exc}"[:300]
+            if kept is None:
+                raise RuntimeError("panel patch retainer returned no path")
+            kept = Path(kept).resolve()
+            if hashlib.sha256(kept.read_bytes()).hexdigest() != member.patch["patch_sha256"]:
+                raise RuntimeError("panel retained patch digest differs")
+            member.patch["patch_file"] = str(kept)
+            member.retained = True
+        except Exception as exc:
+            raise RunAborted(f"panel patch retention failed: {exc}") from exc
+
+    def _record_custody(self, root: Path, member, hypothesis) -> str:
+        """Retain member replies and disposition before its fenced tree releases."""
+        root.mkdir(parents=True, exist_ok=True)
+        bundle = root / ("panel-" + member.panel_id)
+        bundle.mkdir(exist_ok=True)
+        name = hashlib.sha256(member.spec.label.encode()).hexdigest()[:16]
+        source = member.workspace.parent / actor_metrics.REPLY_DIR_NAME
+        copied = custody.copy_reply_bundle(source, bundle / name, root)
+        record = {"label": member.spec.label, "outcome": member.outcome,
+                  "result": member.result, "reason": member.reason or f"panel {member.result}",
+                  "retained_patch": member.patch, "reply_bundle": copied}
+        manifest = bundle / ("disposition-" + name + ".json")
+        custody.write_json(manifest, {"panel_id": member.panel_id,
+                                     "mechanism_id": getattr(hypothesis, "mechanism_id", None),
+                                     "members": [record]})
+        return str(manifest.resolve())
 
     def _release(self, scope, member: _Member) -> None:
         if member.released or member.workspace is None:
             return
-        release = getattr(scope, "release", None)
-        if release is None:
-            return      # the scope exit releases it
-        try:
-            release(member.workspace)
-            member.released = True
-        except Exception:      # noqa: BLE001 -- the scope exit still releases it
-            return
-        # A finished loser's whole footprint goes now, not at the panel's end: its
-        # check dir, then the home dir (tree first: the home dir holds it).
-        for path in member.extra:
-            try:
-                release(path)
-            except Exception:      # noqa: BLE001 -- the scope exit still releases it
-                pass
+        member.released = custody.release_scope_paths(scope, member.workspace, member.extra)
 
     def _harvest_metrics(self, member: _Member) -> None:
         """Move this member's actor-call rows from beside its scratch tree into the
@@ -1331,9 +1402,11 @@ class AuthorPanel:
         try:
             with open(path, "rb") as handle:
                 handle.seek(member.metrics_offset)
-                raw_lines = handle.read().decode("utf-8", "replace").splitlines()
-        except OSError:
+                raw_lines = handle.read().decode("utf-8").splitlines()
+        except FileNotFoundError:
             raw_lines = []
+        except (OSError, UnicodeError) as exc:
+            raise RunAborted(f"panel call record read failed: {exc}") from exc
         annotation = {"panel_id": member.panel_id, "label": member.spec.label,
                       "thinking": member.spec.thinking, "lane": self.lane}
         moved: list[str] = []
@@ -1351,15 +1424,15 @@ class AuthorPanel:
                     value = {**value, "author_panel": annotation}
                     line = json.dumps(value, sort_keys=True)
             moved.append(line)
-        if moved and member.lane_log is not None:
+        if moved:
+            if member.lane_log is None:
+                raise RunAborted("panel call record has no destination")
             try:
-                member.lane_log.parent.mkdir(parents=True, exist_ok=True)
-                with open(member.lane_log, "a", encoding="utf-8") as handle:
-                    handle.write("".join(item + "\n" for item in moved))
-                with open(path, "r+b") as handle:
-                    handle.truncate(member.metrics_offset)
-            except OSError:
-                pass
+                with self._book:
+                    custody.transfer_tail(path, member.lane_log, member.metrics_offset,
+                                          "".join(item + "\n" for item in moved))
+            except OSError as exc:
+                raise RunAborted(f"panel call record transfer failed: {exc}") from exc
         metric_rows = [r for r in rows if r.get("schema") == actor_metrics.METRICS_SCHEMA]
         totals = [((r.get("opencode") or r.get("orchestrator") or {}).get("totals") or {})
                   for r in metric_rows]
@@ -1395,7 +1468,8 @@ class AuthorPanel:
                 "paths": list(member.paths),
                 "report_source": (member.report or {}).get("report_source"),
                 "validation": None if member.validation is None else member.validation.to_dict(),
-                "patch": member.patch, "workspace": None if member.workspace is None
+                "patch": member.patch, "custody_manifest": member.custody_manifest,
+                "workspace": None if member.workspace is None
                 else str(member.workspace), **member.metrics,
                 "wall_budget_s": (None if member.wall_budget_s is None
                                   else _num(member.wall_budget_s)),

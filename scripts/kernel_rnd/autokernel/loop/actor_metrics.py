@@ -59,6 +59,8 @@ import time
 from pathlib import Path
 from typing import Any, Mapping
 
+from ..custody import append_rows
+
 #: Locally-owned schema for the per-call efficiency line this module writes. See the
 #: module docstring for why this is not the VB-AK-SEAT `CALL_SCHEMA`.
 METRICS_SCHEMA = "epyc.autokernel.actor_call_metrics.v1"
@@ -109,8 +111,7 @@ def record_report_source(replies_dir: Path, record: Mapping[str, Any]) -> None:
            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **dict(record)}
     try:
         Path(replies_dir).mkdir(parents=True, exist_ok=True)
-        with open(Path(replies_dir) / CALL_LOG_NAME, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, sort_keys=True) + "\n")
+        append_rows(Path(replies_dir) / CALL_LOG_NAME, json.dumps(row, sort_keys=True) + "\n")
     except OSError:
         pass
 
@@ -132,8 +133,7 @@ def record_salvage_turn(replies_dir: Path, record: Mapping[str, Any]) -> None:
            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **dict(record)}
     try:
         Path(replies_dir).mkdir(parents=True, exist_ok=True)
-        with open(Path(replies_dir) / CALL_LOG_NAME, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, sort_keys=True) + "\n")
+        append_rows(Path(replies_dir) / CALL_LOG_NAME, json.dumps(row, sort_keys=True) + "\n")
     except OSError:
         pass
 
@@ -152,8 +152,8 @@ def record_answer_protocol(replies_dir: Path, record: Mapping[str, Any]) -> None
            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **dict(record)}
     try:
         Path(replies_dir).mkdir(parents=True, exist_ok=True)
-        with open(Path(replies_dir) / CALL_LOG_NAME, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+        append_rows(Path(replies_dir) / CALL_LOG_NAME,
+                    json.dumps(row, sort_keys=True, default=str) + "\n")
     except OSError:
         pass
 

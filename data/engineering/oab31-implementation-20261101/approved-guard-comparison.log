@@ -1,0 +1,33 @@
+new in-scope source has no baseline entry: floor_units.py
+new in-scope source has no baseline entry: gpu_counter.py
+new in-scope source has no baseline entry: keep_screen.py
+new in-scope source has no baseline entry: lane_watchdog.py
+new in-scope source has no baseline entry: lane_watchdog_child.py
+new in-scope source has no baseline entry: provider_factories.py
+new in-scope source has no baseline entry: same_code_tripwire.py
+new in-scope source has no baseline entry: validate_keep_screen_contract.py
+accumulate.py: 763 code lines exceeds ceiling 472 by 291
+actor_metrics.py: 486 code lines exceeds ceiling 381 by 105
+archive.py: 500 code lines exceeds ceiling 469 by 31
+belief_context.py: 591 code lines exceeds ceiling 580 by 11
+bench.py: 386 code lines exceeds ceiling 385 by 1
+campaign_service.py: 714 code lines exceeds ceiling 703 by 11
+champion_reanchor.py: 525 code lines exceeds ceiling 465 by 60
+gates.py: 2993 code lines exceeds ceiling 2988 by 5
+gpu_serving_profile.py: 699 code lines exceeds ceiling 697 by 2
+lane_targets.py: 325 code lines exceeds ceiling 267 by 58
+new_epoch.py: 91 code lines exceeds ceiling 68 by 23
+production.py: 1312 code lines exceeds ceiling 1311 by 1
+residency.py: 537 code lines exceeds ceiling 477 by 60
+resolved_recipe.py: 1374 code lines exceeds ceiling 1364 by 10
+roofline_coverage.py: 227 code lines exceeds ceiling 213 by 14
+seed_bundle.py: 139 code lines exceeds ceiling 100 by 39
+serial_run.py: 2404 code lines exceeds ceiling 2340 by 64
+serving.py: 1587 code lines exceeds ceiling 1566 by 21
+serving_beliefs.py: 203 code lines exceeds ceiling 181 by 22
+serving_gate.py: 153 code lines exceeds ceiling 137 by 16
+status.py: 407 code lines exceeds ceiling 262 by 145
+surface_fold.py: 283 code lines exceeds ceiling 225 by 58
+unified_driver.py: 1293 code lines exceeds ceiling 1231 by 62
+approved entries exact; source snapshot verified; residual baseline guard categories: 31
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 2.13001828501001, "sampled_peak_tree_rss_bytes": 71024640, "samples": 22, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 578617, "leader_birth": 164897516, "child_rc": 0, "children_drained": true, "failure": null}

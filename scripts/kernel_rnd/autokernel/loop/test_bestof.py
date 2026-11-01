@@ -15,6 +15,7 @@ worktree itself.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import builtins
 import io
 import json
 import os
@@ -58,6 +59,7 @@ class FakeScope:
 
     def __init__(self, registry, name, release_method=True):
         self.registry, self.name, self.held = registry, name, []
+        self.fenced = set()
         if not release_method:
             self.release = None      # type: ignore[assignment]
 
@@ -70,6 +72,15 @@ class FakeScope:
         self.registry.counters["worktrees_created"] += 1
         return path
 
+    def block_release(self, reason, token, paths=None):
+        self.fenced.add(token)
+
+    def clear_release_block(self, token):
+        self.fenced.remove(token)
+
+    def retain(self, reason):
+        self.fenced.add("retained")
+
     def release(self, path):
         for repo, held in list(self.held):
             if held == Path(path):
@@ -79,6 +90,8 @@ class FakeScope:
                 self.registry.counters["worktrees_removed"] += 1
 
     def close(self):
+        if self.fenced:
+            return
         for repo, held in list(self.held):
             _git(repo, "worktree", "remove", "--force", str(held))
             self.held.remove((repo, held))
@@ -596,6 +609,156 @@ def _alive(pid: int) -> bool:
 
 
 # --------------------------------------------------------------------------- lifecycle
+
+
+class PanelCustody(Fixture):
+    def test_committed_member_patch_survives_tree_release(self):
+        class Committing(Editor):
+            def author(inner, hypothesis, context):
+                (inner.ws / TARGET).write_text("int f(void) { return 77; }\n")
+                subprocess.run(["git", "-C", str(inner.ws), "add", TARGET], check=True)
+                subprocess.run(["git", "-C", str(inner.ws), "-c", "user.name=fixture",
+                                "-c", "user.email=fixture@example.test", "commit", "-qm",
+                                "author edit"], check=True)
+                return (TARGET,)
+        _, rows = self.call(self.panel({"off": Committing, "medium": Committing}))
+        for member in rows[0]["members"]:
+            retained = Path(member["patch"]["patch_file"]).read_bytes()
+            self.assertIn(b"return 77", retained)
+        self.assertIn("return 77", (self.lane / TARGET).read_text())
+        self.assert_no_scratch_left()
+
+    def test_markers_are_synced_before_author_threads_start(self):
+        synced = []
+        original = actors._sync_path
+        def sync(path):
+            original(path)
+            synced.append(Path(path))
+        class Check(Editor):
+            def author(inner, hypothesis, context):
+                assert scratch._marker_path("worktree", inner.ws) in synced
+                assert scratch._marker_path("dir", inner.ws.parent) in synced
+                return super(Check, inner).author(hypothesis, context)
+        with mock.patch.object(actors, "_sync_path", side_effect=sync):
+            self.call(self.panel({"off": Check, "medium": Check}))
+
+    def test_non_utf8_call_log_keeps_exact_source_under_fence(self):
+        raw = b"invalid-\xff-record\n"
+        class Logged(Editor):
+            def author(inner, hypothesis, context):
+                target = inner.ws.parent / actor_metrics.REPLY_DIR_NAME
+                target.mkdir(exist_ok=True)
+                (target / actor_metrics.CALL_LOG_NAME).write_bytes(raw)
+                return super(Logged, inner).author(hypothesis, context)
+        with self.assertRaisesRegex(loop.RunAborted, "panel call record read failed"):
+            self.call(self.panel({"off": Logged, "medium": Logged}))
+        root = str(Path(self.registry.root).resolve())
+        held = [Path(path) for path in _worktrees(self.repo) if path.startswith(root)]
+        self.assertTrue(held)
+        self.assertTrue(any((path.parent / actor_metrics.REPLY_DIR_NAME /
+                             actor_metrics.CALL_LOG_NAME).read_bytes() == raw
+                            for path in held))
+        for path in held:
+            assert scratch.read_marker("worktree", path).get("release_blocked")
+
+    def test_partial_call_log_write_retains_original_row_and_scratch(self):
+        raw = b'{"schema":"fixture","reply":{"path":"saved.stdout"}}\n'
+        class Logged(Editor):
+            def author(inner, hypothesis, context):
+                target = inner.ws.parent / actor_metrics.REPLY_DIR_NAME
+                target.mkdir(exist_ok=True)
+                (target / actor_metrics.CALL_LOG_NAME).write_bytes(raw)
+                return super(Logged, inner).author(hypothesis, context)
+        destination = self.lane.parent / actor_metrics.REPLY_DIR_NAME / actor_metrics.CALL_LOG_NAME
+        original = builtins.open
+        class Partial:
+            def __init__(self, file, mode, *args, **kwargs):
+                self.file = original(file, mode, *args, **kwargs)
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                self.file.close()
+            def write(self, data):
+                self.file.write(data[:8])
+                self.file.flush()
+                raise OSError("partial destination write")
+        def open_fault(file, mode="r", *args, **kwargs):
+            if isinstance(file, (str, Path)) and Path(file) == destination and mode == "a":
+                return Partial(file, mode, *args, **kwargs)
+            return original(file, mode, *args, **kwargs)
+        with mock.patch("builtins.open", side_effect=open_fault):
+            with self.assertRaisesRegex(loop.RunAborted, "partial destination write"):
+                self.call(self.panel({"off": Logged, "medium": Logged}))
+        root = str(Path(self.registry.root).resolve())
+        held = [Path(path) for path in _worktrees(self.repo) if path.startswith(root)]
+        self.assertTrue(held)
+        self.assertTrue(any((path.parent / actor_metrics.REPLY_DIR_NAME /
+                             actor_metrics.CALL_LOG_NAME).read_bytes() == raw
+                            for path in held))
+        for path in held:
+            assert scratch.read_marker("worktree", path).get("release_blocked")
+
+    def test_actor_custody_failure_escapes_panel_and_retains_tree(self):
+        class FailedActor(Editor):
+            def author(inner, hypothesis, context):
+                (inner.ws / TARGET).write_text("unretained bytes")
+                raise loop.RunAborted("actor reply custody failed")
+        panel = self.panel({"off": FailedActor, "medium": FailedActor})
+        with self.assertRaisesRegex(loop.RunAborted, "actor reply custody failed"):
+            self.call(panel)
+        root = str(Path(self.registry.root).resolve())
+        held = [Path(path) for path in _worktrees(self.repo) if path.startswith(root)]
+        self.assertTrue(held)
+        for path in held:
+            marker = scratch.read_marker("worktree", path)
+            self.assertTrue(marker and marker.get("release_blocked"))
+            self.assertEqual((path / TARGET).read_text(), "unretained bytes")
+
+    def test_validator_custody_failure_is_not_a_retryable_validation(self):
+        def validator(*args, **kwargs):
+            raise loop.RunAborted("validator custody failure")
+        panel = self.panel({"off": Editor, "medium": Editor}, validator=validator)
+        with self.assertRaisesRegex(loop.RunAborted, "validator custody failure"):
+            self.call(panel)
+        root = str(Path(self.registry.root).resolve())
+        self.assertTrue([path for path in _worktrees(self.repo) if path.startswith(root)])
+
+    def test_disposition_failure_keeps_original_member_trees_fenced(self):
+        panel = self.panel({"off": Editor, "medium": Editor})
+        with mock.patch.object(panel, "_record_custody", side_effect=OSError("store unavailable")):
+            with self.assertRaisesRegex(loop.RunAborted, "disposition failed"):
+                self.call(panel)
+        root = str(Path(self.registry.root).resolve())
+        held = [Path(path) for path in _worktrees(self.repo) if path.startswith(root)]
+        self.assertTrue(held)
+        for path in held:
+            marker = scratch.read_marker("worktree", path)
+            self.assertTrue(marker and marker.get("release_blocked"))
+            self.assertIn(b"return 7", (path / TARGET).read_bytes())
+
+    def test_dispositions_name_retained_patch_and_reply_bundle(self):
+        class ReplyEditor(Editor):
+            def author(inner, hypothesis, context):
+                output = inner.ws.parent / actor_metrics.REPLY_DIR_NAME
+                output.mkdir(exist_ok=True)
+                (output / "reply.stdout").write_text("completed answer")
+                return super(ReplyEditor, inner).author(hypothesis, context)
+        _, rows = self.call(self.panel({"off": ReplyEditor, "medium": ReplyEditor}))
+        bundle = self.lane.parent / actor_metrics.REPLY_DIR_NAME / ("panel-" + rows[0]["panel_id"])
+        manifests = sorted(bundle.glob("disposition-*.json"))
+        self.assertEqual(len(manifests), 2)
+        self.assertEqual({m["custody_manifest"] for m in rows[0]["members"]},
+                         {str(path.resolve()) for path in manifests})
+        for manifest in manifests:
+            entry = json.loads(manifest.read_text())["members"][0]
+            self.assertTrue(entry["reason"])
+            patch = Path(entry["retained_patch"]["patch_file"])
+            self.assertTrue(patch.is_file())
+            self.assertEqual((Path(entry["reply_bundle"]) / "reply.stdout").read_text(),
+                             "completed answer")
+        self.assertEqual((self.lane.parent / actor_metrics.REPLY_DIR_NAME /
+                          "reply.stdout").read_text(), "completed answer")
+        self.assert_no_scratch_left()
 
 
 class ScratchLifecycle(Fixture):

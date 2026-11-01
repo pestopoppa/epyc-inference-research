@@ -21,6 +21,7 @@ measuring something other than the pipeline.
 """
 from __future__ import annotations
 
+import gc
 import os
 from pathlib import Path
 import tempfile
@@ -123,6 +124,11 @@ class _Recorder:
         self.rows.append(outcome)
 
 
+def _control_disposition(_worker, _candidate):
+    # CONTROL_ONLY: these concurrency doubles produce no filesystem artifacts.
+    pass
+
+
 def _drive(*, workers, iterations, champion=None, planner=None, critic=None,
            gate=None, measure=None, commit=None, reset=None, record=None,
            on_step=None, tail=None):
@@ -154,6 +160,7 @@ def _drive(*, workers, iterations, champion=None, planner=None, critic=None,
         champion_head=champion.head,
         reset_to_champion=reset or default_reset,
         record=record or (lambda outcome: None),
+        record_abandoned=_control_disposition,
         iterations=iterations,
         on_step=on_step,
         tail=tail)
@@ -930,7 +937,8 @@ class TheTailIsAtomicPerAttempt(unittest.TestCase):
             planner=planner, critic=_Critic(),
             context={}, measure=lambda *a: None,
             gate=lambda *a: (False, [gates.Verdict("compile", False, "nope")]),
-            commit=lambda *a: "x", tail_session=lambda: tail.session("base"))
+            commit=lambda *a: "x", tail_session=lambda: tail.session("base"),
+            record_abandoned=lambda candidate: None)  # CONTROL_ONLY: no source tree
         self.assertTrue(seen, "authoring must have run")
         self.assertFalse(any(seen), "authoring held the tail; formation is serialized")
 
@@ -1298,6 +1306,9 @@ class TheStopSentinelAndPruning(unittest.TestCase):
             with self.subTest(operation=operation), tempfile.TemporaryDirectory() as tmp:
                 store = Path(tmp)
                 (store / "anchor-gen-001").mkdir()
+                # Settle cyclic garbage from preceding tests before taking the baseline;
+                # cleanup during this check otherwise looks like negative fd leakage.
+                gc.collect()
                 before = fd_count()
                 with mock.patch.object(pool.os, operation,
                                        side_effect=OSError("fixture discovery failure")):
@@ -1366,7 +1377,8 @@ class NoLaneMayDieOutsideTheTry(unittest.TestCase):
                 lambda h, p: (False, [gates.Verdict("compile", False, "build failed")])),
             make_measure=lambda w: (lambda h, p: None),
             commit=lambda *a: "x", champion_head=lambda: "base",
-            reset_to_champion=reset, record=recorded.append, iterations=4)
+            reset_to_champion=reset, record=recorded.append, iterations=4,
+            record_abandoned=_control_disposition)
         self.assertEqual(len(outcomes), 4, "the budget must be fully drawn")
         self.assertEqual(sum(1 for o in outcomes if o.status == "lane_error"), 2)
         self.assertIn("could not reach the champion", " ".join(outcomes[0].reasons))
@@ -1388,7 +1400,8 @@ class NoLaneMayDieOutsideTheTry(unittest.TestCase):
             make_gate=lambda w: (lambda h, p: (False, [gates.Verdict("compile", False, "nope")])),
             make_measure=lambda w: (lambda h, p: None),
             commit=lambda *a: "x", champion_head=lambda: "base",
-            reset_to_champion=reset, record=lambda o: None, iterations=3)
+            reset_to_champion=reset, record=lambda o: None, iterations=3,
+            record_abandoned=_control_disposition)
         self.assertEqual(outcomes[0].status, "lane_error")
         self.assertTrue(any(o.status != "lane_error" for o in outcomes[1:]),
                         "the lane must recover, not just survive")
@@ -1440,7 +1453,8 @@ class TheStopMustReachTheLanes(unittest.TestCase):
             make_measure=lambda w: (lambda h, p: None),
             commit=lambda *a: "x", champion_head=lambda: "base",
             reset_to_champion=lambda w: "base", record=lambda o: None,
-            iterations=None, should_stop=lambda: stop["now"])
+            iterations=None, should_stop=lambda: stop["now"],
+            record_abandoned=_control_disposition)
         self.assertEqual(len(outcomes), 1,
                          "unbounded plus an ignored stop is a run that never ends")
 
@@ -1484,6 +1498,7 @@ class ThePoolBreaker(unittest.TestCase):
                 make_measure=lambda w: (lambda h, p: _comparison(0.02, floor=3.452)),
                 commit=lambda *a: "x", champion_head=lambda: _sha(0),
                 reset_to_champion=reset, record=recorded.append,
+                record_abandoned=_control_disposition,
                 iterations=iterations,
                 # A SAFETY NET for mutants only, never the mechanism: a breaker that
                 # does not trip would otherwise hang an unbounded pool forever.

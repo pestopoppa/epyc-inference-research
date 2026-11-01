@@ -34,6 +34,7 @@ appended to the system prompt makes the scoping explicit rather than inferred.
 """
 from __future__ import annotations
 
+import contextvars
 import dataclasses
 from dataclasses import dataclass
 import functools
@@ -49,9 +50,10 @@ import time
 from typing import Any, Callable, Mapping, Sequence
 import uuid
 
+from ..custody import append_rows, sync_path as _sync_path
 from . import actor_metrics, belief_context, history_fields, integrity, procguard, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
-                   Review)
+                   Review, RunAborted)
 
 #: `--actor-belief-context`: the ONLY mode is `required` (operator 2026-10-21: there is no
 #: "off" for planning). Every proposal first obtains a validated `ready` answer from ROOT's
@@ -856,6 +858,47 @@ def _continue_session_argv(backend: Backend, argv: list[str], session_id: str | 
     return [*argv, "--session", str(session_id)]
 
 
+# A call-local state: the scope is released only after both raw streams and the
+# call row naming them have reached durable storage.
+_reply_custody = contextvars.ContextVar("actor_reply_custody", default=None)
+
+
+def _fenced_actor_capture(fn):
+    @functools.wraps(fn)
+    def guarded(attempt, *args, **kwargs):
+        directory = Path(attempt.tmpdir())
+        token = uuid.uuid4().hex
+        attempt.block_release("actor reply awaiting durable disposition", token,
+                              paths=(directory,))
+        # The registry marker writer replaces the marker atomically but does not
+        # itself fsync it. Seal the marker and its directory before starting a child.
+        _sync_path(scratch._marker_path("dir", directory))
+        _sync_path(directory.parent)
+        state = {"directory": directory, "recorded": False}
+        context_token = _reply_custody.set(state)
+        try:
+            try:
+                result = fn(attempt, *args, **kwargs)
+            except BaseException as exc:
+                if not state["recorded"]:
+                    raise RunAborted(
+                        f"actor reply custody failed; raw capture retained at {directory}: "
+                        f"{type(exc).__name__}: {exc}") from exc
+                raise
+            if not state["recorded"]:
+                raise RunAborted(
+                    f"actor reply has no durable disposition; raw capture retained at {directory}")
+            return result
+        finally:
+            _reply_custody.reset(context_token)
+            if state["recorded"]:
+                attempt.clear_release_block(token)
+                _sync_path(scratch._marker_path("dir", directory))
+                _sync_path(directory.parent)
+    return guarded
+
+
+@_fenced_actor_capture
 def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
                   timeout_s: int, backend: Backend, read_only: bool,
                   schema: Mapping[str, Any] | None, env: Mapping[str, str] | None,
@@ -902,10 +945,13 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
     # pipe stopped at exactly 98,304 bytes (DS41 seat A/B, 2026-09-24) while the same
     # export to a file was 316 KB. A long session's stdout (compaction summaries) past
     # that point would lose exactly the JSON the loop needs.
-    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace",
-                                dir=attempt.tmpdir()) as out, \
-         tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace",
-                                dir=attempt.tmpdir()) as err:
+    with (Path(attempt.tmpdir()) / "actor.stdout").open(
+            "w+", encoding="utf-8", errors="replace") as out, \
+         (Path(attempt.tmpdir()) / "actor.stderr").open(
+            "w+", encoding="utf-8", errors="replace") as err:
+        os.fsync(out.fileno())
+        os.fsync(err.fileno())
+        _sync_path(Path(attempt.tmpdir()))
         try:
             if should_stop is None and not budget_s:
                 # `subprocess.run` ends only the direct child on its timeout: the call
@@ -1101,7 +1147,6 @@ def _budget_exhausted(workspace: Path, backend: Backend, prompt: str, *, argv: l
 #: Where raw actor replies land: a sibling of the worker tree, never inside it (a
 #: file inside the worktree would ride into the authored diff).
 ACTOR_REPLY_DIR = actor_metrics.REPLY_DIR_NAME
-ACTOR_REPLY_KEEP_BYTES = 4 * 1024 * 1024
 
 
 def _persist_reply(workspace: Path, backend: Backend,
@@ -1110,21 +1155,35 @@ def _persist_reply(workspace: Path, backend: Backend,
     from the store instead of from a pipe nobody can read.
 
     Returns the two files as `{stdout|stderr: {path, sha256, bytes}}` (bare names in
-    `actor-replies/`) so the call record can bind the exact bytes kept, or None."""
+    `actor-replies/`) so the call record can bind the exact bytes kept."""
     try:
         target = Path(workspace).parent / ACTOR_REPLY_DIR
         target.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-        stem = f"{stamp}-{backend.kind}-{backend.model.replace('/', '_')}-rc{done.returncode}"
+        stem = f"{stamp}-{backend.kind}-{backend.model.replace('/', '_')}-{uuid.uuid4().hex}-rc{done.returncode}"
         refs: dict[str, Any] = {}
         for stream, text in (("stdout", done.stdout), ("stderr", done.stderr)):
-            data = (text or "")[-ACTOR_REPLY_KEEP_BYTES:].encode("utf-8", "replace")
-            (target / f"{stem}.{stream}").write_bytes(data)
+            state = _reply_custody.get()
+            capture = (state["directory"] / f"actor.{stream}") if state else None
+            raw = capture.read_bytes() if capture is not None and capture.is_file() else None
+            # A fake subprocess may return text directly without writing the provided
+            # file. A real redirected child returns None and its file is authoritative.
+            if raw is not None and (raw or not text):
+                data = raw
+            else:
+                data = (text or "").encode("utf-8", "replace")
+            path = target / f"{stem}.{stream}"
+            with path.open("xb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
             refs[stream] = {"path": f"{stem}.{stream}",
                             "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+        _sync_path(target)
+        _sync_path(target.parent)
         return refs
-    except OSError:
-        return None  # a reply record is evidence, never a reason to fail the actor call
+    except OSError as exc:
+        raise RunAborted(f"actor reply retention failed: {exc}") from exc
 
 
 ACTOR_CALL_LOG = actor_metrics.CALL_LOG_NAME
@@ -1148,7 +1207,7 @@ def _record_call(workspace: Path, backend: Backend, prompt: str, *, returncode: 
               "backend": backend.describe(), "agent": backend.agent or None,
               "returncode": returncode, "wall_s": round(wall_s, 1),
               "prompt_chars": len(prompt),
-              "opencode_config": (env or {}).get("OPENCODE_CONFIG")}
+              "opencode_config": (env or {}).get("OPENCODE_CONFIG"), "reply": reply}
     try:
         row = _call_record_v1(workspace, backend, prompt, returncode=returncode,
                               wall_s=wall_s, finished=finished, env=env, schema=schema,
@@ -1158,10 +1217,18 @@ def _record_call(workspace: Path, backend: Backend, prompt: str, *, returncode: 
     try:
         target = Path(workspace).parent / ACTOR_REPLY_DIR
         target.mkdir(parents=True, exist_ok=True)
-        with open(target / ACTOR_CALL_LOG, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, sort_keys=True) + "\n")
-    except OSError:
-        pass  # evidence, never a reason to fail the actor call
+        if not reply or not all(isinstance(reply.get(stream), Mapping)
+                                and reply[stream].get("path")
+                                for stream in ("stdout", "stderr")):
+            raise RunAborted("actor call has no retained reply paths")
+        if row.get("reply") != reply:
+            raise RunAborted("actor call row did not bind its retained reply paths")
+        append_rows(target / ACTOR_CALL_LOG, json.dumps(row, sort_keys=True) + "\n")
+        state = _reply_custody.get()
+        if state is not None:
+            state["recorded"] = True
+    except OSError as exc:
+        raise RunAborted(f"actor call disposition record failed: {exc}") from exc
 
 
 def _safe_role(schema: Mapping[str, Any] | None) -> str | None:
@@ -1298,8 +1365,7 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
     try:
         target = Path(workspace).parent / ACTOR_REPLY_DIR
         target.mkdir(parents=True, exist_ok=True)
-        with open(target / ACTOR_CALL_LOG, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        append_rows(target / ACTOR_CALL_LOG, json.dumps(record, sort_keys=True) + "\n")
     except OSError:
         pass  # evidence, never a reason to fail the actor call
     return failure_class
@@ -1538,6 +1604,7 @@ def _captured(stream_value, handle) -> str:
     if stream_value is not None:
         return _text_of(stream_value)
     handle.flush()
+    os.fsync(handle.fileno())
     handle.seek(0)
     return handle.read()
 
@@ -1717,6 +1784,74 @@ def _relax_required_for_wire(schema: Any) -> Any:
     return relaxed
 
 
+@_fenced_actor_capture
+def _schema_http_capture(attempt, *, request, timeout_s, workspace, backend, instruction):
+    """Capture the actual HTTP response before parsing or disposing of a repair."""
+    import urllib.error
+    import urllib.request
+    path = Path(attempt.tmpdir()) / "actor.stdout"
+    started = time.monotonic()
+    error = None
+    http_status = None
+    with path.open("wb") as output:
+        os.fsync(output.fileno())
+        _sync_path(path.parent)
+
+        def capture(response):
+            while True:
+                try:
+                    chunk = response.read(65536)
+                    single = False
+                except TypeError:  # fixture responses implementing read() only
+                    chunk = response.read()
+                    single = True
+                if not chunk:
+                    return
+                try:
+                    output.write(chunk)
+                    output.flush()
+                    os.fsync(output.fileno())
+                except OSError as exc:
+                    raise RunAborted(f"schema response capture failed: {exc}") from exc
+                if single:
+                    return
+
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_s) as response:
+                capture(response)
+        except urllib.error.HTTPError as exc:
+            # HTTPError is also URLError, but its file-like body is the server's
+            # reply. Keep both its status and exact bytes before recording failure.
+            http_status = exc.code
+            error = f"HTTPError status {http_status}: {exc.reason}"
+            diagnostic = path.parent / "actor.stderr"
+            with diagnostic.open("wb") as details:
+                details.write(error.encode("utf-8", "replace"))
+                details.flush()
+                os.fsync(details.fileno())
+            _sync_path(path.parent)
+            with exc:
+                capture(exc)
+        except (urllib.error.URLError, OSError) as exc:
+            error = f"{type(exc).__name__}: {exc}"
+    raw = path.read_bytes().decode("utf-8", "replace")
+    repaired = None
+    if error is None:
+        try:
+            payload = json.loads(raw)
+            content = payload["choices"][0]["message"]["content"]
+            repaired = json.loads(content)
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            error = f"{type(exc).__name__}: {exc}"
+    done = subprocess.CompletedProcess(
+        args=["schema-repair"], returncode=http_status if http_status is not None else -2 if error else 0,
+        stdout=raw, stderr=error or "")
+    reply = _persist_reply(workspace, backend, done)
+    _record_call(workspace, backend, instruction, returncode=done.returncode,
+                 wall_s=time.monotonic() - started, env=None, reply=reply)
+    return repaired if isinstance(repaired, dict) else None
+
+
 def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
                    workspace: Path, timeout_s: int = SCHEMA_REPAIR_TIMEOUT_S,
                    instruction: str = _EXTRACT_INSTRUCTION,
@@ -1742,8 +1877,10 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
             base = wire
             headers["X-Client-Id"] = actor_passthrough.CLIENT_ID
     except actor_passthrough.UnroutedLocalProvider as exc:
-        _persist_reply(workspace, backend, subprocess.CompletedProcess(
+        reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
             args=["schema-repair"], returncode=-2, stdout="", stderr=str(exc)))
+        _record_call(workspace, backend, instruction, returncode=-2, wall_s=0,
+                     env=None, schema=schema, reply=reply)
         return None
     import urllib.request
     import urllib.error
@@ -1769,19 +1906,10 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
     request = urllib.request.Request(
         base + "/chat/completions", data=json.dumps(body).encode("utf-8"),
         headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
-            payload = json.loads(response.read().decode("utf-8", "replace"))
-        content = payload["choices"][0]["message"]["content"]
-        repaired = json.loads(content)
-    except (urllib.error.URLError, OSError, KeyError, IndexError, TypeError,
-            ValueError) as exc:
-        _persist_reply(workspace, backend, subprocess.CompletedProcess(
-            args=["schema-repair"], returncode=-2, stdout="", stderr=f"{type(exc).__name__}: {exc}"))
-        return None
-    _persist_reply(workspace, backend, subprocess.CompletedProcess(
-        args=["schema-repair"], returncode=0, stdout=content, stderr=""))
-    return repaired if isinstance(repaired, dict) else None
+    with _scratch_scope(workspace).scope("call", "schema-repair") as attempt:
+        return _schema_http_capture(attempt, request=request, timeout_s=timeout_s,
+                                    workspace=workspace, backend=backend,
+                                    instruction=instruction)
 
 
 #: An ACCEPTING review needs no reason: `_REVIEW_TASK` asks for

@@ -357,7 +357,8 @@ class ResumesAtAuthor(Fixture):
 
         outcome = loop.iterate(planner=planner, critic=OneRejection(), context={},
                                measure=lambda h, p: None, gate=passing_gate,
-                               commit=lambda h, p, c: None, should_abandon=lambda: stop["now"])
+                               commit=lambda h, p, c: None, should_abandon=lambda: stop["now"],
+                               record_abandoned=self.owner.record_abandoned)
         self.assertEqual(outcome.status, "stopped_mid_formation")
         checkpoint = outcome.resume_checkpoints[0]
         self.assertEqual(checkpoint["prior_patch_rejections"], ["edits the wrong symbol"])

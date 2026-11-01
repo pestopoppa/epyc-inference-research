@@ -1,0 +1,7 @@
+# OAB-31 implementation evidence
+
+Operator approval: `operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings`. On 2026-11-01 the operator authorized exactly actors.py 3037, bestof.py 1135, loop.py 1427, pipeline.py 355, pool.py 488 and run.py 6588. All other frozen manifest fields are unchanged. Five approved entries include pre-existing overage; those historical defects are not repaired or reclassified.
+
+The independent approval check verifies the six values and reference, frozen source/test hashes and unchanged non-exception manifest fields. `approved-guard-comparison.log` enumerates the **31 remaining pre-existing guard categories**; there is no all-green growth claim. `approved-guard-unit.log` records 25 passing tests and 11 passing subtests. Both ran under the physical 78–79 admission, mutex and bounded supervisor, with children drained.
+
+The reviewed implementation and earlier native controls are preserved in `../oab31-review-20261101/`. The source and test review patch hashes are respectively `a02fe2f5b8e9c869ec5115046f57237360a4ac29c6524eaf0727170563a98a4e` and `4b27c02e3f5b2155696665a9c2021acf4ba28e8cbd3e0994f91487d37e516540`. The shared custody owner is outside the loop-only growth checker, with its reviewed 147 code lines included in the custody AST review fence and creation inventory. This engineering evidence is not a measurement warrant and does not establish a belief-wiring canary.

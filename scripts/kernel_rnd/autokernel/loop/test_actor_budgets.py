@@ -321,7 +321,9 @@ class ConcisePrompt(unittest.TestCase):
         control = self._prompts(backend, None)
         on = self._prompts(backend, actors.ActorSeat(bounded=False, concise=True))
         for role in ("planner", "author"):
-            self.assertEqual(on[role][0], control[role][0] + "\n\n" + actors.CONCISE_RULE)
+            inserted = "\n\n" + actors.CONCISE_RULE
+            self.assertEqual(on[role][0].count(inserted), 1)
+            self.assertEqual(on[role][0].replace(inserted, "", 1), control[role][0])
         for phrase in ("derive each fact once", "reuse results instead of re-deriving",
                        "under ~4,000 tokens", "the JSON object only",
                        "no draft you then replace"):

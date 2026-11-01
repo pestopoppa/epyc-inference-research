@@ -405,7 +405,8 @@ class CarriesAreBounded(Fixture):
             planner=EditsLine(self.repo, []), critic=base.Critic(
                 [], [rejected("no"), rejected("no again")], hypothesis_fails=self),
             context={}, measure=lambda h, p: None, gate=base.passing_gate,
-            commit=lambda h, p, c: None, resume=point, author_attempts=2)
+            commit=lambda h, p, c: None, resume=point, author_attempts=2,
+            record_abandoned=self.owner.record_abandoned)
         self.assertEqual(outcome.status, loop.HYPOTHESIS_RETIRED)
 
     def test_the_budget_spent_is_never_carried(self):

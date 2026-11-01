@@ -33,7 +33,7 @@ from typing import Any
 
 from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
                           workload_contract)
-from .. import codegen_summary
+from .. import codegen_summary, custody
 HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
 #: `--cpu-measurement-gpu-quiet`: the CPU/GPU measurement quiet window. DEFAULT "lock"
@@ -1945,6 +1945,95 @@ def refuse_uncalibrated_keep(surface: str, calibrated: bool, comparison) -> None
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args],
                           capture_output=True, text=True, timeout=600).stdout.strip()
+
+
+def _write_custody_record(store: Path, kind: str, row: dict) -> Path:
+    return custody.write_record(store, kind, row)
+
+
+def _begin_author_custody(worker, hypothesis, checkpoint, *, store: Path) -> dict:
+    base = archive._git(worker.worktree, "rev-parse", "HEAD")
+    hold = pool.begin_custody_hold(worker, hypothesis.mechanism_id,
+                                   identity={"stage": "author", "base": base,
+                                             "hypothesis": hypothesis.to_dict()})
+    try:
+        if archive._git(worker.worktree, "rev-parse", "HEAD") != base:
+            raise RuntimeError("author base moved before custody was established")
+        record = _write_custody_record(store, "author-inflight",
+                                       {"hypothesis": hypothesis.to_dict(), "base": base,
+                                        "checkpoint": checkpoint,
+                                        "reason": "accepted hypothesis entering author"})
+        return {"hold": hold, "record": record, "base": base}
+    except Exception as exc:
+        raise loop.RunAborted(f"author hypothesis custody failed; lane remains held: {exc}") from exc
+
+
+def _finish_author_custody(worker, ticket, hypothesis, failure, *, store: Path):
+    try:
+        base = ticket["base"]
+        combined, additions = custody.capture_from_base(
+            worker.worktree, base, archive.capture_patch, archive._git_env)
+        kept = (archive.retain_patch_bytes(
+            store, combined, head=base, lane=worker.name,
+            mechanism_id=hypothesis.mechanism_id, worktree=str(worker.worktree),
+            untracked_source_paths=additions) if combined else None)
+        retained = None if kept is None else {
+            "patch_file": str(kept.resolve()),
+            "metadata_file": str(kept.with_suffix(".json").resolve()),
+            "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
+        disposition = _write_custody_record(
+            store, "author-disposition",
+            {"reason": failure or "author call returned",
+             "hypothesis_record": str(ticket["record"].resolve()), "retained_patch": retained})
+        if retained is not None:
+            retained["disposition_record"] = str(disposition.resolve())
+        pool.finish_custody_hold(ticket["hold"])
+        return retained
+    except Exception as exc:
+        raise loop.RunAborted(f"author patch custody failed; lane remains held: {exc}") from exc
+
+
+def _retain_fold_before_reset(worker, *, store: Path, base: str | None,
+                              mechanism: str) -> Path:
+    """Preserve the actual committed and dirty fold candidate before replacing a lane."""
+    hold = pool.begin_custody_hold(worker, mechanism, identity={"fold_base": base})
+    try:
+        head = archive._git(worker.worktree, "rev-parse", "HEAD")
+        committed = None
+        if base is not None and head != base:
+            done = subprocess.run(
+                ["git", "-C", str(worker.worktree), "diff", "--binary", "--full-index",
+                 "--no-ext-diff", "--no-textconv", base, head, "--"],
+                capture_output=True, env=archive._git_env(), timeout=600, check=True)
+            if done.stdout:
+                committed = archive.retain_patch_bytes(
+                    store, done.stdout, head=base, lane=worker.name,
+                    mechanism_id=mechanism, worktree=str(worker.worktree))
+        dirty = archive.retain_patch(store, worker.worktree, lane=worker.name,
+                                     mechanism_id=mechanism + "-dirty")
+        target = Path(store) / "patches"
+        target.mkdir(parents=True, exist_ok=True)
+        stamp = hashlib.sha256(f"{worker.name}:{time.time_ns()}".encode()).hexdigest()
+        manifest = target / f"fold-disposition-{stamp}.json"
+        with manifest.open("x", encoding="utf-8") as stream:
+            json.dump({"reason": "cross-target fold check ended; lane reset",
+                       "base": base, "head": head,
+                       "committed_patch": None if committed is None else str(committed.resolve()),
+                       "dirty_patch": None if dirty is None else str(dirty.resolve())},
+                      stream, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        for directory in (target, target.parent):
+            fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        pool.finish_custody_hold(hold)
+        return manifest
+    except Exception as exc:
+        raise loop.RunAborted(f"fold candidate custody failed; lane remains held: {exc}") from exc
 
 
 def _check_new_anchor_epoch_binding(requested: str | None, anchor_commit: str, *,
@@ -6508,7 +6597,30 @@ def _main(argv: list[str] | None = None) -> int:
                 attempt.pop("resume_checkpoints", None)
 
         def record_pooled(outcome) -> None:
+            worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
+            if worker is None:
+                raise loop.RunAborted("cannot fence outcome: lane not found")
+            hold = pool.begin_custody_hold(
+                worker, getattr(outcome.hypothesis, "mechanism_id", None) or "unnamed",
+                identity={"resumed_from": outcome.resumed_from,
+                          "attempt_identity": outcome.attempt_identity,
+                          "spawn_parent": outcome.spawn_parent,
+                          "status": outcome.status})
+            if outcome.retained_patch is None:
+                kept = keep_the_diff(worker, outcome.hypothesis)
+                if kept is not None:
+                    outcome.retained_patch = {
+                        "patch_file": str(kept.resolve()),
+                        "metadata_file": str(kept.with_suffix(".json").resolve()),
+                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
             attempt = attempt_with_codegen(outcome, codegen_by_head)
+            if outcome.hypothesis is not None:
+                hypothesis_record = _write_custody_record(
+                    args.store, "hypothesis-disposition",
+                    {"hypothesis": outcome.hypothesis.to_dict(),
+                     "reason": "; ".join(outcome.reasons) or f"iteration {outcome.status}",
+                     "status": outcome.status, "retained_patch": outcome.retained_patch})
+                attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
             retain_critic2(outcome, attempt)
             attempt["research_scope"] = archive.original_research_scope(
                 attempt, model=args.model, quant=census.dominant_quant,
@@ -6554,6 +6666,7 @@ def _main(argv: list[str] | None = None) -> int:
                     registry.close()
             latest.append(outcome)
             publish("running", latest, hotspot_rows=hotspot_rows)
+            pool.finish_custody_hold(hold)
 
         def record_abandoned_pooled(worker, candidate) -> None:
             """Durable disposition for a candidate abandoned INSIDE an iteration.
@@ -6567,18 +6680,38 @@ def _main(argv: list[str] | None = None) -> int:
             counts) is untouched.
             """
             hypothesis = candidate.hypothesis
+            hold = pool.begin_custody_hold(
+                worker, getattr(hypothesis, "mechanism_id", None) or "unnamed",
+                identity={"resumed_from": candidate.resumed_from,
+                          "resume_stage": candidate.resume_stage,
+                          "attempt_identity": candidate.attempt_identity,
+                          "candidate_diff_sha256": candidate.candidate_diff_sha256,
+                          "spawn_parent": candidate.spawn_parent})
             if hypothesis is not None and hypothesis.runtime_pair is None \
                     and candidate.status != "hypothesis_rejected":
-                try:
+                if candidate.retained_patch is not None:
+                    pointer = candidate.retained_patch
+                    raw = Path(pointer["patch_file"]).read_bytes()
+                    if hashlib.sha256(raw).hexdigest() != pointer["patch_sha256"]:
+                        raise RuntimeError("retained author patch changed; lane remains held")
+                else:
                     kept = keep_the_diff(worker, hypothesis)
-                    candidate.retained_patch = (None if kept is None else {
-                        "patch_file": str(kept.resolve()),
-                        "metadata_file": str(kept.with_suffix(".json").resolve()),
-                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()})
-                except Exception as exc:      # noqa: BLE001 -- the row still lands
-                    candidate.retained_patch = {
-                        "error": f"patch retention failed: {type(exc).__name__}: {exc}"}
+                    if kept is None:
+                        if not pool.prove_empty_pre_author(worker, candidate.spawn_parent):
+                            raise RuntimeError("candidate has no patch and lane is not proven empty")
+                    else:
+                        candidate.retained_patch = {
+                            "patch_file": str(kept.resolve()),
+                            "metadata_file": str(kept.with_suffix(".json").resolve()),
+                            "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
             attempt = candidate.to_attempt()
+            if hypothesis is not None:
+                hypothesis_record = _write_custody_record(
+                    args.store, "hypothesis-disposition",
+                    {"hypothesis": hypothesis.to_dict(),
+                     "reason": "; ".join(candidate.reasons) or f"candidate {candidate.status}",
+                     "status": candidate.status, "retained_patch": candidate.retained_patch})
+                attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
             attempt["research_scope"] = archive.original_research_scope(
                 attempt, model=args.model, quant=census.dominant_quant,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
@@ -6603,6 +6736,7 @@ def _main(argv: list[str] | None = None) -> int:
                                     effect=None, epoch=epoch)
                 finally:
                     registry.close()
+            pool.finish_custody_hold(hold)
             reason = candidate.reasons[0] if candidate.reasons else ""
             patch = (candidate.retained_patch or {}).get("patch_file") \
                 or (candidate.retained_patch or {}).get("error") or "no patch"
@@ -7045,11 +7179,16 @@ def _main(argv: list[str] | None = None) -> int:
             own = lane_targets.PeerTarget(entry=lane_binding.lane, launch_path=Path("/"),
                                           frozen_prompts=Path("/"), store=None)
             own_target = args.target_id or args.surface
+            fold_state = {"base": None, "mechanism": "foldcheck"}
 
             def measure(series):
+                _retain_fold_before_reset(worker, store=args.store, base=None,
+                                          mechanism="foldcheck-before")
                 pool.reset_to_champion(worker, champion_tree=args.worktree,
                                        branch=args.champion_branch)
                 base = _git(worker.worktree, "rev-parse", "HEAD")
+                fold_state["base"] = base
+                fold_state["mechanism"] = f"foldcheck-{series['origin_head'][:12]}"
                 for commit in series["commits"]:
                     if cross_target.apply_in_worktree(worker.worktree, commit) is None:
                         return {"error": f"{commit[:12]} does not apply onto this lane's "
@@ -7097,16 +7236,16 @@ def _main(argv: list[str] | None = None) -> int:
                           f"({event.get('reason')})"
                           + (f"; champion fold: {event['fold'].get('result')}"
                              if event.get("fold") else ""))
+            except loop.RunAborted:
+                raise
             except Exception as exc:  # noqa: BLE001
                 print(f"warning: cross-target fold check failed: {type(exc).__name__}: {exc}",
                       file=sys.stderr)
             finally:
-                try:
-                    pool.reset_to_champion(worker, champion_tree=args.worktree,
-                                           branch=args.champion_branch)
-                except Exception as exc:  # noqa: BLE001
-                    print(f"warning: lane reset after fold check failed: {exc}",
-                          file=sys.stderr)
+                _retain_fold_before_reset(worker, store=args.store, base=fold_state["base"],
+                                          mechanism=fold_state["mechanism"])
+                pool.reset_to_champion(worker, champion_tree=args.worktree,
+                                       branch=args.champion_branch)
 
         def reset_retained(worker):
             # STOP before the gate, or a hard interruption during authoring, leaves
@@ -7322,6 +7461,10 @@ def _main(argv: list[str] | None = None) -> int:
                              "measurement_epoch_sha256": measurement_epoch}),
             reserve_candidate=reserve_pooled,
             record_abandoned=record_abandoned_pooled,
+            begin_author_custody=lambda worker, h, checkpoint:
+                _begin_author_custody(worker, h, checkpoint, store=args.store),
+            finish_author_custody=lambda worker, ticket, h, failure:
+                _finish_author_custody(worker, ticket, h, failure, store=args.store),
             next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
             **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
             champion_tree=args.worktree, branch=args.champion_branch,

@@ -673,6 +673,13 @@ _SELF_CLEANING = "self-cleaning with-block temp; lands in the run scope's tmp (a
 #: `module:qualname:kind` -> (count, reason). Counts are exact: a NEW creating call in an
 #: allowlisted function fails too, so each one is reviewed.
 ALLOWLIST: dict[str, tuple[int, str]] = {
+    "custody.py:write_json:mkdir": (1, "evidence: parent of a durable custody record"),
+    "custody.py:write_json:open-write": (1, "evidence: exclusive durable custody record"),
+    "custody.py:copy_reply_bundle:copytree": (1, "evidence: durable copy of raw reply bundle"),
+    "custody.py:copy_reply_bundle:open-write": (1, "evidence: mirrored raw streams for call records"),
+    "custody.py:append_rows:mkdir": (1, "evidence: durable call-log parent"),
+    "custody.py:append_rows:open-write": (3, "evidence: append and rollback call records transactionally"),
+    "custody.py:transfer_tail:open-write": (1, "evidence: truncate source only after durable destination"),
     # Exact existing producer sites audited after OAB-29's full inventory check.
     # Output paths below are durable evidence; probe scratch is with-block owned.
     "ab_server_pair.py:ServerPair.start:mkdir": (1, "evidence: explicit log_dir retains each arm's server logs"),
@@ -710,23 +717,23 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "actor_opencode_config.py:write_plain_config:mkdir": (1, "writer at a caller-given path; actors pass a call-scope seat dir"),
     "actor_orchestrator.py:OrchestratorBackend.argv:mkdir": (1, "evidence: provenance sidecar dir, bound by digest into the metrics row"),
     "actor_orchestrator.py:OrchestratorBackend.argv:write_text": (3, _IN_SCOPE + " (schema/bundle/scouts request inputs)"),
-    "actors.py:_run_agent_in:TemporaryFile": (2, "anonymous stdout/stderr capture inside the attempt scope's tmp"),
+    "actors.py:_run_agent_in:open-write": (2, "named raw stdout/stderr in fenced attempt scratch before actor spawn"),
+    "actors.py:_schema_http_capture:open-write": (2, "named raw HTTP repair response in fenced attempt scratch"),
     "actor_metrics.py:_run_cli:TemporaryFile": (1, "anonymous (unlinked) capture file, deleted on close"),
     # -- actor evidence (kept) -----------------------------------------------------------
     "actor_metrics.py:export_session:mkdir": (1, "evidence: opencode session export, bound by digest on actor_call_metrics"),
     "actor_metrics.py:export_session:open-write": (1, "evidence: opencode session export, bound by digest on actor_call_metrics"),
     "actor_metrics.py:record_report_source:mkdir": (1, "evidence: actor call log"),
-    "actor_metrics.py:record_report_source:open-write": (1, "evidence: actor call log (append)"),
     "actor_metrics.py:record_salvage_turn:mkdir": (1, "evidence: actor call log (planner salvage-turn row)"),
-    "actor_metrics.py:record_salvage_turn:open-write": (1, "evidence: actor call log (append)"),
     "actor_metrics.py:record_answer_protocol:mkdir": (1, "evidence: actor call log (UFH14-B1 F2 answer-protocol row)"),
-    "actor_metrics.py:record_answer_protocol:open-write": (1, "evidence: actor call log (append)"),
     "actors.py:_persist_reply:mkdir": (1, "evidence: raw replies, bound by digest in the call record"),
-    "actors.py:_persist_reply:write_bytes": (1, "evidence: raw replies, bound by digest in the call record"),
+    "actors.py:_persist_reply:open-write": (1, "evidence: exact raw replies bound by digest in the durable call record"),
+    "bestof.py:AuthorPanel._record_custody:mkdir": (2, "evidence: durable panel reply bundle and member disposition directory"),
+    "pool.py:begin_custody_hold:os-open-create": (1, "durable sibling hold prevents resetting a lane with unresolved custody"),
+    "run.py:_retain_fold_before_reset:mkdir": (1, "evidence: directory for fold-reset disposition and retained patch"),
+    "run.py:_retain_fold_before_reset:open-write": (1, "evidence: durable fold-reset disposition naming exact retained patches"),
     "actors.py:_record_call:mkdir": (1, "evidence: VB-AK-SEAT call record log"),
-    "actors.py:_record_call:open-write": (1, "evidence: VB-AK-SEAT call record log (append)"),
     "actors.py:_record_metrics:mkdir": (2, "evidence: actor_call_metrics log and session exports"),
-    "actors.py:_record_metrics:open-write": (1, "evidence: actor_call_metrics log (append)"),
     "belief_context.py:_append:mkdir": (1, "evidence: belief receipt / degraded-mode logs"),
     "belief_context.py:_append:open-write": (1, "evidence: belief receipt / degraded-mode logs (append)"),
     "belief_context.py:DegradedWork._locked:mkdir": (1, "evidence: degraded-mode log dir (flock)"),
@@ -748,8 +755,6 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "ak_check.py:record_call:open-write": (1, "evidence: ak-check calls log (append)"),
     "ak_check.py:_flock_currently_held:open-write": (1, "state: non-blocking flock probe of an EXISTING lock file (a+b after an exists check); creates nothing"),
     # -- best-of panel (lane/ak-bestof): member trees are Scope.worktree/dir -------------
-    "bestof.py:AuthorPanel._harvest_metrics:mkdir": (1, "evidence: member actor-call rows moved into the LANE's actor-calls.jsonl"),
-    "bestof.py:AuthorPanel._harvest_metrics:open-write": (2, "evidence: the lane's actor-calls.jsonl (append) and the member log truncation"),
     "bestof.py:AuthorPanel._write_row:mkdir": (1, "evidence: author-panel.jsonl in the lane's reply dir"),
     "bestof.py:AuthorPanel._write_row:open-write": (1, "evidence: author-panel.jsonl (append)"),
     "bestof.py:command_validator.validate:TemporaryFile": (2, "anonymous (unlinked) stdout/stderr capture of the winner check, deleted on close"),
@@ -916,7 +921,7 @@ class ScratchInventory(unittest.TestCase):
 
     def _sites(self) -> dict[str, list[int]]:
         sites: dict[str, list[int]] = {}
-        for path in sorted(PKG.glob("*.py")):
+        for path in sorted([*PKG.glob("*.py"), PKG.parent / "custody.py"]):
             if path.name.startswith("test_") or path.name == "scratch.py":
                 continue
             for key, line in creation_sites(path):

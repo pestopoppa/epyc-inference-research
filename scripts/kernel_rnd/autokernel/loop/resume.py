@@ -336,9 +336,9 @@ def retain_checkpoint_patches(checkpoints: list, retain: Callable[[str], Any]) -
 
     `retain(mechanism_id)` retains the lane's diff (`archive.retain_patch`) and
     returns the patch path, or None when the lane holds no diff. A critic2
-    checkpoint the loop could not point yet takes that pointer; one whose lane holds
-    no diff, or whose retention failed, is DROPPED (an author checkpoint beside it
-    still resumes the round). Returns the list, modified in place.
+    checkpoint the loop could not point yet takes that pointer. Missing bytes or
+    a retention error stop the run; an author retry cannot replace this artifact.
+    Returns the list, modified in place.
     """
     if not isinstance(checkpoints, list):
         return checkpoints
@@ -349,12 +349,10 @@ def retain_checkpoint_patches(checkpoints: list, retain: Callable[[str], Any]) -
             mechanism = (entry.get("hypothesis") or {}).get("mechanism_id") or "unnamed"
             try:
                 path = retain(mechanism)
-            except Exception as exc:      # noqa: BLE001 -- the row still lands
-                print(f"warning: critic2 patch retention failed: {type(exc).__name__}: "
-                      f"{exc}", file=sys.stderr)
-                path = None
+            except Exception as exc:
+                raise RuntimeError(f"critic2 patch retention failed: {exc}") from exc
             if path is None:
-                continue
+                raise RuntimeError("critic2 has no retained patch; lane cannot advance")
             path = Path(path)
             entry["retained_patch"] = {
                 "patch_file": str(path.resolve()),

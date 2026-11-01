@@ -109,8 +109,10 @@ def _run(planner, critic, *, effect=0.05, gate_ok=True, floor=1.0):
         committed["head"] = "abc1234"
         return "abc1234"
 
+    # CONTROL_ONLY: injected actors do not create filesystem artifacts.
     outcome = loop.iterate(planner=planner, critic=critic, context={},
-                           measure=measure, gate=gate, commit=commit)
+                           measure=measure, gate=gate, commit=commit,
+                           record_abandoned=lambda candidate: None)
     return outcome, committed
 
 
@@ -498,7 +500,8 @@ class ARefusalNamesWhatWasRefused(unittest.TestCase):
         critic = mock.Mock()
         critic.review_hypothesis.return_value = loop.Review(False, "already in v9")
         outcome = loop.iterate(planner=planner, critic=critic, context={},
-                               measure=mock.Mock(), gate=mock.Mock(), commit=mock.Mock())
+                               measure=mock.Mock(), gate=mock.Mock(), commit=mock.Mock(),
+                               record_abandoned=lambda candidate: None)  # CONTROL_ONLY
         self.assertEqual(outcome.status, "refused_at_formation")
         self.assertIsNotNone(outcome.hypothesis)
         self.assertEqual(outcome.to_attempt()["mechanism_id"], "akm-q4k-branchless")
@@ -582,6 +585,7 @@ class AnInstrumentFailureEndsTheIterationNotTheRun(unittest.TestCase):
             gate=lambda *a: (True, [gates.Verdict("compile", True)]),
             commit=lambda *a: "abc1234")
         self.assertEqual(outcome.status, "bench_failed")
+        self.assertIsNotNone(outcome.hypothesis)
         self.assertIn("rc=-9", " ".join(outcome.reasons))
 
     def test_a_no_op_build_is_recorded_with_both_hashes_and_is_never_a_keep(self):

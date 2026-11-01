@@ -7,6 +7,7 @@ context bundle actually carries what the old planner never received.
 import copy
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -935,11 +936,16 @@ class Backends(unittest.TestCase):
     def test_run_agent_feeds_the_opencode_prompt_on_stdin(self):
         b = actors.backend_for("prov/model", "high")
         done = mock.Mock(returncode=0, stdout="{}", stderr="")
-        with mock.patch.object(actors.subprocess, "run", return_value=done) as ran, \
-             mock.patch.object(actors, "_persist_reply"):
-            actors._run_agent('say "hi" to me', workspace=Path("/ws"), backend=b)
-        self.assertEqual(ran.call_args.kwargs["input"], 'say "hi" to me')
-        self.assertNotIn('say "hi" to me', ran.call_args.args[0])
+        # CONTROL_ONLY: fake backend process; real reply custody uses the temp workspace.
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            actors._run_agent('say "hi" to me', workspace=workspace, backend=b)
+        calls = [call for call in ran.call_args_list if "input" in call.kwargs]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].kwargs["input"], 'say "hi" to me')
+        self.assertNotIn('say "hi" to me', calls[0].args[0])
 
     def test_an_unknown_kind_refuses_rather_than_guessing(self):
         with self.assertRaises(ValueError):
@@ -948,11 +954,15 @@ class Backends(unittest.TestCase):
     def test_run_agent_invokes_the_backend_argv_in_the_workspace(self):
         b = actors.backend_for("claude-fable-5-1", "medium")
         done = mock.Mock(returncode=0, stdout="{}", stderr="")
-        with mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
-            actors._run_agent("PROMPT", workspace=Path("/ws"), backend=b)
+        # CONTROL_ONLY: fake backend process; real reply custody uses the temp workspace.
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            actors._run_agent("PROMPT", workspace=workspace, backend=b)
         argv = ran.call_args.args[0]
-        self.assertEqual(argv, b.argv("PROMPT", Path("/ws")))
-        self.assertEqual(ran.call_args.kwargs["cwd"], "/ws")
+        self.assertEqual(argv, b.argv("PROMPT", workspace))
+        self.assertEqual(ran.call_args.kwargs["cwd"], str(workspace))
 
 
 

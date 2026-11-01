@@ -1072,7 +1072,7 @@ def iterate(*, planner: Planner, critic: Critic,
             next_resume: Callable[[], Any] | None = None,
             author_lane: tuple[Path, str] | None = None,
             iteration_scope=None,
-            author_panel=None
+            author_panel=None, begin_author_custody=None, finish_author_custody=None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -1192,6 +1192,9 @@ def iterate(*, planner: Planner, critic: Critic,
             outcome.reasons = [STOPPED_AFTER_DISPOSALS, *outcome.reasons[1:],
                                _disposal_summary(abandoned)]
         outcome.abandoned_candidates = list(abandoned)
+        if (outcome.hypothesis is progress.get("hypothesis")
+                and progress.get("authored_patch") and outcome.retained_patch is None):
+            outcome.retained_patch = dict(progress["authored_patch"])
         trial = history_fields.current()
         if trial is not None and outcome.history_fields is None:
             outcome.history_fields = trial.snapshot()
@@ -1231,8 +1234,9 @@ def iterate(*, planner: Planner, critic: Critic,
                         validator_provenance=validator_provenance,
                         record_abandoned=record_abandoned, abandoned=abandoned,
                         resume=resume, next_resume=next_resume, progress=progress,
-                        author_lane=author_lane,
-                        author_panel=author_panel))
+                        author_lane=author_lane, author_panel=author_panel,
+                        begin_author_custody=begin_author_custody,
+                        finish_author_custody=finish_author_custody))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -1261,13 +1265,13 @@ def iterate(*, planner: Planner, critic: Critic,
         # Recorded distinctly from a provider transient: "the benchmark could not be
         # taken" is a different fact from "the actor would not answer", and merging
         # them would hide an instrument failing behind an API being flaky.
-        return observed(Outcome("bench_failed", None, [str(exc)]))
+        return observed(Outcome("bench_failed", progress.get("hypothesis"), [str(exc)]))
     except Exception as exc:
         # Contained by the pool as `lane_error`, which carries no hypothesis and
         # never read `progress`. An authored patch whose critic pass 2 had not
         # returned is the one piece of in-flight work worth carrying across that
         # containment: hand its checkpoint to the pool on the exception itself.
-        pending = [dict(progress["critic2"])] if progress.get("critic2") else []
+        pending = _pending_checkpoints(progress)
         if pending:
             try:
                 exc.resume_checkpoints = pending
@@ -1289,7 +1293,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              author_attempts=HYPOTHESIS_AUTHOR_ATTEMPTS,
              validator_provenance=None, record_abandoned=None,
              abandoned=None, resume=None, next_resume=None, progress=None,
-             author_lane=None, author_panel=None) -> Outcome:
+             author_lane=None, author_panel=None,
+             begin_author_custody=None, finish_author_custody=None) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
@@ -1493,13 +1498,14 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 verdicts=(), resume_checkpoint: dict | None = None) -> None:
         """Record one abandoned candidate NOW, with its reason and gate.
 
-        A recording fault is carried on the iteration's final outcome rather than
-        raised: raising here would turn one refused candidate into a lane error that
-        discards the rest of the turn, which is the loss this exists to stop.
+        A recording failure stops the run before another author can overwrite the
+        lane. The pooled recorder also leaves a durable lane custody hold.
         """
         candidate = Outcome(status, hypothesis,
                             [reason or f"{refusal_gate} refused without a reason"],
                             gate_verdicts=list(verdicts), refusal_gate=refusal_gate)
+        if hypothesis is progress.get("hypothesis") and progress.get("authored_patch"):
+            candidate.retained_patch = dict(progress["authored_patch"])
         candidate.hypothesis_round = int(round_telemetry.get("hypothesis_round", 0))
         candidate.patch_round = int(round_telemetry.get("patch_round", 0))
         candidate.prior_rejection_prompt = bool(
@@ -1514,14 +1520,18 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             candidate.author_panels = [dict(progress["author_panel"])]
         _mark_report_source(candidate, progress)
         _mark_belief(candidate, progress)
-        record_error = None
+        if record_abandoned is None:
+            raise RunAborted("candidate disposition has no recorder; lane cannot advance")
         if record_abandoned is not None:
             try:
                 record_abandoned(candidate)
             except Exception as exc:      # noqa: BLE001 -- see docstring
-                record_error = f"{type(exc).__name__}: {exc}"
-                print(f"warning: abandoned-candidate record failed: {record_error}",
-                      file=sys.stderr)
+                raise RunAborted(
+                    f"abandoned-candidate custody failed; retain lane: {type(exc).__name__}: {exc}"
+                ) from exc
+            if isinstance(candidate.retained_patch, dict) and candidate.retained_patch.get("error"):
+                raise RunAborted("abandoned-candidate custody failed; retain lane: "
+                                 + str(candidate.retained_patch["error"]))
         if resume_checkpoint is not None:
             # The owner retained the diff while recording. A later stop row carries
             # this checkpoint too, so a failed disposal record cannot lose it.
@@ -1537,8 +1547,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             "attempt_identity": candidate.attempt_identity,
             "candidate_diff_sha256": candidate.candidate_diff_sha256,
         }
-        if record_error is not None:
-            summary["record_error"] = record_error
         if candidate.resumed_from is not None:
             summary["resumed_from"] = candidate.resumed_from
         abandoned.append(summary)
@@ -1607,6 +1615,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         # Polled BEFORE each actor call, never after: the whole point is that no
         # further multi-minute call is drawn once the run has been told to stop.
         progress["critic2"] = None
+        progress["hypothesis"] = None
+        progress["authored_patch"] = None
         progress["resumed_active"] = False
         progress["author_panel"] = None
         if resumed is not None and getattr(resumed, "stale", None) is None:
@@ -1721,6 +1731,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 # Formed and not yet judged: a stop before critic pass 1 answers keeps it.
                 progress["inflight"] = critic1_checkpoint(hypothesis, 0)
 
+        progress["hypothesis"] = hypothesis
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
         if should_abandon():
             return stopped()
@@ -1853,7 +1864,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         except Exception:      # noqa: BLE001 -- recovery then refuses
                             before_tree = None
 
-                    def authored_checkpoint() -> dict:
+                    def authored_checkpoint(retained=None) -> dict:
                         # The author produced a diff and critic pass 2 has not answered.
                         # The OWNER retains the lane diff when it records the row
                         # (`resume.retain_checkpoint_patches`) and drops this entry if
@@ -1861,7 +1872,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         return checkpoint("critic2", hypothesis,
                                           prior_patch_rejections=list(patch_reasons),
                                           patch_rounds_remaining=round_count - patch_index,
-                                          retained_patch=None)
+                                          retained_patch=retained)
                     author = planner.author
                     if author_panel is not None:
                         def author(h, ctx, _lane=author_lane, _solo=planner.author):
@@ -1869,6 +1880,23 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             # recovery below and every later stage read it as usual.
                             return author_panel(h, ctx, lane=_lane, solo=_solo,
                                                 record=_panel_recorder(progress))
+                    if begin_author_custody is not None:
+                        if finish_author_custody is None:
+                            raise RunAborted("author custody has no completion hook")
+                        call_author = author
+                        def author(h, ctx):
+                            ticket = begin_author_custody(h, progress["inflight"])
+                            failure = None
+                            try:
+                                return call_author(h, ctx)
+                            except BaseException as exc:
+                                failure = f"{type(exc).__name__}: {exc}"
+                                raise
+                            finally:
+                                retained = finish_author_custody(ticket, h, failure)
+                                if retained is not None:
+                                    progress["authored_patch"] = dict(retained)
+                                    progress["critic2"] = authored_checkpoint(retained)
                     log_offset = _call_log_offset(author_lane)
                     try:
                         paths, halted = actor_call(author, hypothesis, working)
@@ -1882,7 +1910,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             # verdict -- but only an edit made BY THIS CALL: a lane
                             # still holding an earlier round's rejected patch is not.
                             if _lane_changed(author_lane, before_tree):
-                                progress["critic2"] = authored_checkpoint()
+                                if progress.get("critic2") is None:
+                                    progress["critic2"] = authored_checkpoint()
                                 raise
                             # No diff by this call: an AUTHORING failure of an accepted
                             # hypothesis (truncation-caused = the harness's).
@@ -1907,7 +1936,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             label="author", outcome="abstained", reason=paths.reason,
                             evidence=_last_call_evidence(author_lane, log_offset))]
                         return authoring_failed(hypothesis, patch_reasons, members)
-                    progress["critic2"] = authored_checkpoint()
+                    if progress.get("critic2") is None:
+                        progress["critic2"] = authored_checkpoint()
                 # A declared path list is a claim, not an isolation boundary.  The
                 # injected host check resolves the full worktree before review/build.
                 try:

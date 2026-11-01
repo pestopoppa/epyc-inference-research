@@ -41,13 +41,14 @@ import io
 import json
 from pathlib import Path
 import signal
+import sqlite3
 import subprocess
 import tempfile
 import unittest
 from unittest import mock
 
 from autokernel.loop import (accumulate, anchor, bench, champion, gates, hotspots, loop,
-                             pipeline, pool)
+                             pipeline, pool, lane_watchdog)
 from autokernel.loop import run as run_mod
 
 CANONICAL = champion.CANONICAL_BRANCH
@@ -248,7 +249,9 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         (inbox_dir / "bad-utf8.md").write_bytes(b"\xff\xfe\xfa")
         (inbox_dir / "dangling.md").symlink_to(inbox_dir / "no-such-target")
 
-    def _run_one_keep(self, *, candidate_symbols=None, surface=None):
+    def _run_one_keep(self, *, candidate_symbols=None, surface=None, refuse_first=False,
+                      fail_disposition=False, no_edit=False, refuse_all=False,
+                      dirty_extra=False):
         """Drive `run.main` through exactly one kept iteration; return the record."""
         accumulate.Bundle(champion_of_record=self.tip, tip=self.tip,
                           surface=surface).save(self.store, surface=surface)
@@ -256,6 +259,13 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         planners: list = []
         scratch = self.root / "scratch-verify"
         repo, root, tip = self.repo, self.root, self.tip
+
+        dispatch_calls = []
+        def fake_dispatch(*_args, **_kwargs):
+            dispatch_calls.append(1)
+            failed = refuse_all or (refuse_first and len(dispatch_calls) == 1)
+            return gates.Verdict("no_fallback_dispatch", not failed,
+                                 "synthetic first refusal" if failed else "")
 
         def fake_compiles(source_root, build_dir, *, cmake_defines, jobs, cpu_list,
                           targets=gates.DEFAULT_TARGETS, cmake="cmake"):
@@ -289,8 +299,11 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
                                        target_symbol="sym")
 
             def author(self, hypothesis, context):
-                (self.workspace / "ggml/src/kernel.c").write_text(
-                    "patched\n", encoding="utf-8")
+                if not no_edit:
+                    (self.workspace / "ggml/src/kernel.c").write_text(
+                        "patched\n", encoding="utf-8")
+                if dirty_extra:
+                    (self.workspace / "untracked.txt").write_text("unretained data")
                 return ("ggml/src/kernel.c",)
 
         class _Critic:
@@ -327,6 +340,21 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
             yield {"device_id": "e2e-double"}
 
         real_verify = anchor.verify
+        real_validate = run_mod.integrity.validate_candidate
+        real_record = run_mod.archive.record
+
+        def fixture_validate(worktree, paths, **kwargs):
+            if no_edit:
+                # CONTROL_ONLY: reach a later refusal with no source delta;
+                # native lane-cleanliness proof and record callbacks remain real.
+                return run_mod.integrity.CandidateIntegrity(
+                    tuple(paths), run_mod.integrity.candidate_tree(worktree), ())
+            return real_validate(worktree, paths, **kwargs)
+
+        def record_with_fault(store, attempt, **kwargs):
+            if fail_disposition and attempt.get("status") == "gate_refused":
+                raise OSError("synthetic disposition archive failure")
+            return real_record(store, attempt, **kwargs)
 
         def verify_in_scratch(**kwargs):
             kwargs["scratch_build"] = scratch
@@ -336,19 +364,23 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
                 "--anchor-build", str(self.startup_anchor),
                 "--model", str(self.root / f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"), "--store", str(self.store),
                 "--iterations", "1", "--workers", "1",
+                "--allow-untested-actor-seats", "synthetic fixture actors",
                 "--worker-root", str(self.root / "lanes"),
                 "--worker-build-root", str(self.root / "builds")]
         out = io.StringIO()
-        with mock.patch.object(gates, "compiles", fake_compiles), \
+        # CONTROL_ONLY: exercise the in-process core so fake actors/builds remain installed;
+        # separate watchdog tests cover the subprocess supervision boundary.
+        with mock.patch.object(lane_watchdog, "_SUPERVISED", True), \
+             mock.patch.object(run_mod.integrity, "validate_candidate", side_effect=fixture_validate), \
+             mock.patch.object(run_mod.archive, "record", side_effect=record_with_fault), \
+             mock.patch.object(gates, "compiles", fake_compiles), \
              mock.patch.object(run_mod.kernel_coverage, "_nm", synthetic_symbols), \
              mock.patch.object(gates, "op_correctness",
                                lambda _b, **_k: gates.Verdict("op_correctness", True)), \
              mock.patch.object(gates, "affected_op_scope", return_value=("MUL_MAT",)), \
              mock.patch.object(gates, "deterministic",
                                lambda *_a, **_k: gates.Verdict("determinism", True)), \
-             mock.patch.object(gates, "no_fallback_dispatch",
-                               lambda *_a, **_k: gates.Verdict(
-                                   "no_fallback_dispatch", True)), \
+             mock.patch.object(gates, "no_fallback_dispatch", fake_dispatch), \
              mock.patch.object(run_mod.bench, "compare", fake_compare), \
              mock.patch.object(run_mod.actors, "AgentPlanner",
                                lambda workspace, **_: _Planner(workspace)), \
@@ -368,6 +400,60 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
              redirect_stdout(out):
             rc = run_mod.main(argv)
         return rc, compile_calls, planners, scratch, out.getvalue()
+
+    def test_real_pooled_refusal_records_patch_and_hypothesis_paths(self):
+        rc, *_ = self._run_one_keep(refuse_first=True)
+        self.assertEqual(rc, 0)
+        with sqlite3.connect(self.store / "experiments.db") as db:
+            rows = [json.loads(row[0]) for row in db.execute(
+                "SELECT payload FROM experiments WHERE status=?", ("gate_refused",))]
+        self.assertTrue(rows)
+        refused = rows[0]
+        self.assertIn("synthetic first refusal", refused["reason"])
+        self.assertIn(b"patched", Path(refused["retained_patch"]["patch_file"]).read_bytes())
+        record = json.loads(Path(refused["hypothesis_custody_record"]).read_text())
+        self.assertIn("synthetic first refusal", record["reason"])
+        self.assertEqual(record["hypothesis"]["mechanism_id"], refused["mechanism_id"])
+        self.assertEqual(record["retained_patch"]["patch_file"],
+                         refused["retained_patch"]["patch_file"])
+
+    def test_real_pooled_no_edit_refusal_records_hypothesis_and_clears_hold(self):
+        rc, *_ = self._run_one_keep(no_edit=True, refuse_all=True)
+        self.assertEqual(rc, 0)
+        with sqlite3.connect(self.store / "experiments.db") as db:
+            rows = [json.loads(row[0]) for row in db.execute(
+                "SELECT payload FROM experiments WHERE status=?", ("gate_refused",))]
+        if not rows:
+            with sqlite3.connect(self.store / "experiments.db") as db:
+                self.fail(repr(db.execute("SELECT status, payload FROM experiments").fetchall()))
+        for row in rows:
+            self.assertIn("synthetic first refusal", row["reason"])
+            record = json.loads(Path(row["hypothesis_custody_record"]).read_text())
+            self.assertEqual(record["hypothesis"]["mechanism_id"], row["mechanism_id"])
+            self.assertIsNone(record["retained_patch"])
+        lane = self.root / "lane0"
+        worker = pipeline.Worker("lane0", lane, self.root / "lane0-build")
+        self.assertFalse(pool.custody_hold_path(worker).exists())
+        self.assertEqual((lane / "ggml/src/kernel.c").read_text(), "base\n")
+
+    def test_no_patch_with_unproven_clean_lane_stops_and_retains_data(self):
+        with self.assertRaisesRegex(loop.RunAborted, "lane is not proven empty"):
+            self._run_one_keep(no_edit=True, refuse_all=True, dirty_extra=True)
+        lane = self.root / "lane0"
+        worker = pipeline.Worker("lane0", lane, self.root / "lane0-build")
+        self.assertTrue(pool.custody_hold_path(worker).is_file())
+        self.assertEqual((lane / "untracked.txt").read_text(), "unretained data")
+
+    def test_real_pooled_disposition_failure_stops_and_fences_lane(self):
+        with self.assertRaisesRegex(loop.RunAborted, "synthetic disposition archive failure"):
+            self._run_one_keep(refuse_first=True, fail_disposition=True)
+        lane = self.root / "lane0"
+        worker = pipeline.Worker("lane0", lane, self.root / "lane0-build")
+        self.assertTrue(pool.custody_hold_path(worker).is_file())
+        self.assertEqual((lane / "ggml/src/kernel.c").read_text(), "patched\n")
+        self.assertEqual(len(list((self.store / "patches").glob("author-inflight-*.json"))), 1)
+        with self.assertRaisesRegex(RuntimeError, "custody hold"):
+            pool.reset_to_champion(worker)
 
     def test_the_automatic_keep_path_promotes_production_complete(self):
         rc, calls, planners, scratch, log = self._run_one_keep()
@@ -460,7 +546,7 @@ class TheRunWiringSeams(unittest.TestCase):
         """A `build_context` quietly reverted to an inline `read_text` loop drops
         the `read_inbox` attribute reference; `inbox` alone would survive a rename,
         so both are pinned. Non-vacuity both directions, as in test_ranking."""
-        referenced = self._referenced(run_mod.main.__code__)
+        referenced = self._referenced(run_mod._main.__code__)
         self.assertIn("inbox", referenced)
         self.assertIn("read_inbox", referenced)
         self.assertNotIn("no_such_global_anywhere", referenced)
