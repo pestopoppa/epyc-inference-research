@@ -1,0 +1,8 @@
+test_raw_uptime_and_existing_warnings (scripts.benchmark.tests.test_canonical_host_attestation.CanonicalHealthTest.test_raw_uptime_and_existing_warnings) ... ok
+test_wrapper_embeds_evidence_and_refuses_capture_failure (scripts.benchmark.tests.test_canonical_host_attestation.CanonicalHealthTest.test_wrapper_embeds_evidence_and_refuses_capture_failure) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 12.478s
+
+OK
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 12.63279030798003, "sampled_peak_tree_rss_bytes": 76935168, "samples": 126, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 488767, "leader_birth": 164845372, "child_rc": 0, "children_drained": true, "failure": null}
