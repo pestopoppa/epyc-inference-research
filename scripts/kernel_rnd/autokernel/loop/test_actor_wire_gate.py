@@ -120,7 +120,12 @@ def test_actual_main_refuses_before_actor_factory(record_state, monkeypatch):
     from . import run, test_promotion_targets as fixtures
     fixture = fixtures.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
-    original_main, original_backend = run.main, actors.backend_for
+    # This test targets the real run core's admission ordering. The public
+    # entrypoint wraps that core in lane_watchdog.supervise(), which starts a
+    # child process; the synthetic fixture patches below intentionally live in
+    # this process and are not inherited by that child. Watchdog ownership and
+    # child supervision have separate tests.
+    original_main, original_backend = run._main, actors.backend_for
     factories = []
     try:
         stale = fixture.root / "stale-wire.json"
@@ -150,7 +155,10 @@ def test_actual_main_override_durable_before_first_call_fails(monkeypatch):
     from . import run, test_promotion_targets as fixtures
     fixture = fixtures.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
-    original_main = run.main
+    # Exercise the real run core with this fixture's mocks in-process. The
+    # public wrapper's watchdog is covered independently and must not fork away
+    # the synthetic actor/build boundaries used here.
+    original_main = run._main
     seen = []
     class FirstCallFailure(RuntimeError):
         pass
