@@ -86,6 +86,7 @@ def test_formatter_unavailable_is_not_a_pass(monkeypatch: pytest.MonkeyPatch) ->
     result = scorer.score("cj7a-operator-swap-001", "anything")
     assert result["verdict"] == VERDICT_OUT_OF_COVERAGE
     assert result["cause"] == "unsupported"
+    assert result["decided_proposition"] is None
     assert result["candidate_raw_sha256"]
     assert result["candidate_normalized_sha256"] is None
     assert result["expected_normalized_sha256"] is None
@@ -101,6 +102,7 @@ def test_formatter_timeout_is_not_a_pass(monkeypatch: pytest.MonkeyPatch) -> Non
     result = scorer.score("cj7a-operator-swap-001", "anything")
     assert result["verdict"] == VERDICT_OUT_OF_COVERAGE
     assert result["cause"] == "timeout"
+    assert result["decided_proposition"] is None
 
 
 def test_formatter_refusal_keeps_observed_identity_but_no_normalized_hashes(
