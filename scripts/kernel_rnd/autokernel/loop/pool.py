@@ -388,7 +388,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           make_author_panel=None,
           reserve_candidate=None, record_abandoned=None,
           next_resume=None, begin_author_custody=None, finish_author_custody=None,
-          author_sandbox: bool = False,
+          author_sandbox: bool = False, stage_lifecycle=None,
           cpu_window=None, tail_priority=None, on_tail_ready=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
@@ -455,7 +455,8 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
             **({"begin_author_custody": begin_author_custody}
                if begin_author_custody is not None else {}),
             **({"finish_author_custody": finish_author_custody}
-               if finish_author_custody is not None else {}))
+               if finish_author_custody is not None else {}),
+            **({"stage_lifecycle": stage_lifecycle} if stage_lifecycle is not None else {}))
     clock.close()
     return PoolResult(outcomes=outcomes, phase_seconds=clock.totals(),
                       wall_seconds=time.monotonic() - started,
