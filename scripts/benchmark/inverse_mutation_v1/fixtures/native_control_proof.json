@@ -1,0 +1,251 @@
+{
+  "captured_at_utc": "2026-11-01T04:08:13.845624+00:00",
+  "execution": {
+    "compute_grant": null,
+    "cpu_affinity": [
+      32,
+      33
+    ],
+    "drain_after": {
+      "action_required": 0,
+      "daemon": "dead; drain reports messages cannot be relayed",
+      "routed_pending": 0
+    },
+    "drain_before": {
+      "action_required": 0,
+      "daemon": "dead; drain reports messages cannot be relayed",
+      "routed_pending": 0
+    },
+    "exit_status": 0,
+    "max_rss_kib": 61144,
+    "omp_num_threads": "1",
+    "openblas_num_threads": "1",
+    "platform": "Linux-6.14.0-37-generic-x86_64-with-glibc2.42",
+    "prep_mutex": "/mnt/raid0/llm/tmp/compute-flags/prep-locks/32-33.lock (exclusive flock held for this run)",
+    "pytest": "16 passed",
+    "python": "3.13.7",
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "wall_seconds": 1.25
+  },
+  "records": [
+    {
+      "candidate_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "candidate_raw_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "control_kind": "correct-inverse-control",
+      "expected_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "fixture_id": "cj7a-operator-swap-001",
+      "formatter": {
+        "configuration": "isolated; line-length=100",
+        "executable_sha256": "88abf248be39383e05419e50811467b9c25ef3f3bc1b8a0874962941c0190ffa",
+        "version": "ruff 0.16.3"
+      },
+      "instruction": "Restore the original arithmetic operator in the McNemar count.",
+      "instruction_sha256": "18a03a22cfb235adf28f4b634b41a964a90f956b8aebca380224e863656e5350",
+      "item_id": "cj7a-operator-swap-001",
+      "mutation": "operator-swap",
+      "recorded_at_utc": "2026-11-01T04:08:13.600110+00:00",
+      "source_provenance": {
+        "commit": "ba4a037de79e282940dbdc1901646e774e9939ba",
+        "license": "MIT (repository LICENSE at pinned source commit)",
+        "path": "scripts/benchmark/e6_budget_analyze.py",
+        "repository": "https://github.com/pestopoppa/epyc-inference-research",
+        "scope": "mechanical edit application only; not software engineering",
+        "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a"
+      },
+      "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "verdict": "pass"
+    },
+    {
+      "candidate_normalized_sha256": "24d31594961f629121792a0ff1d209dbf0b6d5196bb3573a7238447c31d9c845",
+      "candidate_raw_sha256": "df8b22df5f597465434723be589af99bb952b34e40a894aea2ab63252ced0746",
+      "control_kind": "mutated-source-negative-control",
+      "expected_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "fixture_id": "cj7a-operator-swap-001",
+      "formatter": {
+        "configuration": "isolated; line-length=100",
+        "executable_sha256": "88abf248be39383e05419e50811467b9c25ef3f3bc1b8a0874962941c0190ffa",
+        "version": "ruff 0.16.3"
+      },
+      "instruction": "Restore the original arithmetic operator in the McNemar count.",
+      "instruction_sha256": "18a03a22cfb235adf28f4b634b41a964a90f956b8aebca380224e863656e5350",
+      "item_id": "cj7a-operator-swap-001",
+      "mutation": "operator-swap",
+      "recorded_at_utc": "2026-11-01T04:08:13.636550+00:00",
+      "source_provenance": {
+        "commit": "ba4a037de79e282940dbdc1901646e774e9939ba",
+        "license": "MIT (repository LICENSE at pinned source commit)",
+        "path": "scripts/benchmark/e6_budget_analyze.py",
+        "repository": "https://github.com/pestopoppa/epyc-inference-research",
+        "scope": "mechanical edit application only; not software engineering",
+        "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a"
+      },
+      "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "verdict": "fail"
+    },
+    {
+      "candidate_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "candidate_raw_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "control_kind": "correct-inverse-control",
+      "expected_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "fixture_id": "cj7a-boolean-flip-001",
+      "formatter": {
+        "configuration": "isolated; line-length=100",
+        "executable_sha256": "88abf248be39383e05419e50811467b9c25ef3f3bc1b8a0874962941c0190ffa",
+        "version": "ruff 0.16.3"
+      },
+      "instruction": "Restore the original condition that skips empty result data.",
+      "instruction_sha256": "8a6d2a65d1d00c51fbec6f258dfa1dd59f3ba87e92456d762e0979c2800131d3",
+      "item_id": "cj7a-boolean-flip-001",
+      "mutation": "boolean-flip",
+      "recorded_at_utc": "2026-11-01T04:08:13.672495+00:00",
+      "source_provenance": {
+        "commit": "ba4a037de79e282940dbdc1901646e774e9939ba",
+        "license": "MIT (repository LICENSE at pinned source commit)",
+        "path": "scripts/benchmark/e6_budget_analyze.py",
+        "repository": "https://github.com/pestopoppa/epyc-inference-research",
+        "scope": "mechanical edit application only; not software engineering",
+        "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a"
+      },
+      "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "verdict": "pass"
+    },
+    {
+      "candidate_normalized_sha256": "cf111a6a2e9b60c42974cc7245edf5f5cbed10dd098b3a77a4a5ee055f9aa10d",
+      "candidate_raw_sha256": "90391d37aab24381a832cbba6a7fc44ffa3f83170bb87601e6486c2184d3d4e8",
+      "control_kind": "mutated-source-negative-control",
+      "expected_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "fixture_id": "cj7a-boolean-flip-001",
+      "formatter": {
+        "configuration": "isolated; line-length=100",
+        "executable_sha256": "88abf248be39383e05419e50811467b9c25ef3f3bc1b8a0874962941c0190ffa",
+        "version": "ruff 0.16.3"
+      },
+      "instruction": "Restore the original condition that skips empty result data.",
+      "instruction_sha256": "8a6d2a65d1d00c51fbec6f258dfa1dd59f3ba87e92456d762e0979c2800131d3",
+      "item_id": "cj7a-boolean-flip-001",
+      "mutation": "boolean-flip",
+      "recorded_at_utc": "2026-11-01T04:08:13.706713+00:00",
+      "source_provenance": {
+        "commit": "ba4a037de79e282940dbdc1901646e774e9939ba",
+        "license": "MIT (repository LICENSE at pinned source commit)",
+        "path": "scripts/benchmark/e6_budget_analyze.py",
+        "repository": "https://github.com/pestopoppa/epyc-inference-research",
+        "scope": "mechanical edit application only; not software engineering",
+        "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a"
+      },
+      "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "verdict": "fail"
+    },
+    {
+      "candidate_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "candidate_raw_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "control_kind": "correct-inverse-control",
+      "expected_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "fixture_id": "cj7a-off-by-one-001",
+      "formatter": {
+        "configuration": "isolated; line-length=100",
+        "executable_sha256": "88abf248be39383e05419e50811467b9c25ef3f3bc1b8a0874962941c0190ffa",
+        "version": "ruff 0.16.3"
+      },
+      "instruction": "Restore the inclusive upper endpoint of the exact binomial sum.",
+      "instruction_sha256": "4b95a0c7ae1d1697fcaee144d7d589cbfdd647f912adb66b901111135cbfddca",
+      "item_id": "cj7a-off-by-one-001",
+      "mutation": "off-by-one",
+      "recorded_at_utc": "2026-11-01T04:08:13.733529+00:00",
+      "source_provenance": {
+        "commit": "ba4a037de79e282940dbdc1901646e774e9939ba",
+        "license": "MIT (repository LICENSE at pinned source commit)",
+        "path": "scripts/benchmark/e6_budget_analyze.py",
+        "repository": "https://github.com/pestopoppa/epyc-inference-research",
+        "scope": "mechanical edit application only; not software engineering",
+        "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a"
+      },
+      "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "verdict": "pass"
+    },
+    {
+      "candidate_normalized_sha256": "17674006743038922f442ebdbe6e26c9ffc036bfd7caf24eaf2ac7750f3a4289",
+      "candidate_raw_sha256": "e8dc420375423592ad8e4d6fb3e23e83f64f10cd40c815a4c70c777c3c371cd0",
+      "control_kind": "mutated-source-negative-control",
+      "expected_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "fixture_id": "cj7a-off-by-one-001",
+      "formatter": {
+        "configuration": "isolated; line-length=100",
+        "executable_sha256": "88abf248be39383e05419e50811467b9c25ef3f3bc1b8a0874962941c0190ffa",
+        "version": "ruff 0.16.3"
+      },
+      "instruction": "Restore the inclusive upper endpoint of the exact binomial sum.",
+      "instruction_sha256": "4b95a0c7ae1d1697fcaee144d7d589cbfdd647f912adb66b901111135cbfddca",
+      "item_id": "cj7a-off-by-one-001",
+      "mutation": "off-by-one",
+      "recorded_at_utc": "2026-11-01T04:08:13.761300+00:00",
+      "source_provenance": {
+        "commit": "ba4a037de79e282940dbdc1901646e774e9939ba",
+        "license": "MIT (repository LICENSE at pinned source commit)",
+        "path": "scripts/benchmark/e6_budget_analyze.py",
+        "repository": "https://github.com/pestopoppa/epyc-inference-research",
+        "scope": "mechanical edit application only; not software engineering",
+        "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a"
+      },
+      "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "verdict": "fail"
+    },
+    {
+      "candidate_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "candidate_raw_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "control_kind": "correct-inverse-control",
+      "expected_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "fixture_id": "cj7a-removed-guard-001",
+      "formatter": {
+        "configuration": "isolated; line-length=100",
+        "executable_sha256": "88abf248be39383e05419e50811467b9c25ef3f3bc1b8a0874962941c0190ffa",
+        "version": "ruff 0.16.3"
+      },
+      "instruction": "Restore the empty-discordance guard so the zero case returns 1.0.",
+      "instruction_sha256": "d0d5018af232e4371f2c96ff6e579af8f95f82842ab63326e6df83f68f257707",
+      "item_id": "cj7a-removed-guard-001",
+      "mutation": "removed-guard",
+      "recorded_at_utc": "2026-11-01T04:08:13.788177+00:00",
+      "source_provenance": {
+        "commit": "ba4a037de79e282940dbdc1901646e774e9939ba",
+        "license": "MIT (repository LICENSE at pinned source commit)",
+        "path": "scripts/benchmark/e6_budget_analyze.py",
+        "repository": "https://github.com/pestopoppa/epyc-inference-research",
+        "scope": "mechanical edit application only; not software engineering",
+        "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a"
+      },
+      "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "verdict": "pass"
+    },
+    {
+      "candidate_normalized_sha256": "f29a38c5cec63ac45960166ae9d6dc29fd07f9eab49c015c9a8a4b81e184817c",
+      "candidate_raw_sha256": "f90b40ea1a2cc81fdb3958438a7dbf822f2ffc7c0ff58c17af2d2237d5a130a0",
+      "control_kind": "mutated-source-negative-control",
+      "expected_normalized_sha256": "f69813179669c45cc0f7b7ce488055a5ba3d21e201fc27140b4e26a2352e8444",
+      "fixture_id": "cj7a-removed-guard-001",
+      "formatter": {
+        "configuration": "isolated; line-length=100",
+        "executable_sha256": "88abf248be39383e05419e50811467b9c25ef3f3bc1b8a0874962941c0190ffa",
+        "version": "ruff 0.16.3"
+      },
+      "instruction": "Restore the empty-discordance guard so the zero case returns 1.0.",
+      "instruction_sha256": "d0d5018af232e4371f2c96ff6e579af8f95f82842ab63326e6df83f68f257707",
+      "item_id": "cj7a-removed-guard-001",
+      "mutation": "removed-guard",
+      "recorded_at_utc": "2026-11-01T04:08:13.816847+00:00",
+      "source_provenance": {
+        "commit": "ba4a037de79e282940dbdc1901646e774e9939ba",
+        "license": "MIT (repository LICENSE at pinned source commit)",
+        "path": "scripts/benchmark/e6_budget_analyze.py",
+        "repository": "https://github.com/pestopoppa/epyc-inference-research",
+        "scope": "mechanical edit application only; not software engineering",
+        "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a"
+      },
+      "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+      "verdict": "fail"
+    }
+  ],
+  "schema": "cj7a_native_control_proof.v1",
+  "scope": "deterministic native controls only; no model inference, no model-quality/effectiveness claim"
+}

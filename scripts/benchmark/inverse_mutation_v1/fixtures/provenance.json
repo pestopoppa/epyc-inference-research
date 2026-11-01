@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/pestopoppa/epyc-inference-research",
+  "commit": "ba4a037de79e282940dbdc1901646e774e9939ba",
+  "original_path": "scripts/benchmark/e6_budget_analyze.py",
+  "snapshot_path": "scripts/benchmark/inverse_mutation_v1/fixtures/source_snapshot.py",
+  "source_sha256": "844301cb9ac6a7b4344266a8a5025e7abcf47f06da27df54d6a1e675a02ad86a",
+  "license": "MIT; repository LICENSE at the pinned source commit",
+  "source_commit_clean_for_path": true
+}
