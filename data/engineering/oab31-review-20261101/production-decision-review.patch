@@ -1,0 +1,1455 @@
+diff --git a/scripts/kernel_rnd/autokernel/loop/actor_metrics.py b/scripts/kernel_rnd/autokernel/loop/actor_metrics.py
+index d282395b4..dbf8f80e8 100644
+--- a/scripts/kernel_rnd/autokernel/loop/actor_metrics.py
++++ b/scripts/kernel_rnd/autokernel/loop/actor_metrics.py
+@@ -59,6 +59,8 @@ import time
+ from pathlib import Path
+ from typing import Any, Mapping
+ 
++from ..custody import append_rows
++
+ #: Locally-owned schema for the per-call efficiency line this module writes. See the
+ #: module docstring for why this is not the VB-AK-SEAT `CALL_SCHEMA`.
+ METRICS_SCHEMA = "epyc.autokernel.actor_call_metrics.v1"
+@@ -109,8 +111,7 @@ def record_report_source(replies_dir: Path, record: Mapping[str, Any]) -> None:
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **dict(record)}
+     try:
+         Path(replies_dir).mkdir(parents=True, exist_ok=True)
+-        with open(Path(replies_dir) / CALL_LOG_NAME, "a", encoding="utf-8") as handle:
+-            handle.write(json.dumps(row, sort_keys=True) + "\n")
++        append_rows(Path(replies_dir) / CALL_LOG_NAME, json.dumps(row, sort_keys=True) + "\n")
+     except OSError:
+         pass
+ 
+@@ -132,8 +133,7 @@ def record_salvage_turn(replies_dir: Path, record: Mapping[str, Any]) -> None:
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **dict(record)}
+     try:
+         Path(replies_dir).mkdir(parents=True, exist_ok=True)
+-        with open(Path(replies_dir) / CALL_LOG_NAME, "a", encoding="utf-8") as handle:
+-            handle.write(json.dumps(row, sort_keys=True) + "\n")
++        append_rows(Path(replies_dir) / CALL_LOG_NAME, json.dumps(row, sort_keys=True) + "\n")
+     except OSError:
+         pass
+ 
+@@ -152,8 +152,8 @@ def record_answer_protocol(replies_dir: Path, record: Mapping[str, Any]) -> None
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **dict(record)}
+     try:
+         Path(replies_dir).mkdir(parents=True, exist_ok=True)
+-        with open(Path(replies_dir) / CALL_LOG_NAME, "a", encoding="utf-8") as handle:
+-            handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
++        append_rows(Path(replies_dir) / CALL_LOG_NAME,
++                    json.dumps(row, sort_keys=True, default=str) + "\n")
+     except OSError:
+         pass
+ 
+diff --git a/scripts/kernel_rnd/autokernel/loop/actors.py b/scripts/kernel_rnd/autokernel/loop/actors.py
+index a8f22a757..d1cc92559 100644
+--- a/scripts/kernel_rnd/autokernel/loop/actors.py
++++ b/scripts/kernel_rnd/autokernel/loop/actors.py
+@@ -34,6 +34,7 @@ appended to the system prompt makes the scoping explicit rather than inferred.
+ """
+ from __future__ import annotations
+ 
++import contextvars
+ import dataclasses
+ from dataclasses import dataclass
+ import functools
+@@ -49,9 +50,10 @@ import time
+ from typing import Any, Callable, Mapping, Sequence
+ import uuid
+ 
++from ..custody import append_rows, sync_path as _sync_path
+ from . import actor_metrics, belief_context, history_fields, integrity, procguard, scratch
+ from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
+-                   Review)
++                   Review, RunAborted)
+ 
+ #: `--actor-belief-context`: the ONLY mode is `required` (operator 2026-10-21: there is no
+ #: "off" for planning). Every proposal first obtains a validated `ready` answer from ROOT's
+@@ -856,6 +858,47 @@ def _continue_session_argv(backend: Backend, argv: list[str], session_id: str |
+     return [*argv, "--session", str(session_id)]
+ 
+ 
++# A call-local state: the scope is released only after both raw streams and the
++# call row naming them have reached durable storage.
++_reply_custody = contextvars.ContextVar("actor_reply_custody", default=None)
++
++
++def _fenced_actor_capture(fn):
++    @functools.wraps(fn)
++    def guarded(attempt, *args, **kwargs):
++        directory = Path(attempt.tmpdir())
++        token = uuid.uuid4().hex
++        attempt.block_release("actor reply awaiting durable disposition", token,
++                              paths=(directory,))
++        # The registry marker writer replaces the marker atomically but does not
++        # itself fsync it. Seal the marker and its directory before starting a child.
++        _sync_path(scratch._marker_path("dir", directory))
++        _sync_path(directory.parent)
++        state = {"directory": directory, "recorded": False}
++        context_token = _reply_custody.set(state)
++        try:
++            try:
++                result = fn(attempt, *args, **kwargs)
++            except BaseException as exc:
++                if not state["recorded"]:
++                    raise RunAborted(
++                        f"actor reply custody failed; raw capture retained at {directory}: "
++                        f"{type(exc).__name__}: {exc}") from exc
++                raise
++            if not state["recorded"]:
++                raise RunAborted(
++                    f"actor reply has no durable disposition; raw capture retained at {directory}")
++            return result
++        finally:
++            _reply_custody.reset(context_token)
++            if state["recorded"]:
++                attempt.clear_release_block(token)
++                _sync_path(scratch._marker_path("dir", directory))
++                _sync_path(directory.parent)
++    return guarded
++
++
++@_fenced_actor_capture
+ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
+                   timeout_s: int, backend: Backend, read_only: bool,
+                   schema: Mapping[str, Any] | None, env: Mapping[str, str] | None,
+@@ -902,10 +945,13 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
+     # pipe stopped at exactly 98,304 bytes (DS41 seat A/B, 2026-09-24) while the same
+     # export to a file was 316 KB. A long session's stdout (compaction summaries) past
+     # that point would lose exactly the JSON the loop needs.
+-    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace",
+-                                dir=attempt.tmpdir()) as out, \
+-         tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace",
+-                                dir=attempt.tmpdir()) as err:
++    with (Path(attempt.tmpdir()) / "actor.stdout").open(
++            "w+", encoding="utf-8", errors="replace") as out, \
++         (Path(attempt.tmpdir()) / "actor.stderr").open(
++            "w+", encoding="utf-8", errors="replace") as err:
++        os.fsync(out.fileno())
++        os.fsync(err.fileno())
++        _sync_path(Path(attempt.tmpdir()))
+         try:
+             if should_stop is None and not budget_s:
+                 # `subprocess.run` ends only the direct child on its timeout: the call
+@@ -1101,7 +1147,6 @@ def _budget_exhausted(workspace: Path, backend: Backend, prompt: str, *, argv: l
+ #: Where raw actor replies land: a sibling of the worker tree, never inside it (a
+ #: file inside the worktree would ride into the authored diff).
+ ACTOR_REPLY_DIR = actor_metrics.REPLY_DIR_NAME
+-ACTOR_REPLY_KEEP_BYTES = 4 * 1024 * 1024
+ 
+ 
+ def _persist_reply(workspace: Path, backend: Backend,
+@@ -1110,21 +1155,35 @@ def _persist_reply(workspace: Path, backend: Backend,
+     from the store instead of from a pipe nobody can read.
+ 
+     Returns the two files as `{stdout|stderr: {path, sha256, bytes}}` (bare names in
+-    `actor-replies/`) so the call record can bind the exact bytes kept, or None."""
++    `actor-replies/`) so the call record can bind the exact bytes kept."""
+     try:
+         target = Path(workspace).parent / ACTOR_REPLY_DIR
+         target.mkdir(parents=True, exist_ok=True)
+         stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+-        stem = f"{stamp}-{backend.kind}-{backend.model.replace('/', '_')}-rc{done.returncode}"
++        stem = f"{stamp}-{backend.kind}-{backend.model.replace('/', '_')}-{uuid.uuid4().hex}-rc{done.returncode}"
+         refs: dict[str, Any] = {}
+         for stream, text in (("stdout", done.stdout), ("stderr", done.stderr)):
+-            data = (text or "")[-ACTOR_REPLY_KEEP_BYTES:].encode("utf-8", "replace")
+-            (target / f"{stem}.{stream}").write_bytes(data)
++            state = _reply_custody.get()
++            capture = (state["directory"] / f"actor.{stream}") if state else None
++            raw = capture.read_bytes() if capture is not None and capture.is_file() else None
++            # A fake subprocess may return text directly without writing the provided
++            # file. A real redirected child returns None and its file is authoritative.
++            if raw is not None and (raw or not text):
++                data = raw
++            else:
++                data = (text or "").encode("utf-8", "replace")
++            path = target / f"{stem}.{stream}"
++            with path.open("xb") as handle:
++                handle.write(data)
++                handle.flush()
++                os.fsync(handle.fileno())
+             refs[stream] = {"path": f"{stem}.{stream}",
+                             "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
++        _sync_path(target)
++        _sync_path(target.parent)
+         return refs
+-    except OSError:
+-        return None  # a reply record is evidence, never a reason to fail the actor call
++    except OSError as exc:
++        raise RunAborted(f"actor reply retention failed: {exc}") from exc
+ 
+ 
+ ACTOR_CALL_LOG = actor_metrics.CALL_LOG_NAME
+@@ -1148,7 +1207,7 @@ def _record_call(workspace: Path, backend: Backend, prompt: str, *, returncode:
+               "backend": backend.describe(), "agent": backend.agent or None,
+               "returncode": returncode, "wall_s": round(wall_s, 1),
+               "prompt_chars": len(prompt),
+-              "opencode_config": (env or {}).get("OPENCODE_CONFIG")}
++              "opencode_config": (env or {}).get("OPENCODE_CONFIG"), "reply": reply}
+     try:
+         row = _call_record_v1(workspace, backend, prompt, returncode=returncode,
+                               wall_s=wall_s, finished=finished, env=env, schema=schema,
+@@ -1158,10 +1217,18 @@ def _record_call(workspace: Path, backend: Backend, prompt: str, *, returncode:
+     try:
+         target = Path(workspace).parent / ACTOR_REPLY_DIR
+         target.mkdir(parents=True, exist_ok=True)
+-        with open(target / ACTOR_CALL_LOG, "a", encoding="utf-8") as handle:
+-            handle.write(json.dumps(row, sort_keys=True) + "\n")
+-    except OSError:
+-        pass  # evidence, never a reason to fail the actor call
++        if not reply or not all(isinstance(reply.get(stream), Mapping)
++                                and reply[stream].get("path")
++                                for stream in ("stdout", "stderr")):
++            raise RunAborted("actor call has no retained reply paths")
++        if row.get("reply") != reply:
++            raise RunAborted("actor call row did not bind its retained reply paths")
++        append_rows(target / ACTOR_CALL_LOG, json.dumps(row, sort_keys=True) + "\n")
++        state = _reply_custody.get()
++        if state is not None:
++            state["recorded"] = True
++    except OSError as exc:
++        raise RunAborted(f"actor call disposition record failed: {exc}") from exc
+ 
+ 
+ def _safe_role(schema: Mapping[str, Any] | None) -> str | None:
+@@ -1298,8 +1365,7 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
+     try:
+         target = Path(workspace).parent / ACTOR_REPLY_DIR
+         target.mkdir(parents=True, exist_ok=True)
+-        with open(target / ACTOR_CALL_LOG, "a", encoding="utf-8") as handle:
+-            handle.write(json.dumps(record, sort_keys=True) + "\n")
++        append_rows(target / ACTOR_CALL_LOG, json.dumps(record, sort_keys=True) + "\n")
+     except OSError:
+         pass  # evidence, never a reason to fail the actor call
+     return failure_class
+@@ -1538,6 +1604,7 @@ def _captured(stream_value, handle) -> str:
+     if stream_value is not None:
+         return _text_of(stream_value)
+     handle.flush()
++    os.fsync(handle.fileno())
+     handle.seek(0)
+     return handle.read()
+ 
+@@ -1717,6 +1784,74 @@ def _relax_required_for_wire(schema: Any) -> Any:
+     return relaxed
+ 
+ 
++@_fenced_actor_capture
++def _schema_http_capture(attempt, *, request, timeout_s, workspace, backend, instruction):
++    """Capture the actual HTTP response before parsing or disposing of a repair."""
++    import urllib.error
++    import urllib.request
++    path = Path(attempt.tmpdir()) / "actor.stdout"
++    started = time.monotonic()
++    error = None
++    http_status = None
++    with path.open("wb") as output:
++        os.fsync(output.fileno())
++        _sync_path(path.parent)
++
++        def capture(response):
++            while True:
++                try:
++                    chunk = response.read(65536)
++                    single = False
++                except TypeError:  # fixture responses implementing read() only
++                    chunk = response.read()
++                    single = True
++                if not chunk:
++                    return
++                try:
++                    output.write(chunk)
++                    output.flush()
++                    os.fsync(output.fileno())
++                except OSError as exc:
++                    raise RunAborted(f"schema response capture failed: {exc}") from exc
++                if single:
++                    return
++
++        try:
++            with urllib.request.urlopen(request, timeout=timeout_s) as response:
++                capture(response)
++        except urllib.error.HTTPError as exc:
++            # HTTPError is also URLError, but its file-like body is the server's
++            # reply. Keep both its status and exact bytes before recording failure.
++            http_status = exc.code
++            error = f"HTTPError status {http_status}: {exc.reason}"
++            diagnostic = path.parent / "actor.stderr"
++            with diagnostic.open("wb") as details:
++                details.write(error.encode("utf-8", "replace"))
++                details.flush()
++                os.fsync(details.fileno())
++            _sync_path(path.parent)
++            with exc:
++                capture(exc)
++        except (urllib.error.URLError, OSError) as exc:
++            error = f"{type(exc).__name__}: {exc}"
++    raw = path.read_bytes().decode("utf-8", "replace")
++    repaired = None
++    if error is None:
++        try:
++            payload = json.loads(raw)
++            content = payload["choices"][0]["message"]["content"]
++            repaired = json.loads(content)
++        except (KeyError, IndexError, TypeError, ValueError) as exc:
++            error = f"{type(exc).__name__}: {exc}"
++    done = subprocess.CompletedProcess(
++        args=["schema-repair"], returncode=http_status if http_status is not None else -2 if error else 0,
++        stdout=raw, stderr=error or "")
++    reply = _persist_reply(workspace, backend, done)
++    _record_call(workspace, backend, instruction, returncode=done.returncode,
++                 wall_s=time.monotonic() - started, env=None, reply=reply)
++    return repaired if isinstance(repaired, dict) else None
++
++
+ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
+                    workspace: Path, timeout_s: int = SCHEMA_REPAIR_TIMEOUT_S,
+                    instruction: str = _EXTRACT_INSTRUCTION,
+@@ -1742,8 +1877,10 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
+             base = wire
+             headers["X-Client-Id"] = actor_passthrough.CLIENT_ID
+     except actor_passthrough.UnroutedLocalProvider as exc:
+-        _persist_reply(workspace, backend, subprocess.CompletedProcess(
++        reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
+             args=["schema-repair"], returncode=-2, stdout="", stderr=str(exc)))
++        _record_call(workspace, backend, instruction, returncode=-2, wall_s=0,
++                     env=None, schema=schema, reply=reply)
+         return None
+     import urllib.request
+     import urllib.error
+@@ -1769,19 +1906,10 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
+     request = urllib.request.Request(
+         base + "/chat/completions", data=json.dumps(body).encode("utf-8"),
+         headers=headers, method="POST")
+-    try:
+-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+-            payload = json.loads(response.read().decode("utf-8", "replace"))
+-        content = payload["choices"][0]["message"]["content"]
+-        repaired = json.loads(content)
+-    except (urllib.error.URLError, OSError, KeyError, IndexError, TypeError,
+-            ValueError) as exc:
+-        _persist_reply(workspace, backend, subprocess.CompletedProcess(
+-            args=["schema-repair"], returncode=-2, stdout="", stderr=f"{type(exc).__name__}: {exc}"))
+-        return None
+-    _persist_reply(workspace, backend, subprocess.CompletedProcess(
+-        args=["schema-repair"], returncode=0, stdout=content, stderr=""))
+-    return repaired if isinstance(repaired, dict) else None
++    with _scratch_scope(workspace).scope("call", "schema-repair") as attempt:
++        return _schema_http_capture(attempt, request=request, timeout_s=timeout_s,
++                                    workspace=workspace, backend=backend,
++                                    instruction=instruction)
+ 
+ 
+ #: An ACCEPTING review needs no reason: `_REVIEW_TASK` asks for
+diff --git a/scripts/kernel_rnd/autokernel/loop/bestof.py b/scripts/kernel_rnd/autokernel/loop/bestof.py
+index bb054d892..e814f20c4 100644
+--- a/scripts/kernel_rnd/autokernel/loop/bestof.py
++++ b/scripts/kernel_rnd/autokernel/loop/bestof.py
+@@ -95,9 +95,10 @@ import threading
+ import time
+ from typing import Any, Callable, Iterator, Mapping, Sequence
+ 
+-from . import actor_metrics, archive, integrity
++from .. import custody
++from . import actor_metrics, archive, integrity, scratch
+ from .loop import (MEMBER_BUDGET_EXHAUSTED, Abstain, ActorStopped, ActorTransient,
+-                   AuthoringFailure, AuthorReportMissing, author_failure_record)
++                   AuthoringFailure, AuthorReportMissing, RunAborted, author_failure_record)
+ 
+ #: :8083's unified KV pool (np4, --kv-unified, MTP draft) and the tokens that always stay
+ #: free for the other slots (operator 2026-09-26).
+@@ -654,6 +655,7 @@ def ak_check_validator(script: Path | str, *, python: str | None = None,
+ class _Member:
+     spec: AuthorSpec
+     workspace: Path | None = None
++    base: str | None = None
+     started: float | None = None
+     finished: float | None = None
+     outcome: str = "pending"      # diff | abstained | transient | report_missing | stopped | error
+@@ -671,6 +673,8 @@ class _Member:
+     lane_log: Path | None = None
+     released: bool = False
+     retained: bool = False
++    custody_manifest: str | None = None
++    custody_error: BaseException | None = None
+     #: The member's other marked dirs, released with its tree, newest first (its
+     #: ak-check dir, then its home dir holding the per-call opencode config).
+     extra: list = field(default_factory=list)
+@@ -830,16 +834,46 @@ class AuthorPanel:
+         started_stats = _stats(self.scratch)
+         try:
+             with self.scratch.scope("call", name=f"{self.lane}-authors-{panel_id}") as scope:
++                token = f"panel-custody-{panel_id}"
++                fenced = False
+                 try:
+                     self._allocate(scope, members, worktree, base, seed, panel_id)
+-                    return self._race(hypothesis, context, scope, members, worktree, base,
+-                                      lane_tree, row)
+-                finally:
+-                    # Every path: retain what exists, release what is still held (the
+-                    # scope exit releases anything this misses), describe every member.
++                    # Fence every member before any author starts. A crash or failed
++                    # disposition leaves its original scratch for reconciliation.
++                    for member in members:
++                        paths = (member.workspace, *member.extra)
++                        scope.block_release("panel artifact custody incomplete",
++                                            token + "-" + member.spec.label, paths=paths)
++                        if isinstance(scope, scratch.Scope):
++                            from .actors import _sync_path
++                            for path in paths:
++                                kind = "worktree" if path == member.workspace else "dir"
++                                _sync_path(scratch._marker_path(kind, path))
++                                _sync_path(Path(path).parent)
++                    fenced = True
++                    failure = None
++                    try:
++                        result = self._race(hypothesis, context, scope, members, worktree, base,
++                                            lane_tree, row)
++                    except RunAborted:
++                        raise
++                    except Exception as exc:
++                        failure = exc
+                     for member in members:
+                         self._retire(scope, member, hypothesis)
+                     row["members"] = [self._describe(member, row) for member in members]
++                    fenced = False
++                    if failure is not None:
++                        raise failure
++                    return result
++                except BaseException as exc:
++                    if fenced:
++                        scope.retain("panel artifact custody incomplete")
++                        if isinstance(exc, Exception) and not isinstance(exc, RunAborted):
++                            raise RunAborted(f"panel custody failed: {exc}") from exc
++                    raise
++                finally:
++                    row["members"] = [self._describe(member, row) for member in members]
+         finally:
+             # After the scope closed: the registry's own created/removed/sweep counters.
+             row["scratch"].update(_scratch_delta(started_stats, _stats(self.scratch)))
+@@ -867,6 +901,7 @@ class AuthorPanel:
+                 raise _FallBack(f"scratch worktree for {member.spec.label} refused: "
+                                 f"{type(exc).__name__}: {exc}") from None
+             member.workspace = path
++            member.base = base
+             # The actor writes its per-call opencode config and its actor-replies beside
+             # the workspace (`workspace.parent`): two members under one parent would
+             # overwrite each other's config, i.e. run the wrong thinking mode.
+@@ -958,6 +993,8 @@ class AuthorPanel:
+                     except ValidationStopped as exc:
+                         member.validation = Validation(False, -1, str(exc), {"stopped": True},
+                                                        "stopped")
++                    except RunAborted as exc:
++                        member.custody_error = exc
+                     except Exception as exc:      # noqa: BLE001 -- a validator fault is a failure
+                         member.validation = Validation(
+                             False, -1, f"validator failed: {type(exc).__name__}: {exc}"[:500],
+@@ -966,7 +1003,10 @@ class AuthorPanel:
+                         member.validating = False
+             finally:
+                 member.finished = elapsed()
+-                self._harvest_metrics(member)
++                try:
++                    self._harvest_metrics(member)
++                except Exception as exc:
++                    member.custody_error = RunAborted(f"panel reply harvest failed: {exc}")
+                 with lock:
+                     order.append(member)
+                     # A passing diff wins even under a run stop: it lands on the lane
+@@ -987,7 +1027,10 @@ class AuthorPanel:
+                     losers = ([m for m in order if m is not member] if won else
+                               [member] if winner and winner[0] is not member else [])
+                 for loser in losers:
+-                    self._retire(scope, loser, hypothesis)
++                    try:
++                        self._retire(scope, loser, hypothesis)
++                    except RunAborted as exc:
++                        loser.custody_error = exc
+ 
+         # AK-HR-3: each member thread runs in a COPY of this lane's context so its actor
+         # calls carry the lane's `trial_id` (one Context cannot be entered by two threads,
+@@ -999,6 +1042,10 @@ class AuthorPanel:
+             thread.start()
+         for thread in threads:
+             thread.join()
++        failures = [m.custody_error or m.error for m in members
++                    if m.custody_error is not None or isinstance(m.error, RunAborted)]
++        if failures:
++            raise failures[0]
+         row["finished_at"] = _now()
+         spans = [(m.started, m.finished) for m in members
+                  if m.started is not None and m.finished is not None]
+@@ -1265,55 +1312,79 @@ class AuthorPanel:
+     def _retire(self, scope, member: _Member, hypothesis) -> None:
+         """Retain a finished member's patch, then release its tree (once, any thread)."""
+         with self._book:
++            if member.released or member.custody_manifest is not None:
++                return
++            if member.custody_error is not None:
++                raise member.custody_error
++            if isinstance(member.error, RunAborted):
++                raise member.error
+             self._retain(member, hypothesis)
+-            self._release(scope, member)
++            if member.workspace is None:
++                return
++            try:
++                member.custody_manifest = self._record_custody(
++                    member.lane_log.parent, member, hypothesis)
++                scope.clear_release_block(f"panel-custody-{member.panel_id}-{member.spec.label}")
++                self._release(scope, member)
++            except Exception as exc:
++                if isinstance(exc, RunAborted):
++                    raise
++                raise RunAborted(f"panel member disposition failed: {exc}") from exc
+ 
+     def _retain(self, member: _Member, hypothesis) -> None:
+         if member.retained or member.workspace is None or member.released \
+                 or member.started is None:
+             return
+-        member.retained = True
+         try:
+-            captured = archive.capture_patch(member.workspace)
+-        except Exception as exc:      # noqa: BLE001 -- evidence, never a failure
+-            member.patch = {"error": f"capture failed: {type(exc).__name__}: {exc}"[:300]}
+-            return
+-        if captured is None:
++            patch, additions = custody.capture_from_base(
++                member.workspace, member.base, archive.capture_patch, archive._git_env)
++        except Exception as exc:
++            raise RunAborted(f"panel patch capture failed: {exc}") from exc
++        if not patch:
+             member.patch = None
++            member.retained = True
+             return
+-        head, patch, additions = captured
++        head = member.base
+         member.patch_bytes = patch
+         member.patch = {"patch_sha256": hashlib.sha256(patch).hexdigest(),
+                         "bytes": len(patch), "head": head}
+-        if self.retain is None:
+-            return
+         try:
++            if self.retain is None:
++                raise RuntimeError("no panel patch retainer")
+             kept = self.retain(patch=patch, head=head, lane=f"{self.lane}.{member.spec.label}",
+                                mechanism_id=getattr(hypothesis, "mechanism_id", None) or "unnamed",
+                                worktree=str(member.workspace), untracked_source_paths=additions)
+-            if kept is not None:
+-                member.patch["patch_file"] = str(Path(kept).resolve())
+-        except Exception as exc:      # noqa: BLE001
+-            member.patch["retain_error"] = f"{type(exc).__name__}: {exc}"[:300]
++            if kept is None:
++                raise RuntimeError("panel patch retainer returned no path")
++            kept = Path(kept).resolve()
++            if hashlib.sha256(kept.read_bytes()).hexdigest() != member.patch["patch_sha256"]:
++                raise RuntimeError("panel retained patch digest differs")
++            member.patch["patch_file"] = str(kept)
++            member.retained = True
++        except Exception as exc:
++            raise RunAborted(f"panel patch retention failed: {exc}") from exc
++
++    def _record_custody(self, root: Path, member, hypothesis) -> str:
++        """Retain member replies and disposition before its fenced tree releases."""
++        root.mkdir(parents=True, exist_ok=True)
++        bundle = root / ("panel-" + member.panel_id)
++        bundle.mkdir(exist_ok=True)
++        name = hashlib.sha256(member.spec.label.encode()).hexdigest()[:16]
++        source = member.workspace.parent / actor_metrics.REPLY_DIR_NAME
++        copied = custody.copy_reply_bundle(source, bundle / name, root)
++        record = {"label": member.spec.label, "outcome": member.outcome,
++                  "result": member.result, "reason": member.reason or f"panel {member.result}",
++                  "retained_patch": member.patch, "reply_bundle": copied}
++        manifest = bundle / ("disposition-" + name + ".json")
++        custody.write_json(manifest, {"panel_id": member.panel_id,
++                                     "mechanism_id": getattr(hypothesis, "mechanism_id", None),
++                                     "members": [record]})
++        return str(manifest.resolve())
+ 
+     def _release(self, scope, member: _Member) -> None:
+         if member.released or member.workspace is None:
+             return
+-        release = getattr(scope, "release", None)
+-        if release is None:
+-            return      # the scope exit releases it
+-        try:
+-            release(member.workspace)
+-            member.released = True
+-        except Exception:      # noqa: BLE001 -- the scope exit still releases it
+-            return
+-        # A finished loser's whole footprint goes now, not at the panel's end: its
+-        # check dir, then the home dir (tree first: the home dir holds it).
+-        for path in member.extra:
+-            try:
+-                release(path)
+-            except Exception:      # noqa: BLE001 -- the scope exit still releases it
+-                pass
++        member.released = custody.release_scope_paths(scope, member.workspace, member.extra)
+ 
+     def _harvest_metrics(self, member: _Member) -> None:
+         """Move this member's actor-call rows from beside its scratch tree into the
+@@ -1331,9 +1402,11 @@ class AuthorPanel:
+         try:
+             with open(path, "rb") as handle:
+                 handle.seek(member.metrics_offset)
+-                raw_lines = handle.read().decode("utf-8", "replace").splitlines()
+-        except OSError:
++                raw_lines = handle.read().decode("utf-8").splitlines()
++        except FileNotFoundError:
+             raw_lines = []
++        except (OSError, UnicodeError) as exc:
++            raise RunAborted(f"panel call record read failed: {exc}") from exc
+         annotation = {"panel_id": member.panel_id, "label": member.spec.label,
+                       "thinking": member.spec.thinking, "lane": self.lane}
+         moved: list[str] = []
+@@ -1351,15 +1424,15 @@ class AuthorPanel:
+                     value = {**value, "author_panel": annotation}
+                     line = json.dumps(value, sort_keys=True)
+             moved.append(line)
+-        if moved and member.lane_log is not None:
++        if moved:
++            if member.lane_log is None:
++                raise RunAborted("panel call record has no destination")
+             try:
+-                member.lane_log.parent.mkdir(parents=True, exist_ok=True)
+-                with open(member.lane_log, "a", encoding="utf-8") as handle:
+-                    handle.write("".join(item + "\n" for item in moved))
+-                with open(path, "r+b") as handle:
+-                    handle.truncate(member.metrics_offset)
+-            except OSError:
+-                pass
++                with self._book:
++                    custody.transfer_tail(path, member.lane_log, member.metrics_offset,
++                                          "".join(item + "\n" for item in moved))
++            except OSError as exc:
++                raise RunAborted(f"panel call record transfer failed: {exc}") from exc
+         metric_rows = [r for r in rows if r.get("schema") == actor_metrics.METRICS_SCHEMA]
+         totals = [((r.get("opencode") or r.get("orchestrator") or {}).get("totals") or {})
+                   for r in metric_rows]
+@@ -1395,7 +1468,8 @@ class AuthorPanel:
+                 "paths": list(member.paths),
+                 "report_source": (member.report or {}).get("report_source"),
+                 "validation": None if member.validation is None else member.validation.to_dict(),
+-                "patch": member.patch, "workspace": None if member.workspace is None
++                "patch": member.patch, "custody_manifest": member.custody_manifest,
++                "workspace": None if member.workspace is None
+                 else str(member.workspace), **member.metrics,
+                 "wall_budget_s": (None if member.wall_budget_s is None
+                                   else _num(member.wall_budget_s)),
+diff --git a/scripts/kernel_rnd/autokernel/loop/loop.py b/scripts/kernel_rnd/autokernel/loop/loop.py
+index d94ae5949..6034831ad 100644
+--- a/scripts/kernel_rnd/autokernel/loop/loop.py
++++ b/scripts/kernel_rnd/autokernel/loop/loop.py
+@@ -1072,7 +1072,7 @@ def iterate(*, planner: Planner, critic: Critic,
+             next_resume: Callable[[], Any] | None = None,
+             author_lane: tuple[Path, str] | None = None,
+             iteration_scope=None,
+-            author_panel=None
++            author_panel=None, begin_author_custody=None, finish_author_custody=None
+             ) -> Outcome:
+     """One full turn. Pure control flow: every side effect is an injected callable.
+ 
+@@ -1192,6 +1192,9 @@ def iterate(*, planner: Planner, critic: Critic,
+             outcome.reasons = [STOPPED_AFTER_DISPOSALS, *outcome.reasons[1:],
+                                _disposal_summary(abandoned)]
+         outcome.abandoned_candidates = list(abandoned)
++        if (outcome.hypothesis is progress.get("hypothesis")
++                and progress.get("authored_patch") and outcome.retained_patch is None):
++            outcome.retained_patch = dict(progress["authored_patch"])
+         trial = history_fields.current()
+         if trial is not None and outcome.history_fields is None:
+             outcome.history_fields = trial.snapshot()
+@@ -1231,8 +1234,9 @@ def iterate(*, planner: Planner, critic: Critic,
+                         validator_provenance=validator_provenance,
+                         record_abandoned=record_abandoned, abandoned=abandoned,
+                         resume=resume, next_resume=next_resume, progress=progress,
+-                        author_lane=author_lane,
+-                        author_panel=author_panel))
++                        author_lane=author_lane, author_panel=author_panel,
++                        begin_author_custody=begin_author_custody,
++                        finish_author_custody=finish_author_custody))
+     except TailRefused as exc:
+         # The candidate was formed and never measured. Carry the hypothesis: the
+         # patch may well still help against the champion that displaced it, and the
+@@ -1261,13 +1265,13 @@ def iterate(*, planner: Planner, critic: Critic,
+         # Recorded distinctly from a provider transient: "the benchmark could not be
+         # taken" is a different fact from "the actor would not answer", and merging
+         # them would hide an instrument failing behind an API being flaky.
+-        return observed(Outcome("bench_failed", None, [str(exc)]))
++        return observed(Outcome("bench_failed", progress.get("hypothesis"), [str(exc)]))
+     except Exception as exc:
+         # Contained by the pool as `lane_error`, which carries no hypothesis and
+         # never read `progress`. An authored patch whose critic pass 2 had not
+         # returned is the one piece of in-flight work worth carrying across that
+         # containment: hand its checkpoint to the pool on the exception itself.
+-        pending = [dict(progress["critic2"])] if progress.get("critic2") else []
++        pending = _pending_checkpoints(progress)
+         if pending:
+             try:
+                 exc.resume_checkpoints = pending
+@@ -1289,7 +1293,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+              author_attempts=HYPOTHESIS_AUTHOR_ATTEMPTS,
+              validator_provenance=None, record_abandoned=None,
+              abandoned=None, resume=None, next_resume=None, progress=None,
+-             author_lane=None, author_panel=None) -> Outcome:
++             author_lane=None, author_panel=None,
++             begin_author_custody=None, finish_author_custody=None) -> Outcome:
+     last_proposed: Hypothesis | None = None
+     round_telemetry = round_telemetry if round_telemetry is not None else {}
+     validator_provenance = (validator_provenance if validator_provenance is not None
+@@ -1493,13 +1498,14 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+                 verdicts=(), resume_checkpoint: dict | None = None) -> None:
+         """Record one abandoned candidate NOW, with its reason and gate.
+ 
+-        A recording fault is carried on the iteration's final outcome rather than
+-        raised: raising here would turn one refused candidate into a lane error that
+-        discards the rest of the turn, which is the loss this exists to stop.
++        A recording failure stops the run before another author can overwrite the
++        lane. The pooled recorder also leaves a durable lane custody hold.
+         """
+         candidate = Outcome(status, hypothesis,
+                             [reason or f"{refusal_gate} refused without a reason"],
+                             gate_verdicts=list(verdicts), refusal_gate=refusal_gate)
++        if hypothesis is progress.get("hypothesis") and progress.get("authored_patch"):
++            candidate.retained_patch = dict(progress["authored_patch"])
+         candidate.hypothesis_round = int(round_telemetry.get("hypothesis_round", 0))
+         candidate.patch_round = int(round_telemetry.get("patch_round", 0))
+         candidate.prior_rejection_prompt = bool(
+@@ -1514,14 +1520,18 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+             candidate.author_panels = [dict(progress["author_panel"])]
+         _mark_report_source(candidate, progress)
+         _mark_belief(candidate, progress)
+-        record_error = None
++        if record_abandoned is None:
++            raise RunAborted("candidate disposition has no recorder; lane cannot advance")
+         if record_abandoned is not None:
+             try:
+                 record_abandoned(candidate)
+             except Exception as exc:      # noqa: BLE001 -- see docstring
+-                record_error = f"{type(exc).__name__}: {exc}"
+-                print(f"warning: abandoned-candidate record failed: {record_error}",
+-                      file=sys.stderr)
++                raise RunAborted(
++                    f"abandoned-candidate custody failed; retain lane: {type(exc).__name__}: {exc}"
++                ) from exc
++            if isinstance(candidate.retained_patch, dict) and candidate.retained_patch.get("error"):
++                raise RunAborted("abandoned-candidate custody failed; retain lane: "
++                                 + str(candidate.retained_patch["error"]))
+         if resume_checkpoint is not None:
+             # The owner retained the diff while recording. A later stop row carries
+             # this checkpoint too, so a failed disposal record cannot lose it.
+@@ -1537,8 +1547,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+             "attempt_identity": candidate.attempt_identity,
+             "candidate_diff_sha256": candidate.candidate_diff_sha256,
+         }
+-        if record_error is not None:
+-            summary["record_error"] = record_error
+         if candidate.resumed_from is not None:
+             summary["resumed_from"] = candidate.resumed_from
+         abandoned.append(summary)
+@@ -1607,6 +1615,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+         # Polled BEFORE each actor call, never after: the whole point is that no
+         # further multi-minute call is drawn once the run has been told to stop.
+         progress["critic2"] = None
++        progress["hypothesis"] = None
++        progress["authored_patch"] = None
+         progress["resumed_active"] = False
+         progress["author_panel"] = None
+         if resumed is not None and getattr(resumed, "stale", None) is None:
+@@ -1721,6 +1731,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+                 # Formed and not yet judged: a stop before critic pass 1 answers keeps it.
+                 progress["inflight"] = critic1_checkpoint(hypothesis, 0)
+ 
++        progress["hypothesis"] = hypothesis
+         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
+         if should_abandon():
+             return stopped()
+@@ -1853,7 +1864,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+                         except Exception:      # noqa: BLE001 -- recovery then refuses
+                             before_tree = None
+ 
+-                    def authored_checkpoint() -> dict:
++                    def authored_checkpoint(retained=None) -> dict:
+                         # The author produced a diff and critic pass 2 has not answered.
+                         # The OWNER retains the lane diff when it records the row
+                         # (`resume.retain_checkpoint_patches`) and drops this entry if
+@@ -1861,7 +1872,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+                         return checkpoint("critic2", hypothesis,
+                                           prior_patch_rejections=list(patch_reasons),
+                                           patch_rounds_remaining=round_count - patch_index,
+-                                          retained_patch=None)
++                                          retained_patch=retained)
+                     author = planner.author
+                     if author_panel is not None:
+                         def author(h, ctx, _lane=author_lane, _solo=planner.author):
+@@ -1869,6 +1880,23 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+                             # recovery below and every later stage read it as usual.
+                             return author_panel(h, ctx, lane=_lane, solo=_solo,
+                                                 record=_panel_recorder(progress))
++                    if begin_author_custody is not None:
++                        if finish_author_custody is None:
++                            raise RunAborted("author custody has no completion hook")
++                        call_author = author
++                        def author(h, ctx):
++                            ticket = begin_author_custody(h, progress["inflight"])
++                            failure = None
++                            try:
++                                return call_author(h, ctx)
++                            except BaseException as exc:
++                                failure = f"{type(exc).__name__}: {exc}"
++                                raise
++                            finally:
++                                retained = finish_author_custody(ticket, h, failure)
++                                if retained is not None:
++                                    progress["authored_patch"] = dict(retained)
++                                    progress["critic2"] = authored_checkpoint(retained)
+                     log_offset = _call_log_offset(author_lane)
+                     try:
+                         paths, halted = actor_call(author, hypothesis, working)
+@@ -1882,7 +1910,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+                             # verdict -- but only an edit made BY THIS CALL: a lane
+                             # still holding an earlier round's rejected patch is not.
+                             if _lane_changed(author_lane, before_tree):
+-                                progress["critic2"] = authored_checkpoint()
++                                if progress.get("critic2") is None:
++                                    progress["critic2"] = authored_checkpoint()
+                                 raise
+                             # No diff by this call: an AUTHORING failure of an accepted
+                             # hypothesis (truncation-caused = the harness's).
+@@ -1907,7 +1936,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
+                             label="author", outcome="abstained", reason=paths.reason,
+                             evidence=_last_call_evidence(author_lane, log_offset))]
+                         return authoring_failed(hypothesis, patch_reasons, members)
+-                    progress["critic2"] = authored_checkpoint()
++                    if progress.get("critic2") is None:
++                        progress["critic2"] = authored_checkpoint()
+                 # A declared path list is a claim, not an isolation boundary.  The
+                 # injected host check resolves the full worktree before review/build.
+                 try:
+diff --git a/scripts/kernel_rnd/autokernel/loop/pipeline.py b/scripts/kernel_rnd/autokernel/loop/pipeline.py
+index c5a7db0e2..f64cbbf17 100644
+--- a/scripts/kernel_rnd/autokernel/loop/pipeline.py
++++ b/scripts/kernel_rnd/autokernel/loop/pipeline.py
+@@ -305,7 +305,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
+              reserve_candidate=None,
+              make_author_panel: Callable[[Worker], Any] | None = None,
+              record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
+-             next_resume: Callable[[Worker, str], Any] | None = None
++             next_resume: Callable[[Worker, str], Any] | None = None,
++             begin_author_custody=None, finish_author_custody=None
+              ) -> list[loop_mod.Outcome]:
+     """Drive `iterations` iterations across `workers` concurrent lanes.
+ 
+@@ -477,6 +478,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
+                         candidate.exact_repeat_dispatch_count = reservation.dispatch_count
+                         candidate.candidate_diff_sha256 = reservation.candidate_diff_sha256
+                         reservation = None
++                    if record_abandoned is None:
++                        raise loop_mod.RunAborted("candidate disposition has no recorder")
+                     if record_abandoned is not None:
+                         with outcomes_lock:
+                             record_abandoned(_w, candidate)
+@@ -512,6 +515,12 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
+                     # The lane and the commit reset_to_champion put it on for THIS
+                     # draw: the only lane an empty author report may be derived from.
+                     author_lane=(worker.worktree, base),
++                    **({"begin_author_custody": lambda h, checkpoint:
++                        begin_author_custody(worker, h, checkpoint)}
++                       if begin_author_custody is not None else {}),
++                    **({"finish_author_custody": lambda ticket, h, failure:
++                        finish_author_custody(worker, ticket, h, failure)}
++                       if finish_author_custody is not None else {}),
+                     iteration_scope=iteration_scope)
+             except Superseded as exc:
+                 # `iterate` already converted this into an Outcome carrying the
+@@ -570,7 +579,20 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
+                 belief_refusals = 0
+         close_iteration(None)
+ 
+-    threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)
++    def guarded_lane(worker: Worker) -> None:
++        try:
++            lane(worker)
++        except Exception as exc:
++            # Never silently lose a lane when recording or cleanup fails.
++            with outcomes_lock, budget._lock:
++                budget.remaining = 0
++                failure = loop_mod.RunAborted(
++                    f"lane {worker.name} could not persist its outcome: "
++                    f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}")
++                failure.__cause__ = exc
++                aborted.append(failure)
++
++    threads = [threading.Thread(target=guarded_lane, args=(w,), name=w.name, daemon=True)
+                for w in workers]
+     with batch_scope:
+         registry.sweep()
+diff --git a/scripts/kernel_rnd/autokernel/loop/pool.py b/scripts/kernel_rnd/autokernel/loop/pool.py
+index f5e2e1c78..6847ad54a 100644
+--- a/scripts/kernel_rnd/autokernel/loop/pool.py
++++ b/scripts/kernel_rnd/autokernel/loop/pool.py
+@@ -152,6 +152,57 @@ def champion_head(champion_tree: Path = CHAMPION_TREE,
+     return _git(champion_tree, "rev-parse", branch)
+ 
+ 
++CUSTODY_HOLD = ".autokernel-custody-hold.json"
++
++
++def custody_hold_path(worker: pipeline.Worker) -> Path:
++    # A sibling survives every git checkout/reset/clean inside the lane itself.
++    return worker.worktree.parent / ("." + worker.worktree.name + CUSTODY_HOLD)
++
++
++def prove_empty_pre_author(worker: pipeline.Worker, expected_base: str | None) -> bool:
++    """Prove a pre-author lane is clean, including ignored and untracked paths."""
++    if not expected_base:
++        return False
++    try:
++        before = _git(worker.worktree, "rev-parse", "HEAD")
++        status = _git(worker.worktree, "status", "--porcelain=v1",
++                      "--untracked-files=all", "--ignored=matching",
++                      "--ignore-submodules=none")
++        after = _git(worker.worktree, "rev-parse", "HEAD")
++    except (OSError, subprocess.SubprocessError, archive.RatchetRefused):
++        return False
++    return before == expected_base == after and not status
++
++
++def begin_custody_hold(worker: pipeline.Worker, mechanism: str, *,
++                       identity: Mapping[str, Any] | None = None) -> Path:
++    """Fence reuse before disposition; a crash leaves the lane held for reconciliation."""
++    path = custody_hold_path(worker)
++    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
++    with os.fdopen(fd, "w") as f:
++        json.dump({"lane": worker.name, "worktree": str(worker.worktree.resolve()),
++                   "mechanism": mechanism, "identity": dict(identity or {})}, f, sort_keys=True)
++        f.write("\n")
++        f.flush()
++        os.fsync(f.fileno())
++    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
++    try:
++        os.fsync(directory)
++    finally:
++        os.close(directory)
++    return path
++
++
++def finish_custody_hold(path: Path) -> None:
++    path.unlink()
++    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
++    try:
++        os.fsync(directory)
++    finally:
++        os.close(directory)
++
++
+ def reset_to_champion(worker: pipeline.Worker, *,
+                       champion_tree: Path = CHAMPION_TREE,
+                       branch: str = CHAMPION_BRANCH) -> str:
+@@ -166,6 +217,8 @@ def reset_to_champion(worker: pipeline.Worker, *,
+     `clean` is scoped to the source directories a patch may touch, so a lane's build
+     directory (which lives outside the tree) and any operator scratch survive.
+     """
++    if custody_hold_path(worker).exists() or custody_hold_path(worker).is_symlink():
++        raise RuntimeError(f"lane custody hold requires reconciliation: {worker.worktree}")
+     head = champion_head(champion_tree, branch)
+     # --force, and reset BEFORE clean. Without the force, the previous iteration's
+     # uncommitted patch blocks the checkout outright:
+@@ -334,7 +387,8 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
+           validate_candidate=None, formation_guard=None,
+           make_author_panel=None,
+           reserve_candidate=None, record_abandoned=None,
+-          next_resume=None, author_sandbox: bool = False,
++          next_resume=None, begin_author_custody=None, finish_author_custody=None,
++          author_sandbox: bool = False,
+           cpu_window=None, tail_priority=None, on_tail_ready=None) -> PoolResult:
+     """Run `iterations` iterations across `workers` lanes and report the accounting.
+ 
+@@ -397,7 +451,11 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
+             validate_candidate=validate_candidate, formation_guard=formation_guard,
+             **({"make_author_panel": make_author_panel} if make_author_panel is not None else {}),
+             reserve_candidate=reserve_candidate, record_abandoned=record_abandoned,
+-            next_resume=next_resume)
++            next_resume=next_resume,
++            **({"begin_author_custody": begin_author_custody}
++               if begin_author_custody is not None else {}),
++            **({"finish_author_custody": finish_author_custody}
++               if finish_author_custody is not None else {}))
+     clock.close()
+     return PoolResult(outcomes=outcomes, phase_seconds=clock.totals(),
+                       wall_seconds=time.monotonic() - started,
+diff --git a/scripts/kernel_rnd/autokernel/loop/resume.py b/scripts/kernel_rnd/autokernel/loop/resume.py
+index c9f8c6065..d5a5e37a4 100644
+--- a/scripts/kernel_rnd/autokernel/loop/resume.py
++++ b/scripts/kernel_rnd/autokernel/loop/resume.py
+@@ -336,9 +336,9 @@ def retain_checkpoint_patches(checkpoints: list, retain: Callable[[str], Any]) -
+ 
+     `retain(mechanism_id)` retains the lane's diff (`archive.retain_patch`) and
+     returns the patch path, or None when the lane holds no diff. A critic2
+-    checkpoint the loop could not point yet takes that pointer; one whose lane holds
+-    no diff, or whose retention failed, is DROPPED (an author checkpoint beside it
+-    still resumes the round). Returns the list, modified in place.
++    checkpoint the loop could not point yet takes that pointer. Missing bytes or
++    a retention error stop the run; an author retry cannot replace this artifact.
++    Returns the list, modified in place.
+     """
+     if not isinstance(checkpoints, list):
+         return checkpoints
+@@ -349,12 +349,10 @@ def retain_checkpoint_patches(checkpoints: list, retain: Callable[[str], Any]) -
+             mechanism = (entry.get("hypothesis") or {}).get("mechanism_id") or "unnamed"
+             try:
+                 path = retain(mechanism)
+-            except Exception as exc:      # noqa: BLE001 -- the row still lands
+-                print(f"warning: critic2 patch retention failed: {type(exc).__name__}: "
+-                      f"{exc}", file=sys.stderr)
+-                path = None
++            except Exception as exc:
++                raise RuntimeError(f"critic2 patch retention failed: {exc}") from exc
+             if path is None:
+-                continue
++                raise RuntimeError("critic2 has no retained patch; lane cannot advance")
+             path = Path(path)
+             entry["retained_patch"] = {
+                 "patch_file": str(path.resolve()),
+diff --git a/scripts/kernel_rnd/autokernel/loop/run.py b/scripts/kernel_rnd/autokernel/loop/run.py
+index 5d56659d6..bd7d5c235 100644
+--- a/scripts/kernel_rnd/autokernel/loop/run.py
++++ b/scripts/kernel_rnd/autokernel/loop/run.py
+@@ -33,7 +33,7 @@ from typing import Any
+ 
+ from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
+                           workload_contract)
+-from .. import codegen_summary
++from .. import codegen_summary, custody
+ HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
+ HEARTBEAT_STOP_TIMEOUT_S = 10
+ #: `--cpu-measurement-gpu-quiet`: the CPU/GPU measurement quiet window. DEFAULT "lock"
+@@ -1947,6 +1947,95 @@ def _git(repo: Path, *args: str) -> str:
+                           capture_output=True, text=True, timeout=600).stdout.strip()
+ 
+ 
++def _write_custody_record(store: Path, kind: str, row: dict) -> Path:
++    return custody.write_record(store, kind, row)
++
++
++def _begin_author_custody(worker, hypothesis, checkpoint, *, store: Path) -> dict:
++    base = archive._git(worker.worktree, "rev-parse", "HEAD")
++    hold = pool.begin_custody_hold(worker, hypothesis.mechanism_id,
++                                   identity={"stage": "author", "base": base,
++                                             "hypothesis": hypothesis.to_dict()})
++    try:
++        if archive._git(worker.worktree, "rev-parse", "HEAD") != base:
++            raise RuntimeError("author base moved before custody was established")
++        record = _write_custody_record(store, "author-inflight",
++                                       {"hypothesis": hypothesis.to_dict(), "base": base,
++                                        "checkpoint": checkpoint,
++                                        "reason": "accepted hypothesis entering author"})
++        return {"hold": hold, "record": record, "base": base}
++    except Exception as exc:
++        raise loop.RunAborted(f"author hypothesis custody failed; lane remains held: {exc}") from exc
++
++
++def _finish_author_custody(worker, ticket, hypothesis, failure, *, store: Path):
++    try:
++        base = ticket["base"]
++        combined, additions = custody.capture_from_base(
++            worker.worktree, base, archive.capture_patch, archive._git_env)
++        kept = (archive.retain_patch_bytes(
++            store, combined, head=base, lane=worker.name,
++            mechanism_id=hypothesis.mechanism_id, worktree=str(worker.worktree),
++            untracked_source_paths=additions) if combined else None)
++        retained = None if kept is None else {
++            "patch_file": str(kept.resolve()),
++            "metadata_file": str(kept.with_suffix(".json").resolve()),
++            "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
++        disposition = _write_custody_record(
++            store, "author-disposition",
++            {"reason": failure or "author call returned",
++             "hypothesis_record": str(ticket["record"].resolve()), "retained_patch": retained})
++        if retained is not None:
++            retained["disposition_record"] = str(disposition.resolve())
++        pool.finish_custody_hold(ticket["hold"])
++        return retained
++    except Exception as exc:
++        raise loop.RunAborted(f"author patch custody failed; lane remains held: {exc}") from exc
++
++
++def _retain_fold_before_reset(worker, *, store: Path, base: str | None,
++                              mechanism: str) -> Path:
++    """Preserve the actual committed and dirty fold candidate before replacing a lane."""
++    hold = pool.begin_custody_hold(worker, mechanism, identity={"fold_base": base})
++    try:
++        head = archive._git(worker.worktree, "rev-parse", "HEAD")
++        committed = None
++        if base is not None and head != base:
++            done = subprocess.run(
++                ["git", "-C", str(worker.worktree), "diff", "--binary", "--full-index",
++                 "--no-ext-diff", "--no-textconv", base, head, "--"],
++                capture_output=True, env=archive._git_env(), timeout=600, check=True)
++            if done.stdout:
++                committed = archive.retain_patch_bytes(
++                    store, done.stdout, head=base, lane=worker.name,
++                    mechanism_id=mechanism, worktree=str(worker.worktree))
++        dirty = archive.retain_patch(store, worker.worktree, lane=worker.name,
++                                     mechanism_id=mechanism + "-dirty")
++        target = Path(store) / "patches"
++        target.mkdir(parents=True, exist_ok=True)
++        stamp = hashlib.sha256(f"{worker.name}:{time.time_ns()}".encode()).hexdigest()
++        manifest = target / f"fold-disposition-{stamp}.json"
++        with manifest.open("x", encoding="utf-8") as stream:
++            json.dump({"reason": "cross-target fold check ended; lane reset",
++                       "base": base, "head": head,
++                       "committed_patch": None if committed is None else str(committed.resolve()),
++                       "dirty_patch": None if dirty is None else str(dirty.resolve())},
++                      stream, sort_keys=True)
++            stream.write("\n")
++            stream.flush()
++            os.fsync(stream.fileno())
++        for directory in (target, target.parent):
++            fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
++            try:
++                os.fsync(fd)
++            finally:
++                os.close(fd)
++        pool.finish_custody_hold(hold)
++        return manifest
++    except Exception as exc:
++        raise loop.RunAborted(f"fold candidate custody failed; lane remains held: {exc}") from exc
++
++
+ def _check_new_anchor_epoch_binding(requested: str | None, anchor_commit: str, *,
+                                     resolve) -> str | None:
+     """DS41-C126 gap (3): ``--new-anchor-epoch`` BINDS to one commit -- resolved and
+@@ -6508,7 +6597,30 @@ def _main(argv: list[str] | None = None) -> int:
+                 attempt.pop("resume_checkpoints", None)
+ 
+         def record_pooled(outcome) -> None:
++            worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
++            if worker is None:
++                raise loop.RunAborted("cannot fence outcome: lane not found")
++            hold = pool.begin_custody_hold(
++                worker, getattr(outcome.hypothesis, "mechanism_id", None) or "unnamed",
++                identity={"resumed_from": outcome.resumed_from,
++                          "attempt_identity": outcome.attempt_identity,
++                          "spawn_parent": outcome.spawn_parent,
++                          "status": outcome.status})
++            if outcome.retained_patch is None:
++                kept = keep_the_diff(worker, outcome.hypothesis)
++                if kept is not None:
++                    outcome.retained_patch = {
++                        "patch_file": str(kept.resolve()),
++                        "metadata_file": str(kept.with_suffix(".json").resolve()),
++                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
+             attempt = attempt_with_codegen(outcome, codegen_by_head)
++            if outcome.hypothesis is not None:
++                hypothesis_record = _write_custody_record(
++                    args.store, "hypothesis-disposition",
++                    {"hypothesis": outcome.hypothesis.to_dict(),
++                     "reason": "; ".join(outcome.reasons) or f"iteration {outcome.status}",
++                     "status": outcome.status, "retained_patch": outcome.retained_patch})
++                attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
+             retain_critic2(outcome, attempt)
+             attempt["research_scope"] = archive.original_research_scope(
+                 attempt, model=args.model, quant=census.dominant_quant,
+@@ -6554,6 +6666,7 @@ def _main(argv: list[str] | None = None) -> int:
+                     registry.close()
+             latest.append(outcome)
+             publish("running", latest, hotspot_rows=hotspot_rows)
++            pool.finish_custody_hold(hold)
+ 
+         def record_abandoned_pooled(worker, candidate) -> None:
+             """Durable disposition for a candidate abandoned INSIDE an iteration.
+@@ -6567,18 +6680,38 @@ def _main(argv: list[str] | None = None) -> int:
+             counts) is untouched.
+             """
+             hypothesis = candidate.hypothesis
++            hold = pool.begin_custody_hold(
++                worker, getattr(hypothesis, "mechanism_id", None) or "unnamed",
++                identity={"resumed_from": candidate.resumed_from,
++                          "resume_stage": candidate.resume_stage,
++                          "attempt_identity": candidate.attempt_identity,
++                          "candidate_diff_sha256": candidate.candidate_diff_sha256,
++                          "spawn_parent": candidate.spawn_parent})
+             if hypothesis is not None and hypothesis.runtime_pair is None \
+                     and candidate.status != "hypothesis_rejected":
+-                try:
++                if candidate.retained_patch is not None:
++                    pointer = candidate.retained_patch
++                    raw = Path(pointer["patch_file"]).read_bytes()
++                    if hashlib.sha256(raw).hexdigest() != pointer["patch_sha256"]:
++                        raise RuntimeError("retained author patch changed; lane remains held")
++                else:
+                     kept = keep_the_diff(worker, hypothesis)
+-                    candidate.retained_patch = (None if kept is None else {
+-                        "patch_file": str(kept.resolve()),
+-                        "metadata_file": str(kept.with_suffix(".json").resolve()),
+-                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()})
+-                except Exception as exc:      # noqa: BLE001 -- the row still lands
+-                    candidate.retained_patch = {
+-                        "error": f"patch retention failed: {type(exc).__name__}: {exc}"}
++                    if kept is None:
++                        if not pool.prove_empty_pre_author(worker, candidate.spawn_parent):
++                            raise RuntimeError("candidate has no patch and lane is not proven empty")
++                    else:
++                        candidate.retained_patch = {
++                            "patch_file": str(kept.resolve()),
++                            "metadata_file": str(kept.with_suffix(".json").resolve()),
++                            "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
+             attempt = candidate.to_attempt()
++            if hypothesis is not None:
++                hypothesis_record = _write_custody_record(
++                    args.store, "hypothesis-disposition",
++                    {"hypothesis": hypothesis.to_dict(),
++                     "reason": "; ".join(candidate.reasons) or f"candidate {candidate.status}",
++                     "status": candidate.status, "retained_patch": candidate.retained_patch})
++                attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
+             attempt["research_scope"] = archive.original_research_scope(
+                 attempt, model=args.model, quant=census.dominant_quant,
+                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
+@@ -6603,6 +6736,7 @@ def _main(argv: list[str] | None = None) -> int:
+                                     effect=None, epoch=epoch)
+                 finally:
+                     registry.close()
++            pool.finish_custody_hold(hold)
+             reason = candidate.reasons[0] if candidate.reasons else ""
+             patch = (candidate.retained_patch or {}).get("patch_file") \
+                 or (candidate.retained_patch or {}).get("error") or "no patch"
+@@ -7045,11 +7179,16 @@ def _main(argv: list[str] | None = None) -> int:
+             own = lane_targets.PeerTarget(entry=lane_binding.lane, launch_path=Path("/"),
+                                           frozen_prompts=Path("/"), store=None)
+             own_target = args.target_id or args.surface
++            fold_state = {"base": None, "mechanism": "foldcheck"}
+ 
+             def measure(series):
++                _retain_fold_before_reset(worker, store=args.store, base=None,
++                                          mechanism="foldcheck-before")
+                 pool.reset_to_champion(worker, champion_tree=args.worktree,
+                                        branch=args.champion_branch)
+                 base = _git(worker.worktree, "rev-parse", "HEAD")
++                fold_state["base"] = base
++                fold_state["mechanism"] = f"foldcheck-{series['origin_head'][:12]}"
+                 for commit in series["commits"]:
+                     if cross_target.apply_in_worktree(worker.worktree, commit) is None:
+                         return {"error": f"{commit[:12]} does not apply onto this lane's "
+@@ -7097,16 +7236,16 @@ def _main(argv: list[str] | None = None) -> int:
+                           f"({event.get('reason')})"
+                           + (f"; champion fold: {event['fold'].get('result')}"
+                              if event.get("fold") else ""))
++            except loop.RunAborted:
++                raise
+             except Exception as exc:  # noqa: BLE001
+                 print(f"warning: cross-target fold check failed: {type(exc).__name__}: {exc}",
+                       file=sys.stderr)
+             finally:
+-                try:
+-                    pool.reset_to_champion(worker, champion_tree=args.worktree,
+-                                           branch=args.champion_branch)
+-                except Exception as exc:  # noqa: BLE001
+-                    print(f"warning: lane reset after fold check failed: {exc}",
+-                          file=sys.stderr)
++                _retain_fold_before_reset(worker, store=args.store, base=fold_state["base"],
++                                          mechanism=fold_state["mechanism"])
++                pool.reset_to_champion(worker, champion_tree=args.worktree,
++                                       branch=args.champion_branch)
+ 
+         def reset_retained(worker):
+             # STOP before the gate, or a hard interruption during authoring, leaves
+@@ -7322,6 +7461,10 @@ def _main(argv: list[str] | None = None) -> int:
+                              "measurement_epoch_sha256": measurement_epoch}),
+             reserve_candidate=reserve_pooled,
+             record_abandoned=record_abandoned_pooled,
++            begin_author_custody=lambda worker, h, checkpoint:
++                _begin_author_custody(worker, h, checkpoint, store=args.store),
++            finish_author_custody=lambda worker, ticket, h, failure:
++                _finish_author_custody(worker, ticket, h, failure, store=args.store),
+             next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
+             **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
+             champion_tree=args.worktree, branch=args.champion_branch,
+diff --git a/scripts/kernel_rnd/autokernel/custody.py b/scripts/kernel_rnd/autokernel/custody.py
+new file mode 100644
+index 000000000..6cf17f990
+--- /dev/null
++++ b/scripts/kernel_rnd/autokernel/custody.py
+@@ -0,0 +1,180 @@
++"""Shared durable IO for actor, candidate and panel custody.
++
++Callers own admission, disposition semantics and release decisions. These helpers
++only capture original bytes, write durable records and transfer owned artifacts.
++"""
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++from pathlib import Path
++import shutil
++import subprocess
++import time
++
++
++def sync_path(path: Path) -> None:
++    fd = os.open(path, os.O_RDONLY)
++    try:
++        os.fsync(fd)
++    finally:
++        os.close(fd)
++
++
++def write_json(path: Path, row: dict) -> Path:
++    path.parent.mkdir(parents=True, exist_ok=True)
++    with path.open("x", encoding="utf-8") as stream:
++        json.dump(row, stream, sort_keys=True)
++        stream.write("\n")
++        stream.flush()
++        os.fsync(stream.fileno())
++    sync_path(path.parent)
++    sync_path(path.parent.parent)
++    sync_path(path.parent.parent.parent)
++    return path
++
++
++def write_record(store: Path, kind: str, row: dict) -> Path:
++    stamp = hashlib.sha256(f"{kind}:{time.time_ns()}".encode()).hexdigest()
++    return write_json(Path(store) / "patches" / f"{kind}-{stamp}.json", row)
++
++
++def copy_reply_bundle(source: Path, target: Path, mirror: Path) -> str | None:
++    if source.is_symlink():
++        raise RuntimeError("panel reply directory is a symlink")
++    if not source.exists():
++        return None
++    if any(path.is_symlink() for path in source.rglob("*")):
++        raise RuntimeError("panel reply directory contains a symlink")
++    shutil.copytree(source, target)
++    for original in source.iterdir():
++        if original.is_file() and original.suffix in {".stdout", ".stderr"}:
++            destination = mirror / original.name
++            if destination.exists():
++                if destination.read_bytes() != original.read_bytes():
++                    raise RuntimeError("panel reply filename collision")
++            else:
++                with original.open("rb") as incoming, destination.open("xb") as outgoing:
++                    shutil.copyfileobj(incoming, outgoing)
++                    outgoing.flush()
++                    os.fsync(outgoing.fileno())
++    for path in target.rglob("*"):
++        if path.is_file():
++            sync_path(path)
++    directories = sorted((p for p in target.rglob("*") if p.is_dir()),
++                         key=lambda p: len(p.parts), reverse=True)
++    for directory in [*directories, target, mirror]:
++        sync_path(directory)
++    return str(target.resolve())
++
++
++def _check_rows(data: bytes, *, tail_only: bool = False) -> None:
++    if not data:
++        return
++    if not data.endswith(b"\n"):
++        raise OSError("call log has an unterminated tail")
++    lines = data.splitlines()
++    if tail_only:
++        lines = lines[-1:]
++    try:
++        if any(not isinstance(json.loads(line), dict) for line in lines):
++            raise ValueError("call row is not an object")
++    except (ValueError, UnicodeError) as exc:
++        raise OSError("call log has a corrupt row") from exc
++
++
++def append_rows(destination: Path, text: str) -> None:
++    """Append complete rows durably; roll back a failed append while holding custody.
++
++    Callers serialize writers to a destination. Existing malformed tails are never
++    repaired here: their provenance must be reconciled before accepting another row.
++    """
++    _check_rows(text.encode("utf-8"))
++    destination.parent.mkdir(parents=True, exist_ok=True)
++    fence = destination.with_name(destination.name + ".append-inflight")
++    # Acquire before reading the offset: concurrent writers cannot roll back each
++    # other's rows. An incomplete transaction remains fenced for reconciliation.
++    with fence.open("x", encoding="utf-8") as marker:
++        try:
++            original = destination.read_bytes()
++        except FileNotFoundError:
++            original = b""
++        _check_rows(original, tail_only=True)
++        offset = len(original)
++        marker.write(str(offset) + "\n")
++        marker.flush()
++        os.fsync(marker.fileno())
++    sync_path(destination.parent)
++    try:
++        with open(destination, "a", encoding="utf-8") as stream:
++            if stream.write(text) != len(text):
++                raise OSError("short call log append")
++            stream.flush()
++            os.fsync(stream.fileno())
++        sync_path(destination.parent)
++    except Exception as exc:
++        try:
++            with open(destination, "r+b") as stream:
++                stream.truncate(offset)
++                stream.flush()
++                os.fsync(stream.fileno())
++            sync_path(destination.parent)
++            fence.unlink()
++            sync_path(destination.parent)
++        except Exception as rollback:
++            raise OSError(f"call log append failed; rollback failed: {rollback}") from exc
++        raise
++    fence.unlink()
++    sync_path(destination.parent)
++
++
++
++def transfer_tail(source: Path, destination: Path, offset: int, text: str) -> None:
++    append_rows(destination, text)
++    with open(source, "r+b") as stream:
++        stream.truncate(offset)
++        stream.flush()
++        os.fsync(stream.fileno())
++
++
++def release_scope_paths(scope, workspace: Path, extra) -> bool:
++    release = getattr(scope, "release", None)
++    if release is None:
++        return False
++    try:
++        release(workspace)
++    except Exception:
++        return False
++    for path in extra:
++        try:
++            release(path)
++        except Exception:
++            pass
++    return True
++
++
++def capture_from_base(repo: Path, base: str, capture, git_env) -> tuple[bytes, list[str]]:
++    """Exact base-to-current source patch, including accepted untracked source."""
++    def git(*args):
++        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
++                              env=git_env(), timeout=600, check=True).stdout
++    head = git("rev-parse", "HEAD").decode().strip()
++    def diff(ref):
++        return git("diff", "--binary", "--full-index", "--no-ext-diff",
++                   "--no-textconv", ref, "--")
++    dirty = capture(repo)
++    tracked_head, tracked_base = diff(head), diff(base)
++    if dirty is None:
++        if tracked_head:
++            raise RuntimeError("dirty source changed during capture")
++        additions, extra = [], b""
++    else:
++        captured_head, patch, additions = dirty
++        if captured_head != head or not patch.startswith(tracked_head):
++            raise RuntimeError("source changed during capture")
++        extra = patch[len(tracked_head):]
++    if (git("rev-parse", "HEAD").decode().strip() != head
++            or diff(base) != tracked_base or capture(repo) != dirty):
++        raise RuntimeError("source changed during capture")
++    return tracked_base + extra, additions

@@ -1,0 +1,74 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+_ ScratchInventory.test_allowlist_has_no_stale_entries_and_every_reason_is_one_line _
+
+self = <autokernel.loop.test_scratch.ScratchInventory testMethod=test_allowlist_has_no_stale_entries_and_every_reason_is_one_line>
+
+    def test_allowlist_has_no_stale_entries_and_every_reason_is_one_line(self) -> None:
+        sites = self._sites()
+        stale = sorted(set(ALLOWLIST) - set(sites))
+>       self.assertEqual(stale, [], "allowlist entries with no call left: delete them")
+E       AssertionError: Lists differ: ['roofline_coverage.py:write_scope_gap:mkd[276 chars]ite'] != []
+E       
+E       First list contains 8 additional elements.
+E       First extra element 0:
+E       'roofline_coverage.py:write_scope_gap:mkdir'
+E       
+E       + []
+E       - ['roofline_coverage.py:write_scope_gap:mkdir',
+E       -  'roofline_coverage.py:write_scope_gap:write_text',
+E       -  'run.py:main.ppl_contract_bisect_build:write_text',
+E       -  'run.py:main.ppl_contract_tools_build:write_text',
+E       -  'run.py:main.publish_held_claims:mkdir',
+E       -  'run.py:main:mkdir',
+E       -  'serial_run.py:main:mkdir',
+E       -  'serial_run.py:main:open-write'] : allowlist entries with no call left: delete them
+
+scripts/kernel_rnd/autokernel/loop/test_scratch.py:952: AssertionError
+_ ScratchInventory.test_every_creating_call_is_the_registry_or_reviewed_evidence _
+
+self = <autokernel.loop.test_scratch.ScratchInventory testMethod=test_every_creating_call_is_the_registry_or_reviewed_evidence>
+
+    def test_every_creating_call_is_the_registry_or_reviewed_evidence(self) -> None:
+        sites = self._sites()
+        problems = []
+        for key, lines in sorted(sites.items()):
+            allowed = ALLOWLIST.get(key)
+            if allowed is None:
+                problems.append(f"{key} (lines {lines}): NOT ALLOWLISTED -- allocate scratch "
+                                f"through scratch.Scope (dir/file/worktree/tmp_env), or add a "
+                                f"reviewed evidence entry with a one-line reason")
+            elif allowed[0] != len(lines):
+                problems.append(f"{key}: {len(lines)} call(s) at lines {lines}, allowlist "
+                                f"reviewed {allowed[0]} -- review the new one")
+>       self.assertEqual(problems, [], "\n".join(problems))
+E       AssertionError: Lists differ: ['accumulate.py:_shared_cor_lock:mkdir (li[3364 chars]son'] != []
+E       
+E       First list contains 17 additional elements.
+E       First extra element 0:
+E       'accumulate.py:_shared_cor_lock:mkdir (lines [147]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason'
+E       
+E       Diff is 3701 characters long. Set self.maxDiff to None to see it. : accumulate.py:_shared_cor_lock:mkdir (lines [147]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       accumulate.py:_shared_cor_lock:open-write (lines [148]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       keep_screen.py:write_record:mkdir (lines [239]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       keep_screen.py:write_record:mkstemp (lines [245]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       keep_screen.py:write_record:os.link (lines [252]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       lane_watchdog.py:_check_serial_capability:open-write (lines [166]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       lane_watchdog.py:_write:open-write (lines [105]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       lane_watchdog.py:supervise:mkdir (lines [220]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       lane_watchdog.py:supervise:open-write (lines [227]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       run.py:_main.ppl_contract_bisect_build:write_text (lines [6104]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       run.py:_main.ppl_contract_tools_build:write_text (lines [6063]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       run.py:_main.publish_held_claims:mkdir (lines [7615]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       run.py:_main:mkdir (lines [7833, 8367]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       serial_run.py:_main:mkdir (lines [1502]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       serial_run.py:_main:open-write (lines [1503]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       validate_keep_screen_contract.py:main:TemporaryDirectory (lines [79]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+E       validate_keep_screen_contract.py:main:write_text (lines [82]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+
+scripts/kernel_rnd/autokernel/loop/test_scratch.py:947: AssertionError
+=========================== short test summary info ============================
+FAILED scripts/kernel_rnd/autokernel/loop/test_scratch.py::ScratchInventory::test_allowlist_has_no_stale_entries_and_every_reason_is_one_line
+FAILED scripts/kernel_rnd/autokernel/loop/test_scratch.py::ScratchInventory::test_every_creating_call_is_the_registry_or_reviewed_evidence
+2 failed, 1 passed in 2.48s
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 2.6188260021153837, "sampled_peak_tree_rss_bytes": 97726464, "samples": 27, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 4111512, "leader_birth": 164495372, "child_rc": 1, "children_drained": true, "failure": null}

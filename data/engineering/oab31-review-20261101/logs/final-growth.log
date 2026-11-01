@@ -1,0 +1,69 @@
+
+CODE BASELINE VIOLATION:
+  - new in-scope source has no baseline entry: floor_units.py
+  - new in-scope source has no baseline entry: gpu_counter.py
+  - new in-scope source has no baseline entry: keep_screen.py
+  - new in-scope source has no baseline entry: lane_watchdog.py
+  - new in-scope source has no baseline entry: lane_watchdog_child.py
+  - new in-scope source has no baseline entry: provider_factories.py
+  - new in-scope source has no baseline entry: readiness/u3_express.py
+  - new in-scope source has no baseline entry: same_code_tripwire.py
+  - new in-scope source has no baseline entry: validate_keep_screen_contract.py
+  - accumulate.py: 763 code lines exceeds ceiling 472 by 291
+  - actor_metrics.py: 487 code lines exceeds ceiling 381 by 106
+  - actors.py: 3032 code lines exceeds ceiling 2909 by 123
+  - archive.py: 500 code lines exceeds ceiling 469 by 31
+  - belief_context.py: 591 code lines exceeds ceiling 580 by 11
+  - bench.py: 386 code lines exceeds ceiling 385 by 1
+  - bestof.py: 1184 code lines exceeds ceiling 1056 by 128
+  - campaign_service.py: 714 code lines exceeds ceiling 703 by 11
+  - champion_reanchor.py: 525 code lines exceeds ceiling 465 by 60
+  - gates.py: 2993 code lines exceeds ceiling 2988 by 5
+  - gpu_serving_profile.py: 699 code lines exceeds ceiling 697 by 2
+  - lane_targets.py: 325 code lines exceeds ceiling 267 by 58
+  - loop.py: 1425 code lines exceeds ceiling 1394 by 31
+  - new_epoch.py: 91 code lines exceeds ceiling 68 by 23
+  - pipeline.py: 355 code lines exceeds ceiling 325 by 30
+  - pool.py: 488 code lines exceeds ceiling 441 by 47
+  - production.py: 1312 code lines exceeds ceiling 1311 by 1
+  - residency.py: 537 code lines exceeds ceiling 477 by 60
+  - resolved_recipe.py: 1374 code lines exceeds ceiling 1364 by 10
+  - roofline_coverage.py: 227 code lines exceeds ceiling 213 by 14
+  - run.py: 6592 code lines exceeds ceiling 6127 by 465
+  - seed_bundle.py: 139 code lines exceeds ceiling 100 by 39
+  - serial_run.py: 2404 code lines exceeds ceiling 2340 by 64
+  - serving.py: 1587 code lines exceeds ceiling 1566 by 21
+  - serving_beliefs.py: 203 code lines exceeds ceiling 181 by 22
+  - serving_gate.py: 153 code lines exceeds ceiling 137 by 16
+  - status.py: 407 code lines exceeds ceiling 262 by 145
+  - surface_fold.py: 283 code lines exceeds ceiling 225 by 58
+  - unified_driver.py: 1293 code lines exceeds ceiling 1231 by 62
+loop package composition: 106644 code / 15778 prose / 12108 blank (11.7% prose)
+loop package: 134530 LOC across 206 files (informational budget 3450)
+      8537  run.py
+      4723  campaign_control.py
+      4480  actors.py
+      4364  gates.py
+      3681  resume.py
+      2788  serial_run.py
+      2471  worker_lifecycle.py
+      2464  unified_worker.py
+      2437  serving.py
+      2240  loop.py
+
+NOTE: the loop package is 134530 LOC, over the informational 3450; this is not a violation.
+
+NOTE: 24 test file(s) are coupled to guarded documentation. Each makes a deletion cost a regeneration.
+      19 reference(s) to program.md                   test_program_md.py
+      13 reference(s) to README.md                    execution/test_worktree.py
+      11 reference(s) to README.md                    test_readme.py
+       8 reference(s) to FOOTPRINT.md                 test_campaign_footprint.py
+       7 reference(s) to README.md                    loop/test_patch_retention.py
+       5 reference(s) to README.md                    execution/test_execution_chain.py
+       5 reference(s) to FOOTPRINT.md                 test_check_regrowth_guards.py
+       4 reference(s) to HYPOTHESES.md                controller/test_hypothesis_path_end_to_end.py
+       2 reference(s) to HYPOTHESIS_PORTFOLIO_V2.md   controller/test_discovery_deployment.py
+       2 reference(s) to README.md                    loop/test_ak_check.py
+
+1 guard violation(s)
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 3.5480211791582406, "sampled_peak_tree_rss_bytes": 69447680, "samples": 36, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 3852728, "leader_birth": 164364476, "child_rc": 1, "children_drained": true, "failure": null}

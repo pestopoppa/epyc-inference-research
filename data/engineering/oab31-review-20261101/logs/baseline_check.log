@@ -1,0 +1,163 @@
+
+BASELINE EXACT TEST test_allowlist_has_no_stale_entries_and_every_reason_is_one_line
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/tmp/oab-actor-backend/oab31-discard-codex3-20261101/baseline_check.py", line 37, in <module>
+    getattr(fixture, test)()
+  File "/mnt/raid0/llm/tmp/oab-actor-backend/oab31-discard-codex3-20261101/baseline-scan/test_scratch.py", line 943, in test_allowlist_has_no_stale_entries_and_every_reason_is_one_line
+  File "/usr/lib/python3.12/unittest/case.py", line 885, in assertEqual
+    assertion_func(first, second, msg=msg)
+  File "/usr/lib/python3.12/unittest/case.py", line 1091, in assertListEqual
+    self.assertSequenceEqual(list1, list2, msg, seq_type=list)
+  File "/usr/lib/python3.12/unittest/case.py", line 1073, in assertSequenceEqual
+    self.fail(msg)
+  File "/usr/lib/python3.12/unittest/case.py", line 715, in fail
+    raise self.failureException(msg)
+AssertionError: Lists differ: ['roofline_coverage.py:write_scope_gap:mkd[276 chars]ite'] != []
+
+First list contains 8 additional elements.
+First extra element 0:
+'roofline_coverage.py:write_scope_gap:mkdir'
+
++ []
+- ['roofline_coverage.py:write_scope_gap:mkdir',
+-  'roofline_coverage.py:write_scope_gap:write_text',
+-  'run.py:main.ppl_contract_bisect_build:write_text',
+-  'run.py:main.ppl_contract_tools_build:write_text',
+-  'run.py:main.publish_held_claims:mkdir',
+-  'run.py:main:mkdir',
+-  'serial_run.py:main:mkdir',
+-  'serial_run.py:main:open-write'] : allowlist entries with no call left: delete them
+
+BASELINE EXACT TEST test_every_creating_call_is_the_registry_or_reviewed_evidence
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/tmp/oab-actor-backend/oab31-discard-codex3-20261101/baseline_check.py", line 37, in <module>
+    getattr(fixture, test)()
+  File "/mnt/raid0/llm/tmp/oab-actor-backend/oab31-discard-codex3-20261101/baseline-scan/test_scratch.py", line 938, in test_every_creating_call_is_the_registry_or_reviewed_evidence
+  File "/usr/lib/python3.12/unittest/case.py", line 885, in assertEqual
+    assertion_func(first, second, msg=msg)
+  File "/usr/lib/python3.12/unittest/case.py", line 1091, in assertListEqual
+    self.assertSequenceEqual(list1, list2, msg, seq_type=list)
+  File "/usr/lib/python3.12/unittest/case.py", line 1073, in assertSequenceEqual
+    self.fail(msg)
+  File "/usr/lib/python3.12/unittest/case.py", line 715, in fail
+    raise self.failureException(msg)
+AssertionError: Lists differ: ['accumulate.py:_shared_cor_lock:mkdir (li[3364 chars]son'] != []
+
+First list contains 17 additional elements.
+First extra element 0:
+'accumulate.py:_shared_cor_lock:mkdir (lines [147]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason'
+
++ []
+- ['accumulate.py:_shared_cor_lock:mkdir (lines [147]): NOT ALLOWLISTED -- '
+-  'allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a '
+-  'reviewed evidence entry with a one-line reason',
+-  'accumulate.py:_shared_cor_lock:open-write (lines [148]): NOT ALLOWLISTED -- '
+-  'allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a '
+-  'reviewed evidence entry with a one-line reason',
+-  'keep_screen.py:write_record:mkdir (lines [239]): NOT ALLOWLISTED -- allocate '
+-  'scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed '
+-  'evidence entry with a one-line reason',
+-  'keep_screen.py:write_record:mkstemp (lines [245]): NOT ALLOWLISTED -- '
+-  'allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a '
+-  'reviewed evidence entry with a one-line reason',
+-  'keep_screen.py:write_record:os.link (lines [252]): NOT ALLOWLISTED -- '
+-  'allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a '
+-  'reviewed evidence entry with a one-line reason',
+-  'lane_watchdog.py:_check_serial_capability:open-write (lines [166]): NOT '
+-  'ALLOWLISTED -- allocate scratch through scratch.Scope '
+-  '(dir/file/worktree/tmp_env), or add a reviewed evidence entry with a '
+-  'one-line reason',
+-  'lane_watchdog.py:_write:open-write (lines [105]): NOT ALLOWLISTED -- '
+-  'allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a '
+-  'reviewed evidence entry with a one-line reason',
+-  'lane_watchdog.py:supervise:mkdir (lines [220]): NOT ALLOWLISTED -- allocate '
+-  'scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed '
+-  'evidence entry with a one-line reason',
+-  'lane_watchdog.py:supervise:open-write (lines [227]): NOT ALLOWLISTED -- '
+-  'allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a '
+-  'reviewed evidence entry with a one-line reason',
+-  'run.py:_main.ppl_contract_bisect_build:write_text (lines [6015]): NOT '
+-  'ALLOWLISTED -- allocate scratch through scratch.Scope '
+-  '(dir/file/worktree/tmp_env), or add a reviewed evidence entry with a '
+-  'one-line reason',
+-  'run.py:_main.ppl_contract_tools_build:write_text (lines [5974]): NOT '
+-  'ALLOWLISTED -- allocate scratch through scratch.Scope '
+-  '(dir/file/worktree/tmp_env), or add a reviewed evidence entry with a '
+-  'one-line reason',
+-  'run.py:_main.publish_held_claims:mkdir (lines [7472]): NOT ALLOWLISTED -- '
+-  'allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a '
+-  'reviewed evidence entry with a one-line reason',
+-  'run.py:_main:mkdir (lines [7690, 8224]): NOT ALLOWLISTED -- allocate scratch '
+-  'through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed '
+-  'evidence entry with a one-line reason',
+-  'serial_run.py:_main:mkdir (lines [1502]): NOT ALLOWLISTED -- allocate '
+-  'scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed '
+-  'evidence entry with a one-line reason',
+-  'serial_run.py:_main:open-write (lines [1503]): NOT ALLOWLISTED -- allocate '
+-  'scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed '
+-  'evidence entry with a one-line reason',
+-  'validate_keep_screen_contract.py:main:TemporaryDirectory (lines [79]): NOT '
+-  'ALLOWLISTED -- allocate scratch through scratch.Scope '
+-  '(dir/file/worktree/tmp_env), or add a reviewed evidence entry with a '
+-  'one-line reason',
+-  'validate_keep_screen_contract.py:main:write_text (lines [82]): NOT '
+-  'ALLOWLISTED -- allocate scratch through scratch.Scope '
+-  '(dir/file/worktree/tmp_env), or add a reviewed evidence entry with a '
+-  'one-line reason'] : accumulate.py:_shared_cor_lock:mkdir (lines [147]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+accumulate.py:_shared_cor_lock:open-write (lines [148]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+keep_screen.py:write_record:mkdir (lines [239]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+keep_screen.py:write_record:mkstemp (lines [245]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+keep_screen.py:write_record:os.link (lines [252]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+lane_watchdog.py:_check_serial_capability:open-write (lines [166]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+lane_watchdog.py:_write:open-write (lines [105]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+lane_watchdog.py:supervise:mkdir (lines [220]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+lane_watchdog.py:supervise:open-write (lines [227]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+run.py:_main.ppl_contract_bisect_build:write_text (lines [6015]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+run.py:_main.ppl_contract_tools_build:write_text (lines [5974]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+run.py:_main.publish_held_claims:mkdir (lines [7472]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+run.py:_main:mkdir (lines [7690, 8224]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+serial_run.py:_main:mkdir (lines [1502]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+serial_run.py:_main:open-write (lines [1503]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+validate_keep_screen_contract.py:main:TemporaryDirectory (lines [79]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+validate_keep_screen_contract.py:main:write_text (lines [82]): NOT ALLOWLISTED -- allocate scratch through scratch.Scope (dir/file/worktree/tmp_env), or add a reviewed evidence entry with a one-line reason
+
+BASELINE GROWTH ERRORS
+new in-scope source has no baseline entry: floor_units.py
+new in-scope source has no baseline entry: gpu_counter.py
+new in-scope source has no baseline entry: keep_screen.py
+new in-scope source has no baseline entry: lane_watchdog.py
+new in-scope source has no baseline entry: lane_watchdog_child.py
+new in-scope source has no baseline entry: provider_factories.py
+new in-scope source has no baseline entry: readiness/u3_express.py
+new in-scope source has no baseline entry: same_code_tripwire.py
+new in-scope source has no baseline entry: validate_keep_screen_contract.py
+accumulate.py: 763 code lines exceeds ceiling 472 by 291
+actor_metrics.py: 487 code lines exceeds ceiling 381 by 106
+actors.py: 2925 code lines exceeds ceiling 2909 by 16
+archive.py: 500 code lines exceeds ceiling 469 by 31
+belief_context.py: 591 code lines exceeds ceiling 580 by 11
+bench.py: 386 code lines exceeds ceiling 385 by 1
+campaign_service.py: 714 code lines exceeds ceiling 703 by 11
+champion_reanchor.py: 525 code lines exceeds ceiling 465 by 60
+gates.py: 2993 code lines exceeds ceiling 2988 by 5
+gpu_serving_profile.py: 699 code lines exceeds ceiling 697 by 2
+lane_targets.py: 325 code lines exceeds ceiling 267 by 58
+loop.py: 1396 code lines exceeds ceiling 1394 by 2
+new_epoch.py: 91 code lines exceeds ceiling 68 by 23
+pipeline.py: 335 code lines exceeds ceiling 325 by 10
+pool.py: 443 code lines exceeds ceiling 441 by 2
+production.py: 1312 code lines exceeds ceiling 1311 by 1
+residency.py: 537 code lines exceeds ceiling 477 by 60
+resolved_recipe.py: 1374 code lines exceeds ceiling 1364 by 10
+roofline_coverage.py: 227 code lines exceeds ceiling 213 by 14
+run.py: 6452 code lines exceeds ceiling 6127 by 325
+seed_bundle.py: 139 code lines exceeds ceiling 100 by 39
+serial_run.py: 2404 code lines exceeds ceiling 2340 by 64
+serving.py: 1587 code lines exceeds ceiling 1566 by 21
+serving_beliefs.py: 203 code lines exceeds ceiling 181 by 22
+serving_gate.py: 153 code lines exceeds ceiling 137 by 16
+status.py: 407 code lines exceeds ceiling 262 by 145
+surface_fold.py: 283 code lines exceeds ceiling 225 by 58
+unified_driver.py: 1293 code lines exceeds ceiling 1231 by 62
+BASELINE CODE TOTAL 106176
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 3.8664367620367557, "sampled_peak_tree_rss_bytes": 94818304, "samples": 39, "verified_exited_processes": 2, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 3639146, "leader_birth": 164266557, "child_rc": 0, "children_drained": true, "failure": null}

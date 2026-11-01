@@ -1,0 +1,1695 @@
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_actor_budgets.py b/scripts/kernel_rnd/autokernel/loop/test_actor_budgets.py
+index e5e8776ad..8760ef142 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_actor_budgets.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_actor_budgets.py
+@@ -321,7 +321,9 @@ class ConcisePrompt(unittest.TestCase):
+         control = self._prompts(backend, None)
+         on = self._prompts(backend, actors.ActorSeat(bounded=False, concise=True))
+         for role in ("planner", "author"):
+-            self.assertEqual(on[role][0], control[role][0] + "\n\n" + actors.CONCISE_RULE)
++            inserted = "\n\n" + actors.CONCISE_RULE
++            self.assertEqual(on[role][0].count(inserted), 1)
++            self.assertEqual(on[role][0].replace(inserted, "", 1), control[role][0])
+         for phrase in ("derive each fact once", "reuse results instead of re-deriving",
+                        "under ~4,000 tokens", "the JSON object only",
+                        "no draft you then replace"):
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_actors.py b/scripts/kernel_rnd/autokernel/loop/test_actors.py
+index 3f252ee25..e39234bb2 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_actors.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_actors.py
+@@ -7,6 +7,7 @@ context bundle actually carries what the old planner never received.
+ import copy
+ import json
+ import subprocess
++import tempfile
+ from pathlib import Path
+ import unittest
+ from unittest import mock
+@@ -935,11 +936,16 @@ class Backends(unittest.TestCase):
+     def test_run_agent_feeds_the_opencode_prompt_on_stdin(self):
+         b = actors.backend_for("prov/model", "high")
+         done = mock.Mock(returncode=0, stdout="{}", stderr="")
+-        with mock.patch.object(actors.subprocess, "run", return_value=done) as ran, \
+-             mock.patch.object(actors, "_persist_reply"):
+-            actors._run_agent('say "hi" to me', workspace=Path("/ws"), backend=b)
+-        self.assertEqual(ran.call_args.kwargs["input"], 'say "hi" to me')
+-        self.assertNotIn('say "hi" to me', ran.call_args.args[0])
++        # CONTROL_ONLY: fake backend process; real reply custody uses the temp workspace.
++        with tempfile.TemporaryDirectory() as tmp, \
++             mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
++            workspace = Path(tmp) / "ws"
++            workspace.mkdir()
++            actors._run_agent('say "hi" to me', workspace=workspace, backend=b)
++        calls = [call for call in ran.call_args_list if "input" in call.kwargs]
++        self.assertEqual(len(calls), 1)
++        self.assertEqual(calls[0].kwargs["input"], 'say "hi" to me')
++        self.assertNotIn('say "hi" to me', calls[0].args[0])
+ 
+     def test_an_unknown_kind_refuses_rather_than_guessing(self):
+         with self.assertRaises(ValueError):
+@@ -948,11 +954,15 @@ class Backends(unittest.TestCase):
+     def test_run_agent_invokes_the_backend_argv_in_the_workspace(self):
+         b = actors.backend_for("claude-fable-5-1", "medium")
+         done = mock.Mock(returncode=0, stdout="{}", stderr="")
+-        with mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
+-            actors._run_agent("PROMPT", workspace=Path("/ws"), backend=b)
++        # CONTROL_ONLY: fake backend process; real reply custody uses the temp workspace.
++        with tempfile.TemporaryDirectory() as tmp, \
++             mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
++            workspace = Path(tmp) / "ws"
++            workspace.mkdir()
++            actors._run_agent("PROMPT", workspace=workspace, backend=b)
+         argv = ran.call_args.args[0]
+-        self.assertEqual(argv, b.argv("PROMPT", Path("/ws")))
+-        self.assertEqual(ran.call_args.kwargs["cwd"], "/ws")
++        self.assertEqual(argv, b.argv("PROMPT", workspace))
++        self.assertEqual(ran.call_args.kwargs["cwd"], str(workspace))
+ 
+ 
+ 
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_bestof.py b/scripts/kernel_rnd/autokernel/loop/test_bestof.py
+index ef152aead..d632f7c9e 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_bestof.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_bestof.py
+@@ -15,6 +15,7 @@ worktree itself.
+ from __future__ import annotations
+ 
+ from contextlib import contextmanager
++import builtins
+ import io
+ import json
+ import os
+@@ -58,6 +59,7 @@ class FakeScope:
+ 
+     def __init__(self, registry, name, release_method=True):
+         self.registry, self.name, self.held = registry, name, []
++        self.fenced = set()
+         if not release_method:
+             self.release = None      # type: ignore[assignment]
+ 
+@@ -70,6 +72,15 @@ class FakeScope:
+         self.registry.counters["worktrees_created"] += 1
+         return path
+ 
++    def block_release(self, reason, token, paths=None):
++        self.fenced.add(token)
++
++    def clear_release_block(self, token):
++        self.fenced.remove(token)
++
++    def retain(self, reason):
++        self.fenced.add("retained")
++
+     def release(self, path):
+         for repo, held in list(self.held):
+             if held == Path(path):
+@@ -79,6 +90,8 @@ class FakeScope:
+                 self.registry.counters["worktrees_removed"] += 1
+ 
+     def close(self):
++        if self.fenced:
++            return
+         for repo, held in list(self.held):
+             _git(repo, "worktree", "remove", "--force", str(held))
+             self.held.remove((repo, held))
+@@ -598,6 +611,156 @@ def _alive(pid: int) -> bool:
+ # --------------------------------------------------------------------------- lifecycle
+ 
+ 
++class PanelCustody(Fixture):
++    def test_committed_member_patch_survives_tree_release(self):
++        class Committing(Editor):
++            def author(inner, hypothesis, context):
++                (inner.ws / TARGET).write_text("int f(void) { return 77; }\n")
++                subprocess.run(["git", "-C", str(inner.ws), "add", TARGET], check=True)
++                subprocess.run(["git", "-C", str(inner.ws), "-c", "user.name=fixture",
++                                "-c", "user.email=fixture@example.test", "commit", "-qm",
++                                "author edit"], check=True)
++                return (TARGET,)
++        _, rows = self.call(self.panel({"off": Committing, "medium": Committing}))
++        for member in rows[0]["members"]:
++            retained = Path(member["patch"]["patch_file"]).read_bytes()
++            self.assertIn(b"return 77", retained)
++        self.assertIn("return 77", (self.lane / TARGET).read_text())
++        self.assert_no_scratch_left()
++
++    def test_markers_are_synced_before_author_threads_start(self):
++        synced = []
++        original = actors._sync_path
++        def sync(path):
++            original(path)
++            synced.append(Path(path))
++        class Check(Editor):
++            def author(inner, hypothesis, context):
++                assert scratch._marker_path("worktree", inner.ws) in synced
++                assert scratch._marker_path("dir", inner.ws.parent) in synced
++                return super(Check, inner).author(hypothesis, context)
++        with mock.patch.object(actors, "_sync_path", side_effect=sync):
++            self.call(self.panel({"off": Check, "medium": Check}))
++
++    def test_non_utf8_call_log_keeps_exact_source_under_fence(self):
++        raw = b"invalid-\xff-record\n"
++        class Logged(Editor):
++            def author(inner, hypothesis, context):
++                target = inner.ws.parent / actor_metrics.REPLY_DIR_NAME
++                target.mkdir(exist_ok=True)
++                (target / actor_metrics.CALL_LOG_NAME).write_bytes(raw)
++                return super(Logged, inner).author(hypothesis, context)
++        with self.assertRaisesRegex(loop.RunAborted, "panel call record read failed"):
++            self.call(self.panel({"off": Logged, "medium": Logged}))
++        root = str(Path(self.registry.root).resolve())
++        held = [Path(path) for path in _worktrees(self.repo) if path.startswith(root)]
++        self.assertTrue(held)
++        self.assertTrue(any((path.parent / actor_metrics.REPLY_DIR_NAME /
++                             actor_metrics.CALL_LOG_NAME).read_bytes() == raw
++                            for path in held))
++        for path in held:
++            assert scratch.read_marker("worktree", path).get("release_blocked")
++
++    def test_partial_call_log_write_retains_original_row_and_scratch(self):
++        raw = b'{"schema":"fixture","reply":{"path":"saved.stdout"}}\n'
++        class Logged(Editor):
++            def author(inner, hypothesis, context):
++                target = inner.ws.parent / actor_metrics.REPLY_DIR_NAME
++                target.mkdir(exist_ok=True)
++                (target / actor_metrics.CALL_LOG_NAME).write_bytes(raw)
++                return super(Logged, inner).author(hypothesis, context)
++        destination = self.lane.parent / actor_metrics.REPLY_DIR_NAME / actor_metrics.CALL_LOG_NAME
++        original = builtins.open
++        class Partial:
++            def __init__(self, file, mode, *args, **kwargs):
++                self.file = original(file, mode, *args, **kwargs)
++            def __enter__(self):
++                return self
++            def __exit__(self, *args):
++                self.file.close()
++            def write(self, data):
++                self.file.write(data[:8])
++                self.file.flush()
++                raise OSError("partial destination write")
++        def open_fault(file, mode="r", *args, **kwargs):
++            if isinstance(file, (str, Path)) and Path(file) == destination and mode == "a":
++                return Partial(file, mode, *args, **kwargs)
++            return original(file, mode, *args, **kwargs)
++        with mock.patch("builtins.open", side_effect=open_fault):
++            with self.assertRaisesRegex(loop.RunAborted, "partial destination write"):
++                self.call(self.panel({"off": Logged, "medium": Logged}))
++        root = str(Path(self.registry.root).resolve())
++        held = [Path(path) for path in _worktrees(self.repo) if path.startswith(root)]
++        self.assertTrue(held)
++        self.assertTrue(any((path.parent / actor_metrics.REPLY_DIR_NAME /
++                             actor_metrics.CALL_LOG_NAME).read_bytes() == raw
++                            for path in held))
++        for path in held:
++            assert scratch.read_marker("worktree", path).get("release_blocked")
++
++    def test_actor_custody_failure_escapes_panel_and_retains_tree(self):
++        class FailedActor(Editor):
++            def author(inner, hypothesis, context):
++                (inner.ws / TARGET).write_text("unretained bytes")
++                raise loop.RunAborted("actor reply custody failed")
++        panel = self.panel({"off": FailedActor, "medium": FailedActor})
++        with self.assertRaisesRegex(loop.RunAborted, "actor reply custody failed"):
++            self.call(panel)
++        root = str(Path(self.registry.root).resolve())
++        held = [Path(path) for path in _worktrees(self.repo) if path.startswith(root)]
++        self.assertTrue(held)
++        for path in held:
++            marker = scratch.read_marker("worktree", path)
++            self.assertTrue(marker and marker.get("release_blocked"))
++            self.assertEqual((path / TARGET).read_text(), "unretained bytes")
++
++    def test_validator_custody_failure_is_not_a_retryable_validation(self):
++        def validator(*args, **kwargs):
++            raise loop.RunAborted("validator custody failure")
++        panel = self.panel({"off": Editor, "medium": Editor}, validator=validator)
++        with self.assertRaisesRegex(loop.RunAborted, "validator custody failure"):
++            self.call(panel)
++        root = str(Path(self.registry.root).resolve())
++        self.assertTrue([path for path in _worktrees(self.repo) if path.startswith(root)])
++
++    def test_disposition_failure_keeps_original_member_trees_fenced(self):
++        panel = self.panel({"off": Editor, "medium": Editor})
++        with mock.patch.object(panel, "_record_custody", side_effect=OSError("store unavailable")):
++            with self.assertRaisesRegex(loop.RunAborted, "disposition failed"):
++                self.call(panel)
++        root = str(Path(self.registry.root).resolve())
++        held = [Path(path) for path in _worktrees(self.repo) if path.startswith(root)]
++        self.assertTrue(held)
++        for path in held:
++            marker = scratch.read_marker("worktree", path)
++            self.assertTrue(marker and marker.get("release_blocked"))
++            self.assertIn(b"return 7", (path / TARGET).read_bytes())
++
++    def test_dispositions_name_retained_patch_and_reply_bundle(self):
++        class ReplyEditor(Editor):
++            def author(inner, hypothesis, context):
++                output = inner.ws.parent / actor_metrics.REPLY_DIR_NAME
++                output.mkdir(exist_ok=True)
++                (output / "reply.stdout").write_text("completed answer")
++                return super(ReplyEditor, inner).author(hypothesis, context)
++        _, rows = self.call(self.panel({"off": ReplyEditor, "medium": ReplyEditor}))
++        bundle = self.lane.parent / actor_metrics.REPLY_DIR_NAME / ("panel-" + rows[0]["panel_id"])
++        manifests = sorted(bundle.glob("disposition-*.json"))
++        self.assertEqual(len(manifests), 2)
++        self.assertEqual({m["custody_manifest"] for m in rows[0]["members"]},
++                         {str(path.resolve()) for path in manifests})
++        for manifest in manifests:
++            entry = json.loads(manifest.read_text())["members"][0]
++            self.assertTrue(entry["reason"])
++            patch = Path(entry["retained_patch"]["patch_file"])
++            self.assertTrue(patch.is_file())
++            self.assertEqual((Path(entry["reply_bundle"]) / "reply.stdout").read_text(),
++                             "completed answer")
++        self.assertEqual((self.lane.parent / actor_metrics.REPLY_DIR_NAME /
++                          "reply.stdout").read_text(), "completed answer")
++        self.assert_no_scratch_left()
++
++
+ class ScratchLifecycle(Fixture):
+ 
+     def test_worktrees_are_created_at_the_base_and_removed(self):
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_campaign_stub_continuation.py b/scripts/kernel_rnd/autokernel/loop/test_campaign_stub_continuation.py
+index 880eb6712..94284d3d7 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_campaign_stub_continuation.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_campaign_stub_continuation.py
+@@ -1,4 +1,5 @@
+ """Stubbed CPU campaign continuation through the installed iterator, without inference."""
++import hashlib
+ import json
+ import os
+ from pathlib import Path
+@@ -26,6 +27,24 @@ def test_experimental_keep_continues_into_a_completed_next_batch():
+ 
+     def first_then_next(argv):
+         assert original_main(argv) == 0
++        store = Path(sr.option(argv, "--store"))
++        dispositions = [json.loads(path.read_text()) for path in
++                        (store / "patches").glob("author-disposition-*.json")]
++        retained = [row for row in dispositions if row.get("retained_patch")]
++        assert retained
++        for item in retained:
++            patch = item["retained_patch"]
++            assert item["reason"]
++            assert hashlib.sha256(Path(patch["patch_file"]).read_bytes()).hexdigest() == patch["patch_sha256"]
++            hypothesis = json.loads(Path(item["hypothesis_record"]).read_text())
++            assert hypothesis["hypothesis"]["mechanism_id"]
++        kept_rows = resume_fixture.rows_with(store, "kept")
++        assert kept_rows
++        for kept_row in kept_rows:
++            hypothesis_path = Path(kept_row["hypothesis_custody_record"])
++            hypothesis = json.loads(hypothesis_path.read_text())
++            assert hypothesis["reason"] and hypothesis["status"] == "kept"
++            assert hypothesis["hypothesis"]["mechanism_id"] == kept_row["mechanism_id"]
+         first = Path(sr.option(argv, "--out"))
+         continuation = first / "loop-continuation.json"
+         row, _ = sr.load_completed(continuation)
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_candidate_dispositions.py b/scripts/kernel_rnd/autokernel/loop/test_candidate_dispositions.py
+index 0b12a78e4..62de09ca2 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_candidate_dispositions.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_candidate_dispositions.py
+@@ -222,17 +222,15 @@ class AbandonedCandidatesGetTheirOwnRow(unittest.TestCase):
+         self.assertEqual([row["status"] for row in outcome.abandoned_candidates],
+                          ["hypothesis_rejected", "patch_rejected"])
+ 
+-    def test_a_recording_fault_is_carried_not_raised(self):
++    def test_a_recording_fault_aborts_before_further_authoring(self):
+         def broken(candidate):
+             raise OSError("store is read-only")
+-        outcome = loop.iterate(
+-            planner=_Planner([_hypothesis()]), critic=_Critic(), context={},
+-            measure=lambda h, p: None, gate=_refusing_gate, commit=lambda h, p, c: None,
+-            hypothesis_rounds=1, record_abandoned=broken)
+-        self.assertEqual(outcome.status, loop.SCOPE_BLOCKED)
+-        self.assertEqual(len(outcome.abandoned_candidates), 2)
+-        self.assertTrue(all("store is read-only" in row["record_error"]
+-                            for row in outcome.abandoned_candidates))
++        with self.assertRaisesRegex(loop.RunAborted, "store is read-only"):
++            loop.iterate(
++                planner=_Planner([_hypothesis()]), critic=_Critic(), context={},
++                measure=lambda h, p: None, gate=_refusing_gate, commit=lambda h, p, c: None,
++                hypothesis_rounds=1, record_abandoned=broken)
++
+ 
+ 
+ class PoolAttachesLineageAndTheRefusedDiffsReservation(unittest.TestCase):
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_loop.py b/scripts/kernel_rnd/autokernel/loop/test_loop.py
+index 9c5435b81..dcbc6acb4 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_loop.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_loop.py
+@@ -109,8 +109,10 @@ def _run(planner, critic, *, effect=0.05, gate_ok=True, floor=1.0):
+         committed["head"] = "abc1234"
+         return "abc1234"
+ 
++    # CONTROL_ONLY: injected actors do not create filesystem artifacts.
+     outcome = loop.iterate(planner=planner, critic=critic, context={},
+-                           measure=measure, gate=gate, commit=commit)
++                           measure=measure, gate=gate, commit=commit,
++                           record_abandoned=lambda candidate: None)
+     return outcome, committed
+ 
+ 
+@@ -498,7 +500,8 @@ class ARefusalNamesWhatWasRefused(unittest.TestCase):
+         critic = mock.Mock()
+         critic.review_hypothesis.return_value = loop.Review(False, "already in v9")
+         outcome = loop.iterate(planner=planner, critic=critic, context={},
+-                               measure=mock.Mock(), gate=mock.Mock(), commit=mock.Mock())
++                               measure=mock.Mock(), gate=mock.Mock(), commit=mock.Mock(),
++                               record_abandoned=lambda candidate: None)  # CONTROL_ONLY
+         self.assertEqual(outcome.status, "refused_at_formation")
+         self.assertIsNotNone(outcome.hypothesis)
+         self.assertEqual(outcome.to_attempt()["mechanism_id"], "akm-q4k-branchless")
+@@ -582,6 +585,7 @@ class AnInstrumentFailureEndsTheIterationNotTheRun(unittest.TestCase):
+             gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+             commit=lambda *a: "abc1234")
+         self.assertEqual(outcome.status, "bench_failed")
++        self.assertIsNotNone(outcome.hypothesis)
+         self.assertIn("rc=-9", " ".join(outcome.reasons))
+ 
+     def test_a_no_op_build_is_recorded_with_both_hashes_and_is_never_a_keep(self):
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_pipeline.py b/scripts/kernel_rnd/autokernel/loop/test_pipeline.py
+index 561bac7a6..1bbdaeddb 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_pipeline.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_pipeline.py
+@@ -21,6 +21,7 @@ measuring something other than the pipeline.
+ """
+ from __future__ import annotations
+ 
++import gc
+ import os
+ from pathlib import Path
+ import tempfile
+@@ -123,6 +124,11 @@ class _Recorder:
+         self.rows.append(outcome)
+ 
+ 
++def _control_disposition(_worker, _candidate):
++    # CONTROL_ONLY: these concurrency doubles produce no filesystem artifacts.
++    pass
++
++
+ def _drive(*, workers, iterations, champion=None, planner=None, critic=None,
+            gate=None, measure=None, commit=None, reset=None, record=None,
+            on_step=None, tail=None):
+@@ -154,6 +160,7 @@ def _drive(*, workers, iterations, champion=None, planner=None, critic=None,
+         champion_head=champion.head,
+         reset_to_champion=reset or default_reset,
+         record=record or (lambda outcome: None),
++        record_abandoned=_control_disposition,
+         iterations=iterations,
+         on_step=on_step,
+         tail=tail)
+@@ -930,7 +937,8 @@ class TheTailIsAtomicPerAttempt(unittest.TestCase):
+             planner=planner, critic=_Critic(),
+             context={}, measure=lambda *a: None,
+             gate=lambda *a: (False, [gates.Verdict("compile", False, "nope")]),
+-            commit=lambda *a: "x", tail_session=lambda: tail.session("base"))
++            commit=lambda *a: "x", tail_session=lambda: tail.session("base"),
++            record_abandoned=lambda candidate: None)  # CONTROL_ONLY: no source tree
+         self.assertTrue(seen, "authoring must have run")
+         self.assertFalse(any(seen), "authoring held the tail; formation is serialized")
+ 
+@@ -1298,6 +1306,9 @@ class TheStopSentinelAndPruning(unittest.TestCase):
+             with self.subTest(operation=operation), tempfile.TemporaryDirectory() as tmp:
+                 store = Path(tmp)
+                 (store / "anchor-gen-001").mkdir()
++                # Settle cyclic garbage from preceding tests before taking the baseline;
++                # cleanup during this check otherwise looks like negative fd leakage.
++                gc.collect()
+                 before = fd_count()
+                 with mock.patch.object(pool.os, operation,
+                                        side_effect=OSError("fixture discovery failure")):
+@@ -1366,7 +1377,8 @@ class NoLaneMayDieOutsideTheTry(unittest.TestCase):
+                 lambda h, p: (False, [gates.Verdict("compile", False, "build failed")])),
+             make_measure=lambda w: (lambda h, p: None),
+             commit=lambda *a: "x", champion_head=lambda: "base",
+-            reset_to_champion=reset, record=recorded.append, iterations=4)
++            reset_to_champion=reset, record=recorded.append, iterations=4,
++            record_abandoned=_control_disposition)
+         self.assertEqual(len(outcomes), 4, "the budget must be fully drawn")
+         self.assertEqual(sum(1 for o in outcomes if o.status == "lane_error"), 2)
+         self.assertIn("could not reach the champion", " ".join(outcomes[0].reasons))
+@@ -1388,7 +1400,8 @@ class NoLaneMayDieOutsideTheTry(unittest.TestCase):
+             make_gate=lambda w: (lambda h, p: (False, [gates.Verdict("compile", False, "nope")])),
+             make_measure=lambda w: (lambda h, p: None),
+             commit=lambda *a: "x", champion_head=lambda: "base",
+-            reset_to_champion=reset, record=lambda o: None, iterations=3)
++            reset_to_champion=reset, record=lambda o: None, iterations=3,
++            record_abandoned=_control_disposition)
+         self.assertEqual(outcomes[0].status, "lane_error")
+         self.assertTrue(any(o.status != "lane_error" for o in outcomes[1:]),
+                         "the lane must recover, not just survive")
+@@ -1440,7 +1453,8 @@ class TheStopMustReachTheLanes(unittest.TestCase):
+             make_measure=lambda w: (lambda h, p: None),
+             commit=lambda *a: "x", champion_head=lambda: "base",
+             reset_to_champion=lambda w: "base", record=lambda o: None,
+-            iterations=None, should_stop=lambda: stop["now"])
++            iterations=None, should_stop=lambda: stop["now"],
++            record_abandoned=_control_disposition)
+         self.assertEqual(len(outcomes), 1,
+                          "unbounded plus an ignored stop is a run that never ends")
+ 
+@@ -1484,6 +1498,7 @@ class ThePoolBreaker(unittest.TestCase):
+                 make_measure=lambda w: (lambda h, p: _comparison(0.02, floor=3.452)),
+                 commit=lambda *a: "x", champion_head=lambda: _sha(0),
+                 reset_to_champion=reset, record=recorded.append,
++                record_abandoned=_control_disposition,
+                 iterations=iterations,
+                 # A SAFETY NET for mutants only, never the mechanism: a breaker that
+                 # does not trip would otherwise hang an unbounded pool forever.
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_promotion_targets.py b/scripts/kernel_rnd/autokernel/loop/test_promotion_targets.py
+index bc31c9443..9d5aaf276 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_promotion_targets.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_promotion_targets.py
+@@ -41,13 +41,14 @@ import io
+ import json
+ from pathlib import Path
+ import signal
++import sqlite3
+ import subprocess
+ import tempfile
+ import unittest
+ from unittest import mock
+ 
+ from autokernel.loop import (accumulate, anchor, bench, champion, gates, hotspots, loop,
+-                             pipeline, pool)
++                             pipeline, pool, lane_watchdog)
+ from autokernel.loop import run as run_mod
+ 
+ CANONICAL = champion.CANONICAL_BRANCH
+@@ -248,7 +249,9 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
+         (inbox_dir / "bad-utf8.md").write_bytes(b"\xff\xfe\xfa")
+         (inbox_dir / "dangling.md").symlink_to(inbox_dir / "no-such-target")
+ 
+-    def _run_one_keep(self, *, candidate_symbols=None, surface=None):
++    def _run_one_keep(self, *, candidate_symbols=None, surface=None, refuse_first=False,
++                      fail_disposition=False, no_edit=False, refuse_all=False,
++                      dirty_extra=False):
+         """Drive `run.main` through exactly one kept iteration; return the record."""
+         accumulate.Bundle(champion_of_record=self.tip, tip=self.tip,
+                           surface=surface).save(self.store, surface=surface)
+@@ -257,6 +260,13 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
+         scratch = self.root / "scratch-verify"
+         repo, root, tip = self.repo, self.root, self.tip
+ 
++        dispatch_calls = []
++        def fake_dispatch(*_args, **_kwargs):
++            dispatch_calls.append(1)
++            failed = refuse_all or (refuse_first and len(dispatch_calls) == 1)
++            return gates.Verdict("no_fallback_dispatch", not failed,
++                                 "synthetic first refusal" if failed else "")
++
+         def fake_compiles(source_root, build_dir, *, cmake_defines, jobs, cpu_list,
+                           targets=gates.DEFAULT_TARGETS, cmake="cmake"):
+             compile_calls.append({"source": Path(source_root),
+@@ -289,8 +299,11 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
+                                        target_symbol="sym")
+ 
+             def author(self, hypothesis, context):
+-                (self.workspace / "ggml/src/kernel.c").write_text(
+-                    "patched\n", encoding="utf-8")
++                if not no_edit:
++                    (self.workspace / "ggml/src/kernel.c").write_text(
++                        "patched\n", encoding="utf-8")
++                if dirty_extra:
++                    (self.workspace / "untracked.txt").write_text("unretained data")
+                 return ("ggml/src/kernel.c",)
+ 
+         class _Critic:
+@@ -327,6 +340,21 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
+             yield {"device_id": "e2e-double"}
+ 
+         real_verify = anchor.verify
++        real_validate = run_mod.integrity.validate_candidate
++        real_record = run_mod.archive.record
++
++        def fixture_validate(worktree, paths, **kwargs):
++            if no_edit:
++                # CONTROL_ONLY: reach a later refusal with no source delta;
++                # native lane-cleanliness proof and record callbacks remain real.
++                return run_mod.integrity.CandidateIntegrity(
++                    tuple(paths), run_mod.integrity.candidate_tree(worktree), ())
++            return real_validate(worktree, paths, **kwargs)
++
++        def record_with_fault(store, attempt, **kwargs):
++            if fail_disposition and attempt.get("status") == "gate_refused":
++                raise OSError("synthetic disposition archive failure")
++            return real_record(store, attempt, **kwargs)
+ 
+         def verify_in_scratch(**kwargs):
+             kwargs["scratch_build"] = scratch
+@@ -336,19 +364,23 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
+                 "--anchor-build", str(self.startup_anchor),
+                 "--model", str(self.root / f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"), "--store", str(self.store),
+                 "--iterations", "1", "--workers", "1",
++                "--allow-untested-actor-seats", "synthetic fixture actors",
+                 "--worker-root", str(self.root / "lanes"),
+                 "--worker-build-root", str(self.root / "builds")]
+         out = io.StringIO()
+-        with mock.patch.object(gates, "compiles", fake_compiles), \
++        # CONTROL_ONLY: exercise the in-process core so fake actors/builds remain installed;
++        # separate watchdog tests cover the subprocess supervision boundary.
++        with mock.patch.object(lane_watchdog, "_SUPERVISED", True), \
++             mock.patch.object(run_mod.integrity, "validate_candidate", side_effect=fixture_validate), \
++             mock.patch.object(run_mod.archive, "record", side_effect=record_with_fault), \
++             mock.patch.object(gates, "compiles", fake_compiles), \
+              mock.patch.object(run_mod.kernel_coverage, "_nm", synthetic_symbols), \
+              mock.patch.object(gates, "op_correctness",
+                                lambda _b, **_k: gates.Verdict("op_correctness", True)), \
+              mock.patch.object(gates, "affected_op_scope", return_value=("MUL_MAT",)), \
+              mock.patch.object(gates, "deterministic",
+                                lambda *_a, **_k: gates.Verdict("determinism", True)), \
+-             mock.patch.object(gates, "no_fallback_dispatch",
+-                               lambda *_a, **_k: gates.Verdict(
+-                                   "no_fallback_dispatch", True)), \
++             mock.patch.object(gates, "no_fallback_dispatch", fake_dispatch), \
+              mock.patch.object(run_mod.bench, "compare", fake_compare), \
+              mock.patch.object(run_mod.actors, "AgentPlanner",
+                                lambda workspace, **_: _Planner(workspace)), \
+@@ -369,6 +401,60 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
+             rc = run_mod.main(argv)
+         return rc, compile_calls, planners, scratch, out.getvalue()
+ 
++    def test_real_pooled_refusal_records_patch_and_hypothesis_paths(self):
++        rc, *_ = self._run_one_keep(refuse_first=True)
++        self.assertEqual(rc, 0)
++        with sqlite3.connect(self.store / "experiments.db") as db:
++            rows = [json.loads(row[0]) for row in db.execute(
++                "SELECT payload FROM experiments WHERE status=?", ("gate_refused",))]
++        self.assertTrue(rows)
++        refused = rows[0]
++        self.assertIn("synthetic first refusal", refused["reason"])
++        self.assertIn(b"patched", Path(refused["retained_patch"]["patch_file"]).read_bytes())
++        record = json.loads(Path(refused["hypothesis_custody_record"]).read_text())
++        self.assertIn("synthetic first refusal", record["reason"])
++        self.assertEqual(record["hypothesis"]["mechanism_id"], refused["mechanism_id"])
++        self.assertEqual(record["retained_patch"]["patch_file"],
++                         refused["retained_patch"]["patch_file"])
++
++    def test_real_pooled_no_edit_refusal_records_hypothesis_and_clears_hold(self):
++        rc, *_ = self._run_one_keep(no_edit=True, refuse_all=True)
++        self.assertEqual(rc, 0)
++        with sqlite3.connect(self.store / "experiments.db") as db:
++            rows = [json.loads(row[0]) for row in db.execute(
++                "SELECT payload FROM experiments WHERE status=?", ("gate_refused",))]
++        if not rows:
++            with sqlite3.connect(self.store / "experiments.db") as db:
++                self.fail(repr(db.execute("SELECT status, payload FROM experiments").fetchall()))
++        for row in rows:
++            self.assertIn("synthetic first refusal", row["reason"])
++            record = json.loads(Path(row["hypothesis_custody_record"]).read_text())
++            self.assertEqual(record["hypothesis"]["mechanism_id"], row["mechanism_id"])
++            self.assertIsNone(record["retained_patch"])
++        lane = self.root / "lane0"
++        worker = pipeline.Worker("lane0", lane, self.root / "lane0-build")
++        self.assertFalse(pool.custody_hold_path(worker).exists())
++        self.assertEqual((lane / "ggml/src/kernel.c").read_text(), "base\n")
++
++    def test_no_patch_with_unproven_clean_lane_stops_and_retains_data(self):
++        with self.assertRaisesRegex(loop.RunAborted, "lane is not proven empty"):
++            self._run_one_keep(no_edit=True, refuse_all=True, dirty_extra=True)
++        lane = self.root / "lane0"
++        worker = pipeline.Worker("lane0", lane, self.root / "lane0-build")
++        self.assertTrue(pool.custody_hold_path(worker).is_file())
++        self.assertEqual((lane / "untracked.txt").read_text(), "unretained data")
++
++    def test_real_pooled_disposition_failure_stops_and_fences_lane(self):
++        with self.assertRaisesRegex(loop.RunAborted, "synthetic disposition archive failure"):
++            self._run_one_keep(refuse_first=True, fail_disposition=True)
++        lane = self.root / "lane0"
++        worker = pipeline.Worker("lane0", lane, self.root / "lane0-build")
++        self.assertTrue(pool.custody_hold_path(worker).is_file())
++        self.assertEqual((lane / "ggml/src/kernel.c").read_text(), "patched\n")
++        self.assertEqual(len(list((self.store / "patches").glob("author-inflight-*.json"))), 1)
++        with self.assertRaisesRegex(RuntimeError, "custody hold"):
++            pool.reset_to_champion(worker)
++
+     def test_the_automatic_keep_path_promotes_production_complete(self):
+         rc, calls, planners, scratch, log = self._run_one_keep()
+         self.assertEqual(rc, 0, log)
+@@ -460,7 +546,7 @@ class TheRunWiringSeams(unittest.TestCase):
+         """A `build_context` quietly reverted to an inline `read_text` loop drops
+         the `read_inbox` attribute reference; `inbox` alone would survive a rename,
+         so both are pinned. Non-vacuity both directions, as in test_ranking."""
+-        referenced = self._referenced(run_mod.main.__code__)
++        referenced = self._referenced(run_mod._main.__code__)
+         self.assertIn("inbox", referenced)
+         self.assertIn("read_inbox", referenced)
+         self.assertNotIn("no_such_global_anywhere", referenced)
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_resume.py b/scripts/kernel_rnd/autokernel/loop/test_resume.py
+index 6a20902c8..56ff98eee 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_resume.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_resume.py
+@@ -357,7 +357,8 @@ class ResumesAtAuthor(Fixture):
+ 
+         outcome = loop.iterate(planner=planner, critic=OneRejection(), context={},
+                                measure=lambda h, p: None, gate=passing_gate,
+-                               commit=lambda h, p, c: None, should_abandon=lambda: stop["now"])
++                               commit=lambda h, p, c: None, should_abandon=lambda: stop["now"],
++                               record_abandoned=self.owner.record_abandoned)
+         self.assertEqual(outcome.status, "stopped_mid_formation")
+         checkpoint = outcome.resume_checkpoints[0]
+         self.assertEqual(checkpoint["prior_patch_rejections"], ["edits the wrong symbol"])
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_resume_carry.py b/scripts/kernel_rnd/autokernel/loop/test_resume_carry.py
+index f2c2686c7..5e7732e0f 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_resume_carry.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_resume_carry.py
+@@ -405,7 +405,8 @@ class CarriesAreBounded(Fixture):
+             planner=EditsLine(self.repo, []), critic=base.Critic(
+                 [], [rejected("no"), rejected("no again")], hypothesis_fails=self),
+             context={}, measure=lambda h, p: None, gate=base.passing_gate,
+-            commit=lambda h, p, c: None, resume=point, author_attempts=2)
++            commit=lambda h, p, c: None, resume=point, author_attempts=2,
++            record_abandoned=self.owner.record_abandoned)
+         self.assertEqual(outcome.status, loop.HYPOTHESIS_RETIRED)
+ 
+     def test_the_budget_spent_is_never_carried(self):
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_resume_critic2.py b/scripts/kernel_rnd/autokernel/loop/test_resume_critic2.py
+index fecbc51a7..c1de4b90a 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_resume_critic2.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_resume_critic2.py
+@@ -139,15 +139,15 @@ class ACriticFailureLeavesACritic2Checkpoint(Fixture):
+                                record_abandoned=self.owner.record_abandoned)
+         self.assertEqual([ck["stage"] for ck in outcome.resume_checkpoints], ["author"])
+ 
+-    def test_an_empty_lane_drops_the_critic2_checkpoint_and_keeps_the_author_one(self):
++    def test_an_empty_lane_refuses_to_drop_the_critic2_checkpoint(self):
+         outcome = loop.iterate(
+             planner=base.Planner(self.repo, [base.hyp()]), critic=TransientCritic(),
+             context={}, measure=lambda h, p: None, gate=base.passing_gate,
+             commit=lambda h, p, c: None, hypothesis_rounds=1)
+         base.reset(self.repo)                  # the lane lost its diff before recording
+-        self.owner.record(outcome)
+-        (row,) = base.rows_with(self.store, "planner_transient")
+-        self.assertEqual([ck["stage"] for ck in row["resume_checkpoints"]], ["author"])
++        with self.assertRaisesRegex(RuntimeError, "critic2 has no retained patch"):
++            self.owner.record(outcome)
++        self.assertFalse((self.store / "experiments.db").exists())
+ 
+     def test_a_report_path_failure_over_a_real_edit_checkpoints_critic2(self):
+         """Run 10d: the author edited the lane; its report was unusable and the lane
+@@ -197,7 +197,9 @@ class ACriticFailureLeavesACritic2Checkpoint(Fixture):
+         (outcome,) = outcomes
+         self.assertEqual(outcome.status, "lane_error")
+         (row,) = base.rows_with(self.store, "lane_error")
+-        (checkpoint,) = row["resume_checkpoints"]
++        self.assertEqual([entry["stage"] for entry in row["resume_checkpoints"]],
++                         ["author", "critic2"])
++        checkpoint = row["resume_checkpoints"][1]
+         self.assertEqual(checkpoint["stage"], "critic2")
+         self.assertTrue(checkpoint["retained_patch"]["patch_sha256"])
+         base.reset(self.repo)
+@@ -296,7 +298,8 @@ class ResumesAtCritic2(Fixture):
+         outcome = loop.iterate(planner=fresh, critic=critic, context={},
+                                measure=lambda h, p: base.comparison(0.0),
+                                gate=base.passing_gate, commit=lambda h, p, c: None,
+-                               hypothesis_rounds=1, resume=point)
++                               hypothesis_rounds=1, resume=point,
++                               record_abandoned=self.owner.record_abandoned)
+         # The restored bytes are reversed, and the resumed hypothesis -- still
+         # ACCEPTED, only its patch was refused -- stays pending at the author instead
+         # of the planner being asked for fresh work.
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_scratch.py b/scripts/kernel_rnd/autokernel/loop/test_scratch.py
+index 5b502814e..9a2a93000 100644
+--- a/scripts/kernel_rnd/autokernel/loop/test_scratch.py
++++ b/scripts/kernel_rnd/autokernel/loop/test_scratch.py
+@@ -673,6 +673,13 @@ _SELF_CLEANING = "self-cleaning with-block temp; lands in the run scope's tmp (a
+ #: `module:qualname:kind` -> (count, reason). Counts are exact: a NEW creating call in an
+ #: allowlisted function fails too, so each one is reviewed.
+ ALLOWLIST: dict[str, tuple[int, str]] = {
++    "custody.py:write_json:mkdir": (1, "evidence: parent of a durable custody record"),
++    "custody.py:write_json:open-write": (1, "evidence: exclusive durable custody record"),
++    "custody.py:copy_reply_bundle:copytree": (1, "evidence: durable copy of raw reply bundle"),
++    "custody.py:copy_reply_bundle:open-write": (1, "evidence: mirrored raw streams for call records"),
++    "custody.py:append_rows:mkdir": (1, "evidence: durable call-log parent"),
++    "custody.py:append_rows:open-write": (3, "evidence: append and rollback call records transactionally"),
++    "custody.py:transfer_tail:open-write": (1, "evidence: truncate source only after durable destination"),
+     # Exact existing producer sites audited after OAB-29's full inventory check.
+     # Output paths below are durable evidence; probe scratch is with-block owned.
+     "ab_server_pair.py:ServerPair.start:mkdir": (1, "evidence: explicit log_dir retains each arm's server logs"),
+@@ -710,23 +717,23 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
+     "actor_opencode_config.py:write_plain_config:mkdir": (1, "writer at a caller-given path; actors pass a call-scope seat dir"),
+     "actor_orchestrator.py:OrchestratorBackend.argv:mkdir": (1, "evidence: provenance sidecar dir, bound by digest into the metrics row"),
+     "actor_orchestrator.py:OrchestratorBackend.argv:write_text": (3, _IN_SCOPE + " (schema/bundle/scouts request inputs)"),
+-    "actors.py:_run_agent_in:TemporaryFile": (2, "anonymous stdout/stderr capture inside the attempt scope's tmp"),
++    "actors.py:_run_agent_in:open-write": (2, "named raw stdout/stderr in fenced attempt scratch before actor spawn"),
++    "actors.py:_schema_http_capture:open-write": (2, "named raw HTTP repair response in fenced attempt scratch"),
+     "actor_metrics.py:_run_cli:TemporaryFile": (1, "anonymous (unlinked) capture file, deleted on close"),
+     # -- actor evidence (kept) -----------------------------------------------------------
+     "actor_metrics.py:export_session:mkdir": (1, "evidence: opencode session export, bound by digest on actor_call_metrics"),
+     "actor_metrics.py:export_session:open-write": (1, "evidence: opencode session export, bound by digest on actor_call_metrics"),
+     "actor_metrics.py:record_report_source:mkdir": (1, "evidence: actor call log"),
+-    "actor_metrics.py:record_report_source:open-write": (1, "evidence: actor call log (append)"),
+     "actor_metrics.py:record_salvage_turn:mkdir": (1, "evidence: actor call log (planner salvage-turn row)"),
+-    "actor_metrics.py:record_salvage_turn:open-write": (1, "evidence: actor call log (append)"),
+     "actor_metrics.py:record_answer_protocol:mkdir": (1, "evidence: actor call log (UFH14-B1 F2 answer-protocol row)"),
+-    "actor_metrics.py:record_answer_protocol:open-write": (1, "evidence: actor call log (append)"),
+     "actors.py:_persist_reply:mkdir": (1, "evidence: raw replies, bound by digest in the call record"),
+-    "actors.py:_persist_reply:write_bytes": (1, "evidence: raw replies, bound by digest in the call record"),
++    "actors.py:_persist_reply:open-write": (1, "evidence: exact raw replies bound by digest in the durable call record"),
++    "bestof.py:AuthorPanel._record_custody:mkdir": (2, "evidence: durable panel reply bundle and member disposition directory"),
++    "pool.py:begin_custody_hold:os-open-create": (1, "durable sibling hold prevents resetting a lane with unresolved custody"),
++    "run.py:_retain_fold_before_reset:mkdir": (1, "evidence: directory for fold-reset disposition and retained patch"),
++    "run.py:_retain_fold_before_reset:open-write": (1, "evidence: durable fold-reset disposition naming exact retained patches"),
+     "actors.py:_record_call:mkdir": (1, "evidence: VB-AK-SEAT call record log"),
+-    "actors.py:_record_call:open-write": (1, "evidence: VB-AK-SEAT call record log (append)"),
+     "actors.py:_record_metrics:mkdir": (2, "evidence: actor_call_metrics log and session exports"),
+-    "actors.py:_record_metrics:open-write": (1, "evidence: actor_call_metrics log (append)"),
+     "belief_context.py:_append:mkdir": (1, "evidence: belief receipt / degraded-mode logs"),
+     "belief_context.py:_append:open-write": (1, "evidence: belief receipt / degraded-mode logs (append)"),
+     "belief_context.py:DegradedWork._locked:mkdir": (1, "evidence: degraded-mode log dir (flock)"),
+@@ -748,8 +755,6 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
+     "ak_check.py:record_call:open-write": (1, "evidence: ak-check calls log (append)"),
+     "ak_check.py:_flock_currently_held:open-write": (1, "state: non-blocking flock probe of an EXISTING lock file (a+b after an exists check); creates nothing"),
+     # -- best-of panel (lane/ak-bestof): member trees are Scope.worktree/dir -------------
+-    "bestof.py:AuthorPanel._harvest_metrics:mkdir": (1, "evidence: member actor-call rows moved into the LANE's actor-calls.jsonl"),
+-    "bestof.py:AuthorPanel._harvest_metrics:open-write": (2, "evidence: the lane's actor-calls.jsonl (append) and the member log truncation"),
+     "bestof.py:AuthorPanel._write_row:mkdir": (1, "evidence: author-panel.jsonl in the lane's reply dir"),
+     "bestof.py:AuthorPanel._write_row:open-write": (1, "evidence: author-panel.jsonl (append)"),
+     "bestof.py:command_validator.validate:TemporaryFile": (2, "anonymous (unlinked) stdout/stderr capture of the winner check, deleted on close"),
+@@ -916,7 +921,7 @@ class ScratchInventory(unittest.TestCase):
+ 
+     def _sites(self) -> dict[str, list[int]]:
+         sites: dict[str, list[int]] = {}
+-        for path in sorted(PKG.glob("*.py")):
++        for path in sorted([*PKG.glob("*.py"), PKG.parent / "custody.py"]):
+             if path.name.startswith("test_") or path.name == "scratch.py":
+                 continue
+             for key, line in creation_sites(path):
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_actor_reply_custody.py b/scripts/kernel_rnd/autokernel/loop/test_actor_reply_custody.py
+new file mode 100644
+index 000000000..4c6a5fcf6
+--- /dev/null
++++ b/scripts/kernel_rnd/autokernel/loop/test_actor_reply_custody.py
+@@ -0,0 +1,392 @@
++"""Completed replies retain every byte and cannot collide within a second."""
++import hashlib
++import builtins
++import io
++import os
++import sys
++import threading
++import json
++import re
++import pytest
++from unittest import mock
++from pathlib import Path
++import subprocess
++
++from . import actors, actor_metrics
++from .. import custody
++
++
++def test_complete_replies_are_distinct_and_untruncated(tmp_path):
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    backend = actors.Backend("codex", "model", "low", "binary")
++    first = "begin-" + "x" * (4 * 1024 * 1024) + "-end"
++    done = subprocess.CompletedProcess([], 0, stdout=first, stderr="err")
++    ref1 = actors._persist_reply(workspace, backend, done)
++    ref2 = actors._persist_reply(workspace, backend, done)
++    target = tmp_path / actors.ACTOR_REPLY_DIR
++    assert ref1["stdout"]["path"] != ref2["stdout"]["path"]
++    for ref in (ref1, ref2):
++        raw = (target / ref["stdout"]["path"]).read_bytes()
++        assert raw == first.encode()
++        assert ref["stdout"]["sha256"] == hashlib.sha256(raw).hexdigest()
++        assert (target / ref["stderr"]["path"]).read_bytes() == b"err"
++
++
++def test_fallback_call_record_keeps_actual_reply_paths(tmp_path):
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    backend = actors.Backend("codex", "model", "low", "binary")
++    reply = actors._persist_reply(workspace, backend,
++                                  subprocess.CompletedProcess([], 1, "partial", "error"))
++    with mock.patch.object(actors, "_call_record_v1", side_effect=RuntimeError("offline")):
++        actors._record_call(workspace, backend, "prompt", returncode=1,
++                            wall_s=1, env=None, reply=reply)
++    row = json.loads((tmp_path / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG).read_text())
++    assert row["reply"] == reply
++    assert (tmp_path / actors.ACTOR_REPLY_DIR / row["reply"]["stdout"]["path"]).read_text() == "partial"
++
++
++@pytest.mark.parametrize("failure_site", ["reply", "record", "badrow"])
++def test_io_failure_preserves_named_raw_capture_and_stops(tmp_path, failure_site):
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    backend = actors.Backend("codex", "model", "low", "binary")
++
++    def child(*args, **kwargs):
++        kwargs["stdout"].write("paid-for reply")
++        kwargs["stderr"].write("actor diagnostics")
++        return subprocess.CompletedProcess(args=[], returncode=0, stdout=None, stderr=None)
++
++    target = {"reply": "_persist_reply", "record": "_record_call",
++              "badrow": "_call_record_v1"}[failure_site]
++    failure = (mock.patch.object(actors, target, return_value={"reply": None})
++               if failure_site == "badrow" else
++               mock.patch.object(actors, target, side_effect=OSError("disk refused")))
++    with mock.patch.object(actors.subprocess, "run", side_effect=child), failure:
++        with pytest.raises(actors.RunAborted, match="raw capture retained") as caught:
++            actors._run_agent("prompt", workspace=workspace, backend=backend)
++    match = re.search(r"raw capture retained at ([^:]+):", str(caught.value))
++    assert match
++    capture = Path(match.group(1))
++    assert (capture / "actor.stdout").read_text() == "paid-for reply"
++    assert (capture / "actor.stderr").read_text() == "actor diagnostics"
++    marker = actors.scratch.read_marker("dir", capture)
++    assert marker["release_blocked"] == "actor reply awaiting durable disposition"
++
++
++def test_schema_reply_write_failure_keeps_original_http_bytes(tmp_path):
++    from . import actor_passthrough
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    backend = actors.Backend("opencode", "provider/model", "low", "binary")
++    raw = b'{"choices":[{"message":{"content":"{\"a\":1}"}}]}'
++    class Response(io.BytesIO):
++        pass
++    with mock.patch.object(actors, "_provider_base_url", return_value="http://example.invalid"), \
++         mock.patch.object(actor_passthrough, "wire_url", return_value=None), \
++         mock.patch("urllib.request.urlopen", return_value=Response(raw)), \
++         mock.patch.object(actors, "_persist_reply", side_effect=OSError("store full")):
++        with pytest.raises(actors.RunAborted, match="raw capture retained") as caught:
++            actors._schema_repair("raw", schema={"type": "object"}, backend=backend,
++                                  workspace=workspace)
++    capture = Path(re.search(r"raw capture retained at ([^:]+):", str(caught.value)).group(1))
++    assert (capture / "actor.stdout").read_bytes() == raw
++    assert actors.scratch.read_marker("dir", capture)["release_blocked"]
++
++
++def test_process_crash_leaves_pre_spawn_fence_and_named_reply(tmp_path):
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    code = """
++import os, subprocess
++from pathlib import Path
++from unittest import mock
++from autokernel.loop import actors
++
++def child(*args, **kwargs):
++    output = kwargs["stdout"]
++    output.write("finished reply")
++    output.flush()
++    os.fsync(output.fileno())
++    os._exit(17)
++
++backend = actors.Backend("codex", "model", "low", "binary")
++with mock.patch.object(actors.subprocess, "run", side_effect=child):
++    actors._run_agent("prompt", workspace=Path(os.environ["TEST_ACTOR_LANE"]), backend=backend)
++"""
++    done = subprocess.run([sys.executable, "-c", code],
++                          env={**os.environ, "TEST_ACTOR_LANE": str(workspace)},
++                          capture_output=True, text=True)
++    assert done.returncode == 17, done.stderr
++    captures = list(tmp_path.rglob("actor.stdout"))
++    assert len(captures) == 1
++    capture = captures[0].parent
++    assert captures[0].read_text() == "finished reply"
++    assert actors.scratch.read_marker("dir", capture)["release_blocked"]
++
++
++
++def test_non_utf8_child_bytes_are_retained_without_changing_text_api(tmp_path):
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    backend = actors.Backend("codex", "model", "low", "binary")
++    raw = b"begin-\xff-end"
++
++    def child(*args, **kwargs):
++        kwargs["stdout"].buffer.write(raw)
++        return subprocess.CompletedProcess(args=[], returncode=0, stdout=None, stderr=None)
++
++    with mock.patch.object(actors.subprocess, "run", side_effect=child):
++        result = actors._run_agent("prompt", workspace=workspace, backend=backend)
++    assert result == raw.decode("utf-8", "replace")
++    target = tmp_path / actors.ACTOR_REPLY_DIR
++    rows = [json.loads(line) for line in (target / actors.ACTOR_CALL_LOG).read_text().splitlines()]
++    ref = rows[-1]["reply"]["stdout"]
++    assert (target / ref["path"]).read_bytes() == raw
++    assert ref["sha256"] == hashlib.sha256(raw).hexdigest()
++
++
++
++def test_unrouted_schema_repair_records_reason_and_retained_streams(tmp_path):
++    from . import actor_passthrough
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    backend = actors.Backend("opencode", "local/model", "low", "binary")
++    with mock.patch.object(actors, "_provider_base_url", return_value="http://example.invalid"), \
++         mock.patch.object(actor_passthrough, "wire_url",
++                           side_effect=actor_passthrough.UnroutedLocalProvider("no route")):
++        assert actors._schema_repair("raw", schema={"type": "object"}, backend=backend,
++                                     workspace=workspace) is None
++    root = tmp_path / actors.ACTOR_REPLY_DIR
++    row = json.loads((root / actors.ACTOR_CALL_LOG).read_text().splitlines()[-1])
++    assert row["returncode"] == -2
++    assert (root / row["reply"]["stderr"]["path"]).read_text() == "no route"
++
++
++
++@pytest.mark.parametrize("store_failure", [False, True])
++def test_schema_http_error_preserves_exact_status_and_body(tmp_path, store_failure):
++    import contextlib
++    import urllib.error
++    from . import actor_passthrough
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    backend = actors.Backend("opencode", "provider/model", "low", "binary")
++    body = b"rate-limited-\xff-actual-body"
++    http_error = urllib.error.HTTPError("http://example.invalid", 429, "Too Many Requests",
++                                        {}, io.BytesIO(body))
++    failure = (mock.patch.object(actors, "_persist_reply", side_effect=OSError("store full"))
++               if store_failure else contextlib.nullcontext())
++    with mock.patch.object(actors, "_provider_base_url", return_value="http://example.invalid"), \
++         mock.patch.object(actor_passthrough, "wire_url", return_value=None), \
++         mock.patch("urllib.request.urlopen", side_effect=http_error), failure:
++        if store_failure:
++            with pytest.raises(actors.RunAborted, match="raw capture retained") as caught:
++                actors._schema_repair("raw", schema={"type": "object"},
++                                      backend=backend, workspace=workspace)
++        else:
++            assert actors._schema_repair("raw", schema={"type": "object"},
++                                         backend=backend, workspace=workspace) is None
++    if store_failure:
++        capture = Path(re.search(r"raw capture retained at ([^:]+):", str(caught.value)).group(1))
++        assert (capture / "actor.stdout").read_bytes() == body
++        assert (capture / "actor.stderr").read_text() == "HTTPError status 429: Too Many Requests"
++        assert actors.scratch.read_marker("dir", capture)["release_blocked"]
++    else:
++        root = tmp_path / actors.ACTOR_REPLY_DIR
++        row = json.loads((root / actors.ACTOR_CALL_LOG).read_text().splitlines()[-1])
++        assert row["returncode"] == 429
++        assert (root / row["reply"]["stdout"]["path"]).read_bytes() == body
++        assert (root / row["reply"]["stderr"]["path"]).read_text() == "HTTPError status 429: Too Many Requests"
++        assert row["reply"]["stdout"]["sha256"] == hashlib.sha256(body).hexdigest()
++
++
++
++def test_schema_http_error_capture_write_failure_keeps_prefix_and_status(tmp_path):
++    import urllib.error
++    from . import actor_passthrough
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    backend = actors.Backend("opencode", "provider/model", "low", "binary")
++    body = b"a" * 65536 + b"\xfftail"
++    http_error = urllib.error.HTTPError("http://example.invalid", 503, "Unavailable",
++                                        {}, io.BytesIO(body))
++    original_open = Path.open
++
++    class FailingOutput:
++        def __init__(self, file):
++            self.file = file
++            self.writes = 0
++        def __enter__(self):
++            return self
++        def __exit__(self, *args):
++            return self.file.__exit__(*args)
++        def __getattr__(self, key):
++            return getattr(self.file, key)
++        def write(self, data):
++            self.writes += 1
++            if self.writes == 2:
++                raise OSError("capture disk full")
++            return self.file.write(data)
++
++    def open_with_failure(path, *args, **kwargs):
++        opened = original_open(path, *args, **kwargs)
++        return FailingOutput(opened) if path.name == "actor.stdout" and args == ("wb",) else opened
++
++    with mock.patch.object(actors, "_provider_base_url", return_value="http://example.invalid"), \
++         mock.patch.object(actor_passthrough, "wire_url", return_value=None), \
++         mock.patch("urllib.request.urlopen", side_effect=http_error), \
++         mock.patch.object(Path, "open", new=open_with_failure):
++        with pytest.raises(actors.RunAborted, match="raw capture retained") as caught:
++            actors._schema_repair("raw", schema={"type": "object"},
++                                  backend=backend, workspace=workspace)
++    capture = Path(re.search(r"raw capture retained at ([^:]+):", str(caught.value)).group(1))
++    assert (capture / "actor.stdout").read_bytes() == body[:65536]
++    assert (capture / "actor.stderr").read_text() == "HTTPError status 503: Unavailable"
++    assert actors.scratch.read_marker("dir", capture)["release_blocked"]
++
++
++@pytest.mark.parametrize("rollback_fails,complete_write", [(False, False), (True, False), (True, True)])
++def test_partial_transfer_then_real_actor_writer_preserves_records(tmp_path, rollback_fails, complete_write):
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    target = tmp_path / actors.ACTOR_REPLY_DIR
++    target.mkdir()
++    log = target / actors.ACTOR_CALL_LOG
++    previous = b'{"schema":"existing","value":1}\n'
++    raw = b'{"schema":"panel","value":2}\n'
++    log.write_bytes(previous)
++    source = tmp_path / "member.jsonl"
++    source.write_bytes(raw)
++    original_open = builtins.open
++    class Partial:
++        def __init__(self, *args, **kwargs):
++            self.file = original_open(*args, **kwargs)
++        def __enter__(self):
++            return self
++        def __exit__(self, *args):
++            self.file.close()
++        def write(self, data):
++            self.file.write(data if complete_write else data[:8])
++            self.file.flush()
++            raise OSError("partial append")
++    def fault(file, mode="r", *args, **kwargs):
++        if Path(file) == log and mode == "a":
++            return Partial(file, mode, *args, **kwargs)
++        if rollback_fails and Path(file) == log and mode == "r+b":
++            raise OSError("rollback refused")
++        return original_open(file, mode, *args, **kwargs)
++    with mock.patch("builtins.open", side_effect=fault):
++        with pytest.raises(OSError, match="rollback failed" if rollback_fails else "partial append"):
++            custody.transfer_tail(source, log, 0, raw.decode())
++    assert source.read_bytes() == raw
++    written = raw if complete_write else raw[:8]
++    assert log.read_bytes() == (previous + written if rollback_fails else previous)
++    backend = actors.Backend("codex", "model", "low", "binary")
++    reply = actors._persist_reply(workspace, backend,
++                                 subprocess.CompletedProcess([], 0, "actual reply", ""))
++    state = {"recorded": False}
++    token = actors._reply_custody.set(state)
++    try:
++        with mock.patch.object(actors, "_call_record_v1", side_effect=RuntimeError("offline")):
++            if rollback_fails:
++                with pytest.raises(actors.RunAborted, match="File exists"):
++                    actors._record_call(workspace, backend, "prompt", returncode=0,
++                                        wall_s=1, env=None, reply=reply)
++                assert not state["recorded"]
++                assert log.read_bytes() == previous + written
++            else:
++                actors._record_call(workspace, backend, "prompt", returncode=0,
++                                    wall_s=1, env=None, reply=reply)
++                assert state["recorded"]
++                rows = [json.loads(line) for line in log.read_bytes().splitlines()]
++                assert rows[0] == {"schema": "existing", "value": 1}
++                assert rows[1]["reply"] == reply
++    finally:
++        actors._reply_custody.reset(token)
++    assert source.read_bytes() == raw
++
++
++def test_corrupt_terminated_tail_refuses_actor_record(tmp_path):
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    backend = actors.Backend("codex", "model", "low", "binary")
++    reply = actors._persist_reply(workspace, backend,
++                                 subprocess.CompletedProcess([], 0, "reply", ""))
++    log = tmp_path / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG
++    raw = b'{"valid":1}\nnot-json\n'
++    log.write_bytes(raw)
++    state = {"recorded": False}
++    token = actors._reply_custody.set(state)
++    try:
++        with pytest.raises(actors.RunAborted, match="corrupt row"):
++            actors._record_call(workspace, backend, "prompt", returncode=0,
++                                wall_s=1, env=None, reply=reply)
++        assert not state["recorded"]
++        assert log.read_bytes() == raw
++    finally:
++        actors._reply_custody.reset(token)
++
++
++def test_actor_fence_stays_held_when_prior_tail_is_corrupt(tmp_path):
++    workspace = tmp_path / "lane"
++    workspace.mkdir()
++    target = tmp_path / actors.ACTOR_REPLY_DIR
++    target.mkdir()
++    log = target / actors.ACTOR_CALL_LOG
++    log.write_bytes(b'{"complete":true}\n{"unfinished"')
++    backend = actors.Backend("codex", "model", "low", "binary")
++    def child(*args, **kwargs):
++        kwargs["stdout"].write("paid reply")
++        return subprocess.CompletedProcess([], 0, stdout=None, stderr=None)
++    with mock.patch.object(actors.subprocess, "run", side_effect=child):
++        with pytest.raises(actors.RunAborted, match="raw capture retained") as caught:
++            actors._run_agent("prompt", workspace=workspace, backend=backend)
++    capture = Path(re.search(r"raw capture retained at ([^:]+):", str(caught.value)).group(1))
++    assert (capture / "actor.stdout").read_text() == "paid reply"
++    assert actors.scratch.read_marker("dir", capture)["release_blocked"]
++    assert log.read_bytes() == b'{"complete":true}\n{"unfinished"'
++
++
++@pytest.mark.parametrize("writer", [actor_metrics.record_report_source,
++                                    actor_metrics.record_salvage_turn,
++                                    actor_metrics.record_answer_protocol])
++def test_sibling_writers_do_not_extend_corrupt_tail(tmp_path, writer):
++    raw = b'{"complete":1}\n{"unfinished"'
++    path = tmp_path / actor_metrics.CALL_LOG_NAME
++    path.write_bytes(raw)
++    writer(tmp_path, {"reason": "test"})
++    assert path.read_bytes() == raw
++
++
++def test_append_fence_precedes_offset_read_for_concurrent_writers(tmp_path):
++    log = tmp_path / "actor-calls.jsonl"
++    log.write_bytes(b'{"prior":1}\n')
++    entered, release = threading.Event(), threading.Event()
++    original = Path.read_bytes
++    errors = []
++    def blocking_read(path):
++        if path == log and threading.current_thread().name == "first-writer":
++            entered.set()
++            assert release.wait(5)
++        return original(path)
++    def first():
++        try:
++            custody.append_rows(log, '{"first":1}\n')
++        except Exception as exc:
++            errors.append(exc)
++    with mock.patch.object(Path, "read_bytes", blocking_read):
++        thread = threading.Thread(target=first, name="first-writer")
++        thread.start()
++        try:
++            assert entered.wait(5)
++            with pytest.raises(FileExistsError):
++                custody.append_rows(log, '{"second":1}\n')
++        finally:
++            release.set()
++            thread.join(5)
++    assert not thread.is_alive()
++    assert not errors
++    assert [json.loads(line) for line in log.read_bytes().splitlines()] == [
++        {"prior": 1}, {"first": 1}]
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_custody_hold.py b/scripts/kernel_rnd/autokernel/loop/test_custody_hold.py
+new file mode 100644
+index 000000000..a0c2a09b4
+--- /dev/null
++++ b/scripts/kernel_rnd/autokernel/loop/test_custody_hold.py
+@@ -0,0 +1,382 @@
++"""Failure and restart checks for the abandoned-candidate custody fence."""
++import os
++import subprocess
++import sys
++from pathlib import Path
++from tempfile import TemporaryDirectory
++from unittest import mock
++
++import pytest
++from . import loop, pipeline, pool
++from .test_candidate_dispositions import _Planner, _Critic, _hypothesis, _refusing_gate
++
++
++def test_recorder_failure_stops_before_next_author(tmp_path):
++    path = tmp_path / 'authored'
++    class Planner(_Planner):
++        calls = 0
++        def author(self, hypothesis, context):
++            self.calls += 1
++            path.write_text(str(self.calls))
++            return (path,)
++    planner = Planner([_hypothesis()])
++    def fail(_candidate):
++        raise OSError('archive unavailable')
++    with pytest.raises(loop.RunAborted, match='custody failed'):
++        loop.iterate(planner=planner, critic=_Critic(), context={},
++                     measure=lambda *a: None, gate=_refusing_gate, commit=lambda *a: None,
++                     hypothesis_rounds=1, patch_rounds=2, record_abandoned=fail)
++    assert planner.calls == 1 and path.read_text() == '1'
++
++
++def test_error_only_recorder_stops_before_next_author(tmp_path):
++    path = tmp_path / 'authored'
++    class Planner(_Planner):
++        calls = 0
++        def author(self, hypothesis, context):
++            self.calls += 1
++            path.write_text(str(self.calls))
++            return (path,)
++    planner = Planner([_hypothesis()])
++    def fail(candidate):
++        candidate.retained_patch = {'error': 'retention failed'}
++    with pytest.raises(loop.RunAborted, match='retention failed'):
++        loop.iterate(planner=planner, critic=_Critic(), context={},
++                     measure=lambda *a: None, gate=_refusing_gate, commit=lambda *a: None,
++                     hypothesis_rounds=1, patch_rounds=2, record_abandoned=fail)
++    assert planner.calls == 1 and path.read_text() == '1'
++
++
++def test_hold_survives_process_exit_and_blocks_reset(tmp_path):
++    lane = tmp_path / 'lane'; lane.mkdir()
++    patch = lane / 'candidate.c'; patch.write_text('keep original')
++    code = ('from pathlib import Path; from autokernel.loop import pool,pipeline; '
++            'import os; w=pipeline.Worker(name="lane0",worktree=Path(os.environ["LANE"]),'
++            'build_dir=Path(os.environ["LANE"])); pool.begin_custody_hold(w,"m"); os._exit(17)')
++    env = dict(os.environ, LANE=str(lane))
++    child = subprocess.run([sys.executable, '-c', code], env=env)
++    assert child.returncode == 17
++    worker = pipeline.Worker(name='lane0', worktree=lane, build_dir=lane)
++    with mock.patch.object(pool, 'champion_head') as champion:
++        with pytest.raises(RuntimeError, match='custody hold'):
++            pool.reset_to_champion(worker)
++        champion.assert_not_called()
++    assert patch.read_text() == 'keep original'
++    with pytest.raises(FileExistsError):
++        pool.begin_custody_hold(worker, 'other')
++    pool.finish_custody_hold(pool.custody_hold_path(worker))
++    assert not (pool.custody_hold_path(worker)).exists()
++
++
++def test_pool_failure_stops_run_and_restart_cannot_reset_lane(tmp_path):
++    lane = tmp_path / 'lane'; lane.mkdir()
++    patch = lane / 'candidate.c'
++    class Planner(_Planner):
++        calls = 0
++        def author(self, hypothesis, context):
++            self.calls += 1
++            patch.write_text('valuable patch')
++            return (patch,)
++    planner = Planner([_hypothesis()])
++    worker = pipeline.Worker('lane0', lane, lane)
++    recorded = []
++    def failed_record(w, candidate):
++        pool.begin_custody_hold(w, candidate.hypothesis.mechanism_id)
++        raise OSError('retention failed')
++    with pytest.raises(loop.RunAborted, match='retention failed'):
++        pipeline.run_pool(
++            workers=[worker], make_planner=lambda w: planner,
++            make_critic=lambda w: _Critic(), build_context=dict,
++            make_gate=lambda w: _refusing_gate, make_measure=lambda w: None,
++            commit=lambda *a: None, champion_head=lambda: 'c0',
++            reset_to_champion=lambda w: 'c0', record=recorded.append,
++            iterations=3, record_abandoned=failed_record)
++    assert planner.calls == 1 and patch.read_text() == 'valuable patch'
++    assert [item.status for item in recorded] == ['run_aborted']
++    assert recorded[0].resumed_from is None
++    with pytest.raises(RuntimeError, match='custody hold'):
++        pool.reset_to_champion(worker)
++
++
++@pytest.mark.parametrize('marker', ['partial', 'dangling_symlink'])
++def test_incomplete_or_symlink_hold_fences_reset(tmp_path, marker):
++    lane = tmp_path / 'lane'; lane.mkdir()
++    worker = pipeline.Worker('lane0', lane, lane)
++    hold = pool.custody_hold_path(worker)
++    assert hold.parent == lane.parent and hold.parent != lane
++    if marker == 'partial':
++        hold.write_bytes(b'{')  # crash during marker creation, before fsync
++    else:
++        hold.symlink_to(tmp_path / 'missing')
++    with mock.patch.object(pool, 'champion_head') as champion:
++        with pytest.raises(RuntimeError, match='custody hold'):
++            pool.reset_to_champion(worker)
++        champion.assert_not_called()
++    with pytest.raises(FileExistsError):
++        pool.begin_custody_hold(worker, 'm')
++
++
++def test_real_git_clean_cannot_remove_sibling_hold(tmp_path):
++    lane = tmp_path / 'lane'; lane.mkdir()
++    subprocess.run(['git', 'init', '-q', str(lane)], check=True)
++    worker = pipeline.Worker('lane0', lane, lane)
++    hold = pool.begin_custody_hold(worker, 'm')
++    (lane / 'untracked.c').write_text('candidate')
++    subprocess.run(['git', '-C', str(lane), 'clean', '-fdx'], check=True,
++                   stdout=subprocess.DEVNULL)
++    assert hold.is_file()
++    with pytest.raises(RuntimeError, match='custody hold'):
++        pool.reset_to_champion(worker)
++
++
++def test_empty_pre_author_proof_refuses_dirty_ignored_and_changed_head(tmp_path):
++    lane = tmp_path / 'lane'; lane.mkdir()
++    def git(*args):
++        return subprocess.run(['git', '-C', str(lane), *args], check=True,
++                              capture_output=True, text=True).stdout.strip()
++    git('init', '-q')
++    git('config', 'user.email', 'fixture@example.invalid')
++    git('config', 'user.name', 'fixture')
++    (lane / '.gitignore').write_text('ignored\n')
++    (lane / 'tracked').write_text('base')
++    git('add', '.gitignore', 'tracked'); git('commit', '-qm', 'base')
++    base = git('rev-parse', 'HEAD')
++    worker = pipeline.Worker('lane0', lane, lane)
++    assert pool.prove_empty_pre_author(worker, base)
++    assert not pool.prove_empty_pre_author(worker, None)
++    (lane / 'untracked').write_text('x')
++    assert not pool.prove_empty_pre_author(worker, base)
++    (lane / 'untracked').unlink(); (lane / 'ignored').write_text('x')
++    assert not pool.prove_empty_pre_author(worker, base)
++    (lane / 'ignored').unlink(); (lane / 'tracked').write_text('changed')
++    assert not pool.prove_empty_pre_author(worker, base)
++    git('add', 'tracked'); git('commit', '-qm', 'changed')
++    assert not pool.prove_empty_pre_author(worker, base)
++
++
++def test_final_recorder_failure_stops_pool_without_another_draw(tmp_path):
++    worker = pipeline.Worker("lane0", tmp_path, tmp_path)
++    planner = _Planner([_hypothesis()])
++    calls = []
++    def reset(_worker):
++        calls.append("reset")
++        return "base"
++    def fail(_outcome):
++        raise OSError("journal unavailable")
++    with pytest.raises(loop.RunAborted, match="journal unavailable"):
++        pipeline.run_pool(
++            workers=[worker], make_planner=lambda w: planner,
++            make_critic=lambda w: _Critic(), build_context=dict,
++            make_gate=lambda w: _refusing_gate, make_measure=lambda w: None,
++            commit=lambda *a: None, champion_head=lambda: "base",
++            reset_to_champion=reset, record=fail, iterations=3,
++            record_abandoned=lambda w, c: None)  # CONTROL_ONLY: fake gate, no source tree
++    assert calls == ["reset"]
++
++
++
++def _fold_lane(tmp_path):
++    from . import run
++    lane = tmp_path / "lane"; lane.mkdir()
++    def git(*args):
++        return subprocess.run(["git", "-C", str(lane), *args], check=True,
++                              capture_output=True, text=True).stdout.strip()
++    git("init", "-q")
++    git("config", "user.email", "fixture@example.invalid")
++    git("config", "user.name", "fixture")
++    path = lane / "tracked.c"
++    path.write_text("base\n")
++    git("add", "tracked.c"); git("commit", "-qm", "base")
++    base = git("rev-parse", "HEAD")
++    path.write_text("committed fold\n")
++    git("add", "tracked.c"); git("commit", "-qm", "fold")
++    path.write_text("committed fold\ndirty fold\n")
++    return run, pipeline.Worker("lane0", lane, lane), base, git
++
++
++def test_fold_reset_disposition_retains_committed_and_dirty_bytes(tmp_path):
++    import json
++    run, worker, base, git = _fold_lane(tmp_path)
++    manifest = run._retain_fold_before_reset(worker, store=tmp_path / "store",
++                                             base=base, mechanism="foldcheck")
++    record = json.loads(manifest.read_text())
++    assert record["reason"] and record["base"] == base
++    assert b"committed fold" in Path(record["committed_patch"]).read_bytes()
++    assert b"dirty fold" in Path(record["dirty_patch"]).read_bytes()
++    assert not pool.custody_hold_path(worker).exists()
++
++
++def test_fold_retention_failure_leaves_committed_tree_held(tmp_path):
++    run, worker, base, git = _fold_lane(tmp_path)
++    head = git("rev-parse", "HEAD")
++    with mock.patch.object(run.archive, "retain_patch_bytes", side_effect=OSError("store unavailable")):
++        with pytest.raises(loop.RunAborted, match="lane remains held"):
++            run._retain_fold_before_reset(worker, store=tmp_path / "store",
++                                          base=base, mechanism="foldcheck")
++    assert pool.custody_hold_path(worker).exists()
++    assert git("rev-parse", "HEAD") == head
++    assert (worker.worktree / "tracked.c").read_text() == "committed fold\ndirty fold\n"
++    with pytest.raises(RuntimeError, match="custody hold"):
++        pool.reset_to_champion(worker)
++
++
++
++def test_author_checkpoint_precedes_call_and_patch_disposition_precedes_release(tmp_path):
++    import json
++    run, worker, base, git = _fold_lane(tmp_path)
++    hypothesis = _hypothesis()
++    ticket = run._begin_author_custody(worker, hypothesis, {"stage": "author"},
++                                       store=tmp_path / "store")
++    assert pool.custody_hold_path(worker).exists()
++    hold = json.loads(pool.custody_hold_path(worker).read_text())
++    assert hold["identity"]["hypothesis"]["mechanism_id"] == hypothesis.mechanism_id
++    inflight = json.loads(ticket["record"].read_text())
++    assert inflight["hypothesis"]["mechanism_id"] == hypothesis.mechanism_id
++    retained = run._finish_author_custody(worker, ticket, hypothesis,
++                                          "ActorTransient: transport failed",
++                                          store=tmp_path / "store")
++    assert b"dirty fold" in Path(retained["patch_file"]).read_bytes()
++    row = json.loads(Path(retained["disposition_record"]).read_text())
++    assert row["reason"] == "ActorTransient: transport failed"
++    assert row["hypothesis_record"] == str(ticket["record"].resolve())
++    assert not pool.custody_hold_path(worker).exists()
++
++
++def test_author_capture_failure_keeps_lane_and_accepted_hypothesis(tmp_path):
++    run, worker, base, git = _fold_lane(tmp_path)
++    hypothesis = _hypothesis()
++    ticket = run._begin_author_custody(worker, hypothesis, {"stage": "author"},
++                                       store=tmp_path / "store")
++    with mock.patch.object(run.archive, "retain_patch_bytes", side_effect=OSError("store unavailable")):
++        with pytest.raises(loop.RunAborted, match="lane remains held"):
++            run._finish_author_custody(worker, ticket, hypothesis, None,
++                                       store=tmp_path / "store")
++    assert ticket["record"].is_file()
++    assert pool.custody_hold_path(worker).exists()
++    assert (worker.worktree / "tracked.c").read_text() == "committed fold\ndirty fold\n"
++
++
++
++def test_transient_author_keeps_exact_written_patch_and_failure_reason(tmp_path):
++    import json
++    run, worker, base, git = _fold_lane(tmp_path)
++    git("restore", "tracked.c")
++    hypothesis = _hypothesis()
++    class FailingPlanner(_Planner):
++        def author(self, hypothesis, context):
++            (worker.worktree / "tracked.c").write_text("partial authored edit\n")
++            raise loop.ActorTransient("provider lost after editing")
++    outcome = loop.iterate(
++        planner=FailingPlanner([hypothesis]), critic=_Critic(), context={},
++        gate=lambda *a: (True, []), measure=lambda *a: None, commit=lambda *a: None,
++        author_lane=(worker.worktree, git("rev-parse", "HEAD")),
++        begin_author_custody=lambda h, ck: run._begin_author_custody(
++            worker, h, ck, store=tmp_path / "store"),
++        finish_author_custody=lambda ticket, h, failure: run._finish_author_custody(
++            worker, ticket, h, failure, store=tmp_path / "store"))
++    retained = outcome.retained_patch
++    assert b"partial authored edit" in Path(retained["patch_file"]).read_bytes()
++    row = json.loads(Path(retained["disposition_record"]).read_text())
++    assert "provider lost after editing" in row["reason"]
++    assert not pool.custody_hold_path(worker).exists()
++
++
++
++def test_pooled_author_transient_records_hypothesis_and_actual_patch(tmp_path):
++    import json
++    run, worker, base, git = _fold_lane(tmp_path)
++    git("restore", "tracked.c")
++    hypothesis = _hypothesis()
++    class FailingPlanner(_Planner):
++        def author(self, hypothesis, context):
++            (worker.worktree / "tracked.c").write_text("pooled source edit\n")
++            raise loop.ActorTransient("provider failed after edit")
++    records = []
++    outcomes = pipeline.run_pool(
++        workers=[worker], make_planner=lambda w: FailingPlanner([hypothesis]),
++        make_critic=lambda w: _Critic(), build_context=dict,
++        make_gate=lambda w: lambda *a: (True, []),
++        make_measure=lambda w: lambda *a: None, commit=lambda *a: None,
++        champion_head=lambda: git("rev-parse", "HEAD"),
++        reset_to_champion=lambda w: git("rev-parse", "HEAD"),
++        record=records.append, iterations=1,
++        begin_author_custody=lambda w, h, ck: run._begin_author_custody(
++            w, h, ck, store=tmp_path / "store"),
++        finish_author_custody=lambda w, ticket, h, failure: run._finish_author_custody(
++            w, ticket, h, failure, store=tmp_path / "store"))
++    assert len(outcomes) == len(records) == 1
++    retained = records[0].retained_patch
++    assert b"pooled source edit" in Path(retained["patch_file"]).read_bytes()
++    disposition = json.loads(Path(retained["disposition_record"]).read_text())
++    assert "provider failed after edit" in disposition["reason"]
++    hypothesis_record = json.loads(Path(disposition["hypothesis_record"]).read_text())
++    assert hypothesis_record["hypothesis"]["mechanism_id"] == hypothesis.mechanism_id
++
++
++
++def test_missing_disposition_recorder_stops_before_another_author(tmp_path):
++    run, worker, base, git = _fold_lane(tmp_path)
++    git("restore", "tracked.c")
++    hypothesis = _hypothesis()
++    calls = []
++    class Planner(_Planner):
++        def author(self, hypothesis, context):
++            calls.append("author")
++            (worker.worktree / "tracked.c").write_text("the first patch\n")
++            return ("tracked.c",)
++    with pytest.raises(loop.RunAborted, match="no recorder"):
++        pipeline.run_pool(
++            workers=[worker], make_planner=lambda w: Planner([hypothesis]),
++            make_critic=lambda w: _Critic(), build_context=dict,
++            make_gate=lambda w: _refusing_gate, make_measure=lambda w: lambda *a: None,
++            commit=lambda *a: None, champion_head=lambda: git("rev-parse", "HEAD"),
++            reset_to_champion=lambda w: git("rev-parse", "HEAD"),
++            record=lambda o: None, iterations=2,
++            begin_author_custody=lambda w, h, ck: run._begin_author_custody(
++                w, h, ck, store=tmp_path / "store"),
++            finish_author_custody=lambda w, ticket, h, failure: run._finish_author_custody(
++                w, ticket, h, failure, store=tmp_path / "store"))
++    assert calls == ["author"]
++    assert (worker.worktree / "tracked.c").read_text() == "the first patch\n"
++    assert list((tmp_path / "store" / "patches").glob("*.patch"))
++
++
++
++def test_author_commit_and_dirty_source_survive_transient_and_reset(tmp_path):
++    import json
++    run, worker, base, git = _fold_lane(tmp_path)
++    git("restore", "tracked.c")
++    hypothesis = _hypothesis()
++    author_base = git("rev-parse", "HEAD")
++    class CommitPlanner(_Planner):
++        def author(self, hypothesis, context):
++            (worker.worktree / "tracked.c").write_text("authored commit\n")
++            git("add", "tracked.c")
++            git("commit", "-qm", "authored")
++            (worker.worktree / "tracked.c").write_text("authored commit\ndirty edit\n")
++            (worker.worktree / "src").mkdir()
++            (worker.worktree / "src" / "new.c").write_text("new source\n")
++            raise loop.ActorTransient("failure after commit and edits")
++    outcome = loop.iterate(
++        planner=CommitPlanner([hypothesis]), critic=_Critic(), context={},
++        gate=lambda *a: (True, []), measure=lambda *a: None, commit=lambda *a: None,
++        author_lane=(worker.worktree, author_base),
++        begin_author_custody=lambda h, ck: run._begin_author_custody(
++            worker, h, ck, store=tmp_path / "store"),
++        finish_author_custody=lambda ticket, h, failure: run._finish_author_custody(
++            worker, ticket, h, failure, store=tmp_path / "store"))
++    pointer = outcome.retained_patch
++    patch = Path(pointer["patch_file"]).read_bytes()
++    sidecar = json.loads(Path(pointer["metadata_file"]).read_text())
++    assert sidecar["original_head"] == author_base
++    assert b"authored commit" in patch and b"dirty edit" in patch and b"new source" in patch
++    assert "failure after commit and edits" in json.loads(
++        Path(pointer["disposition_record"]).read_text())["reason"]
++    git("reset", "--hard", author_base)
++    git("clean", "-fd", "--", "src")
++    subprocess.run(["git", "-C", str(worker.worktree), "apply", "--check", "--binary", "-"],
++                   input=patch, check=True)
++    subprocess.run(["git", "-C", str(worker.worktree), "apply", "--binary", "-"],
++                   input=patch, check=True)
++    assert (worker.worktree / "tracked.c").read_text() == "authored commit\ndirty edit\n"
++    assert (worker.worktree / "src" / "new.c").read_text() == "new source\n"
+diff --git a/scripts/kernel_rnd/autokernel/loop/test_discard_invariant.py b/scripts/kernel_rnd/autokernel/loop/test_discard_invariant.py
+new file mode 100644
+index 000000000..5f0d631ca
+--- /dev/null
++++ b/scripts/kernel_rnd/autokernel/loop/test_discard_invariant.py
+@@ -0,0 +1,125 @@
++"""Review fence for custody control flow; behavioral custody tests remain mandatory.
++
++A changed AST in any producer, transfer, or release path requires reviewing every
++artifact disposition and adding a failure-injection test before updating the pinned
++fingerprint. This conservative fence deliberately includes enclosing conditions.
++"""
++import ast
++import hashlib
++import json
++from pathlib import Path
++
++import pytest
++
++HERE = Path(__file__).parent
++REVIEWED = {
++    "actor_metrics.py": "48f0e9495d7d4ca375cacfa6fd70cd007136ffbbd1205a5ffea3b80871aa0614",
++    "../custody.py": "187c9cc71c35c0c94e44430202667505f45e616f7c70790d64a59d159ade1b55",
++    "actors.py": "f27344d84427e0f4b1e5567781f585ba3dd8600cf750748627de3c74de644c0f",
++    "archive.py": "4a8cdaaf7469ae915358e2f06cfdd7adbb8bbdb2a6186a5641f3ae95aecad6c1",
++    "bestof.py": "a42ade5e6075eaff43d5cf065c93015ff2445e80546bed3eb7d2a7f279012959",
++    "cross_target.py": "8a4afa59ce62645b23f9f1e02e4bd17e0b7ba1cc997ad25cdcc1aa91e9900409",
++    "loop.py": "add46ea62614dc0f1dffa32fec2d3d9c81753aac6a6ff62e3529fe1d22a723a0",
++    "pipeline.py": "642b5ade0bd6dc972fa22ca93a5249889b1f1ba564af248a31e69604bdcadfcf",
++    "pool.py": "807fe1b7e6e9f26b9d036b29489fe4a5a5e975b4e63f22129e5e72e77467a23c",
++    "resume.py": "ed9c0bbc0bdd584e76fb5abbcfc9ccb80ae4cc0379a5d5531cebb47659a82c3f",
++    "run.py": "8b37c71c5a63b60bec97695e675c0ef6aaf2a08856e90dbb9c8b89c83d16bdca",
++    "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
++}
++
++
++def normalized(node):
++    if isinstance(node, ast.AST):
++        return [type(node).__name__, [[name, normalized(value)]
++                for name, value in ast.iter_fields(node) if name != "type_params"]]
++    if isinstance(node, list):
++        return [normalized(value) for value in node]
++    if node is Ellipsis:
++        return ["ellipsis"]
++    if isinstance(node, bytes):
++        return ["bytes", node.hex()]
++    if isinstance(node, complex):
++        return ["complex", repr(node)]
++    return node
++
++
++def fingerprint(tree):
++    data = json.dumps(normalized(tree), separators=(",", ":"), ensure_ascii=True)
++    return hashlib.sha256(data.encode()).hexdigest()
++
++
++def assert_reviewed(name, tree):
++    assert fingerprint(tree) == REVIEWED[name], (
++        f"{name}: custody control flow changed; review every produced artifact "
++        "and add a behavioral failure-injection test before updating the inventory")
++
++
++@pytest.mark.parametrize("name", sorted(REVIEWED))
++def test_custody_control_flow_requires_review(name):
++    assert_reviewed(name, ast.parse((HERE / name).read_text()))
++
++
++def test_an_unrecorded_new_drop_is_caught():
++    tree = ast.parse((HERE / "loop.py").read_text())
++    function = next(node for node in tree.body
++                    if isinstance(node, ast.FunctionDef) and node.name == "_iterate")
++    function.body.insert(0, ast.If(test=ast.Constant(True),
++                                   body=[ast.Return(value=ast.Constant(None))], orelse=[]))
++    with pytest.raises(AssertionError, match="custody control flow changed"):
++        assert_reviewed("loop.py", tree)
++
++
++def test_a_drop_hidden_in_an_existing_condition_is_caught():
++    tree = ast.parse((HERE / "loop.py").read_text())
++    function = next(node for node in tree.body
++                    if isinstance(node, ast.FunctionDef) and node.name == "_iterate")
++    condition = next(node for node in ast.walk(function) if isinstance(node, ast.If))
++    condition.body.insert(0, ast.Assign(
++        targets=[ast.Subscript(value=ast.Name(id="progress", ctx=ast.Load()),
++                               slice=ast.Constant("critic2"), ctx=ast.Store())],
++        value=ast.Constant(None)))
++    with pytest.raises(AssertionError, match="custody control flow changed"):
++        assert_reviewed("loop.py", tree)
++
++
++
++def test_a_new_pipeline_drop_is_caught():
++    tree = ast.parse((HERE / "pipeline.py").read_text())
++    function = next(node for node in tree.body
++                    if isinstance(node, ast.FunctionDef) and node.name == "run_pool")
++    function.body.insert(0, ast.If(test=ast.Constant(True),
++                                   body=[ast.Return(value=ast.List(elts=[], ctx=ast.Load()))],
++                                   orelse=[]))
++    with pytest.raises(AssertionError, match="custody control flow changed"):
++        assert_reviewed("pipeline.py", tree)
++
++
++def test_removing_disposition_record_is_caught():
++    tree = ast.parse((HERE / "run.py").read_text())
++    recorder = next(node for node in ast.walk(tree)
++                    if isinstance(node, ast.FunctionDef) and node.name == "record_pooled")
++    call = next(node for node in ast.walk(recorder)
++                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
++                and isinstance(node.func.value, ast.Name)
++                and node.func.value.id == "archive" and node.func.attr == "record")
++    call.func.attr = "discard"
++    with pytest.raises(AssertionError, match="custody control flow changed"):
++        assert_reviewed("run.py", tree)
++
++
++def test_dropping_durable_transfer_from_shared_owner_is_caught():
++    tree = ast.parse((HERE / "../custody.py").read_text())
++    function = next(node for node in tree.body
++                    if isinstance(node, ast.FunctionDef) and node.name == "transfer_tail")
++    function.body.insert(0, ast.Return(value=ast.Constant(None)))
++    with pytest.raises(AssertionError, match="custody control flow changed"):
++        assert_reviewed("../custody.py", tree)
++
++
++def test_shared_append_rollback_cannot_be_removed_without_review():
++    tree = ast.parse((HERE / "../custody.py").read_text())
++    function = next(node for node in tree.body
++                    if isinstance(node, ast.FunctionDef) and node.name == "append_rows")
++    function.body.insert(0, ast.Return(value=ast.Constant(None)))
++    with pytest.raises(AssertionError, match="custody control flow changed"):
++        assert_reviewed("../custody.py", tree)

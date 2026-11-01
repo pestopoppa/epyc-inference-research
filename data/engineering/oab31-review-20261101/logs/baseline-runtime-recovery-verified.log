@@ -1,0 +1,31 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix _
+scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py:171: in test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix
+    assert (first / "loop-runtime-interruption.json").exists(), (first / "stderr.log").read_text()
+E   AssertionError: BASELINE-OBJECT-CODE autokernel.loop.test_runtime_recovery 94b1dd64c163d915eb1347b118f57e44e981bf78
+E     BASELINE-OBJECT autokernel.loop.loop 94b1dd64c163d915eb1347b118f57e44e981bf78
+E     BASELINE-OBJECT autokernel.loop.run 94b1dd64c163d915eb1347b118f57e44e981bf78
+E     BASELINE-OBJECT autokernel.loop.actors 94b1dd64c163d915eb1347b118f57e44e981bf78
+E     BASELINE-OBJECT autokernel.loop.pipeline 94b1dd64c163d915eb1347b118f57e44e981bf78
+E     BASELINE-OBJECT autokernel.loop.pool 94b1dd64c163d915eb1347b118f57e44e981bf78
+E     BASELINE-OBJECT autokernel.loop.resume 94b1dd64c163d915eb1347b118f57e44e981bf78
+E     BASELINE-OBJECT autokernel.loop.bestof 94b1dd64c163d915eb1347b118f57e44e981bf78
+E     Traceback (most recent call last):
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E       File "<frozen runpy>", line 88, in _run_code
+E       File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py", line 274, in <module>
+E         raise SystemExit(_child(sys.argv[2:]))
+E                          ^^^^^^^^^^^^^^^^^^^^
+E       File "/mnt/micron/codex3-lanes/research/scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py", line 80, in _child
+E         assert not observed.ran and observed.could_not_run_reason.startswith("HistoricalLaunchBudgetExhausted:")
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     AssertionError
+E     
+E   assert False
+E    +  where False = exists()
+E    +    where exists = (PosixPath('/mnt/raid0/llm/tmp/oab-actor-backend/oab31-discard-codex3-20261101/pytest-of-root/pytest-68/test_real_serial_interruption_0/router/batches/batch-000000') / 'loop-runtime-interruption.json').exists
+=========================== short test summary info ============================
+FAILED scripts/kernel_rnd/autokernel/loop/test_runtime_recovery.py::test_real_serial_interruption_new_holder_same_pending_pair_no_old_sample_mix
+1 failed in 1.31s
+{"schema": "bounded-r11-native-profile-supervisor/v1", "elapsed_s": 1.511958742979914, "sampled_peak_tree_rss_bytes": 212709376, "samples": 16, "verified_exited_processes": 0, "verified_exited_threads": 0, "per_process_address_space_limit_bytes": null, "rss_scope": "sum of sampled resident pages across owned process tree; sampling may miss transients and double-count shared pages", "leader_pid": 3826164, "leader_birth": 164347016, "child_rc": 1, "children_drained": true, "failure": null}
