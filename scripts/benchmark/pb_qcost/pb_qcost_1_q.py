@@ -46,6 +46,10 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+from deadline_contract import deadline_arg_utc  # noqa: E402
+
 sys.dont_write_bytecode = True
 sys.path.insert(0, "/mnt/raid0/llm/tmp/pb-hol-1")
 import pb_hol_1 as H  # noqa: E402  (reuse: LogTail, port_owner_ok, parse_deadline, load_decoder)
