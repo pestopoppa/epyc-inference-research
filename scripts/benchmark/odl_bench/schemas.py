@@ -138,7 +138,7 @@ class MetricRow:
 
 @dataclass
 class DeterministicRowSet:
-    """The wired deterministic comparison: engines x {structural,table,order,speed}."""
+    """Engine rows for structural, table, order, speed, and intrinsic diagnostics."""
 
     engines: list[str]
     gt_json: str

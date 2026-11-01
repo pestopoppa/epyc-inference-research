@@ -249,6 +249,7 @@ def compute_intrachunk_cohesion(
     chunk_embeddings: "object | None" = None,
     batch_size: int = 16,
     progress_bar: bool = False,
+    count_out: list[int] | None = None,
 ) -> float | None:
     """Mean cosine similarity between a chunk's sentences and its embedding.
 
@@ -259,6 +260,8 @@ def compute_intrachunk_cohesion(
     import numpy as np
 
     if not chunks:
+        if count_out is not None:
+            count_out.append(0)
         return None
     if chunk_embeddings is None:
         chunk_embeddings = _embed_chunks(chunks, model, batch_size, progress_bar)
@@ -289,6 +292,8 @@ def compute_intrachunk_cohesion(
 
     flattened: list[str] = [s for sent_list in chunk_sentences for s in sent_list]
     if not flattened:
+        if count_out is not None:
+            count_out.append(0)
         return None
     sentence_embeddings = np.asarray(
         model.encode(
@@ -312,6 +317,8 @@ def compute_intrachunk_cohesion(
         sims = np.dot(sent_embeds, chunk_embeddings[idx])
         cohesion_scores.append(np.mean(sims))
 
+    if count_out is not None:
+        count_out.append(len(cohesion_scores))
     if not cohesion_scores:
         return None
     return float(np.clip(np.mean(cohesion_scores), 0.0, 1.0))
@@ -330,6 +337,7 @@ def compute_contextual_coherence(
     batch_size: int = 16,
     chunk_embeddings: "object | None" = None,
     progress_bar: bool = False,
+    count_out: list[int] | None = None,
 ) -> float | None:
     """Mean cosine similarity of each chunk to its sliding context window.
 
@@ -341,6 +349,8 @@ def compute_contextual_coherence(
 
     n = len(chunks)
     if n < 2:
+        if count_out is not None:
+            count_out.append(0)
         return None
     if chunk_embeddings is None:
         chunk_embeddings = _embed_chunks(chunks, model, batch_size, progress_bar)
@@ -390,6 +400,8 @@ def compute_contextual_coherence(
         i += window_step
 
     if not text_windows:
+        if count_out is not None:
+            count_out.append(0)
         return None
 
     window_embeddings = np.asarray(
@@ -409,6 +421,8 @@ def compute_contextual_coherence(
             sim = np.dot(window_embed, chunk_embeddings[chunk_idx])
             cohesion_scores.append(sim)
 
+    if count_out is not None:
+        count_out.append(len(cohesion_scores))
     if not cohesion_scores:
         return None
     return float(np.clip(np.mean(cohesion_scores), 0.0, 1.0))
@@ -604,14 +618,16 @@ def score_chunks(
         value=sc,
         n=len(chunks),
         detail=(
-            "size compliance: fraction of chunks within "
-            f"[{min_tokens},{max_tokens}] whitespace tokens; HIGHER is better"
+            "size compliance: compliant chunks / all chunks; "
+            f"bounds=[{min_tokens},{max_tokens}] whitespace tokens; HIGHER is better"
         ),
     ))
 
+    block_boundaries = doc_split_points or detect_block_boundaries(full_text)
+    block_count = len(block_boundaries) + 1
     bi = compute_block_integrity(
         chunks,
-        doc_split_points or detect_block_boundaries(full_text),
+        block_boundaries,
         full_text,
     )
     rows.append(MetricRow(
@@ -619,21 +635,21 @@ def score_chunks(
         metric_family=METRIC_INTRINSIC,
         metric_name="Ekimetrics.BI",
         value=bi,
-        n=len(chunks),
+        n=block_count if bi is not None else 0,
         detail=(
-            "block integrity: fraction of structural blocks (headings/paragraphs) "
-            "not cut; HIGHER is better"
+            "block integrity: intact structural blocks / all structural blocks "
+            f"(headings/paragraphs; denominator={block_count}); HIGHER is better"
         ),
     ))
 
     if embedder is None:
-        reason = embedder_reason or "no embedder provided (install sentence-transformers)"
+        reason = embedder_reason or "no embedder supplied"
         rows.append(MetricRow(
             engine=engine,
             metric_family=METRIC_INTRINSIC,
             metric_name="Ekimetrics.ICC",
             value=None,
-            n=len(chunks),
+            n=0,
             detail=f"intrachunk cohesion unavailable: {reason}",
         ))
         rows.append(MetricRow(
@@ -641,33 +657,41 @@ def score_chunks(
             metric_family=METRIC_INTRINSIC,
             metric_name="Ekimetrics.DCC",
             value=None,
-            n=len(chunks),
+            n=0,
             detail=f"contextual coherence unavailable: {reason}",
         ))
         return rows
 
     split_points = split_points or detect_block_boundaries(full_text)
+    icc_n: list[int] = []
     icc = compute_intrachunk_cohesion(
-        chunks, full_text, split_points, model=embedder,
+        chunks, full_text, split_points, model=embedder, count_out=icc_n,
     )
     rows.append(MetricRow(
         engine=engine,
         metric_family=METRIC_INTRINSIC,
         metric_name="Ekimetrics.ICC",
         value=icc,
-        n=len(chunks),
-        detail="intrachunk cohesion: mean sentence-vs-chunk cosine; HIGHER is better",
+        n=icc_n[0] if icc_n else 0,
+        detail=(
+            "intrachunk cohesion: mean sentence-vs-chunk cosine over chunks "
+            f"with >=2 sentences; denominator={icc_n[0] if icc_n else 0}; HIGHER is better"
+        ),
     ))
+    dcc_n: list[int] = []
     dcc = compute_contextual_coherence(
-        chunks, full_text, model=embedder,
+        chunks, full_text, model=embedder, count_out=dcc_n,
     )
     rows.append(MetricRow(
         engine=engine,
         metric_family=METRIC_INTRINSIC,
         metric_name="Ekimetrics.DCC",
         value=dcc,
-        n=len(chunks),
-        detail="contextual coherence: chunk-vs-window cosine; HIGHER is better",
+        n=dcc_n[0] if dcc_n else 0,
+        detail=(
+            "contextual coherence: mean chunk-vs-context-window cosine over "
+            f"chunk/window pairs; denominator={dcc_n[0] if dcc_n else 0}; HIGHER is better"
+        ),
     ))
     return rows
 
@@ -684,10 +708,10 @@ def score_prediction_dir(
 ) -> list["MetricRow"]:  # noqa: F821
     """Score every prediction ``*.md`` in a dir, aggregated into engine rows.
 
-    Each prediction file is treated as one document: chunked (default chunker),
-    scored, then the per-document scores are aggregated (mean) into a single
-    set of intrinsic rows for ``engine``. ``n`` = number of documents scored.
-    Missing/empty files are skipped; a dir with no scorable documents yields
+    Each prediction file is one GT page: chunked (default chunker), scored,
+    then per-page scores are aggregated (mean) into a single set of intrinsic
+    rows for ``engine``. ``n`` is the count of non-null per-page values.
+    Missing/empty files are skipped; a dir with no scorable pages yields
     rows with ``value=None``.
     """
     from pathlib import Path
@@ -717,6 +741,13 @@ def score_prediction_dir(
     per_doc: dict[str, list[float]] = {
         "Ekimetrics.SC": [], "Ekimetrics.BI": [], "Ekimetrics.ICC": [], "Ekimetrics.DCC": []
     }
+    per_doc_denominators: dict[str, int] = {name: 0 for name in per_doc}
+    metric_units = {
+        "Ekimetrics.SC": "chunks",
+        "Ekimetrics.BI": "structural blocks",
+        "Ekimetrics.ICC": "eligible chunks",
+        "Ekimetrics.DCC": "chunk/window pairs",
+    }
     unavailable_detail: dict[str, str] = {}
     skipped_docs = 0
     skip_errors: list[str] = []
@@ -738,6 +769,7 @@ def score_prediction_dir(
         for row in rows:
             if row.value is not None:
                 per_doc[row.metric_name].append(float(row.value))
+                per_doc_denominators[row.metric_name] += row.n
             elif row.metric_name not in unavailable_detail:
                 unavailable_detail[row.metric_name] = row.detail
 
@@ -745,8 +777,8 @@ def score_prediction_dir(
         sample = skip_errors[0][:120]
         more = f" (+{len(skip_errors) - 1} more)" if len(skip_errors) > 1 else ""
         skip_note = (
-            f"{len(docs)} prediction documents, {skipped_docs} skipped "
-            f"(document-level scoring error: {sample}{more})"
+            f"{len(docs)} non-empty prediction pages, {skipped_docs} skipped "
+            f"(page-level scoring error: {sample}{more})"
         )
         for name in ("Ekimetrics.SC", "Ekimetrics.BI", "Ekimetrics.ICC", "Ekimetrics.DCC"):
             if name not in unavailable_detail:
@@ -758,19 +790,27 @@ def score_prediction_dir(
         value: float | None
         if values:
             value = sum(values) / len(values) if aggregate == "mean" else min(values)
-            detail = f"{aggregate} over {len(docs)} prediction documents"
+            detail = (
+                f"unweighted {aggregate} of per-page estimates over {len(values)} "
+                f"scored prediction pages; underlying {metric_units[name]} denominator "
+                f"sum={per_doc_denominators[name]}; {len(docs)} non-empty pages "
+                f"considered; {skipped_docs} skipped"
+            )
         else:
             value = None
+            reason = unavailable_detail.get(name)
             detail = (
-                unavailable_detail.get(name)
-                or f"not computable over {len(docs)} prediction documents"
+                f"{reason}; no metric values across {len(docs)} non-empty "
+                f"prediction pages ({skipped_docs} skipped)"
+                if reason
+                else f"not computable over {len(docs)} non-empty prediction pages"
             )
         rows.append(MetricRow(
             engine=engine,
             metric_family=METRIC_INTRINSIC,
             metric_name=name,
             value=value,
-            n=len(docs),
+            n=len(values),
             detail=detail,
         ))
     return rows

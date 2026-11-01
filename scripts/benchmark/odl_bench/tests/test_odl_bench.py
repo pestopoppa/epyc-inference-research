@@ -24,6 +24,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 # Make `import odl_bench` work: add scripts/benchmark (the package parent).
@@ -57,6 +58,7 @@ from odl_bench.unlimited_ocr import (  # noqa: E402
     UnlimitedOcrProducer,
 )
 from odl_bench.schemas import (  # noqa: E402
+    METRIC_INTRINSIC,
     METRIC_READING_ORDER,
     METRIC_SPEED,
     METRIC_STRUCTURAL,
@@ -749,17 +751,36 @@ class TestDeterministicRowSet(unittest.TestCase):
         register_backend(FakeBackend(name="fake", latency_ms=3.0))
         self.addCleanup(lambda: unregister_backend("fake"))
 
-    def test_row_set_speed_only_without_scoring(self):
+    def test_default_row_set_includes_lightweight_intrinsic_without_external_scoring(self):
         adapter = OdlBenchAdapter(bench_root=BENCH_ROOT)
+        # The default path may compute the stdlib-only intrinsic diagnostics,
+        # but it must not invoke the OmniDocBench scorer (or an embedder).
         images = run_configs.gt_image_basenames(DEMO_GT)
         pdf_manifest = {img: f"/nonexistent/{img}.pdf" for img in images}
         with tempfile.TemporaryDirectory() as td:
-            rs = adapter.build_deterministic_row_set(
-                DEMO_GT, pdf_manifest, td, engines=("fake",), do_score=False,
-            )
+            adapter.score = lambda *args, **kwargs: self.fail("external scorer called by default")
+            with patch(
+                "odl_bench.intrinsic.resolve_embedder",
+                side_effect=AssertionError("embedder provider called by default"),
+            ):
+                rs = adapter.build_deterministic_row_set(
+                    DEMO_GT, pdf_manifest, td, engines=("fake",), do_score=False,
+                )
             self.assertEqual(rs.engines, ["fake"])
             families = {r.metric_family for r in rs.metric_rows}
-            self.assertEqual(families, {METRIC_SPEED})
+            self.assertEqual(families, {METRIC_SPEED, METRIC_INTRINSIC})
+            intrinsic = [r for r in rs.metric_rows if r.metric_family == METRIC_INTRINSIC]
+            self.assertEqual(
+                {r.metric_name for r in intrinsic},
+                {"Ekimetrics.SC", "Ekimetrics.BI", "Ekimetrics.ICC", "Ekimetrics.DCC"},
+            )
+            for row in intrinsic:
+                self.assertIn("prediction_set_sha256=", row.detail)
+            by_name = {r.metric_name: r for r in intrinsic}
+            for unavailable in ("Ekimetrics.ICC", "Ekimetrics.DCC"):
+                self.assertIsNone(by_name[unavailable].value)
+                self.assertEqual(by_name[unavailable].n, 0)
+                self.assertIn("no embedder", by_name[unavailable].detail)
             self.assertEqual(len(rs.run_manifests), 1)
             # JSON round-trip
             json.dumps(rs.to_dict())

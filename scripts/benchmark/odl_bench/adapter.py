@@ -7,20 +7,23 @@ Pipeline per engine:
      LiteParse) over the source PDFs mapped to each GT page, writing one
      ``<gt_stem>.md`` prediction into a per-engine dir. Captures per-page latency
      (the SPEED rows — the harness does not time engines).
-  2. emit_config() — write an OmniDocBench YAML config pointing prediction.data_path
+  2. score_intrinsic() — score the produced Markdown pages with the existing
+     no-embedder Ekimetrics path and bind rows to the exact prediction set.
+  3. emit_config() — write an OmniDocBench YAML config pointing prediction.data_path
      at that dir (metrics: text_block Edit_dist, table TEDS+Edit_dist, reading_order
      Edit_dist).
-  3. score() — run ``pdf_validation.py --config`` under the BENCH venv (cwd=bench_root)
+  4. score() — run ``pdf_validation.py --config`` under the BENCH venv (cwd=bench_root)
      and parse ``result/<save>_metric_result.json`` into structural/table/reading_order
      MetricRows.
 
-score() is the only step that shells out; generate_predictions()/emit_config() are
-pure + deterministic and are what the unit tests exercise. Model-gated engines are
+The intrinsic step is pure and deterministic unless a caller explicitly supplies
+an embedder. ``score()`` is the only step that shells out; model-gated engines are
 NOT run here — see manifest_stubs.model_gated_stubs().
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -240,6 +243,18 @@ class OdlBenchAdapter:
 
     # ---------------------------------------------------- intrinsic scoring
     @staticmethod
+    def _prediction_set_sha256(prediction_dir: str | Path) -> str:
+        digest = hashlib.sha256()
+        for path in sorted(Path(prediction_dir).glob("*.md")):
+            name = path.name.encode("utf-8")
+            content = path.read_bytes()
+            digest.update(len(name).to_bytes(8, "big"))
+            digest.update(name)
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+        return digest.hexdigest()
+
+    @staticmethod
     def score_intrinsic(
         prediction_dir: str | Path,
         engine: str,
@@ -256,12 +271,22 @@ class OdlBenchAdapter:
         carry ``value=None`` with the reason when ``embedder`` is None (the
         same degrade convention as a missing extraction backend).
         """
-        return score_prediction_dir(
+        prediction_sha256 = OdlBenchAdapter._prediction_set_sha256(prediction_dir)
+        rows = score_prediction_dir(
             prediction_dir,
             engine=engine,
             embedder=embedder,
             chunker=chunker,
         )
+        if OdlBenchAdapter._prediction_set_sha256(prediction_dir) != prediction_sha256:
+            raise RuntimeError("prediction set changed while intrinsic scoring was in progress")
+        for row in rows:
+            row.detail = (
+                f"{row.detail}; prediction_set_sha256={prediction_sha256}"
+                if row.detail
+                else f"prediction_set_sha256={prediction_sha256}"
+            )
+        return rows
 
     # -------------------------------------------------- full deterministic set
     def build_deterministic_row_set(
@@ -275,9 +300,11 @@ class OdlBenchAdapter:
     ) -> DeterministicRowSet:
         """Wire the deterministic comparison for all engines.
 
-        With ``do_score=False`` (default; safe under the research venv) only the
-        prediction + speed rows are produced; structural/table/reading_order rows
-        are added when ``do_score=True`` (BENCH venv, real fixtures).
+        With ``do_score=False`` (default; safe under the research venv), the
+        prediction + speed rows and stdlib-only intrinsic diagnostics are
+        produced; structural/table/reading_order rows are added only when
+        ``do_score=True`` (BENCH venv, real fixtures). No embedder is resolved
+        implicitly by this path.
         """
         run_dir = Path(run_dir)
         row_set = DeterministicRowSet(engines=list(engines), gt_json=str(gt_json))
@@ -286,6 +313,9 @@ class OdlBenchAdapter:
             manifest = self.generate_predictions(engine, gt_json, pdf_manifest, pred_dir)
             row_set.run_manifests.append(manifest)
             row_set.metric_rows.append(manifest.speed_row())
+            row_set.metric_rows.extend(
+                self.score_intrinsic(pred_dir, engine)
+            )
             if manifest.detail:
                 row_set.notes.append(f"{engine}: {manifest.detail}")
             if do_score:
@@ -355,6 +385,9 @@ class OdlBenchAdapter:
         )
         row_set.run_manifests.append(manifest)
         row_set.metric_rows.append(manifest.speed_row())
+        row_set.metric_rows.extend(
+            self.score_intrinsic(pred_dir, engine)
+        )
         if manifest.detail:
             row_set.notes.append(f"{engine}: {manifest.detail}")
         if do_score:

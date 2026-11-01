@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 # Make `import odl_bench` work: add scripts/benchmark (the package parent).
 _PKG_PARENT = Path(__file__).resolve().parents[2]  # .../scripts/benchmark
@@ -275,6 +276,12 @@ class TestScoreChunksRows(unittest.TestCase):
         self.assertEqual({r.metric_family for r in rows}, {METRIC_INTRINSIC})
         names = {r.metric_name for r in rows}
         self.assertEqual(names, {"Ekimetrics.SC", "Ekimetrics.BI", "Ekimetrics.ICC", "Ekimetrics.DCC"})
+        by_name = {r.metric_name: r for r in rows}
+        self.assertEqual(by_name["Ekimetrics.SC"].n, len(chunks))
+        self.assertEqual(
+            by_name["Ekimetrics.BI"].n,
+            len(detect_block_boundaries(text)) + 1,
+        )
         # FMRE/RC is excluded by contract: no metric name mentions it.
         self.assertFalse(any("FMRE" in n or n.endswith(".RC") for n in names))
 
@@ -285,7 +292,16 @@ class TestScoreChunksRows(unittest.TestCase):
         by_name = {r.metric_name: r for r in rows}
         self.assertIsNone(by_name["Ekimetrics.ICC"].value)
         self.assertIsNone(by_name["Ekimetrics.DCC"].value)
+        self.assertEqual(by_name["Ekimetrics.ICC"].n, 0)
+        self.assertEqual(by_name["Ekimetrics.DCC"].n, 0)
+        self.assertIn("denominator=", by_name["Ekimetrics.BI"].detail)
         self.assertIn("no embedder", by_name["Ekimetrics.ICC"].detail)
+
+    def test_empty_chunking_has_no_observed_block_denominator(self):
+        rows = score_chunks([], "# Present but not chunked", engine="fake")
+        by_name = {r.metric_name: r for r in rows}
+        self.assertIsNone(by_name["Ekimetrics.BI"].value)
+        self.assertEqual(by_name["Ekimetrics.BI"].n, 0)
 
     def test_icc_dcc_values_with_embedder(self):
         text = "# Title\n\n" + "word " * 400 + "\n\n" + "word " * 400
@@ -294,6 +310,8 @@ class TestScoreChunksRows(unittest.TestCase):
         by_name = {r.metric_name: r for r in rows}
         self.assertIsNotNone(by_name["Ekimetrics.ICC"].value)
         self.assertIsNotNone(by_name["Ekimetrics.DCC"].value)
+        self.assertGreater(by_name["Ekimetrics.ICC"].n, 0)
+        self.assertGreater(by_name["Ekimetrics.DCC"].n, 0)
         for r in rows:
             json.dumps(r.to_dict())  # serialisable
 
@@ -314,6 +332,8 @@ class TestScorePredictionDir(unittest.TestCase):
         self.assertIsNotNone(by_name["Ekimetrics.BI"].value)
         self.assertIsNone(by_name["Ekimetrics.ICC"].value)
         self.assertIn("no embedder", by_name["Ekimetrics.ICC"].detail)
+        self.assertIn("unweighted mean", by_name["Ekimetrics.SC"].detail)
+        self.assertIn("underlying chunks denominator sum=", by_name["Ekimetrics.SC"].detail)
 
     def test_empty_dir_returns_none_rows(self):
         with tempfile.TemporaryDirectory() as td:
@@ -357,6 +377,40 @@ class TestScorePredictionDir(unittest.TestCase):
         self.assertEqual(len(rows), 4)
         self.assertEqual(rows[0].engine, "fake-engine")
         self.assertEqual(rows[0].metric_family, METRIC_INTRINSIC)
+        for row in rows:
+            self.assertIn("prediction_set_sha256=", row.detail)
+        by_name = {row.metric_name: row for row in rows}
+        self.assertEqual(by_name["Ekimetrics.SC"].n, 1)
+        self.assertEqual(by_name["Ekimetrics.BI"].n, 1)
+        self.assertEqual(by_name["Ekimetrics.ICC"].n, 0)
+        self.assertIn("no embedder", by_name["Ekimetrics.ICC"].detail)
+
+    def test_prediction_set_hash_changes_when_input_changes(self):
+        with tempfile.TemporaryDirectory() as td:
+            pred_dir = Path(td) / "pred"
+            pred_dir.mkdir()
+            page = pred_dir / "p1.md"
+            page.write_text("# A\n\n" + "word " * 400, encoding="utf-8")
+            first = OdlBenchAdapter.score_intrinsic(pred_dir, "x")[0].detail
+            page.write_text("# B\n\n" + "word " * 400, encoding="utf-8")
+            second = OdlBenchAdapter.score_intrinsic(pred_dir, "x")[0].detail
+        self.assertNotEqual(first.split("prediction_set_sha256=")[-1], second.split("prediction_set_sha256=")[-1])
+
+    def test_prediction_mutation_during_scoring_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            pred_dir = Path(td) / "pred"
+            pred_dir.mkdir()
+            page = pred_dir / "p1.md"
+            page.write_text("# A\n\n" + "word " * 400, encoding="utf-8")
+
+            def score_then_mutate(*args, **kwargs):
+                rows = score_prediction_dir(*args, **kwargs)
+                page.write_text("# changed after scoring", encoding="utf-8")
+                return rows
+
+            with patch("odl_bench.adapter.score_prediction_dir", side_effect=score_then_mutate):
+                with self.assertRaisesRegex(RuntimeError, "prediction set changed"):
+                    OdlBenchAdapter.score_intrinsic(pred_dir, "x")
 
 
 if __name__ == "__main__":

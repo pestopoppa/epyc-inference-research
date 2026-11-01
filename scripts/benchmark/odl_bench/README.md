@@ -42,18 +42,37 @@ strip the 4-char image extension, append `.md` → `foo.pdf_7.jpg` ⇒ `foo.pdf_
 | `table_fidelity` | `table` → `TEDS.all` (+ `TEDS_structure_only`, `Edit_dist`) | higher better | harness scoring |
 | `reading_order` | `reading_order` → `Edit_dist.ALL_page_avg` | lower better | harness scoring |
 | `speed` | per-page extraction `latency_ms` (median) | lower better | **odl_bench** (backends time themselves; the harness does not time engines) |
-| `intrinsic_chunk_quality` | Ekimetrics SC/BI (+ ICC/DCC with an embedder) | higher better | **odl_bench** (`intrinsic` scoring; informational, never a gate) |
+| `intrinsic_chunk_quality` | Ekimetrics SC/BI (+ ICC/DCC with an explicitly supplied embedder) | higher better | **odl_bench** (included in row-set JSON; informational, never a gate) |
 
 CDM/display_formula are intentionally omitted (CDM needs TeX Live / Ghostscript /
 ImageMagick; out of scope for the structural/table/order/speed set).
 
 ## Intrinsic chunk-quality scoring (ODL-011)
 
-The bench scores extraction fidelity (NID/TEDS/MHS); the intrinsic rows score
-the *chunking quality* of each engine's extracted markdown using the Ekimetrics
-MIT scaffold (intake-579/580) — the instrumented harness for the Phase-2
-Ekimetrics-vs-HOPE side-by-side contract (`handoffs/active/
-opendataloader-pipeline-integration.md` :539-540).
+The OmniDocBench rows score extraction fidelity. The intrinsic rows separately
+score the *chunking quality* diagnostic for each engine's extracted markdown
+using the Ekimetrics MIT scaffold (intake-579/580) — the instrumented harness
+for the Phase-2 Ekimetrics-vs-HOPE side-by-side contract
+(`handoffs/active/opendataloader-pipeline-integration.md` :539-540). The
+standard `run` and `run-model` row-set JSONs include SC/BI and unavailable
+ICC/DCC rows for each generated prediction directory. The default chunker is a
+deterministic stand-in; until the real Phase-2 chunker is passed through
+`score_chunks`, these rows describe that stand-in's chunks and cannot establish
+the production chunker's quality. Intrinsic rows carry the sorted prediction
+file-set SHA-256, and `n` is the count of pages with a non-null metric value.
+ICC/DCC are null with the embedder-unavailable reason by default; scoring these
+rows does not load an embedder or download a model.
+
+The sibling `opendataloader-bench` NID/MHS family remains a distinct evaluator
+and is not silently synthesized in OmniDocBench row sets. When an artifact from
+that evaluator is co-reported, preserve its raw field, scorer provenance, and
+direction: `src/evaluator_reading_order.py:evaluate_reading_order` returns NID
+and NID-S similarity scores in `[0,1]` (higher is better; NID-S excludes table
+content); `src/evaluator_heading_level.py:evaluate_heading_level` returns MHS
+and MHS-S similarity scores in `[0,1]` (higher is better; MHS-S ignores text).
+They are not interchangeable with OmniDocBench normalized edit distances
+(lower is better), nor converted to their complements. Report only a bound
+artifact's actual raw rows; these source mappings do not create values.
 
 ```bash
 # score an existing prediction dir (no inference, no model download)
@@ -77,7 +96,8 @@ Contract constraints, load-bearing:
   is not lifted: it requires `maverick-coref` (CC BY-NC-SA 4.0) and its
   upstream RC=99.0 figure is unverified (reference-boundary corruption fixed
   only on 2026-07-06). No coref code or license exposure enters this repo.
-* **Never a gate.** Intrinsic scores are informational next to NID/TEDS/MHS and
+* **Never a gate.** Intrinsic scores are informational alongside the
+  extraction-fidelity rows and
   do not gate on their own; the Ekimetrics-vs-HOPE side-by-side is the decision
   instrument (intake-581 falsifies the cohesion premise ICC/BI rest on).
 * **Embedder degrade.** ICC/DCC require a sentence-transformers model; when
