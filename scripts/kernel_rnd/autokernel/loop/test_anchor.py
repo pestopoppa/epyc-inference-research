@@ -465,7 +465,46 @@ class PromotionBuildsTheAnchorWhereItIsUsed(unittest.TestCase):
             body = json.loads((promoted / "provenance.json").read_text())
             self.assertEqual(body["champion_commit"], CHAMPION)
             self.assertEqual(body["build_recipe"]["name"], "house-gpu")
-            self.assertEqual(body["built_at"], str(promoted))
+            self.assertRegex(body["built_at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+
+    def test_built_at_is_captured_at_build_return_and_only_on_success(self):
+        import json
+        from unittest.mock import patch
+        events = []
+        original_dumps = json.dumps
+
+        def build(dest, targets):
+            events.append("build-return")
+            return gates.Verdict("compile", True, "")
+
+        def clock(*args):
+            events.append("timestamp")
+            return "2026-11-02T00:00:00Z"
+
+        def dumps(*args, **kwargs):
+            events.append("provenance-serialize")
+            return original_dumps(*args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(pool.time, "strftime", side_effect=clock), \
+             patch.object(pool.json, "dumps", side_effect=dumps):
+            promoted = pool.promote_anchor(Path(tmp), build=build,
+                                           champion_commit=CHAMPION)
+            self.assertEqual(events, ["build-return", "timestamp", "provenance-serialize"])
+            body = json.loads((promoted / "provenance.json").read_text())
+            self.assertEqual(body["built_at"], "2026-11-02T00:00:00Z")
+
+        events.clear()
+        def failed_build(dest, targets):
+            events.append("build-return")
+            return gates.Verdict("compile", False, "failed")
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(pool.time, "strftime", side_effect=clock):
+            with self.assertRaises(ValueError):
+                pool.promote_anchor(Path(tmp), build=failed_build,
+                                    champion_commit=CHAMPION)
+        self.assertEqual(events, ["build-return"])
 
     def test_a_champion_that_will_not_build_refuses_the_promotion(self):
         with tempfile.TemporaryDirectory() as tmp:

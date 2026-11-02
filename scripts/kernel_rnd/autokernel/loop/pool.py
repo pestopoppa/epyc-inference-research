@@ -528,6 +528,9 @@ def promote_anchor(store: Path, *, build: Callable[..., Any], champion_commit: s
             f"another generation's CMakeCache is the relocation hazard by another route")
     promoted.mkdir(parents=True)
     verdict = build(promoted, tuple(targets))
+    # Capture successful build-command completion before any later provenance work.
+    built_at = (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                if getattr(verdict, "passed", False) else None)
     if not getattr(verdict, "passed", False):
         raise ValueError(
             f"champion {champion_commit[:12]} would not build into {promoted} "
@@ -535,7 +538,7 @@ def promote_anchor(store: Path, *, build: Callable[..., Any], champion_commit: s
             f"the next candidate against")
     (promoted / "provenance.json").write_text(json.dumps(
         {"champion_commit": champion_commit, "build_recipe": dict(recipe or {}),
-         "targets": list(targets), "built_at": str(promoted)},
+         "targets": list(targets), "built_at": built_at},
         sort_keys=True), encoding="utf-8")
     return promoted
 

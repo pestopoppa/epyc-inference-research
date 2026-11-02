@@ -8058,11 +8058,21 @@ def _main(argv: list[str] | None = None) -> int:
                     if checked_tree != source_tree:
                         raise surface_validation.SurfaceValidationRefused(
                             "shared source tree changed before target build")
-                    build_ok, build_verdicts = gates.run_all(
-                        lambda: local_compiles(
+                    # A reused directory can make a successful build a no-op. Its
+                    # command completion is observable; its artifact build time is not.
+                    build_dir_was_absent = not validation_candidate_build.exists()
+                    build_finished_at = [None]
+                    def target_build():
+                        verdict = local_compiles(
                             checked_source, validation_candidate_build,
                             cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
-                            cpu_list=build_cpu_list, targets=gates.PROMOTION_TARGETS),
+                            cpu_list=build_cpu_list, targets=gates.PROMOTION_TARGETS)
+                        if verdict.passed:
+                            build_finished_at[0] = time.strftime(
+                                "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                        return verdict
+                    build_ok, build_verdicts = gates.run_all(
+                        target_build,
                         lambda: local_op_correctness(
                             validation_candidate_build, op="MUL_MAT",
                             **({"backend": "CPU",
@@ -8090,7 +8100,9 @@ def _main(argv: list[str] | None = None) -> int:
                             {"champion_commit": source_resumed["current_anchor"]["commit"],
                              "build_recipe": recipe.to_dict(),
                              "targets": list(gates.PROMOTION_TARGETS),
-                             "built_at": str(validation_candidate_build)},
+                             "built_at": (build_finished_at[0] if build_dir_was_absent else None),
+                             "build_command_completed_at": build_finished_at[0],
+                             "build_directory_was_absent": build_dir_was_absent},
                             prefix=".provenance-")
 
             if (direct_launch and calibration_samples and validation_identity_error is None
