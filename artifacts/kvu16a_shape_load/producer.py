@@ -125,6 +125,35 @@ def write_json(path, record):
         json.dump(record, f, indent=2, sort_keys=True); f.write('\n'); f.flush(); os.fsync(f.fileno())
 
 
+def fake_dry_run(port, dry_dir, result_path, pidfile):
+    """Exercise the keeper entrypoint with an owned fake HTTP server, never a model."""
+    dry_dir = Path(dry_dir)
+    dry_dir.mkdir(parents=True, exist_ok=True)
+    code = ("from http.server import BaseHTTPRequestHandler,HTTPServer; "
+            "exec('class H(BaseHTTPRequestHandler):\\n def do_GET(self):\\n  self.send_response(200 if self.path == \"/health\" else 404); self.end_headers()'); "
+            "HTTPServer(('127.0.0.1',int(__import__('sys').argv[1])),H).serve_forever()")
+    server = server_lifecycle.Server([sys.executable, '-c', code, str(port)], dict(os.environ),
+                                     dry_dir / 'fake-server.log', pidfile)
+    cleanup = None; error = None
+    try:
+        server.start(); deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if not server.alive(): raise RuntimeError('fake server exited')
+            if health(port): break
+            time.sleep(0.05)
+        else: raise RuntimeError('fake health timeout')
+    except BaseException as exc:
+        error = f'{type(exc).__name__}: {exc}'
+    finally:
+        try: cleanup = server.close(term_grace=2, kill_grace=2)
+        except BaseException as exc: error = error or f'cleanup: {exc}'
+    passed = not error and bool(cleanup and cleanup.get('verified_dead'))
+    write_json(result_path, {'schema': 'kvu16a.fake-dry-run.v1', 'fake': True, 'passed': passed,
+                             'error': error, 'cleanup': cleanup,
+                             'interpretation': 'entrypoint control only; no GPU, model, sample or belief'})
+    return 0 if passed else 75
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--belief-adapter', required=True, type=Path, help='pinned epyc-root scripts/vidya/adapters/kvu16a_native.py')
@@ -159,6 +188,12 @@ def main():
         return 0
     if digest(plan_path) != args.run_plan_sha256 or json.loads(plan_path.read_text()) != plan:
         raise RuntimeError('predeclared plan hash or rendered launch changed')
+    mode = os.environ.get('FILLER_DRYRUN')
+    if mode not in ('0', '1'):
+        raise RuntimeError('explicit FILLER_DRYRUN mode required')
+    if mode == '1':
+        return fake_dry_run(args.port, os.environ['FILLER_DRYRUN_DIR'],
+                            os.environ['FILLER_DRYRUN_RESULT_PATH'], os.environ['FILLER_PIDFILE'])
     if os.environ.get('FILLER_NEEDGPU') != '1':
         raise RuntimeError('GPU grant missing')
     deadline = int(os.environ['FILLER_DEADLINE']) - 30

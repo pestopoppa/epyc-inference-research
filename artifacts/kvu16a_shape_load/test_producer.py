@@ -71,6 +71,15 @@ class ProducerTests(unittest.TestCase):
             self.assertTrue(result['verified_dead'])
             self.assertIsNotNone(server.proc.poll())
 
+    def test_keeper_dry_run_is_fake_and_cleans_up(self):
+        with tempfile.TemporaryDirectory() as d:
+            sock = socket.socket(); sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]; sock.close()
+            result = Path(d) / 'dry.json'
+            self.assertEqual(producer.fake_dry_run(port, Path(d) / 'fake', result, Path(d) / 'pid'), 0)
+            receipt = json.loads(result.read_text())
+            self.assertTrue(receipt['fake'] and receipt['passed'] and receipt['cleanup']['verified_dead'])
+            self.assertNotIn('sampled_max_own_vram_b', receipt)
+
     def test_process_identity_rejects_argv_mismatch(self):
         birth = sampler.start_ticks(Path('/proc') / str(os.getpid()))
         plan = {'argv':['/deliberately-wrong'], 'effective_env':{}, 'identities':{}}
