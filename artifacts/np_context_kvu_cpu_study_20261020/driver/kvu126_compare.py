@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -78,7 +79,8 @@ def wave_observation(root, item, spec, min_samples):
         raise ValueError("too few native occupancy samples")
     if not occupancy.get("native_source") or len(occupancy.get("native_source_sha256", "")) != 64:
         raise ValueError("missing native occupancy source or digest")
-    native = json.loads(read_pinned(root, {"path": occupancy["native_source"], "sha256": occupancy["native_source_sha256"]}))
+    native_root = (root / item["occupancy_file"]["path"]).parent
+    native = json.loads(read_pinned(native_root, {"path": occupancy["native_source"], "sha256": occupancy["native_source_sha256"]}))
     for key in ("row_sha256", "decode_start_monotonic_s", "decode_end_monotonic_s", "samples"):
         if native.get(key) != occupancy.get(key):
             raise ValueError(f"native source disagrees on {key}")
@@ -148,17 +150,88 @@ def analyze(plan, root):
             "arms": arms, "comparisons": comparisons}
 
 
+def analyze_prospective(plan, records, root):
+    """Keep the pre-run declaration separate from post-run evidence hashes."""
+    if plan.get("schema") != "epyc.kvu126.prospective_plan.v1":
+        raise ValueError("invalid prospective plan schema")
+    if records.get("schema") != "epyc.kvu126.evidence_index.v1":
+        raise ValueError("invalid post-run evidence index")
+    identity = plan["expected_identity"]
+    for key, length in (("binary_sha256", 64), ("model_sha256", 64), ("source_commit", 40)):
+        if not re.fullmatch(rf"[0-9a-f]{{{length}}}", identity.get(key, "")):
+            raise ValueError(f"missing or invalid predeclared {key}")
+    for key in ("model", "cpu_list", "threads", "prompt_mode", "mtp", "draft_depth", "cache_idle_slots_argv"):
+        if identity.get(key) is None:
+            raise ValueError(f"missing predeclared {key}")
+    expected_arms = {"np8_32k": (8, 32768), "np8_48k": (8, 49152),
+                     "np8_64k": (8, 65536), "np4_96k": (4, 98304)}
+    if set(plan["arms"]) != set(expected_arms) or set(records["arms"]) != set(expected_arms):
+        raise ValueError("missing or extra KVU-12.6 arms")
+    required_pairs = {("np8_32k", "np8_64k"), ("np8_48k", "np4_96k")}
+    pairs = [(p["left"], p["right"]) for p in plan["comparisons"]]
+    if len(pairs) != 2 or set(pairs) != required_pairs:
+        raise ValueError("missing or extra KVU-12.6 comparisons")
+    if not plan.get("noise_rule"):
+        raise ValueError("noise rule must be predeclared; no threshold is supplied by the handoff")
+    build = json.loads(read_pinned(root, records["build_receipt"]))
+    if (build.get("schema") != "epyc.kvu126.build_identity.v1" or
+            build.get("source_commit") != identity["source_commit"] or
+            build.get("binary_sha256") != identity["binary_sha256"] or
+            build.get("source_tree_clean") is not True or not build.get("dso_sha256")):
+        raise ValueError("build receipt does not establish declared identity")
+    dsos = build["dso_sha256"]
+    if not isinstance(dsos, dict) or any(not re.fullmatch(r"[0-9a-f]{64}", x) for x in dsos.values()):
+        raise ValueError("invalid build library digests")
+    merged = {"schema": "epyc.kvu126.comparison_plan.v1",
+              "max_occupancy_fraction_gap": plan.get("max_occupancy_fraction_gap"),
+              "min_occupancy_samples": plan.get("min_occupancy_samples"),
+              "min_waves_per_arm": plan.get("min_waves_per_arm"),
+              "arms": {}, "comparisons": plan["comparisons"]}
+    for name, (np, length) in expected_arms.items():
+        spec = plan["arms"][name]
+        if (spec.get("np"), spec.get("L"), spec.get("c")) != (np, length, 524288):
+            raise ValueError(f"incorrect geometry for {name}")
+        entries = records["arms"][name]
+        for entry in entries:
+            receipt = json.loads(read_pinned(root, entry["runtime_receipt"]))
+            if (receipt.get("schema") != "epyc.kvu126.runtime_identity.v1" or
+                    receipt.get("binary_sha256") != identity["binary_sha256"] or
+                    receipt.get("model_sha256") != identity["model_sha256"] or
+                    receipt.get("mapped_dso_sha256") != dsos or
+                    not receipt.get("pid_birth_identity")):
+                raise ValueError(f"runtime identity missing or mismatched for {name}")
+        merged["arms"][name] = dict(spec, observations=entries)
+    result = analyze(merged, root)
+    for name, observations in result["arms"].items():
+        for entry, observation in zip(records["arms"][name], observations):
+            receipt = json.loads(read_pinned(root, entry["runtime_receipt"]))
+            if receipt.get("row_sha256") != observation["row_sha256"]:
+                raise ValueError(f"runtime receipt not bound to wave for {name}")
+            for key, value in observation["identity"].items():
+                if value != identity[key]:
+                    raise ValueError(f"producer wave identity differs: {key}")
+    result["noise_rule"] = plan["noise_rule"]
+    result["scope"] += "; predeclared noise rule is reported, not evaluated by this descriptive reducer"
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", type=Path)
     parser.add_argument("--expected-plan-sha256", required=True)
+    parser.add_argument("--records", type=Path, required=True, help="post-run evidence index; separate from the pre-run declaration")
+    parser.add_argument("--expected-records-sha256", required=True)
     args = parser.parse_args()
     try:
         raw = args.plan.read_bytes()
         if digest(raw) != args.expected_plan_sha256:
             raise ValueError("predeclaration digest mismatch")
-        result = analyze(json.loads(raw), args.plan.resolve().parent)
+        records_raw = args.records.read_bytes()
+        if digest(records_raw) != args.expected_records_sha256:
+            raise ValueError("evidence index digest mismatch")
+        result = analyze_prospective(json.loads(raw), json.loads(records_raw), args.records.resolve().parent)
         result["plan_sha256"] = digest(raw)
+        result["records_sha256"] = digest(records_raw)
         print(json.dumps(result, indent=2, allow_nan=False))
     except (ValueError, KeyError, OSError, TypeError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": "INVALID", "reason": str(exc)}))

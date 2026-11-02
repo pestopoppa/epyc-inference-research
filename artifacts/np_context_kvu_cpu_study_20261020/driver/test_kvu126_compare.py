@@ -65,6 +65,17 @@ class ComparisonTest(unittest.TestCase):
         self.update_native("np4_96k", lambda x: x["samples"][1].update(unique_cells=200))
         self.assertFalse(compare.analyze(self.plan, self.root)["comparisons"][0]["occupancy_matched"])
 
+    def test_native_source_resolves_relative_to_occupancy_receipt(self):
+        item = self.plan["arms"]["np4_96k"]["observations"][0]
+        receipt = item["occupancy_file"]
+        content = json.loads((self.root / receipt["path"]).read_bytes())
+        nested = self.root / "nested"
+        nested.mkdir()
+        (nested / content["native_source"]).write_bytes((self.root / content["native_source"]).read_bytes())
+        (nested / Path(receipt["path"]).name).write_bytes((self.root / receipt["path"]).read_bytes())
+        receipt["path"] = "nested/" + Path(receipt["path"]).name
+        self.assertTrue(compare.analyze(self.plan, self.root)["comparisons"][0]["occupancy_matched"])
+
     def test_missing_and_post_window_occupancy_refuse(self):
         for bad in ([], [{"monotonic_s": 11, "unique_cells": 100}, {"monotonic_s": 21, "unique_cells": 100}]):
             with self.subTest(bad=bad):
@@ -89,6 +100,55 @@ class ComparisonTest(unittest.TestCase):
         arm["wave_file"] = self.write_json(arm["wave_file"]["path"], row)
         with self.assertRaisesRegex(ValueError, "cache_n"):
             compare.analyze(self.plan, self.root)
+
+    def prospective(self):
+        self.row("np8_32k", 8, 32768, 260000)
+        self.row("np8_64k", 8, 65536, 510000)
+        identity = {"binary_sha256": "a" * 64, "model_sha256": "d" * 64, "source_commit": "e" * 40,
+                    "model": "fake-model", "cpu_list": "24-47", "threads": 24, "prompt_mode": "depth",
+                    "mtp": True, "draft_depth": 4, "cache_idle_slots_argv": "off"}
+        dsos = {"libllama.so": "f" * 64}
+        build = {"schema": "epyc.kvu126.build_identity.v1", "source_commit": identity["source_commit"],
+                 "binary_sha256": identity["binary_sha256"], "source_tree_clean": True, "dso_sha256": dsos}
+        records = {"schema": "epyc.kvu126.evidence_index.v1", "build_receipt": self.write_json("build.json", build), "arms": {}}
+        arms = {}
+        for name, value in self.plan["arms"].items():
+            arms[name] = {k: value[k] for k in ("np", "L", "c")}
+            entries = value["observations"]
+            for entry in entries:
+                row = json.loads((self.root / entry["wave_file"]["path"]).read_bytes())
+                receipt = {"schema": "epyc.kvu126.runtime_identity.v1", "binary_sha256": identity["binary_sha256"],
+                           "model_sha256": identity["model_sha256"], "mapped_dso_sha256": dsos,
+                           "pid_birth_identity": "1:123", "row_sha256": row["row_sha256"]}
+                entry["runtime_receipt"] = self.write_json(name + "-runtime.json", receipt)
+            records["arms"][name] = entries
+        plan = {"schema": "epyc.kvu126.prospective_plan.v1", "expected_identity": identity, "arms": arms,
+                "comparisons": [{"left": "np8_32k", "right": "np8_64k"},
+                                {"left": "np8_48k", "right": "np4_96k"}],
+                "noise_rule": "synthetic test only", "max_occupancy_fraction_gap": 0.02,
+                "min_occupancy_samples": 2, "min_waves_per_arm": 1}
+        return plan, records
+
+    def test_prospective_declaration_is_separate_from_evidence(self):
+        plan, records = self.prospective()
+        self.assertNotIn("observations", plan["arms"]["np8_48k"])
+        result = compare.analyze_prospective(plan, records, self.root)
+        self.assertEqual(len(result["comparisons"]), 2)
+        self.assertFalse(result["comparisons"][0]["occupancy_matched"])
+        self.assertTrue(result["comparisons"][1]["occupancy_matched"])
+
+    def test_prospective_rejects_wrong_pair_and_unbound_runtime(self):
+        plan, records = self.prospective()
+        plan["comparisons"].pop()
+        with self.assertRaisesRegex(ValueError, "comparisons"):
+            compare.analyze_prospective(plan, records, self.root)
+        plan["comparisons"].append({"left": "np8_48k", "right": "np4_96k"})
+        ref = records["arms"]["np8_48k"][0]["runtime_receipt"]
+        receipt = json.loads((self.root / ref["path"]).read_bytes())
+        receipt["row_sha256"] = "0" * 64
+        records["arms"]["np8_48k"][0]["runtime_receipt"] = self.write_json(ref["path"], receipt)
+        with self.assertRaisesRegex(ValueError, "not bound to wave"):
+            compare.analyze_prospective(plan, records, self.root)
 
 
 if __name__ == "__main__":
