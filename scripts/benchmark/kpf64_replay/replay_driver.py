@@ -43,6 +43,7 @@ from pathlib import Path  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adapter  # noqa: E402
 import cohort_audit  # noqa: E402
+import pause_gate  # noqa: E402
 
 REFUSED_PORTS = range(8000, 8200)  # production 8070-8099, orchestrator 8000, hub 8100
 DEFAULT_PORT = 18964
@@ -164,6 +165,7 @@ class Replay:
         self.done = load_done(self.req_path)
         self.outs = load_outputs(self.outs_path)
         self.stop = threading.Event()
+        self.gate = pause_gate.PauseGate() if getattr(a, "pause_control_socket", None) else None
         self.head = adapter.HeadIndex()
         self.cnt, self.peak, self.bursts = {}, {}, []
         self.seq, self.svc = 0, {}      # global arrival counter; per-session accumulated service time (ms)
@@ -183,6 +185,8 @@ class Replay:
         if not self.a.think_scale or gap is None:
             return 0.0
         wait = min(self.a.think_scale * gap, self.a.think_cap_s)
+        if self.gate is not None:
+            return self.gate.active_sleep(self.stop, wait)
         self.stop.wait(wait)
         return wait
 
@@ -252,43 +256,49 @@ class Replay:
             with self.lock:   # DS-LB1: arrival order and the session's service time BEFORE this request
                 arrival, svc_before = self.seq, self.svc.get(sid, 0.0)
                 self.seq += 1
-            self._bump("inflight", 1)
-            t0 = time.time()
-            body = build_body(prompt, turns[k]["ref"], self.a.history, self.a.n_predict)
-            try:
-                r = http_json(f"{self.base}/completion", body, timeout=self.a.timeout)
-            except Exception as e:  # recorded, session stops; analysis excludes the session from all arms
-                self._bump("inflight", -1)
-                self.append(self.req_path, {"session": sid, "k": k, "error": f"{type(e).__name__}: {e}"[:200]})
+            if self.gate is not None and not self.gate.enter(self.stop):
                 return n
-            self._bump("inflight", -1)
-            t1 = time.time()
-            tm = r.get("timings") or {}
-            pn, cn = int(tm.get("prompt_n", 0)), int(tm.get("cache_n", 0))
-            total = pn + cn
-            ideal_tok = round(total * ideal_c / len(prompt)) if prompt else 0
-            union_tok = round(total * max(ideal_c, cross_c) / len(prompt)) if prompt else 0
-            svc_ms = float(tm.get("prompt_ms") or 0) + float(tm.get("predicted_ms") or 0)
-            with self.lock:
-                self.svc[sid] = self.svc.get(sid, 0.0) + svc_ms
-            self.head.add(prompt, sid)
-            rec = {"session": sid, "store": sess.get("store"), "k": k, "reset": bool(turns[k].get("reset")),
-                   "parent": parent, "is_child": parent is not None, "think_wait_s": waited,
-                   "arrival_seq": arrival, "svc_before_ms": svc_before, "svc_ms": svc_ms,
-                   "svc_after_ms": svc_before + svc_ms,
-                   "ideal_cross_chars": cross_c, "ideal_union_tok": union_tok,
-                   "history": self.a.history, "prompt_chars": len(prompt), "prompt_n": pn, "cache_n": cn,
-                   "total_tok": total, "ideal_chars": ideal_c, "ideal_tok": ideal_tok,
-                   "prompt_ms": tm.get("prompt_ms"), "predicted_n": tm.get("predicted_n"),
-                   "id_slot": r.get("id_slot", tm.get("id_slot")), "t_start": t0, "t_end": t1,
-                   "inferred_evict": bool(k > 0 and not turns[k].get("reset") and ideal_tok > 0
-                                          and cn < ideal_tok - self.a.infer_tol_tokens)}
-            if live:
-                out = r.get("content", "")
-                outputs[k] = out
-                self.append(self.outs_path, {"session": sid, "k": k, "out": out})
-            self.append(self.req_path, rec)
-            n += 1
+            try:
+                self._bump("inflight", 1)
+                t0 = time.time()
+                body = build_body(prompt, turns[k]["ref"], self.a.history, self.a.n_predict)
+                try:
+                    r = http_json(f"{self.base}/completion", body, timeout=self.a.timeout)
+                except Exception as e:  # recorded, session stops; analysis excludes the session from all arms
+                    self._bump("inflight", -1)
+                    self.append(self.req_path, {"session": sid, "k": k, "error": f"{type(e).__name__}: {e}"[:200]})
+                    return n
+                self._bump("inflight", -1)
+                t1 = time.time()
+                tm = r.get("timings") or {}
+                pn, cn = int(tm.get("prompt_n", 0)), int(tm.get("cache_n", 0))
+                total = pn + cn
+                ideal_tok = round(total * ideal_c / len(prompt)) if prompt else 0
+                union_tok = round(total * max(ideal_c, cross_c) / len(prompt)) if prompt else 0
+                svc_ms = float(tm.get("prompt_ms") or 0) + float(tm.get("predicted_ms") or 0)
+                with self.lock:
+                    self.svc[sid] = self.svc.get(sid, 0.0) + svc_ms
+                self.head.add(prompt, sid)
+                rec = {"session": sid, "store": sess.get("store"), "k": k, "reset": bool(turns[k].get("reset")),
+                       "parent": parent, "is_child": parent is not None, "think_wait_s": waited,
+                       "arrival_seq": arrival, "svc_before_ms": svc_before, "svc_ms": svc_ms,
+                       "svc_after_ms": svc_before + svc_ms,
+                       "ideal_cross_chars": cross_c, "ideal_union_tok": union_tok,
+                       "history": self.a.history, "prompt_chars": len(prompt), "prompt_n": pn, "cache_n": cn,
+                       "total_tok": total, "ideal_chars": ideal_c, "ideal_tok": ideal_tok,
+                       "prompt_ms": tm.get("prompt_ms"), "predicted_n": tm.get("predicted_n"),
+                       "id_slot": r.get("id_slot", tm.get("id_slot")), "t_start": t0, "t_end": t1,
+                       "inferred_evict": bool(k > 0 and not turns[k].get("reset") and ideal_tok > 0
+                                              and cn < ideal_tok - self.a.infer_tol_tokens)}
+                if live:
+                    out = r.get("content", "")
+                    outputs[k] = out
+                    self.append(self.outs_path, {"session": sid, "k": k, "out": out})
+                self.append(self.req_path, rec)
+                n += 1
+            finally:
+                if self.gate is not None:
+                    self.gate.leave()
             if by_turn.get(k):
                 tail += self.run_burst(sid, k, by_turn[k])
                 paused_after_burst = self.a.parent_during_burst == "pause"
@@ -297,13 +307,20 @@ class Replay:
     def snapshots(self):
         path = self.out / "snapshots.jsonl"
         while not self.stop.wait(self.a.snap_interval):
-            rec = {"t": time.time()}
-            for ep in ("slots", "metrics"):
-                try:
-                    rec[ep] = http_json(f"{self.base}/slots", timeout=10) if ep == "slots" else http_text(f"{self.base}/metrics")
-                except Exception as e:  # snapshots are best effort; absence is recorded, not hidden
-                    rec[ep] = f"ERR {type(e).__name__}"
-            self.append(path, rec)
+            if self.gate is not None and not self.gate.enter(self.stop):
+                break
+            try:
+                rec = {"t": time.time()}
+                for ep in ("slots", "metrics"):
+                    try:
+                        rec[ep] = http_json(f"{self.base}/slots", timeout=10) if ep == "slots" else http_text(f"{self.base}/metrics")
+                    except Exception as e:  # snapshots are best effort; absence is recorded, not hidden
+                        rec[ep] = f"ERR {type(e).__name__}"
+                self.append(path, rec)
+            finally:
+                if self.gate is not None:
+                    self.gate.leave()
+
 
 
 # ---- in-process stub (dry run only; NOT inference) ----------------------------------------------
@@ -384,6 +401,8 @@ def main(argv=None):
     ap.add_argument("--think-cap-s", type=float, default=120.0, help="upper bound on one emitted gap, seconds")
     ap.add_argument("--children", choices=("off", "bursts"), default="off")
     ap.add_argument("--parent-during-burst", choices=("pause", "continue"), default="pause")
+    ap.add_argument("--pause-control-socket", default=None,
+                    help="experimental local quiescence control; does not release a resource claim")
     ap.add_argument("--own-server-pid", type=int, default=None,
                     help="PID of the server the launcher started; the listener is then expected")
     ap.add_argument("--dry-run", action="store_true", help="drive an in-process stub (not inference)")
@@ -416,6 +435,7 @@ def main(argv=None):
         check_port(a.port, own_pid=a.own_server_pid)
     base = f"http://127.0.0.1:{a.port}"
     rp = Replay(a, base)
+    control = pause_gate.Control(Path(a.pause_control_socket), rp.gate) if rp.gate is not None else None
     snap = threading.Thread(target=rp.snapshots, daemon=True)
     snap.start()
     t0 = time.time()
@@ -431,6 +451,8 @@ def main(argv=None):
         if srv:
             srv.shutdown()
             srv.server_close()
+        if control:
+            control.close()
     pats = json.loads(Path(a.patterns).read_text()) if a.patterns else None
     events = count_log_events(a.server_log, pats)
     (Path(a.out) / "run_meta.json").write_text(json.dumps({
