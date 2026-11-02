@@ -16,7 +16,6 @@ from unittest import mock
 
 from .. import journal as J
 from .. import schemas as S
-from .. import test_campaign_footprint as footprint
 from ..controller import champion as C
 from ..controller import sequencer as Q
 from ..controller import test_champion as CF
@@ -354,11 +353,6 @@ class CloseoutIntegrationTests(unittest.TestCase):
 
 
 class CloseoutBoundaryTests(unittest.TestCase):
-    def test_closeout_is_outside_campaign_import_closure(self):
-        graph = footprint.ImportGraph(footprint.PKG_DIR, footprint.ROOT_PKG)
-        modules = set(graph.closure(footprint.campaign_roots()))
-        self.assertNotIn(f"{footprint.ROOT_PKG}.release.closeout", modules)
-
     def test_release_initializers_do_not_import_closeout(self):
         source = Path(O.__file__).with_name("__init__.py").read_text()
         self.assertNotIn("closeout", source)

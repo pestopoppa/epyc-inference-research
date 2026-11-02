@@ -14,7 +14,7 @@ makes an EPYC or MI210 kernel fast**, and `campaign.py`'s real import closure
 reached none of this plane — the loop was drivable without any of it. Against
 `karpathy/autoresearch`, whose equivalent control surface is 114 lines of prose in
 a `program.md` a human edits, 20,000 lines of scaffolding around an empty centre
-is the wrong trade. Ours is `../program.md`.
+is the wrong trade. Ours is `../loop/program.md`.
 
 WHAT SURVIVES, AND WHY IT IS NOT STRATEGY
 -----------------------------------------
@@ -64,20 +64,15 @@ mutation, build, benchmark, process, release, or production-write capability and
 remain deliberately unbound here, so campaign #1 cannot import them through the
 controller package.
 
-ON THE CAMPAIGN PATH SINCE 2026-08-04
--------------------------------------
-`campaign.py` imports both. It had not, and that was the defect:
-`hypotheses.claim_for_hypothesis` calls itself *"The ONLY route from a hypothesis
-to a resource claim"* and had ZERO non-test callers, because the driver acquired
-its region claim directly. The driver is what SPENDS the claim, so
-`campaign.py --hypothesis` now acquires through the gate, and `do_not_repeat`
-comes with it — `authorize_claim(ledger=…)` has no default and a token carrying
-no verdict is refused at the door, so no spendable token exists without a real
-ledger.
-
-Note what this does NOT change: neither module ranks anything, and neither is
-consulted about what to try. The campaign path reaches the gate that decides
-whether a claim may be spent on a question — not a strategy plane.
+THE LEGACY CAMPAIGN DRIVER (2026-08-04 .. 2026-11-02)
+----------------------------------------------------
+From 2026-08-04 the legacy `campaign.py` driver imported both and acquired its
+region claim through `hypotheses.claim_for_hypothesis` (`campaign.py
+--hypothesis`), with `do_not_repeat` behind `authorize_claim(ledger=…)`. That
+driver, its `--hypothesis` drop-in path and the `HYPOTHESES.md` runbook were
+retired on 2026-11-02 (C5-05); the live entry point is `loop/run.py`. The store,
+the gate and the ledger remain here unchanged: neither module ranks anything, and
+neither is consulted about what to try.
 
 Governing instrument: `epyc-root/measurement/protocols/kernel-research.md`
 (Annex K, **P-AK-SEARCH-1**, RATIFIED 2026-08-03).

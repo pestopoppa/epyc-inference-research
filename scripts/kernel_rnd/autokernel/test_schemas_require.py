@@ -61,7 +61,6 @@ KEEP_SET = (
     "schemas.py",
     "journal.py",
     "storage.py",
-    "campaign.py",
     "evaluator/api.py",
     "evaluator/correctness.py",
     "evaluator/recipes.py",

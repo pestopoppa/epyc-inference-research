@@ -21,16 +21,22 @@ PACKAGE = Path(__file__).resolve().parent
 class DocCouplingDetector(unittest.TestCase):
 
     def test_it_finds_the_known_coupled_tests(self):
-        """If this stops finding test_readme.py, the detector has gone vacuous."""
+        """If this stops finding a known doc-reading test, the detector has gone vacuous.
+
+        The original anchors (`test_readme.py`, `test_campaign_footprint.py`,
+        `test_program_md.py`) were deleted with the retired `campaign.py` driver
+        (C5-05/C5-06, 2026-11-02); these are surviving files that still read a
+        guarded document.
+        """
         found = {name for name, _, _ in guards.doc_coupled_tests(PACKAGE)}
-        self.assertIn("test_readme.py", found)
-        self.assertIn("test_campaign_footprint.py", found)
-        self.assertIn("test_program_md.py", found)
+        self.assertIn("execution/test_worktree.py", found)
+        self.assertIn("loop/test_patch_retention.py", found)
+        self.assertIn("loop/test_loop.py", found)
 
     def test_it_reports_which_document_couples_each_file(self):
         rows = {name: doc for name, _, doc in guards.doc_coupled_tests(PACKAGE)}
-        self.assertEqual(rows["test_campaign_footprint.py"], "FOOTPRINT.md")
-        self.assertEqual(rows["test_readme.py"], "README.md")
+        self.assertEqual(rows["execution/test_worktree.py"], "README.md")
+        self.assertEqual(rows["loop/test_loop.py"], "program.md")
 
     def test_an_uncoupled_test_file_is_not_reported(self):
         with tempfile.TemporaryDirectory() as tmp:

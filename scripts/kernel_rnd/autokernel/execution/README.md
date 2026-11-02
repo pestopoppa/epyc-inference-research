@@ -28,7 +28,7 @@ decides whether today is a campaign or a plumbing session.
 | `control_runner.py` | Scores the five controls through the same dispatcher a candidate uses | live 5/5 panel, 2026-08-05 |
 | `live_controls.py` | Predeclares, measures, calibrates and scores recipe-local live CPU controls, including the fixed five-block control extension needed to make a positive verdict reachable | live; dry-run by default; explicit prefill/decode cell |
 | `chain.py` | The **seams** between the above and the evaluator that reads them, plus the four T0 evidence projections (build, symbols, diff, change surface) | projection only; reads ELF/diff/log text it is handed, spawns nothing |
-| `../campaign.py` | **The entrypoint.** Composes everything above into one loop and gives it a `main()` | dry-run composition yes; no candidate built, no bench spawned |
+| `../loop/run.py` | **The live entry point.** The legacy `../campaign.py` driver that first composed these executors was retired on 2026-11-02 (C5-05) | see `../loop/program.md` |
 
 A live T1 plan is not constructively admissible without one physical envelope
 for every measurement-material unit. Work terms are conservative lower bounds;
@@ -53,25 +53,10 @@ surface are on the lean campaign path. The former broad release/adapters plane
 was deliberately deleted on 2026-08-04 and is restored only for a scheduled
 freeze or speech campaign; it is not silently present behind this driver.
 
-**Read `../campaign.py` before working through §2 by hand.** Until 2026-08-04 this
-package had NO entrypoint at all — `grep -rln '__main__|argparse|def main('` over
-every non-test module returned nothing — and that, not a missing gate, is why it
-had produced no results. §2 below is now a driver rather than a procedure:
-
-```bash
-# from /mnt/raid0/llm/epyc-inference-research — composes every step, executes NOTHING
-python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
-```
-
-Dry run is the **default**; `--execute` additionally requires `--i-hold-the-host`
-AND an ops object with no unimplemented seams (refused at argv time, before the
-claim — see `HostOps.unimplemented_seams`). An executing run also requires a
-validated `--proposal-manifest` using the current proposal schema, an exact-unit
-`--physical-envelope` (or `--ranked-units`), and a current
-`--calibration-bundle`. The bundle is identity-bound to the production commit,
-measurement-instrument commit and recipe; the v8 control bundle is rejected on
-v9. The proposal is fsynced before preflight or any host work, and an identical
-resume reuses that event; the same proposal id with different bytes is refused.
+The legacy `../campaign.py` driver (2026-08-04 .. 2026-11-02) and its
+`python3 -m scripts.kernel_rnd.autokernel.campaign` CLI were retired on
+2026-11-02 (C5-05). The live loop is `../loop/run.py`; its operating
+procedure is `../loop/program.md`.
 
 ### Recipe-local CPU controls
 

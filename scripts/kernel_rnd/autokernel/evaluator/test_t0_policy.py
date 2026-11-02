@@ -1,51 +1,21 @@
-"""The shared T0 defaults preserve campaign values without loading its driver."""
+"""The shared T0 defaults keep their declared values for every runtime caller.
+
+The legacy-equivalence assertions against ``campaign.HostOps`` were removed with
+the retired ``campaign.py`` driver (C5-05, 2026-11-02); the literal expected values
+below are the ones that driver carried.
+"""
 
 import dataclasses
 import hashlib
 import json
-import subprocess
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 
-def test_fresh_live_loop_import_does_not_load_campaign_driver():
-    package = __package__.rsplit(".", 1)[0]
-    code = (
-        "import importlib,sys; "
-        f"sys.path[:0] = {sys.path!r}; "
-        f"importlib.import_module({package + '.loop.run'!r}); "
-        f"assert {package + '.campaign'!r} not in sys.modules"
-    )
-    subprocess.run([sys.executable, "-B", "-c", code], check=True)
-
-
-@pytest.mark.parametrize(
-    "caller",
-    [
-        "loop.runtime_admission",
-        "loop.direct_historical_control",
-        "loop.direct_gpu_control",
-        "execution.live_controls",
-    ],
-)
-def test_fresh_actual_runtime_caller_import_does_not_load_campaign(caller):
-    package = __package__.rsplit(".", 1)[0]
-    code = (
-        "import importlib,sys; "
-        f"sys.path[:0] = {sys.path!r}; "
-        f"importlib.import_module({package + '.loop.run'!r}); "
-        f"importlib.import_module({package + '.' + caller!r}); "
-        f"assert {package + '.campaign'!r} not in sys.modules"
-    )
-    subprocess.run([sys.executable, "-B", "-c", code], check=True)
-
-
 def test_shared_tools_preserve_original_recipe_root():
     from . import recipes, t0_policy
-    from .. import campaign
 
     tools = t0_policy.t0_tools()
     assert dataclasses.asdict(tools) == {
@@ -54,13 +24,11 @@ def test_shared_tools_preserve_original_recipe_root():
         "git": None,
         "verify_ggml_linkage_sh": str(recipes.REPO_ROOT / "scripts/utils/verify_ggml_linkage.sh"),
     }
-    assert tools == campaign.HostOps._t0_tools()
 
 
 @pytest.mark.parametrize("backend", ["llama_cpu", "llama_gpu"])
-def test_fixed_policy_outputs_and_legacy_campaign_entry(backend):
+def test_fixed_policy_outputs(backend):
     from . import t0_policy
-    from .. import campaign
 
     policy = t0_policy.t0_evaluator_policy(backend)
     assert json.loads(json.dumps(dataclasses.asdict(policy))) == {
@@ -76,12 +44,10 @@ def test_fixed_policy_outputs_and_legacy_campaign_entry(backend):
         "coherence_tolerance_floor": 0.98,
         "policy_ref": "ak-policy/v1",
     }
-    assert policy == campaign.HostOps._t0_evaluator_policy(SimpleNamespace(backend=backend))
 
 
-def test_generation_output_and_legacy_campaign_entry():
+def test_generation_output():
     from . import t0_policy
-    from .. import campaign
 
     plan = t0_policy.t0_generation_plan("/MOCK_ONLY/model.gguf")
     assert json.loads(json.dumps(dataclasses.asdict(plan))) == {
@@ -95,9 +61,6 @@ def test_generation_output_and_legacy_campaign_entry():
         "extra_argv": ["-m", "/MOCK_ONLY/model.gguf"],
         "timeout_s": 1800.0,
     }
-    assert plan == campaign.HostOps._t0_generation_plan(
-        SimpleNamespace(model="/MOCK_ONLY/model.gguf")
-    )
 
 
 @pytest.mark.parametrize(
@@ -106,17 +69,12 @@ def test_generation_output_and_legacy_campaign_entry():
 )
 def test_consecutive_arithmetic_keeps_original_public_functions(values):
     from . import anchor_drift
-    from .. import campaign
 
     expected = tuple(
         (float(values[i + 1]) - float(values[i])) / float(values[i]) for i in range(len(values) - 1)
     )
     assert anchor_drift.adjacent_relative_steps(values) == expected
     assert anchor_drift.drift_bound_from(values) == max(abs(v) for v in expected)
-    assert campaign.adjacent_relative_steps is anchor_drift.adjacent_relative_steps
-    assert campaign.drift_bound_from is anchor_drift.drift_bound_from
-    assert campaign.drift_bound_from.__annotations__ == {"series": "Sequence[float]", "return": "float"}
-    assert campaign.adjacent_relative_steps.__annotations__ == {"series": "Sequence[float]", "return": "tuple"}
 
 
 def test_all_new_leaf_bytes_enter_actual_control_fingerprints(tmp_path, monkeypatch):
@@ -144,8 +102,8 @@ def test_all_new_leaf_bytes_enter_actual_control_fingerprints(tmp_path, monkeypa
                 )
 
 
-def test_declared_pins_keep_every_original_value_and_campaign_export():
-    from .. import campaign, production_pins
+def test_declared_pins_keep_every_original_value():
+    from .. import production_pins
 
     expected = {
         "PRODUCTION_REPO": "/mnt/raid0/llm/llama.cpp",
@@ -161,7 +119,6 @@ def test_declared_pins_keep_every_original_value_and_campaign_export():
         "IQK_MATCHED_PAIR_REPS": 1,
     }
     assert {k: getattr(production_pins, k) for k in expected} == expected
-    assert {k: getattr(campaign, k) for k in expected} == expected
 
 
 def test_actual_runtime_gate_uses_the_shared_backend_policy(monkeypatch):
@@ -244,13 +201,3 @@ def test_actual_live_anchor_authority_uses_the_unchanged_shared_drift(tmp_path):
     )
     assert authority["anchor_medians"] == list(values)
     assert authority["bound"] == anchor_drift.drift_bound_from(values)
-
-
-def test_actual_campaign_evaluator_seal_includes_each_new_source_leaf():
-    from . import anchor_drift, t0_policy
-    from .. import campaign, production_pins
-
-    paths = campaign.HostOps._evaluator_bundle_files()
-    for leaf in (production_pins, anchor_drift, t0_policy):
-        assert Path(leaf.__file__) in paths
-    assert len(paths) == len(set(paths))

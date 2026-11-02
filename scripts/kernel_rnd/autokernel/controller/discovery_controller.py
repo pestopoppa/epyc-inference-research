@@ -29,7 +29,7 @@ import tempfile
 import time
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from .. import campaign, hypothesis_portfolio, journal, schemas, source_candidate
+from .. import hypothesis_portfolio, journal, schemas, source_candidate
 from ..evaluator import integrity
 from . import (claude_fable5_critic_actor, codex_container_actor,
                discovery_telemetry, do_not_repeat, hypotheses)
@@ -1516,30 +1516,6 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
                 f"changed-line count ({estimated} < {actual_changed_lines})")
     return PlannedCandidate(**value, source_manifest=manifest, source_manifest_sha256=manifest.patch_bundle_sha256,
                             experiment_intent=intent)
-
-
-class CampaignScreener:
-    """Concrete adapter: call the existing candidate-only campaign transaction."""
-    def __init__(self, *, spec_factory: Callable[[PlannedCandidate, hypotheses.ClaimAuthorization], campaign.CampaignSpec], ops_factory: Callable[[], Any]) -> None:
-        self.spec_factory, self.ops_factory = spec_factory, ops_factory
-    def screen(self, candidate: PlannedCandidate, authorization: hypotheses.ClaimAuthorization, lease: Mapping[str, Any]) -> SealedScreen:
-        spec = self.spec_factory(candidate, authorization)
-        if not spec.screening_only or spec.source_patch is not candidate.source_manifest or spec.authorization != authorization:
-            raise DiscoveryControllerError("campaign adapter must bind typed patch, authorization, and candidate-only screen")
-        if spec.source_prerequisite_package is None and spec.fresh_source_prerequisite_plan is None:
-            raise DiscoveryControllerError("source candidate requires source correctness and dispatch prerequisite package")
-        result = campaign.run_campaign(spec, self.ops_factory())
-        return _screen_from_campaign(result)
-
-
-def _screen_from_campaign(result: campaign.CampaignResult) -> SealedScreen:
-    raw = result.to_dict(); report = raw.get("screening_report")
-    if not (result.ok and raw.get("state") == "decided" and raw.get("screening_only") is True and isinstance(report, Mapping)):
-        raise DiscoveryControllerError("campaign did not produce a sealed candidate-only result")
-    required = ("baseline_sha256", "source_prerequisite_package_sha256", "dispatch_attribution_sha256", "result_sha256")
-    if not all(isinstance(report.get(key), str) and HASH.fullmatch(report[key]) for key in required):
-        raise DiscoveryControllerError("campaign result lacks source proof, exact dispatch proof, baseline, or result hash")
-    return SealedScreen(receipt_path=str(report.get("receipt_path", "")), result_sha256=report["result_sha256"], effect_fraction=float(report["median_relative"]), classification=str(report.get("classification", "candidate")), baseline_sha256=report["baseline_sha256"], source_proof_sha256=report["source_prerequisite_package_sha256"], dispatch_proof_sha256=report["dispatch_attribution_sha256"])
 
 
 @dataclass(frozen=True)

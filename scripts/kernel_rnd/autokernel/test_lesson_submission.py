@@ -1,4 +1,4 @@
-"""Exercise the campaign entry, native writer, and provenance refusal."""
+"""Exercise the lesson-submission entry, native writer, and provenance refusal."""
 import hashlib
 import json
 import subprocess
@@ -18,7 +18,7 @@ class SubmissionTest(unittest.TestCase):
         config["task_id"] = "CONTROL-fixture" if control else "operational-fixture"
         path = self.root / "submission.json"
         path.write_text(json.dumps(config))
-        argv = [sys.executable, "-m", "autokernel.campaign", "submit-lesson",
+        argv = [sys.executable, "-m", "autokernel.lesson_submission",
                 "--config", str(path), "--journal", str(self.root / "journal")]
         if control:
             argv.append("--control")

@@ -852,14 +852,15 @@ class TestReadingFrozenProductionChangesNothing(_ReadOnlyProductionAnchorAsserti
 
         Separate from the read-only test above ON PURPOSE: this one is SUPPOSED
         to fail at a promotion, and its failure is the reminder to edit
-        `campaign.PRODUCTION_*`. Merging the two is how a promotion-detector gets
-        deleted for being noisy.
+        `production_pins.PRODUCTION_*` (the single declared pin since C5-04; the
+        retired `campaign.py` only re-exported it). Merging the two is how a
+        promotion-detector gets deleted for being noisy.
         """
-        from .. import campaign
-        repo = W.GitRepo(campaign.PRODUCTION_REPO)
-        anchor = W.resolve_anchor(repo, campaign.PRODUCTION_BRANCH,
-                                  expected_commit=campaign.PRODUCTION_COMMIT)
-        self.assertEqual(anchor.commit, campaign.PRODUCTION_COMMIT)
+        from .. import production_pins
+        repo = W.GitRepo(production_pins.PRODUCTION_REPO)
+        anchor = W.resolve_anchor(repo, production_pins.PRODUCTION_BRANCH,
+                                  expected_commit=production_pins.PRODUCTION_COMMIT)
+        self.assertEqual(anchor.commit, production_pins.PRODUCTION_COMMIT)
 
     def test_the_frozen_tree_cannot_become_a_sandbox_path_on_the_real_host(self):
         with self.assertRaises(W.ProductionTreeViolation):

@@ -14,7 +14,6 @@ from pathlib import Path
 
 from .. import journal as J
 from .. import schemas as S
-from .. import test_campaign_footprint as footprint
 from .. import test_schemas as fixtures
 from . import build_recipe as BR
 from . import champion as C
@@ -649,12 +648,6 @@ class StaticBoundaryTests(unittest.TestCase):
                               "execution", "worktree", "release", "adapters"):
                 self.assertFalse(any(forbidden in item for item in imported),
                                  (name, forbidden, imported))
-
-    def test_campaign_import_closure_cannot_reach_new_controller(self):
-        graph = footprint.ImportGraph(footprint.PKG_DIR, footprint.ROOT_PKG)
-        modules = set(graph.closure(footprint.campaign_roots()))
-        self.assertNotIn(f"{footprint.ROOT_PKG}.controller.champion", modules)
-        self.assertNotIn(f"{footprint.ROOT_PKG}.controller.sequencer", modules)
 
 
 if __name__ == "__main__":

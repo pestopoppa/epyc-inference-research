@@ -5,64 +5,19 @@ a throwaway worktree off the *current* frozen production tip, proves it still
 computes the right answer, measures it against production in interleaved paired
 blocks, and keeps or reverts it. Production is never touched.
 
-**The one command** — from `/mnt/raid0/llm/epyc-inference-research`:
+**Entry point.** The live loop is `loop/run.py`, launched and stopped through the
+operator-gated readiness package; its operating procedure is
+[`loop/program.md`](loop/program.md).
 
-```bash
-python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
-```
-
-**Dry run is the default.** It composes and prints every applicable step, including
-the exact argv and env both arms would be spawned with, and executes nothing.
-`--execute` additionally requires `--i-hold-the-host`, a validated
-`--proposal-manifest`, an exact-unit physical envelope and a current
-identity-bound calibration bundle; proposal-v4 is fsynced before any host work.
-
-**Status: no candidate has ever been built, and no benchmark has ever been run
-by this package.** Not one. The loop above has been composed end to end and
-never executed. Until 2026-08-04 there was no entrypoint at all — `grep -rln
-'__main__|argparse|def main('` over every non-test module returned nothing —
-and that, not a missing gate and not a missing statistic, is why 100k lines and
-6,000 passing tests have produced no results. What still stands between here and
-a first number is [§ *The honest list*](execution/README.md#6-before-a-first-campaign-can-start--the-honest-list).
-
-**Essential vs deferred.** Until 2026-08-04 roughly half of this package — the
-controller's research strategy, the release plane, the adapters, the dashboard
-surface — was provably unreachable from the path between "an idea for a kernel"
-and "a measured number". That split was computed by walking the import graph, not
-asserted, and the operator acted on it: those planes were removed, about 79,600
-lines including their tests, recoverable from the tag
-`autokernel-preserve-20260804`. Later the same day the surviving controller
-memory was opened *module by module* — see **A question, or an exploration**
-below. Four small pure analysis modules are deliberately off the campaign import
-path: prior-art classification, screening-lane planning, real-archive
-construction, and offline least-commitment evaluation. They cannot launch or mutate anything, and become
-reachable only when their owning workflow supplies evidence. The campaign-path
-boundary still guards every new import. [`FOOTPRINT.md`](FOOTPRINT.md) carries the current totals and every
-module's reachability row by row, and `test_campaign_footprint.py` turns the
-suite red if the document and the tree disagree. **The figures live there and
-only there** — a number stated in two documents drifts in exactly one of them.
-
-### A question, or an exploration
-
-```bash
-python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf \
-    --journal-root /some/durable/root \
-    --hypothesis akh-fuse-norm-cluster --hypothesis-store /path/to/operator_hypotheses.json
-```
-
-With `--hypothesis`, the region claim is acquired through
-`controller/hypotheses.py::claim_for_hypothesis`, so a question with **no
-falsifier** — or a placeholder one (`"tbd"`) — cannot reach a claim, and the
-refusal lands before anything is acquired and before the worktree exists. The
-falsifier travels into the claim's own receipt, so the resource record and the
-question record say the same thing. Without `--hypothesis` the campaign is
-**exploratory** and the record says so in as many words: an unexplained absence
-and a declared exploratory run must not read the same afterwards.
-
-That gate had been written, documented as *"The ONLY route from a hypothesis to a
-resource claim"*, and never called by anything but its own tests — the driver
-acquired the claim directly. Writing your own question:
-[`HYPOTHESES.md`](HYPOTHESES.md).
+**Retired 2026-11-02 (C5-05/C5-06).** The legacy `campaign.py` driver and its
+`python3 -m scripts.kernel_rnd.autokernel.campaign` CLI, the `--hypothesis`
+drop-in runbook (`HYPOTHESES.md`), the top-level campaign `program.md`, the
+`/kernel` dashboard producer (`dashboard.py`), the least-commitment, held-out
+and IQK matched-pair producers, the evidence-path rehearsal, `artifact_diff`,
+`candidate_record`, the source-prerequisite producers, `FOOTPRINT.md` and the
+tests that pinned them were deleted as one dormant plane; git history keeps
+them. Lesson submission, formerly the driver's `submit-lesson` subcommand, is
+now its own module (see *Lesson submission* below).
 
 ### The two things the harness is built around
 
@@ -70,7 +25,7 @@ acquired the claim directly. Writing your own question:
    deleting the computation is the fastest kernel there is. The predecessor
    harness tested `MUL_MAT` only, so a kernel that broke `MUL_MAT_ID` (MoE
    dispatch, on *every* token in production) passed it cleanly. If T0 fails,
-   `run_campaign` returns before a single block is planned.
+   the run stops before a single block is planned.
 2. **Interleaved paired blocks, because drift was measured.** Four A/A runs of
    *identical* code on a quiet host declined monotonically on decode (52.76 →
    52.31 → 51.62 → 50.52). A candidate-then-anchor A/B therefore charges the
@@ -101,10 +56,8 @@ than borrowing BF16's target or converting a relative speedup into a roofline.
 
 | You want | Go to |
 |---|---|
-| To run a campaign | [`campaign.py`](campaign.py)'s module docstring — the loop order, the accept rule, and the import boundary |
+| To run the loop | [`loop/program.md`](loop/program.md) and `python3 -m scripts.kernel_rnd.autokernel.loop.run --help` |
 | What blocks a first result | [`execution/README.md` §6](execution/README.md) — the honest list |
-| The research programme | [`program.md`](program.md) |
-| What is on the path and what is not | [`FOOTPRINT.md`](FOOTPRINT.md) |
 | GEAK / AgentKernelArena on MI210 | [`controller/ARENA_INTEGRATION.md`](controller/ARENA_INTEGRATION.md) |
 
 ### Provider is not champion (AK-D39)
@@ -137,124 +90,6 @@ canonical encoding, and semantics-preserving recoding fixtures into one derived
 `frame_sha256`. Proposal v2 remains readable, but new candidate orderings are
 comparable only when `check_representation_comparable()` returns `PASS`.
 
-`offline_least_commitment.py` implements the AP-WM-1 shadow protocol over matched,
-completed proposal archives. It reports direction, conditional predictive value,
-robust sign error, effective pairs/noise exclusions, and recoding stability. Its
-only authority label is `observe_only`; it is intentionally outside the campaign
-import path and exposes no selector, champion, T2, or T3 mutation API.
-
-`least_commitment_archive_builder.py` is the strict AK-WM-2a join in front of that
-evaluator. Every row must resolve to a real proposal-v3 or proposal-v4 journal event and an exact
-clean `decided` terminal event with samples, released resources, and a passing
-production immutability proof. Hash-pinned diagnostic, outcome, and matched
-one-factor receipts must agree on representation, empirical-demand, candidate,
-regime, surface, and metric-direction frames. A preflight refusal or synthetic
-fixture therefore cannot be relabelled as an empirical archive row.
-
-`least_commitment_capture.py` closes the live-producer gap before those offline
-steps. Executing IQK parameter campaigns require a hash-bound
-`--least-commitment-capture-plan`; diagnostics and recoding controls are fixed
-before the claim, while held-out transfer, falsifier margin, and noise floor are
-mechanically reduced from a separately hash-bound measured held-out-regime
-receipt, the role-specific falsifier, and accepted calibration.
-`least_commitment_heldout.py` creates that receipt only by joining a distinct,
-clean, hypothesis-bound completed campaign and resolving the journaled terminal
-`decision.median_relative` value. It re-derives the receipt on every capture-plan
-load, rejects torn journals and explicit non-real markers, and binds a candidate
-frame derived from model, source, backend, topology, provider and immutable
-production/measurement identities. A copied hash or hand-entered scalar cannot
-pass. The held-out
-regime must be outside the proposal target regimes; missing or target-regime
-evidence refuses live materialization. A control falsifies on KEEP or when its
-absolute measured effect exceeds the accepted noise floor. Control diagnostic
-semantics must come from an independently bound source and cannot be copied from
-the intervention under a new receipt id. A
-`role=control` plan is the only capability that permits the generated production-
-setting A/A control proposal to use identical arms. Architecture fixtures are
-accepted for rehearsal but refused by `--execute`.
-
-`prepare_iqk_matched_pair.py` is the single regeneration entry point for a
-matched CPU-IQK pair. V2 adds a closed `measurement_frame`: canonical pp512
-prefill or tg128 decode. The selected calibration must name that exact recipe;
-decode uses `n_gen=128` and cannot inherit a prefill bundle or an `n_prompt`
-frame. V2 also requires the physical-envelope template to match that bundle's
-declared committed cell, apart from the schedule-dependent frame hash. The
-result carries a self-hashed conversion receipt mapping the calibration's
-`model:shape:aa_calibration` identity to the canonical campaign unit while
-preserving every physical fact. The
-distinct-regime decode pair is bootstrap-only because its completed
-journals are the source for the real held-out receipts. A later prefill pair may
-then use `heldout_bound` evidence. V1 manifests retain their historical pp512
-meaning. The producer derives the control proposal, all shared seeds, the
-matched physical frame, and the complete factor vocabulary; it refuses unless
-`ggml_iqk` is the sole difference. Publication uses private staging, revalidates
-both durable post-rename paths, and rolls both new outputs back if either final
-campaign fails admission; it never runs a campaign. Existing output directories
-are never overwritten.
-
-First project one receipt per role from real completed held-out campaigns:
-
-```bash
-python3 -m scripts.kernel_rnd.autokernel.least_commitment_heldout \
-  /absolute/path/heldout-projection-manifest.json \
-  --output /absolute/new/least-commitment-heldout-outcome.json
-```
-
-```bash
-python3 -m scripts.kernel_rnd.autokernel.prepare_iqk_matched_pair \
-  /absolute/path/iqk-matched-pair-preparation.json \
-  --result /absolute/new/iqk-matched-pair-preparation-result.json
-```
-
-The result records every input and emitted file hash. Re-running the same command
-against the published paths must refuse; byte reproducibility is checked by
-archiving the first two generated directories, recreating the same paths with
-the unchanged manifest, and comparing the complete results. A held-out
-placeholder cannot satisfy this command: both receipts must already bind their
-exact proposal and a measured regime outside the proposal targets.
-
-`least_commitment_receipts.py` is the governed producer for those three receipt
-schemas. Its offline CLI accepts a projection plan whose values are JSON-pointer
-bindings into explicitly SHA-256-pinned proposal, candidate, evaluation, or
-terminal-result records; the plan cannot carry an empirical literal. It requires
-at least two distinct clean completed campaigns, derives the matched pair's sole
-changed factor from the two journal-bound factor maps, rejects explicit fixture,
-synthetic, and dry-run evidence, then feeds its files through the unchanged
-archive builder. `assemble_plan()` derives every JSON pointer and record hash
-from the completed candidate records, and projection publishes both
-`archive-build-manifest.json` and the validated `archive.json`; no hand-authored
-binding or synthetic scalar is needed after two clean matched campaigns exist.
-
-```bash
-python3 -m scripts.kernel_rnd.autokernel.least_commitment_receipts \
-  --assemble-completed completed-campaigns.json \
-  --plan-output projection-plan.json
-
-python3 -m scripts.kernel_rnd.autokernel.least_commitment_receipts \
-  projection-plan.json --output-dir /absolute/new/output-directory
-
-python3 -m scripts.kernel_rnd.autokernel.offline_least_commitment \
-  /absolute/new/output-directory/archive.json \
-  --projection-result /absolute/new/output-directory/projection-result.json \
-  --output ap-wm-report.json
-```
-
-The AP-WM CLI emits a `real` evidence label only after validating both strict
-builder provenance in the archive and the journal projector result. Direct
-library evaluation remains available for regression fixtures, but labels those
-reports `fixture_or_unlabelled`. Reports expose both members' noise floors,
-explicit matched validation, and an `underpowered` state below five effective
-pairs. Neither path has live selection or promotion authority.
-
-`evidence_path_rehearsal.py` is a no-inference dress rehearsal. It derives the
-matched A/A control proposal, validates both prospective capture plans, proves
-the sole changed factor, imports every downstream producer through release
-packaging, and emits a field-level producer manifest labelled
-`architecture_regression_fixture`. It never substitutes for the two real clean
-`DECIDED` journals required by AK-WM-2. The rehearsal also executes the current
-campaign dry-run automation contract: `--json` must emit exactly one JSON
-document on stdout, with the human trace on stderr and `executed: false`.
-
 `release/live_material.py` closes the final journal-to-release-material producer
 gap. An operator-triggered dry run supplies readiness, T3, package, and overlay
 receipts; the adapter binds their hashes to the exact composed champion,
@@ -264,14 +99,6 @@ binary, linkage closure, and build directory to match the journal byte for byte.
 T3 observations or package inputs made for another seal are refused rather than
 retrofitted. The adapter has no clock, process, build, inference, transport,
 freeze, cutover, or production-write authority.
-
-For the CPU known-win diagnostic, a `change_class: "parameter"` proposal must
-declare `change.parameter_surface` with exact `candidate` and `anchor` mappings.
-The only arm-local key currently licensed by the recipe registry is
-`ggml_iqk` (`"0"` or `"1"`). `campaign.py` projects that declaration into the
-existing `MicrobenchPlan` arm overrides, and its dry run prints the two distinct
-environments. Identical arms are admitted only for the hash-bound matched A/A
-control above; any accidental no-op or unregistered key is refused before a claim.
 
 ---
 
@@ -332,7 +159,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `execution/physical_bounds.py` | **RVP-C6-4.** Immutable per-shape work lower bounds plus hardware peak upper bounds. The time floor is `max(compute, memory)` and the equivalent throughput ceiling is `min(compute, memory)`; every sample above it is refused before ranking. The envelope binds the registered delivered unit and an exact recipe/model/parameter-frame digest; serialized derived values are re-derived rather than trusted. |
 | `execution/reward_hack_scan.py`, `execution/reward_hack_corpus.py` | **RVP-C6-6/C6-9 plus static parts of C6-2/C6-3.** Versioned added-line detectors cover protected-frame edits, pointer memoization, structured-input/known-shape short circuits, environment/timing probes, stream creation, and thread/async creation. The corpus producer materializes, compiles and executes the named 10 planted + 15 clean HIP programs on gfx90a under a device claim, reports sensitivity/specificity/FPR, and times normal and hard units in the same ranked set. Successor v2 receipts prospectively emit 3 detector plus 50 exact case×ranked-unit belief measurements bound to source, binary, case, unit, producer, and released-claim identities; they retain instrument-validation-only, no-candidate-speed, and no-campaign-authority semantics. The admitted v1 receipt remains pre-hook and is never back-filled. This is named-taxonomy instrument evidence, never arbitrary-program coverage. Runtime stream synchronization and thread-set assertions live in `microbench.py`. |
 | `execution/live_controls.py` | **AK3 live calibration.** Dry-run-default CPU producer that predeclares a fresh v9/hardened campaign and an exact RVP-C6-4 envelope for every control leg, copies the reviewed measurement binary and its build-local DSOs byte-for-byte into the evidence bundle, acquires q0–q3, measures fresh A/A/neutral/control legs, solves calibration, and sends all five controls through the candidate dispatcher. The control window predeclares the one five-block extension needed for the sign-martingale to cross; stopping at `B_min=5` cannot authorize a positive control. The prior v8 result remains historical evidence in `data/autokernel_controls_3pct_20260805/`; it is not silently reused as v9 calibration. |
-| `controller/hypotheses.py` | The operator hypothesis store and falsifier-before-claim gate used by `campaign.py --hypothesis`. |
+| `controller/hypotheses.py` | The operator hypothesis store and falsifier-before-claim gate (its legacy `campaign.py --hypothesis` caller was retired on 2026-11-02). |
 | `controller/do_not_repeat.py` | The receipt-bearing negative/constraint ledger required before a hypothesis can spend a claim. |
 | `controller/shared.py` | The small shared vocabulary needed by the two surviving controller-memory modules. |
 | `controller/discovery_supervisor.py` | Host-owned tmux lifetime boundary for the discovery deployment factory. It publishes the exact AutoKernel import closure at a content-addressed path beneath root-owned `/var/lib/epyc-autokernel/execution-closures`; the base and closure are non-writable by the controller UID, every directory is root-owned `0555`, every exact manifest file is root-owned `0444`, and extra/symlink/bytecode leaves are refused. It binds canonical config bytes plus file/directory identities and the independently recomputed semantic config identity into a v4 launch spec, pins all runtime state beneath one `O_DIRECTORY|O_NOFOLLOW` dirfd, and requires the tmux session/pane PID to equal the supervisor PID/startticks. The v5 discovery graph hashes canonical repo-logical module paths plus exact bytes, never relocatable physical import roots; supervised execution separately binds every imported `__file__` object by closure dirfd, inode and manifest before graph construction. Every controller epoch enters a unique owned cgroup v2 subtree behind a pre-exec gate; all build-sandbox cgroups remain descendants. Shutdown observes recursive `cgroup.events:populated`, uses exact pidfds followed by parent `cgroup.kill`, removes nested and controller cgroups, and fsyncs `cgroup.remove` before any successor epoch. The same locked fd validates and appends the exact hash-linked ledger state machine. For live builds, a fsynced `child_started` record with the exact cgroup dev/inode identity is projected through an inherited `epyc.autokernel.supervised_build_authority.v2` FD into the factory and builder permit; canonical-byte and semantic identities remain separately named and bound through crash recovery. Production deployment restarts remain zero until typed offline reconciliation exists; only the hardware-free canary exercises bounded restart. Every public command, including `status` and `stop`, must be invoked as `PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.kernel_rnd.autokernel.controller.discovery_supervisor …`; it refuses unless both bytecode guards are active. |
@@ -352,7 +179,6 @@ calibration exists. Source-changing campaigns additionally require their own
 | `controller/kernelfoundry_arena.py` | **INF-03 KernelFoundry gfx90a port (off campaign path).** Runs the pinned Apache-2.0 inherited `Controller.run_single` branch/island loop with GPT-5.6 Sol/high. A scoped registrar activates all declared Triton feature patterns, and a composition database seam routes the inherited `add()` call through upstream parent-aware QD transition tracking when a measured parent exists. AgentKernelArena remains the only compile/correctness/timing authority. |
 | `controller/arena_roundtrip.py` | **EVL-47 SC20/SC21 (off campaign path).** Prospective write-side GEAK/Arena receipt producer. It emits correctness pass rate and timing-harness validity as separate repetition-based `belief_measurements`; preflight source/license/hardware/registry findings remain hash-bound dependency evidence and never become a fabricated ordinal metric. |
 | `controller/authoring_contract.py` | **AK-PL-1 / AK-LE-4 / AK-LE-5 (off campaign path).** The only reviewed fully-rendered authoring-prompt seam; sealed-evaluator leak scan with compliant control, priced never-bulk-read context, reversible compaction headers with exact git recovery, and typed external numeric priors. It calls no model and selects no work. |
-| `controller/completed_campaign_adapter.py` | **Live journal→lean sequencer join (off campaign path).** Projects one clean completed campaign into `CampaignRun`; a KEEP becomes banked only when journaled passing T0/T1 dispatch and mechanism gates exist and measured throughput clears both the accepted floor and MDE. |
 | `controller/loop_experiments.py` | **AK-LE-1/2/3 contracts (off campaign path).** Predeclares matched planner/scaffold cells and reduces either a complete panel or an explicitly planner-only AK-LE-1/2 panel; the partial receipt says scaffold evidence is absent rather than fabricating zero observations. |
 | `controller/loop_experiment_runner.py` | **AK-LE-1/2 capture and AK-LE-3 router (off campaign path).** Executes only the exact predeclared read-only planner CLI cells, seals prompts/process output/timing/parsed observations, and delegates scaffold execution to the separately governed workspace-writing seam. |
 | `controller/loop_scaffold_runner.py` | **AK-LE-3 SAME-MODEL scaffold seam (off campaign path).** Compiles exactly `gpt-5.6-sol` and `gpt-5.6-terra` at high effort crossed with direct-implement and implement-then-exploit, with exact selected task/context/champion/source/actor/Arena pins and equal wall budgets. Each cell creates fresh detached baseline/candidate worktrees; the digest-pinned `codex_container_actor` exposes only the candidate as one writable container bind. The parent captures and reaps the launcher PID/process group, audits declared relative writes, seals each role diff/checkpoint, holds an exclusive `mi210_0` claim across the separately pinned AgentKernelArena evaluator subprocess, then removes and verifies both disposable worktrees while durable artifacts remain outside them. Injected runners require explicit fixture mode. Outputs are diagnostic-only and cannot rank, choose a champion, enter campaign #1, or authorize release. This implementation session ran no model or GPU; a real observation still requires the selected run inputs, credentials, clean Arena checkout, and device claim. |
@@ -383,17 +209,8 @@ calibration exists. Source-changing campaigns additionally require their own
 | `datatype_targets.py` | **INF-03 FP8 authoring target.** Declares FP8-weight/software-upcast-to-bf16 as an experimental gfx90a task, not a native capability; forces independent decoding, upcast-cost attribution, exact-shape baselines and whole-model confirmation, and mechanically defers NVFP4 until FP8 has a terminal result. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
-| `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
-| `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
-| `least_commitment_archive_builder.py` | The AK-WM-2a real-record join: resolves proposal-v3 or proposal-v4 and clean terminal journal events, verifies hash-bound diagnostic/outcome/matched-one-factor receipts, and emits only protocol-valid observe-only archives. |
-| `least_commitment_capture.py` | The prospective live IQK/control capture: binds pre-run diagnostics and recodings, reduces only declared measured outcomes, and gives no selector or release authority. |
-| `least_commitment_heldout.py` | The prospective held-out projector: derives an out-of-regime effect from a distinct clean terminal journal, binds the immutable cross-regime candidate frame, and replays the join before campaign execution. |
-| `least_commitment_receipts.py` | The AK-WM-2a governed receipt producer: derives SHA-pinned journal bindings from distinct clean completed campaigns, proves the sole matched intervention factor, rejects non-real evidence, and publishes the validated archive. |
-| `prepare_iqk_matched_pair.py` | Deterministically publishes the intervention/control proposals, shared matched frame, physical envelopes, and v2 capture plans into two new directories without executing either campaign. |
-| `evidence_path_rehearsal.py` | No-inference control/proposal/AP-WM/champion/readiness/T3/package producer inventory; architecture fixture only. |
 | `release/live_material.py` | Actual-journal release-material compiler: hash-binds the composed champion and its evidence to an exact full-build T3/package seal for operator-triggered dry run only. |
 | `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |
-| `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
 
 AK-LE-3 execution first compiles one strict reviewed JSON input. Its top-level
 fields are exactly `schema` (`epyc.autokernel.ak_le_3_scaffold_compile_input.v1`),
@@ -619,37 +436,12 @@ execution to the exact ordered tensor surface. The checked-in HyRA artifacts
 are kernel references, not model hooks, so the compiler must not invent that
 mapping.
 
-### AK6 — the operator surface
+### AK6 — the operator surface (retired)
 
-`dashboard.py` is the PRODUCER half. `HostOps.journal()` calls it only after the
-terminal record is durable; an export failure warns but cannot relabel that record as lost. Its consumer is the handoff
-hub in **epyc-root** (`dashboard/panels.py`, `dashboard/server.py`,
-`dashboard/static/kernel.html`), which owns the panel→producer registry, the
-per-panel freshness envelope, the transport watchdog and the `/api/health` fold.
-The hub never imports this package. It also reports committed implementation
-history and durable A/A/work bundles under `_activity`, but that context never
-enters `_freshness` or health. The halves are bound by two suites:
-
-| Suite | What only it can fail on |
-|---|---|
-| `test_dashboard.py` | the producer: old evidence cannot be re-dated, unowned planes are explicit, and the writer cannot reach scratch, a checkout, or production |
-| `epyc-root/tests/test_dashboard_panels.py` | the consumer and seam: absent ≠ empty, activity cannot resurrect runtime health, the registry is total, and restart chaos never goes green over a dead producer |
-
-The seam suite exists because both halves were green while disagreeing: the hub
-overwrote `contract_version` (a producer-owned key, integer `2`) with the string
-`"v2"`, so what `/api/kernel` served no longer validated under
-`schemas.validate_kernel_dashboard_v2`; and `static/kernel.html` drew only a v1
-run log, so a **fully reported** v2 contract rendered as an empty page under the
-sentence *"the kernel-R&D loop has not exported any results"*. Both are fixed in
-epyc-root (hub-derived fields are now `_contract_version` / `_freshness` /
-`_render`, and the empty-state sentence is derived on the wire from the document
-that was read). The two suites fail if either behavior returns.
-
-`RestartChaosTest` reproduces the incident this surface exists for: a producer
-alive and reporting → the producer dies → time passes → the board goes from green
-to naming it, and stays naming it **across a hub restart**. Death is simulated by
-not exporting and by injecting the clock; **no process is started, signalled or
-killed**, and the suite audits its own source to keep it that way.
+The `dashboard.py` producer of the `/kernel` contract (`kernel_dashboard.json`,
+schema `epyc.autokernel.kernel_dashboard.v1/v2`) and its schema validators were
+deleted with the legacy driver on 2026-11-02 (C5-05). epyc-root had already
+retired the `/kernel` route on 2026-08-30 because the file had gone stale.
 
 ### AK3 — what the evaluator delivers
 
@@ -1938,7 +1730,7 @@ implementation (deliberately — AK-D25 keeps cadence an operator policy).
 
 ### Lesson submission (write side only)
 
-`python3 -m autokernel.campaign submit-lesson --config CONFIG --journal JOURNAL`
+`python3 -m scripts.kernel_rnd.autokernel.lesson_submission --config CONFIG --journal JOURNAL`
 invokes the native producer explicitly. The producer configuration includes a
 per-workload `upper_cap` and `cap_provenance` object with `kind` set to
 `workload_roofline` and `source` naming the source of the workload ceiling.

@@ -1,4 +1,9 @@
-"""Explicit AutoKernel lesson submission; retrieval remains disabled."""
+"""Explicit AutoKernel lesson submission; retrieval remains disabled.
+
+Run as ``python3 -m scripts.kernel_rnd.autokernel.lesson_submission``. It was
+previously reached as the ``submit-lesson`` subcommand of the retired
+``campaign.py`` CLI (C5-05, 2026-11-02); arguments and output are unchanged.
+"""
 from __future__ import annotations
 
 import argparse
@@ -11,7 +16,7 @@ from .lesson_native import produce
 
 
 def main(argv=None, *, out=None):
-    parser = argparse.ArgumentParser(prog="campaign submit-lesson")
+    parser = argparse.ArgumentParser(prog="lesson_submission")
     parser.add_argument("--config", required=True, help="native producer JSON")
     parser.add_argument("--journal", required=True, help="AutoKernel journal root")
     parser.add_argument("--control", action="store_true", help="isolated pipeline control only")
@@ -36,3 +41,7 @@ def main(argv=None, *, out=None):
                       "reason": entry.payload["reason"], "control": args.control}),
           file=out or sys.stdout)
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

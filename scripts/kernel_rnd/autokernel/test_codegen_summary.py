@@ -12,7 +12,7 @@ import time
 import unittest
 from unittest import mock
 
-from . import campaign, codegen_summary
+from . import codegen_summary
 from .loop import loop as loop_module, run as loop_run
 
 
@@ -215,23 +215,6 @@ class TestCodegenSummary(unittest.TestCase):
                     codegen_summary.summarize_codegen("llama_gpu", directory)
             self.assertEqual(inspect.call_args_list[0].kwargs["timeout_s"], 8.0)
             self.assertEqual(inspect.call_args_list[1].kwargs["timeout_s"], 1.0)
-
-    def test_only_keep_attaches_and_summary_does_not_change_keep(self) -> None:
-        spec = campaign.CampaignSpec(campaign_id="ak-codegen-test",
-                                     candidate_id="akc-codegen-test",
-                                     candidate_ref="fixture", backend="llama_cpu",
-                                     model="/mnt/raid0/llm/models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf")
-        ops = campaign.HostOps()
-        tree = object()
-        keep = mock.Mock(keep=True)
-        revert = mock.Mock(keep=False)
-        with mock.patch.object(codegen_summary, "summarize_codegen",
-                               return_value={"status": "unavailable"}) as inspect:
-            self.assertFalse(ops.keep_or_revert(spec, tree, revert)["keep"])
-            inspect.assert_not_called()
-            self.assertTrue(ops.keep_or_revert(spec, tree, keep)["keep"])
-            inspect.assert_called_once_with("llama_cpu", spec.build_dir)
-        self.assertEqual(ops._codegen_summary, {"status": "unavailable"})
 
     def test_live_pool_sidecar_is_idempotent_and_commit_bound(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

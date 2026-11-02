@@ -91,18 +91,10 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_worktree.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_t0_provider.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_microbench.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_control_runner.py
-# The DRIVER — `campaign.py`, the entrypoint this package spent 100k lines not
-# having. These four guard the things a reader and an operator actually touch:
-# the loop order and accept rule (`test_campaign`), the import boundary that
-# makes deleting the deferred half a one-line decision
-# (`test_campaign_footprint`), the research programme's prose against the code
-# that runs (`test_program_md`), and the README's one command — driven, with
-# every spawn primitive booby-trapped, so "dry run executes nothing" is an
-# assertion rather than a promise (`test_readme`).
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_campaign.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_campaign_footprint.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_program_md.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_readme.py
+# The legacy `campaign.py` driver and its four smoke suites (`test_campaign`,
+# `test_campaign_footprint`, `test_program_md`, `test_readme`) were retired on
+# 2026-11-02 (C5-05/C5-06). The live entry point is `loop/run.py`; its suites run
+# under `scripts/kernel_rnd/autokernel/loop/` and the CI suite floors.
 # INF-70 PROD-1 — the Qwen3.8-Flash-Next CPU serving recipe. In the smoke set because
 # the recipe is DATA and these are its anti-drift guards: the `--fa 1` flag form that
 # cost SYNC-10 seven MTP arms, the two THP knobs that must never collapse into one, the
