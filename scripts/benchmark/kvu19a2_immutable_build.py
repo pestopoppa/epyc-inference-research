@@ -10,8 +10,9 @@ import stat
 import subprocess
 
 ROOT = Path("/dev/shm/kvu19a2-root-source-20261102")
-OUT = Path("/dev/shm/kvu19a2-immutable-build-20261102")
-TOOLS = Path("/mnt/raid0/llm/tmp/kvu19a2-build-row-20261102/toolchain.sha256")
+OUT = Path("/dev/shm/kvu19a2-immutable-build-v2-20261102")
+TOOLS = Path(__file__).resolve().parents[2] / "artifacts/kvu19a2-repeat-20261102/container-toolchain.sha256"
+TOOLS_SHA256 = "2b8ad6a514751640eec363b27a3c9dc29fa17e8479a4a2f144bcf80a648c68dd"
 TILES = {"base": "878a3640f685e68c6c3d3102c331c43054bfb0bce81f68c3224ad271b8d9d844",
          "candidate": "3f79373e68603691630c7dc38703411456cdf5fa12348d07812323568cdb1e82"}
 
@@ -55,6 +56,8 @@ def build():
     before = {arm: inventory(ROOT / arm) for arm in TILES}
     manifest = OUT / "source-inventory.json"
     manifest.write_text(json.dumps(before, sort_keys=True, separators=(",", ":")) + "\n")
+    if file_sha(TOOLS) != TOOLS_SHA256:
+        raise ValueError("toolchain catalog changed")
     subprocess.run(["/usr/bin/sha256sum", "-c", "--quiet", str(TOOLS)], check=True)
     env = {"PATH": "/opt/rocm/bin:/usr/bin:/bin", "ROCM_PATH": "/opt/rocm", "HIP_PATH": "/opt/rocm",
            "CXX": "/usr/bin/g++", "CC": "/usr/bin/gcc", "HIPCXX": "/opt/rocm/llvm/bin/clang++",
@@ -82,6 +85,8 @@ def build():
     after = {arm: inventory(ROOT / arm) for arm in TILES}
     if before != after:
         raise ValueError("source changed during build")
+    if file_sha(TOOLS) != TOOLS_SHA256:
+        raise ValueError("toolchain catalog changed during build")
     subprocess.run(["/usr/bin/sha256sum", "-c", "--quiet", str(TOOLS)], check=True)
     receipt = {"schema": "kvu19a2.root-owned-source-build.v1", "source_root": str(ROOT),
                "source_commit": "a0d0ae238e714aaab04e973ef4b5a4b7c9917744",
