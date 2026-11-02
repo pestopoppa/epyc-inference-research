@@ -48,10 +48,24 @@ SLOT_MARGIN_TOK = 256           # explicit planning margin kept free in every sl
 DEPTH_SUFFIX_RESERVE_TOK = 384  # header + <=256-token suffix + ratio slack (W2 measured suffix turns of 261-310 tokens incl. header)
 TEMPLATE_OVERHEAD_TOK = 64      # BOS / template / tokenizer-boundary slack (the cells use raw prompts, so this is conservative)
 GUARD_HEADROOM_TOK = 32         # HARD refusal: planned request tokens + n_predict must be <= slot - this
-LS = {"8k": 8192, "32k": 32768, "64k": 65536, "128k": 131072, "t8short": 1024}   # t8short: 8 clients vs np4, anchor for stack_topology.yaml:140-150 (T=8 full 124.56 tok/s)
+LS = {"8k": 8192, "32k": 32768, "48k": 49152, "64k": 65536, "96k": 98304, "128k": 131072, "t8short": 1024}   # t8short: 8 clients vs np4, anchor for stack_topology.yaml:140-150 (T=8 full 124.56 tok/s)
 FORK_BIN_DEFAULT = "/mnt/raid0/llm/llama.cpp-experimental/build-cpu/bin/llama-server"   # placeholder; pass --fork-binary
 BANK_NAMES = ["8k", "32k", "64k", "128k"]
+# Preserve the existing default bank and its manifests. New lengths are opt-in.
+AVAILABLE_BANK_NAMES = ["8k", "32k", "48k", "64k", "96k", "128k"]
 BANK_DOCS = 8
+
+def validate_names(raw, valid, label, increasing=False):
+    """Refuse unknown, repeated or unordered sizes before launching any server."""
+    names = raw.split(",")
+    unknown = [name for name in names if name not in valid]
+    if unknown:
+        raise ValueError(f"{label}: unknown sizes {unknown}; expected {valid}")
+    if len(set(names)) != len(names):
+        raise ValueError(f"{label}: duplicate sizes are not supported")
+    if increasing and any(LS[a] >= LS[b] for a, b in zip(names, names[1:])):
+        raise ValueError(f"{label}: sizes must increase for additive bank building")
+    return names
 def depth_doc_tok(L, npredict):
     """Tokens of the per-stream depth-mode document so that wave 0 AND every suffix turn fit a slot of L tokens."""
     return L - SLOT_MARGIN_TOK - npredict - DEPTH_SUFFIX_RESERVE_TOK - TEMPLATE_OVERHEAD_TOK
@@ -193,7 +207,7 @@ def build_launches(a):
         for np_ in nps:
             add(f"split_np{np_}_slot65536", np_, np_ * 65536, False, True, [l for l in L_all if LS[l] <= 65536], pmodes)
             if np_ <= 4:
-                add(f"split_np{np_}_slot131072", np_, np_ * 131072, False, True, [l for l in L_all if LS[l] == 131072], pmodes)
+                add(f"split_np{np_}_slot131072", np_, np_ * 131072, False, True, [l for l in L_all if 65536 < LS[l] <= 131072], pmodes)
     if "unified" in a.kv_modes.split(","):
         for pool in [int(x) for x in a.pools.split(",")]:
             for np_ in nps:
@@ -803,7 +817,10 @@ def make_bank_tokens(port, corpus, ndocs, maxtok, bankdir):
     for i in range(ndocs):
         f = Path(bankdir) / f"doc{i}.tokens.json"
         if f.exists():
-            docs.append(json.loads(f.read_text())); continue
+            existing = json.loads(f.read_text())
+            if len(existing) < maxtok:
+                raise ValueError(f"existing bank token file {f} has {len(existing)} tokens, needs {maxtok}; use a new bank directory")
+            docs.append(existing); continue
         nch = int(maxtok * 4.2); toks = []
         while len(toks) < maxtok:
             toks += tokenize_text(port, corpus.take(nch)); nch = max(nch // 2, 20000)
@@ -1080,6 +1097,12 @@ def main():
     a = p.parse_args()
     if a.port in range(8000, 8201):
         sys.exit("refusing production port range 8000-8200")
+    try:
+        validate_names(a.lens, LS, "--lens")
+        if a.build_bank:
+            validate_names(a.bank_names, AVAILABLE_BANK_NAMES, "--bank-names", increasing=True)
+    except ValueError as exc:
+        p.error(str(exc))
     if a.verify_against_launcher:
         sys.exit(0 if verify_against_launcher() else 1)
     MANIFEST = Path(a.manifest)
@@ -1121,7 +1144,7 @@ def main():
             tsp = 0.0
             for n_ in sp_nps:
                 Ls_ = [pm_l for la in ls if not la["unified"] and la["np"] == n_ for pm_l, pm in la["cells"] if pm.startswith("bank")]
-                nm_ = [nm for nm in BANK_NAMES if LS[nm] <= max(LS[x] for x in Ls_)]
+                nm_ = [nm for nm in AVAILABLE_BANK_NAMES if LS[nm] <= max(LS[x] for x in Ls_) and (nm in BANK_NAMES or nm in Ls_)]
                 e_ = est_bank_build(n_, nm_); tsp += e_
                 print(f"BANK BUILD split np{n_} (layout-specific, n_stream={n_}): est={e_/3600:.1f} h  names={nm_}  cmd: --build-bank --bank-kv split --bank-np {n_} --bank-names {','.join(nm_)}")
             print(f"BANK BUILD TOTAL est={(tb+tsp)/3600:.1f} h; bank dir {a.bank_dir}")
