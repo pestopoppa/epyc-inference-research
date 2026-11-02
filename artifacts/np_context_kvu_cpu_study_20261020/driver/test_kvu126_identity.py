@@ -2,10 +2,13 @@
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
 import kvu126_identity as identity
+import kvu126_capture as capture
 
 
 class RuntimeIdentityTest(unittest.TestCase):
@@ -21,12 +24,22 @@ class RuntimeIdentityTest(unittest.TestCase):
             subprocess.run(["cc", "-shared", "-fPIC", "-x", "c", "-", "-o", str(lib)],
                            input="int fixture(void) { return 1; }\n", text=True, check=True)
             self.libs.append(lib)
-        code = ("import ctypes,sys,time; a=ctypes.CDLL(sys.argv[1]); b=ctypes.CDLL(sys.argv[2]); "
-                "print('READY',flush=True); time.sleep(60)")
+        code = '''import ctypes,sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+a=ctypes.CDLL(sys.argv[1]); b=ctypes.CDLL(sys.argv[2])
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200); self.end_headers()
+        self.wfile.write(b"# HELP llamacpp:kv_cache_used_cells Number of occupied unique KV cache cells.\\n# TYPE llamacpp:kv_cache_used_cells gauge\\nllamacpp:kv_cache_used_cells 123\\n")
+    def log_message(self,*args): pass
+server=ThreadingHTTPServer(("127.0.0.1",0),Handler)
+print(server.server_port,flush=True)
+server.serve_forever()
+'''
         self.proc = subprocess.Popen([sys.executable, "-u", "-c", code, *map(str, self.libs), "-m", str(self.model)],
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.addCleanup(self.stop)
-        self.assertEqual(self.proc.stdout.readline().strip(), "READY")
+        self.port = int(self.proc.stdout.readline().strip())
         self.build = {"schema": "epyc.kvu126.build_identity.v1", "source_tree_clean": True,
                       "source_commit": "a" * 40, "binary_sha256": identity.sha256_file(Path(sys.executable).resolve()),
                       "dso_sha256": {p.name: identity.sha256_file(p) for p in self.libs}}
@@ -52,6 +65,31 @@ class RuntimeIdentityTest(unittest.TestCase):
         self.assertIn('"row_sha256": "' + "b" * 64 + '"', receipt.read_text())
         with self.assertRaises(FileExistsError):
             identity.write_runtime_receipt(self.root, 1, "b" * 64, before, after)
+
+    def test_actual_http_sampling_is_bound_to_same_process(self):
+        before = self.verifier.check(self.proc.pid)
+        sampler = capture.Sampler(self.port, capture.UNIQUE_CELLS_METRIC, interval_s=0.01,
+                                  identity_check=lambda: self.verifier.fast_check(self.proc.pid, before))
+        sampler.start()
+        start = time.monotonic()
+        threading.Event().wait(0.25)
+        end = time.monotonic()
+        result = sampler.finish([{"t_first_monotonic": start, "t_end_monotonic": end}], 524288)
+        self.assertGreaterEqual(len(result["samples"]), 2)
+        self.assertTrue(all(x["pid_birth_identity"] == before["pid_birth_identity"] for x in result["samples"]))
+        self.assertEqual(self.verifier.check(self.proc.pid)["mapped_dso_sha256"], before["mapped_dso_sha256"])
+
+    def test_model_mutation_during_sampling_refuses_the_wave(self):
+        before = self.verifier.check(self.proc.pid)
+        sampler = capture.Sampler(self.port, capture.UNIQUE_CELLS_METRIC, interval_s=0.01,
+                                  identity_check=lambda: self.verifier.fast_check(self.proc.pid, before))
+        sampler.start()
+        start = time.monotonic()
+        threading.Event().wait(0.08)
+        self.model.write_bytes(b"changed during sampling")
+        threading.Event().wait(0.10)
+        with self.assertRaisesRegex(capture.CaptureError, "sampling failed"):
+            sampler.finish([{"t_first_monotonic": start, "t_end_monotonic": time.monotonic()}], 524288)
 
     def test_model_mutation_is_refused_even_with_same_path(self):
         snap = self.verifier.check(self.proc.pid)

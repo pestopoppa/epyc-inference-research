@@ -88,9 +88,11 @@ def write_bound_record(directory, wave, row_sha256, capture):
     raw = dict(capture, row_sha256=row_sha256)
     raw_path = directory / f"wave-{wave}-native.json"
     raw_bytes = json.dumps(raw, sort_keys=True, allow_nan=False).encode()
-    raw_path.write_bytes(raw_bytes)
+    with raw_path.open("xb") as out:
+        out.write(raw_bytes)
     record = dict(raw, schema="epyc.kvu126.native_unique_cells.v1", native_source=raw_path.name,
                   native_source_sha256=hashlib.sha256(raw_bytes).hexdigest())
     receipt_path = directory / f"wave-{wave}-occupancy.json"
-    receipt_path.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+    with receipt_path.open("x") as out:
+        out.write(json.dumps(record, indent=2, allow_nan=False) + "\n")
     return receipt_path

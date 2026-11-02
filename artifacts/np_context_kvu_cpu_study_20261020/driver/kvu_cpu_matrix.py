@@ -671,7 +671,8 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
     nclients = 8 if Lname == "t8short" else np_
     ntok = L - a.npredict - TOK_MARGIN
     limit = slot_limit(la, L)
-    cdir = ldir / f"{Lname}_{pmode}"; cdir.mkdir(exist_ok=True)
+    cdir = ldir / f"{Lname}_{pmode}"
+    cdir.mkdir(exist_ok=not bool(getattr(a, "unique_cells_metric", "")))
     cl = open(cdir / "cell.log", "w"); cell_header(cl, a, la, Lname, pmode, srv, facts)
     cl.write(f"SLOT_BUDGET limit={limit} L={L} npredict={a.npredict} slot_margin={SLOT_MARGIN_TOK} suffix_reserve={DEPTH_SUFFIX_RESERVE_TOK} "
              f"template_overhead={TEMPLATE_OVERHEAD_TOK} guard_headroom={GUARD_HEADROOM_TOK} depth_doc_tok={depth_doc_tok(L, a.npredict)}\n")
@@ -971,7 +972,8 @@ def parse_bank_mode(pmode, np_):
 def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, off):
     L, np_ = LS[Lname], la["np"]; D = bank_tok(Lname)
     active, nrest = parse_bank_mode(pmode, np_)
-    cdir = ldir / f"{Lname}_{pmode}"; cdir.mkdir(exist_ok=True)
+    cdir = ldir / f"{Lname}_{pmode}"
+    cdir.mkdir(exist_ok=not bool(getattr(a, "unique_cells_metric", "")))
     cl = open(cdir / "cell.log", "w"); cell_header(cl, a, la, Lname, pmode, srv, facts)
     loadavg = [round(x, 2) for x in os.getloadavg()]
     docs = [load_bank_tokens(a.bank_dir, i) for i in range(nrest)]

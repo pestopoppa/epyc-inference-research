@@ -56,6 +56,8 @@ class CaptureTest(unittest.TestCase):
             self.assertEqual(receipt["row_sha256"], "a" * 64)
             source = json.loads((Path(tmp) / receipt["native_source"]).read_text())
             self.assertEqual(source["samples"], receipt["samples"])
+            with self.assertRaises(FileExistsError):
+                capture.write_bound_record(tmp, 1, "a" * 64, result)
 
     def test_missing_ambiguous_and_non_integer_gauges_refuse(self):
         for body in (b"# TYPE llamacpp:n_tokens_max gauge\nllamacpp:n_tokens_max 100\n",

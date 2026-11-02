@@ -120,6 +120,9 @@ class ComparisonTest(unittest.TestCase):
                 receipt = {"schema": "epyc.kvu126.runtime_identity.v1", "binary_sha256": identity["binary_sha256"],
                            "model_sha256": identity["model_sha256"], "mapped_dso_sha256": dsos,
                            "pid_birth_identity": "1:123", "row_sha256": row["row_sha256"]}
+                common = {k: receipt[k] for k in ("binary_sha256", "model_sha256", "mapped_dso_sha256", "pid_birth_identity")}
+                receipt["before"] = dict(common, captured_monotonic_s=9)
+                receipt["after"] = dict(common, captured_monotonic_s=21)
                 entry["runtime_receipt"] = self.write_json(name + "-runtime.json", receipt)
             records["arms"][name] = entries
         plan = {"schema": "epyc.kvu126.prospective_plan.v1", "expected_identity": identity, "arms": arms,
