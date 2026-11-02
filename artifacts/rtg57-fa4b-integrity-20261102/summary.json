@@ -1,0 +1,124 @@
+{
+  "schema": "v11-fa4b-quality.m2",
+  "manifest_sha256": "f74b54c19fd229f9e22d322e9b21184f8cc1ec5281e67ebde3edb45f5cb1107f",
+  "response_integrity_scope": "JSON numeric finiteness and DF2-9 client text rule for all accepted responses; M2 separately rejects failed requests and unhealthy whole-server logs. No independent logits or hidden-state finiteness claim.",
+  "agreement_all_configs": false,
+  "cells": {
+    "f16:off": {
+      "agreement": false,
+      "response_integrity": {
+        "OFF": {
+          "greedy": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 100
+          },
+          "score": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 200
+          }
+        },
+        "ON": {
+          "greedy": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 100
+          },
+          "score": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 200
+          }
+        }
+      }
+    },
+    "f16:on": {
+      "agreement": true,
+      "response_integrity": {
+        "OFF": {
+          "greedy": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 100
+          },
+          "score": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 200
+          }
+        },
+        "ON": {
+          "greedy": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 100
+          },
+          "score": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 200
+          }
+        }
+      }
+    },
+    "q8_0:off": {
+      "agreement": false,
+      "response_integrity": {
+        "OFF": {
+          "greedy": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 100
+          },
+          "score": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 200
+          }
+        },
+        "ON": {
+          "greedy": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 100
+          },
+          "score": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 200
+          }
+        }
+      }
+    },
+    "q8_0:on": {
+      "agreement": false,
+      "response_integrity": {
+        "OFF": {
+          "greedy": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 100
+          },
+          "score": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 200
+          }
+        },
+        "ON": {
+          "greedy": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 100
+          },
+          "score": {
+            "garbage_text": 0,
+            "nonfinite_json": 0,
+            "responses": 200
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,341 @@
+{
+  "alarm": {
+    "cleared": {
+      "belief-ledger-not-current-escalated.kvu19a2.private-visibility": "not-active",
+      "belief-ledger-not-current.kvu19a2.private-visibility": "not-active"
+    }
+  },
+  "as_of": "2026-11-02T12:54:18.147666+00:00",
+  "banner": "No beliefs are scoped to diagnostic-placeholder.gguf (gpu). The lines below are sibling/host context only.",
+  "consumer": "kvu19a2.private-visibility",
+  "detail": "",
+  "evidence": {
+    "as_of": "2026-11-02T12:54:18.147666+00:00",
+    "banner": "No beliefs are scoped to diagnostic-placeholder.gguf (gpu). The lines below are sibling/host context only.",
+    "claim_ids": [],
+    "claims": [
+      {
+        "anchor_value": null,
+        "claim_id": "clm_kvu19a2_283cca81010dc0adb60f76af",
+        "effect_rel": null,
+        "grade": "Judged/Located",
+        "knob_family": "",
+        "knobs": {},
+        "linked_claim_ids": [],
+        "locator": "kvu19a2:kvu19a2-rootbuild-live-20261102:14",
+        "mechanism_id": "",
+        "model_file": "",
+        "n_pairs": null,
+        "noise_floor_rel": null,
+        "not_evidence": true,
+        "outcome": "",
+        "recipe": "",
+        "reps": 1,
+        "retrofit": false,
+        "role": "",
+        "run": null,
+        "source_kind": "kvu19a2-native",
+        "stack_regime": "",
+        "stale_epoch": false,
+        "status": "verified",
+        "tier": "host",
+        "unit": "",
+        "value": null,
+        "varied": []
+      },
+      {
+        "anchor_value": null,
+        "claim_id": "clm_kvu19a2_2f97d04ff067a7264f497a55",
+        "effect_rel": null,
+        "grade": "Judged/Located",
+        "knob_family": "",
+        "knobs": {},
+        "linked_claim_ids": [],
+        "locator": "kvu19a2:kvu19a2-rootbuild-live-20261102:4",
+        "mechanism_id": "",
+        "model_file": "",
+        "n_pairs": null,
+        "noise_floor_rel": null,
+        "not_evidence": true,
+        "outcome": "",
+        "recipe": "",
+        "reps": 1,
+        "retrofit": false,
+        "role": "",
+        "run": null,
+        "source_kind": "kvu19a2-native",
+        "stack_regime": "",
+        "stale_epoch": false,
+        "status": "verified",
+        "tier": "host",
+        "unit": "",
+        "value": null,
+        "varied": []
+      },
+      {
+        "anchor_value": null,
+        "claim_id": "clm_kvu19a2_314b8b2c94731003c765e4d5",
+        "effect_rel": null,
+        "grade": "Judged/Located",
+        "knob_family": "",
+        "knobs": {},
+        "linked_claim_ids": [],
+        "locator": "kvu19a2:kvu19a2-rootbuild-live-20261102:7",
+        "mechanism_id": "",
+        "model_file": "",
+        "n_pairs": null,
+        "noise_floor_rel": null,
+        "not_evidence": true,
+        "outcome": "",
+        "recipe": "",
+        "reps": 1,
+        "retrofit": false,
+        "role": "",
+        "run": null,
+        "source_kind": "kvu19a2-native",
+        "stack_regime": "",
+        "stale_epoch": false,
+        "status": "verified",
+        "tier": "host",
+        "unit": "",
+        "value": null,
+        "varied": []
+      }
+    ],
+    "contested_claim_ids": [],
+    "empty_targets": [
+      "diagnostic-placeholder.gguf"
+    ],
+    "flagged": {
+      "contested": [],
+      "refuted": [],
+      "withdrawn": []
+    },
+    "frontier": 60,
+    "host_claim_ids": [
+      "clm_kvu19a2_283cca81010dc0adb60f76af",
+      "clm_kvu19a2_2f97d04ff067a7264f497a55",
+      "clm_kvu19a2_314b8b2c94731003c765e4d5"
+    ],
+    "nonempty_target": false,
+    "not_evidence_claim_ids": [
+      "clm_kvu19a2_283cca81010dc0adb60f76af",
+      "clm_kvu19a2_2f97d04ff067a7264f497a55",
+      "clm_kvu19a2_314b8b2c94731003c765e4d5"
+    ],
+    "omitted": [
+      {
+        "claim_id": "clm_kvu19a2_92451a3a1b45eb387a8cff38",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_93fb4eb53058cd4353a1dfde",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_45b2b4a0f7cf231ef6fa955b",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_d3d30a5a3a2e822b23385d9d",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_4525cde57476c17cc273e1b5",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_ab5d4560000ff019ba420ab4",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_599f6c936a4f759f35e0dcfd",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_addecb1b42d5d8c7cec440d7",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_5ec750b49c8cbb78da94c48f",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_d3f5d74b26cae38587617e08",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_88a2e7bbed526b8311448e4c",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_c11bb219c54567856afb0ea4",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_396a9eafa87171f38761c37a",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_cafc5022397cef8e95a3ebe1",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_a8013edd55cac12d300c9758",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_74c8b71a3a8d0312915bd42c",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      },
+      {
+        "claim_id": "clm_kvu19a2_af7bf50e9c2b682a5bb9df46",
+        "detail": "cap 27 claims / 14000 bytes",
+        "reason": "bounded",
+        "run": null,
+        "source_kind": "kvu19a2-native"
+      }
+    ],
+    "omitted_count": 17,
+    "reasons": [
+      "bounded"
+    ],
+    "refuted_claim_ids": [],
+    "runs": [
+      {
+        "claim_ids": [
+          "clm_kvu19a2_283cca81010dc0adb60f76af",
+          "clm_kvu19a2_2f97d04ff067a7264f497a55",
+          "clm_kvu19a2_314b8b2c94731003c765e4d5"
+        ],
+        "reason": "",
+        "run": null,
+        "source_kind": "kvu19a2-native",
+        "status": "presented"
+      }
+    ],
+    "section": "## Belief-kernel evidence (Vidya ledger, read-only)\nNo beliefs are scoped to diagnostic-placeholder.gguf (gpu). The lines below are sibling/host context only.\nTarget(s): diagnostic-placeholder.gguf / quant unstated / gpu / gfx90a.\nClaims are tiered by declared applicability: knob (the target's own weights and a knob family it can change), target (the target's own weights), lineup (this stack regime), sibling (same declared lineage, other weights or recipe; transfer unproven), host (device-only scope; a ceiling, not about this model). Grade is the folded claim_tuple.grade() Q/T at ledger frontier 60, as of 2026-11-02T12:54:18.147666+00:00.\n### Host tier -- host ceiling, not about this model; not evidence for a proposal\n- clm_kvu19a2_283cca81010dc0adb60f76af [Judged/Located \u00b7 verified] host ceiling, not about this model: kvu19a2:kvu19a2-rootbuild-live-20261102:14 (protocol none; n=1; 2026-11-02T12:53:18Z): Observed 0 NaN output elements for base FA_CASE=80,repeat=3 in one native launch\n- clm_kvu19a2_2f97d04ff067a7264f497a55 [Judged/Located \u00b7 verified] host ceiling, not about this model: kvu19a2:kvu19a2-rootbuild-live-20261102:4 (protocol none; n=1; 2026-11-02T12:53:18Z): Observed 0 NaN output elements for base FA_CASE=78,repeat=3 in one native launch\n- clm_kvu19a2_314b8b2c94731003c765e4d5 [Judged/Located \u00b7 verified] host ceiling, not about this model: kvu19a2:kvu19a2-rootbuild-live-20261102:7 (protocol none; n=1; 2026-11-02T12:53:18Z): Observed 0 NaN output elements for base FA_CASE=78,repeat=4 in one native launch\nShown 0 of 0 knob, 0 of 0 target, 0 of 0 lineup, 0 of 0 sibling, 3 of 20 host claim(s) (0 contested, 0 withdrawn, 0 refuted); tried index 0 of 0 mechanism(s); bounded at 27 claims / 14000 bytes.\nOptional reply field relies_on_claims: a list of the knob-, target-, lineup- or sibling-tier claim ids above that the proposal depends on; omit it when it depends on none. Host-tier lines and contested, withdrawn or refuted claims are not evidence for a proposal.",
+    "section_bytes": 2000,
+    "section_sha256": "0b98bea0d6cb0c389fa53d3ea84ec012853edac44920baaece072cc337060d58",
+    "status": "presented",
+    "tiers": {
+      "host": 20,
+      "knob": 0,
+      "lineup": 0,
+      "sibling": 0,
+      "target": 0
+    },
+    "tiers_shown": {
+      "host": 3,
+      "knob": 0,
+      "lineup": 0,
+      "sibling": 0,
+      "target": 0
+    },
+    "tried_index": [],
+    "tried_index_count": 0,
+    "withdrawn_claim_ids": []
+  },
+  "flag_counts": {
+    "contested": 0,
+    "withdrawn": 0
+  },
+  "known_good_error": null,
+  "known_good_path": "/mnt/raid0/llm/worktrees/rtg57-fa4b-accounting-20261102/kvu19a2-planning-visibility-20261102/known-good.json",
+  "ledger_path": "/mnt/raid0/llm/worktrees/rtg57-fa4b-accounting-20261102/kvu19a2-rootbuild-private-ledger.jsonl",
+  "ledger_state": {
+    "frame_count": 60,
+    "fresh": true,
+    "freshness": {
+      "frames_emitted": 0,
+      "index_max_id": 0,
+      "index_sha256": null,
+      "index_source": "/mnt/raid0/llm/worktrees/rtg57-fa4b-accounting-20261102/kvu19a2-planning-visibility-20261102/unused-index",
+      "last_sync": "2026-11-02T12:54:18.147666+00:00",
+      "sources": [],
+      "sync_action": "already-fresh",
+      "sync_seconds": null,
+      "synced_max_id": 0,
+      "was_fresh": true
+    },
+    "head_hash": "sha256:57738fc76f1c15239fa1f95e935e5260c76d4528f93657d0a2e17fc92f97d07a",
+    "head_seq": 59,
+    "ledger_path": "/mnt/raid0/llm/worktrees/rtg57-fa4b-accounting-20261102/kvu19a2-rootbuild-private-ledger.jsonl",
+    "schema": "epyc.vidya.ledger_state.v1",
+    "verified_at": "2026-11-02T12:54:18Z"
+  },
+  "ledger_state_digest": "sha256:26080bf38c11c2085c75e8d262adde7c032ff627f9c1f1655161a1d8e7e15a8e",
+  "policy": {
+    "floor": "Judged/Located",
+    "standard": "DV",
+    "use": "planner-context"
+  },
+  "reason": null,
+  "schema": "epyc.vidya.loop_beliefs.v1",
+  "status": "ready",
+  "targets": [
+    {
+      "backend": "gpu",
+      "context_tokens": null,
+      "device": "gfx90a",
+      "focus_symbols": [],
+      "knob_families": [],
+      "label": "",
+      "model_file": "diagnostic-placeholder.gguf",
+      "model_sha256": "",
+      "quant": "",
+      "recipe": "",
+      "role": "",
+      "scope": "model",
+      "stack_regime": ""
+    }
+  ]
+}

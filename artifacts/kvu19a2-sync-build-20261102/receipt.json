@@ -1,0 +1,28 @@
+{
+  "commit": "18d030309a57071c32ffd0db42994ae473d2722a",
+  "configure": [
+    "/usr/bin/cmake",
+    "-S",
+    "/dev/shm/kvu19a2-sync-source-20261102",
+    "-B",
+    "/dev/shm/kvu19a2-sync-build-20261102/build",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DGGML_HIP=ON",
+    "-DAMDGPU_TARGETS=gfx90a",
+    "-DLLAMA_BUILD_TESTS=ON",
+    "-DLLAMA_BUILD_SERVER=OFF",
+    "-DLLAMA_BUILD_TOOLS=OFF"
+  ],
+  "outputs": {
+    "build.log": "e8e4edef37fc97199bf6bc2089decec99d278b3471dbfb3a46c27b86ab2d3d6d",
+    "build/CMakeCache.txt": "b89dea8733db31c59b52227f39659b850ea95514cff96d5370137fcd0f6d469a",
+    "build/bin/libggml-hip.so": "61ab9630ae73451cf32877f4e03e158832e30b0e597c27bb157f4d80282ec99c",
+    "build/bin/test-backend-ops": "99bdacb7eb629806c253cc5df5b59a036b063a0641a63f56ecae27938cce2c03",
+    "configure.log": "9b9ed498253d5e88a1ba4350308d728ffcf6073ba50fb1e470102d9a4caadbb7",
+    "inventory.json": "b9e6952473431364a405b223bb18cb0ccfb38c86cf1fb25e612f985a1c75d4f7"
+  },
+  "scope": "root owned, read-only to build user; transitive toolchain not fully captured",
+  "source_archive_sha256": "34251fa02113cbccc5a2d911bc6d0274ef2730bd31474075aa1129772fb65559",
+  "tile_sha256": "e66f5dc8c7a1ff8efd1bad30c0154a8741dbf204833e0f53ca172ab21809062a",
+  "toolchain_catalog_sha256": "2b8ad6a514751640eec363b27a3c9dc29fa17e8479a4a2f144bcf80a648c68dd"
+}

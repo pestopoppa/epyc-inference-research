@@ -1,0 +1,250 @@
+{
+  "cases": {
+    "78": {
+      "base": {
+        "elements": 32768,
+        "first_varying_flat_indices": [],
+        "largest_within_arm_abs_difference": 0.0,
+        "mean_within_arm_abs_spread": 0.0,
+        "nonfinite_elements": 0,
+        "varying_elements": 0,
+        "varying_flat_ranges_inclusive": []
+      },
+      "candidate": {
+        "elements": 32768,
+        "first_varying_flat_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "largest_within_arm_abs_difference": 0.0017658434808254242,
+        "mean_within_arm_abs_spread": 7.703416667698571e-05,
+        "nonfinite_elements": 0,
+        "varying_elements": 16384,
+        "varying_flat_ranges_inclusive": [
+          [
+            0,
+            511
+          ],
+          [
+            1024,
+            1535
+          ],
+          [
+            2048,
+            2559
+          ],
+          [
+            3072,
+            3583
+          ],
+          [
+            4096,
+            4607
+          ],
+          [
+            5120,
+            5631
+          ],
+          [
+            6144,
+            6655
+          ],
+          [
+            7168,
+            7679
+          ],
+          [
+            8192,
+            8703
+          ],
+          [
+            9216,
+            9727
+          ],
+          [
+            10240,
+            10751
+          ],
+          [
+            11264,
+            11775
+          ],
+          [
+            12288,
+            12799
+          ],
+          [
+            13312,
+            13823
+          ],
+          [
+            14336,
+            14847
+          ],
+          [
+            15360,
+            15871
+          ],
+          [
+            16384,
+            16895
+          ],
+          [
+            17408,
+            17919
+          ],
+          [
+            18432,
+            18943
+          ],
+          [
+            19456,
+            19967
+          ],
+          [
+            20480,
+            20991
+          ],
+          [
+            21504,
+            22015
+          ],
+          [
+            22528,
+            23039
+          ],
+          [
+            23552,
+            24063
+          ],
+          [
+            24576,
+            25087
+          ],
+          [
+            25600,
+            26111
+          ],
+          [
+            26624,
+            27135
+          ],
+          [
+            27648,
+            28159
+          ],
+          [
+            28672,
+            29183
+          ],
+          [
+            29696,
+            30207
+          ],
+          [
+            30720,
+            31231
+          ],
+          [
+            31744,
+            32255
+          ]
+        ]
+      }
+    },
+    "80": {
+      "base": {
+        "elements": 16384,
+        "first_varying_flat_indices": [],
+        "largest_within_arm_abs_difference": 0.0,
+        "mean_within_arm_abs_spread": 0.0,
+        "nonfinite_elements": 0,
+        "varying_elements": 0,
+        "varying_flat_ranges_inclusive": []
+      },
+      "candidate": {
+        "elements": 16384,
+        "first_varying_flat_indices": [
+          8192,
+          8193,
+          8194,
+          8195,
+          8196,
+          8197,
+          8198,
+          8199,
+          8200,
+          8201,
+          8202,
+          8203,
+          8204,
+          8205,
+          8206,
+          8207,
+          8208,
+          8209,
+          8210,
+          8211
+        ],
+        "largest_within_arm_abs_difference": 0.000479917973279953,
+        "mean_within_arm_abs_spread": 2.762230189517871e-05,
+        "nonfinite_elements": 0,
+        "varying_elements": 4096,
+        "varying_flat_ranges_inclusive": [
+          [
+            8192,
+            8703
+          ],
+          [
+            9216,
+            9727
+          ],
+          [
+            10240,
+            10751
+          ],
+          [
+            11264,
+            11775
+          ],
+          [
+            12288,
+            12799
+          ],
+          [
+            13312,
+            13823
+          ],
+          [
+            14336,
+            14847
+          ],
+          [
+            15360,
+            15871
+          ]
+        ]
+      }
+    }
+  },
+  "schema": "kvu19a2.output-difference-audit.v1",
+  "scope": "post-hoc output-byte localization, not source-causation or a numerical threshold"
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "kvu19a2.canonical-inputs.v1",
+  "cases": {
+    "78": {
+      "input_00.bin": "0ad2f3ae2ee75164ce4f887087ddaedc849155ed5d584061b1152bb5e6a999de",
+      "input_01.bin": "2888c15555d15cb4d0a0a2a16e661d39229d8062a89de86040bd56df6abd3001",
+      "input_02.bin": "91e9ed8544fed29a3ee63b3ffc88813b0a2ade7b89f739ce466953ba129b2a47"
+    },
+    "80": {
+      "input_00.bin": "41a9a5e3f217c7fc59b96352e047583e280483ebe314b72955dbb8ee1263cb8d",
+      "input_01.bin": "082a8d6beb174273ef7267a238b9d613a74b79422255020d27ecdd2d6e3fe644",
+      "input_02.bin": "6b08cc71ea4bbec2ac1347752926333cbfcf3caa13d8f9a9e975b11cd23923ca",
+      "input_03.bin": "346f23ae8769061fae65545539a7a14c85f648facb1df5cb826db00132ddb4e0"
+    }
+  }
+}
