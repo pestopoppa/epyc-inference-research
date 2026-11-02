@@ -22,22 +22,174 @@ host (needs `+pids` in cgroup.subtree_control). Tracked in
 handoffs/active/scoring-infra-standardization.md. Corrected 2026-07-29 — this
 docstring previously claimed RLIMIT_NPROC was set; it never was.
 
-⚠ HARDENING TODO (before untrusted / at-scale runs, Phase 2b): this does NOT yet
-provide network isolation or a real filesystem jail. Run only trusted algorithmic
-benchmarks until wrapped in unshare/nsjail/container. Never point this at
-adversarial code.
+The default remains the trusted-code scaffold. An explicit bubblewrap mode adds a
+separate user, PID and network namespace, a restricted read-only system runtime,
+and a private temporary filesystem. Optional Docker mode uses an explicit,
+trusted local image ID and a no-network, read-only, non-root container with a
+process count limit and an explicit subset of the caller's CPU affinity; the
+caller must separately hold the relevant region claim. It changes the interpreter
+environment. Candidate and test bytes are encoded in container argv and visible
+to the host Docker daemon. Both fail closed if setup is unavailable. Neither
+hides tests assembled into the candidate program or establishes a complete
+hostile-code security boundary.
 """
 from __future__ import annotations
 
 import os
+import base64
+import json
 import re
 import resource
+import secrets
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+
+class SandboxUnavailable(RuntimeError):
+    """Requested isolation could not be established; never score as a model failure."""
+
+
+def _parse_cpuset(value: str | None) -> set[int]:
+    cpus: set[int] = set()
+    if not isinstance(value, str) or not value or len(value) > 1024:
+        raise SandboxUnavailable("a nonempty explicit Docker CPU set is required")
+    for component in value.split(","):
+        if not re.fullmatch(r"[0-9]+(?:-[0-9]+)?", component):
+            raise SandboxUnavailable("invalid Docker CPU set")
+        parts = [int(x) for x in component.split("-")]
+        lo, hi = parts[0], parts[-1]
+        if lo > hi or hi > 65535:
+            raise SandboxUnavailable("invalid Docker CPU range")
+        cpus.update(range(lo, hi + 1))
+    return cpus
+
+
+def _run_docker(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
+                docker_image: str | None, docker_cpuset: str | None,
+                broker_socket: str | None = None) -> tuple[bool, str]:
+    """Run in an isolated, caller-pinned local Python image; never mount host paths."""
+    if not docker_image or not re.fullmatch(r"sha256:[0-9a-f]{64}", docker_image):
+        raise SandboxUnavailable("docker mode requires an immutable local image ID")
+    cpus = _parse_cpuset(docker_cpuset)
+    if not cpus.issubset(os.sched_getaffinity(0)):
+        raise SandboxUnavailable("Docker CPU set exceeds caller process affinity")
+    mount_args = []
+    if broker_socket is not None:
+        sock = Path(broker_socket)
+        if (not sock.is_absolute() or ',' in broker_socket or not sock.exists()
+                or str(sock.resolve()) != broker_socket
+                or not stat.S_ISSOCK(sock.stat().st_mode) or sock.stat().st_uid != os.getuid()):
+            raise SandboxUnavailable("broker must be an existing absolute Unix socket")
+        mount_args = ["--mount", f"type=bind,src={broker_socket},dst=/broker/socket,readonly"]
+    name = f"codeexec-{secrets.token_hex(16)}"
+    marker = f"__docker_ready_{secrets.token_hex(16)}__"
+    payload = base64.b64encode(code.encode()).decode()
+    bootstrap = ("import base64,resource,sys; "
+                 "resource.setrlimit(resource.RLIMIT_CPU,(int(sys.argv[3]),int(sys.argv[3]))); "
+                 "resource.setrlimit(resource.RLIMIT_CORE,(0,0)); "
+                 "sys.stdout.write(sys.argv[1]); sys.stdout.flush(); "
+                 "exec(compile(base64.b64decode(sys.argv[2]),'<candidate>','exec'))")
+    def docker(*args: str, timeout_s: int = 15) -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(["docker", *args], capture_output=True, text=True,
+                                  timeout=timeout_s, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise SandboxUnavailable(f"docker command failed: {exc}") from exc
+    info = docker("image", "inspect", docker_image)
+    try:
+        image = json.loads(info.stdout)[0]
+        if info.returncode or image["Id"] != docker_image or image["Config"].get("Volumes"):
+            raise ValueError("image unavailable, ID mismatch, or declared volumes")
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        raise SandboxUnavailable(f"docker image preflight failed: {exc}") from exc
+    cid = None
+    try:
+        created = docker("create", "--pull=never", "--name", name,
+                         "--network=none", "--read-only", "--cap-drop=ALL",
+                         "--security-opt=no-new-privileges", "--pids-limit=64",
+                         "--memory", f"{mem_mb}m", "--cpus=1", f"--cpuset-cpus={docker_cpuset}", "--user=65534:65534",
+                         "--tmpfs=/tmp:rw,nosuid,nodev,noexec,size=64m", "--workdir=/tmp",
+                         "--env=HOME=/tmp", "--env=PYTHONDONTWRITEBYTECODE=1",
+                         "--env=OPENBLAS_NUM_THREADS=1", "--env=OMP_NUM_THREADS=1",
+                         *mount_args,
+                         "--entrypoint=python3", "-i", docker_image, "-c", bootstrap, marker, payload, str(cpu_s))
+        cid = created.stdout.strip()
+        if created.returncode or not re.fullmatch(r"[0-9a-f]{64}", cid):
+            raise SandboxUnavailable(f"docker create failed: {created.stderr[-200:]}")
+        inspected = docker("inspect", cid)
+        try:
+            item = json.loads(inspected.stdout)[0]
+            host = item["HostConfig"]
+            mounts = item["Mounts"]
+            mount_valid = (not mounts if broker_socket is None else
+                           len(mounts) == 1 and mounts[0].get("Type") == "bind"
+                           and mounts[0].get("Source") == broker_socket
+                           and mounts[0].get("Destination") == "/broker/socket"
+                           and mounts[0].get("RW") is False)
+            valid = (inspected.returncode == 0 and item["Id"] == cid
+                     and host["NetworkMode"] == "none" and host["ReadonlyRootfs"] is True
+                     and host["Privileged"] is False and mount_valid
+                     and host["PidMode"] in ("", "private") and host["IpcMode"] != "host"
+                     and item["Config"]["User"] == "65534:65534"
+                     and "ALL" in host["CapDrop"] and host["PidsLimit"] == 64
+                     and "no-new-privileges" in host["SecurityOpt"]
+                     and host["Memory"] == mem_mb * 1024 * 1024
+                     and host["NanoCpus"] == 1000000000
+                     and _parse_cpuset(host["CpusetCpus"]) == cpus
+                     and host["Tmpfs"].get("/tmp") == "rw,nosuid,nodev,noexec,size=64m")
+            if not valid:
+                raise ValueError("container does not match isolation contract")
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise SandboxUnavailable(f"docker isolation preflight failed: {exc}") from exc
+        try:
+            run = subprocess.run(["docker", "start", "-ai", cid], input=stdin,
+                                 capture_output=True, text=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired as exc:
+            observed = exc.stdout or b""
+            if not observed.startswith(marker.encode() if isinstance(observed, bytes) else marker):
+                raise SandboxUnavailable("docker setup timed out") from exc
+            return False, "__timeout__"
+        except OSError as exc:
+            raise SandboxUnavailable(f"docker start failed: {exc}") from exc
+        if not run.stdout.startswith(marker):
+            raise SandboxUnavailable(f"docker setup failed: {run.stderr[-200:]}")
+        out = run.stdout[len(marker):]
+        return ((False, f"__exit_{run.returncode}__:{run.stderr[-200:]}")
+                if run.returncode else (True, out))
+    finally:
+        # Name is unique and ours, including when the create response was lost.
+        target = cid if cid and re.fullmatch(r"[0-9a-f]{64}", cid) else name
+        removed = docker("rm", "-f", target)
+        remaining = docker("inspect", target)
+        if remaining.returncode == 0 or "no such" not in remaining.stderr.lower():
+            raise SandboxUnavailable(f"docker cleanup could not be verified: {removed.stderr[-200:]}")
+
+
+def _bubblewrap_command(exe: str, src: Path, bwrap_exe: str, marker: str) -> list[str]:
+    """Build an explicit mount allowlist; never expose the host root or workspace."""
+    binary = Path(bwrap_exe)
+    runtime = Path(exe)
+    if not binary.is_absolute() or not binary.is_file() or not os.access(binary, os.X_OK):
+        raise SandboxUnavailable("bubblewrap executable must be an absolute executable file")
+    # A venv outside /usr would need additional mounts and can expose arbitrary
+    # host files. Fail explicitly until a separately reviewed runtime is supplied.
+    if not runtime.is_absolute() or not runtime.is_relative_to('/usr') or not runtime.resolve().is_relative_to('/usr'):
+        raise SandboxUnavailable("bubblewrap mode currently supports interpreters under /usr only")
+    return [str(binary), '--unshare-user', '--unshare-pid', '--unshare-net',
+            '--unshare-ipc', '--unshare-uts', '--die-with-parent',
+            '--ro-bind', '/usr', '/usr',
+            '--symlink', 'usr/lib', '/lib', '--symlink', 'usr/lib64', '/lib64',
+            '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
+            '--dir', '/work', '--ro-bind', str(src), '/work/sol.py',
+            '--chdir', '/work', '--', exe, '-c',
+            'import os,sys; os.write(1,sys.argv[1].encode()); '
+            'os.execv(sys.executable,[sys.executable,sys.argv[2]])',
+            marker, '/work/sol.py']
 
 
 def extract_code(response: str, language: str = "python") -> str:
@@ -83,27 +235,38 @@ def _kill_group(proc: subprocess.Popen | None) -> None:
 
 
 def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
-              python_exe: str | None = None) -> tuple[bool, str]:
+              python_exe: str | None = None, *, isolation: str = "scaffold",
+              bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
+              docker_cpuset: str | None = None, broker_socket: str | None = None) -> tuple[bool, str]:
     """Run code with stdin, return (ok, stdout-or-error)."""
     # absolutize BEFORE the child runs with cwd=tempdir — a relative interpreter
     # path would otherwise resolve inside the tempdir and fail to spawn.
     # absolute(), NOT resolve(): resolve() dereferences the venv's bin/python
     # symlink to the BASE interpreter, silently dropping the venv site-packages.
     exe = str(Path(python_exe).absolute()) if python_exe else sys.executable
+    if isolation == "docker":
+        if python_exe is not None:
+            raise SandboxUnavailable("docker uses its pinned image interpreter, not python_exe")
+        return _run_docker(code, stdin, timeout, cpu_s, mem_mb, docker_image, docker_cpuset, broker_socket)
+    if isolation not in ("scaffold", "bubblewrap"):
+        raise ValueError(f"unsupported isolation mode: {isolation}")
     with tempfile.TemporaryDirectory(prefix="codeexec_") as d:
         src = Path(d) / "sol.py"
         src.write_text(code)
         proc: subprocess.Popen | None = None
+        marker = f"__bubblewrap_ready_{secrets.token_hex(16)}__" if isolation == "bubblewrap" else None
         try:
+            cmd = (_bubblewrap_command(exe, src, bwrap_exe, marker)
+                   if marker is not None else [exe, str(src)])
             # Popen (not run) so the pid is available for a GROUP kill on timeout;
             # start_new_session=True gives the child its own process group so the
             # kill reaches descendants the scored code spawned.
             proc = subprocess.Popen(
-                [exe, str(src)],
+                cmd,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, text=True,
                 cwd=d, env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1",
-                            "MPLBACKEND": "Agg", "HOME": d,
+                            "MPLBACKEND": "Agg", "HOME": "/tmp" if marker else d,
                             # single-threaded math libs: OpenBLAS sizes buffers by
                             # nproc (192 here) and blows RLIMIT_AS otherwise
                             "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1",
@@ -112,17 +275,29 @@ def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
                 start_new_session=True,
             )
             out, err = proc.communicate(input=stdin, timeout=timeout)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             _kill_group(proc)
             # drain the pipes the killed group left behind, else the fds leak
             try:
                 proc.communicate(timeout=5)
             except Exception:  # noqa: BLE001
                 pass
+            if marker is not None:
+                observed = e.output or b""
+                if not observed.startswith(marker.encode() if isinstance(observed, bytes) else marker):
+                    raise SandboxUnavailable("bubblewrap setup timed out")
             return False, "__timeout__"
+        except SandboxUnavailable:
+            raise
         except Exception as e:  # noqa: BLE001
             _kill_group(proc)
+            if marker is not None:
+                raise SandboxUnavailable(f"bubblewrap spawn failed: {e}") from e
             return False, f"__spawn_error__:{e}"
+        if marker is not None:
+            if not out.startswith(marker):
+                raise SandboxUnavailable(f"bubblewrap setup failed: {err[-200:]}")
+            out = out[len(marker):]
         if proc.returncode != 0:
             return False, f"__exit_{proc.returncode}__:{err[-200:]}"
         return True, out
@@ -135,6 +310,8 @@ def score_code(
     timeout: int = 10,
     cpu_s: int = 8,
     mem_mb: int = 1024,
+    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
+    docker_cpuset: str | None = None,
 ) -> dict[str, Any]:
     """Score generated code against test_cases.
 
@@ -149,9 +326,9 @@ def score_code(
     passed, detail = 0, []
     for tc in test_cases:
         if "assert" in tc:
-            ok, out = _run_once(code + "\n\n" + tc["assert"], "", timeout, cpu_s, mem_mb)
+            ok, out = _run_once(code + "\n\n" + tc["assert"], "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image, docker_cpuset=docker_cpuset)
         else:
-            ok, out = _run_once(code, tc.get("input", ""), timeout, cpu_s, mem_mb)
+            ok, out = _run_once(code, tc.get("input", ""), timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image, docker_cpuset=docker_cpuset)
             if ok:
                 ok = out.strip() == str(tc.get("output", "")).strip()
         passed += int(ok)
@@ -169,6 +346,8 @@ def score_functional(
     timeout: int = 10,
     cpu_s: int = 8,
     mem_mb: int = 1024,
+    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
+    docker_cpuset: str | None = None,
 ) -> bool:
     """HumanEval/MBPP-style: the model completes a function; `test_code` is a
     `check(candidate)` body of asserts. Pass iff the assembled program runs clean.
@@ -183,7 +362,7 @@ def score_functional(
     if not re.search(rf"\bdef\s+{re.escape(entry_point)}\s*\(", code):
         code = (prompt or "") + "\n" + code
     program = f"{code}\n\n{test_code}\n\ncheck({entry_point})\n"
-    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb)
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image, docker_cpuset=docker_cpuset)
     return ok
 
 
@@ -196,6 +375,8 @@ def score_unittest(
     timeout: int = 30,
     cpu_s: int = 25,
     mem_mb: int = 4096,
+    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
+    docker_cpuset: str | None = None,
 ) -> bool:
     """BigCodeBench-style: the model implements `entry_point` (task_func); the
     suite ships a unittest.TestCase in `test_code`. Pass iff the whole unittest
@@ -209,7 +390,7 @@ def score_unittest(
         code = (code_prompt or "") + "\n" + code
     program = (f"{code}\n\n{test_code}\n\n"
                "import unittest as _ut\n_ut.main(argv=['x'], exit=True)\n")
-    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, python_exe=python_exe)
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, python_exe=python_exe, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image, docker_cpuset=docker_cpuset)
     return ok
 
 
