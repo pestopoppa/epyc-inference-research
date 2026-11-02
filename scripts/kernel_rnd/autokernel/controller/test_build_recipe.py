@@ -56,17 +56,29 @@ class RecipeContract(unittest.TestCase):
     def test_identity_is_stable_for_the_same_recipe(self):
         self.assertEqual(br.HOUSE_GPU_RECIPE.sha256(), br.HOUSE_GPU_RECIPE.sha256())
 
-    def test_the_production_reference_is_declared_not_verified(self):
-        """`build-hip/` holds only `bin/` -- there is no CMakeCache to read back.
+    def test_v10_reference_verified_house_reference_remains_declared(self):
+        self.assertTrue(br.PRODUCTION_RECIPE_IS_VERIFIABLE)
+        self.assertIs(br.GFX90A_ROCM62_V10_RECIPE.to_dict()[
+            "production_reference_is_verifiable"], True)
+        self.assertIs(br.HOUSE_GPU_RECIPE.to_dict()[
+            "production_reference_is_verifiable"], False)
 
-        The production column is sourced from the CH-8 ruling, not from the build
-        production actually serves. Saying so in a constant is the difference
-        between a known gap and a silent one.
-        """
-        self.assertFalse(br.PRODUCTION_RECIPE_IS_VERIFIABLE)
-        self.assertIs(
-            br.HOUSE_GPU_RECIPE.to_dict()["production_reference_is_verifiable"],
-            False)
+    def test_verification_is_recipe_specific_and_round_trips(self):
+        from autokernel.controller import champion
+
+        verified = br.GFX90A_ROCM62_V10_RECIPE.to_dict()
+        old = dict(verified, production_reference_is_verifiable=False)
+        for record in (old, verified):
+            rebuilt = champion.champion_build_recipe({"build_recipe": record})
+            self.assertEqual(rebuilt.to_dict(), record)
+        self.assertNotEqual(
+            champion.champion_build_recipe({"build_recipe": old}).sha256(),
+            champion.champion_build_recipe({"build_recipe": verified}).sha256())
+        self.assertFalse(br.HOUSE_GPU_RECIPE.to_dict()["production_reference_is_verifiable"])
+        self.assertFalse(br.NATIVE_CPU_RECIPE.to_dict()["production_reference_is_verifiable"])
+        invalid = dict(old, production_reference_is_verifiable="false")
+        with self.assertRaises(champion.EvidenceRefused):
+            champion.champion_build_recipe({"build_recipe": invalid})
 
     def test_unknown_recipe_names_are_refused(self):
         with self.assertRaises(br.BuildRecipeError):

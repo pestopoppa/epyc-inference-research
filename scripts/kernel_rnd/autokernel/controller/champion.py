@@ -140,9 +140,13 @@ def champion_build_recipe(record: Mapping[str, Any]) -> recipes.BuildRecipe:
     flags = raw.get("flags")
     if not isinstance(flags, list) or not flags:
         raise EvidenceRefused("champion build_recipe names no flags")
+    verified = raw.get("production_reference_is_verifiable", False)
+    if not isinstance(verified, bool):
+        raise EvidenceRefused("build_recipe.production_reference_is_verifiable must be boolean")
     try:
         return recipes.from_flags(_text(raw.get("name"), "build_recipe.name"),
-                                  flags, notes=str(raw.get("notes") or ""))
+                                  flags, notes=str(raw.get("notes") or ""),
+                                  production_reference_is_verifiable=verified)
     except recipes.BuildRecipeError as exc:
         raise EvidenceRefused(f"champion build_recipe is invalid: {exc}") from exc
 

@@ -19,16 +19,23 @@ versioned object in which **a flag that diverges from production without a state
 reason is refused at construction**. Divergence becomes a decision you can read,
 never an omission you have to discover by measuring non-finite outputs.
 
-WHAT THIS CANNOT DO, AND WHY IT MATTERS
----------------------------------------
-Production's own GPU recipe is NOT recoverable from disk: `/mnt/raid0/llm/llama.cpp/
-build-hip/` contains only `bin/`, with no `CMakeCache.txt`. The production column
-below is therefore a DECLARED reference -- sourced from the CH-8 ruling recorded in
-the research repo README -- not a value read back from the build that production
-serves. `PRODUCTION_RECIPE_IS_VERIFIABLE` is False to say so out loud, because a
-reference nobody can re-derive is exactly the kind of thing that silently rots.
-Closing that gap means recording production's configure line at freeze time; it is
-filed against the promotion runbook, not fixed here.
+PRODUCTION REFERENCE AND ITS LIMITS
+-----------------------------------
+The historical house recipe is a CH-8 declaration, not a verified production
+build. The v10 reference instead comes from the retained v10 configure cache.
+R18-A independently rebuilt commit ffc1bac82eeca6f9099e1ccd9ba49703c460a115
+and compared all CPU, HIP host and gfx90a device export sets against verified v10
+anchors: each set had zero additions and removals. The HIP build replayed 141
+recorded compiler CUIDs; this proves symbol-set identity under that replay, not
+byte-for-byte binary identity or unconstrained compiler reproducibility.
+
+Evidence in epyc-root `artifacts/compute/r18a-r4-20261102/`:
+`symbol-identity.json` SHA-256
+ a65607d95c186aa46ec3c1f67c2638fb51ae6cbbb0e20e4d6401eb1a9050a287;
+`full-result.json` SHA-256
+ 6c5d01435ca3699f5ab2ccf94c8a6942320dc6d4c624d3eab9aeb86a55431de4.
+The predicate applies to the v10 reference only. Historical records retain the
+verification value recorded at their creation, which is part of recipe identity.
 """
 from __future__ import annotations
 
@@ -39,8 +46,8 @@ from typing import Any, Mapping, Sequence
 
 RECIPE_SCHEMA = "epyc.autokernel.gpu_build_recipe.v1"
 
-#: The production reference is declared, not read back. See the module docstring.
-PRODUCTION_RECIPE_IS_VERIFIABLE = False
+#: The v10 reference is verified under the conditions in the module docstring.
+PRODUCTION_RECIPE_IS_VERIFIABLE = True
 
 
 class BuildRecipeError(ValueError):
@@ -137,6 +144,7 @@ class BuildRecipe:
     name: str
     flags: tuple[Flag, ...]
     notes: str = ""
+    production_reference_is_verifiable: bool = False
 
     def cmake_defines(self) -> tuple[tuple[str, str], ...]:
         """The defines, in the shape `StaticGpuSourceBuilder` takes."""
@@ -149,7 +157,7 @@ class BuildRecipe:
         return {
             "schema": RECIPE_SCHEMA,
             "name": self.name,
-            "production_reference_is_verifiable": PRODUCTION_RECIPE_IS_VERIFIABLE,
+            "production_reference_is_verifiable": self.production_reference_is_verifiable,
             "flags": [flag.to_dict() for flag in self.flags],
             "divergences": [flag.name for flag in self.divergences()],
             "notes": self.notes or None,
@@ -206,6 +214,7 @@ ROCWMMA_IN_BINARY_ARM = "planned: carried as GGML_HIP_ROCWMMA_FATTN=ON until the
 
 GFX90A_ROCM62_V10_RECIPE = BuildRecipe(
     name="gfx90a-rocm62-v10",
+    production_reference_is_verifiable=PRODUCTION_RECIPE_IS_VERIFIABLE,
     notes=("Read back from production-consolidated-v10 (gpu-20260921-ffc1bac82 "
            "CMakeCache.txt), ROCm 6.2.0-66. Matches production on every named flag; "
            "the build host must report ROCm " + ROCM_VERSION_REQUIRED + " "
@@ -337,11 +346,13 @@ def recipe_for(name: str) -> BuildRecipe:
 
 
 def from_flags(name: str, flags: Sequence[Mapping[str, Any]], *,
-               notes: str = "") -> BuildRecipe:
+               notes: str = "",
+               production_reference_is_verifiable: bool = False) -> BuildRecipe:
     """Build a recipe from declarations, refusing any unjustified divergence."""
     return BuildRecipe(
         name=name,
         notes=notes,
+        production_reference_is_verifiable=production_reference_is_verifiable,
         flags=tuple(Flag(name=str(item["name"]), value=str(item["value"]),
                          production_value=item.get("production_value"),
                          reason=str(item.get("reason") or ""))
