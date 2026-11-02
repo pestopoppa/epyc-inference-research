@@ -73,17 +73,28 @@ def test_docker_requires_image_id():
                           docker_image="python:latest")
 
 
-@pytest.mark.skipif(not os.getenv("CODEEXEC_TEST_DOCKER_IMAGE"), reason="no explicit local image")
+def test_docker_requires_valid_affinity_subset(monkeypatch):
+    image = "sha256:" + "a" * 64
+    monkeypatch.setattr(os, "sched_getaffinity", lambda _: {2, 3})
+    for cpuset in (None, "", "2-1", "3,4", "2-999999", "2;echo x"):
+        with pytest.raises(scorer.SandboxUnavailable):
+            scorer._run_once("pass", "", 2, 1, 128, isolation="docker",
+                             docker_image=image, docker_cpuset=cpuset)
+    assert scorer._parse_cpuset("2-3,5") == {2, 3, 5}
+
+
+@pytest.mark.skipif(not os.getenv("CODEEXEC_TEST_DOCKER_IMAGE") or not os.getenv("CODEEXEC_TEST_CPUSET"), reason="no explicit local image or claimed CPU set")
 def test_docker_actual_boundary_and_timeout(tmp_path):
     image = os.environ["CODEEXEC_TEST_DOCKER_IMAGE"]
+    cpuset = os.environ["CODEEXEC_TEST_CPUSET"]
     secret = tmp_path / "host-secret"
     secret.write_text("host-only")
-    code = (f"import socket\ntry:\n open({str(secret)!r}).read()\n print('LEAK')\n"
+    code = (f"import socket,os\nprint(','.join(map(str,sorted(os.sched_getaffinity(0)))))\ntry:\n open({str(secret)!r}).read()\n print('LEAK')\n"
             "except OSError:\n print('denied')\n"
             "s=socket.socket(); s.settimeout(1)\nprint(s.connect_ex(('1.1.1.1',80)))\n")
-    ok, out = scorer._run_once(code, "", 15, 8, 256, isolation="docker", docker_image=image)
-    assert ok and out.splitlines() == ["denied", "101"]
+    ok, out = scorer._run_once(code, "", 15, 8, 256, isolation="docker", docker_image=image, docker_cpuset=cpuset)
+    assert ok and out.splitlines() == [','.join(map(str,sorted(scorer._parse_cpuset(cpuset)))), "denied", "101"]
     assert scorer.score_code("print(3)", [{"output": "3"}], isolation="docker",
-                             docker_image=image)["correct"]
+                             docker_image=image, docker_cpuset=cpuset)["correct"]
     assert scorer._run_once("import time; time.sleep(30)", "", 2, 8, 256,
-                            isolation="docker", docker_image=image) == (False, "__timeout__")
+                            isolation="docker", docker_image=image, docker_cpuset=cpuset) == (False, "__timeout__")

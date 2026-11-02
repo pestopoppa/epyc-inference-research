@@ -26,9 +26,12 @@ The default remains the trusted-code scaffold. An explicit bubblewrap mode adds 
 separate user, PID and network namespace, a restricted read-only system runtime,
 and a private temporary filesystem. Optional Docker mode uses an explicit,
 trusted local image ID and a no-network, read-only, non-root container with a
-process count limit; it changes the interpreter environment. Both fail closed
-if setup is unavailable. Neither hides tests assembled into the candidate
-program or establishes a complete hostile-code security boundary.
+process count limit and an explicit subset of the caller's CPU affinity; the
+caller must separately hold the relevant region claim. It changes the interpreter
+environment. Candidate and test bytes are encoded in container argv and visible
+to the host Docker daemon. Both fail closed if setup is unavailable. Neither
+hides tests assembled into the candidate program or establishes a complete
+hostile-code security boundary.
 """
 from __future__ import annotations
 
@@ -50,11 +53,29 @@ class SandboxUnavailable(RuntimeError):
     """Requested isolation could not be established; never score as a model failure."""
 
 
+def _parse_cpuset(value: str | None) -> set[int]:
+    cpus: set[int] = set()
+    if not isinstance(value, str) or not value or len(value) > 1024:
+        raise SandboxUnavailable("a nonempty explicit Docker CPU set is required")
+    for component in value.split(","):
+        if not re.fullmatch(r"[0-9]+(?:-[0-9]+)?", component):
+            raise SandboxUnavailable("invalid Docker CPU set")
+        parts = [int(x) for x in component.split("-")]
+        lo, hi = parts[0], parts[-1]
+        if lo > hi or hi > 65535:
+            raise SandboxUnavailable("invalid Docker CPU range")
+        cpus.update(range(lo, hi + 1))
+    return cpus
+
+
 def _run_docker(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
-                docker_image: str | None) -> tuple[bool, str]:
+                docker_image: str | None, docker_cpuset: str | None) -> tuple[bool, str]:
     """Run in an isolated, caller-pinned local Python image; never mount host paths."""
     if not docker_image or not re.fullmatch(r"sha256:[0-9a-f]{64}", docker_image):
         raise SandboxUnavailable("docker mode requires an immutable local image ID")
+    cpus = _parse_cpuset(docker_cpuset)
+    if not cpus.issubset(os.sched_getaffinity(0)):
+        raise SandboxUnavailable("Docker CPU set exceeds caller process affinity")
     name = f"codeexec-{secrets.token_hex(16)}"
     marker = f"__docker_ready_{secrets.token_hex(16)}__"
     payload = base64.b64encode(code.encode()).decode()
@@ -81,7 +102,7 @@ def _run_docker(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
         created = docker("create", "--pull=never", "--name", name,
                          "--network=none", "--read-only", "--cap-drop=ALL",
                          "--security-opt=no-new-privileges", "--pids-limit=64",
-                         "--memory", f"{mem_mb}m", "--cpus=1", "--user=65534:65534",
+                         "--memory", f"{mem_mb}m", "--cpus=1", f"--cpuset-cpus={docker_cpuset}", "--user=65534:65534",
                          "--tmpfs=/tmp:rw,nosuid,nodev,noexec,size=64m", "--workdir=/tmp",
                          "--env=HOME=/tmp", "--env=PYTHONDONTWRITEBYTECODE=1",
                          "--env=OPENBLAS_NUM_THREADS=1", "--env=OMP_NUM_THREADS=1",
@@ -101,6 +122,7 @@ def _run_docker(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
                      and "no-new-privileges" in host["SecurityOpt"]
                      and host["Memory"] == mem_mb * 1024 * 1024
                      and host["NanoCpus"] == 1000000000
+                     and _parse_cpuset(host["CpusetCpus"]) == cpus
                      and host["Tmpfs"].get("/tmp") == "rw,nosuid,nodev,noexec,size=64m")
             if not valid:
                 raise ValueError("container does not match isolation contract")
@@ -196,7 +218,8 @@ def _kill_group(proc: subprocess.Popen | None) -> None:
 
 def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
               python_exe: str | None = None, *, isolation: str = "scaffold",
-              bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None) -> tuple[bool, str]:
+              bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
+              docker_cpuset: str | None = None) -> tuple[bool, str]:
     """Run code with stdin, return (ok, stdout-or-error)."""
     # absolutize BEFORE the child runs with cwd=tempdir — a relative interpreter
     # path would otherwise resolve inside the tempdir and fail to spawn.
@@ -206,7 +229,7 @@ def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
     if isolation == "docker":
         if python_exe is not None:
             raise SandboxUnavailable("docker uses its pinned image interpreter, not python_exe")
-        return _run_docker(code, stdin, timeout, cpu_s, mem_mb, docker_image)
+        return _run_docker(code, stdin, timeout, cpu_s, mem_mb, docker_image, docker_cpuset)
     if isolation not in ("scaffold", "bubblewrap"):
         raise ValueError(f"unsupported isolation mode: {isolation}")
     with tempfile.TemporaryDirectory(prefix="codeexec_") as d:
@@ -270,6 +293,7 @@ def score_code(
     cpu_s: int = 8,
     mem_mb: int = 1024,
     *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
+    docker_cpuset: str | None = None,
 ) -> dict[str, Any]:
     """Score generated code against test_cases.
 
@@ -284,9 +308,9 @@ def score_code(
     passed, detail = 0, []
     for tc in test_cases:
         if "assert" in tc:
-            ok, out = _run_once(code + "\n\n" + tc["assert"], "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image)
+            ok, out = _run_once(code + "\n\n" + tc["assert"], "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image, docker_cpuset=docker_cpuset)
         else:
-            ok, out = _run_once(code, tc.get("input", ""), timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image)
+            ok, out = _run_once(code, tc.get("input", ""), timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image, docker_cpuset=docker_cpuset)
             if ok:
                 ok = out.strip() == str(tc.get("output", "")).strip()
         passed += int(ok)
@@ -305,6 +329,7 @@ def score_functional(
     cpu_s: int = 8,
     mem_mb: int = 1024,
     *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
+    docker_cpuset: str | None = None,
 ) -> bool:
     """HumanEval/MBPP-style: the model completes a function; `test_code` is a
     `check(candidate)` body of asserts. Pass iff the assembled program runs clean.
@@ -319,7 +344,7 @@ def score_functional(
     if not re.search(rf"\bdef\s+{re.escape(entry_point)}\s*\(", code):
         code = (prompt or "") + "\n" + code
     program = f"{code}\n\n{test_code}\n\ncheck({entry_point})\n"
-    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image)
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image, docker_cpuset=docker_cpuset)
     return ok
 
 
@@ -333,6 +358,7 @@ def score_unittest(
     cpu_s: int = 25,
     mem_mb: int = 4096,
     *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
+    docker_cpuset: str | None = None,
 ) -> bool:
     """BigCodeBench-style: the model implements `entry_point` (task_func); the
     suite ships a unittest.TestCase in `test_code`. Pass iff the whole unittest
@@ -346,7 +372,7 @@ def score_unittest(
         code = (code_prompt or "") + "\n" + code
     program = (f"{code}\n\n{test_code}\n\n"
                "import unittest as _ut\n_ut.main(argv=['x'], exit=True)\n")
-    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, python_exe=python_exe, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image)
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, python_exe=python_exe, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image, docker_cpuset=docker_cpuset)
     return ok
 
 
