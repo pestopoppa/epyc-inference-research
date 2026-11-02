@@ -42,6 +42,7 @@ import re
 import resource
 import secrets
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -69,13 +70,22 @@ def _parse_cpuset(value: str | None) -> set[int]:
 
 
 def _run_docker(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
-                docker_image: str | None, docker_cpuset: str | None) -> tuple[bool, str]:
+                docker_image: str | None, docker_cpuset: str | None,
+                broker_socket: str | None = None) -> tuple[bool, str]:
     """Run in an isolated, caller-pinned local Python image; never mount host paths."""
     if not docker_image or not re.fullmatch(r"sha256:[0-9a-f]{64}", docker_image):
         raise SandboxUnavailable("docker mode requires an immutable local image ID")
     cpus = _parse_cpuset(docker_cpuset)
     if not cpus.issubset(os.sched_getaffinity(0)):
         raise SandboxUnavailable("Docker CPU set exceeds caller process affinity")
+    mount_args = []
+    if broker_socket is not None:
+        sock = Path(broker_socket)
+        if (not sock.is_absolute() or ',' in broker_socket or not sock.exists()
+                or str(sock.resolve()) != broker_socket
+                or not stat.S_ISSOCK(sock.stat().st_mode) or sock.stat().st_uid != os.getuid()):
+            raise SandboxUnavailable("broker must be an existing absolute Unix socket")
+        mount_args = ["--mount", f"type=bind,src={broker_socket},dst=/broker/socket,readonly"]
     name = f"codeexec-{secrets.token_hex(16)}"
     marker = f"__docker_ready_{secrets.token_hex(16)}__"
     payload = base64.b64encode(code.encode()).decode()
@@ -106,6 +116,7 @@ def _run_docker(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
                          "--tmpfs=/tmp:rw,nosuid,nodev,noexec,size=64m", "--workdir=/tmp",
                          "--env=HOME=/tmp", "--env=PYTHONDONTWRITEBYTECODE=1",
                          "--env=OPENBLAS_NUM_THREADS=1", "--env=OMP_NUM_THREADS=1",
+                         *mount_args,
                          "--entrypoint=python3", "-i", docker_image, "-c", bootstrap, marker, payload, str(cpu_s))
         cid = created.stdout.strip()
         if created.returncode or not re.fullmatch(r"[0-9a-f]{64}", cid):
@@ -114,9 +125,15 @@ def _run_docker(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
         try:
             item = json.loads(inspected.stdout)[0]
             host = item["HostConfig"]
+            mounts = item["Mounts"]
+            mount_valid = (not mounts if broker_socket is None else
+                           len(mounts) == 1 and mounts[0].get("Type") == "bind"
+                           and mounts[0].get("Source") == broker_socket
+                           and mounts[0].get("Destination") == "/broker/socket"
+                           and mounts[0].get("RW") is False)
             valid = (inspected.returncode == 0 and item["Id"] == cid
                      and host["NetworkMode"] == "none" and host["ReadonlyRootfs"] is True
-                     and host["Privileged"] is False and not item["Mounts"]
+                     and host["Privileged"] is False and mount_valid
                      and host["PidMode"] in ("", "private") and host["IpcMode"] != "host"
                      and item["Config"]["User"] == "65534:65534"
                      and "ALL" in host["CapDrop"] and host["PidsLimit"] == 64
@@ -220,7 +237,7 @@ def _kill_group(proc: subprocess.Popen | None) -> None:
 def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
               python_exe: str | None = None, *, isolation: str = "scaffold",
               bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
-              docker_cpuset: str | None = None) -> tuple[bool, str]:
+              docker_cpuset: str | None = None, broker_socket: str | None = None) -> tuple[bool, str]:
     """Run code with stdin, return (ok, stdout-or-error)."""
     # absolutize BEFORE the child runs with cwd=tempdir — a relative interpreter
     # path would otherwise resolve inside the tempdir and fail to spawn.
@@ -230,7 +247,7 @@ def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
     if isolation == "docker":
         if python_exe is not None:
             raise SandboxUnavailable("docker uses its pinned image interpreter, not python_exe")
-        return _run_docker(code, stdin, timeout, cpu_s, mem_mb, docker_image, docker_cpuset)
+        return _run_docker(code, stdin, timeout, cpu_s, mem_mb, docker_image, docker_cpuset, broker_socket)
     if isolation not in ("scaffold", "bubblewrap"):
         raise ValueError(f"unsupported isolation mode: {isolation}")
     with tempfile.TemporaryDirectory(prefix="codeexec_") as d:
