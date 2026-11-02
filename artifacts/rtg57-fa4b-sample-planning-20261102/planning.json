@@ -1,0 +1,261 @@
+{
+  "cells": {
+    "f16:off": {
+      "capped_responses": {
+        "OFF": {
+          "capped": 104,
+          "observed": 200,
+          "termination_unknown": 0
+        },
+        "ON": {
+          "capped": 103,
+          "observed": 200,
+          "termination_unknown": 0
+        }
+      },
+      "historical_pairs": 200,
+      "off_only": 0,
+      "on_only": 3,
+      "size_sensitivity": [
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.162,
+          "inside_margin_simulations": 81,
+          "monte_carlo_wilson_95": [
+            0.13230178838983928,
+            0.19685226576217005
+          ],
+          "sample_pairs": 200,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.262,
+          "inside_margin_simulations": 131,
+          "monte_carlo_wilson_95": [
+            0.22537626941723765,
+            0.30225291664246134
+          ],
+          "sample_pairs": 400,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.274,
+          "inside_margin_simulations": 137,
+          "monte_carlo_wilson_95": [
+            0.2367406256658206,
+            0.3147055762228011
+          ],
+          "sample_pairs": 800,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.378,
+          "inside_margin_simulations": 189,
+          "monte_carlo_wilson_95": [
+            0.3365807935394356,
+            0.42127954553318325
+          ],
+          "sample_pairs": 1600,
+          "simulations": 500
+        }
+      ]
+    },
+    "f16:on": {
+      "capped_responses": {
+        "OFF": {
+          "capped": 105,
+          "observed": 200,
+          "termination_unknown": 0
+        },
+        "ON": {
+          "capped": 104,
+          "observed": 200,
+          "termination_unknown": 0
+        }
+      },
+      "historical_pairs": 200,
+      "off_only": 2,
+      "on_only": 2,
+      "size_sensitivity": [
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.274,
+          "inside_margin_simulations": 137,
+          "monte_carlo_wilson_95": [
+            0.2367406256658206,
+            0.3147055762228011
+          ],
+          "sample_pairs": 200,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.712,
+          "inside_margin_simulations": 356,
+          "monte_carlo_wilson_95": [
+            0.6708105507601558,
+            0.749956728884146
+          ],
+          "sample_pairs": 400,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.934,
+          "inside_margin_simulations": 467,
+          "monte_carlo_wilson_95": [
+            0.9087605988391466,
+            0.9526214736402262
+          ],
+          "sample_pairs": 800,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 1.0,
+          "inside_margin_simulations": 500,
+          "monte_carlo_wilson_95": [
+            0.9923756595384479,
+            1.0
+          ],
+          "sample_pairs": 1600,
+          "simulations": 500
+        }
+      ]
+    },
+    "q8_0:off": {
+      "capped_responses": {
+        "OFF": {
+          "capped": 102,
+          "observed": 200,
+          "termination_unknown": 0
+        },
+        "ON": {
+          "capped": 104,
+          "observed": 200,
+          "termination_unknown": 0
+        }
+      },
+      "historical_pairs": 200,
+      "off_only": 2,
+      "on_only": 1,
+      "size_sensitivity": [
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.378,
+          "inside_margin_simulations": 189,
+          "monte_carlo_wilson_95": [
+            0.3365807935394356,
+            0.42127954553318325
+          ],
+          "sample_pairs": 200,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.756,
+          "inside_margin_simulations": 378,
+          "monte_carlo_wilson_95": [
+            0.7164951931439073,
+            0.791601144539778
+          ],
+          "sample_pairs": 400,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.922,
+          "inside_margin_simulations": 461,
+          "monte_carlo_wilson_95": [
+            0.8951464501266115,
+            0.9424186065238385
+          ],
+          "sample_pairs": 800,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.998,
+          "inside_margin_simulations": 499,
+          "monte_carlo_wilson_95": [
+            0.9887592932948532,
+            0.9996468636054407
+          ],
+          "sample_pairs": 1600,
+          "simulations": 500
+        }
+      ]
+    },
+    "q8_0:on": {
+      "capped_responses": {
+        "OFF": {
+          "capped": 104,
+          "observed": 200,
+          "termination_unknown": 0
+        },
+        "ON": {
+          "capped": 102,
+          "observed": 200,
+          "termination_unknown": 0
+        }
+      },
+      "historical_pairs": 200,
+      "off_only": 0,
+      "on_only": 2,
+      "size_sensitivity": [
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.412,
+          "inside_margin_simulations": 206,
+          "monte_carlo_wilson_95": [
+            0.369688475931219,
+            0.4556534079900142
+          ],
+          "sample_pairs": 200,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.588,
+          "inside_margin_simulations": 294,
+          "monte_carlo_wilson_95": [
+            0.5443465920099858,
+            0.630311524068781
+          ],
+          "sample_pairs": 400,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.722,
+          "inside_margin_simulations": 361,
+          "monte_carlo_wilson_95": [
+            0.6811514003636959,
+            0.7594633924713748
+          ],
+          "sample_pairs": 800,
+          "simulations": 500
+        },
+        {
+          "bootstrap_draws_per_simulation": 10000,
+          "fraction": 0.946,
+          "inside_margin_simulations": 473,
+          "monte_carlo_wilson_95": [
+            0.9225734384893529,
+            0.9626256498189425
+          ],
+          "sample_pairs": 1600,
+          "simulations": 500
+        }
+      ]
+    }
+  },
+  "input_manifest_sha256": "f74b54c19fd229f9e22d322e9b21184f8cc1ec5281e67ebde3edb45f5cb1107f",
+  "schema": "v11-fa4b.sample-planning.v1",
+  "scope": "Empirical capped-run discordance point estimates held fixed; Monte Carlo interval covers simulation error only. No uncertainty for true rates, corpus sampling, cap effects, quality, power guarantee, protocol amendment, or promotion. Zero observed discordance does not prove zero true discordance. Uncapped quality and runtime are unknown.",
+  "seed": 42,
+  "source_report_sha256": "edba0cccca5658887bb6de62448fdf3e28ccab0b747de8eced9862eedc1371cb"
+}
