@@ -19,9 +19,30 @@ def upstream():
         def do_POST(self):
             data = self.rfile.read(int(self.headers['Content-Length']))
             calls.append((self.path, data))
-            mode = json.loads(data).get('mode')
+            request = json.loads(data)
+            mode = request.get('mode')
+            if request.get('stream') is True:
+                content = request['messages'][0].get('content')
+                event = (b'data: {"choices":[{"delta":{"content":"hidden-secret"}}]}\n\n'
+                         if content == 'secret-sse' else
+                         b'data: {"choices":[{"delta":{"content":"hidden-"}}]}\n\n'
+                         b'data: {"choices":[{"delta":{"content":"secret"}}]}\n\n'
+                         if content == 'split-secret-sse' else
+                         b'data: {"x":"' + b'x' * 33000 + b'"}\n\n'
+                         if content == 'large-sse' else
+                         b'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n')
+                if content != 'missing-done':
+                    event += b'data: [DONE]\n\n'
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/event-stream')
+                self.send_header('Transfer-Encoding', 'chunked')
+                self.end_headers()
+                self.wfile.write(f'{len(event):x}\r\n'.encode() + event + b'\r\n0\r\n\r\n')
+                return
             body = (b'{"answer":"hidden-secret"}' if mode == 'secret' else
-                    b'x' * 70000 if mode == 'large' else b'{"answer":"ok"}')
+                    b'x' * 70000 if mode == 'large' else
+                    b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+                    if self.path == '/v1/chat/completions' else b'{"answer":"ok"}')
             self.send_response(302 if mode == 'redirect' else 200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(body)))
@@ -95,13 +116,40 @@ def test_client_tools_mode_fails_closed(tmp_path, upstream):
     with pytest.raises(BrokerRefusal):
         broker.handle({**request, 'path': '/chat'})
     for change in ({'x_tool_mode': 'repl'}, {'x_tool_mode': None}, {'x_escalation': 'auto'},
-                   {'x_memory': 'on'}, {'stream': True}, {'model': 'architect'},
+                   {'x_memory': 'on'}, {'stream': 'yes'}, {'model': 'architect'},
                    {'x_force_role': 'architect'}, {'messages': [{'role':'user','content':[{'type':'image'}]}]}):
         with pytest.raises(BrokerRefusal):
             broker.handle({**request, 'body': {**request['body'], **change}})
     assert not calls
-    assert broker.handle(request) == {'ok': True, 'body': {'answer': 'ok'}}
+    assert broker.handle(request)['body']['choices'][0]['message']['content'] == 'ok'
     assert calls[0][0] == '/v1/chat/completions'
+
+
+def test_sse_requires_done_and_refuses_reference_leak(tmp_path, upstream):
+    server, _ = upstream
+    endpoint = f'http://127.0.0.1:{server.server_port}/v1/chat/completions'
+    broker = LocalEndpointBroker(tmp_path / 'sock', endpoint, allowed_body_keys=CLIENT_BODY_KEYS,
+                                 profile='client-tools-v1', model='frontdoor', protected=('hidden-secret',))
+    request = {'token': broker.token, 'method': 'POST', 'path': '/v1/chat/completions',
+               'body': {**_client_body(), 'stream': True}}
+    assert broker.handle(request)['stream'] is True
+    for content in ('secret-sse', 'split-secret-sse', 'large-sse', 'missing-done'):
+        with pytest.raises(BrokerRefusal):
+            broker.handle({**request, 'body': {**request['body'],
+                          'messages': [{'role': 'user', 'content': content}]}})
+
+
+def test_multi_request_broker_rejects_replayed_id(tmp_path, upstream):
+    server, calls = upstream
+    broker = LocalEndpointBroker(tmp_path / 'sock', f'http://127.0.0.1:{server.server_port}/v1/chat/completions',
+                                 allowed_body_keys=CLIENT_BODY_KEYS, profile='client-tools-v1',
+                                 model='frontdoor', max_requests=2)
+    request = {'token': broker.token, 'request_id': 'a' * 32, 'method': 'POST',
+               'path': '/v1/chat/completions', 'body': _client_body()}
+    assert broker.handle(request)['ok'] is True
+    with pytest.raises(BrokerRefusal):
+        broker.handle(request)
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize('payload,accepted', [
@@ -154,6 +202,48 @@ def test_real_client_tools_socket(upstream):
             ok, output = _run_once(code, '', 15, 8, 256, isolation='docker',
                                    docker_image=os.environ['CODEEXEC_TEST_DOCKER_IMAGE'],
                                    docker_cpuset=os.environ['CODEEXEC_TEST_CPUSET'], broker_socket=str(path))
-            assert ok and json.loads(output) == {'ok': True, 'body': {'answer': 'ok'}}
+            assert ok and json.loads(output)['body']['choices'][0]['message']['content'] == 'ok'
     assert len(calls) == 1
     assert json.loads(calls[0][1])['x_tool_mode'] == 'client'
+
+
+@pytest.mark.skipif(not os.getenv('CODEEXEC_TEST_DOCKER_IMAGE') or not os.getenv('CODEEXEC_TEST_CPUSET'),
+                    reason='no explicit local image or claimed CPU set')
+def test_real_container_http_adapter(upstream):
+    import tempfile
+    server, calls = upstream
+    source = (Path(__file__).resolve().parents[1] / 'container_http_adapter.py').read_text()
+    with tempfile.TemporaryDirectory(prefix='evl46-adapter-', dir='/mnt/raid0/llm/tmp') as directory:
+        os.chmod(directory, 0o711)
+        path = Path(directory) / 'socket'
+        with LocalEndpointBroker(path, f'http://127.0.0.1:{server.server_port}/v1/chat/completions',
+                                 allowed_body_keys=CLIENT_BODY_KEYS, profile='client-tools-v1',
+                                 model='frontdoor', max_requests=2, protected=('/private/oracle',)) as broker:
+            code = f'''import http.client, json, threading
+scope = {{'__name__':'adapter'}}
+exec(compile({source!r}, 'adapter.py', 'exec'), scope)
+server = scope['make_server'](broker_socket='/broker/socket',token={broker.token!r},model='frontdoor',session='trial-1')
+thread = threading.Thread(target=server.serve_forever,daemon=True); thread.start()
+def call(path,body):
+    conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=3)
+    conn.request('POST',path,json.dumps(body),{{'Content-Type':'application/json'}})
+    response=conn.getresponse(); data=response.read(); ctype=response.getheader('Content-Type'); result=[response.status, data.decode() if ctype=='text/event-stream' else json.loads(data),ctype]; conn.close(); return result
+base={{'model':'frontdoor','messages':[{{'role':'user','content':'hello'}}], 'max_tokens':256}}
+results=[call('/admin',base),call('/v1/chat/completions',{{**base,'model':'architect'}}),call('/v1/chat/completions',base),call('/v1/chat/completions',{{**base,'stream':True,'stream_options':{{'include_usage':True}}}})]
+server.shutdown(); server.server_close(); thread.join()
+print(json.dumps(results))
+'''
+            ok, output = _run_once(code, '', 20, 10, 256, isolation='docker',
+                                   docker_image=os.environ['CODEEXEC_TEST_DOCKER_IMAGE'],
+                                   docker_cpuset=os.environ['CODEEXEC_TEST_CPUSET'], broker_socket=str(path))
+            assert ok, output
+            results = json.loads(output)
+            assert [result[0] for result in results] == [422, 422, 200, 200]
+            assert results[-2][1]['choices'][0]['message']['content'] == 'ok'
+            assert results[-1][2] == 'text/event-stream' and 'data: [DONE]' in results[-1][1]
+    assert len(calls) == 2
+    for index, (route, raw) in enumerate(calls):
+        body = json.loads(raw)
+        assert route == '/v1/chat/completions' and body['x_tool_mode'] == 'client'
+        assert body['x_memory'] == 'off' and body['x_escalation'] == 'off'
+        assert body['stream'] is bool(index) and body['model'] == 'frontdoor'
