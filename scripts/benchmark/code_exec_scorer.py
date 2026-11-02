@@ -24,13 +24,17 @@ docstring previously claimed RLIMIT_NPROC was set; it never was.
 
 The default remains the trusted-code scaffold. An explicit bubblewrap mode adds a
 separate user, PID and network namespace, a restricted read-only system runtime,
-and a private temporary filesystem. It fails closed if setup is unavailable; it
-does not hide tests assembled into the candidate program, bound process count,
-or establish a complete hostile-code security boundary.
+and a private temporary filesystem. Optional Docker mode uses an explicit,
+trusted local image ID and a no-network, read-only, non-root container with a
+process count limit; it changes the interpreter environment. Both fail closed
+if setup is unavailable. Neither hides tests assembled into the candidate
+program or establishes a complete hostile-code security boundary.
 """
 from __future__ import annotations
 
 import os
+import base64
+import json
 import re
 import resource
 import secrets
@@ -44,6 +48,86 @@ from typing import Any
 
 class SandboxUnavailable(RuntimeError):
     """Requested isolation could not be established; never score as a model failure."""
+
+
+def _run_docker(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
+                docker_image: str | None) -> tuple[bool, str]:
+    """Run in an isolated, caller-pinned local Python image; never mount host paths."""
+    if not docker_image or not re.fullmatch(r"sha256:[0-9a-f]{64}", docker_image):
+        raise SandboxUnavailable("docker mode requires an immutable local image ID")
+    name = f"codeexec-{secrets.token_hex(16)}"
+    marker = f"__docker_ready_{secrets.token_hex(16)}__"
+    payload = base64.b64encode(code.encode()).decode()
+    bootstrap = ("import base64,resource,sys; "
+                 "resource.setrlimit(resource.RLIMIT_CPU,(int(sys.argv[3]),int(sys.argv[3]))); "
+                 "resource.setrlimit(resource.RLIMIT_CORE,(0,0)); "
+                 "sys.stdout.write(sys.argv[1]); sys.stdout.flush(); "
+                 "exec(compile(base64.b64decode(sys.argv[2]),'<candidate>','exec'))")
+    def docker(*args: str, timeout_s: int = 15) -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(["docker", *args], capture_output=True, text=True,
+                                  timeout=timeout_s, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise SandboxUnavailable(f"docker command failed: {exc}") from exc
+    info = docker("image", "inspect", docker_image)
+    try:
+        image = json.loads(info.stdout)[0]
+        if info.returncode or image["Id"] != docker_image or image["Config"].get("Volumes"):
+            raise ValueError("image unavailable, ID mismatch, or declared volumes")
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        raise SandboxUnavailable(f"docker image preflight failed: {exc}") from exc
+    cid = None
+    try:
+        created = docker("create", "--pull=never", "--name", name,
+                         "--network=none", "--read-only", "--cap-drop=ALL",
+                         "--security-opt=no-new-privileges", "--pids-limit=64",
+                         "--memory", f"{mem_mb}m", "--cpus=1", "--user=65534:65534",
+                         "--tmpfs=/tmp:rw,nosuid,nodev,noexec,size=64m", "--workdir=/tmp",
+                         "--env=HOME=/tmp", "--env=PYTHONDONTWRITEBYTECODE=1",
+                         "--env=OPENBLAS_NUM_THREADS=1", "--env=OMP_NUM_THREADS=1",
+                         "--entrypoint=python3", "-i", docker_image, "-c", bootstrap, marker, payload, str(cpu_s))
+        cid = created.stdout.strip()
+        if created.returncode or not re.fullmatch(r"[0-9a-f]{64}", cid):
+            raise SandboxUnavailable(f"docker create failed: {created.stderr[-200:]}")
+        inspected = docker("inspect", cid)
+        try:
+            item = json.loads(inspected.stdout)[0]
+            host = item["HostConfig"]
+            valid = (inspected.returncode == 0 and item["Id"] == cid
+                     and host["NetworkMode"] == "none" and host["ReadonlyRootfs"] is True
+                     and host["Privileged"] is False and not item["Mounts"]
+                     and item["Config"]["User"] == "65534:65534"
+                     and "ALL" in host["CapDrop"] and host["PidsLimit"] == 64
+                     and "no-new-privileges" in host["SecurityOpt"]
+                     and host["Memory"] == mem_mb * 1024 * 1024
+                     and host["NanoCpus"] == 1000000000
+                     and host["Tmpfs"].get("/tmp") == "rw,nosuid,nodev,noexec,size=64m")
+            if not valid:
+                raise ValueError("container does not match isolation contract")
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise SandboxUnavailable(f"docker isolation preflight failed: {exc}") from exc
+        try:
+            run = subprocess.run(["docker", "start", "-ai", cid], input=stdin,
+                                 capture_output=True, text=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired as exc:
+            observed = exc.stdout or b""
+            if not observed.startswith(marker.encode() if isinstance(observed, bytes) else marker):
+                raise SandboxUnavailable("docker setup timed out") from exc
+            return False, "__timeout__"
+        except OSError as exc:
+            raise SandboxUnavailable(f"docker start failed: {exc}") from exc
+        if not run.stdout.startswith(marker):
+            raise SandboxUnavailable(f"docker setup failed: {run.stderr[-200:]}")
+        out = run.stdout[len(marker):]
+        return ((False, f"__exit_{run.returncode}__:{run.stderr[-200:]}")
+                if run.returncode else (True, out))
+    finally:
+        # Name is unique and ours, including when the create response was lost.
+        target = cid if cid and re.fullmatch(r"[0-9a-f]{64}", cid) else name
+        removed = docker("rm", "-f", target)
+        remaining = docker("inspect", target)
+        if remaining.returncode == 0 or "no such" not in remaining.stderr.lower():
+            raise SandboxUnavailable(f"docker cleanup could not be verified: {removed.stderr[-200:]}")
 
 
 def _bubblewrap_command(exe: str, src: Path, bwrap_exe: str, marker: str) -> list[str]:
@@ -112,13 +196,17 @@ def _kill_group(proc: subprocess.Popen | None) -> None:
 
 def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
               python_exe: str | None = None, *, isolation: str = "scaffold",
-              bwrap_exe: str = "/usr/bin/bwrap") -> tuple[bool, str]:
+              bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None) -> tuple[bool, str]:
     """Run code with stdin, return (ok, stdout-or-error)."""
     # absolutize BEFORE the child runs with cwd=tempdir — a relative interpreter
     # path would otherwise resolve inside the tempdir and fail to spawn.
     # absolute(), NOT resolve(): resolve() dereferences the venv's bin/python
     # symlink to the BASE interpreter, silently dropping the venv site-packages.
     exe = str(Path(python_exe).absolute()) if python_exe else sys.executable
+    if isolation == "docker":
+        if python_exe is not None:
+            raise SandboxUnavailable("docker uses its pinned image interpreter, not python_exe")
+        return _run_docker(code, stdin, timeout, cpu_s, mem_mb, docker_image)
     if isolation not in ("scaffold", "bubblewrap"):
         raise ValueError(f"unsupported isolation mode: {isolation}")
     with tempfile.TemporaryDirectory(prefix="codeexec_") as d:
@@ -181,7 +269,7 @@ def score_code(
     timeout: int = 10,
     cpu_s: int = 8,
     mem_mb: int = 1024,
-    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap",
+    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
 ) -> dict[str, Any]:
     """Score generated code against test_cases.
 
@@ -196,9 +284,9 @@ def score_code(
     passed, detail = 0, []
     for tc in test_cases:
         if "assert" in tc:
-            ok, out = _run_once(code + "\n\n" + tc["assert"], "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe)
+            ok, out = _run_once(code + "\n\n" + tc["assert"], "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image)
         else:
-            ok, out = _run_once(code, tc.get("input", ""), timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe)
+            ok, out = _run_once(code, tc.get("input", ""), timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image)
             if ok:
                 ok = out.strip() == str(tc.get("output", "")).strip()
         passed += int(ok)
@@ -216,7 +304,7 @@ def score_functional(
     timeout: int = 10,
     cpu_s: int = 8,
     mem_mb: int = 1024,
-    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap",
+    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
 ) -> bool:
     """HumanEval/MBPP-style: the model completes a function; `test_code` is a
     `check(candidate)` body of asserts. Pass iff the assembled program runs clean.
@@ -231,7 +319,7 @@ def score_functional(
     if not re.search(rf"\bdef\s+{re.escape(entry_point)}\s*\(", code):
         code = (prompt or "") + "\n" + code
     program = f"{code}\n\n{test_code}\n\ncheck({entry_point})\n"
-    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe)
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image)
     return ok
 
 
@@ -244,7 +332,7 @@ def score_unittest(
     timeout: int = 30,
     cpu_s: int = 25,
     mem_mb: int = 4096,
-    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap",
+    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap", docker_image: str | None = None,
 ) -> bool:
     """BigCodeBench-style: the model implements `entry_point` (task_func); the
     suite ships a unittest.TestCase in `test_code`. Pass iff the whole unittest
@@ -258,7 +346,7 @@ def score_unittest(
         code = (code_prompt or "") + "\n" + code
     program = (f"{code}\n\n{test_code}\n\n"
                "import unittest as _ut\n_ut.main(argv=['x'], exit=True)\n")
-    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, python_exe=python_exe, isolation=isolation, bwrap_exe=bwrap_exe)
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, python_exe=python_exe, isolation=isolation, bwrap_exe=bwrap_exe, docker_image=docker_image)
     return ok
 
 

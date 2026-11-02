@@ -1,5 +1,6 @@
 """Isolation is opt-in and setup failures must never become scorer verdicts."""
 import subprocess
+import os
 
 import pytest
 
@@ -64,3 +65,25 @@ def test_readiness_marker_is_removed_from_candidate_output(monkeypatch, tmp_path
                                    python_exe="/usr/bin/python3", isolation="bubblewrap",
                                    bwrap_exe=str(executable))
     assert ok and output == "3\n"
+
+
+def test_docker_requires_image_id():
+    with pytest.raises(scorer.SandboxUnavailable, match="immutable local image"):
+        scorer.score_code("print(3)", [{"output": "3"}], isolation="docker",
+                          docker_image="python:latest")
+
+
+@pytest.mark.skipif(not os.getenv("CODEEXEC_TEST_DOCKER_IMAGE"), reason="no explicit local image")
+def test_docker_actual_boundary_and_timeout(tmp_path):
+    image = os.environ["CODEEXEC_TEST_DOCKER_IMAGE"]
+    secret = tmp_path / "host-secret"
+    secret.write_text("host-only")
+    code = (f"import socket\ntry:\n open({str(secret)!r}).read()\n print('LEAK')\n"
+            "except OSError:\n print('denied')\n"
+            "s=socket.socket(); s.settimeout(1)\nprint(s.connect_ex(('1.1.1.1',80)))\n")
+    ok, out = scorer._run_once(code, "", 15, 8, 256, isolation="docker", docker_image=image)
+    assert ok and out.splitlines() == ["denied", "101"]
+    assert scorer.score_code("print(3)", [{"output": "3"}], isolation="docker",
+                             docker_image=image)["correct"]
+    assert scorer._run_once("import time; time.sleep(30)", "", 2, 8, 256,
+                            isolation="docker", docker_image=image) == (False, "__timeout__")
