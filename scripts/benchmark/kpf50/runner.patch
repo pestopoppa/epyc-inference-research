@@ -1,0 +1,38 @@
+--- kpf18_gate.py
++++ kpf50_gate.py
+@@ -817,0 +818,4 @@
++        env["LLAMA_KPF50_TIMING"] = "1"
++        env["LLAMA_KPF30_MIXED_BLOCKS"] = "1"
++        env["LLAMA_KPF30_TARGET_ONLY"] = "1"
++        env["LLAMA_KPF50_MASK_SHARED_TRUNK"] = "1" if "-scenario-mask-" in self.label else "0"
+@@ -820 +824 @@
+-        note["set"].update({k: env[k] for k in ("HSA_TOOLS_LIB", "ROCP_TOOL_LIB", "ROCP_METRICS", "ROCP_INPUT", "ROCP_OUTPUT_DIR", "ROCP_TIMESTAMP_ON")})
++        note["set"].update({k: env[k] for k in ("HSA_TOOLS_LIB", "ROCP_TOOL_LIB", "ROCP_METRICS", "ROCP_INPUT", "ROCP_OUTPUT_DIR", "ROCP_TIMESTAMP_ON", "LLAMA_KPF50_TIMING", "LLAMA_KPF30_MIXED_BLOCKS", "LLAMA_KPF30_TARGET_ONLY", "LLAMA_KPF50_MASK_SHARED_TRUNK")})
+@@ -1261,0 +1266,3 @@
++        rec["kpf50_diagnostic"] = {"mask_shared_trunk": srv.env_note["set"].get("LLAMA_KPF50_MASK_SHARED_TRUNK") == "1", "synchronized_observer": True,
++                                   "performance_claim": False, "quality_claim": False}
++        rec["grading_note"] = "KPF50 diagnostic only: synchronized observer and optional trunk masking change scheduling and outputs; no serving performance or quality claim."
+@@ -1751,4 +1758,13 @@
+-    for w, arm in enumerate(["fork_off", "fork_on", "fork_off", "fork_on"]):
+-        wid = f"{a.window_id}-item7-{'AB'[w % 2]}{w // 2 + 1}"
+-        fm = a.fork_min if arm == "fork_on" else 0
+-        srv = Server(ctx, f"item7-{wid}-{arm}-{utc_tag()}", Path(a.fork_bin), fm)
++    for w, scenario in enumerate(["full", "mask", "mask", "full"]):
++        arm = "fork_on"  # Both arms must fork the same 60k trunk.
++        wid = f"{a.window_id}-item7-{w + 1}-{scenario}"
++        fm = a.fork_min
++        srv = Server(ctx, f"item7-{wid}-{arm}-scenario-{scenario}-{utc_tag()}", Path(a.fork_bin), fm)
++        def clock_sample(wid=wid, stage="before"):
++            env = os.environ.copy()
++            env["HSA_OVERRIDE_CPU_AFFINITY_DEBUG"] = "0"
++            env["LD_LIBRARY_PATH"] = "/opt/rocm/lib"
++            path = ctx.out / "clocks" / f"{wid}-{stage}.json"
++            path.parent.mkdir(parents=True, exist_ok=True)
++            subprocess.run([sys.executable, str(HERE / "hsa_clock.py"), "--out", str(path)], env=env, check=True)
++        steps.append(Step(f"{wid}: bracketed HSA/host clock before", 1, clock_sample))
+@@ -1816,0 +1833,2 @@
++        steps.append(Step(f"{wid}: bracketed HSA/host clock after", 1,
++                          lambda wid=wid: clock_sample(wid=wid, stage="after")))
+@@ -1819 +1837 @@
+-        write_json(ctx.out / "item7_summary.json", {**summary, "note": "pairs windows A1/B1/A2/B2; no verdict word"})
++        write_json(ctx.out / "item7_summary.json", {**summary, "note": "fork-on full/mask/mask/full prospective diagnostic; only first four-sequence eligible step is comparable; no gate verdict"})

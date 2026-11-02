@@ -1,0 +1,7 @@
+{
+  "schema": "epyc.kpf50.runner-source.v1",
+  "source_sha256": "203740c52f3393ca23d13ad62d5b101351e88fe853cdbe4e4a428412b5bbf430",
+  "result_sha256": "a7802161340a1f01a1cdc6a8d9e32c7f5d84b4ad0244194e9f736583b19658b6",
+  "source_description": "retained KPF50 rocprof-instrumented KPF18 runner, local 2026-11-02",
+  "arms_sha256": "a4054741fc34d12d1f636882b2e69cace4ae681faa6ae1c784ace1bf2c891a24"
+}
