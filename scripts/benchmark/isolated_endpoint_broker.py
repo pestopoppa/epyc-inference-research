@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-MAX_REQUEST = 16_384
+MAX_REQUEST = 131_072
 MAX_RESPONSE = 65_536
 MAX_SSE = 32_768
 ALLOWED_PATHS = frozenset(("/chat", "/v1/chat/completions"))

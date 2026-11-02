@@ -70,7 +70,7 @@ def test_selected_endpoint_and_refusals(tmp_path, upstream):
     broker = LocalEndpointBroker(tmp_path / 'broker.sock', endpoint, allowed_body_keys=frozenset({'prompt', 'mode', 'x'}), protected=('/private/oracle', 'hidden-secret'))
     good = {'token': broker.token, 'method': 'POST', 'path': '/chat', 'body': {'prompt': 'hello'}}
     for change in ({'path': '/admin'}, {'method': 'GET'}, {'token': 'wrong'},
-                   {'body': {'prompt': '/private/oracle'}}, {'body': {'x': 'z' * 17000}},
+                   {'body': {'prompt': '/private/oracle'}}, {'body': {'x': 'z' * 132000}},
                    {'body': {'unauthorized_key': True}}):
         with pytest.raises(BrokerRefusal):
             broker.handle({**good, **change})

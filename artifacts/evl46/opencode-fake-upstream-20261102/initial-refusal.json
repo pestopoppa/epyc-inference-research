@@ -1,0 +1,20 @@
+{
+  "schema": "evl46-opencode-fake-probe.v1",
+  "status": "refused_before_upstream",
+  "scope": "actual OpenCode executable in a no-network container against an HTTP adapter and synthetic model server; no model inference",
+  "open_code_version": "1.18.31",
+  "binary_sha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
+  "container_image": "sha256:e8c7d0023b96514a4c94b07bb978139f4d186552b40e5fc54cd90196fe4757a7",
+  "base_image": "sha256:d4372bb352f52720cd04874bad4c05276ae7eb996e9be47a633405c45b87d68d",
+  "adapter_sha256": "67205d51d62262107ed60d6f769eee8e0bca5167fd758aa87cdb99328097b38f",
+  "request_limit_bytes": 16384,
+  "http_status": 422,
+  "endpoint_path": "/v1/chat/completions",
+  "observed_header_shape": {"content_type": "application/json", "content_length_count": 1, "transfer_encoding": null},
+  "content_length_value": null,
+  "decoded_request_count": 0,
+  "upstream_request_count": 0,
+  "host_reference_canary_unchanged": true,
+  "interpretation": "The adapter refused before decoding. Given the observed framing, its Content-Length parse or 16384-byte bound is the remaining gate; the exact header value was not captured. No tool call or live inference occurred.",
+  "evidence_scope": "Historical source-bound operational observation; not live isolation, task completion, model efficacy, or a belief measurement tuple."
+}

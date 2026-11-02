@@ -14,7 +14,7 @@ import socket
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-MAX_REQUEST = 16_384
+MAX_REQUEST = 131_072
 MAX_RESPONSE = 65_536
 BODY_KEYS = frozenset(("model", "messages", "tools", "tool_choice", "max_tokens",
                        "temperature", "seed", "stream", "stream_options", "x_tool_mode", "x_escalation",
@@ -61,17 +61,24 @@ def make_server(*, broker_socket: str, token: str, model: str, session: str,
             self.connection.settimeout(timeout)
             try:
                 lengths = self.headers.get_all('Content-Length', [])
+                self.server.observed_headers.append({'path': self.path,
+                    'length_count': len(lengths), 'content_length': lengths[0] if len(lengths) == 1 else None,
+                    'transfer_encoding': self.headers.get('Transfer-Encoding'),
+                    'content_type': self.headers.get_content_type()})
                 if (self.path != '/v1/chat/completions' or len(lengths) != 1
                         or not lengths[0].isdecimal() or int(lengths[0]) > MAX_REQUEST
                         or self.headers.get('Transfer-Encoding')
                         or self.headers.get_content_type() != 'application/json'):
                     raise ValueError('request refused')
                 body = json.loads(self.rfile.read(int(lengths[0])))
+                self.server.observed_keys.append(sorted(body) if isinstance(body, dict) else [])
                 if not isinstance(body, dict) or not set(body).issubset(BODY_KEYS):
+                    self.server.observed_stages.append('body_keys_refused')
                     raise ValueError('body refused')
                 fixed = {'x_tool_mode': 'client', 'x_escalation': 'off', 'x_memory': 'off',
                          'model': model, 'x_session_id': session}
                 if any(key in body and body[key] != value for key, value in fixed.items()):
+                    self.server.observed_stages.append('fixed_setting_refused')
                     raise ValueError('fixed setting conflict')
                 body.update(fixed)
                 if 'stream' not in body:
@@ -97,7 +104,9 @@ def make_server(*, broker_socket: str, token: str, model: str, session: str,
                     raise ValueError('invalid broker response')
                 result = json.loads(reply)
                 if not isinstance(result, dict) or result.get('ok') is not True:
+                    self.server.observed_stages.append('broker_refused')
                     raise ValueError('broker refused')
+                self.server.observed_stages.append('broker_accepted')
                 if body['stream']:
                     if result.get('stream') is not True or not isinstance(result.get('data_b64'), str):
                         raise ValueError('invalid stream response')
@@ -118,4 +127,7 @@ def make_server(*, broker_socket: str, token: str, model: str, session: str,
 
     server = HTTPServer(('127.0.0.1', 0), Handler)
     server.timeout = timeout
+    server.observed_keys = []
+    server.observed_headers = []
+    server.observed_stages = []
     return server
