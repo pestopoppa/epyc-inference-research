@@ -22,6 +22,7 @@ def test_reject_truncated_parent_but_allow_virtual_anchor(tmp_path):
     assert not report['valid']
     assert report['issues'][0]['status'] == 'parent_turn_outside_retained_parent'
     assert report['issues'][0]['requests'] == 1
+    assert report['unknown_timing'] == [{'session': 'c', 'turn': 0, 'status': 'timestamp_unknown'}]
     assert 'prompt' not in json.dumps(report)
     anchor = tmp_path / 'anchor'
     anchor.mkdir()

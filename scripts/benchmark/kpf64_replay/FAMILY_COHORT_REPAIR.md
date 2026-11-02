@@ -9,6 +9,8 @@ remains a partial observation and does not establish the F–FB contrast.
 and each selected session, reports each invalid child, its source hash and request count,
 and refuses parent positions outside a replayable parent's retained turns, unlinked
 children, inconsistent lineage, duplicate IDs, count mismatch and reversed timestamps.
+Missing timestamps remain explicitly `unknown_timing`, not reconstructed or silently passed
+as timed observations; the prospective amendment must decide their treatment.
 Virtual anchor parents remain explicitly distinct: their bursts are ordered by the
 recorded parent-turn ordinal and no parent request is invented. The report contains no
 transcript text. `--requests` additionally compares the planned keys to the actual JSONL:

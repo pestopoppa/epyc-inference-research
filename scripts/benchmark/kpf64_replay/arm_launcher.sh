@@ -117,6 +117,7 @@ for arg in "${DARGS[@]}" "${EXTRA[@]}"; do
   case "$arg" in --children) EXPECT_ARG=children ;; --only) EXPECT_ARG=only ;;
     --children=*) AUDIT_CHILDREN="${arg#*=}" ;; --only=*) AUDIT_ONLY="${arg#*=}" ;; esac
 done
+[ -z "$EXPECT_ARG" ] || { echo "arm_launcher: missing value for $EXPECT_ARG" >&2; exit 2; }
 AUDIT_ARGS=(--sessions "$SESSIONS" --children "$AUDIT_CHILDREN" --out "$OUT/cohort_audit.json")
 [ -z "$AUDIT_ONLY" ] || AUDIT_ARGS+=(--only "$AUDIT_ONLY")
 python3 "$HERE/cohort_audit.py" "${AUDIT_ARGS[@]}" || {

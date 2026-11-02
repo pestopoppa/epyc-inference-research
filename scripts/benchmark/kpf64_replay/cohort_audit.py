@@ -25,7 +25,7 @@ def audit_cohort(directory, children='bursts', only=None):
     selected = set(only) if only else {e['id'] for e in entries if not e.get('parent')}
     if not selected <= {e['id'] for e in entries if not e.get('parent')}:
         raise ValueError('selected id is not a manifest parent')
-    problems, sessions, expected = [], [], set()
+    problems, unknown_timing, sessions, expected = [], [], [], set()
     for parent_id in sorted(selected):
         parent_path = directory / f'{parent_id}.json'
         parent = json.loads(parent_path.read_text())
@@ -72,11 +72,13 @@ def audit_cohort(directory, children='bursts', only=None):
                              'source_hash': by_id[sid].get('source_hash')})
             for k, turn in enumerate(sess['turns']):
                 start, end = turn.get('ts_start'), turn.get('ts_end')
-                if isinstance(start, (int, float)) and isinstance(end, (int, float)) and start > end:
+                if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+                    unknown_timing.append({'session': sid, 'turn': k, 'status': 'timestamp_unknown'})
+                elif start > end:
                     problems.append({'session': sid, 'turn': k, 'status': 'reversed_timestamp'})
     return {'schema': 'kpf64.cohort-audit.v1', 'manifest_sha256': _sha(manifest_path),
             'sessions': sessions, 'expected': sorted(expected), 'issues': problems,
-            'valid': not problems}
+            'unknown_timing': unknown_timing, 'valid': not problems}
 
 
 def audit_coverage(expected, path):
