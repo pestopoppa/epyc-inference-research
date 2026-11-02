@@ -24,6 +24,7 @@ import urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import kvu126_capture
+import kvu126_identity
 
 HERE = Path(__file__).resolve().parent
 ART = HERE.parent
@@ -611,8 +612,9 @@ def run_launch(a, la, outroot, corpus, summary):
             summary(dict(launch=la["id"], cell="loadonly", result="OK", **facts)); return
         if getattr(a, "unique_cells_metric", ""):
             try:
+                a.identity_verifier.check(srv.proc.pid)
                 kvu126_capture.read_gauge(a.port, a.unique_cells_metric)
-            except kvu126_capture.CaptureError as e:
+            except (kvu126_capture.CaptureError, kvu126_identity.IdentityError) as e:
                 summary(dict(launch=la["id"], cell="-", result="OCCUPANCY_UNSUPPORTED", reason=str(e)))
                 a.refused = True
                 return
@@ -646,6 +648,23 @@ def cell_header(cl, a, la, Lname, pmode, srv, facts):
              f"mtp={la['mtp']} waves={a.waves} n_predict={a.npredict}\nARGV {json.dumps(srv.prefix + srv.argv)}\n"
              f"ENV {json.dumps({k: srv.env.get(k) for k in PROD_ENV})}\nBINARY {os.path.realpath(srv.argv[0])} LINKAGE {json.dumps(srv.linkage())}\n"
              f"LOADFACTS {json.dumps(facts)}\nPHYSICS {json.dumps(physics(la['np'], LS[Lname], la['mtp']))}\n")
+
+def start_identity_sampler(a, srv):
+    before = a.identity_verifier.check(srv.proc.pid)
+    callback = lambda: a.identity_verifier.fast_check(srv.proc.pid, before)
+    sampler = kvu126_capture.Sampler(a.port, a.unique_cells_metric, identity_check=callback)
+    sampler.start()
+    return sampler, before
+
+def finish_identity_sampler(a, srv, sampler, before, recs, pool):
+    captured = sampler.finish(recs, pool)
+    after = a.identity_verifier.check(srv.proc.pid)
+    keys = ("pid_birth_identity", "binary_sha256", "model_sha256", "mapped_dso_sha256")
+    if any(before[key] != after[key] for key in keys):
+        raise kvu126_identity.IdentityError("runtime identity changed during wave")
+    if any(s.get("pid_birth_identity") != before["pid_birth_identity"] for s in captured["samples"]):
+        raise kvu126_identity.IdentityError("metric sample lacks the owned process identity")
+    return captured, {"before": before, "after": after}
 
 def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio, off):
     L, np_ = LS[Lname], la["np"]
@@ -717,9 +736,7 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                                "Summarize the document above in detail.\n")
         bar = threading.Barrier(nclients)
         t0 = time.time()
-        sampler = kvu126_capture.Sampler(a.port, a.unique_cells_metric) if getattr(a, "unique_cells_metric", "") and w > 0 else None
-        if sampler:
-            sampler.start()
+        sampler, identity_before = start_identity_sampler(a, srv) if getattr(a, "unique_cells_metric", "") and w > 0 else (None, None)
         try:
             with ThreadPoolExecutor(nclients) as ex:
                 recs = list(ex.map(lambda sp: one_request(a.port, sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0] if pmode == "depth" else None), enumerate(prompts)))
@@ -741,8 +758,8 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                   n_reprefill=(sum(1 for r in recs if (r["prompt_n"] or 0) > 0.5 * ntok) if (pmode == "depth" and w > 0) else None))
         if sampler:
             try:
-                wv["occupancy_capture"] = sampler.finish(recs, la["c"])
-            except kvu126_capture.CaptureError as e:
+                wv["occupancy_capture"], wv["runtime_identity"] = finish_identity_sampler(a, srv, sampler, identity_before, recs, la["c"])
+            except (kvu126_capture.CaptureError, kvu126_identity.IdentityError) as e:
                 a.refused = True
                 wv["occupancy_capture_error"] = str(e)
         waves.append(wv)
@@ -772,6 +789,7 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
             wf.write(json.dumps(captured) + "\n")
             if w.get("occupancy_capture"):
                 kvu126_capture.write_bound_record(cdir, w["wave"], captured["row_sha256"], w["occupancy_capture"])
+                kvu126_identity.write_runtime_receipt(cdir, w["wave"], captured["row_sha256"], w["runtime_identity"]["before"], w["runtime_identity"]["after"])
     row = finalize_row(row, a, la, srv, facts, loadavg)
     row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close()
@@ -966,9 +984,7 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
             rest.append(dict(slot=i, n_restored=r.get("n_restored", r.get("n_tokens")), ms=round((time.time() - t0) * 1000)))
         sfx = [suffix_tokens(a.port, corpus, 200) for _ in range(active)]
         bar = threading.Barrier(active); t0 = time.time()
-        sampler = kvu126_capture.Sampler(a.port, a.unique_cells_metric) if getattr(a, "unique_cells_metric", "") and w > 0 else None
-        if sampler:
-            sampler.start()
+        sampler, identity_before = start_identity_sampler(a, srv) if getattr(a, "unique_cells_metric", "") and w > 0 else (None, None)
         try:
             with ThreadPoolExecutor(active) as ex:
                 recs = list(ex.map(lambda sp: one_request(a.port, docs[sp[0]][:D] + sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0]), enumerate(sfx)))
@@ -990,8 +1006,8 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
                   n_reprefill=sum(1 for r in recs if (r["prompt_n"] or 0) > 0.5 * D))
         if sampler:
             try:
-                wv["occupancy_capture"] = sampler.finish(recs, la["c"])
-            except kvu126_capture.CaptureError as e:
+                wv["occupancy_capture"], wv["runtime_identity"] = finish_identity_sampler(a, srv, sampler, identity_before, recs, la["c"])
+            except (kvu126_capture.CaptureError, kvu126_identity.IdentityError) as e:
                 a.refused = True
                 wv["occupancy_capture_error"] = str(e)
         waves.append(wv); cl.write("WAVE " + json.dumps(wv) + "\n"); cl.flush()
@@ -1019,6 +1035,7 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
             wf.write(json.dumps(captured) + "\n")
             if w.get("occupancy_capture"):
                 kvu126_capture.write_bound_record(cdir, w["wave"], captured["row_sha256"], w["occupancy_capture"])
+                kvu126_identity.write_runtime_receipt(cdir, w["wave"], captured["row_sha256"], w["runtime_identity"]["before"], w["runtime_identity"]["after"])
     row = finalize_row(row, a, la, srv, facts, loadavg); row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close(); summary(row)
 
@@ -1131,6 +1148,9 @@ def main():
     p.add_argument("--binary", default=str(BIN), help="server binary for the plain arms (default: production v10 kernel store)")
     p.add_argument("--extra-argv", default="", help="extra server argv for ALL arms (space separated)")
     p.add_argument("--unique-cells-metric", default="", help="opt in to a source-verified native unique-cell Prometheus gauge; stock server lacks one")
+    p.add_argument("--identity-build-receipt", default="", help="build-time identity receipt for the instrument")
+    p.add_argument("--identity-build-sha256", default="", help="predeclared SHA-256 of that build receipt")
+    p.add_argument("--identity-model-sha256", default="", help="predeclared full target model SHA-256")
     p.add_argument("--fork-binary", default="", help="cross-slot prefix-fork build; enables the shared_fork prompt-mode arm")
     p.add_argument("--fork-min-tokens", type=int, default=1024, help="value for --slot-fork-min-tokens in the shared_fork arm (0 = off)")
     p.add_argument("--aba-key", default="", help="KVU-12.4: A/B pairing key; with --aba-ledger, refuse a launch whose argv differs (beyond KV mode) from an earlier launch with the same key")
@@ -1144,6 +1164,8 @@ def main():
     a = p.parse_args()
     if a.unique_cells_metric and a.unique_cells_metric != kvu126_capture.UNIQUE_CELLS_METRIC:
         p.error("--unique-cells-metric must name the supported native unique-cell gauge")
+    if a.unique_cells_metric and (not a.identity_build_receipt or not re.fullmatch(r"[0-9a-f]{64}", a.identity_build_sha256) or not re.fullmatch(r"[0-9a-f]{64}", a.identity_model_sha256)):
+        p.error("unique-cell capture requires a pinned build receipt and model digest")
     if a.unique_cells_metric and "--metrics" not in a.extra_argv.split():
         a.extra_argv += " --metrics"
     if a.port in range(8000, 8201):
@@ -1209,7 +1231,7 @@ def main():
             f.write(json.dumps(row) + "\n")
         print("SUMMARY " + json.dumps({k: row.get(k) for k in ("launch", "cell", "result", "prefill_tps_med", "ttft_s_med", "decode_tps_sum_med", "agg_e2e_med")}), flush=True)
     print(f"corpus sha256={corpus.sha} files={corpus.nfiles} chars={len(corpus.text)}", flush=True)
-    r = subprocess.run([LINKAGE, str(BIN)], capture_output=True, text=True)
+    r = subprocess.run([LINKAGE, str(a.binary)], capture_output=True, text=True)
     print("verify_ggml_linkage rc=%d\n%s%s" % (r.returncode, r.stdout[-600:], r.stderr[-300:]), flush=True)
     if r.returncode != 0:
         sys.exit("verify_ggml_linkage failed; refusing to measure")
@@ -1223,8 +1245,18 @@ def main():
     if a.gates:
         run_gates(a, out, corpus); print("DONE", flush=True); return
     a.refused = False
-    for la in ls:
-        run_launch(a, la, out, corpus, summary)
+    a.identity_verifier = None
+    try:
+        if a.unique_cells_metric:
+            if kvu126_identity.sha256_file(a.identity_build_receipt) != a.identity_build_sha256:
+                sys.exit("build receipt digest mismatch; refusing to measure")
+            build_receipt = json.loads(Path(a.identity_build_receipt).read_text())
+            a.identity_verifier = kvu126_identity.RuntimeVerifier(MODEL, a.identity_model_sha256, build_receipt)
+        for la in ls:
+            run_launch(a, la, out, corpus, summary)
+    finally:
+        if a.identity_verifier:
+            a.identity_verifier.close()
     print("DONE", flush=True)
     if a.refused:
         sys.exit(3)          # a REFUSED_OVERSIZE cell is a failed cell, never a quiet pass

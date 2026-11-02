@@ -41,8 +41,9 @@ def read_gauge(port, name, timeout=2):
 
 
 class Sampler:
-    def __init__(self, port, metric, interval_s=0.25):
+    def __init__(self, port, metric, interval_s=0.25, identity_check=None):
         self.port, self.metric, self.interval_s = port, metric, interval_s
+        self.identity_check = identity_check
         self.samples, self.errors = [], []
         self.done = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -51,10 +52,14 @@ class Sampler:
         while not self.done.is_set():
             start = time.monotonic()
             try:
+                before = self.identity_check() if self.identity_check else None
                 value, raw = read_gauge(self.port, self.metric)
+                after = self.identity_check() if self.identity_check else None
+                if before != after:
+                    raise CaptureError("process identity changed during metric request")
                 self.samples.append({"request_start_monotonic_s": start, "monotonic_s": time.monotonic(),
-                                     "unique_cells": value, "metrics_text": raw})
-            except CaptureError as exc:
+                                     "unique_cells": value, "metrics_text": raw, "pid_birth_identity": after})
+            except Exception as exc:
                 self.errors.append(str(exc))
             self.done.wait(self.interval_s)
 

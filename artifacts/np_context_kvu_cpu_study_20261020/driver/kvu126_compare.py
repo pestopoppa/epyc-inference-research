@@ -99,6 +99,7 @@ def wave_observation(root, item, spec, min_samples):
             "identity": {k: row.get(k) for k in ("binary_sha256", "model", "mtp", "draft_depth", "cpu_list", "threads", "prompt_mode", "cache_idle_slots_argv")},
             "occupancy_source": occupancy["native_source"], "occupancy_source_sha256": occupancy["native_source_sha256"],
             "occupancy_samples": observed, "occupancy_median": statistics.median(observed),
+            "sample_pid_birth_identities": [sample.get("pid_birth_identity") for sample in samples],
             "prompt_n": row["prompt_n"], "resume_cache_n": row["cache_n"],
             "decode_tps_sum": row["decode_tps_sum"]}
 
@@ -207,6 +208,8 @@ def analyze_prospective(plan, records, root):
             receipt = json.loads(read_pinned(root, entry["runtime_receipt"]))
             if receipt.get("row_sha256") != observation["row_sha256"]:
                 raise ValueError(f"runtime receipt not bound to wave for {name}")
+            if any(value != receipt["pid_birth_identity"] for value in observation["sample_pid_birth_identities"]):
+                raise ValueError(f"sample process identity missing or mismatched for {name}")
             for key, value in observation["identity"].items():
                 if value != identity[key]:
                     raise ValueError(f"producer wave identity differs: {key}")

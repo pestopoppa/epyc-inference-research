@@ -37,8 +37,8 @@ class ComparisonTest(unittest.TestCase):
         wave = self.write_json(name + ".jsonl", row)
         native = {"schema": "epyc.kvu126.native_unique_cells.v1", "row_sha256": row["row_sha256"],
                   "decode_start_monotonic_s": 10.0, "decode_end_monotonic_s": 20.0,
-                  "samples": [{"monotonic_s": 11.0, "unique_cells": occupancy},
-                              {"monotonic_s": 19.0, "unique_cells": occupancy + 100}]}
+                  "samples": [{"monotonic_s": 11.0, "unique_cells": occupancy, "pid_birth_identity": "1:123"},
+                              {"monotonic_s": 19.0, "unique_cells": occupancy + 100, "pid_birth_identity": "1:123"}]}
         source = self.write_json(name + "-raw-native.json", native)
         native.update(native_source=source["path"], native_source_sha256=source["sha256"])
         obs = {"wave_file": wave, "wave": 1, "occupancy_file": self.write_json(name + "-native.json", native)}
