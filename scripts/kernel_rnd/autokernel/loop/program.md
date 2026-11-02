@@ -824,6 +824,13 @@ real work; they are simply not what this loop can build, gate and A/B:
 
 ## Settled — do not re-open without new evidence
 
+- **Loop-champion per-commit attribution is inflated.** The 36 commit subjects on
+  `ak/loop-champion-20260828` report cumulative gains that compound to +171.7%
+  (sum +101.8%), whereas the measured effect of the block was +8.524%. Those
+  individual percentages are not marginal effects and must not be added or
+  compounded as such. See `epyc-root/handoffs/active/autokernel-rebuild-program.md`
+  R18-C and `autokernel-champion-aggregate.md` CH-16 for the recorded scope.
+
 - **`MMQ_MFMA` OFF.** +23.09% on the 0.5B toy, **+0.50%** on Qwen3.8-27B. Real where
   it was taken, worth nothing where the fleet runs.
 - **`ubatch 512→1024`.** A NULL ARM: llama.cpp clamps `n_ubatch = min(n_batch,
