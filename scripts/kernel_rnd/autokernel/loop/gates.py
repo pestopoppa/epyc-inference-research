@@ -2796,7 +2796,8 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                    require_reference: bool = False,
                    params_filter: str | None = None,
                    environment_overrides: tuple[tuple[str, str], ...] = (),
-                   expected_cases: int | None = None) -> Verdict:
+                   expected_cases: int | None = None,
+                   _boundary_case_set: bool = False) -> Verdict:
     """`test-backend-ops` on the op the patch touches. The real correctness gate.
 
     THE DEFECT THIS SHAPE EXISTS TO PREVENT. An older binary did not accept
@@ -2837,6 +2838,8 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
         # Run it under the actual treatment's loader/env and CPU/NUMA prefix.
         argv = [*resolved_recipe.topology_prefix, *argv]
         environment = dict(resolved_recipe.launch_env)
+    # The selector belongs to this gate, not inherited launcher state.
+    environment.pop("AUTOKERNEL_BOUNDARY_CASE_SET", None)
     if environment_overrides:
         environment = {**environment, **dict(environment_overrides)}
     if require_reference:
@@ -2865,6 +2868,9 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
         return Verdict("oracle_unavailable", False,
                        "seeded reference suite output exceeds inspection bound")
     plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    if _boundary_case_set and "AUTOKERNEL_BOUNDARY_CASE_SET=r22-5-v1 cases=108" not in done.stderr:
+        return Verdict("oracle_unavailable", False,
+                       "selected instrument lacks the R22-5 boundary case set")
     block = re.search(
         rf"(?ms)^Backend \d+/\d+: {re.escape(backend)}\b(.*?)"
         rf"^  Backend {re.escape(backend)}: (OK|FAIL)\b", plain)
@@ -2905,8 +2911,9 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                     for case in frame.cases
                     if case.op in backend_ops_selector(op).split(",")
                     and case.status != "not_supported"]
-        if (not selected or any(not case.passed or case.reference is None
-                                for case in selected)):
+        if ((_boundary_case_set and len(selected) != expected_cases)
+                or not selected or any(not case.passed or case.reference is None
+                                       for case in selected)):
             return Verdict("oracle_unavailable", False,
                            f"{op} did not emit a reference metric for every selected {backend} case")
         if any(case.reference.oracle_id != "ggml_cpu_reference/v1" for case in selected):
@@ -2936,6 +2943,20 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                        case_records=gate_case_records(plain, backend, op))
     return Verdict("correctness", True, detail=done.stdout[-500:],
                    case_records=gate_case_records(plain, backend, op))
+
+
+def boundary_matrix_correctness(build_dir: Path, *, op: str, backend: str,
+                                resolved_recipe=None, require_reference: bool = False) -> Verdict:
+    """Run the reviewed R22-5 matrix for one op; unsupported ops refuse explicitly."""
+    counts = {"MUL_MAT": 36, "MUL_MAT_ID": 36, "GATED_DELTA_NET": 9,
+              "RMS_NORM": 9, "RMS_NORM_MUL_ADD": 9, "FLASH_ATTN_EXT": 9}
+    if op not in counts:
+        return Verdict("oracle_unavailable", False,
+                       f"R22-5 has no reviewed boundary-shape corpus for {op}")
+    return op_correctness(build_dir, op=op, backend=backend, resolved_recipe=resolved_recipe,
+                          require_reference=require_reference,
+                          environment_overrides=(("AUTOKERNEL_BOUNDARY_CASE_SET", "r22-5-v1"),),
+                          expected_cases=counts[op], _boundary_case_set=True)
 
 
 def deterministic(build_dir: Path, model: Path, *, runs: int = 3) -> Verdict:
