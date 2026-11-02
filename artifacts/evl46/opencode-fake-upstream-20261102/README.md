@@ -10,7 +10,8 @@ The receipt is retained at
 
 The broker hashes compact UTF-8 JSON with sorted keys and no trailing newline;
 its SHA-256 is `741660709a3538b1d55503f8228a1bfa6cbcdc75e6be2d8370f1e2d0e5c79394`.
-The file carries a final newline for ordinary text handling. A change in any
-schema byte or addition/removal of a tool is refused and requires new review.
+The file carries a final newline for ordinary text handling. A change in the
+canonical schema content or addition/removal of a tool is refused and requires
+new review; JSON key order and formatting do not affect the canonical hash.
 This is a public tool contract observed with a fake upstream, not model
 performance, hidden-grader isolation, or permission to enable a live transport.
