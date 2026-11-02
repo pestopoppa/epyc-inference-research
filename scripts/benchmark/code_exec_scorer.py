@@ -117,6 +117,7 @@ def _run_docker(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
             valid = (inspected.returncode == 0 and item["Id"] == cid
                      and host["NetworkMode"] == "none" and host["ReadonlyRootfs"] is True
                      and host["Privileged"] is False and not item["Mounts"]
+                     and host["PidMode"] in ("", "private") and host["IpcMode"] != "host"
                      and item["Config"]["User"] == "65534:65534"
                      and "ALL" in host["CapDrop"] and host["PidsLimit"] == 64
                      and "no-new-privileges" in host["SecurityOpt"]
