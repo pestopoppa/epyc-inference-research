@@ -22,6 +22,9 @@ from urllib.parse import urlsplit
 MAX_REQUEST = 16_384
 MAX_RESPONSE = 65_536
 ALLOWED_PATHS = frozenset(("/chat", "/v1/chat/completions"))
+CLIENT_BODY_KEYS = frozenset(("model", "messages", "tools", "tool_choice", "max_tokens",
+                              "temperature", "seed", "stream", "x_tool_mode", "x_escalation",
+                              "x_memory", "x_session_id"))
 
 
 class BrokerRefusal(ValueError):
@@ -33,7 +36,7 @@ class LocalEndpointBroker:
 
     def __init__(self, socket_path: Path, endpoint: str, *, allowed_body_keys: frozenset[str],
                  protected: tuple[str, ...] = (),
-                 timeout: float = 3.0):
+                 timeout: float = 3.0, profile: str = "fixture", model: str | None = None):
         u = urlsplit(endpoint)
         try:
             port = u.port
@@ -49,8 +52,15 @@ class LocalEndpointBroker:
             raise BrokerRefusal("protected strings must be nonempty")
         if not allowed_body_keys or any(not isinstance(key, str) or not key for key in allowed_body_keys):
             raise BrokerRefusal("an explicit body-key allowlist is required")
+        if u.path == "/v1/chat/completions":
+            if (profile != "client-tools-v1" or not isinstance(model, str) or not model
+                    or not allowed_body_keys.issubset(CLIENT_BODY_KEYS)):
+                raise BrokerRefusal("v1 route requires the pinned client-tools profile")
+        elif profile != "fixture" or model is not None:
+            raise BrokerRefusal("chat route is available only for synthetic fixtures")
         self.socket_path, self.endpoint, self.port = socket_path, u.path, port
         self.protected, self.timeout, self.allowed_body_keys = protected, timeout, allowed_body_keys
+        self.profile, self.model = profile, model
         self.token = secrets.token_hex(32)
         self._listener: socket.socket | None = None
         self._thread: threading.Thread | None = None
@@ -69,6 +79,22 @@ class LocalEndpointBroker:
                 or not set(request["body"]).issubset(self.allowed_body_keys)
                 or self._forbidden(request["body"])):
             raise BrokerRefusal("request refused")
+        if self.profile == "client-tools-v1":
+            body = request["body"]
+            messages = body.get("messages")
+            session = body.get("x_session_id")
+            if (body.get("x_tool_mode") != "client" or body.get("x_escalation") != "off"
+                    or body.get("x_memory") != "off" or body.get("stream") is not False
+                    or body.get("model") != self.model or not isinstance(session, str)
+                    or not 1 <= len(session) <= 128
+                    or not isinstance(messages, list) or not 1 <= len(messages) <= 128
+                    or ("tools" in body and not isinstance(body["tools"], list))
+                    or ("tool_choice" in body and not isinstance(body["tool_choice"], (str, dict)))
+                    or any(not isinstance(m, dict) or m.get("role") not in
+                           ("system", "user", "assistant", "tool")
+                           or not isinstance(m.get("content"), (str, type(None))) for m in messages)
+                    or type(body.get("max_tokens")) is not int or not 1 <= body["max_tokens"] <= 8192):
+                raise BrokerRefusal("client-tools request contract refused")
         encoded = json.dumps(request["body"], ensure_ascii=False, separators=(',', ':')).encode()
         if len(encoded) > MAX_REQUEST:
             raise BrokerRefusal("request too large")
