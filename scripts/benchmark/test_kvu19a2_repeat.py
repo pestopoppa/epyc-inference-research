@@ -37,3 +37,19 @@ def test_comparison_refuses_missing_samples_input_drift_and_duplicates(monkeypat
     rows[0]["input_hashes"] = rows[1]["input_hashes"]
     rows[0]["repeat"] = 2
     assert m.compare(rows)["78"]["arms"]["base"]["verdict"] == "UNKNOWN"
+
+
+def test_rootbuild_comparison_requires_predeclared_canonical_input(monkeypatch):
+    load(monkeypatch)
+    monkeypatch.setenv("KVU19A2_BUILD_RECEIPT_SHA256", "f" * 64)
+    monkeypatch.setenv("KVU19A2_EXE_SHA256", "e" * 64)
+    m = importlib.import_module("kvu19a2_repeat_rootbuild")
+    hashes = {"a": "1", "b": "2", "c": "3"}
+    rows = [{"case": 78, "arm": arm, "repeat": repeat, "rc": 0,
+             "input_hashes": hashes, "output_sha256": "same", "mapping": {"pid": 1},
+             "samples": [{"kfd": True, "vram_bytes": 1}]}
+            for arm in ("base", "candidate") for repeat in range(1, 6)]
+    canonical = {"78": hashes, "80": {"a": "1", "b": "2", "c": "3", "d": "4"}}
+    assert m.compare(rows, canonical)["78"]["arms"]["base"]["verdict"] == "BIT_IDENTICAL"
+    canonical["78"] = {"a": "other", "b": "2", "c": "3"}
+    assert m.compare(rows, canonical)["78"]["arms"]["base"]["verdict"] == "UNKNOWN"
