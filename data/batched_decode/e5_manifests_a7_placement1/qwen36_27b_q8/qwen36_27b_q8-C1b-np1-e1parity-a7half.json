@@ -3,6 +3,7 @@
   "a7_source_config": "C3",
   "a7_source_shape": "quarters(retired)",
   "architecture": "qwen35",
+  "cache_reset": "per_cell",
   "cell_id": "qwen36_27b_q8-C1b-np1-e1parity-a7half",
   "chat_template_kwargs": {},
   "config_id": "C1b",

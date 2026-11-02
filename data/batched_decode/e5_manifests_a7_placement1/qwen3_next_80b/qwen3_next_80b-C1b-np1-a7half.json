@@ -3,6 +3,7 @@
   "a7_source_config": "C3",
   "a7_source_shape": "quarters(retired)",
   "architecture": "ssm_moe_hybrid",
+  "cache_reset": "per_cell",
   "cell_id": "qwen3_next_80b-C1b-np1-a7half",
   "chat_template_kwargs": {},
   "config_id": "C1b",

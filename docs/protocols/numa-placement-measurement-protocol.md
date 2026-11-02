@@ -184,6 +184,21 @@ cold-interleave figure, exactly as this predicts.
    intervention; the locality read is the *proof the intervention took effect*. Without it, F2 is
    undetected by construction.
 
+> **Harness note (2026-11-02, BRF-T3 E5).** Decision-grade timing cells need a per-cell cache reset
+> plus a witness. Until this date `server_numa_np_sweep.py` dropped caches only between model groups,
+> so a cell inherited the previous cell's warm cache. In the a7 gemma run the C1b cells'
+> `pages_by_node` equalled the C1 interleave layout. Now each e5 cell manifest states
+> `cache_reset: per_cell | per_group | none`. The validator refuses `per_group`/`none` on a
+> decision-grade cell unless it sets `warm_cache_control: true`. Before every `per_cell` cell the
+> harness writes a `cache_reset` witness into the cell row and `events.jsonl`. The witness holds the
+> timestamp, the method, the commands with return codes, and per-node `free_kib_by_node` and
+> `pages_by_node` (FilePages) before and after. The method is host-wide `drop_caches` **only** when
+> the run's process tree holds the whole host (q0..q3 plus gpu-quiet exclusive). Otherwise it is
+> `numa_evict.py` scoped to the cell's NUMA nodes. That fallback is a free-memory floor, not a cold
+> cache (`cold_cache_guaranteed: false`), so it does not satisfy F2-CHK: a P-BENCH-PLACEMENT-1 cell
+> reset that way is demoted (`cache_reset_not_cold`). A failed reset fails the cell before launch.
+> Code: `scripts/lib/cell_cache_reset.py`.
+
 ### 1.3 F3 — Shared mmap defeats per-instance `--membind`
 
 **What it is.** llama.cpp `mmap`s the GGUF by default. Those pages live in the **shared page

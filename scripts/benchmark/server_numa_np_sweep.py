@@ -2,8 +2,13 @@
 """P-BENCH-3 multi-server NUMA x np sweep for E5 batched-decode cells.
 
 Sibling of server_np_sweep.py (the E1 single-server harness). One invocation
-runs the cells of ONE model group (drop_caches + re-warm between models is an
-OPERATOR step, never harness-run): per cell it launches N llama-server
+runs the cells of ONE model group: per cell it first resets the page cache
+per the manifest's ``cache_reset`` policy and writes a witness into the cell
+row (scripts/lib/cell_cache_reset.py — ``per_cell`` is the default and the only
+policy a decision-grade cell may declare unless it is a warm-cache control;
+host-wide drop_caches ONLY under a whole-host hold, else numa_evict scoped to
+the cell's NUMA nodes; BRF-T3 E5: a cell that followed another on the same model
+inherited its warm page cache), then launches N llama-server
 instances (per-instance `taskset -c` pinning; `numactl --interleave=all` ONLY
 when the instance's manifest policy says so), verifies LIVE affinity via the
 orchestrator affinity_preflight cell-manifest mode as a HARD gate, drives the
@@ -71,6 +76,12 @@ from canonical_recipe import (  # noqa: E402
     FREQ_BOOST_THRESHOLD_KHZ,
     assert_canonical_env,
     build_canonical_env,
+)
+from cell_cache_reset import (  # noqa: E402
+    POLICY_PER_CELL,
+    cache_reset_violations,
+    perform_cell_cache_reset,
+    resolve_policy,
 )
 from server_np_sweep import (  # noqa: E402
     collect_attestation,
@@ -309,6 +320,11 @@ def harness_refusals(cells: list[Cell]) -> list[str]:
                 )
         if cell.np <= 0:
             errors.append(f"{name}: np must be positive")
+        # Cache-reset policy (BRF-T3 E5). Harness form: an absent field on a
+        # decision-grade cell resolves to per_cell; the schema owner's validator
+        # additionally requires it to be declared.
+        for violation in cache_reset_violations(cell.manifest, require_declared=False):
+            errors.append(f"{name}: {violation}")
         selection = cell.prompt_batch.get("selection")
         if selection != "pinned_qids":
             errors.append(
@@ -1363,6 +1379,7 @@ def summarize_cell(
     host_warnings: list[str],
     cell_host_warnings: list[str] | None = None,
     throttle_check: dict[str, Any] | None = None,
+    cache_reset: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     trimmed = trimmed_aggregate(records)
     successes = [record for record in records if record.success]
@@ -1486,6 +1503,7 @@ def summarize_cell(
             f"response_capture_failure: {len(capture_failures)} generated response(s) "
             "lacked answer-text SSE deltas"
         )
+    decision_grade_blockers.extend(cache_reset_blockers(cell, cache_reset))
     decision_grade = (
         cell.decision_grade_intent
         and hard_gates_passed
@@ -1577,6 +1595,9 @@ def summarize_cell(
         "throttle_check": throttle_check,
         "trimmed_window_ready": trimmed_window_ready,
         "response_capture_failure_count": len(capture_failures),
+        "cache_reset_policy": (cache_reset or {}).get("policy", resolve_policy(cell.manifest)),
+        "cache_reset_method": (cache_reset or {}).get("method"),
+        "cache_reset": cache_reset,
         "decision_grade_blockers": decision_grade_blockers,
         "decision_grade_intent": cell.decision_grade_intent,
         "decision_grade": decision_grade,
@@ -1620,6 +1641,8 @@ CSV_FIELDS = [
     "kv_unified",
     "ggml_iqk",
     "live_affinity_verified",
+    "cache_reset_policy",
+    "cache_reset_method",
     "decision_grade",
     "cell_error",
 ]
@@ -1632,6 +1655,62 @@ def write_csv_row(path: Path, row: dict[str, Any]) -> None:
         if not exists:
             writer.writeheader()
         writer.writerow({fieldname: row.get(fieldname) for fieldname in CSV_FIELDS})
+
+
+def cache_reset_blockers(cell: Cell, cache_reset: dict[str, Any] | None) -> list[str]:
+    """Decision-grade demotions from the per-cell cache-reset witness (BRF-T3 E5).
+
+    Defence in depth behind the up-front refusal: a decision-grade cell banks
+    only with a witnessed, successful per_cell reset — or as a declared
+    warm-cache control.
+    """
+    if not cell.decision_grade_intent:
+        return []
+    if not isinstance(cache_reset, dict):
+        return ["cache_reset_unwitnessed: no per-cell cache-reset witness recorded"]
+    if cache_reset.get("warm_cache_control") is True:
+        return []
+    if cache_reset.get("policy") != POLICY_PER_CELL:
+        return [
+            f"cache_reset_policy_{cache_reset.get('policy')}: decision-grade timing "
+            "requires a per-cell cache reset"
+        ]
+    if not cache_reset.get("ok") or not cache_reset.get("performed"):
+        return [f"cache_reset_failed: {cache_reset.get('error')}"]
+    if (
+        cell.manifest.get("placement_protocol") == "P-BENCH-PLACEMENT-1"
+        and cache_reset.get("cold_cache_guaranteed") is not True
+    ):
+        # P-BENCH-PLACEMENT-1 F2-CHK requires drop_caches per arm. The scoped
+        # numa_evict fallback is a free-memory floor, not a cold cache.
+        return [
+            f"cache_reset_not_cold: method {cache_reset.get('method')!r} under "
+            "P-BENCH-PLACEMENT-1 (F2-CHK needs drop_caches per arm: run under a "
+            "whole-host hold, q0..q3 + gpu-quiet exclusive)"
+        ]
+    return []
+
+
+def run_cell_cache_reset(cell: Cell) -> dict[str, Any]:
+    """Reset the page cache for one cell per its policy; return the witness.
+
+    The single seam the tests replace — the real path may run sync +
+    drop_caches or numa_evict (scripts/lib/cell_cache_reset.py).
+    """
+    model = Path(cell.model_path)
+    model_bytes = model.stat().st_size if model.is_file() else None
+    return perform_cell_cache_reset(
+        cell_id=cell.cell_id,
+        manifest=cell.manifest,
+        instances=[(inst.cpu_list, inst.numactl_policy) for inst in cell.instances],
+        model_bytes=model_bytes,
+    )
+
+
+class CacheResetFailure(RuntimeError):
+    def __init__(self, witness: dict[str, Any]):
+        super().__init__(f"cache_reset_failed: {witness.get('error')}")
+        self.witness = witness
 
 
 def failed_cell_row(cell: Cell, error: str, affinity: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1686,8 +1765,13 @@ def run_cell_execute(
     output_dir: Path,
     env: dict[str, str],
     host_warnings: list[str],
+    cache_reset: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Launch, gate, warm, drive, and tear down one cell. Returns the cell row."""
+    """Launch, gate, warm, drive, and tear down one cell. Returns the cell row.
+
+    ``cache_reset`` is the witness of the reset cmd_sweep ran for this cell
+    before calling here; it is banked on the row and gates decision grade.
+    """
     log_dir = output_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     procs: list[tuple[Instance, subprocess.Popen[str]]] = []
@@ -1875,6 +1959,7 @@ def run_cell_execute(
             host_warnings=host_warnings,
             cell_host_warnings=cell_host_warnings,
             throttle_check=throttle_check,
+            cache_reset=cache_reset,
         )
     finally:
         if procs:
@@ -1999,6 +2084,7 @@ def build_run_manifest(
                 "np": cell.np,
                 "window": cell.manifest.get("window"),
                 "decision_grade_intent": cell.decision_grade_intent,
+                "cache_reset": resolve_policy(cell.manifest),
                 "kv_unified": bool(cell.kv.get("kv_unified")),
                 "sampling": resolve_sampling(cell),
         # A11: the executed reasoning mode, so a banked row can answer "was this
@@ -2068,6 +2154,11 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             if env_errors:
                 raise RuntimeError("; ".join(env_errors))
             print(f"[dry-run] cell {cell.cell_id} (config {cell.config_id} np={cell.np}):")
+            print(
+                f"  cache_reset: {resolve_policy(cell.manifest)} (per_cell at execute: "
+                "drop_caches iff this tree holds q0..q3 + gpu-quiet exclusive, else "
+                "numa_evict scoped to the cell's NUMA nodes; witness on the row)"
+            )
             for inst in cell.instances:
                 cmd = build_instance_command(
                     binary=args.llama_server, cell=cell, inst=inst
@@ -2173,7 +2264,24 @@ def cmd_sweep(args: argparse.Namespace) -> int:
 
     for cell in cells:
         print(f"[{utc_now()}] cell={cell.cell_id} config={cell.config_id} np={cell.np}", flush=True)
+        cache_reset: dict[str, Any] | None = None
         try:
+            # Per-cell page-cache reset BEFORE launch (BRF-T3 E5): the previous
+            # cell is already torn down, so nothing of ours holds the model's
+            # pages. A failed reset fails the cell — a decision-grade timing
+            # must not run on an unwitnessed cache.
+            cache_reset = run_cell_cache_reset(cell)
+            write_jsonl(
+                output_dir / "events.jsonl",
+                {
+                    "timestamp": utc_now(),
+                    "event": "cell_cache_reset",
+                    "cell_id": cell.cell_id,
+                    "witness": cache_reset,
+                },
+            )
+            if not cache_reset.get("ok"):
+                raise CacheResetFailure(cache_reset)
             row = run_cell_execute(
                 cell=cell,
                 prompts=prompts,
@@ -2181,6 +2289,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
                 output_dir=output_dir,
                 env=env,
                 host_warnings=warnings,
+                cache_reset=cache_reset,
             )
         except AffinityPreflightFailure as exc:
             row = failed_cell_row(
@@ -2204,6 +2313,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             )
         except TeardownFailure as exc:
             row = failed_cell_row(cell, f"teardown_failed: {exc}")
+            row["cache_reset"] = cache_reset
             run_decision_grade = False
             write_jsonl(output_dir / "cells.jsonl", row)
             write_csv_row(output_dir / "summary.csv", row)
@@ -2224,6 +2334,12 @@ def cmd_sweep(args: argparse.Namespace) -> int:
                     "error": str(exc),
                 },
             )
+        if row.get("cell_error") is not None:
+            # Failed rows carry the witness too (it is the evidence of what the
+            # cache was when the cell failed).
+            row.setdefault("cache_reset", cache_reset)
+            row.setdefault("cache_reset_policy", resolve_policy(cell.manifest))
+            row.setdefault("cache_reset_method", (cache_reset or {}).get("method"))
         if cell.decision_grade_intent and not row.get("decision_grade"):
             # Any per-cell hard-gate demotion (host-health flip, under-load
             # throttle warning, failed gate) propagates to the run manifest.

@@ -37,6 +37,11 @@ manufactures a passing reading.
 
 Take the CPU region lock before launching. Do not infer freeness from `ps`/`lsof`.
 
+Hold the WHOLE host (2026-11-02, BRF-T3 E5). Wrap the sweep in `region-lock run --cpu-list 0-95 --gpu-quiet exclusive -- ...`.
+The per-cell cache reset uses `drop_caches` only when this process tree holds q0..q3 plus gpu-quiet exclusive.
+Without that hold it falls back to a scoped `numa_evict`, which is not a cold cache, and every P-BENCH-PLACEMENT-1 cell is demoted
+(`cache_reset_not_cold`). Check that each row's `cache_reset.method` is `drop_caches`.
+
 ## Step 2 — run
 
     cd /mnt/raid0/llm/epyc-inference-research

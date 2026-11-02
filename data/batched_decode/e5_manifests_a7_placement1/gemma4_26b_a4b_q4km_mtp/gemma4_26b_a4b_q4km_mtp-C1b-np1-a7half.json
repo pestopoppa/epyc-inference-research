@@ -3,6 +3,7 @@
   "a7_source_config": "C3",
   "a7_source_shape": "quarters(retired)",
   "architecture": "gemma4",
+  "cache_reset": "per_cell",
   "cell_id": "gemma4_26b_a4b_q4km_mtp-C1b-np1-a7half",
   "chat_template_kwargs": {},
   "config_id": "C1b",

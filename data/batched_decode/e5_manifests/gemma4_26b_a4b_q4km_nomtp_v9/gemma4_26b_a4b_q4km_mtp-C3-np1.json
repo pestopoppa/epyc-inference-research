@@ -1,5 +1,6 @@
 {
   "architecture": "gemma4",
+  "cache_reset": "per_cell",
   "cell_id": "gemma4_26b_a4b_q4km_mtp-C3-np1",
   "chat_template_kwargs": {},
   "config_id": "C3",

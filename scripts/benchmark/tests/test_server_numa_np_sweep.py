@@ -36,6 +36,33 @@ for _p in (str(_RESEARCH_ROOT), str(_SCRIPTS_DIR), str(_BENCHMARK_DIR)):
 import server_numa_np_sweep as sns  # noqa: E402
 from canonical_recipe import CANONICAL_OMP_ENV, LLVM20_LIBDIR  # noqa: E402
 
+# SAFETY (BRF-T3 E5 per-cell cache reset): the real seam may run sync +
+# drop_caches or numa_evict on a shared host. Replace it for EVERY test in this
+# module at import time, so no execute-path test can reach a real reset; tests
+# that exercise the wiring patch `perform_cell_cache_reset` instead.
+_REAL_RUN_CELL_CACHE_RESET = sns.run_cell_cache_reset
+
+
+def _fake_cell_cache_reset(cell):
+    return {
+        "schema": "cell-cache-reset-witness/1",
+        "cell_id": cell.cell_id,
+        "timestamp": "2026-11-02T00:00:00+00:00",
+        "policy": sns.resolve_policy(cell.manifest),
+        "warm_cache_control": cell.manifest.get("warm_cache_control") is True,
+        "performed": True,
+        "method": "numa_evict",
+        "scope_nodes": [0, 1],
+        "commands": [{"argv": ["fake"], "returncode": 0}],
+        "before": {"free_kib_by_node": {}, "pages_by_node": {}},
+        "after": {"free_kib_by_node": {}, "pages_by_node": {}},
+        "ok": True,
+        "error": None,
+    }
+
+
+sns.run_cell_cache_reset = _fake_cell_cache_reset
+
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures (stdlib only, so they work under both runners)
@@ -1009,6 +1036,7 @@ def test_empty_trimmed_window_demotes_decision_grade_cell(tmp_path):
         cell=cell, records=records, wall_s=2.0, env={"GGML_IQK": "1"},
         instance_pids={19080: 1}, affinity={"live_affinity_verified": True},
         run_overrides_active=False, host_warnings=[], throttle_check={"warnings": []},
+        cache_reset=_fake_cell_cache_reset(cell),
     )
     assert row["tasks_per_hour_trimmed"] == 0.0
     assert row["trimmed_window_ready"] is False
@@ -1046,6 +1074,7 @@ def test_aggregate_decode_tps_sums_per_stream_rates():
         cell=cell, records=records, wall_s=1000.0, env={"GGML_IQK": "1"},
         instance_pids={19080: 1}, affinity={"live_affinity_verified": True},
         run_overrides_active=False, host_warnings=[], throttle_check={"warnings": []},
+        cache_reset=_fake_cell_cache_reset(cell),
     )
     assert abs(row["aggregate_decode_tps"] - 40.0) < 1e-9
     assert abs(row["per_stream_decode_tps"] - 20.0) < 1e-9
@@ -1078,6 +1107,7 @@ def test_aggregate_decode_tps_sums_per_stream_rates():
         cell=cell, records=broken, wall_s=1000.0, env={"GGML_IQK": "1"},
         instance_pids={19080: 1}, affinity={"live_affinity_verified": True},
         run_overrides_active=False, host_warnings=[], throttle_check={"warnings": []},
+        cache_reset=_fake_cell_cache_reset(cell),
     )
     assert abs(row2["aggregate_decode_tps"] - 40.0) < 1e-9
     assert row2["decode_tokens_total"] == 400
@@ -1202,6 +1232,7 @@ def test_gemma_reasoning_only_chat_stream_fails_closed_without_answer_text(tmp_p
         cell=cell, records=[record], wall_s=1.0, env={"GGML_IQK": "1"},
         instance_pids={19080: 1}, affinity={"live_affinity_verified": True},
         run_overrides_active=False, host_warnings=[], throttle_check={"warnings": []},
+        cache_reset=_fake_cell_cache_reset(cell),
     )
     assert row["response_capture_failure_count"] == 1
     assert row["decision_grade"] is False
@@ -1978,6 +2009,165 @@ def test_summarize_run_end_to_end():
         summary = (run_dir / "summary.md").read_text()
         assert "NOT byte-comparable to E1" in summary
         assert "R4 — model-keyed capability rows" in summary
+
+
+# ---------------------------------------------------------------------------
+# Per-cell cache reset + witness (BRF-T3 E5, 2026-11-02)
+# ---------------------------------------------------------------------------
+
+
+def _execute_patches(sent, pids, starts=None):
+    def fake_preflight(**kwargs):
+        artifact = {"live_affinity_verified": True}
+        kwargs["artifact_path"].parent.mkdir(parents=True, exist_ok=True)
+        kwargs["artifact_path"].write_text(json.dumps(artifact))
+        return 0, artifact, "all cells matched"
+
+    def fake_start(cmd, env, log):
+        if starts is not None:
+            starts.append(cmd)
+        return DummyProc(pid=next(pids))
+
+    return (
+        (sns, "_manifest_interface", lambda: SCHEMA_STUB),
+        (sns, "ensure_clean_runtime", lambda: None),
+        (sns, "collect_attestation", lambda: dict(CLEAN_ATTESTATION)),
+        (sns, "cpu_freq_static_warnings", lambda: []),
+        (sns, "cpu_freq_throttle_warnings", _idle_throttle_guard),
+        (sns, "run_capture", lambda cmd, timeout=10.0: "version: 10098 (fake)"),
+        (sns, "start_server", fake_start),
+        (sns, "wait_for_health", lambda port, timeout, proc: None),
+        (sns, "run_affinity_preflight", fake_preflight),
+        (sns, "stop_instance", lambda proc, **kw: {"pid": proc.pid, "ps_verified_dead": True}),
+        (sns, "send_streaming_completion", make_fake_send(sent)),
+        (subprocess, "Popen", _popen_guard),
+    )
+
+
+def _setup_execute(tmp_path: Path, **overrides):
+    pool = write_pool(tmp_path)
+    binary = tmp_path / "bin" / "llama-server"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("")
+    model = tmp_path / "model.gguf"
+    model.write_text("")
+    manifest_path = write_manifest(tmp_path, make_manifest(model_path=str(model), **overrides))
+    return pool, binary, manifest_path
+
+
+def _rows(run_dir: Path, name: str = "cells.jsonl") -> list[dict]:
+    return [json.loads(line) for line in (run_dir / name).read_text().splitlines() if line.strip()]
+
+
+def test_execute_banks_cache_reset_witness_on_row_and_event():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        pool, binary, manifest_path = _setup_execute(tmp_path, cache_reset="per_cell")
+        sent: list = []
+        with patched_many(*_execute_patches(sent, iter([5001, 5002]))):
+            rc = sns.main(_execute_args(tmp_path, manifest_path, pool, binary, "witness-test"))
+        assert rc == 0
+        run_dir = tmp_path / "out" / "witness-test"
+        row = _rows(run_dir)[0]
+        assert row["decision_grade"] is True
+        assert row["cache_reset_policy"] == "per_cell"
+        assert row["cache_reset_method"] == "numa_evict"
+        assert row["cache_reset"]["ok"] is True
+        assert row["cache_reset"]["before"] is not None and row["cache_reset"]["after"] is not None
+        events = [e for e in _rows(run_dir, "events.jsonl") if e["event"] == "cell_cache_reset"]
+        assert len(events) == 1 and events[0]["witness"]["cell_id"] == row["cell_id"]
+        header = (run_dir / "summary.csv").read_text().splitlines()[0].split(",")
+        assert "cache_reset_policy" in header and "cache_reset_method" in header
+        manifest = json.loads((run_dir / "manifest.json").read_text())
+        assert manifest["cells"][0]["cache_reset"] == "per_cell"
+
+
+def test_failed_cache_reset_fails_the_cell_before_any_launch():
+    def failing_reset(cell):
+        witness = _fake_cell_cache_reset(cell)
+        witness.update(ok=False, performed=False, error="drop_caches failed: rc=1")
+        return witness
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        pool, binary, manifest_path = _setup_execute(tmp_path, cache_reset="per_cell")
+        sent: list = []
+        starts: list = []
+        with patched_many(
+            *_execute_patches(sent, iter([5001, 5002]), starts),
+            (sns, "run_cell_cache_reset", failing_reset),
+        ):
+            rc = sns.main(_execute_args(tmp_path, manifest_path, pool, binary, "reset-fail"))
+        assert rc == 0
+        assert starts == [] and sent == []  # nothing launched on an unwitnessed cache
+        run_dir = tmp_path / "out" / "reset-fail"
+        row = _rows(run_dir)[0]
+        assert row["cell_error"].startswith("cache_reset_failed")
+        assert row["decision_grade"] is False
+        assert row["cache_reset"]["ok"] is False
+        assert row["cache_reset_policy"] == "per_cell"
+        assert json.loads((run_dir / "manifest.json").read_text())["decision_grade"] is False
+
+
+def test_harness_refuses_decision_grade_cell_without_per_cell_reset():
+    with tempfile.TemporaryDirectory() as tmp:
+        for policy in ("per_group", "none"):
+            cell = load_cell(Path(tmp), make_manifest(cache_reset=policy))
+            errors = sns.harness_refusals([cell])
+            assert any("warm_cache_control=true" in e for e in errors), errors
+            control = load_cell(Path(tmp), make_manifest(cache_reset=policy, warm_cache_control=True))
+            assert sns.harness_refusals([control]) == []
+        # Absent on a decision-grade cell resolves to per_cell (the default).
+        bare = load_cell(Path(tmp), make_manifest())
+        assert sns.harness_refusals([bare]) == []
+        assert sns.resolve_policy(bare.manifest) == "per_cell"
+        scout = load_cell(Path(tmp), make_manifest(decision_grade_intent=False, cache_reset="none"))
+        assert sns.harness_refusals([scout]) == []
+
+
+def test_cache_reset_blockers_demote_unwitnessed_or_failed_resets():
+    with tempfile.TemporaryDirectory() as tmp:
+        cell = load_cell(Path(tmp))
+        ok = _fake_cell_cache_reset(cell)
+        assert sns.cache_reset_blockers(cell, ok) == []
+        assert sns.cache_reset_blockers(cell, None)[0].startswith("cache_reset_unwitnessed")
+        failed = dict(ok, ok=False, performed=False, error="boom")
+        assert sns.cache_reset_blockers(cell, failed) == ["cache_reset_failed: boom"]
+        relaxed = dict(ok, policy="per_group")
+        assert sns.cache_reset_blockers(cell, relaxed)[0].startswith("cache_reset_policy_per_group")
+        assert sns.cache_reset_blockers(cell, dict(relaxed, warm_cache_control=True)) == []
+        scout = load_cell(Path(tmp), make_manifest(decision_grade_intent=False))
+        assert sns.cache_reset_blockers(scout, None) == []
+        # P-BENCH-PLACEMENT-1 F2-CHK: only drop_caches (cold cache) banks.
+        placement = load_cell(Path(tmp), make_manifest(placement_protocol="P-BENCH-PLACEMENT-1"))
+        evicted = dict(ok, cold_cache_guaranteed=False)
+        assert sns.cache_reset_blockers(placement, evicted)[0].startswith("cache_reset_not_cold")
+        dropped = dict(ok, method="drop_caches", cold_cache_guaranteed=True)
+        assert sns.cache_reset_blockers(placement, dropped) == []
+        assert sns.cache_reset_blockers(cell, evicted) == []
+
+
+def test_real_reset_seam_passes_the_cell_shape_to_the_library():
+    captured = {}
+
+    def fake_perform(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        model = Path(tmp) / "m.gguf"
+        model.write_bytes(b"x" * 123)
+        cell = load_cell(Path(tmp), make_manifest(model_path=str(model)))
+        with patched_many(
+            (sns, "perform_cell_cache_reset", fake_perform),
+            (subprocess, "run", _popen_guard),
+            (subprocess, "Popen", _popen_guard),
+        ):
+            assert _REAL_RUN_CELL_CACHE_RESET(cell) == {"ok": True}
+    assert captured["cell_id"] == cell.cell_id
+    assert captured["model_bytes"] == 123
+    assert captured["instances"] == [("24-47,120-143", "none"), ("48-71,144-167", "none")]
+    assert captured["manifest"] is cell.manifest
 
 
 # ---------------------------------------------------------------------------

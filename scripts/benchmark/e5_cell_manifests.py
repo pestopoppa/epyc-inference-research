@@ -52,7 +52,13 @@ C1-C4). Pre-registered grid encoded here:
 Additive (optional) fields beyond the frozen schema, documented for consumers:
 ``stage_b_families`` (list[str] iso-T/scaling/anchor pairing tags for the
 summarizer), ``model_path_present`` / ``draft_model_path_present`` (bool,
-generation-time file-presence flags — absent files are FLAGGED, not fatal).
+generation-time file-presence flags — absent files are FLAGGED, not fatal),
+``cache_reset`` (``per_cell`` | ``per_group`` | ``none``; the generator always
+emits ``per_cell``) and ``warm_cache_control`` (bool). The cache-reset rule
+(BRF-T3 E5, 2026-11-02) lives once in scripts/lib/cell_cache_reset.py: a
+decision-grade cell MUST declare ``cache_reset``, and ``per_group``/``none`` on a
+decision-grade cell is refused unless ``warm_cache_control`` is true — a cell
+that inherits the previous cell's warm page cache measures that cell's placement.
 Consumers must ignore unknown additive fields; unknown ``schema_version``
 values are refused (fail closed on drift).
 """
@@ -99,6 +105,10 @@ PROTOCOL_ID = "P-BENCH-3"
 # both kernel cutovers and an ELIGIBILITY boundary
 # (E8-cpu-bench-throttle-scope), and a latest-in-scope lookup returns the
 # eligibility row for the whole W1/W2/W4 window. See scripts/lib/instrument_era.py.
+from cell_cache_reset import (  # noqa: E402
+    POLICY_PER_CELL,
+    cache_reset_violations,
+)
 from instrument_era import (  # noqa: E402
     ERA_SOURCE,
     INSTRUMENT_ERAS_PATH,
@@ -562,6 +572,7 @@ def make_cell(
     extra_notes: str = "",
     stage_b_families: list[str] | None = None,
     sampling: dict | None = None,
+    cache_reset: str = POLICY_PER_CELL,
 ) -> dict:
     """Build one cell manifest in the frozen e5-cell-manifest/1 field order."""
     model = MODELS[model_key]
@@ -629,6 +640,8 @@ def make_cell(
         "jinja": True,
         "warmup": {"prompts": WARMUP_PROMPTS, "n_predict": WARMUP_N_PREDICT},
         "decision_grade_intent": decision_grade_intent,
+        # Per-cell page-cache reset + witness (BRF-T3 E5): always stated.
+        "cache_reset": cache_reset,
         "notes": notes,
         "stage_b_families": stage_b_families if stage_b_families is not None else [],
     }
@@ -1174,6 +1187,10 @@ def validate_cell_manifest(manifest: dict) -> list[str]:
                 f"{N_PREDICT_STAGE_B} (work parity); scout caps are never "
                 f"decision-grade"
             )
+
+    # -- cache-reset policy (BRF-T3 E5) -------------------------------------
+    for violation in cache_reset_violations(manifest, require_declared=True):
+        err(violation)
 
     if "notes" in manifest and not isinstance(manifest.get("notes"), str):
         err("notes must be a string when present")

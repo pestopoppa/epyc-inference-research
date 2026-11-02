@@ -122,6 +122,7 @@
     "n_predict": 32
   },
   "decision_grade_intent": false,
+  "cache_reset": "per_cell",
   "notes": "E1-parity twin (temperature 0, operator-decided regime 2026-07-23): continuity read against the E1 ladder only \u2014 excluded from R1/R2/R4 via the e1_parity_anchor variant tag",
   "stage_b_families": [
     "anchor_C1",

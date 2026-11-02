@@ -133,6 +133,7 @@
     "n_predict": 32
   },
   "decision_grade_intent": true,
+  "cache_reset": "per_cell",
   "notes": "",
   "stage_b_families": [
     "whole_machine_T16",

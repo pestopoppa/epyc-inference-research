@@ -589,6 +589,71 @@ def test_grid_stage_b_iso_t_families():
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Cache-reset policy (BRF-T3 E5, 2026-11-02)
+# ---------------------------------------------------------------------------
+
+
+def test_grid_every_cell_states_cache_reset_per_cell():
+    # Always emitted, never inferred from absence — and per_cell everywhere,
+    # including scouts and E1-parity twins.
+    assert {cell.get("cache_reset") for cell in grid()} == {"per_cell"}
+
+
+def test_decision_grade_cell_must_declare_cache_reset():
+    manifest = base_manifest()
+    assert manifest["decision_grade_intent"] is True
+    del manifest["cache_reset"]
+    assert_violation(e5.validate_cell_manifest(manifest), "must declare cache_reset")
+
+
+def test_decision_grade_per_group_or_none_refused_without_warm_cache_control():
+    for policy in ("per_group", "none"):
+        manifest = base_manifest()
+        manifest["cache_reset"] = policy
+        assert_violation(e5.validate_cell_manifest(manifest), "without warm_cache_control=true")
+        manifest["warm_cache_control"] = True
+        assert_valid(manifest)
+
+
+def test_warm_cache_control_contradicts_per_cell():
+    manifest = base_manifest()
+    manifest["warm_cache_control"] = True
+    assert_violation(e5.validate_cell_manifest(manifest), "contradicts cache_reset='per_cell'")
+
+
+def test_cache_reset_enum_and_type_refusals():
+    manifest = base_manifest()
+    manifest["cache_reset"] = "per_model"
+    assert_violation(e5.validate_cell_manifest(manifest), "is not one of")
+    manifest = base_manifest()
+    manifest["warm_cache_control"] = "yes"
+    assert_violation(e5.validate_cell_manifest(manifest), "must be a boolean")
+
+
+def test_scout_cell_may_omit_or_relax_cache_reset():
+    scout = by_id("qwen36_q8_0-C3-np8-scout")
+    assert scout["decision_grade_intent"] is False
+    del scout["cache_reset"]
+    assert_valid(scout)
+    scout["cache_reset"] = "per_group"
+    assert_valid(scout)
+
+
+def test_committed_decision_grade_manifests_declare_per_cell():
+    """Every committed decision-grade template manifest states per_cell."""
+    data = _RESEARCH_ROOT / "data" / "batched_decode"
+    checked = 0
+    for root in ("e5_manifests", "e5_manifests_a7_placement1"):
+        for path in sorted((data / root).glob("*/*.json")):
+            manifest = json.loads(path.read_text())
+            if manifest.get("decision_grade_intent") is True:
+                checked += 1
+                assert manifest.get("cache_reset") == "per_cell", path
+    if (data / "e5_manifests_a7_placement1").is_dir():
+        assert checked >= 36
+
+
 def _run_cli(argv: list[str]) -> tuple[int, str]:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
