@@ -30,6 +30,9 @@ class Tests(unittest.TestCase):
                 for x in log(1)[3:-1]]
         a[-1:-1]=second
         self.assertEqual(first_step(a,1)['call'],1)
+    def test_prefill_elsewhere_in_iteration_refuses(self):
+        a=log(1); a.insert(-1,'KPF30_PHASE call=2 index=0 seq=0 pos=80001 phase=prefill')
+        with self.assertRaises(ValueError): first_step(a,1)
     def test_inactive_draft_refuses(self):
         a=log(1); a[1]=a[1].replace('slots=4','slots=0'); a[2]=a[2].replace('slots=4','slots=0')
         with self.assertRaises(ValueError): first_step(a,1)

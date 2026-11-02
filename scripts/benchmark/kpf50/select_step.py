@@ -22,7 +22,7 @@ def first_step(lines, expected_mask):
     for line in lines:
         if m:=ITER_BEGIN.search(line):
             if iteration is not None: raise ValueError('nested iteration')
-            iteration={'id':int(m[1]),'start_ns':int(m[2]),'draft_context':int(m[3])}
+            iteration={'id':int(m[1]),'start_ns':int(m[2]),'draft_context':int(m[3]),'all_phases':[]}
         if m:=DRAFT_BEGIN.search(line):
             if iteration is None or 'draft_start_ns' in iteration: raise ValueError('unmatched draft begin')
             iteration['draft_start_ns']=int(m[1]); iteration['draft_slots']=int(m[2])
@@ -36,6 +36,8 @@ def first_step(lines, expected_mask):
             if iteration['end_ns'] <= iteration['start_ns']: raise ValueError('invalid iteration')
             if selected is not None:
                 if not iteration['draft_context'] or iteration.get('draft_slots',0) <= 0: raise ValueError('missing active draft context')
+                if not iteration['all_phases'] or any(p not in ('decode','verify') for p in iteration['all_phases']):
+                    raise ValueError('iteration includes prefill or unknown phase')
                 if not (iteration['start_ns'] <= iteration.get('draft_start_ns',-1) <= iteration.get('draft_end_ns',-1) <= iteration['end_ns']):
                     raise ValueError('draft span missing or outside iteration')
                 if not (iteration['start_ns'] <= selected['start_ns'] < selected['end_ns'] <= iteration['end_ns']):
@@ -45,6 +47,7 @@ def first_step(lines, expected_mask):
             iteration=None
         if m:=PHASE.search(line):
             call,i,seq,pos,phase=m.groups(); get(int(call))['phases'][int(i)]=(int(seq),int(pos),phase)
+            if iteration is not None: iteration['all_phases'].append(phase)
         if m:=INPUT.search(line):
             call,i,tok,pos=m.groups(); get(int(call))['inputs'][int(i)]=(int(tok),int(pos))
         if m:=BEGIN.search(line):
