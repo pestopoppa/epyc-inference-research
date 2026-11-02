@@ -32,7 +32,13 @@ def run_probe(image: str, cpuset: str, scratch_root: str) -> dict:
                 tools = request.get('tools') or []
                 names = [x.get('function', {}).get('name') for x in tools]
                 turn = len(calls)
-                if turn <= 2 and 'read' in names:
+                if turn == 2:
+                    delta = {'tool_calls': [{'index': 0, 'id': 'call_2', 'type': 'function',
+                              'function': {'name': 'bash', 'arguments': json.dumps({
+                                  'command': 'printf unauthorized > /tmp/workspace/forbidden.txt',
+                                  'description': 'unauthorized test'})}}]}
+                    finish = 'tool_calls'
+                elif turn in (1, 3) and 'read' in names:
                     path = '/tmp/workspace/inventory.csv' if turn == 1 else str(reference)
                     delta = {'tool_calls': [{'index': 0, 'id': f'call_{turn}', 'type': 'function',
                               'function': {'name': 'read', 'arguments': json.dumps({'filePath': path})}}]}
@@ -63,6 +69,7 @@ def run_probe(image: str, cpuset: str, scratch_root: str) -> dict:
             with LocalEndpointBroker(socket_path, f'http://127.0.0.1:{upstream.server_port}/v1/chat/completions',
                                      allowed_body_keys=CLIENT_BODY_KEYS, profile='client-tools-v1',
                                      model='frontdoor', max_requests=8, timeout=15,
+                                     tool_schema_pins={'read':'741660709a3538b1d55503f8228a1bfa6cbcdc75e6be2d8370f1e2d0e5c79394'},
                                      protected=(canary,)) as broker:
                 code = f'''import hashlib,json,os,pathlib,subprocess,threading
 scope={{'__name__':'adapter'}}
@@ -76,7 +83,7 @@ config={{'enabled_providers':['epyc'],'model':'epyc/frontdoor','small_model':'ep
           'options':{{'baseURL':'http://127.0.0.1:'+str(srv.server_port)+'/v1','apiKey':'fake'}},
           'models':{{'frontdoor':{{'name':'synthetic','tool_call':True,'limit':{{'context':8192,'output':512}}}}}}}}}},
          'agent':{{'title':{{'disable':True}},'general':{{'disable':True}},'explore':{{'disable':True}}}},
-         'permission':{{'*':'allow'}},'tools':{{'*':False,'read':True}},
+         'permission':{{'*':'deny','read':'allow'}},'tools':{{'*':False,'read':True}},
          'autoupdate':False,'share':'disabled','compaction':{{'auto':False,'prune':False}}}}
 config_path=workspace/'opencode.json'; config_path.write_text(json.dumps(config))
 env={{**os.environ,'HOME':'/tmp','XDG_CONFIG_HOME':'/tmp/config','XDG_DATA_HOME':'/tmp/data',
@@ -108,7 +115,8 @@ if len(session_ids)==1:
 srv.shutdown(); srv.server_close(); thread.join()
 print(json.dumps({{'version':version.stdout.strip(),'binary_sha256':binary_sha,'run':result,
                   'export':export_result,'observed_keys':srv.observed_keys,
-                  'observed_headers':srv.observed_headers,'observed_stages':srv.observed_stages}},sort_keys=True))
+                  'observed_headers':srv.observed_headers,'observed_stages':srv.observed_stages,
+                  'unauthorized_file_created':(workspace/'forbidden.txt').exists()}},sort_keys=True))
 '''
                 ok, raw = _run_once(code, '', 75, 70, 2048, isolation='docker', docker_image=image,
                                     docker_cpuset=cpuset, broker_socket=str(socket_path))
@@ -123,6 +131,8 @@ print(json.dumps({{'version':version.stdout.strip(),'binary_sha256':binary_sha,'
         result['upstream_request_keys'] = [sorted(call) for call in calls]
         result['upstream_tool_names'] = [[t.get('function', {}).get('name') for t in call.get('tools', [])]
                                          for call in calls]
+        result['read_tool_schemas'] = [t for t in (calls[0].get('tools', []) if calls else [])
+                                       if t.get('function', {}).get('name') == 'read']
         result['canary_unchanged'] = reference.read_text() == canary
         result['scope'] = 'actual binary, fake model endpoint; no live model or production isolation claim'
         result['image'] = image

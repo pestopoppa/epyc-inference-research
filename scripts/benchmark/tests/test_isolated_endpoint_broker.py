@@ -11,6 +11,10 @@ import pytest
 from scripts.benchmark.code_exec_scorer import _run_once
 from scripts.benchmark.isolated_endpoint_broker import BrokerRefusal, CLIENT_BODY_KEYS, LocalEndpointBroker
 
+READ_PIN = {'read': '741660709a3538b1d55503f8228a1bfa6cbcdc75e6be2d8370f1e2d0e5c79394'}
+READ_SCHEMA = json.loads((Path(__file__).resolve().parents[3] /
+    'artifacts/evl46/opencode-fake-upstream-20261102/read-tool.schema.json').read_text())
+
 
 @pytest.fixture
 def upstream():
@@ -25,6 +29,11 @@ def upstream():
                 content = request['messages'][0].get('content')
                 event = (b'data: {"choices":[{"delta":{"content":"hidden-secret"}}]}\n\n'
                          if content == 'secret-sse' else
+                         b'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"name":"ba"}}]}}]}\n\n'
+                         b'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"name":"sh"}}]}}]}\n\n'
+                         if content == 'bash-sse' else
+                         b'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"name":"read"}}]}}]}\n\n'
+                         if content == 'read-sse' else
                          b'data: {"choices":[{"delta":{"content":"hidden-"}}]}\n\n'
                          b'data: {"choices":[{"delta":{"content":"secret"}}]}\n\n'
                          if content == 'split-secret-sse' else
@@ -101,7 +110,7 @@ def test_broker_deadline(tmp_path, upstream):
 def _client_body():
     return {'model': 'frontdoor', 'messages': [{'role': 'user', 'content': 'hello'}],
             'x_tool_mode': 'client', 'x_escalation': 'off', 'x_memory': 'off',
-            'x_session_id': 'trial-1', 'stream': False, 'max_tokens': 256}
+            'x_session_id': 'trial-1', 'stream': False, 'max_tokens': 256, 'tools': [READ_SCHEMA]}
 
 
 def test_client_tools_mode_fails_closed(tmp_path, upstream):
@@ -110,14 +119,15 @@ def test_client_tools_mode_fails_closed(tmp_path, upstream):
     with pytest.raises(BrokerRefusal):
         LocalEndpointBroker(tmp_path / 'sock', endpoint, allowed_body_keys=CLIENT_BODY_KEYS)
     broker = LocalEndpointBroker(tmp_path / 'sock', endpoint, allowed_body_keys=CLIENT_BODY_KEYS,
-                                 profile='client-tools-v1', model='frontdoor')
+                                 profile='client-tools-v1', model='frontdoor', tool_schema_pins=READ_PIN)
     request = {'token': broker.token, 'method': 'POST', 'path': '/v1/chat/completions',
                'body': _client_body()}
     with pytest.raises(BrokerRefusal):
         broker.handle({**request, 'path': '/chat'})
     for change in ({'x_tool_mode': 'repl'}, {'x_tool_mode': None}, {'x_escalation': 'auto'},
                    {'x_memory': 'on'}, {'stream': 'yes'}, {'model': 'architect'},
-                   {'x_force_role': 'architect'}, {'messages': [{'role':'user','content':[{'type':'image'}]}]}):
+                   {'x_force_role': 'architect'}, {'messages': [{'role':'user','content':[{'type':'image'}]}]},
+                   {'tools': []}, {'tools': [{**READ_SCHEMA, 'type': 'changed'}]}):
         with pytest.raises(BrokerRefusal):
             broker.handle({**request, 'body': {**request['body'], **change}})
     assert not calls
@@ -129,11 +139,13 @@ def test_sse_requires_done_and_refuses_reference_leak(tmp_path, upstream):
     server, _ = upstream
     endpoint = f'http://127.0.0.1:{server.server_port}/v1/chat/completions'
     broker = LocalEndpointBroker(tmp_path / 'sock', endpoint, allowed_body_keys=CLIENT_BODY_KEYS,
-                                 profile='client-tools-v1', model='frontdoor', protected=('hidden-secret',))
+                                 profile='client-tools-v1', model='frontdoor', protected=('hidden-secret',), tool_schema_pins=READ_PIN)
     request = {'token': broker.token, 'method': 'POST', 'path': '/v1/chat/completions',
                'body': {**_client_body(), 'stream': True}}
     assert broker.handle(request)['stream'] is True
-    for content in ('secret-sse', 'split-secret-sse', 'large-sse', 'missing-done'):
+    assert broker.handle({**request, 'body': {**request['body'],
+                         'messages': [{'role': 'user', 'content': 'read-sse'}]}})['stream'] is True
+    for content in ('secret-sse', 'split-secret-sse', 'large-sse', 'missing-done', 'bash-sse'):
         with pytest.raises(BrokerRefusal):
             broker.handle({**request, 'body': {**request['body'],
                           'messages': [{'role': 'user', 'content': content}]}})
@@ -143,7 +155,7 @@ def test_multi_request_broker_rejects_replayed_id(tmp_path, upstream):
     server, calls = upstream
     broker = LocalEndpointBroker(tmp_path / 'sock', f'http://127.0.0.1:{server.server_port}/v1/chat/completions',
                                  allowed_body_keys=CLIENT_BODY_KEYS, profile='client-tools-v1',
-                                 model='frontdoor', max_requests=2)
+                                 model='frontdoor', max_requests=2, tool_schema_pins=READ_PIN)
     request = {'token': broker.token, 'request_id': 'a' * 32, 'method': 'POST',
                'path': '/v1/chat/completions', 'body': _client_body()}
     assert broker.handle(request)['ok'] is True
@@ -193,7 +205,7 @@ def test_real_client_tools_socket(upstream):
         path = Path(directory) / 'socket'
         with LocalEndpointBroker(path, f'http://127.0.0.1:{server.server_port}/v1/chat/completions',
                                  allowed_body_keys=CLIENT_BODY_KEYS, profile='client-tools-v1',
-                                 model='frontdoor') as broker:
+                                 model='frontdoor', tool_schema_pins=READ_PIN) as broker:
             request = {'token': broker.token, 'method': 'POST', 'path': '/v1/chat/completions',
                        'body': _client_body()}
             code = ("import socket\ns=socket.socket(socket.AF_UNIX); s.connect('/broker/socket')\n"
@@ -218,7 +230,7 @@ def test_real_container_http_adapter(upstream):
         path = Path(directory) / 'socket'
         with LocalEndpointBroker(path, f'http://127.0.0.1:{server.server_port}/v1/chat/completions',
                                  allowed_body_keys=CLIENT_BODY_KEYS, profile='client-tools-v1',
-                                 model='frontdoor', max_requests=2, protected=('/private/oracle',)) as broker:
+                                 model='frontdoor', max_requests=2, protected=('/private/oracle',), tool_schema_pins=READ_PIN) as broker:
             code = f'''import http.client, json, threading
 scope = {{'__name__':'adapter'}}
 exec(compile({source!r}, 'adapter.py', 'exec'), scope)
@@ -228,7 +240,7 @@ def call(path,body):
     conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=3)
     conn.request('POST',path,json.dumps(body),{{'Content-Type':'application/json'}})
     response=conn.getresponse(); data=response.read(); ctype=response.getheader('Content-Type'); result=[response.status, data.decode() if ctype=='text/event-stream' else json.loads(data),ctype]; conn.close(); return result
-base={{'model':'frontdoor','messages':[{{'role':'user','content':'hello'}}], 'max_tokens':256}}
+base={{'model':'frontdoor','messages':[{{'role':'user','content':'hello'}}], 'max_tokens':256, 'tools':[{READ_SCHEMA!r}]}}
 results=[call('/admin',base),call('/v1/chat/completions',{{**base,'model':'architect'}}),call('/v1/chat/completions',base),call('/v1/chat/completions',{{**base,'stream':True,'stream_options':{{'include_usage':True}}}})]
 server.shutdown(); server.server_close(); thread.join()
 print(json.dumps(results))

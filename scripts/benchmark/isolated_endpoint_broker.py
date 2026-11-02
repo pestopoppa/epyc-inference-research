@@ -4,11 +4,14 @@ This broker is not a live transport authorization. It exposes one dedicated
 Unix socket, accepts a bounded number of authenticated JSON requests, and never provides the
 agent a host-network or Docker socket. The caller owns endpoint and reference
 isolation; literal scanning is a tripwire, not a confidentiality boundary.
+Client-mode calls require exact tool-schema hashes and refuse returned tool
+names outside those pins before any buffered response reaches the client.
 """
 from __future__ import annotations
 
 import base64
 import hmac
+import hashlib
 import http.client
 import json
 import os
@@ -39,7 +42,7 @@ class LocalEndpointBroker:
     def __init__(self, socket_path: Path, endpoint: str, *, allowed_body_keys: frozenset[str],
                  protected: tuple[str, ...] = (),
                  timeout: float = 3.0, profile: str = "fixture", model: str | None = None,
-                 max_requests: int = 1):
+                 max_requests: int = 1, tool_schema_pins: dict[str, str] | None = None):
         u = urlsplit(endpoint)
         try:
             port = u.port
@@ -59,13 +62,18 @@ class LocalEndpointBroker:
             raise BrokerRefusal("request count must be between 1 and 16")
         if u.path == "/v1/chat/completions":
             if (profile != "client-tools-v1" or not isinstance(model, str) or not model
-                    or not allowed_body_keys.issubset(CLIENT_BODY_KEYS)):
+                    or not allowed_body_keys.issubset(CLIENT_BODY_KEYS)
+                    or not isinstance(tool_schema_pins, dict) or not tool_schema_pins
+                    or any(not isinstance(k, str) or not k or not isinstance(v, str)
+                           or len(v) != 64 or any(c not in '0123456789abcdef' for c in v)
+                           for k, v in tool_schema_pins.items())):
                 raise BrokerRefusal("v1 route requires the pinned client-tools profile")
         elif profile != "fixture" or model is not None:
             raise BrokerRefusal("chat route is available only for synthetic fixtures")
         self.socket_path, self.endpoint, self.port = socket_path, u.path, port
         self.protected, self.timeout, self.allowed_body_keys = protected, timeout, allowed_body_keys
         self.profile, self.model = profile, model
+        self.tool_schema_pins = dict(tool_schema_pins or {})
         self.max_requests, self._seen_ids = max_requests, set()
         self.token = secrets.token_hex(32)
         self._listener: socket.socket | None = None
@@ -82,6 +90,7 @@ class LocalEndpointBroker:
         if not text.endswith('\n\n') or not events or events[-1] != 'data: [DONE]' or self._forbidden(text):
             raise BrokerRefusal("invalid or prohibited SSE")
         strings = []
+        tool_names = {}
         def collect(value):
             if isinstance(value, str):
                 strings.append(value)
@@ -98,6 +107,17 @@ class LocalEndpointBroker:
             if not isinstance(item, dict) or self._forbidden(item):
                 raise BrokerRefusal("prohibited SSE data")
             collect(item)
+            for choice in item.get('choices', []):
+                for call in (choice.get('delta') or {}).get('tool_calls', []):
+                    key = (choice.get('index', 0), call.get('index'))
+                    if type(key[1]) is not int or not isinstance(call.get('function', {}), dict):
+                        raise BrokerRefusal("invalid streamed tool call")
+                    name = call.get('function', {}).get('name', '')
+                    if name is not None and not isinstance(name, str):
+                        raise BrokerRefusal("invalid streamed tool name")
+                    tool_names[key] = tool_names.get(key, '') + (name or '')
+        if any(name not in self.tool_schema_pins for name in tool_names.values()):
+            raise BrokerRefusal("unpermitted streamed tool call")
         if self._forbidden(''.join(strings)):
             raise BrokerRefusal("prohibited split SSE data")
 
@@ -137,6 +157,19 @@ class LocalEndpointBroker:
                            or not isinstance(m.get("content"), (str, type(None))) for m in messages)
                     or type(body.get("max_tokens")) is not int or not 1 <= body["max_tokens"] <= 8192):
                 raise BrokerRefusal("client-tools request contract refused")
+            tools = body.get("tools")
+            if not isinstance(tools, list) or len(tools) != len(self.tool_schema_pins):
+                raise BrokerRefusal("tool catalog refused")
+            seen = set()
+            for tool in tools:
+                if not isinstance(tool, dict) or not isinstance(tool.get('function'), dict):
+                    raise BrokerRefusal("invalid tool schema")
+                name = tool['function'].get('name')
+                digest = hashlib.sha256(json.dumps(tool, sort_keys=True, separators=(',', ':'),
+                                                   ensure_ascii=False).encode()).hexdigest()
+                if name in seen or self.tool_schema_pins.get(name) != digest:
+                    raise BrokerRefusal("unapproved tool schema")
+                seen.add(name)
         encoded = json.dumps(request["body"], ensure_ascii=False, separators=(',', ':')).encode()
         if len(encoded) > MAX_REQUEST:
             raise BrokerRefusal("request too large")
@@ -194,6 +227,11 @@ class LocalEndpointBroker:
             body = json.loads(data)
             if not isinstance(body, dict) or self._forbidden(body):
                 raise BrokerRefusal("upstream content refused")
+            if self.profile == "client-tools-v1":
+                for choice in body.get('choices', []):
+                    for call in (choice.get('message') or {}).get('tool_calls', []):
+                        if (call.get('function') or {}).get('name') not in self.tool_schema_pins:
+                            raise BrokerRefusal("unpermitted tool call")
             return {"ok": True, "body": body}
         except (AttributeError, OSError, ValueError, http.client.HTTPException) as exc:
             raise BrokerRefusal("upstream failed or was refused") from exc
