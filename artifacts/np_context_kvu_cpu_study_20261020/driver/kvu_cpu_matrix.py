@@ -23,6 +23,9 @@ import argparse, atexit, hashlib, json, os, re, signal, statistics, subprocess, 
 import urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import kvu126_capture
+import kvu126_identity
+import kvu126_finalize
 
 HERE = Path(__file__).resolve().parent
 ART = HERE.parent
@@ -48,10 +51,24 @@ SLOT_MARGIN_TOK = 256           # explicit planning margin kept free in every sl
 DEPTH_SUFFIX_RESERVE_TOK = 384  # header + <=256-token suffix + ratio slack (W2 measured suffix turns of 261-310 tokens incl. header)
 TEMPLATE_OVERHEAD_TOK = 64      # BOS / template / tokenizer-boundary slack (the cells use raw prompts, so this is conservative)
 GUARD_HEADROOM_TOK = 32         # HARD refusal: planned request tokens + n_predict must be <= slot - this
-LS = {"8k": 8192, "32k": 32768, "64k": 65536, "128k": 131072, "t8short": 1024}   # t8short: 8 clients vs np4, anchor for stack_topology.yaml:140-150 (T=8 full 124.56 tok/s)
+LS = {"8k": 8192, "32k": 32768, "48k": 49152, "64k": 65536, "96k": 98304, "128k": 131072, "t8short": 1024}   # t8short: 8 clients vs np4, anchor for stack_topology.yaml:140-150 (T=8 full 124.56 tok/s)
 FORK_BIN_DEFAULT = "/mnt/raid0/llm/llama.cpp-experimental/build-cpu/bin/llama-server"   # placeholder; pass --fork-binary
 BANK_NAMES = ["8k", "32k", "64k", "128k"]
+# Preserve the existing default bank and its manifests. New lengths are opt-in.
+AVAILABLE_BANK_NAMES = ["8k", "32k", "48k", "64k", "96k", "128k"]
 BANK_DOCS = 8
+
+def validate_names(raw, valid, label, increasing=False):
+    """Refuse unknown, repeated or unordered sizes before launching any server."""
+    names = raw.split(",")
+    unknown = [name for name in names if name not in valid]
+    if unknown:
+        raise ValueError(f"{label}: unknown sizes {unknown}; expected {valid}")
+    if len(set(names)) != len(names):
+        raise ValueError(f"{label}: duplicate sizes are not supported")
+    if increasing and any(LS[a] >= LS[b] for a, b in zip(names, names[1:])):
+        raise ValueError(f"{label}: sizes must increase for additive bank building")
+    return names
 def depth_doc_tok(L, npredict):
     """Tokens of the per-stream depth-mode document so that wave 0 AND every suffix turn fit a slot of L tokens."""
     return L - SLOT_MARGIN_TOK - npredict - DEPTH_SUFFIX_RESERVE_TOK - TEMPLATE_OVERHEAD_TOK
@@ -193,7 +210,7 @@ def build_launches(a):
         for np_ in nps:
             add(f"split_np{np_}_slot65536", np_, np_ * 65536, False, True, [l for l in L_all if LS[l] <= 65536], pmodes)
             if np_ <= 4:
-                add(f"split_np{np_}_slot131072", np_, np_ * 131072, False, True, [l for l in L_all if LS[l] == 131072], pmodes)
+                add(f"split_np{np_}_slot131072", np_, np_ * 131072, False, True, [l for l in L_all if 65536 < LS[l] <= 131072], pmodes)
     if "unified" in a.kv_modes.split(","):
         for pool in [int(x) for x in a.pools.split(",")]:
             for np_ in nps:
@@ -358,6 +375,8 @@ def one_request(port, prompt, npred, tag, t_barrier=None, id_slot=None, stream=T
     if t_barrier is not None:
         t_barrier.wait()
     t0 = time.time(); rec["t_start"] = t0
+    rec["t_start_monotonic"] = time.monotonic()
+    rec["t_first_monotonic"] = None
     last = {}
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -381,6 +400,7 @@ def one_request(port, prompt, npred, tag, t_barrier=None, id_slot=None, stream=T
                 ntk = len(j.get("tokens") or []) or (1 if j.get("content") else 0)
                 if ntk and rec["ttft"] is None:
                     rec["ttft"] = now - t0
+                    rec["t_first_monotonic"] = time.monotonic()
                 if ntk:
                     rec["chunks"].append((round(now - t0, 4), ntk))
                 if j.get("stop"):
@@ -390,6 +410,7 @@ def one_request(port, prompt, npred, tag, t_barrier=None, id_slot=None, stream=T
     except Exception as e:                                      # noqa: BLE001 - recorded as evidence, not swallowed
         rec["error"] = repr(e)[:300]
     rec["t_end"] = time.time()
+    rec["t_end_monotonic"] = time.monotonic()
     tm = last.get("timings", {})
     rec.update(draft_n=tm.get("draft_n"), draft_n_accepted=tm.get("draft_n_accepted"), n_fork_tokens=tm.get("n_fork_tokens"), prompt_n=tm.get("prompt_n"), cache_n=tm.get("cache_n", last.get("tokens_cached")),
                prompt_ms=tm.get("prompt_ms"), prompt_tps=tm.get("prompt_per_second"),
@@ -590,6 +611,14 @@ def run_launch(a, la, outroot, corpus, summary):
         (ldir / "loadfacts.json").write_text(json.dumps(dict(facts=facts, linkage=link, argv=prefix + argv), indent=1))
         if a.loadonly:
             summary(dict(launch=la["id"], cell="loadonly", result="OK", **facts)); return
+        if getattr(a, "unique_cells_metric", ""):
+            try:
+                a.identity_verifier.check(srv.proc.pid)
+                kvu126_capture.read_gauge(a.port, a.unique_cells_metric)
+            except (kvu126_capture.CaptureError, kvu126_identity.IdentityError) as e:
+                summary(dict(launch=la["id"], cell="-", result="OCCUPANCY_UNSUPPORTED", reason=str(e)))
+                a.refused = True
+                return
         # warm-up: one short untimed request (graph build, page-in), not counted
         one_request(a.port, "Warm up. " * 50, 16, "warmup")
         off = len(open(ldir / "server.log", "rb").read())
@@ -621,12 +650,32 @@ def cell_header(cl, a, la, Lname, pmode, srv, facts):
              f"ENV {json.dumps({k: srv.env.get(k) for k in PROD_ENV})}\nBINARY {os.path.realpath(srv.argv[0])} LINKAGE {json.dumps(srv.linkage())}\n"
              f"LOADFACTS {json.dumps(facts)}\nPHYSICS {json.dumps(physics(la['np'], LS[Lname], la['mtp']))}\n")
 
+def start_identity_sampler(a, srv):
+    kvu126_identity.verify_producer_pins(a.identity_producer_pins)
+    before = a.identity_verifier.check(srv.proc.pid)
+    callback = lambda: a.identity_verifier.fast_check(srv.proc.pid, before)
+    sampler = kvu126_capture.Sampler(a.port, a.unique_cells_metric, identity_check=callback)
+    sampler.start()
+    return sampler, before
+
+def finish_identity_sampler(a, srv, sampler, before, recs, pool):
+    captured = sampler.finish(recs, pool)
+    kvu126_identity.verify_producer_pins(a.identity_producer_pins)
+    after = a.identity_verifier.check(srv.proc.pid)
+    keys = ("pid_birth_identity", "binary_sha256", "model_sha256", "mapped_dso_sha256")
+    if any(before[key] != after[key] for key in keys):
+        raise kvu126_identity.IdentityError("runtime identity changed during wave")
+    if any(s.get("pid_birth_identity") != before["pid_birth_identity"] for s in captured["samples"]):
+        raise kvu126_identity.IdentityError("metric sample lacks the owned process identity")
+    return captured, {"before": before, "after": after}
+
 def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio, off):
     L, np_ = LS[Lname], la["np"]
     nclients = 8 if Lname == "t8short" else np_
     ntok = L - a.npredict - TOK_MARGIN
     limit = slot_limit(la, L)
-    cdir = ldir / f"{Lname}_{pmode}"; cdir.mkdir(exist_ok=True)
+    cdir = ldir / f"{Lname}_{pmode}"
+    cdir.mkdir(exist_ok=not bool(getattr(a, "unique_cells_metric", "")))
     cl = open(cdir / "cell.log", "w"); cell_header(cl, a, la, Lname, pmode, srv, facts)
     cl.write(f"SLOT_BUDGET limit={limit} L={L} npredict={a.npredict} slot_margin={SLOT_MARGIN_TOK} suffix_reserve={DEPTH_SUFFIX_RESERVE_TOK} "
              f"template_overhead={TEMPLATE_OVERHEAD_TOK} guard_headroom={GUARD_HEADROOM_TOK} depth_doc_tok={depth_doc_tok(L, a.npredict)}\n")
@@ -691,8 +740,13 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                                "Summarize the document above in detail.\n")
         bar = threading.Barrier(nclients)
         t0 = time.time()
-        with ThreadPoolExecutor(nclients) as ex:
-            recs = list(ex.map(lambda sp: one_request(a.port, sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0] if pmode == "depth" else None), enumerate(prompts)))
+        sampler, identity_before = start_identity_sampler(a, srv) if getattr(a, "unique_cells_metric", "") and w > 0 else (None, None)
+        try:
+            with ThreadPoolExecutor(nclients) as ex:
+                recs = list(ex.map(lambda sp: one_request(a.port, sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0] if pmode == "depth" else None), enumerate(prompts)))
+        finally:
+            if sampler:
+                sampler.done.set()
         wall = time.time() - t0
         rss, hwm = srv.rss_gib()
         ok = [r for r in recs if r["error"] is None and r["status"] == 200]
@@ -706,6 +760,12 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                   agg_e2e_tok_s=round(sum(r["predicted_n"] or 0 for r in ok) / wall, 2),
                   rss_gib=rss, vmhwm_gib=hwm, errors=[r["error"] for r in recs if r["error"]][:4],
                   n_reprefill=(sum(1 for r in recs if (r["prompt_n"] or 0) > 0.5 * ntok) if (pmode == "depth" and w > 0) else None))
+        if sampler:
+            try:
+                wv["occupancy_capture"], wv["runtime_identity"] = finish_identity_sampler(a, srv, sampler, identity_before, recs, la["c"])
+            except (kvu126_capture.CaptureError, kvu126_identity.IdentityError) as e:
+                a.refused = True
+                wv["occupancy_capture_error"] = str(e)
         waves.append(wv)
         cl.write("WAVE " + json.dumps(wv) + "\n"); cl.flush()
         say(f"{la['id']} {Lname} {pmode} wave{w}: wall={wv['wall_s']}s ttft={wv['ttft_s']} dec_sum={wv['decode_tps_sum']} cache={wv['n_prompt_tokens_cache']} err={wv['n_err']}")
@@ -727,9 +787,13 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                min_headroom_tok=(limit - max(req_tok.values()) - a.npredict if req_tok else None))
     with open(cdir / "waves_capture.jsonl", "w") as wf:
         for w in waves:
-            wf.write(json.dumps(finalize_row(dict(row, pmode=pmode, L=L, cell=row["cell"], decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"],
+            captured = finalize_row(dict(row, pmode=pmode, L=L, cell=row["cell"], decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"],
                                                   prefill_tps=w["prefill_tps"], decode_tps_per_stream=w["decode_tps_per_stream"],
-                                                  agg_e2e_tok_s=w["agg_e2e_tok_s"]), a, la, srv, facts, loadavg, wave=w["wave"], wave_rec=w)) + "\n")
+                                                  agg_e2e_tok_s=w["agg_e2e_tok_s"]), a, la, srv, facts, loadavg, wave=w["wave"], wave_rec=w)
+            wf.write(json.dumps(captured) + "\n")
+            if w.get("occupancy_capture"):
+                kvu126_capture.write_bound_record(cdir, w["wave"], captured["row_sha256"], w["occupancy_capture"])
+                kvu126_identity.write_runtime_receipt(cdir, w["wave"], captured["row_sha256"], w["runtime_identity"]["before"], w["runtime_identity"]["after"], a.identity_plan_sha256, a.identity_producer_pins)
     row = finalize_row(row, a, la, srv, facts, loadavg)
     row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close()
@@ -803,7 +867,10 @@ def make_bank_tokens(port, corpus, ndocs, maxtok, bankdir):
     for i in range(ndocs):
         f = Path(bankdir) / f"doc{i}.tokens.json"
         if f.exists():
-            docs.append(json.loads(f.read_text())); continue
+            existing = json.loads(f.read_text())
+            if len(existing) < maxtok:
+                raise ValueError(f"existing bank token file {f} has {len(existing)} tokens, needs {maxtok}; use a new bank directory")
+            docs.append(existing); continue
         nch = int(maxtok * 4.2); toks = []
         while len(toks) < maxtok:
             toks += tokenize_text(port, corpus.take(nch)); nch = max(nch // 2, 20000)
@@ -908,7 +975,8 @@ def parse_bank_mode(pmode, np_):
 def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, off):
     L, np_ = LS[Lname], la["np"]; D = bank_tok(Lname)
     active, nrest = parse_bank_mode(pmode, np_)
-    cdir = ldir / f"{Lname}_{pmode}"; cdir.mkdir(exist_ok=True)
+    cdir = ldir / f"{Lname}_{pmode}"
+    cdir.mkdir(exist_ok=not bool(getattr(a, "unique_cells_metric", "")))
     cl = open(cdir / "cell.log", "w"); cell_header(cl, a, la, Lname, pmode, srv, facts)
     loadavg = [round(x, 2) for x in os.getloadavg()]
     docs = [load_bank_tokens(a.bank_dir, i) for i in range(nrest)]
@@ -921,8 +989,13 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
             rest.append(dict(slot=i, n_restored=r.get("n_restored", r.get("n_tokens")), ms=round((time.time() - t0) * 1000)))
         sfx = [suffix_tokens(a.port, corpus, 200) for _ in range(active)]
         bar = threading.Barrier(active); t0 = time.time()
-        with ThreadPoolExecutor(active) as ex:
-            recs = list(ex.map(lambda sp: one_request(a.port, docs[sp[0]][:D] + sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0]), enumerate(sfx)))
+        sampler, identity_before = start_identity_sampler(a, srv) if getattr(a, "unique_cells_metric", "") and w > 0 else (None, None)
+        try:
+            with ThreadPoolExecutor(active) as ex:
+                recs = list(ex.map(lambda sp: one_request(a.port, docs[sp[0]][:D] + sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0]), enumerate(sfx)))
+        finally:
+            if sampler:
+                sampler.done.set()
         wall = time.time() - t0; rss, hwm = srv.rss_gib()
         ok = [r for r in recs if r["error"] is None and r["status"] == 200]; dec = [r["decode_tps"] for r in ok if r["decode_tps"]]
         resident = sum(x["n_restored"] or 0 for x in rest)
@@ -936,6 +1009,12 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
                   draft_n=[r["draft_n"] for r in recs], draft_n_accepted=[r["draft_n_accepted"] for r in recs],
                   rss_gib=rss, vmhwm_gib=hwm, errors=[r["error"] for r in recs if r["error"]][:4],
                   n_reprefill=sum(1 for r in recs if (r["prompt_n"] or 0) > 0.5 * D))
+        if sampler:
+            try:
+                wv["occupancy_capture"], wv["runtime_identity"] = finish_identity_sampler(a, srv, sampler, identity_before, recs, la["c"])
+            except (kvu126_capture.CaptureError, kvu126_identity.IdentityError) as e:
+                a.refused = True
+                wv["occupancy_capture_error"] = str(e)
         waves.append(wv); cl.write("WAVE " + json.dumps(wv) + "\n"); cl.flush()
         say(f"{la['id']} {Lname} {pmode} wave{w}: wall={wv['wall_s']}s ttft={wv['ttft_s']} dec_sum={wv['decode_tps_sum']} prompt_n={wv['prompt_n']} resident={resident} err={wv['n_err']}")
     errs, _ = scan_log(ldir / "server.log", off)
@@ -955,7 +1034,13 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
                physics=physics(active, L, la["mtp"]), host_bw_gbs=HOST_BW_GBS, kv_unified=facts.get("kv_unified"))
     with open(cdir / "waves_capture.jsonl", "w") as wf:
         for w in waves:
-            wf.write(json.dumps(finalize_row(dict(row, decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"]), a, la, srv, facts, loadavg, wave=w["wave"], wave_rec=w)) + "\n")
+            captured = finalize_row(dict(row, decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"],
+                                         decode_tps_per_stream=w["decode_tps_per_stream"]), a, la, srv, facts, loadavg,
+                                    wave=w["wave"], wave_rec=w)
+            wf.write(json.dumps(captured) + "\n")
+            if w.get("occupancy_capture"):
+                kvu126_capture.write_bound_record(cdir, w["wave"], captured["row_sha256"], w["occupancy_capture"])
+                kvu126_identity.write_runtime_receipt(cdir, w["wave"], captured["row_sha256"], w["runtime_identity"]["before"], w["runtime_identity"]["after"], a.identity_plan_sha256, a.identity_producer_pins)
     row = finalize_row(row, a, la, srv, facts, loadavg); row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close(); summary(row)
 
@@ -1067,6 +1152,12 @@ def main():
     p.add_argument("--anchor", action="store_true", help="add the T=8-clients/np4 short-ctx cell comparable to stack_topology.yaml:140-150")
     p.add_argument("--binary", default=str(BIN), help="server binary for the plain arms (default: production v10 kernel store)")
     p.add_argument("--extra-argv", default="", help="extra server argv for ALL arms (space separated)")
+    p.add_argument("--unique-cells-metric", default="", help="opt in to a source-verified native unique-cell Prometheus gauge; stock server lacks one")
+    p.add_argument("--identity-build-receipt", default="", help="build-time identity receipt for the instrument")
+    p.add_argument("--identity-build-sha256", default="", help="predeclared SHA-256 of that build receipt")
+    p.add_argument("--identity-model-sha256", default="", help="predeclared full target model SHA-256")
+    p.add_argument("--identity-plan", default="", help="pre-run prospective plan file")
+    p.add_argument("--identity-plan-sha256", default="", help="predeclared SHA-256 of the prospective plan")
     p.add_argument("--fork-binary", default="", help="cross-slot prefix-fork build; enables the shared_fork prompt-mode arm")
     p.add_argument("--fork-min-tokens", type=int, default=1024, help="value for --slot-fork-min-tokens in the shared_fork arm (0 = off)")
     p.add_argument("--aba-key", default="", help="KVU-12.4: A/B pairing key; with --aba-ledger, refuse a launch whose argv differs (beyond KV mode) from an earlier launch with the same key")
@@ -1078,8 +1169,20 @@ def main():
     p.add_argument("--loadonly", action="store_true", help="launch, record load facts, stop (correctness-class)")
     p.add_argument("--corpus-roots", default="/workspace/handoffs,/workspace/docs")
     a = p.parse_args()
+    if a.unique_cells_metric and a.unique_cells_metric != kvu126_capture.UNIQUE_CELLS_METRIC:
+        p.error("--unique-cells-metric must name the supported native unique-cell gauge")
+    if a.unique_cells_metric and (not a.identity_build_receipt or not a.identity_plan or not re.fullmatch(r"[0-9a-f]{64}", a.identity_build_sha256) or not re.fullmatch(r"[0-9a-f]{64}", a.identity_model_sha256) or not re.fullmatch(r"[0-9a-f]{64}", a.identity_plan_sha256)):
+        p.error("unique-cell capture requires a pinned plan, build receipt and model digest")
+    if a.unique_cells_metric and "--metrics" not in a.extra_argv.split():
+        a.extra_argv += " --metrics"
     if a.port in range(8000, 8201):
         sys.exit("refusing production port range 8000-8200")
+    try:
+        validate_names(a.lens, LS, "--lens")
+        if a.build_bank:
+            validate_names(a.bank_names, AVAILABLE_BANK_NAMES, "--bank-names", increasing=True)
+    except ValueError as exc:
+        p.error(str(exc))
     if a.verify_against_launcher:
         sys.exit(0 if verify_against_launcher() else 1)
     MANIFEST = Path(a.manifest)
@@ -1121,12 +1224,14 @@ def main():
             tsp = 0.0
             for n_ in sp_nps:
                 Ls_ = [pm_l for la in ls if not la["unified"] and la["np"] == n_ for pm_l, pm in la["cells"] if pm.startswith("bank")]
-                nm_ = [nm for nm in BANK_NAMES if LS[nm] <= max(LS[x] for x in Ls_)]
+                nm_ = [nm for nm in AVAILABLE_BANK_NAMES if LS[nm] <= max(LS[x] for x in Ls_) and (nm in BANK_NAMES or nm in Ls_)]
                 e_ = est_bank_build(n_, nm_); tsp += e_
                 print(f"BANK BUILD split np{n_} (layout-specific, n_stream={n_}): est={e_/3600:.1f} h  names={nm_}  cmd: --build-bank --bank-kv split --bank-np {n_} --bank-names {','.join(nm_)}")
             print(f"BANK BUILD TOTAL est={(tb+tsp)/3600:.1f} h; bank dir {a.bank_dir}")
         return
-    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    # KVU-12.6 original-run evidence must never mix with, or overwrite,
+    # previously exposed rows. The caller supplies a fresh run directory.
+    out = Path(a.out); out.mkdir(parents=True, exist_ok=not bool(a.unique_cells_metric))
     corpus = Corpus(a.corpus_roots.split(","))
     sumf = out / "summary.jsonl"
     def summary(row):
@@ -1135,7 +1240,7 @@ def main():
             f.write(json.dumps(row) + "\n")
         print("SUMMARY " + json.dumps({k: row.get(k) for k in ("launch", "cell", "result", "prefill_tps_med", "ttft_s_med", "decode_tps_sum_med", "agg_e2e_med")}), flush=True)
     print(f"corpus sha256={corpus.sha} files={corpus.nfiles} chars={len(corpus.text)}", flush=True)
-    r = subprocess.run([LINKAGE, str(BIN)], capture_output=True, text=True)
+    r = subprocess.run([LINKAGE, str(a.binary)], capture_output=True, text=True)
     print("verify_ggml_linkage rc=%d\n%s%s" % (r.returncode, r.stdout[-600:], r.stderr[-300:]), flush=True)
     if r.returncode != 0:
         sys.exit("verify_ggml_linkage failed; refusing to measure")
@@ -1149,8 +1254,47 @@ def main():
     if a.gates:
         run_gates(a, out, corpus); print("DONE", flush=True); return
     a.refused = False
-    for la in ls:
-        run_launch(a, la, out, corpus, summary)
+    a.identity_verifier = None
+    try:
+        if a.unique_cells_metric:
+            if kvu126_identity.sha256_file(a.identity_plan) != a.identity_plan_sha256:
+                sys.exit("pre-run plan digest mismatch; refusing to measure")
+            if kvu126_identity.sha256_file(a.identity_build_receipt) != a.identity_build_sha256:
+                sys.exit("build receipt digest mismatch; refusing to measure")
+            build_receipt = json.loads(Path(a.identity_build_receipt).read_text())
+            plan = json.loads(Path(a.identity_plan).read_text())
+            declared = plan.get("expected_identity", {})
+            if (plan.get("schema") != "epyc.kvu126.prospective_plan.v1" or
+                declared.get("model_sha256") != a.identity_model_sha256 or
+                declared.get("binary_sha256") != build_receipt.get("binary_sha256") or
+                declared.get("source_commit") != build_receipt.get("source_commit")):
+                sys.exit("pre-run plan identity differs; refusing to measure")
+            a.identity_producer_pins = kvu126_identity.verify_producer_pins(plan.get("producer_pins"))
+            # Persist the exact pre-run declaration and build receipt before any
+            # target request. Exclusive files protect prior exposures.
+            a.identity_plan_copy = out / "kvu126-plan.json"
+            a.identity_build_copy = out / "kvu126-build-receipt.json"
+            for source, target, expected in ((a.identity_plan, a.identity_plan_copy, a.identity_plan_sha256),
+                                             (a.identity_build_receipt, a.identity_build_copy, a.identity_build_sha256)):
+                raw = Path(source).read_bytes()
+                if hashlib.sha256(raw).hexdigest() != expected:
+                    sys.exit("pre-run identity file changed; refusing to measure")
+                with target.open("xb") as dest:
+                    dest.write(raw)
+            a.identity_verifier = kvu126_identity.RuntimeVerifier(MODEL, a.identity_model_sha256, build_receipt)
+        for la in ls:
+            run_launch(a, la, out, corpus, summary)
+    finally:
+        if a.identity_verifier:
+            a.identity_verifier.close()
+    if a.unique_cells_metric and not a.refused and not a.loadonly:
+        # Original-run finalization is mandatory for a successful capture: an
+        # incomplete index or failed comparison is never labelled wired.
+        kvu126_identity.verify_producer_pins(a.identity_producer_pins)
+        index = kvu126_finalize.write_index(out, a.identity_build_copy)
+        subprocess.run([sys.executable, str(HERE / "kvu126_compare.py"), str(a.identity_plan_copy),
+                        "--expected-plan-sha256", a.identity_plan_sha256,
+                        "--records", str(index), "--expected-records-sha256", kvu126_identity.sha256_file(index)], check=True)
     print("DONE", flush=True)
     if a.refused:
         sys.exit(3)          # a REFUSED_OVERSIZE cell is a failed cell, never a quiet pass
