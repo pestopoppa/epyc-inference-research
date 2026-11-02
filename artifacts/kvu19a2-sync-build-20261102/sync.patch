@@ -1,0 +1,23 @@
+diff --git a/ggml/src/ggml-cuda/fattn-tile.cuh b/ggml/src/ggml-cuda/fattn-tile.cuh
+index 21ceb9a08..f30ededfc 100644
+--- a/ggml/src/ggml-cuda/fattn-tile.cuh
++++ b/ggml/src/ggml-cuda/fattn-tile.cuh
+@@ -1028,12 +1028,16 @@ static __global__ void flash_attn_tile(
+             if (threadIdx.x == 0) {
+                 KQ_sum_combine[threadIdx.y] = KQ_sum[0];
+             }
+-
+-            return;
+         }
+ 
++        // The producer warps must participate before exiting: this barrier
++        // publishes their shared VKQ and KQ_sum values to the consumer warps.
+         __syncthreads();
+ 
++        if (threadIdx.y % np != 0) {
++            return;
++        }
++
+ #pragma unroll
+         for (int ip = 1; ip < np; ++ip) {
+ #ifdef FAST_FP16_AVAILABLE
