@@ -35,6 +35,10 @@ def test_complete_report_counts_and_missing_records_refuse(tmp_path):
         assert result["cells"]["q8:off"]["agreement"] is False
         assert result["cells"]["q8:off"]["response_integrity"]["ON"]["score"] == {
             "responses": 1, "nonfinite_json": 0, "garbage_text": 0}
+        bad = dict(row, content="!!!!!!!!", raw_response_text='{"x": NaN}')
+        (tmp_path / "ON/q8-off/score/000-item.json").write_text(json.dumps(bad))
+        with pytest.raises(ValueError, match="invalid response"):
+            report.analyze(manifest, tmp_path)
         (tmp_path / "ON/q8-off/score/000-item.json").unlink()
         with pytest.raises(ValueError, match="incomplete"):
             report.analyze(manifest, tmp_path)
