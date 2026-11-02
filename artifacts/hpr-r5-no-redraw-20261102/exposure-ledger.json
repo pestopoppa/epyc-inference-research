@@ -1,0 +1,17 @@
+{
+  "schema": "epyc.hpr.exposure-ledger.v1",
+  "cohort": {
+    "corpus_sha256": "cfd8cafb44e35e1e8f0e81e629642c785233429a2143b3c78a7d28ef1d359289",
+    "selection_sha256": "84ea5daeff6fcf69932f98faa2a1fba7b2f0c99252bf3f1b8c59174ef29d994d",
+    "model": "q36_35b",
+    "unit": "64k"
+  },
+  "cells": [
+    {"arm": "dense", "wave": 0, "state": "exposed_complete", "evidence": "R5 continuation audit SHA256 896566dc3edefa4308c2f9874f07b9d9753e84aba695aca9fae9a8da34b74390"},
+    {"arm": "dense", "wave": 1, "state": "exposed_complete", "evidence": "R5 continuation audit SHA256 896566dc3edefa4308c2f9874f07b9d9753e84aba695aca9fae9a8da34b74390"},
+    {"arm": "dense", "wave": 2, "state": "exposed_complete", "evidence": "R5 continuation audit SHA256 896566dc3edefa4308c2f9874f07b9d9753e84aba695aca9fae9a8da34b74390"},
+    {"arm": "coarse", "wave": 0, "state": "exposed_complete", "evidence": "R5 continuation audit SHA256 896566dc3edefa4308c2f9874f07b9d9753e84aba695aca9fae9a8da34b74390"},
+    {"arm": "coarse", "wave": 1, "state": "exposed_complete", "evidence": "R5 continuation audit SHA256 896566dc3edefa4308c2f9874f07b9d9753e84aba695aca9fae9a8da34b74390"},
+    {"arm": "coarse", "wave": 2, "state": "exposed_unknown", "evidence": "R5 request 116 interrupted in prefill; no retained slot or final response; continuation audit SHA256 896566dc3edefa4308c2f9874f07b9d9753e84aba695aca9fae9a8da34b74390"}
+  ]
+}
