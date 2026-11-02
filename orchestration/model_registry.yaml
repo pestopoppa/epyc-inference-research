@@ -1075,6 +1075,9 @@ server_mode:
   # qwen25_coder_32b_q4km: launch spec preserved from the former coder_escalation model
   # (role realigned to Qwen3.6 2026-05-27; kept per model_not_role_indexing). Not in process_layout.
   qwen25_coder_32b_q4km:
+    deprecated: true
+    deprecated_date: 2026-11-02
+    deprecated_reason: "Qwen2.5-Coder-32B-Instruct-Q4_K_M GGUF (19.9 GB) deleted 2026-11-02 in an operator-approved disk reclaim; no live role bound (coder_escalation moved to Qwen3.8-27B on :8083; this row was a preserved former-coder_escalation record, not in process_layout). Benchmark history (2025-12-16 spec-dec 5.4x) kept below as provenance."
     url: http://localhost:8081
     port: 8081
     slots: 1  # Sweep 2026-02-19: p95 1.98x at concurrency=2, serial only
@@ -1113,7 +1116,7 @@ server_mode:
     # differs from its server_mode entry (recording ignored_model_id), so a stale value here would
     # silently serve the OLD artifact while the registry read as swapped.
     model_role: qwen38_27b_q8_local
-    description: "Coding escalation — Qwen3.8-27B dense Q8 MTP on MI210 (ROCm0). 2026-08-20: artifact swapped from Qwen3.6-27B-MTP-Q8_0. 2026-07-31: MOVED off frontdoor's :8070 shared 35B process onto architect_general's :8083 GPU process; alias, launches no server of its own. 2026-09-27 ARCHSWAP: the :8083 host role is now architect_critic (same process, same model). Quality on this model NOT yet measured for the coder suite. Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km."
+    description: "Coding escalation — Qwen3.8-27B dense Q8 MTP on MI210 (ROCm0). 2026-08-20: artifact swapped from Qwen3.6-27B-MTP-Q8_0. 2026-07-31: MOVED off frontdoor's :8070 shared 35B process onto architect_general's :8083 GPU process; alias, launches no server of its own. 2026-09-27 ARCHSWAP: the :8083 host role is now architect_critic (same process, same model). Quality on this model NOT yet measured for the coder suite. Former Qwen2.5-Coder-32B-Q4 was preserved as qwen25_coder_32b_q4km (deprecated, GGUF deleted 2026-11-02)."
     alias_of: architect_critic    # documentation; the load-bearing binding is server_mode.architect_critic.shared_with (ARCHSWAP-20260927: the :8083 host row was renamed architect_general -> architect_critic)
     benchmark_date: null   # 2026-07-31 model swap: 35B bench voided, 27B not yet run
     benchmark_score: null  # was "170/183 (93%)" = Qwen3.6-35B-A3B May-4 Claude-as-Judge; belongs to frontdoor's model, NOT this one
@@ -3005,6 +3008,9 @@ roles:
   # qwen25_coder_32b_q4km: benchmark record preserved from the former coder_escalation model
   # (role realigned to Qwen3.6 2026-05-27; kept per model_not_role_indexing — holds the 5.4x spec-dec data).
   qwen25_coder_32b_q4km:
+    deprecated: true
+    deprecated_date: 2026-11-02
+    deprecated_reason: "Qwen2.5-Coder-32B-Instruct-Q4_K_M GGUF (19.9 GB) deleted 2026-11-02 in an operator-approved disk reclaim; no live role bound (coder_escalation moved to Qwen3.8-27B on :8083; this row was a preserved former-coder_escalation record, not in process_layout). Benchmark history (2025-12-16 spec-dec 5.4x) kept below as provenance."
     tier: B
     description: Qwen2.5-Coder-32B-Instruct Q4_K_M — dense coder with spec decode + prompt lookup (former coder_escalation; 2025-12-16 bench)
     model:
@@ -3041,7 +3047,7 @@ roles:
       Handle edge cases explicitly.
   coder_escalation:
     tier: B
-    description: "Coding escalation — Qwen3.8-27B dense Q8 MTP on MI210 (ROCm0). E-7 2026-08-22 at terse template 1443ea9ab4bb: math 85.0%, mmlu_pro 27.5%, gpqa_diamond 47.5%, cruxeval 22.5% (alias on architect_general's :8083; same stamps). 2026-07-31: MOVED off frontdoor. Alias on architect_general's :8083 process; NO LONGER the same model as frontdoor and no longer shares its GGUF mmap. Absorbs the eliminated architect_coding role. Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km."
+    description: "Coding escalation — Qwen3.8-27B dense Q8 MTP on MI210 (ROCm0). E-7 2026-08-22 at terse template 1443ea9ab4bb: math 85.0%, mmlu_pro 27.5%, gpqa_diamond 47.5%, cruxeval 22.5% (alias on architect_general's :8083; same stamps). 2026-07-31: MOVED off frontdoor. Alias on architect_general's :8083 process; NO LONGER the same model as frontdoor and no longer shares its GGUF mmap. Absorbs the eliminated architect_coding role. Former Qwen2.5-Coder-32B-Q4 was preserved as qwen25_coder_32b_q4km (deprecated, GGUF deleted 2026-11-02)."
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
@@ -8738,6 +8744,9 @@ roles:
       residency: cold
       pinned: false
   ingest_qwen2_5_coder_32b:
+    deprecated: true
+    deprecated_date: 2026-11-02
+    deprecated_reason: "Qwen2.5-Coder-32B-Instruct-Q4_K_M GGUF (19.9 GB) deleted 2026-11-02 in an operator-approved disk reclaim; no live role bound (coder_escalation moved to Qwen3.8-27B on :8083; this row was a preserved former-coder_escalation record, not in process_layout). Benchmark history (2025-12-16 spec-dec 5.4x) kept below as provenance. Catalogue row naming the SAME GGUF; deprecated with it."
     tier: B
     description: Ingest candidate - Qwen2.5-Coder-32B (72% quality, 51x spec speedup)
     model:
@@ -13525,6 +13534,20 @@ deprecated_models:
       (size_gb is GiB). Moved to trash and purged 2026-10-21T19:00:05Z; assert_not_mapped.sh PASS at 18:59Z
       (10 processes unreadable by this user).
     deleted: 2026-10-21
+
+  - model: Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf
+    path_was: /mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf
+    size_gb: 19.9
+    reason: >-
+      Operator-approved 2026-11-02 disk reclaim. Former coder_escalation model (swapped 2026-05-06);
+      no live role bound. roles.qwen25_coder_32b_q4km, roles.ingest_qwen2_5_coder_32b and
+      server_mode.qwen25_coder_32b_q4km deprecated in the same commit. Supersedes the "KEPT" note on the
+      Q8_0 sibling row above. Stale tooling (benchmark scripts, not serving): bench_all_spec_sweeps.sh,
+      bench_coder_192t.sh, bench_kv_cache_quant.sh, bench_kv_hadamard.sh, bench_largek_speculation.sh,
+      bench_numa_coder_quant_sweep.sh, bench_sweep_coder_spec_params.sh, bench_sweep_spec_params.sh,
+      bench_tree_speculation_server.sh, profile_verification_cost.sh, scripts/benchmark/deprecated/*,
+      the AA-omniscience measurement commands/manifest under docs/ (historical measurement record).
+    deleted: 2026-11-02
 
 
 
