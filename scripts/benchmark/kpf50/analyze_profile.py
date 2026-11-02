@@ -57,7 +57,7 @@ def analyze_profile(manifest, dispatches, clock_bounds):
     require(isinstance(steps, list) and steps, 'no step boundaries')
     ordered_steps = sorted(steps, key=lambda x: x['start_ns'])
     for i, s in enumerate(ordered_steps):
-        require(s.get('phase') in ('decode', 'verify'), 'unknown or prefill step')
+        require(s.get('phase') in ('decode', 'verify', 'mixed_decode_verify'), 'unknown or prefill step')
         require(s.get('complete') is True and s.get('synchronized') is True, 'step lacks synchronized complete boundary')
         require(isinstance(s.get('start_ns'), int) and isinstance(s.get('end_ns'), int) and s['start_ns'] < s['end_ns'], 'invalid step')
         require(i == 0 or ordered_steps[i-1]['end_ns'] <= s['start_ns'], 'overlapping steps')
@@ -117,6 +117,12 @@ def main():
         require(sha256(args.dispatch_csv) == manifest.get('dispatch_sha256'), 'dispatch hash mismatch')
         with open(args.dispatch_csv, newline='') as f:
             rows = [{'kernel': r['KernelName'], 'begin_ns': int(r['BeginNs']), 'end_ns': int(r['EndNs'])} for r in csv.DictReader(f)]
+        alignment = manifest['clock_alignment']
+        alignment_path = Path(alignment['path'])
+        require(sha256(alignment_path) == alignment['sha256'], 'clock alignment hash mismatch')
+        alignment_data = json.loads(alignment_path.read_text())
+        require(alignment_data.get('schema') == 'epyc.kpf50.clock-smoke.v1' and alignment_data.get('verified') is True,
+                'clock alignment witness did not pass')
         captures = []
         for key in ('clock_before', 'clock_after'):
             c = manifest[key]
