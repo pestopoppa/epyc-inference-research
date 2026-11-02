@@ -7,6 +7,7 @@ No completion or generation request is ever sent. A sample maximum is not a peak
 import argparse
 import hashlib
 import http.client
+import importlib.util
 import json
 import os
 import re
@@ -126,6 +127,7 @@ def write_json(path, record):
 
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument('--belief-adapter', required=True, type=Path, help='pinned epyc-root scripts/vidya/adapters/kvu16a_native.py')
     p.add_argument('--output-dir', required=True, type=Path)
     p.add_argument('--port', required=True, type=int)
     p.add_argument('--max-gap-seconds', required=True, type=float, help='predeclared maximum sampling gap')
@@ -140,7 +142,15 @@ def main():
     slots = args.output_dir.resolve() / 'slots'
     if not slots.is_dir() or any(slots.iterdir()):
         raise RuntimeError('isolated slot directory missing or not empty')
+    adapter_path = args.belief_adapter.resolve(strict=True)
+    if adapter_path.name != 'kvu16a_native.py': raise RuntimeError('expected KVU-16a belief adapter')
+    spec = importlib.util.spec_from_file_location('kvu16a_native', adapter_path)
+    belief_adapter = importlib.util.module_from_spec(spec); spec.loader.exec_module(belief_adapter)
     plan, env = render(args.port, slots)
+    plan.update({'belief_adapter_sha256': digest(adapter_path), 'producer_path': str(Path(__file__).resolve()),
+                 'producer_sha256': digest(Path(__file__)),
+                 'producer_files_sha256': {name: digest(Path(__file__).resolve().parent / name) for name in
+                                           ('producer.py', 'sampler.py', 'device_identity.py', 'server_lifecycle.py')}})
     plan.update({'max_gap_seconds': args.max_gap_seconds, 'healthy_samples': args.healthy_samples,
                  'meaning': 'sampled own-PID VRAM; observed maximum is not a measured peak'})
     plan_path = args.output_dir / 'plan.json'
@@ -205,13 +215,15 @@ def main():
     kv_b = float(kv_matches[0]) * 1024**2 if len(kv_matches) == 1 else None
     if kv_b is None or not healthy_vram:
         complete = False
-    result = {'schema': 'kvu16a.load.sampled.v1', 'state': state, 'device': device, 'runtime_identity': identity,
+    grant = {k: os.environ.get(k) for k in ('FILLER_NEEDGPU', 'FILLER_DEADLINE', 'FILLER_STOPFILE', 'FILLER_PIDFILE')}
+    result = {'schema': 'kvu16a.load.sampled.v1', 'grant': grant, 'state': state, 'device': device, 'runtime_identity': identity,
               'cleanup': cleanup, 'sample_count': len(observed), 'missing': missing, 'sampling_gaps_s': gaps,
               'coverage_qualified': complete, 'sampled_max_own_vram_b': max((x['own_vram_b'] for x in observed if x['own_vram_b'] is not None), default=None),
               'target_kv_b_from_log': kv_b,
               'healthy_sampled_max_non_kv_b': max(healthy_vram) - kv_b if healthy_vram and kv_b is not None else None,
               'interpretation': 'sampled maximum only, not a peak; no registry ratification'}
     write_json(args.output_dir / 'result.json', result)
+    belief_adapter.record_run(args.output_dir)
     return 0 if complete else 75
 
 

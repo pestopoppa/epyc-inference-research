@@ -12,6 +12,7 @@ all placeholders with the predeclared values:
 ```sh
 cd /path/to/pinned/epyc-orchestrator
 PYTHONPATH="$PWD" /path/to/orchestrator/.venv/bin/python /path/to/producer.py \
+  --belief-adapter /path/to/epyc-root/scripts/vidya/adapters/kvu16a_native.py \
   --output-dir /path/to/new/private/output --port PORT \
   --max-gap-seconds MAX_GAP --healthy-samples COUNT
 sha256sum /path/to/new/private/output/plan.json
