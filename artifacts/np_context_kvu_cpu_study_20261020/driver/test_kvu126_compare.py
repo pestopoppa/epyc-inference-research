@@ -37,8 +37,8 @@ class ComparisonTest(unittest.TestCase):
         wave = self.write_json(name + ".jsonl", row)
         native = {"schema": "epyc.kvu126.native_unique_cells.v1", "row_sha256": row["row_sha256"],
                   "decode_start_monotonic_s": 10.0, "decode_end_monotonic_s": 20.0,
-                  "samples": [{"monotonic_s": 11.0, "unique_cells": occupancy, "pid_birth_identity": "1:123"},
-                              {"monotonic_s": 19.0, "unique_cells": occupancy + 100, "pid_birth_identity": "1:123"}]}
+                  "samples": [{"request_start_monotonic_s": 10.9, "monotonic_s": 11.0, "unique_cells": occupancy, "pid_birth_identity": "1:123"},
+                              {"request_start_monotonic_s": 18.9, "monotonic_s": 19.0, "unique_cells": occupancy + 100, "pid_birth_identity": "1:123"}]}
         source = self.write_json(name + "-raw-native.json", native)
         native.update(native_source=source["path"], native_source_sha256=source["sha256"])
         obs = {"wave_file": wave, "wave": 1, "occupancy_file": self.write_json(name + "-native.json", native)}
@@ -90,6 +90,11 @@ class ComparisonTest(unittest.TestCase):
         item = self.plan["arms"]["np4_96k"]["observations"][0]["wave_file"]
         (self.root / item["path"]).write_text("{}")
         with self.assertRaisesRegex(ValueError, "digest mismatch"):
+            compare.analyze(self.plan, self.root)
+
+    def test_sample_request_straddling_decode_start_refuses(self):
+        self.update_native("np4_96k", lambda x: x["samples"][0].update(request_start_monotonic_s=9.5))
+        with self.assertRaisesRegex(ValueError, "outside decode window"):
             compare.analyze(self.plan, self.root)
 
     def test_null_stream_and_errors_refuse(self):

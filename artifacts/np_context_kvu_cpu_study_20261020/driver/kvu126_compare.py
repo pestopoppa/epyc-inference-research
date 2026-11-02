@@ -87,9 +87,10 @@ def wave_observation(root, item, spec, min_samples):
     observed = []
     times = []
     for sample in samples:
+        request_start = number(sample.get("request_start_monotonic_s"), "sample request start")
         t = number(sample.get("monotonic_s"), "sample time")
         cells = number(sample.get("unique_cells"), "unique_cells")
-        if not start <= t <= end or not isinstance(cells, int) or cells > row["c"]:
+        if not start <= request_start <= t <= end or not isinstance(cells, int) or cells > row["c"]:
             raise ValueError("occupancy outside decode window or pool")
         observed.append(cells)
         times.append(t)
