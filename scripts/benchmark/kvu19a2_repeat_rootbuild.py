@@ -25,8 +25,9 @@ ROOT = Path("/dev/shm/kvu19a2-immutable-build-v2-20261102")
 BUILD_RECEIPT = ROOT / "build-receipt.json"
 BUILD_RECEIPT_SHA = os.environ["KVU19A2_BUILD_RECEIPT_SHA256"]
 EXPECTED_EXE = os.environ["KVU19A2_EXE_SHA256"]
+HARNESS_RECEIPT_SHA = os.environ["KVU19A2_HARNESS_RECEIPT_SHA256"]
 EXPECTED_ARCHIVE = "87e3cdc13b1859a31dfd3ced43c596e6b9653e2194b1ebd0d5eb6772593c04c2"
-PLAN_SHA = "b384ba0fec8d5a5504b2caa70a91c6933860180f1a792951fbe833cc77ca5f49"
+PLAN_SHA = "94466eff41bbbb59ed2185c8c021b785965344ad253a571079f7a9ee855d5d61"
 INPUT_PIN_SHA = "f9fc6b1f96d359c7dad6023794a9b804e71910a2d6ae31acc25f2faaf317f1e8"
 
 
@@ -71,14 +72,23 @@ def run():
     artifact = Path(__file__).resolve().parents[2] / "artifacts/kvu19a2-repeat-20261102"
     plan = artifact / "PREDECLARATION-ROOTBUILD.md"
     input_pin = artifact / "canonical-input-hashes.json"
+    harness_receipt = EXE.parent / "harness-receipt.json"
     if (sha_file(plan) != PLAN_SHA or sha_file(input_pin) != INPUT_PIN_SHA or sha_file(EXE) != EXPECTED_EXE
+            or sha_file(harness_receipt) != HARNESS_RECEIPT_SHA
             or sha_file(ARCHIVE) != EXPECTED_ARCHIVE or sha_file(BUILD_RECEIPT) != BUILD_RECEIPT_SHA):
         raise ValueError("plan, executable or archive hash changed")
     build = json.loads(BUILD_RECEIPT.read_text())
     if build.get("schema") != "kvu19a2.root-owned-source-build.v1" or build.get("source_archive_sha256") != EXPECTED_ARCHIVE:
         raise ValueError("build receipt source mismatch")
+    harness = json.loads(harness_receipt.read_text())
+    if (harness.get("schema") != "kvu19a2.harness-build.v1" or harness.get("executable_sha256") != EXPECTED_EXE
+            or harness.get("pair_build_receipt_sha256") != BUILD_RECEIPT_SHA):
+        raise ValueError("harness receipt mismatch")
     canonical = json.loads(input_pin.read_text())["cases"]
     hips = {arm: build["outputs"][arm]["hip_sha256"] for arm in ("base", "candidate")}
+    preflight_libs = {arm: {str(p.resolve()): sha_file(p.resolve())
+                            for p in (ROOT / arm / "bin").glob("libggml*.so.0.16.0")}
+                      for arm in ("base", "candidate")}
     OUT.mkdir(exist_ok=False)
     results, observations = [], []
     inroot = Path(tempfile.mkdtemp(prefix="kvu19a2-inputs-", dir="/dev/shm"))
@@ -94,9 +104,13 @@ def run():
                 hip = (libdir / "libggml-hip.so").resolve()
                 if sha_file(hip) != hips[arm]:
                     raise ValueError("HIP digest mismatch")
-                libs = {str(p.resolve()): sha_file(p.resolve()) for p in libdir.glob("libggml*.so.0.16.0")}
-                env = dict(os.environ, FA_CASE=str(case), FA_DUMP_DIR=str(output), FA_INPUT_DIR=str(inputs),
-                           LD_LIBRARY_PATH=str(libdir) + ":/opt/rocm/lib", GGML_BACKEND_PATH=str(hip))
+                libs = preflight_libs[arm]
+                if not libs or any(sha_file(Path(path)) != digest for path, digest in libs.items()):
+                    raise ValueError("runtime library changed after preflight")
+                env = {key: value for key, value in os.environ.items() if not key.startswith("GGML_")}
+                env.update(FA_CASE=str(case), FA_DUMP_DIR=str(output), FA_INPUT_DIR=str(inputs),
+                           LD_LIBRARY_PATH=str(libdir) + ":/opt/rocm/lib", GGML_BACKEND_PATH=str(hip),
+                           GGML_CUDA_FA_MASK_SKIP="0")
                 samples, mapping = [], None
                 start = time_now()
                 log = output / "native.log"
@@ -140,7 +154,8 @@ def run():
                        "hip_sha256": hips[arm], "mapped_ggml": mapping["mapped_ggml"] if mapping else {},
                        "mapping_sample_present": bool(mapping), "samples": samples,
                        "source_build_binding": "root-owned read-only to build UID; transitive toolchain not fully pinned",
-                       "build_receipt_sha256": BUILD_RECEIPT_SHA, "input_hashes": input_hashes,
+                       "build_receipt_sha256": BUILD_RECEIPT_SHA, "harness_receipt_sha256": HARNESS_RECEIPT_SHA,
+                       "mask_skip": "0", "input_hashes": input_hashes,
                        "started_at": start, "ended_at": end}
                 device = re.search(r"Device 0:.*?\b(gfx[0-9a-f]+)\b", log.read_text(errors="replace"))
                 if device and mapping and any(s["kfd"] and s["vram_bytes"] is not None and s["vram_bytes"] > 0
@@ -159,7 +174,8 @@ def run():
     result = {"schema": "kvu19a2.repeat-diagnostic.v1", "plan_sha256": PLAN_SHA,
               "executable_sha256": EXPECTED_EXE, "source_archive_sha256": EXPECTED_ARCHIVE,
               "source_build_binding": "root-owned read-only to build UID; transitive toolchain not fully pinned",
-              "build_receipt_sha256": BUILD_RECEIPT_SHA, "input_root_tmpfs": str(inroot), "runs": results,
+              "build_receipt_sha256": BUILD_RECEIPT_SHA, "harness_receipt_sha256": HARNESS_RECEIPT_SHA,
+              "runtime_library_pins": preflight_libs, "mask_skip": "0", "input_root_tmpfs": str(inroot), "runs": results,
               "comparisons": compare(results, canonical), "scope": "model-free diagnostic; no promotion"}
     with (OUT / "result.json").open("x") as f:
         json.dump(result, f, sort_keys=True); f.write("\n"); f.flush(); os.fsync(f.fileno())

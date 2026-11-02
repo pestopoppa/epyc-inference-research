@@ -12,7 +12,10 @@ original retained binary are separate experiments.
 
 After build completion, pin its receipt and all runtime library bytes before
 launch. Run exactly FA_CASE 78 and 80, five fresh processes per arm, alternating
-arm order. Actual saved Q/K/V/mask bytes must match each other and the canonical
+arm order. Explicitly set `GGML_CUDA_FA_MASK_SKIP=0` for both arms, after
+clearing inherited `GGML_*` variables: this tests the guarded-loop candidate
+with mask skipping disabled. Record this setting with each observation. Actual
+saved Q/K/V/mask bytes must match each other and the canonical
 input bytes preserved in `inputs/case78` and `inputs/case80` from the first
 experiment. Capture raw output, rc, process identity, in-window own KFD/VRAM,
 and mapped executable and ggml libraries for every run. A missing input,

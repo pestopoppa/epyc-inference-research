@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "/usr/bin/g++",
+    "-std=c++17",
+    "-O2",
+    "-x",
+    "c++",
+    "/proc/2415871/fd/3",
+    "-I/dev/shm/kvu19a2-root-source-20261102/base/ggml/include",
+    "-L/dev/shm/kvu19a2-immutable-build-v2-20261102/base/bin",
+    "-lggml",
+    "-lggml-base",
+    "-lggml-cpu",
+    "-o",
+    "/dev/shm/kvu19a2-immutable-build-v2-20261102/harness/fa_harness"
+  ],
+  "compile_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "executable_sha256": "a41b12fd64a28af97e13d50bcd28a1bb31a9c7a95c5182d7a08c0fa54fef5ed7",
+  "pair_build_receipt_sha256": "3b327e7b729e02e38ed377847f4ea890d42852aa4e2300f681be07e86742511f",
+  "schema": "kvu19a2.harness-build.v1",
+  "scope": "sealed source bytes and root-owned headers; toolchain transitive inputs unpinned",
+  "sealed_memfd_flags": 15,
+  "source_sha256": "b9f352a91ea975c682cbe78c2f4dbf9035c6a40e309b84035bfbdaf49b420091",
+  "toolchain_catalog_sha256": "2b8ad6a514751640eec363b27a3c9dc29fa17e8479a4a2f144bcf80a648c68dd"
+}

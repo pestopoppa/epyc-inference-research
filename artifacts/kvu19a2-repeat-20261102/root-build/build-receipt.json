@@ -1,0 +1,60 @@
+{
+  "outputs": {
+    "base": {
+      "build_log_sha256": "19ce3fe11056a0f130e7076ad0fc587ad967cd63d29dc48ec227733f1f2d31cc",
+      "cache_sha256": "ae9c062b6d6d2c4624075bed4101d630cb03a847bf90794a0d7ac25bcddd9014",
+      "configure": [
+        "/usr/bin/cmake",
+        "-S",
+        "/dev/shm/kvu19a2-root-source-20261102/base",
+        "-B",
+        "/dev/shm/kvu19a2-immutable-build-v2-20261102/base",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DGGML_HIP=ON",
+        "-DAMDGPU_TARGETS=gfx90a",
+        "-DLLAMA_BUILD_TESTS=ON",
+        "-DLLAMA_BUILD_SERVER=OFF",
+        "-DLLAMA_BUILD_TOOLS=OFF"
+      ],
+      "configure_log_sha256": "afebd0d27b23531f5b66a9348597c5fab34523e05e3d4d1201c22bf6489c2430",
+      "hip_path": "/dev/shm/kvu19a2-immutable-build-v2-20261102/base/bin/libggml-hip.so",
+      "hip_sha256": "c1207b369ebe2c9fb36e538431e1bf97e9db4add00163dd29ccdc77a6577351c",
+      "test_path": "/dev/shm/kvu19a2-immutable-build-v2-20261102/base/bin/test-backend-ops",
+      "test_sha256": "f83411d8ade3cc64c03b8f696885a9723b4c84bd7dc27c1ea626996097892d53"
+    },
+    "candidate": {
+      "build_log_sha256": "cec0dfb831931f2531a89f7ffcf369f1c63711af3783aac00a50fc90831345eb",
+      "cache_sha256": "21790b6ee5750f8c59c218569b7aebc075e8e110beccdf279b4bfadf8adc08d7",
+      "configure": [
+        "/usr/bin/cmake",
+        "-S",
+        "/dev/shm/kvu19a2-root-source-20261102/candidate",
+        "-B",
+        "/dev/shm/kvu19a2-immutable-build-v2-20261102/candidate",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DGGML_HIP=ON",
+        "-DAMDGPU_TARGETS=gfx90a",
+        "-DLLAMA_BUILD_TESTS=ON",
+        "-DLLAMA_BUILD_SERVER=OFF",
+        "-DLLAMA_BUILD_TOOLS=OFF"
+      ],
+      "configure_log_sha256": "24ed65817f044799e9ac69c3f845512c8bbc8c3884b73e814f2b69f523515aef",
+      "hip_path": "/dev/shm/kvu19a2-immutable-build-v2-20261102/candidate/bin/libggml-hip.so",
+      "hip_sha256": "dd965b9f875f98ee45961d683e84d646f85cd4d44ad2046a265636beb23a4e88",
+      "test_path": "/dev/shm/kvu19a2-immutable-build-v2-20261102/candidate/bin/test-backend-ops",
+      "test_sha256": "560612e35e80b0b564e80bdcd40ea9b3699b242bdd6f71d680af41b4354e5078"
+    }
+  },
+  "patch_sha256": "4147d2b65bbb416fdee1bf004d5447238933524bf3c087a69dcf6bbeca73b235",
+  "schema": "kvu19a2.root-owned-source-build.v1",
+  "scope": "root-owned read-only to build UID, not immutable against root; transitive toolchain not fully captured",
+  "source_archive_sha256": "87e3cdc13b1859a31dfd3ced43c596e6b9653e2194b1ebd0d5eb6772593c04c2",
+  "source_commit": "a0d0ae238e714aaab04e973ef4b5a4b7c9917744",
+  "source_inventory_sha256": "6872681cba6a82e530eabdf3b8ec9beb5159355dfa2efcf77ba9678c6abd91e9",
+  "source_root": "/dev/shm/kvu19a2-root-source-20261102",
+  "tiles": {
+    "base": "878a3640f685e68c6c3d3102c331c43054bfb0bce81f68c3224ad271b8d9d844",
+    "candidate": "3f79373e68603691630c7dc38703411456cdf5fa12348d07812323568cdb1e82"
+  },
+  "toolchain_catalog_sha256": "2b8ad6a514751640eec363b27a3c9dc29fa17e8479a4a2f144bcf80a648c68dd"
+}

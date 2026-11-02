@@ -43,6 +43,7 @@ def test_rootbuild_comparison_requires_predeclared_canonical_input(monkeypatch):
     load(monkeypatch)
     monkeypatch.setenv("KVU19A2_BUILD_RECEIPT_SHA256", "f" * 64)
     monkeypatch.setenv("KVU19A2_EXE_SHA256", "e" * 64)
+    monkeypatch.setenv("KVU19A2_HARNESS_RECEIPT_SHA256", "d" * 64)
     m = importlib.import_module("kvu19a2_repeat_rootbuild")
     hashes = {"a": "1", "b": "2", "c": "3"}
     rows = [{"case": 78, "arm": arm, "repeat": repeat, "rc": 0,
