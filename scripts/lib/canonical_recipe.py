@@ -50,6 +50,8 @@ Memory references:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import subprocess
@@ -462,10 +464,20 @@ def assert_binary_resolves_correctly(
             # That's not a violation; just means we can't check it. Skip.
             continue
         actual = match.group(1)
-        # Expected and actual can differ by suffix (.so vs .so.0); compare prefix.
+        # Compare the DIRECTORY each side resolves to, by realpath (2026-11-02).
+        # The v10 kernel store serves from symlinks (kernels/production/cpu ->
+        # builds/cpu-<date>-<sha>/bin), so a store-symlink entry in
+        # LD_LIBRARY_PATH makes ldd print production/cpu/libggml-cpu.so.0 while
+        # the expected path is the resolved build dir. The old textual compare
+        # called that correctly linked binary "INCORRECT", and discovery then
+        # silently fell through to the deprecated ik_llama binary. Resolving
+        # both sides cannot widen what counts as correct: a library that
+        # resolves into any other directory still fails. The soname stem
+        # already matched via base_lib in the regex above.
+        expected_dir = os.path.dirname(os.path.realpath(expected))
+        actual_dir = os.path.dirname(os.path.realpath(actual))
         expected_base = expected.rstrip("0123456789.")
-        actual_base = actual.rstrip("0123456789.")
-        if actual_base != expected_base:
+        if actual_dir != expected_dir:
             raise CanonicalRecipeViolation(
                 f"{binary} resolves {lib_name} INCORRECTLY:\n"
                 f"  expected base: {expected_base}\n"
@@ -496,12 +508,345 @@ def _path_is_within(path: str, root: str) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Kernel-store arms (2026-11-02)
+# ---------------------------------------------------------------------------
+# Since v10, production is SERVED from the kernel store
+# (kernels/production/{cpu,gpu} -> kernels/builds/<id>/bin), not from a source
+# tree's build/. Those build directories are not git worktrees, so the explicit
+# --binary/--source-root/--library-path tuple refused the production binary
+# ("binary is outside --source-root") and callers fell back to raw llama-bench,
+# skipping NUMA pre-evict and the placement proof (EXP-04 r2, 2026-11-02).
+#
+# A store build is accepted ONLY on content proof, never on its path (CLAUDE.md:
+# "A build path or directory name does not identify the binary it contains"):
+#   * the binary's sha256 equals its entry in the build's own SHA256SUMS;
+#   * every libllama*/libggml*/libmtmd* the loader resolves comes from the
+#     binary's own directory AND matches its SHA256SUMS entry;
+#   * the build's manifest (BUILD-IDENTITY.json source_sha, else the
+#     PROVENANCE.md "- commit `<sha>`" line) names exactly one source commit;
+#   * that commit is embedded in the hashed binary or its libllama-common
+#     (llama.cpp build-info), so the manifest cannot name a commit the bytes
+#     were not built from;
+#   * --source-root is a git repository that resolves that commit to a full sha;
+#   * verify_ggml_linkage.sh PASSes under the emitted environment.
+# The store build id and the full source commit are returned as the run's
+# identity block. A binary in neither a worktree nor a store build is refused.
+KERNEL_STORE_ROOT: str = "/mnt/raid0/llm/kernels"
+KERNEL_STORE_BUILD_PARENTS: tuple[str, ...] = ("builds", "candidates", "archive")
+VERIFY_GGML_LINKAGE: str = os.path.realpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "utils",
+                 "verify_ggml_linkage.sh")
+)
+_SHA256SUMS_LINE = re.compile(r"([0-9a-f]{64}) [ *](.+)")
+_PROVENANCE_COMMIT = re.compile(r"^\s*-\s+commit\s+`([0-9a-f]{7,40})`", re.MULTILINE)
+_EMBEDDED_HEX = re.compile(rb"(?<=\x00)([0-9a-f]{7,40})(?=\x00)")
+_LINKED_LLAMA_LIB = re.compile(
+    r"^\s*((?:libllama|libggml|libmtmd)\S*\.so(?:\.[0-9.]+)?)\s*=>\s*(\S+)",
+    re.MULTILINE,
+)
+
+
+def _sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 22), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def resolve_store_build(path: str) -> Optional[tuple[str, str]]:
+    """Return (build_dir, build_id) if realpath(path) lies inside a store build.
+
+    A store build is ``<KERNEL_STORE_ROOT>/{builds,candidates,archive}/<id>/``.
+    Membership is decided on the RESOLVED path, so a production symlink maps to
+    the build it currently points at. This only LOCATES the manifest; it proves
+    nothing about the bytes (assert_store_build_identity does that).
+    """
+    real = os.path.realpath(path)
+    root = os.path.realpath(KERNEL_STORE_ROOT)
+    for parent in KERNEL_STORE_BUILD_PARENTS:
+        base = os.path.join(root, parent)
+        if real == base or not _path_is_within(real, base):
+            continue
+        build_id = os.path.relpath(real, base).split(os.sep, 1)[0]
+        if build_id in ("", ".", ".."):
+            return None
+        return os.path.join(base, build_id), build_id
+    return None
+
+
+def _read_sha256sums(path: str) -> dict[str, str]:
+    """Parse a sha256sum(1) file into {normalized relpath: digest}; fail closed."""
+    if not os.path.isfile(path):
+        raise CanonicalRecipeViolation(
+            f"kernel-store build has no SHA256SUMS: {path}\n"
+            f"Without it the binary's bytes cannot be bound to the build."
+        )
+    entries: dict[str, str] = {}
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for lineno, line in enumerate(f, 1):
+            line = line.rstrip("\n")
+            if not line.strip():
+                continue
+            m = _SHA256SUMS_LINE.fullmatch(line)
+            if not m:
+                raise CanonicalRecipeViolation(
+                    f"malformed SHA256SUMS line {lineno} in {path}: {line!r}"
+                )
+            digest, rel = m.group(1), os.path.normpath(m.group(2))
+            if entries.get(rel, digest) != digest:
+                raise CanonicalRecipeViolation(
+                    f"SHA256SUMS lists {rel} twice with different digests: {path}"
+                )
+            entries[rel] = digest
+    if not entries:
+        raise CanonicalRecipeViolation(f"SHA256SUMS is empty: {path}")
+    return entries
+
+
+def _store_manifest_commit(build_dir: str) -> tuple[str, str]:
+    """Return (manifest_path, commit) from the build's own manifest; fail closed."""
+    identity = os.path.join(build_dir, "BUILD-IDENTITY.json")
+    if os.path.isfile(identity):
+        try:
+            with open(identity, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError) as e:
+            raise CanonicalRecipeViolation(
+                f"unreadable store manifest {identity}: {e}"
+            ) from e
+        commit = data.get("source_sha") if isinstance(data, dict) else None
+        if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise CanonicalRecipeViolation(
+                f"store manifest {identity} has no 40-hex source_sha "
+                f"(got {commit!r})"
+            )
+        output = data.get("output")
+        if output and os.path.realpath(output) != os.path.realpath(build_dir):
+            raise CanonicalRecipeViolation(
+                f"store manifest {identity} describes another build:\n"
+                f"  manifest output: {output}\n"
+                f"  this build:      {build_dir}"
+            )
+        return identity, commit
+
+    provenance = os.path.join(build_dir, "PROVENANCE.md")
+    if os.path.isfile(provenance):
+        with open(provenance, encoding="utf-8", errors="replace") as f:
+            commits = sorted(set(_PROVENANCE_COMMIT.findall(f.read())))
+        if len(commits) == 1:
+            return provenance, commits[0]
+        if len(commits) > 1:
+            raise CanonicalRecipeViolation(
+                f"store manifest {provenance} names several source commits "
+                f"{commits}; the build's commit is ambiguous"
+            )
+    raise CanonicalRecipeViolation(
+        f"kernel-store build has no manifest binding a source commit: {build_dir}\n"
+        f"  expected BUILD-IDENTITY.json (source_sha) or PROVENANCE.md with a\n"
+        f"  '- commit `<sha>`' line. A store build without one cannot be\n"
+        f"  benchmarked canonically."
+    )
+
+
+def _commits_agree(a: str, b: str) -> bool:
+    return min(len(a), len(b)) >= 7 and (a.startswith(b) or b.startswith(a))
+
+
+def assert_store_build_identity(
+    binary: str,
+    library_path: str,
+    env: dict[str, str],
+    source_root: Optional[str] = None,
+    require_library_path_first: bool = True,
+) -> dict:
+    """Prove a kernel-store binary's identity from content; return the identity block.
+
+    ``binary`` must resolve into a store build (see resolve_store_build) and
+    ``library_path`` must be its own directory, first in LD_LIBRARY_PATH. When
+    ``source_root`` is given it must be a git repository that resolves the
+    manifest's commit; the full commit is then recorded. Default production
+    discovery passes ``require_library_path_first=False`` because it relies on
+    the binary's $ORIGIN RUNPATH rather than a pinned LD_LIBRARY_PATH; the ldd
+    and verify_ggml_linkage.sh checks still prove every library is the build's
+    own. Raises CanonicalRecipeViolation on any failure (fail closed).
+    """
+    resolved_binary = os.path.realpath(binary)
+    resolved_library_path = os.path.realpath(library_path)
+    located = resolve_store_build(resolved_binary)
+    if located is None:
+        raise CanonicalRecipeViolation(
+            f"binary is not inside a kernel-store build directory:\n"
+            f"  binary:     {resolved_binary}\n"
+            f"  store root: {os.path.realpath(KERNEL_STORE_ROOT)}/"
+            f"{{{','.join(KERNEL_STORE_BUILD_PARENTS)}}}/<build-id>/"
+        )
+    build_dir, build_id = located
+    if os.path.dirname(resolved_binary) != resolved_library_path:
+        raise CanonicalRecipeViolation(
+            f"--library-path must be the store binary's own directory:\n"
+            f"  binary directory: {os.path.dirname(resolved_binary)}\n"
+            f"  library path:     {resolved_library_path}"
+        )
+    ld_entries = [
+        os.path.realpath(e) for e in env.get("LD_LIBRARY_PATH", "").split(":") if e
+    ]
+    if require_library_path_first and (
+        not ld_entries or ld_entries[0] != resolved_library_path
+    ):
+        raise CanonicalRecipeViolation(
+            f"the store build's library directory must be first in LD_LIBRARY_PATH:\n"
+            f"  expected first: {resolved_library_path}\n"
+            f"  actual:         {env.get('LD_LIBRARY_PATH', '')}"
+        )
+
+    sums_path = os.path.join(build_dir, "SHA256SUMS")
+    sums = _read_sha256sums(sums_path)
+
+    def verify_digest(path: str) -> str:
+        real = os.path.realpath(path)
+        rel = os.path.normpath(os.path.relpath(real, build_dir))
+        want = sums.get(rel)
+        if want is None:
+            raise CanonicalRecipeViolation(
+                f"{rel} has no entry in the store build's SHA256SUMS:\n"
+                f"  {sums_path}\n"
+                f"An unlisted file cannot be proven to belong to build {build_id}."
+            )
+        got = _sha256_file(real)
+        if got != want:
+            raise CanonicalRecipeViolation(
+                f"store file does NOT match its SHA256SUMS entry — refusing:\n"
+                f"  file:     {real}\n"
+                f"  expected: {want}\n"
+                f"  actual:   {got}\n"
+                f"The bytes on disk are not build {build_id}."
+            )
+        return got
+
+    binary_sha = verify_digest(resolved_binary)
+
+    out = _ldd_output(resolved_binary, env=env)
+    linked: dict[str, str] = {}
+    linked_paths: list[str] = []
+    for lib_name, actual in _LINKED_LLAMA_LIB.findall(out):
+        if actual == "not":
+            raise CanonicalRecipeViolation(
+                f"{resolved_binary} has unresolved store dependency: {lib_name}"
+            )
+        if not _path_is_within(actual, resolved_library_path):
+            raise CanonicalRecipeViolation(
+                f"{resolved_binary} resolves {lib_name} outside its store build:\n"
+                f"  expected under: {resolved_library_path}\n"
+                f"  actual:         {os.path.realpath(actual)}"
+            )
+        real = os.path.realpath(actual)
+        linked[os.path.basename(real)] = verify_digest(real)
+        linked_paths.append(real)
+    if not any(name.startswith("libggml-base.so") for name in linked):
+        raise CanonicalRecipeViolation(
+            f"ldd shows no libggml-base for {resolved_binary}; the store build's "
+            f"linkage cannot be verified (vacuous)"
+        )
+    has_hip = any(
+        name.startswith("libggml-hip.so") for name in os.listdir(resolved_library_path)
+    )
+    if has_hip and not any(name.startswith("libggml-hip.so") for name in linked):
+        raise CanonicalRecipeViolation(
+            f"GPU store build {build_id} ships libggml-hip but {resolved_binary} "
+            f"does not resolve it from {resolved_library_path} — a GPU arm would "
+            f"run on CPU"
+        )
+
+    manifest_path, manifest_commit = _store_manifest_commit(build_dir)
+
+    embedded: set[str] = set()
+    for path in [resolved_binary] + [
+        p for p in linked_paths if os.path.basename(p).startswith("libllama-common")
+    ]:
+        with open(path, "rb") as f:
+            embedded.update(m.decode() for m in _EMBEDDED_HEX.findall(f.read()))
+    embedded_match = sorted(c for c in embedded if _commits_agree(c, manifest_commit))
+    if not embedded_match:
+        raise CanonicalRecipeViolation(
+            f"the store manifest's commit is not embedded in the hashed binary:\n"
+            f"  manifest: {manifest_path}\n"
+            f"  commit:   {manifest_commit}\n"
+            f"  binary:   {resolved_binary} (and its libllama-common)\n"
+            f"The manifest names a commit these bytes were not built from."
+        )
+
+    source_commit = manifest_commit if len(manifest_commit) == 40 else None
+    resolved_source_root = None
+    if source_root is not None:
+        resolved_source_root = os.path.realpath(source_root)
+        try:
+            full = subprocess.check_output(
+                ["git", "-C", resolved_source_root, "rev-parse", "--verify",
+                 "--quiet", f"{manifest_commit}^{{commit}}"],
+                text=True,
+                stderr=subprocess.STDOUT,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError) as e:
+            raise CanonicalRecipeViolation(
+                f"--source-root cannot resolve the store manifest's commit:\n"
+                f"  source root: {resolved_source_root}\n"
+                f"  commit:      {manifest_commit} (from {manifest_path})\n"
+                f"{getattr(e, 'output', '') or ''}"
+            ) from e
+        if not re.fullmatch(r"[0-9a-f]{40}", full) or not full.startswith(manifest_commit):
+            raise CanonicalRecipeViolation(
+                f"--source-root resolved {manifest_commit} to an unexpected "
+                f"object: {full!r}"
+            )
+        source_commit = full
+
+    if not os.path.isfile(VERIFY_GGML_LINKAGE):
+        raise CanonicalRecipeViolation(
+            f"verify_ggml_linkage.sh not found at {VERIFY_GGML_LINKAGE}; store "
+            f"linkage cannot be proven"
+        )
+    link = subprocess.run(
+        ["bash", VERIFY_GGML_LINKAGE, resolved_binary, resolved_library_path],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if link.returncode != 0:
+        raise CanonicalRecipeViolation(
+            f"verify_ggml_linkage.sh FAILED (exit {link.returncode}) for "
+            f"{resolved_binary}:\n{(link.stdout + link.stderr)[-1500:]}"
+        )
+
+    return {
+        "kind": "kernel_store",
+        "store_root": os.path.realpath(KERNEL_STORE_ROOT),
+        "store_build_id": build_id,
+        "store_build_dir": build_dir,
+        "backend": "gpu" if has_hip else "cpu",
+        "binary": resolved_binary,
+        "binary_sha256": binary_sha,
+        "library_path": resolved_library_path,
+        "linked_libraries_sha256": dict(sorted(linked.items())),
+        "sha256sums": sums_path,
+        "sha256sums_sha256": _sha256_file(sums_path),
+        "manifest": manifest_path,
+        "manifest_sha256": _sha256_file(manifest_path),
+        "manifest_commit": manifest_commit,
+        "embedded_commit": embedded_match[0],
+        "source_root": resolved_source_root,
+        "source_commit": source_commit,
+        "ggml_linkage": "PASS",
+    }
+
+
 def assert_explicit_bench_identity(
     binary: str,
     source_root: str,
     library_path: str,
     env: dict[str, str],
-) -> None:
+) -> dict:
     """Validate an explicit candidate arm's source, binary, and shared libraries.
 
     All three paths are required for explicit A/B arms. The binary and library
@@ -509,6 +854,15 @@ def assert_explicit_bench_identity(
     first in LD_LIBRARY_PATH, and every dynamic llama.cpp library must resolve
     from it. This prevents an experimental binary from silently loading
     production libraries through an ambient loader path or embedded RUNPATH.
+
+    KERNEL-STORE ARMS (2026-11-02): a binary that resolves into a kernel-store
+    build directory instead of the worktree is accepted on CONTENT proof from
+    the store's own SHA256SUMS and manifest (assert_store_build_identity);
+    --source-root must then be a git repository that resolves the manifest's
+    commit. A binary inside neither is refused.
+
+    Returns the run's identity block (``kind`` = ``git_worktree`` or
+    ``kernel_store``).
     """
     resolved_binary = os.path.realpath(binary)
     resolved_source_root = os.path.realpath(source_root)
@@ -527,10 +881,17 @@ def assert_explicit_bench_identity(
             f"library path is not a directory: {resolved_library_path}"
         )
     if not _path_is_within(resolved_binary, resolved_source_root):
+        if resolve_store_build(resolved_binary) is not None:
+            return assert_store_build_identity(
+                resolved_binary, resolved_library_path, env,
+                source_root=resolved_source_root,
+            )
         raise CanonicalRecipeViolation(
-            f"binary is outside --source-root:\n"
+            f"binary is outside --source-root and is not in a kernel-store build:\n"
             f"  binary:      {resolved_binary}\n"
-            f"  source root: {resolved_source_root}"
+            f"  source root: {resolved_source_root}\n"
+            f"  store builds: {os.path.realpath(KERNEL_STORE_ROOT)}/"
+            f"{{{','.join(KERNEL_STORE_BUILD_PARENTS)}}}/<build-id>/"
         )
     if not _path_is_within(resolved_library_path, resolved_source_root):
         raise CanonicalRecipeViolation(
@@ -601,6 +962,13 @@ def assert_explicit_bench_identity(
             f"ldd found no libllama/libggml dependencies for {resolved_binary}; "
             f"cannot verify candidate library identity"
         )
+    return {
+        "kind": "git_worktree",
+        "binary": resolved_binary,
+        "binary_sha256": _sha256_file(resolved_binary),
+        "library_path": resolved_library_path,
+        "source_root": resolved_source_root,
+    }
 
 
 def discover_v4_fork_bench() -> tuple[str, list[str]]:
@@ -866,7 +1234,17 @@ def validate_canonical_env(
 # ---------------------------------------------------------------------------
 
 
-def build_canonical_bench_command(
+def build_canonical_bench_command(*args, **kwargs) -> tuple[str, list[str], dict[str, str]]:
+    """Build (binary_path, cmd_list, env_dict); see build_canonical_bench_run.
+
+    Kept with its original 3-tuple shape for existing callers. Use
+    build_canonical_bench_run when the run's identity block is needed.
+    """
+    binary, cmd, env, _identity = build_canonical_bench_run(*args, **kwargs)
+    return binary, cmd, env
+
+
+def build_canonical_bench_run(
     model: str,
     n_prompt: int = 0,
     n_gen: int = 512,
@@ -880,8 +1258,13 @@ def build_canonical_bench_command(
     library_path: Optional[str] = None,
     ggml_iqk: str = "1",
     ggml_iqk_q8_0: Optional[str] = None,
-) -> tuple[str, list[str], dict[str, str]]:
-    """Build (binary_path, cmd_list, env_dict) for the canonical llama-bench run.
+) -> tuple[str, list[str], dict[str, str], dict]:
+    """Build (binary_path, cmd_list, env_dict, identity) for the canonical llama-bench run.
+
+    ``identity`` is the run's identity block: ``kernel_store`` (store build id,
+    source commit, content digests) for a binary that resolves into the kernel
+    store, ``git_worktree`` for an explicit worktree candidate, or
+    ``unverified_discovery`` for a legacy non-store fallback.
 
     This is the ONLY blessed way to construct a bench command. Do not reconstruct
     from memory — drift bit this project at least 3 times (2026-05-02, 2026-05-28
@@ -964,14 +1347,24 @@ def build_canonical_bench_command(
         binary = os.path.realpath(binary)
         source_root = os.path.realpath(source_root)
         library_path = os.path.realpath(library_path)
-        assert_explicit_bench_identity(binary, source_root, library_path, env)
+        identity = assert_explicit_bench_identity(binary, source_root, library_path, env)
     elif use_v4_fork:
         binary, _expected_libs = discover_v4_fork_bench()
+        identity = {"kind": "unverified_discovery", "binary": binary}
     else:
         # 2026-06-26 v6 cutover: default selection is the v6-iqk candidate.
         binary, _expected_libs = discover_canonical_bench_binary(
             prefer_v6=prefer_v6, prefer_ik_llama=prefer_ik_llama
         )
+        if resolve_store_build(binary) is not None:
+            # Production discovery resolves through the kernel store: prove the
+            # bytes from the store's own manifest, exactly as an explicit arm.
+            identity = assert_store_build_identity(
+                binary, os.path.dirname(os.path.realpath(binary)), env,
+                require_library_path_first=False,
+            )
+        else:
+            identity = {"kind": "unverified_discovery", "binary": binary}
 
     bench_args: list[str] = (
         list(CANONICAL_BENCH_FLAGS_LLAMA_BENCH)
@@ -982,7 +1375,7 @@ def build_canonical_bench_command(
 
     cmd = apply_canonical_prefix([binary, *bench_args])
 
-    return binary, cmd, env
+    return binary, cmd, env, identity
 
 
 # ---------------------------------------------------------------------------
@@ -1004,7 +1397,7 @@ def _emit_bench_command_json(args) -> int:
         # 2026-06-26 v6 cutover: default to the v6-iqk candidate. --ik-llama
         # restores the legacy two-kernel preference (ik_llama first).
         prefer_ik = getattr(args, "ik_llama", False)
-        binary, cmd, env = build_canonical_bench_command(
+        binary, cmd, env, identity = build_canonical_bench_run(
             model=args.model,
             n_prompt=args.n_prompt,
             n_gen=args.n_gen,
@@ -1052,6 +1445,7 @@ def _emit_bench_command_json(args) -> int:
         ),
         "ggml_iqk": args.ggml_iqk,
         "ggml_iqk_q8_0": args.ggml_iqk_q8_0,
+        "identity": identity,
     }
     print(json.dumps(out, indent=2))
     return 0

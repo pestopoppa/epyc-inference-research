@@ -573,5 +573,258 @@ class TestQwenPreflightIsMetadataOnly(unittest.TestCase):
             self._preflight(wrong_size=recipe.MTP_HEAD_GGUF)
 
 
+class TestKernelStoreIdentity(unittest.TestCase):
+    """Kernel-store arms (2026-11-02): a binary that resolves into a store build
+    is accepted only on content proof from the build's own SHA256SUMS + manifest.
+    The store, binaries, ldd, git and verify_ggml_linkage.sh are synthetic; no
+    process from the real store is started."""
+
+    SHORT = "abc1234de"
+    FULL = "abc1234de" + "0123456789abcdef0123456789abcdef012"[:31]
+    BUILD = "gpu-20990101-abc1234de"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = os.path.realpath(self._tmp.name)
+        self.store = os.path.join(self.tmp, "kernels")
+        self.build = os.path.join(self.store, "builds", self.BUILD)
+        self.bin = os.path.join(self.build, "bin")
+        os.makedirs(self.bin)
+        os.makedirs(os.path.join(self.store, "production"))
+        # Production is served through a symlink, exactly as v10 is.
+        self.prod = os.path.join(self.store, "production", "gpu")
+        os.symlink(self.bin, self.prod)
+        self.binary = os.path.join(self.bin, "llama-bench")
+        self.libs = {
+            "libggml-base.so.0": "libggml-base.so.0.16.0",
+            "libggml-hip.so.0": "libggml-hip.so.0.16.0",
+            "libllama-common.so.0": "libllama-common.so.0.0.1",
+        }
+        with open(self.binary, "wb") as f:
+            f.write(b"\x7fELF-fake\x00" + self.SHORT.encode() + b"\x00tail\x00")
+        os.chmod(self.binary, 0o755)
+        for soname, real in self.libs.items():
+            with open(os.path.join(self.bin, real), "wb") as f:
+                f.write(b"lib\x00" + real.encode() + b"\x00")
+            os.symlink(real, os.path.join(self.bin, soname))
+        with open(os.path.join(self.build, "PROVENANCE.md"), "w") as f:
+            f.write(f"# {self.BUILD}\n\n- commit `{self.SHORT}` on `x`, build **1**\n")
+        self.write_sums()
+        self.git_calls = []
+        self.linkage_calls = []
+        self.ldd_dir = self.prod      # what the loader reports (symlink spelling)
+        self.ldd_extra = ""
+        self.linkage_rc = 0
+        self.git_fails = False
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def write_sums(self):
+        lines = []
+        for name in sorted(os.listdir(self.bin)):
+            p = os.path.join(self.bin, name)
+            if os.path.islink(p):
+                continue
+            with open(p, "rb") as f:
+                lines.append(f"{hashlib.sha256(f.read()).hexdigest()}  bin/{name}")
+        with open(os.path.join(self.build, "SHA256SUMS"), "w") as f:
+            f.write("\n".join(lines) + "\n")
+
+    def fake_check_output(self, argv, **kwargs):
+        if argv[0] == "ldd":
+            rows = [f"\t{so} => {self.ldd_dir}/{so} (0x1)" for so in self.libs]
+            return "\n".join(rows) + "\n" + self.ldd_extra
+        if argv[0] == "git":
+            self.git_calls.append(argv)
+            if not self.git_fails and argv[-1] == f"{self.SHORT}^{{commit}}":
+                return self.FULL + "\n"
+            raise r.subprocess.CalledProcessError(1, argv, output="")
+        self.fail(f"unexpected command: {argv}")
+
+    def fake_run(self, argv, **kwargs):
+        self.linkage_calls.append((argv, kwargs.get("env")))
+        return r.subprocess.CompletedProcess(argv, self.linkage_rc, "linkage out", "")
+
+    def patches(self):
+        return [
+            mock.patch.object(r, "KERNEL_STORE_ROOT", self.store),
+            mock.patch.object(r.subprocess, "check_output", side_effect=self.fake_check_output),
+            mock.patch.object(r.subprocess, "run", side_effect=self.fake_run),
+            mock.patch.object(r, "VERIFY_GGML_LINKAGE", __file__),
+        ]
+
+    def run_arm(self, binary=None, source_root=None, library_path=None):
+        model = os.path.join(self.tmp, "model.gguf")
+        open(model, "w").close()
+        source_root = source_root or os.path.join(self.tmp, "llama.cpp")
+        os.makedirs(source_root, exist_ok=True)
+        ctx = self.patches()
+        for c in ctx:
+            c.start()
+        try:
+            with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": f"{self.prod}:/opt/rocm/lib"}):
+                return r.build_canonical_bench_run(
+                    model=model,
+                    binary=binary or os.path.join(self.prod, "llama-bench"),
+                    source_root=source_root,
+                    library_path=library_path or self.prod,
+                    n_gen=0, n_prompt=2048, reps=1,
+                )
+        finally:
+            for c in reversed(ctx):
+                c.stop()
+
+    def test_store_binary_accepted_with_manifest_proof(self):
+        binary, cmd, env, ident = self.run_arm()
+        self.assertEqual(binary, self.binary)
+        self.assertIn(self.binary, cmd)
+        self.assertEqual(ident["kind"], "kernel_store")
+        self.assertEqual(ident["store_build_id"], self.BUILD)
+        self.assertEqual(ident["backend"], "gpu")
+        self.assertEqual(ident["manifest_commit"], self.SHORT)
+        self.assertEqual(ident["embedded_commit"], self.SHORT)
+        self.assertEqual(ident["source_commit"], self.FULL)
+        with open(self.binary, "rb") as f:
+            self.assertEqual(ident["binary_sha256"], hashlib.sha256(f.read()).hexdigest())
+        self.assertEqual(
+            sorted(ident["linked_libraries_sha256"]), sorted(self.libs.values()))
+        self.assertEqual(ident["ggml_linkage"], "PASS")
+        # verify_ggml_linkage.sh ran on the RESOLVED binary + build dir, under
+        # the emitted env whose first LD_LIBRARY_PATH entry is the realpath.
+        (argv, lenv), = self.linkage_calls
+        self.assertEqual(argv[-2:], [self.binary, self.bin])
+        self.assertEqual(lenv["LD_LIBRARY_PATH"].split(":")[0], self.bin)
+        self.assertEqual(env["LD_LIBRARY_PATH"].split(":")[0], self.bin)
+        self.assertNotIn(self.prod, env["LD_LIBRARY_PATH"].split(":"))
+
+    def test_tampered_binary_refused(self):
+        with open(self.binary, "ab") as f:
+            f.write(b"patched")
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm()
+        self.assertIn("does NOT match its SHA256SUMS", str(ctx.exception))
+        self.assertEqual(self.linkage_calls, [])
+
+    def test_tampered_linked_library_refused(self):
+        with open(os.path.join(self.bin, "libggml-hip.so.0.16.0"), "ab") as f:
+            f.write(b"patched")
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm()
+        self.assertIn("libggml-hip.so.0.16.0", str(ctx.exception))
+        self.assertIn("does NOT match its SHA256SUMS", str(ctx.exception))
+
+    def test_unlisted_binary_refused(self):
+        sums = os.path.join(self.build, "SHA256SUMS")
+        with open(sums) as f:
+            kept = [l for l in f if not l.rstrip().endswith("bin/llama-bench")]
+        with open(sums, "w") as f:
+            f.writelines(kept)
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm()
+        self.assertIn("has no entry in the store build's SHA256SUMS", str(ctx.exception))
+
+    def test_manifest_commit_not_embedded_in_binary_refused(self):
+        with open(os.path.join(self.build, "PROVENANCE.md"), "w") as f:
+            f.write("- commit `fedcba987` on `x`\n")
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm()
+        self.assertIn("not embedded in the hashed binary", str(ctx.exception))
+
+    def test_build_without_manifest_refused(self):
+        os.unlink(os.path.join(self.build, "PROVENANCE.md"))
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm()
+        self.assertIn("no manifest binding a source commit", str(ctx.exception))
+
+    def test_source_root_that_cannot_resolve_commit_refused(self):
+        self.git_fails = True
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm()
+        self.assertIn("cannot resolve the store manifest's commit", str(ctx.exception))
+
+    def test_ggml_linkage_failure_refused(self):
+        self.linkage_rc = 1
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm()
+        self.assertIn("verify_ggml_linkage.sh FAILED", str(ctx.exception))
+
+    def test_gpu_build_not_resolving_hip_refused(self):
+        del self.libs["libggml-hip.so.0"]   # ldd no longer reports it
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm()
+        self.assertIn("would run on CPU", str(ctx.exception))
+
+    def test_library_resolving_outside_store_build_refused(self):
+        other = os.path.join(self.tmp, "elsewhere")
+        os.makedirs(other)
+        self.ldd_extra = f"\tlibllama.so.0 => {other}/libllama.so.0 (0x1)\n"
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm()
+        self.assertIn("outside its store build", str(ctx.exception))
+
+    def test_non_store_non_worktree_binary_refused(self):
+        stray_bin = os.path.join(self.tmp, "stray", "bin")
+        os.makedirs(stray_bin)
+        stray = os.path.join(stray_bin, "llama-bench")
+        with open(self.binary, "rb") as src, open(stray, "wb") as dst:
+            dst.write(src.read())   # byte-identical to a store binary: still refused
+        os.chmod(stray, 0o755)
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            self.run_arm(binary=stray, library_path=stray_bin)
+        self.assertIn("binary is outside --source-root", str(ctx.exception))
+        self.assertIn("not in a kernel-store build", str(ctx.exception))
+        self.assertEqual(self.linkage_calls, [])
+
+    def test_symlinked_ld_library_path_is_resolved(self):
+        """A store-symlink spelling in LD_LIBRARY_PATH must not trip linkage.
+
+        Before 2026-11-02 assert_binary_resolves_correctly compared paths as
+        text, so ldd's production/cpu/libggml-cpu.so.0 did not equal the
+        resolved builds/<id>/bin/libggml-cpu.so.0.16.0 and default discovery
+        fell through to ik_llama."""
+        ldd = (
+            f"\tlibggml-base.so.0 => {self.prod}/libggml-base.so.0 (0x1)\n"
+            f"\tlibggml-hip.so.0 => {self.prod}/libggml-hip.so.0 (0x1)\n"
+        )
+        expected = [os.path.join(self.bin, "libggml-base.so.0.16.0"),
+                    os.path.join(self.bin, "libggml-hip.so.0.16.0")]
+        with mock.patch.object(r, "_ldd_output", return_value=ldd):
+            r.assert_binary_resolves_correctly(self.binary, expected)
+        other = os.path.join(self.tmp, "other")
+        os.makedirs(other)
+        wrong = ldd.replace(self.prod, other)
+        with mock.patch.object(r, "_ldd_output", return_value=wrong):
+            with self.assertRaises(r.CanonicalRecipeViolation):
+                r.assert_binary_resolves_correctly(self.binary, expected)
+        with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": f"{self.prod}:/opt/rocm/lib"}):
+            env = r.build_canonical_env(library_path=self.prod)
+        entries = env["LD_LIBRARY_PATH"].split(":")
+        self.assertEqual(entries[0], self.bin)
+        self.assertNotIn(self.prod, entries)
+
+    def test_worktree_arm_identity_block_unchanged_in_kind(self):
+        """The worktree route still applies (and now reports its kind)."""
+        tree = os.path.join(self.tmp, "llama.cpp-experimental")
+        lib = os.path.join(tree, "build", "bin")
+        os.makedirs(lib)
+        b = os.path.join(lib, "llama-bench")
+        with open(b, "w") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(b, 0o755)
+
+        def fake(argv, **kwargs):
+            if argv[0] == "git":
+                return tree + "\n"
+            return f"libggml-base.so.0 => {lib}/libggml-base.so.0 (0x1)\n"
+
+        with mock.patch.object(r, "KERNEL_STORE_ROOT", self.store), \
+                mock.patch.object(r.subprocess, "check_output", side_effect=fake):
+            ident = r.assert_explicit_bench_identity(
+                b, tree, lib, {"LD_LIBRARY_PATH": f"{lib}:{r.LLVM20_LIBDIR}"})
+        self.assertEqual(ident["kind"], "git_worktree")
+        self.assertEqual(ident["source_root"], tree)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -93,9 +93,19 @@ Usage: $(basename "$0") -m MODEL [OPTIONS] [-- EXTRA_BENCH_FLAGS...]
   --no-ik-llama       Prefer v5_clean over ik_llama (default: prefer ik_llama)
   --v4-fork           Retired; fails with mainline V4 migration guidance
   --binary PATH        Explicit llama-bench binary for a candidate A/B arm
-  --source-root DIR    Git worktree root owning --binary
-  --library-path DIR   Candidate llama.cpp library directory; pinned first
-                      in LD_LIBRARY_PATH
+  --source-root DIR    Git worktree root owning --binary. When --binary
+                      resolves into a KERNEL-STORE build
+                      (/mnt/raid0/llm/kernels/{builds,candidates,archive}/<id>/,
+                      e.g. kernels/production/gpu/llama-bench), it is instead
+                      a git repo that resolves the store manifest's commit
+                      (e.g. /mnt/raid0/llm/llama.cpp); the store binary is
+                      accepted only on content proof: its sha256 and its
+                      linked libs' match the build's SHA256SUMS, the manifest
+                      commit is embedded in the binary, and
+                      verify_ggml_linkage.sh passes.
+  --library-path DIR   Candidate llama.cpp library directory (the binary's
+                      own directory); pinned first in LD_LIBRARY_PATH as a
+                      realpath, so a store symlink path is fine
                       (all three explicit identity options are required together)
   --ggml-iqk {0,1}    Set the GGML_IQK runtime gate (default: 1)
   --ggml-iqk-q8-0 1   Explicitly enable the Q8_0 IQK sub-gate
@@ -189,6 +199,21 @@ fi
 # Parse JSON safely with Python
 BINARY=$(echo "$CMD_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin)['binary'])")
 
+# The run's identity block (kernel-store build id + source commit + content
+# digests, or the worktree tuple). Printed in the banner and written next to
+# the bench log so every result names the bytes it measured.
+IDENTITY_JSON=$(echo "$CMD_JSON" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin).get('identity'), indent=1, sort_keys=True))")
+IDENTITY_LINE=$(echo "$CMD_JSON" | python3 -c "
+import sys, json
+i = json.load(sys.stdin).get('identity') or {}
+if i.get('kind') == 'kernel_store':
+    print(f\"kernel_store build={i['store_build_id']} backend={i['backend']} \"
+          f\"source_commit={i['source_commit'] or i['manifest_commit']} \"
+          f\"binary_sha256={i['binary_sha256'][:16]} ggml_linkage={i['ggml_linkage']}\")
+else:
+    print(i.get('kind', 'none'), i.get('source_root') or i.get('binary') or '')
+")
+
 # Build the env-var export string and cmd-arg list
 ENV_EXPORTS=$(echo "$CMD_JSON" | python3 -c "
 import sys, json, shlex
@@ -267,6 +292,7 @@ EVICT_LOG="${LOG_DIR}/pre-evict.log"
 
 echo "=== Canonical bench command ===" >&2
 echo "Binary:    $BINARY" >&2
+echo "Identity:  $IDENTITY_LINE" >&2
 echo "Env:       $ENV_EXPORTS" >&2
 echo "Cmd:       ${CMD_ARGS[*]}" >&2
 if [[ -n "$LOCK_PREFIX" ]]; then
@@ -294,6 +320,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 mkdir -p "$LOG_DIR"
+printf '%s\n' "$IDENTITY_JSON" > "${LOG_DIR}/identity.json"
 
 # Reserve the log without clobbering an earlier run. The host snapshot is
 # captured inside region-lock, immediately before the benchmark command.
