@@ -23,6 +23,7 @@ import argparse, atexit, hashlib, json, os, re, signal, statistics, subprocess, 
 import urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import kvu126_capture
 
 HERE = Path(__file__).resolve().parent
 ART = HERE.parent
@@ -372,6 +373,8 @@ def one_request(port, prompt, npred, tag, t_barrier=None, id_slot=None, stream=T
     if t_barrier is not None:
         t_barrier.wait()
     t0 = time.time(); rec["t_start"] = t0
+    rec["t_start_monotonic"] = time.monotonic()
+    rec["t_first_monotonic"] = None
     last = {}
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -395,6 +398,7 @@ def one_request(port, prompt, npred, tag, t_barrier=None, id_slot=None, stream=T
                 ntk = len(j.get("tokens") or []) or (1 if j.get("content") else 0)
                 if ntk and rec["ttft"] is None:
                     rec["ttft"] = now - t0
+                    rec["t_first_monotonic"] = time.monotonic()
                 if ntk:
                     rec["chunks"].append((round(now - t0, 4), ntk))
                 if j.get("stop"):
@@ -404,6 +408,7 @@ def one_request(port, prompt, npred, tag, t_barrier=None, id_slot=None, stream=T
     except Exception as e:                                      # noqa: BLE001 - recorded as evidence, not swallowed
         rec["error"] = repr(e)[:300]
     rec["t_end"] = time.time()
+    rec["t_end_monotonic"] = time.monotonic()
     tm = last.get("timings", {})
     rec.update(draft_n=tm.get("draft_n"), draft_n_accepted=tm.get("draft_n_accepted"), n_fork_tokens=tm.get("n_fork_tokens"), prompt_n=tm.get("prompt_n"), cache_n=tm.get("cache_n", last.get("tokens_cached")),
                prompt_ms=tm.get("prompt_ms"), prompt_tps=tm.get("prompt_per_second"),
@@ -604,6 +609,13 @@ def run_launch(a, la, outroot, corpus, summary):
         (ldir / "loadfacts.json").write_text(json.dumps(dict(facts=facts, linkage=link, argv=prefix + argv), indent=1))
         if a.loadonly:
             summary(dict(launch=la["id"], cell="loadonly", result="OK", **facts)); return
+        if getattr(a, "unique_cells_metric", ""):
+            try:
+                kvu126_capture.read_gauge(a.port, a.unique_cells_metric)
+            except kvu126_capture.CaptureError as e:
+                summary(dict(launch=la["id"], cell="-", result="OCCUPANCY_UNSUPPORTED", reason=str(e)))
+                a.refused = True
+                return
         # warm-up: one short untimed request (graph build, page-in), not counted
         one_request(a.port, "Warm up. " * 50, 16, "warmup")
         off = len(open(ldir / "server.log", "rb").read())
@@ -705,8 +717,15 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                                "Summarize the document above in detail.\n")
         bar = threading.Barrier(nclients)
         t0 = time.time()
-        with ThreadPoolExecutor(nclients) as ex:
-            recs = list(ex.map(lambda sp: one_request(a.port, sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0] if pmode == "depth" else None), enumerate(prompts)))
+        sampler = kvu126_capture.Sampler(a.port, a.unique_cells_metric) if getattr(a, "unique_cells_metric", "") and w > 0 else None
+        if sampler:
+            sampler.start()
+        try:
+            with ThreadPoolExecutor(nclients) as ex:
+                recs = list(ex.map(lambda sp: one_request(a.port, sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0] if pmode == "depth" else None), enumerate(prompts)))
+        finally:
+            if sampler:
+                sampler.done.set()
         wall = time.time() - t0
         rss, hwm = srv.rss_gib()
         ok = [r for r in recs if r["error"] is None and r["status"] == 200]
@@ -720,6 +739,12 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                   agg_e2e_tok_s=round(sum(r["predicted_n"] or 0 for r in ok) / wall, 2),
                   rss_gib=rss, vmhwm_gib=hwm, errors=[r["error"] for r in recs if r["error"]][:4],
                   n_reprefill=(sum(1 for r in recs if (r["prompt_n"] or 0) > 0.5 * ntok) if (pmode == "depth" and w > 0) else None))
+        if sampler:
+            try:
+                wv["occupancy_capture"] = sampler.finish(recs, la["c"])
+            except kvu126_capture.CaptureError as e:
+                a.refused = True
+                wv["occupancy_capture_error"] = str(e)
         waves.append(wv)
         cl.write("WAVE " + json.dumps(wv) + "\n"); cl.flush()
         say(f"{la['id']} {Lname} {pmode} wave{w}: wall={wv['wall_s']}s ttft={wv['ttft_s']} dec_sum={wv['decode_tps_sum']} cache={wv['n_prompt_tokens_cache']} err={wv['n_err']}")
@@ -741,9 +766,12 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
                min_headroom_tok=(limit - max(req_tok.values()) - a.npredict if req_tok else None))
     with open(cdir / "waves_capture.jsonl", "w") as wf:
         for w in waves:
-            wf.write(json.dumps(finalize_row(dict(row, pmode=pmode, L=L, cell=row["cell"], decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"],
+            captured = finalize_row(dict(row, pmode=pmode, L=L, cell=row["cell"], decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"],
                                                   prefill_tps=w["prefill_tps"], decode_tps_per_stream=w["decode_tps_per_stream"],
-                                                  agg_e2e_tok_s=w["agg_e2e_tok_s"]), a, la, srv, facts, loadavg, wave=w["wave"], wave_rec=w)) + "\n")
+                                                  agg_e2e_tok_s=w["agg_e2e_tok_s"]), a, la, srv, facts, loadavg, wave=w["wave"], wave_rec=w)
+            wf.write(json.dumps(captured) + "\n")
+            if w.get("occupancy_capture"):
+                kvu126_capture.write_bound_record(cdir, w["wave"], captured["row_sha256"], w["occupancy_capture"])
     row = finalize_row(row, a, la, srv, facts, loadavg)
     row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close()
@@ -938,8 +966,15 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
             rest.append(dict(slot=i, n_restored=r.get("n_restored", r.get("n_tokens")), ms=round((time.time() - t0) * 1000)))
         sfx = [suffix_tokens(a.port, corpus, 200) for _ in range(active)]
         bar = threading.Barrier(active); t0 = time.time()
-        with ThreadPoolExecutor(active) as ex:
-            recs = list(ex.map(lambda sp: one_request(a.port, docs[sp[0]][:D] + sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0]), enumerate(sfx)))
+        sampler = kvu126_capture.Sampler(a.port, a.unique_cells_metric) if getattr(a, "unique_cells_metric", "") and w > 0 else None
+        if sampler:
+            sampler.start()
+        try:
+            with ThreadPoolExecutor(active) as ex:
+                recs = list(ex.map(lambda sp: one_request(a.port, docs[sp[0]][:D] + sp[1], a.npredict, f"w{w}s{sp[0]}", bar, sp[0]), enumerate(sfx)))
+        finally:
+            if sampler:
+                sampler.done.set()
         wall = time.time() - t0; rss, hwm = srv.rss_gib()
         ok = [r for r in recs if r["error"] is None and r["status"] == 200]; dec = [r["decode_tps"] for r in ok if r["decode_tps"]]
         resident = sum(x["n_restored"] or 0 for x in rest)
@@ -953,6 +988,12 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
                   draft_n=[r["draft_n"] for r in recs], draft_n_accepted=[r["draft_n_accepted"] for r in recs],
                   rss_gib=rss, vmhwm_gib=hwm, errors=[r["error"] for r in recs if r["error"]][:4],
                   n_reprefill=sum(1 for r in recs if (r["prompt_n"] or 0) > 0.5 * D))
+        if sampler:
+            try:
+                wv["occupancy_capture"] = sampler.finish(recs, la["c"])
+            except kvu126_capture.CaptureError as e:
+                a.refused = True
+                wv["occupancy_capture_error"] = str(e)
         waves.append(wv); cl.write("WAVE " + json.dumps(wv) + "\n"); cl.flush()
         say(f"{la['id']} {Lname} {pmode} wave{w}: wall={wv['wall_s']}s ttft={wv['ttft_s']} dec_sum={wv['decode_tps_sum']} prompt_n={wv['prompt_n']} resident={resident} err={wv['n_err']}")
     errs, _ = scan_log(ldir / "server.log", off)
@@ -972,7 +1013,12 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
                physics=physics(active, L, la["mtp"]), host_bw_gbs=HOST_BW_GBS, kv_unified=facts.get("kv_unified"))
     with open(cdir / "waves_capture.jsonl", "w") as wf:
         for w in waves:
-            wf.write(json.dumps(finalize_row(dict(row, decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"]), a, la, srv, facts, loadavg, wave=w["wave"], wave_rec=w)) + "\n")
+            captured = finalize_row(dict(row, decode_tps_sum=w["decode_tps_sum"], ttft_s=w["ttft_s"],
+                                         decode_tps_per_stream=w["decode_tps_per_stream"]), a, la, srv, facts, loadavg,
+                                    wave=w["wave"], wave_rec=w)
+            wf.write(json.dumps(captured) + "\n")
+            if w.get("occupancy_capture"):
+                kvu126_capture.write_bound_record(cdir, w["wave"], captured["row_sha256"], w["occupancy_capture"])
     row = finalize_row(row, a, la, srv, facts, loadavg); row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close(); summary(row)
 
@@ -1084,6 +1130,7 @@ def main():
     p.add_argument("--anchor", action="store_true", help="add the T=8-clients/np4 short-ctx cell comparable to stack_topology.yaml:140-150")
     p.add_argument("--binary", default=str(BIN), help="server binary for the plain arms (default: production v10 kernel store)")
     p.add_argument("--extra-argv", default="", help="extra server argv for ALL arms (space separated)")
+    p.add_argument("--unique-cells-metric", default="", help="opt in to a source-verified native unique-cell Prometheus gauge; stock server lacks one")
     p.add_argument("--fork-binary", default="", help="cross-slot prefix-fork build; enables the shared_fork prompt-mode arm")
     p.add_argument("--fork-min-tokens", type=int, default=1024, help="value for --slot-fork-min-tokens in the shared_fork arm (0 = off)")
     p.add_argument("--aba-key", default="", help="KVU-12.4: A/B pairing key; with --aba-ledger, refuse a launch whose argv differs (beyond KV mode) from an earlier launch with the same key")
@@ -1095,6 +1142,10 @@ def main():
     p.add_argument("--loadonly", action="store_true", help="launch, record load facts, stop (correctness-class)")
     p.add_argument("--corpus-roots", default="/workspace/handoffs,/workspace/docs")
     a = p.parse_args()
+    if a.unique_cells_metric and a.unique_cells_metric != kvu126_capture.UNIQUE_CELLS_METRIC:
+        p.error("--unique-cells-metric must name the supported native unique-cell gauge")
+    if a.unique_cells_metric and "--metrics" not in a.extra_argv.split():
+        a.extra_argv += " --metrics"
     if a.port in range(8000, 8201):
         sys.exit("refusing production port range 8000-8200")
     try:
