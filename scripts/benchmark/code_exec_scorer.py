@@ -22,22 +22,50 @@ host (needs `+pids` in cgroup.subtree_control). Tracked in
 handoffs/active/scoring-infra-standardization.md. Corrected 2026-07-29 — this
 docstring previously claimed RLIMIT_NPROC was set; it never was.
 
-⚠ HARDENING TODO (before untrusted / at-scale runs, Phase 2b): this does NOT yet
-provide network isolation or a real filesystem jail. Run only trusted algorithmic
-benchmarks until wrapped in unshare/nsjail/container. Never point this at
-adversarial code.
+The default remains the trusted-code scaffold. An explicit bubblewrap mode adds a
+separate user, PID and network namespace, a restricted read-only system runtime,
+and a private temporary filesystem. It fails closed if setup is unavailable; it
+does not hide tests assembled into the candidate program, bound process count,
+or establish a complete hostile-code security boundary.
 """
 from __future__ import annotations
 
 import os
 import re
 import resource
+import secrets
 import signal
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+
+class SandboxUnavailable(RuntimeError):
+    """Requested isolation could not be established; never score as a model failure."""
+
+
+def _bubblewrap_command(exe: str, src: Path, bwrap_exe: str, marker: str) -> list[str]:
+    """Build an explicit mount allowlist; never expose the host root or workspace."""
+    binary = Path(bwrap_exe)
+    runtime = Path(exe)
+    if not binary.is_absolute() or not binary.is_file() or not os.access(binary, os.X_OK):
+        raise SandboxUnavailable("bubblewrap executable must be an absolute executable file")
+    # A venv outside /usr would need additional mounts and can expose arbitrary
+    # host files. Fail explicitly until a separately reviewed runtime is supplied.
+    if not runtime.is_absolute() or not runtime.is_relative_to('/usr') or not runtime.resolve().is_relative_to('/usr'):
+        raise SandboxUnavailable("bubblewrap mode currently supports interpreters under /usr only")
+    return [str(binary), '--unshare-user', '--unshare-pid', '--unshare-net',
+            '--unshare-ipc', '--unshare-uts', '--die-with-parent',
+            '--ro-bind', '/usr', '/usr',
+            '--symlink', 'usr/lib', '/lib', '--symlink', 'usr/lib64', '/lib64',
+            '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
+            '--dir', '/work', '--ro-bind', str(src), '/work/sol.py',
+            '--chdir', '/work', '--', exe, '-c',
+            'import os,sys; os.write(1,sys.argv[1].encode()); '
+            'os.execv(sys.executable,[sys.executable,sys.argv[2]])',
+            marker, '/work/sol.py']
 
 
 def extract_code(response: str, language: str = "python") -> str:
@@ -83,27 +111,33 @@ def _kill_group(proc: subprocess.Popen | None) -> None:
 
 
 def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
-              python_exe: str | None = None) -> tuple[bool, str]:
+              python_exe: str | None = None, *, isolation: str = "scaffold",
+              bwrap_exe: str = "/usr/bin/bwrap") -> tuple[bool, str]:
     """Run code with stdin, return (ok, stdout-or-error)."""
     # absolutize BEFORE the child runs with cwd=tempdir — a relative interpreter
     # path would otherwise resolve inside the tempdir and fail to spawn.
     # absolute(), NOT resolve(): resolve() dereferences the venv's bin/python
     # symlink to the BASE interpreter, silently dropping the venv site-packages.
     exe = str(Path(python_exe).absolute()) if python_exe else sys.executable
+    if isolation not in ("scaffold", "bubblewrap"):
+        raise ValueError(f"unsupported isolation mode: {isolation}")
     with tempfile.TemporaryDirectory(prefix="codeexec_") as d:
         src = Path(d) / "sol.py"
         src.write_text(code)
         proc: subprocess.Popen | None = None
+        marker = f"__bubblewrap_ready_{secrets.token_hex(16)}__" if isolation == "bubblewrap" else None
         try:
+            cmd = (_bubblewrap_command(exe, src, bwrap_exe, marker)
+                   if marker is not None else [exe, str(src)])
             # Popen (not run) so the pid is available for a GROUP kill on timeout;
             # start_new_session=True gives the child its own process group so the
             # kill reaches descendants the scored code spawned.
             proc = subprocess.Popen(
-                [exe, str(src)],
+                cmd,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, text=True,
                 cwd=d, env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1",
-                            "MPLBACKEND": "Agg", "HOME": d,
+                            "MPLBACKEND": "Agg", "HOME": "/tmp" if marker else d,
                             # single-threaded math libs: OpenBLAS sizes buffers by
                             # nproc (192 here) and blows RLIMIT_AS otherwise
                             "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1",
@@ -112,17 +146,29 @@ def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
                 start_new_session=True,
             )
             out, err = proc.communicate(input=stdin, timeout=timeout)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             _kill_group(proc)
             # drain the pipes the killed group left behind, else the fds leak
             try:
                 proc.communicate(timeout=5)
             except Exception:  # noqa: BLE001
                 pass
+            if marker is not None:
+                observed = e.output or b""
+                if not observed.startswith(marker.encode() if isinstance(observed, bytes) else marker):
+                    raise SandboxUnavailable("bubblewrap setup timed out")
             return False, "__timeout__"
+        except SandboxUnavailable:
+            raise
         except Exception as e:  # noqa: BLE001
             _kill_group(proc)
+            if marker is not None:
+                raise SandboxUnavailable(f"bubblewrap spawn failed: {e}") from e
             return False, f"__spawn_error__:{e}"
+        if marker is not None:
+            if not out.startswith(marker):
+                raise SandboxUnavailable(f"bubblewrap setup failed: {err[-200:]}")
+            out = out[len(marker):]
         if proc.returncode != 0:
             return False, f"__exit_{proc.returncode}__:{err[-200:]}"
         return True, out
@@ -135,6 +181,7 @@ def score_code(
     timeout: int = 10,
     cpu_s: int = 8,
     mem_mb: int = 1024,
+    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap",
 ) -> dict[str, Any]:
     """Score generated code against test_cases.
 
@@ -149,9 +196,9 @@ def score_code(
     passed, detail = 0, []
     for tc in test_cases:
         if "assert" in tc:
-            ok, out = _run_once(code + "\n\n" + tc["assert"], "", timeout, cpu_s, mem_mb)
+            ok, out = _run_once(code + "\n\n" + tc["assert"], "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe)
         else:
-            ok, out = _run_once(code, tc.get("input", ""), timeout, cpu_s, mem_mb)
+            ok, out = _run_once(code, tc.get("input", ""), timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe)
             if ok:
                 ok = out.strip() == str(tc.get("output", "")).strip()
         passed += int(ok)
@@ -169,6 +216,7 @@ def score_functional(
     timeout: int = 10,
     cpu_s: int = 8,
     mem_mb: int = 1024,
+    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap",
 ) -> bool:
     """HumanEval/MBPP-style: the model completes a function; `test_code` is a
     `check(candidate)` body of asserts. Pass iff the assembled program runs clean.
@@ -183,7 +231,7 @@ def score_functional(
     if not re.search(rf"\bdef\s+{re.escape(entry_point)}\s*\(", code):
         code = (prompt or "") + "\n" + code
     program = f"{code}\n\n{test_code}\n\ncheck({entry_point})\n"
-    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb)
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, isolation=isolation, bwrap_exe=bwrap_exe)
     return ok
 
 
@@ -196,6 +244,7 @@ def score_unittest(
     timeout: int = 30,
     cpu_s: int = 25,
     mem_mb: int = 4096,
+    *, isolation: str = "scaffold", bwrap_exe: str = "/usr/bin/bwrap",
 ) -> bool:
     """BigCodeBench-style: the model implements `entry_point` (task_func); the
     suite ships a unittest.TestCase in `test_code`. Pass iff the whole unittest
@@ -209,7 +258,7 @@ def score_unittest(
         code = (code_prompt or "") + "\n" + code
     program = (f"{code}\n\n{test_code}\n\n"
                "import unittest as _ut\n_ut.main(argv=['x'], exit=True)\n")
-    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, python_exe=python_exe)
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, python_exe=python_exe, isolation=isolation, bwrap_exe=bwrap_exe)
     return ok
 
 
