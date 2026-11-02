@@ -37,8 +37,10 @@ class ComparisonTest(unittest.TestCase):
         wave = self.write_json(name + ".jsonl", row)
         native = {"schema": "epyc.kvu126.native_unique_cells.v1", "row_sha256": row["row_sha256"],
                   "decode_start_monotonic_s": 10.0, "decode_end_monotonic_s": 20.0,
-                  "samples": [{"request_start_monotonic_s": 10.9, "monotonic_s": 11.0, "unique_cells": occupancy, "pid_birth_identity": "1:123"},
-                              {"request_start_monotonic_s": 18.9, "monotonic_s": 19.0, "unique_cells": occupancy + 100, "pid_birth_identity": "1:123"}]}
+                  "samples": [{"request_start_monotonic_s": 10.9, "monotonic_s": 11.0, "unique_cells": occupancy, "pid_birth_identity": "1:123",
+                               "metrics_text": "# HELP llamacpp:kv_cache_used_cells Number of occupied unique KV cache cells.\n# TYPE llamacpp:kv_cache_used_cells gauge\nllamacpp:kv_cache_used_cells " + str(occupancy) + "\n"},
+                              {"request_start_monotonic_s": 18.9, "monotonic_s": 19.0, "unique_cells": occupancy + 100, "pid_birth_identity": "1:123",
+                               "metrics_text": "# HELP llamacpp:kv_cache_used_cells Number of occupied unique KV cache cells.\n# TYPE llamacpp:kv_cache_used_cells gauge\nllamacpp:kv_cache_used_cells " + str(occupancy + 100) + "\n"}]}
         source = self.write_json(name + "-raw-native.json", native)
         native.update(native_source=source["path"], native_source_sha256=source["sha256"])
         obs = {"wave_file": wave, "wave": 1, "occupancy_file": self.write_json(name + "-native.json", native)}
@@ -116,6 +118,7 @@ class ComparisonTest(unittest.TestCase):
         build = {"schema": "epyc.kvu126.build_identity.v1", "source_commit": identity["source_commit"],
                  "binary_sha256": identity["binary_sha256"], "source_tree_clean": True, "dso_sha256": dsos}
         records = {"schema": "epyc.kvu126.evidence_index.v1", "build_receipt": self.write_json("build.json", build), "arms": {}}
+        pins = {name: "d" * 64 for name in ("kvu_cpu_matrix.py", "kvu126_capture.py", "kvu126_identity.py", "kvu126_compare.py", "kvu126_build.py", "kvu126_finalize.py")}
         arms = {}
         for name, value in self.plan["arms"].items():
             arms[name] = {k: value[k] for k in ("np", "L", "c")}
@@ -124,13 +127,14 @@ class ComparisonTest(unittest.TestCase):
                 row = json.loads((self.root / entry["wave_file"]["path"]).read_bytes())
                 receipt = {"schema": "epyc.kvu126.runtime_identity.v1", "binary_sha256": identity["binary_sha256"],
                            "model_sha256": identity["model_sha256"], "mapped_dso_sha256": dsos,
-                           "pid_birth_identity": "1:123", "row_sha256": row["row_sha256"]}
+                           "pid_birth_identity": "1:123", "row_sha256": row["row_sha256"], "plan_sha256": "9" * 64,
+                           "producer_pins": pins}
                 common = {k: receipt[k] for k in ("binary_sha256", "model_sha256", "mapped_dso_sha256", "pid_birth_identity")}
                 receipt["before"] = dict(common, captured_monotonic_s=9)
                 receipt["after"] = dict(common, captured_monotonic_s=21)
                 entry["runtime_receipt"] = self.write_json(name + "-runtime.json", receipt)
             records["arms"][name] = entries
-        plan = {"schema": "epyc.kvu126.prospective_plan.v1", "expected_identity": identity, "arms": arms,
+        plan = {"schema": "epyc.kvu126.prospective_plan.v1", "expected_identity": identity, "producer_pins": pins, "arms": arms,
                 "comparisons": [{"left": "np8_32k", "right": "np8_64k"},
                                 {"left": "np8_48k", "right": "np4_96k"}],
                 "noise_rule": "synthetic test only", "max_occupancy_fraction_gap": 0.02,
@@ -140,7 +144,7 @@ class ComparisonTest(unittest.TestCase):
     def test_prospective_declaration_is_separate_from_evidence(self):
         plan, records = self.prospective()
         self.assertNotIn("observations", plan["arms"]["np8_48k"])
-        result = compare.analyze_prospective(plan, records, self.root)
+        result = compare.analyze_prospective(plan, records, self.root, "9" * 64)
         self.assertEqual(len(result["comparisons"]), 2)
         self.assertFalse(result["comparisons"][0]["occupancy_matched"])
         self.assertTrue(result["comparisons"][1]["occupancy_matched"])
@@ -149,14 +153,14 @@ class ComparisonTest(unittest.TestCase):
         plan, records = self.prospective()
         plan["comparisons"].pop()
         with self.assertRaisesRegex(ValueError, "comparisons"):
-            compare.analyze_prospective(plan, records, self.root)
+            compare.analyze_prospective(plan, records, self.root, "9" * 64)
         plan["comparisons"].append({"left": "np8_48k", "right": "np4_96k"})
         ref = records["arms"]["np8_48k"][0]["runtime_receipt"]
         receipt = json.loads((self.root / ref["path"]).read_bytes())
         receipt["row_sha256"] = "0" * 64
         records["arms"]["np8_48k"][0]["runtime_receipt"] = self.write_json(ref["path"], receipt)
         with self.assertRaisesRegex(ValueError, "not bound to wave"):
-            compare.analyze_prospective(plan, records, self.root)
+            compare.analyze_prospective(plan, records, self.root, "9" * 64)
 
 
 if __name__ == "__main__":

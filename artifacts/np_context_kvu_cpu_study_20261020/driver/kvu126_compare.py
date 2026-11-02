@@ -153,13 +153,17 @@ def analyze(plan, root):
             "arms": arms, "comparisons": comparisons}
 
 
-def analyze_prospective(plan, records, root):
+def analyze_prospective(plan, records, root, plan_sha256):
     """Keep the pre-run declaration separate from post-run evidence hashes."""
     if plan.get("schema") != "epyc.kvu126.prospective_plan.v1":
         raise ValueError("invalid prospective plan schema")
     if records.get("schema") != "epyc.kvu126.evidence_index.v1":
         raise ValueError("invalid post-run evidence index")
     identity = plan["expected_identity"]
+    pins = plan.get("producer_pins")
+    if (not isinstance(pins, dict) or set(pins) != {"kvu_cpu_matrix.py", "kvu126_capture.py", "kvu126_identity.py", "kvu126_compare.py", "kvu126_build.py", "kvu126_finalize.py"}
+            or any(not re.fullmatch(r"[0-9a-f]{64}", value or "") for value in pins.values())):
+        raise ValueError("producer source pins missing or invalid")
     for key, length in (("binary_sha256", 64), ("model_sha256", 64), ("source_commit", 40)):
         if not re.fullmatch(rf"[0-9a-f]{{{length}}}", identity.get(key, "")):
             raise ValueError(f"missing or invalid predeclared {key}")
@@ -198,6 +202,8 @@ def analyze_prospective(plan, records, root):
         for entry in entries:
             receipt = json.loads(read_pinned(root, entry["runtime_receipt"]))
             if (receipt.get("schema") != "epyc.kvu126.runtime_identity.v1" or
+                    receipt.get("plan_sha256") != plan_sha256 or
+                    receipt.get("producer_pins") != pins or
                     receipt.get("binary_sha256") != identity["binary_sha256"] or
                     receipt.get("model_sha256") != identity["model_sha256"] or
                     receipt.get("mapped_dso_sha256") != dsos or
@@ -228,12 +234,41 @@ def analyze_prospective(plan, records, root):
     return result
 
 
+def write_belief_measurements(path, plan_path, records_path):
+    """Write a scoped matched-occupancy gap at the original comparison boundary.
+
+    No historical raw records are upgraded: analyze_prospective must already
+    have verified that each original runtime receipt bound the pre-run plan.
+    """
+    plan_path, records_path = Path(plan_path).resolve(), Path(records_path).resolve()
+    plan_raw, records_raw = plan_path.read_bytes(), records_path.read_bytes()
+    result = analyze_prospective(json.loads(plan_raw), json.loads(records_raw), records_path.parent, digest(plan_raw))
+    selected = next((p for p in result["comparisons"] if (p["left"], p["right"]) == ("np8_48k", "np4_96k")), None)
+    if selected is None:
+        raise ValueError("missing matched-occupancy comparison")
+    left = result["arms"]["np8_48k"]
+    right = result["arms"]["np4_96k"]
+    left_median = statistics.median(x["occupancy_median"] for x in left)
+    right_median = statistics.median(x["occupancy_median"] for x in right)
+    row = {"schema": "epyc.kvu126.occupancy_gap.v1", "kind": "predeclared_matched_occupancy_gap",
+           "plan_path": str(plan_path), "plan_sha256": digest(plan_raw),
+           "evidence_index_path": str(records_path), "evidence_index_sha256": digest(records_raw),
+           "left_arm": "np8_48k", "right_arm": "np4_96k", "left_median_cells": left_median,
+           "right_median_cells": right_median, "absolute_gap_cells": abs(left_median - right_median),
+           "scope_note": "lower gap means closer physical occupancy only; no performance or quality claim"}
+    row["row_sha256"] = matrix.row_hash(row)
+    with open(path, "x") as out:
+        out.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
+    return row
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", type=Path)
     parser.add_argument("--expected-plan-sha256", required=True)
     parser.add_argument("--records", type=Path, required=True, help="post-run evidence index; separate from the pre-run declaration")
     parser.add_argument("--expected-records-sha256", required=True)
+    parser.add_argument("--belief-output", type=Path, help="exclusive original-run observation carrier (default beside records)")
     args = parser.parse_args()
     try:
         raw = args.plan.read_bytes()
@@ -242,9 +277,12 @@ def main():
         records_raw = args.records.read_bytes()
         if digest(records_raw) != args.expected_records_sha256:
             raise ValueError("evidence index digest mismatch")
-        result = analyze_prospective(json.loads(raw), json.loads(records_raw), args.records.resolve().parent)
+        result = analyze_prospective(json.loads(raw), json.loads(records_raw), args.records.resolve().parent, digest(raw))
         result["plan_sha256"] = digest(raw)
         result["records_sha256"] = digest(records_raw)
+        belief_output = args.belief_output or args.records.resolve().parent / "belief_measurements.jsonl"
+        write_belief_measurements(belief_output, args.plan, args.records)
+        result["belief_output"] = str(belief_output)
         print(json.dumps(result, indent=2, allow_nan=False))
     except (ValueError, KeyError, OSError, TypeError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": "INVALID", "reason": str(exc)}))

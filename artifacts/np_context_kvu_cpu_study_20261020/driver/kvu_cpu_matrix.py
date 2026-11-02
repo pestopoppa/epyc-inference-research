@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import kvu126_capture
 import kvu126_identity
+import kvu126_finalize
 
 HERE = Path(__file__).resolve().parent
 ART = HERE.parent
@@ -650,6 +651,7 @@ def cell_header(cl, a, la, Lname, pmode, srv, facts):
              f"LOADFACTS {json.dumps(facts)}\nPHYSICS {json.dumps(physics(la['np'], LS[Lname], la['mtp']))}\n")
 
 def start_identity_sampler(a, srv):
+    kvu126_identity.verify_producer_pins(a.identity_producer_pins)
     before = a.identity_verifier.check(srv.proc.pid)
     callback = lambda: a.identity_verifier.fast_check(srv.proc.pid, before)
     sampler = kvu126_capture.Sampler(a.port, a.unique_cells_metric, identity_check=callback)
@@ -658,6 +660,7 @@ def start_identity_sampler(a, srv):
 
 def finish_identity_sampler(a, srv, sampler, before, recs, pool):
     captured = sampler.finish(recs, pool)
+    kvu126_identity.verify_producer_pins(a.identity_producer_pins)
     after = a.identity_verifier.check(srv.proc.pid)
     keys = ("pid_birth_identity", "binary_sha256", "model_sha256", "mapped_dso_sha256")
     if any(before[key] != after[key] for key in keys):
@@ -790,7 +793,7 @@ def run_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, ratio,
             wf.write(json.dumps(captured) + "\n")
             if w.get("occupancy_capture"):
                 kvu126_capture.write_bound_record(cdir, w["wave"], captured["row_sha256"], w["occupancy_capture"])
-                kvu126_identity.write_runtime_receipt(cdir, w["wave"], captured["row_sha256"], w["runtime_identity"]["before"], w["runtime_identity"]["after"])
+                kvu126_identity.write_runtime_receipt(cdir, w["wave"], captured["row_sha256"], w["runtime_identity"]["before"], w["runtime_identity"]["after"], a.identity_plan_sha256, a.identity_producer_pins)
     row = finalize_row(row, a, la, srv, facts, loadavg)
     row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close()
@@ -1037,7 +1040,7 @@ def run_bank_cell(a, la, ldir, corpus, Lname, pmode, srv, summary, say, facts, o
             wf.write(json.dumps(captured) + "\n")
             if w.get("occupancy_capture"):
                 kvu126_capture.write_bound_record(cdir, w["wave"], captured["row_sha256"], w["occupancy_capture"])
-                kvu126_identity.write_runtime_receipt(cdir, w["wave"], captured["row_sha256"], w["runtime_identity"]["before"], w["runtime_identity"]["after"])
+                kvu126_identity.write_runtime_receipt(cdir, w["wave"], captured["row_sha256"], w["runtime_identity"]["before"], w["runtime_identity"]["after"], a.identity_plan_sha256, a.identity_producer_pins)
     row = finalize_row(row, a, la, srv, facts, loadavg); row["validation_problems"] = validate_row(row); row["row_sha256"] = row_hash(row)
     cl.write("CELL_SUMMARY " + json.dumps(row) + "\n"); cl.close(); summary(row)
 
@@ -1153,6 +1156,8 @@ def main():
     p.add_argument("--identity-build-receipt", default="", help="build-time identity receipt for the instrument")
     p.add_argument("--identity-build-sha256", default="", help="predeclared SHA-256 of that build receipt")
     p.add_argument("--identity-model-sha256", default="", help="predeclared full target model SHA-256")
+    p.add_argument("--identity-plan", default="", help="pre-run prospective plan file")
+    p.add_argument("--identity-plan-sha256", default="", help="predeclared SHA-256 of the prospective plan")
     p.add_argument("--fork-binary", default="", help="cross-slot prefix-fork build; enables the shared_fork prompt-mode arm")
     p.add_argument("--fork-min-tokens", type=int, default=1024, help="value for --slot-fork-min-tokens in the shared_fork arm (0 = off)")
     p.add_argument("--aba-key", default="", help="KVU-12.4: A/B pairing key; with --aba-ledger, refuse a launch whose argv differs (beyond KV mode) from an earlier launch with the same key")
@@ -1166,8 +1171,8 @@ def main():
     a = p.parse_args()
     if a.unique_cells_metric and a.unique_cells_metric != kvu126_capture.UNIQUE_CELLS_METRIC:
         p.error("--unique-cells-metric must name the supported native unique-cell gauge")
-    if a.unique_cells_metric and (not a.identity_build_receipt or not re.fullmatch(r"[0-9a-f]{64}", a.identity_build_sha256) or not re.fullmatch(r"[0-9a-f]{64}", a.identity_model_sha256)):
-        p.error("unique-cell capture requires a pinned build receipt and model digest")
+    if a.unique_cells_metric and (not a.identity_build_receipt or not a.identity_plan or not re.fullmatch(r"[0-9a-f]{64}", a.identity_build_sha256) or not re.fullmatch(r"[0-9a-f]{64}", a.identity_model_sha256) or not re.fullmatch(r"[0-9a-f]{64}", a.identity_plan_sha256)):
+        p.error("unique-cell capture requires a pinned plan, build receipt and model digest")
     if a.unique_cells_metric and "--metrics" not in a.extra_argv.split():
         a.extra_argv += " --metrics"
     if a.port in range(8000, 8201):
@@ -1224,7 +1229,9 @@ def main():
                 print(f"BANK BUILD split np{n_} (layout-specific, n_stream={n_}): est={e_/3600:.1f} h  names={nm_}  cmd: --build-bank --bank-kv split --bank-np {n_} --bank-names {','.join(nm_)}")
             print(f"BANK BUILD TOTAL est={(tb+tsp)/3600:.1f} h; bank dir {a.bank_dir}")
         return
-    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    # KVU-12.6 original-run evidence must never mix with, or overwrite,
+    # previously exposed rows. The caller supplies a fresh run directory.
+    out = Path(a.out); out.mkdir(parents=True, exist_ok=not bool(a.unique_cells_metric))
     corpus = Corpus(a.corpus_roots.split(","))
     sumf = out / "summary.jsonl"
     def summary(row):
@@ -1250,15 +1257,44 @@ def main():
     a.identity_verifier = None
     try:
         if a.unique_cells_metric:
+            if kvu126_identity.sha256_file(a.identity_plan) != a.identity_plan_sha256:
+                sys.exit("pre-run plan digest mismatch; refusing to measure")
             if kvu126_identity.sha256_file(a.identity_build_receipt) != a.identity_build_sha256:
                 sys.exit("build receipt digest mismatch; refusing to measure")
             build_receipt = json.loads(Path(a.identity_build_receipt).read_text())
+            plan = json.loads(Path(a.identity_plan).read_text())
+            declared = plan.get("expected_identity", {})
+            if (plan.get("schema") != "epyc.kvu126.prospective_plan.v1" or
+                declared.get("model_sha256") != a.identity_model_sha256 or
+                declared.get("binary_sha256") != build_receipt.get("binary_sha256") or
+                declared.get("source_commit") != build_receipt.get("source_commit")):
+                sys.exit("pre-run plan identity differs; refusing to measure")
+            a.identity_producer_pins = kvu126_identity.verify_producer_pins(plan.get("producer_pins"))
+            # Persist the exact pre-run declaration and build receipt before any
+            # target request. Exclusive files protect prior exposures.
+            a.identity_plan_copy = out / "kvu126-plan.json"
+            a.identity_build_copy = out / "kvu126-build-receipt.json"
+            for source, target, expected in ((a.identity_plan, a.identity_plan_copy, a.identity_plan_sha256),
+                                             (a.identity_build_receipt, a.identity_build_copy, a.identity_build_sha256)):
+                raw = Path(source).read_bytes()
+                if hashlib.sha256(raw).hexdigest() != expected:
+                    sys.exit("pre-run identity file changed; refusing to measure")
+                with target.open("xb") as dest:
+                    dest.write(raw)
             a.identity_verifier = kvu126_identity.RuntimeVerifier(MODEL, a.identity_model_sha256, build_receipt)
         for la in ls:
             run_launch(a, la, out, corpus, summary)
     finally:
         if a.identity_verifier:
             a.identity_verifier.close()
+    if a.unique_cells_metric and not a.refused and not a.loadonly:
+        # Original-run finalization is mandatory for a successful capture: an
+        # incomplete index or failed comparison is never labelled wired.
+        kvu126_identity.verify_producer_pins(a.identity_producer_pins)
+        index = kvu126_finalize.write_index(out, a.identity_build_copy)
+        subprocess.run([sys.executable, str(HERE / "kvu126_compare.py"), str(a.identity_plan_copy),
+                        "--expected-plan-sha256", a.identity_plan_sha256,
+                        "--records", str(index), "--expected-records-sha256", kvu126_identity.sha256_file(index)], check=True)
     print("DONE", flush=True)
     if a.refused:
         sys.exit(3)          # a REFUSED_OVERSIZE cell is a failed cell, never a quiet pass

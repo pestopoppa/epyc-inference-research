@@ -61,10 +61,10 @@ server.serve_forever()
         before = self.verifier.check(self.proc.pid)
         self.assertEqual(self.verifier.fast_check(self.proc.pid, before), before["pid_birth_identity"])
         after = self.verifier.check(self.proc.pid)
-        receipt = identity.write_runtime_receipt(self.root, 1, "b" * 64, before, after)
+        receipt = identity.write_runtime_receipt(self.root, 1, "b" * 64, before, after, "c" * 64, {"fixture": "synthetic"})
         self.assertIn('"row_sha256": "' + "b" * 64 + '"', receipt.read_text())
         with self.assertRaises(FileExistsError):
-            identity.write_runtime_receipt(self.root, 1, "b" * 64, before, after)
+            identity.write_runtime_receipt(self.root, 1, "b" * 64, before, after, "c" * 64, {"fixture": "synthetic"})
 
     def test_actual_http_sampling_is_bound_to_same_process(self):
         before = self.verifier.check(self.proc.pid)
@@ -115,6 +115,17 @@ server.serve_forever()
         self.stop()
         with self.assertRaises(identity.IdentityError):
             self.verifier.check(self.proc.pid)
+
+
+class ProducerPinsTest(unittest.TestCase):
+    def test_declared_original_source_pins_are_required_and_checked(self):
+        directory = Path(identity.__file__).resolve().parent
+        names = ("kvu_cpu_matrix.py", "kvu126_capture.py", "kvu126_identity.py", "kvu126_compare.py", "kvu126_build.py", "kvu126_finalize.py")
+        pins = {name: identity.sha256_file(directory / name) for name in names}
+        self.assertEqual(identity.verify_producer_pins(pins), pins)
+        pins["kvu126_capture.py"] = "0" * 64
+        with self.assertRaisesRegex(identity.IdentityError, "producer sources changed"):
+            identity.verify_producer_pins(pins)
 
 
 if __name__ == "__main__":

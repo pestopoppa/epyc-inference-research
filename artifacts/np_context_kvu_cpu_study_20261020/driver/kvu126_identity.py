@@ -152,11 +152,22 @@ class RuntimeVerifier:
             raise IdentityError(f"per-sample identity unavailable: {exc}") from exc
 
 
-def write_runtime_receipt(directory, wave, row_sha256, before, after):
+def verify_producer_pins(expected):
+    names = ("kvu_cpu_matrix.py", "kvu126_capture.py", "kvu126_identity.py", "kvu126_compare.py", "kvu126_build.py", "kvu126_finalize.py")
+    if not isinstance(expected, dict) or set(expected) != set(names):
+        raise IdentityError("predeclared producer pins missing or incomplete")
+    actual = {name: sha256_file(Path(__file__).resolve().parent / name) for name in names}
+    if actual != expected:
+        raise IdentityError("producer sources changed or do not match the predeclared pins")
+    return actual
+
+
+def write_runtime_receipt(directory, wave, row_sha256, before, after, plan_sha256, producer_pins):
     keys = ("pid_birth_identity", "binary_sha256", "model_sha256", "mapped_dso_sha256")
     if any(before[key] != after[key] for key in keys):
         raise IdentityError("runtime identity changed over the wave")
-    receipt = {"schema": "epyc.kvu126.runtime_identity.v1", "row_sha256": row_sha256,
+    receipt = {"schema": "epyc.kvu126.runtime_identity.v1", "row_sha256": row_sha256, "plan_sha256": plan_sha256,
+               "producer_pins": producer_pins,
                **{key: before[key] for key in keys}, "before": before, "after": after}
     path = Path(directory) / f"wave-{wave}-runtime.json"
     with path.open("x") as out:
