@@ -95,6 +95,23 @@ OUT="${OUT:-/mnt/raid0/llm/tmp/kpf64-arm-$ARM}"
 DRIVER=(python3 "$HERE/replay_driver.py" --sessions "${SESSIONS:-SESSIONS_DIR}" --out "$OUT/replay" --arm "$ARM"
         --port "$PORT" --server-log "$OUT/server.log" --slots 4 "${DARGS[@]}")
 
+# A derived successor is executable only against its predeclared, file-bound
+# report and manifest. Verify before a model can load; legacy manifests remain unchanged.
+if [ -n "$SESSIONS" ] && [ -f "$SESSIONS/manifest.json" ]; then
+  SUCCESSOR=$(python3 - "$SESSIONS/manifest.json" <<'PYVERIFY'
+import json, sys
+print('yes' if json.load(open(sys.argv[1])).get('successor') else 'no')
+PYVERIFY
+  ) || exit 2
+  if [ "$SUCCESSOR" = yes ]; then
+    : "${KPF64_SUCCESSOR_REPORT_SHA256:?successor report hash required}"
+    : "${KPF64_SUCCESSOR_MANIFEST_SHA256:?successor manifest hash required}"
+    python3 "$HERE/family_successor.py" --verify --dest "$SESSIONS" \
+      --report-sha256 "$KPF64_SUCCESSOR_REPORT_SHA256" \
+      --manifest-sha256 "$KPF64_SUCCESSOR_MANIFEST_SHA256" || exit 2
+  fi
+fi
+
 if [ "$DRY" = 1 ]; then
   echo "preflight: qwen_first_reply_preflight $PORT after own-PID port proof, before replay (rc!=0 fails the arm)"
   echo "DRY-RUN arm=$ARM device=$DEVICE port=$PORT (nothing started)"
