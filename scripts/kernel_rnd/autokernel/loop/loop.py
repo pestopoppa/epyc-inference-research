@@ -549,6 +549,10 @@ class Outcome:
     invalid_measurement: dict | None = None
     instrument_failure: dict | None = None
     integrity_screen: dict | None = None
+    # JEV-4: {"critic": "critic:hypothesis"|"critic:patch", "state": "unavailable",
+    # "attempts": n, "error": text} when a critic was ASKED and never ANSWERED. Kept
+    # off the verdict fields: an unavailable critic is neither an accept nor a reject.
+    critic_call: dict | None = None
     # Evidence of a keep in flight when a guard aborted the run after `commit` landed
     # (status "run_aborted" only). Audit trail; the keep is NOT recorded as kept.
     abort_evidence: dict | None = None
@@ -641,6 +645,8 @@ class Outcome:
             row["instrument_failure"] = self.instrument_failure
         if self.integrity_screen is not None:
             row["integrity_screen"] = self.integrity_screen
+        if self.critic_call is not None:
+            row["critic_call"] = self.critic_call
         if self.abort_evidence is not None:
             row["abort_evidence"] = self.abort_evidence
         if self.no_op_build is not None:
@@ -1253,7 +1259,8 @@ def iterate(*, planner: Planner, critic: Critic,
         # A critic-pass-1 transient carries the planner's hypothesis (and its row
         # the critic1 checkpoint): the row names what was in flight.
         return observed(Outcome("planner_transient", getattr(exc, "hypothesis", None),
-                                [str(exc)]))
+                                [str(exc)],
+                                critic_call=getattr(exc, "critic_call", None)))
     except bench.BenchFailed as exc:
         # The INSTRUMENT failed, not the science, and it gets the same treatment for
         # the same reason. Run 12 died on iteration 1 because `llama-bench` was
@@ -1776,17 +1783,25 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         if should_abandon():
                             return stopped()
                         continue
+                    used = (critic1_used(hypothesis) + 1) if critic1 else 1
+                    critic_call = {"critic": "critic:hypothesis", "state": "unavailable",
+                                   "attempts": used, "empty_reply_retried": retried,
+                                   "error": str(exc)[:500]}
                     if critic1:
-                        used = critic1_used(hypothesis) + 1
                         if used >= CRITIC1_RETRIES:
                             progress["inflight"] = None
                             spent = _critic1_spent(exc, used)
                             spent.hypothesis = hypothesis
+                            try:
+                                spent.critic_call = {**critic_call, "budget_spent": True}
+                            except Exception:  # noqa: BLE001
+                                pass
                             raise spent from exc
                         progress["inflight"] = critic1_checkpoint(hypothesis, used,
                                                                   last_transient=str(exc))
                     try:
                         exc.hypothesis = hypothesis     # the row names what was in flight
+                        exc.critic_call = critic_call
                     except Exception:      # noqa: BLE001 -- an exception without __dict__
                         pass
                     raise
@@ -1963,8 +1978,24 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 on_step("critic pass 2: carried verdict (resumed at build)")
             elif hypothesis.runtime_pair is None:
                 on_step("critic pass 2: reviewing the diff")
-                patch_verdict, halted = actor_call(critic.review_patch, hypothesis, paths,
-                                                   working)
+                try:
+                    patch_verdict, halted = actor_call(critic.review_patch, hypothesis, paths,
+                                                       working)
+                except ActorStopped:
+                    raise
+                except ActorTransient as exc:
+                    # ASKED, never ANSWERED: the critic2 checkpoint stays (it resumes
+                    # here) and the row says the critic was unavailable (JEV-4).
+                    if isinstance(progress.get("critic2"), dict):
+                        progress["critic2"] = {**progress["critic2"],
+                                               "last_transient": str(exc)[:500]}
+                    try:
+                        exc.hypothesis = getattr(exc, "hypothesis", None) or hypothesis
+                        exc.critic_call = {"critic": "critic:patch", "state": "unavailable",
+                                           "attempts": 1, "error": str(exc)[:500]}
+                    except Exception:  # noqa: BLE001
+                        pass
+                    raise
                 if halted is not None:
                     return halted
                 # A verdict came back: the critic2 checkpoint is answered either way.

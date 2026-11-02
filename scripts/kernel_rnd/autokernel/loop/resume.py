@@ -157,6 +157,7 @@ immutable content-addressed pair `archive.retain_patch` writes) and appends that
 from __future__ import annotations
 
 import argparse
+import enum
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -986,52 +987,95 @@ def other_epoch_checkpoints(store_root: Path, *, epoch: str,
     return count
 
 
+class IneligibleCode(str, enum.Enum):
+    """Exhaustive reasons a checkpoint is not resumable now (JEV-4)."""
+
+    UNKNOWN_STAGE = "unknown_stage"
+    NO_HYPOTHESIS = "no_hypothesis"
+    NO_RETAINED_PATCH = "no_retained_patch"
+    NO_PATCH_ROUND_LEFT = "no_patch_round_left"
+    REFUSED_BY_VERDICT_GATE = "refused_by_verdict_gate"
+    GATE_RULES_UNCHANGED = "gate_rules_unchanged"
+    CRITIC1_RETRY_BUDGET_SPENT = "critic1_retry_budget_spent"
+    AUTHOR_BUDGET_SPENT = "author_budget_spent"
+    SCOPE_RULES_UNCHANGED = "scope_rules_unchanged"
+
+
+class Ineligible(str):
+    """Text of an ineligibility verdict carrying its typed :class:`IneligibleCode`."""
+
+    code: IneligibleCode
+
+    def __new__(cls, code: IneligibleCode, text: str) -> "Ineligible":
+        obj = super().__new__(cls, text)
+        obj.code = IneligibleCode(code)
+        return obj
+
+    @property
+    def text(self) -> str:
+        return str.__str__(self)
+
+    def to_dict(self) -> dict:
+        return {"code": self.code.value, "text": self.text}
+
+
+def ineligible_code(reason: "str | None") -> str | None:
+    """JSON-safe code for an ``ineligible_reason`` result (None when eligible)."""
+    if reason is None:
+        return None
+    return reason.code.value if isinstance(reason, Ineligible) else "unclassified"
+
+
 def ineligible_reason(candidate: Candidate, *, rules_fingerprint: str,
-                      scope_fingerprint: str | None = None) -> str | None:
+                      scope_fingerprint: str | None = None) -> "Ineligible | None":
     """Why this checkpoint is not resumable NOW (it stays unclaimed), or None.
 
     A pending accepted hypothesis (an author checkpoint from `patch_rounds_exhausted`
     or `scope_blocked`) is refused only when its authoring budget is spent, or while
     the scope rules that blocked it are unchanged (`loop.scope_rules_fingerprint`).
+
+    The result is an :class:`Ineligible` -- a ``str`` (the human text, so existing
+    callers are unchanged) whose ``.code`` is an exhaustive :class:`IneligibleCode`.
     """
     ck = candidate.checkpoint
     if candidate.stage not in STAGE_RANK:
-        return f"unknown stage {candidate.stage!r}"
+        return Ineligible(IneligibleCode.UNKNOWN_STAGE, f"unknown stage {candidate.stage!r}")
     if not candidate.hypothesis.get("mechanism_id"):
-        return "checkpoint carries no hypothesis"
+        return Ineligible(IneligibleCode.NO_HYPOTHESIS, "checkpoint carries no hypothesis")
     if candidate.stage in PATCH_STAGES:
         pointer = ck.get("retained_patch")
         if not isinstance(pointer, Mapping) or not pointer.get("patch_sha256"):
-            return "no retained patch"
+            return Ineligible(IneligibleCode.NO_RETAINED_PATCH, "no retained patch")
     if candidate.stage == "critic2":
         # Absent means the round in flight only (it counts itself).
         remaining = ck.get("patch_rounds_remaining")
         if remaining is not None and int(remaining) < 1:
-            return "no patch round left"
+            return Ineligible(IneligibleCode.NO_PATCH_ROUND_LEFT, "no patch round left")
     elif candidate.stage == "build":
         gate = ck.get("refusal_gate")
         if gate is not None and gate not in RULE_GATES:
-            return f"refused by {gate}, a verdict on the patch rather than a rule"
+            return Ineligible(IneligibleCode.REFUSED_BY_VERDICT_GATE,
+                              f"refused by {gate}, a verdict on the patch rather than a rule")
         recorded = ck.get("gate_rules_fingerprint")
         if gate is not None and recorded is not None and recorded == rules_fingerprint:
-            return f"{gate} rules unchanged since the refusal"
+            return Ineligible(IneligibleCode.GATE_RULES_UNCHANGED, f"{gate} rules unchanged since the refusal")
     elif candidate.stage == "critic1":
         used = int(ck.get("critic1_attempts_used") or 0)
         if used >= loop.CRITIC1_RETRIES:
-            return (f"critic pass 1 retry budget spent ({used}/{loop.CRITIC1_RETRIES} "
+            return Ineligible(IneligibleCode.CRITIC1_RETRY_BUDGET_SPENT, f"critic pass 1 retry budget spent ({used}/{loop.CRITIC1_RETRIES} "
                     "transients)")
     elif int(ck.get("patch_rounds_remaining") or 0) < 1:
-        return "no patch round left"
+        return Ineligible(IneligibleCode.NO_PATCH_ROUND_LEFT, "no patch round left")
     budget = ck.get("author_attempts_budget")
     if budget is not None and int(ck.get("author_attempts_used") or 0) >= int(budget):
-        return (f"authoring budget spent ({ck.get('author_attempts_used')}/{budget} "
+        return Ineligible(IneligibleCode.AUTHOR_BUDGET_SPENT, f"authoring budget spent ({ck.get('author_attempts_used')}/{budget} "
                 "attempts)")
     block = ck.get("scope_block")
     if isinstance(block, Mapping):
         recorded = block.get("scope_rules_fingerprint")
         current = scope_fingerprint or loop.scope_rules_fingerprint()
         if recorded is not None and recorded == current:
-            return (f"scope-blocked on {block.get('route')} by {block.get('source')}: "
+            return Ineligible(IneligibleCode.SCOPE_RULES_UNCHANGED, f"scope-blocked on {block.get('route')} by {block.get('source')}: "
                     f"{str(block.get('rule') or '')[:200]}; the scope rules are unchanged")
     return None
 
@@ -2358,6 +2402,8 @@ def reinstate_plan(store_root: Path, *, row_id: str, rejection_rows: Sequence[st
         "epoch_rebound": rebind,
         "ineligible_now": ineligible_reason(candidate,
                                             rules_fingerprint=loop.gate_rules_fingerprint()),
+        "ineligible_now_code": ineligible_code(ineligible_reason(
+            candidate, rules_fingerprint=loop.gate_rules_fingerprint())),
         **_live_status(store_root),
     }
     checks["epoch_matches_live_loop_status"] = checks["live_loop_status_epoch"] == epoch
@@ -2965,6 +3011,8 @@ def backfill_critic1_plan(store_root: Path, *, row_id: str, reply: Path, epoch: 
         "reply_precedes_row": attempt["backfilled_from"]["reply"]["mtime"] <= row["recorded_at"],
         "ineligible_now": ineligible_reason(candidate,
                                             rules_fingerprint=loop.gate_rules_fingerprint()),
+        "ineligible_now_code": ineligible_code(ineligible_reason(
+            candidate, rules_fingerprint=loop.gate_rules_fingerprint())),
         **_live_status(store_root),
     }
     checks["epoch_matches_live_loop_status"] = checks["live_loop_status_epoch"] == epoch
@@ -3670,7 +3718,7 @@ __all__ = ["BACKFILL_SCHEMA", "CLAIMS_FILE", "CRITIC2_BACKFILL_SCHEMA", "Candida
            "backfill_critic2_apply", "backfill_critic2_plan", "retain_checkpoint_patches",
            "INFRASTRUCTURE_STATUSES", "MAX_RESUME_DEPTH", "RELEASED", "RULE_GATES",
            "ResumePoint", "ResumeQueue", "ResumeRejected", "backfill_apply",
-           "backfill_plan", "bind_checkpoints", "discard", "ineligible_reason", "materialize",
+           "backfill_plan", "bind_checkpoints", "discard", "Ineligible", "IneligibleCode", "ineligible_code", "ineligible_reason", "materialize",
            "patch_applies", "patch_paths", "prepare", "prevalidate", "preview_op_scope",
            "rejection_attempt", "reopen_apply", "reopen_plan", "resume_point", "scan",
            "target_identity",
