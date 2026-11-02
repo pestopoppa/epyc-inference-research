@@ -5,6 +5,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -130,6 +131,11 @@ def run():
                        "mapping_sample_present": bool(mapping), "samples": samples,
                        "source_build_binding": "unproven", "input_hashes": input_hashes,
                        "started_at": start, "ended_at": end}
+                device = re.search(r"Device 0:.*?\b(gfx[0-9a-f]+)\b", log.read_text(errors="replace"))
+                if device and mapping and any(s["kfd"] and s["vram_bytes"] is not None and s["vram_bytes"] > 0
+                                              for s in samples):
+                    obs.update(applicability={"backend": "gpu", "device": device.group(1)},
+                               log_path=str(log), log_sha256=sha_file(log))
                 if captured:
                     raw = target.read_bytes()
                     if not raw or len(raw) % 4:
