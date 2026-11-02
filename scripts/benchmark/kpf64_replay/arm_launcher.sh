@@ -108,6 +108,20 @@ if [ "$DRY" = 1 ]; then
 fi
 
 mkdir -p "$OUT"
+# Validate the exact selected family cohort before starting or loading any model. Driver options in
+# EXTRA override arm defaults, as they do in argparse; never substitute a different family sample.
+AUDIT_CHILDREN=off AUDIT_ONLY="" EXPECT_ARG=""
+for arg in "${DARGS[@]}" "${EXTRA[@]}"; do
+  if [ "$EXPECT_ARG" = children ]; then AUDIT_CHILDREN="$arg"; EXPECT_ARG=""; continue; fi
+  if [ "$EXPECT_ARG" = only ]; then AUDIT_ONLY="$arg"; EXPECT_ARG=""; continue; fi
+  case "$arg" in --children) EXPECT_ARG=children ;; --only) EXPECT_ARG=only ;;
+    --children=*) AUDIT_CHILDREN="${arg#*=}" ;; --only=*) AUDIT_ONLY="${arg#*=}" ;; esac
+done
+AUDIT_ARGS=(--sessions "$SESSIONS" --children "$AUDIT_CHILDREN" --out "$OUT/cohort_audit.json")
+[ -z "$AUDIT_ONLY" ] || AUDIT_ARGS+=(--only "$AUDIT_ONLY")
+python3 "$HERE/cohort_audit.py" "${AUDIT_ARGS[@]}" || {
+  echo "arm_launcher: invalid cohort; see $OUT/cohort_audit.json" >&2; exit 1;
+}
 export LD_LIBRARY_PATH="$BIN_DIR"   # own libs only; never inherit another tree's ggml
 bash "$LINK" "$KPF64_SERVER_BIN" "$BIN_DIR" | tee "$OUT/linkage.txt"
 

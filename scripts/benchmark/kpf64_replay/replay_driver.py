@@ -42,6 +42,7 @@ from pathlib import Path  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adapter  # noqa: E402
+import cohort_audit  # noqa: E402
 
 REFUSED_PORTS = range(8000, 8200)  # production 8070-8099, orchestrator 8000, hub 8100
 DEFAULT_PORT = 18964
@@ -388,17 +389,9 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="drive an in-process stub (not inference)")
     a = ap.parse_args(argv)
     a.active = a.active or a.slots
-    srv = None
-    if a.dry_run:
-        check_port(0, allow_listening=True)
-        Path(a.out).mkdir(parents=True, exist_ok=True)
-        a.server_log = a.server_log or str(Path(a.out) / "stub_server.log")
-        _Stub.nslots = a.slots
-        srv, _th = start_stub(a.server_log)
-        a.port = srv.server_address[1]
-    else:
-        check_port(a.port, own_pid=a.own_server_pid)
-    base = f"http://127.0.0.1:{a.port}"
+    # Preserve the production-port refusal before inspecting potentially untrusted input.
+    if not a.dry_run and a.port in REFUSED_PORTS:
+        raise SystemExit(f"replay_driver: refusing port {a.port}: 8000-8199 is production/dashboard range")
     man = json.loads((Path(a.sessions) / "manifest.json").read_text())
     if not man["sessions"]:
         raise SystemExit("replay_driver: refusing: the manifest has zero sessions")
@@ -407,6 +400,21 @@ def main(argv=None):
         ids = [i for i in ids if next(m for m in man["sessions"] if m["id"] == i).get("replayable", True)]
     if not ids:
         raise SystemExit("replay_driver: refusing: zero replayable sessions selected (children=off skips anchor-only parents)")
+    cohort = cohort_audit.audit_cohort(a.sessions, children=a.children, only=ids)
+    Path(a.out).mkdir(parents=True, exist_ok=True)
+    (Path(a.out) / "cohort_audit.json").write_text(json.dumps(cohort, indent=2) + "\n")
+    if not cohort["valid"]:
+        raise SystemExit("replay_driver: refusing invalid cohort; see cohort_audit.json")
+    srv = None
+    if a.dry_run:
+        check_port(0, allow_listening=True)
+        a.server_log = a.server_log or str(Path(a.out) / "stub_server.log")
+        _Stub.nslots = a.slots
+        srv, _th = start_stub(a.server_log)
+        a.port = srv.server_address[1]
+    else:
+        check_port(a.port, own_pid=a.own_server_pid)
+    base = f"http://127.0.0.1:{a.port}"
     rp = Replay(a, base)
     snap = threading.Thread(target=rp.snapshots, daemon=True)
     snap.start()
@@ -433,8 +441,11 @@ def main(argv=None):
         "think_cap_s": a.think_cap_s, "peak_inflight_requests": rp.peak.get("inflight", 0),
         "peak_active_lineages": rp.peak.get("sessions", 0), "bursts": len(rp.bursts),
         "burst_sizes": [len(b["children"]) for b in rp.bursts]}, indent=1))
-    print(json.dumps({"arm": a.arm, "requests": len(load_done(rp.req_path)), "events": events["observed_eviction_events"]}))
-    return 0
+    coverage = cohort_audit.audit_coverage(cohort["expected"], rp.req_path)
+    (Path(a.out) / "coverage_audit.json").write_text(json.dumps(coverage, indent=2) + "\n")
+    print(json.dumps({"arm": a.arm, "requests": coverage["observed_unique"],
+                      "complete": coverage["complete"], "events": events["observed_eviction_events"]}))
+    return 0 if coverage["complete"] else 1
 
 
 if __name__ == "__main__":
