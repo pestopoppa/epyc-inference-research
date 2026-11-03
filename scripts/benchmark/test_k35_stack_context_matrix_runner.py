@@ -821,5 +821,84 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         self.assertEqual(stored["schema"], "epyc.k35_stack_context_matrix.summary.v1")
 
 
+class K35LoadThreadsDefaultTests(unittest.TestCase):
+    """--load-threads <claimed cpus> is the default loader knob (2026-11-03)."""
+
+    BINARY = Path("/nonexistent-k35-load-threads/bin/llama-server")
+
+    def setUp(self):
+        k35._LOAD_THREADS_SUPPORT_CACHE.clear()
+        self.addCleanup(k35._LOAD_THREADS_SUPPORT_CACHE.clear)
+
+    def argv(self, scenario, binary=None):
+        return k35.build_server_argv(
+            scenario, binary=binary or self.BINARY, port=19123, nominal_context=2048, max_tokens=256
+        )
+
+    def test_default_flag_uses_thread_count_when_no_cpu_list(self):
+        for name, expected in (("architect_general_cpu_native_mtp", "96"), ("frontdoor_cpu_no_spec", "96")):
+            argv = self.argv(k35.scenario_by_name(name))
+            self.assertEqual(argv.count("--load-threads"), 1)
+            self.assertEqual(argv[argv.index("--load-threads") + 1], expected)
+        quarter = replace(k35.scenario_by_name("frontdoor_cpu_no_spec"), threads=24)
+        argv = self.argv(quarter)
+        self.assertEqual(argv[argv.index("--load-threads") + 1], "24")
+
+    def test_sealed_extra_args_load_threads_wins(self):
+        scenario = replace(k35.scenario_by_name("frontdoor_cpu_no_spec"), extra_args=("--load-threads", "8"))
+        argv = self.argv(scenario)
+        self.assertEqual(argv.count("--load-threads"), 1)
+        self.assertEqual(argv[argv.index("--load-threads") + 1], "8")
+
+    def test_mlock_no_mmap_without_flag_is_refused(self):
+        with self.assertRaises(k35.LoaderThreadsRefusal):
+            k35.check_loader_threads(["llama-server", "--mlock", "--no-mmap"], supported=True)
+        k35.check_loader_threads(["llama-server", "--mlock", "--no-mmap", "--load-threads", "96"], supported=True)
+
+    def test_main_refuses_stripped_flag_with_nonzero_exit(self):
+        stripped = lambda argv, scenario, binary: k35.check_loader_threads(argv, supported=True) or argv
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(k35, "add_loader_threads", stripped), \
+                mock.patch("sys.stderr") as stderr:
+            out = Path(tmp) / "out"
+            rc = k35.main(["--only", "v9_frontdoor_cpu_native_mtp", "--context", "2048",
+                           "--binary", str(self.BINARY), "--output-dir", str(out)])
+            self.assertEqual(rc, 2)
+            self.assertFalse(out.exists())
+            self.assertIn("REFUSED", "".join(call.args[0] for call in stderr.write.call_args_list))
+
+    def test_v10_production_binary_suppresses_flag(self):
+        scenario = k35.scenario_by_name("v9_frontdoor_cpu_native_mtp")
+        self.assertTrue(scenario.mlock and scenario.no_mmap)
+        with mock.patch.object(k35, "binary_supports_load_threads", return_value=False) as probe, \
+                mock.patch("sys.stderr"):
+            argv = self.argv(scenario, Path("/mnt/raid0/llm/kernels/production/cpu/llama-server"))
+        probe.assert_called()
+        self.assertNotIn("--load-threads", argv)
+        self.assertIn("--mlock", argv)
+
+    def test_strings_probe_detects_flag_in_libllama_common_and_caches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            v10 = Path(tmp) / "v10" / "bin"
+            champion = Path(tmp) / "c6" / "bin"
+            for bin_dir in (v10, champion):
+                bin_dir.mkdir(parents=True)
+                (bin_dir / "llama-server").write_bytes(b"\x7fELF server")
+            (v10 / "libllama-common.so").write_bytes(b"--threads --mlock")
+            (champion / "libllama-common.so").write_bytes(b"--load-threads N")
+            self.assertIs(k35.binary_supports_load_threads(v10 / "llama-server"), False)
+            self.assertIs(k35.binary_supports_load_threads(champion / "llama-server"), True)
+            (v10 / "libllama-common.so").write_bytes(b"--load-threads")
+            self.assertIs(k35.binary_supports_load_threads(v10 / "llama-server"), False)
+            scenario = k35.scenario_by_name("frontdoor_cpu_no_spec")
+            self.assertNotIn("--load-threads", self.argv(scenario, v10 / "llama-server"))
+            self.assertIn("--load-threads", self.argv(scenario, champion / "llama-server"))
+
+    def test_strip_loader_args_for_seals(self):
+        self.assertEqual(
+            k35.strip_loader_args(["-b", "512", "--load-threads", "96", "--load-threads=4", "--no-repack"]),
+            ("-b", "512", "--no-repack"),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

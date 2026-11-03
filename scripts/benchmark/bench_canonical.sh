@@ -270,6 +270,75 @@ else
     LOCK_PREFIX="$REGION_LOCK run --cpu-list $BENCH_CPU_LIST --role bench-canonical --tag canonical:$(basename "$BINARY") --"
 fi
 
+# --- Loader threads: --load-threads <claimed cpus> by default -----------------
+# A LOADER knob, not part of the recipe: it sets how many threads read the GGUF
+# and cannot change a measured result. The canonical recipe runs -mmp 0, so
+# without it the model loads single-threaded (2026-11-02: 87 GiB loaded
+# single-threaded on the 96-core host; --load-threads 96 loaded 100 GiB in 25 s).
+# This wrapper launches llama-bench only (no llama-server). The flag is passed
+# ONLY when the bench binary advertises it: the champion C5/C6 llama-bench do
+# not, a build that adds it is picked up automatically. Detection reads bytes
+# only (nothing is executed): the resolved llama-bench file itself and its
+# sibling libllama-bench-impl.so*. libllama-common.so is deliberately NOT read -
+# it carries llama-server's --load-threads and would be a false positive.
+# A caller's own --load-threads (after --) wins.
+bench_advertises_load_threads() {
+    local real dir f
+    real=$(readlink -f -- "$1" 2>/dev/null) || return 1
+    dir=$(dirname -- "$real")
+    for f in "$real" "$dir"/libllama-bench-impl.so*; do
+        [[ -f "$f" ]] || continue
+        if grep -qaF -- '--load-threads' "$f"; then
+            return 0
+        fi
+    done
+    return 1
+}
+LOAD_THREADS_NOTE=""
+HAS_LOAD_THREADS=0
+for _arg in "${CMD_ARGS[@]}"; do
+    if [[ "$_arg" == "--load-threads" || "$_arg" == --load-threads=* ]]; then
+        HAS_LOAD_THREADS=1
+    fi
+done
+if [[ "$HAS_LOAD_THREADS" -eq 1 ]]; then
+    LOAD_THREADS_NOTE="caller-supplied --load-threads (kept)"
+elif bench_advertises_load_threads "$BINARY"; then
+    # N = CPUs in the claimed taskset list, else the command's -t value.
+    LOAD_THREADS_N=$(python3 -c '
+import sys
+cpus = set()
+for part in sys.argv[1].split(","):
+    part = part.strip()
+    if not part:
+        continue
+    span, _, stride = part.partition(":")
+    lo, _, hi = span.partition("-")
+    try:
+        first, last, step = int(lo), int(hi or lo), int(stride or 1)
+    except ValueError:
+        cpus = set()
+        break
+    if first < 0 or last < first or step <= 0:
+        cpus = set()
+        break
+    cpus.update(range(first, last + 1, step))
+if cpus:
+    print(len(cpus))
+else:
+    args = sys.argv[2:]
+    print(args[args.index("-t") + 1] if "-t" in args[:-1] else "")
+' "$BENCH_CPU_LIST" "${CMD_ARGS[@]}")
+    if [[ "$LOAD_THREADS_N" =~ ^[0-9]+$ && "$LOAD_THREADS_N" -gt 0 ]]; then
+        CMD_ARGS+=(--load-threads "$LOAD_THREADS_N")
+        LOAD_THREADS_NOTE="--load-threads $LOAD_THREADS_N (default: claimed cpus)"
+    else
+        LOAD_THREADS_NOTE="advertised, but no cpu list or -t to size it; not passed"
+    fi
+else
+    LOAD_THREADS_NOTE="not advertised by this llama-bench; loading single-threaded"
+fi
+
 # --- INF-70/C7: NUMA placement defaults, read from the single source of truth ---
 if [[ -z "$PRE_EVICT_GIB" || -z "$MAX_NODE_SHARE" ]]; then
     read -r _DEF_EVICT _DEF_SHARE < <(python3 -c "
@@ -295,6 +364,7 @@ echo "Binary:    $BINARY" >&2
 echo "Identity:  $IDENTITY_LINE" >&2
 echo "Env:       $ENV_EXPORTS" >&2
 echo "Cmd:       ${CMD_ARGS[*]}" >&2
+echo "Loader:    $LOAD_THREADS_NOTE" >&2
 if [[ -n "$LOCK_PREFIX" ]]; then
     echo "Regions:   cpu-list $BENCH_CPU_LIST (held for the run via region-lock)" >&2
 else

@@ -30,7 +30,7 @@ class CanonicalHealthTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d); scripts = root / "scripts" / "benchmark"; scripts.mkdir(parents=True)
             lib = root / "scripts" / "lib"; lib.mkdir()
-            for name in ("bench_canonical.sh", "canonical_host_attestation.py"):
+            for name in ("bench_canonical.sh", "canonical_host_attestation.py", "placement_sampler.sh"):
                 shutil.copy(BENCH / name, scripts / name)
             (scripts / "server_np_sweep.py").write_text("import os\ndef collect_attestation():\n assert os.path.exists(os.environ[\"TEST_ADMITTED\"])\n return {\"uptime_seconds\": 604800}\ndef host_health_warnings(a):\n return []\n")
             lock = root / "fixture-lock"
