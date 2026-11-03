@@ -2316,3 +2316,37 @@ def test_reasoning_flag_absent_when_manifest_omits_it():
         binary=Path("/fake/llama-server"), cell=cell, inst=cell.instances[0],
     )
     assert "--reasoning" not in cmd
+
+
+def _cpu_nodes(cpu_list: str) -> set[int]:
+    """NPS4 node map on EPYC 9655: node = (cpu % 96) // 24."""
+    nodes: set[int] = set()
+    for part in cpu_list.split(","):
+        lo, _, hi = part.partition("-")
+        nodes.update((c % 96) // 24 for c in range(int(lo), int(hi or lo) + 1))
+    return nodes
+
+
+def test_c1b_half_manifests_bind_memory_to_own_nodes():
+    root = _RESEARCH_ROOT / "data" / "batched_decode" / "e5_manifests_a7_placement1"
+    paths = sorted(root.glob("*/*-C1b-*-a7half.json"))
+    assert len(paths) >= 20, paths  # 4 models x np ladder; never vacuous
+    binding = {"0-47,96-143": "--interleave=0,1", "48-95,144-191": "--interleave=2,3"}
+    for path in paths:
+        cell = sns.load_cell_manifest(path)
+        assert cell.manifest["memory_locality_required"] is True, path.name
+        assert len(cell.instances) == 2, path.name
+        for inst in cell.instances:
+            want = binding[inst.cpu_list]
+            nodes = ",".join(map(str, sorted(_cpu_nodes(inst.cpu_list))))
+            assert want == f"--interleave={nodes}", path.name
+            cmd = sns.build_instance_command(binary=Path("/fake/llama-server"), cell=cell, inst=inst)
+            assert cmd[:5] == ["taskset", "-c", inst.cpu_list, "numactl", want], (path.name, cmd[:6])
+            assert "--membind" not in " ".join(cmd)
+
+
+def test_node_list_interleave_policy_accepted_and_garbage_refused():
+    assert sns._valid_numactl_policy("interleave=0,1")
+    assert sns._valid_numactl_policy("interleave=all") and sns._valid_numactl_policy("none")
+    for bad in ("membind=0", "interleave=", "interleave=0,", "--interleave=0", "interleave=a"):
+        assert not sns._valid_numactl_policy(bad), bad

@@ -68,6 +68,7 @@ import argparse
 import copy
 import datetime as _dt
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -981,11 +982,15 @@ def validate_cell_manifest(manifest: dict) -> list[str]:
             else:
                 seen_ports[port] = idx
         policy = inst.get("numactl_policy")
-        if policy not in VALID_NUMACTL_POLICIES:
+        if policy not in VALID_NUMACTL_POLICIES and not (
+            isinstance(policy, str) and re.match(r"^interleave=\d+(,\d+)*$", policy)
+        ):
             err(
                 f"instances[{idx}].numactl_policy {policy!r} is not one of "
                 f"{VALID_NUMACTL_POLICIES}"
             )
+        elif policy not in VALID_NUMACTL_POLICIES:
+            pass  # interleave=<node list>: legal on any cpuset (own-node interleave)
         elif policy == "interleave=all" and cpu_list != CPUSET_FULL:
             err(
                 f"instances[{idx}]: numactl_policy 'interleave=all' is ONLY "

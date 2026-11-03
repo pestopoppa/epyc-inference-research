@@ -22,13 +22,13 @@
   "instances": [
     {
       "cpu_list": "0-47,96-143",
-      "numactl_policy": "none",
+      "numactl_policy": "interleave=0,1",
       "port": 19180,
       "threads": 96
     },
     {
       "cpu_list": "48-95,144-191",
-      "numactl_policy": "none",
+      "numactl_policy": "interleave=2,3",
       "port": 19181,
       "threads": 96
     }
@@ -40,6 +40,7 @@
     "type_k": "q8_0",
     "type_v": "q8_0"
   },
+  "memory_locality_required": true,
   "mlock": true,
   "model_key": "qwen36_27b_q8",
   "model_path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",

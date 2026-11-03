@@ -52,8 +52,8 @@ def full_shape(manifest: dict) -> list[dict]:
 
 def half_shape(manifest: dict) -> list[dict]:
     p = _base_port(manifest)
-    return [{"cpu_list": CPUSET_HALF0, "threads": 96, "numactl_policy": "none", "port": p},
-            {"cpu_list": CPUSET_HALF1, "threads": 96, "numactl_policy": "none", "port": p + 1}]
+    return [{"cpu_list": CPUSET_HALF0, "threads": 96, "numactl_policy": "interleave=0,1", "port": p},
+            {"cpu_list": CPUSET_HALF1, "threads": 96, "numactl_policy": "interleave=2,3", "port": p + 1}]
 
 
 def emit(manifest: dict, arm: str) -> dict:
@@ -75,6 +75,8 @@ def emit(manifest: dict, arm: str) -> dict:
     out["cell_id"] = "-".join(parts)
     out["placement_protocol"] = PLACEMENT_PROTOCOL
     out["placement_declared"] = True
+    if arm == "half":
+        out["memory_locality_required"] = True
     out["a7_source_cell"] = manifest["cell_id"]
     out["a7_source_shape"] = "quarters(retired)"
     out["notes"] = (manifest.get("notes", "") or "") + (

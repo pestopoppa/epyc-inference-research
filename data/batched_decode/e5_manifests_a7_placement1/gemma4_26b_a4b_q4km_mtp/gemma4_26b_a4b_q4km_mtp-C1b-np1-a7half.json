@@ -23,13 +23,13 @@
   "instances": [
     {
       "cpu_list": "0-47,96-143",
-      "numactl_policy": "none",
+      "numactl_policy": "interleave=0,1",
       "port": 19380,
       "threads": 96
     },
     {
       "cpu_list": "48-95,144-191",
-      "numactl_policy": "none",
+      "numactl_policy": "interleave=2,3",
       "port": 19381,
       "threads": 96
     }
@@ -41,6 +41,7 @@
     "type_k": "q8_0",
     "type_v": "q8_0"
   },
+  "memory_locality_required": true,
   "mlock": true,
   "model_key": "gemma4_26b_a4b_q4km_mtp",
   "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",

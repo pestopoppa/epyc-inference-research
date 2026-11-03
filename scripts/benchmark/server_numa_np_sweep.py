@@ -314,7 +314,7 @@ def harness_refusals(cells: list[Cell]) -> list[str]:
                     f"{name}: port {inst.port} outside bench range "
                     f"[{BENCH_PORT_MIN},{BENCH_PORT_MAX}] — prod ports are refused"
                 )
-            if inst.numactl_policy not in ("none", "interleave=all"):
+            if not _valid_numactl_policy(inst.numactl_policy):
                 errors.append(
                     f"{name}: unknown numactl_policy {inst.numactl_policy!r}"
                 )
@@ -445,6 +445,13 @@ def effective_reasoning(cell: "Cell") -> str:
     return value if isinstance(value, str) and value else "auto"
 
 
+_INTERLEAVE_NODES_RE = re.compile(r"^interleave=\d+(,\d+)*$")
+
+
+def _valid_numactl_policy(policy: str) -> bool:
+    return policy in ("none", "interleave=all") or bool(_INTERLEAVE_NODES_RE.match(policy))
+
+
 def build_instance_command(*, binary: Path, cell: Cell, inst: Instance) -> list[str]:
     """Per-instance launch command: taskset pinning + per-instance numactl policy.
 
@@ -454,10 +461,12 @@ def build_instance_command(*, binary: Path, cell: Cell, inst: Instance) -> list[
     production wiring).
     """
     cmd = ["taskset", "-c", inst.cpu_list]
-    if inst.numactl_policy == "interleave=all":
-        cmd += ["numactl", "--interleave=all"]
-    elif inst.numactl_policy != "none":
-        raise RuntimeError(f"unknown numactl_policy {inst.numactl_policy!r}")
+    if inst.numactl_policy != "none":
+        if not _valid_numactl_policy(inst.numactl_policy):
+            raise RuntimeError(f"unknown numactl_policy {inst.numactl_policy!r}")
+        # "interleave=all" or "interleave=<node list>" (e.g. a half machine
+        # interleaves over ITS OWN two NPS4 nodes: "interleave=0,1").
+        cmd += ["numactl", f"--{inst.numactl_policy}"]
     kv = cell.kv
     cmd += [
         str(binary),

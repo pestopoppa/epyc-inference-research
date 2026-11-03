@@ -108,7 +108,7 @@ def cell_ok(rundir, cell):
 def run_cell(cell, dry, deadline, stopfile):
     man = manifest(cell)
     m = json.load(open(man))
-    thr = 40 if m["instances"][0]["numactl_policy"].startswith("interleave") else 60   # 4-node interleave vs 2-node half
+    thr = 40 if m["instances"][0]["numactl_policy"]== "interleave=all" else 60   # 4-node interleave (25%) vs 2-node own-node interleave (~50%)
     rid = f"p12-{cell}"
     logdir = f"{OUT}/{cell}"; os.makedirs(logdir, exist_ok=True)
     cmd = [PY, "-I", HARN, "--cell-manifest", man, "--run-id", rid, "--output-root", OUT + "/runs",

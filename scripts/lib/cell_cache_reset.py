@@ -198,6 +198,9 @@ def cell_memory_nodes(
     for cpu_list, policy in instances:
         if policy == "interleave=all":
             return all_nodes
+        if policy.startswith("interleave="):
+            nodes.update(int(n) for n in policy.split("=", 1)[1].split(","))
+            continue
         for cpu in parse_cpulist(cpu_list):
             if cpu not in cpu_to_node:
                 raise ValueError(f"cpu {cpu} of cpu_list {cpu_list!r} has no NUMA node")
