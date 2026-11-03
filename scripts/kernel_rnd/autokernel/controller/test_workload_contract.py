@@ -327,5 +327,72 @@ class TheRealModelsOnDisk(unittest.TestCase):
         self.assertTrue(parity.exact, parity.detail)
 
 
+class SplitShardCensusTests(unittest.TestCase):
+    """A split GGUF is censused across ALL shards, dominant by tensor BYTES."""
+
+    IQ4_NL, IQ1_S = 20 + 1, 19 + 1   # ggml ids: IQ4_NL=21, IQ1_S=20
+
+    def _shard(self, path, tensors, *, n_embd=2560):
+        # tensors: list of (type_id, n_elements)
+        out = bytearray(b"GGUF") + struct.pack("<I", 3)
+        out += struct.pack("<Q", len(tensors)) + struct.pack("<Q", 2)
+        for key, val in (("general.architecture", "qwen35"),):
+            out += struct.pack("<Q", len(key)) + key.encode() + struct.pack("<I", 8)
+            out += struct.pack("<Q", len(val)) + val.encode()
+        key = "qwen35.embedding_length"
+        out += struct.pack("<Q", len(key)) + key.encode()
+        out += struct.pack("<I", 4) + struct.pack("<I", n_embd)
+        for i, (type_id, elems) in enumerate(tensors):
+            name = f"t{i}".encode()
+            out += struct.pack("<Q", len(name)) + name
+            out += struct.pack("<I", 1) + struct.pack("<Q", elems)
+            out += struct.pack("<I", type_id) + struct.pack("<Q", 0)
+        path.write_bytes(bytes(out))
+
+    def test_aggregates_all_shards_by_bytes_not_count(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as raw:
+            d = Path(raw)
+            self._shard(d / "m-00001-of-00003.gguf", [])          # metadata only
+            # shard 2: many small Q8_0 tensors (higher COUNT), shard 3: few big IQ4_NL
+            self._shard(d / "m-00002-of-00003.gguf", [(Q8_0, 4096)] * 10)
+            self._shard(d / "m-00003-of-00003.gguf", [(21, 1 << 22)] * 2)
+            first = d / "m-00001-of-00003.gguf"
+            self.assertIsNone(wc.read_census(first).dominant_quant)
+            self.assertEqual(wc.read_census(d / "m-00002-of-00003.gguf").dominant_quant,
+                             "Q8_0")
+            census = wc.read_split_census(first)
+            self.assertEqual(census.dominant_quant, "IQ4_NL")
+            self.assertEqual(census.n_embd, 2560)
+            self.assertEqual(census.tensor_types["Q8_0"], 10)
+            self.assertEqual(len(census.shards), 3)
+            self.assertIn("tensor_bytes", census.to_dict())
+
+    def test_any_shard_path_resolves_the_same_set(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as raw:
+            d = Path(raw)
+            self._shard(d / "m-00001-of-00002.gguf", [])
+            self._shard(d / "m-00002-of-00002.gguf", [(Q4_K, 1 << 20)])
+            self.assertEqual(
+                wc.read_split_census(d / "m-00002-of-00002.gguf").dominant_quant,
+                "Q4_K")
+
+    def test_missing_shard_refuses_instead_of_undercounting(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as raw:
+            d = Path(raw)
+            self._shard(d / "m-00001-of-00002.gguf", [])
+            with self.assertRaises(wc.WorkloadContractError):
+                wc.read_split_census(d / "m-00001-of-00002.gguf")
+
+    def test_unsplit_file_unchanged(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as raw:
+            p = Path(raw) / "plain.gguf"
+            self._shard(p, [(Q4_K, 1 << 20)])
+            self.assertEqual(wc.read_split_census(p).dominant_quant, "Q4_K")
+
+
 if __name__ == "__main__":
     unittest.main()

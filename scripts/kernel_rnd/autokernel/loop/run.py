@@ -3644,7 +3644,7 @@ def _main(argv: list[str] | None = None) -> int:
                         "measured_execution_digest": cpu_launch.execution_digest, "candidate": None}
 
     # The workload must dispatch the kernels production dispatches. Refuse loudly.
-    census = (workload_contract.read_census(args.model) if direct_launch
+    census = (workload_contract.read_split_census(args.model) if direct_launch
               else workload_contract.verify_workload(args.model))
     # G6 (2026-10-04): a SELECTED GPU serving target builds with the recipe read back
     # from production v10 (ROCm 6.2, rocWMMA FA on); the legacy bench screen keeps the

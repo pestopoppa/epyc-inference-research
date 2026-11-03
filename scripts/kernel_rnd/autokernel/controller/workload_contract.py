@@ -48,7 +48,8 @@ for a month precisely because it lived in a filename.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 import struct
 from pathlib import Path
 from typing import Any, Mapping
@@ -94,6 +95,18 @@ CONFIRM_RUNG = "confirm"
 K_SUPERBLOCK = 256
 
 
+#: (elements per block, bytes per block) for the byte-weighted census.
+_BLOCK_LAYOUT = {
+    "F32": (1, 4), "F16": (1, 2), "BF16": (1, 2),
+    "Q4_0": (32, 18), "Q4_1": (32, 20), "Q5_0": (32, 22), "Q5_1": (32, 24),
+    "Q8_0": (32, 34), "Q2_K": (256, 84), "Q3_K": (256, 110), "Q4_K": (256, 144),
+    "Q5_K": (256, 176), "Q6_K": (256, 210), "Q8_K": (256, 292),
+    "IQ2_XXS": (256, 66), "IQ2_XS": (256, 74), "IQ3_XXS": (256, 98),
+    "IQ1_S": (256, 50), "IQ4_NL": (32, 18), "IQ3_S": (256, 110),
+    "IQ2_S": (256, 82), "IQ4_XS": (256, 136),
+}
+
+
 class WorkloadContractError(ValueError):
     """The workload does not dispatch production's kernels."""
 
@@ -106,11 +119,17 @@ class WorkloadCensus:
     architecture: str
     n_embd: int | None
     tensor_types: Mapping[str, int]
+    #: Per-type tensor BYTES. Populated only by `read_split_census`; when present it
+    #: decides `dominant_quant` (a split GGUF's shards carry unequal tensor counts,
+    #: and shard 1 may carry none, so a count over one shard is not the model's).
+    tensor_bytes: Mapping[str, int] = field(default_factory=dict)
+    shards: tuple[str, ...] = ()
 
     @property
     def dominant_quant(self) -> str | None:
         """The most common NON-float tensor type: the kernel this model exercises."""
-        quantised = {name: count for name, count in self.tensor_types.items()
+        weights = self.tensor_bytes or self.tensor_types
+        quantised = {name: count for name, count in weights.items()
                      if name not in FLOAT_TYPES}
         if not quantised:
             return None
@@ -139,11 +158,25 @@ class WorkloadCensus:
             "superblock_compatible": self.superblock_compatible,
             "dominant_quant": self.dominant_quant,
             "tensor_types": dict(sorted(self.tensor_types.items())),
+            **({"tensor_bytes": dict(sorted(self.tensor_bytes.items())),
+                "shards": list(self.shards)} if self.tensor_bytes else {}),
         }
+
+
+def _tensor_nbytes(type_name: str, shape: list[int]) -> int:
+    elems = 1
+    for dim in shape:
+        elems *= dim
+    block, size = _BLOCK_LAYOUT.get(type_name, (1, 0))
+    return elems // block * size
 
 
 def read_census(path: Path | str) -> WorkloadCensus:
     """Parse the GGUF header. The filename is not evidence; the tensor table is."""
+    return _read_one(path)[0]
+
+
+def _read_one(path: Path | str) -> tuple[WorkloadCensus, dict[str, int]]:
     path = Path(path)
     with path.open("rb") as handle:
         if handle.read(4) != b"GGUF":
@@ -191,21 +224,69 @@ def read_census(path: Path | str) -> WorkloadCensus:
             metadata[key] = read_value(struct.unpack("<I", handle.read(4))[0])
 
         counts: Counter[str] = Counter()
+        nbytes: Counter[str] = Counter()
         for _ in range(tensor_count):
             read_string()
             dims = struct.unpack("<I", handle.read(4))[0]
-            for _ in range(dims):
-                struct.unpack("<Q", handle.read(8))
+            shape = [struct.unpack("<Q", handle.read(8))[0] for _ in range(dims)]
             type_id = struct.unpack("<I", handle.read(4))[0]
             struct.unpack("<Q", handle.read(8))                   # offset
-            counts[GGML_TYPE_NAMES.get(type_id, f"type_{type_id}")] += 1
+            name = GGML_TYPE_NAMES.get(type_id, f"type_{type_id}")
+            counts[name] += 1
+            nbytes[name] += _tensor_nbytes(name, shape)
 
     architecture = str(metadata.get("general.architecture", "unknown"))
     n_embd = metadata.get(f"{architecture}.embedding_length")
     return WorkloadCensus(
         path=str(path), architecture=architecture,
         n_embd=n_embd if isinstance(n_embd, int) else None,
-        tensor_types=dict(counts))
+        tensor_types=dict(counts)), dict(nbytes)
+
+
+_SHARD_RE = re.compile(r"^(?P<stem>.+)-(?P<idx>\d{5})-of-(?P<n>\d{5})\.gguf$")
+
+
+def split_shards(path: Path | str) -> list[Path]:
+    """All shards of a split GGUF given any one of them; [path] if not split.
+
+    Refuses (never silently under-counts) when a sibling shard is missing.
+    """
+    path = Path(path)
+    match = _SHARD_RE.match(path.name)
+    if not match:
+        return [path]
+    total = int(match["n"])
+    shards = [path.with_name(f"{match['stem']}-{i:05d}-of-{match['n']}.gguf")
+              for i in range(1, total + 1)]
+    missing = [str(s) for s in shards if not s.is_file()]
+    if missing:
+        raise WorkloadContractError(
+            f"{path}: split GGUF is missing shard(s) {missing}; a partial census "
+            f"would mislabel the model's dominant quant")
+    return shards
+
+
+def read_split_census(path: Path | str) -> WorkloadCensus:
+    """Census a split GGUF across EVERY shard; dominant quant is by tensor bytes.
+
+    Shard 1 of a split typically holds metadata only (0 tensors), so a one-shard
+    census reports dominant None; shards 2/3 alone can report a different
+    dominant (Q8_0 on Qwen3.8-Flash-Next UD-IQ4_XS). Architecture and n_embd come
+    from shard 1 (the metadata carrier). A non-split file returns read_census
+    unchanged apart from tensor_bytes being populated.
+    """
+    shards = split_shards(path)
+    first, _ = _read_one(shards[0])
+    counts: Counter[str] = Counter()
+    nbytes: Counter[str] = Counter()
+    for shard in shards:
+        census, shard_bytes = _read_one(shard)
+        counts.update(census.tensor_types)
+        nbytes.update(shard_bytes)
+    return WorkloadCensus(
+        path=str(path), architecture=first.architecture, n_embd=first.n_embd,
+        tensor_types=dict(counts), tensor_bytes=dict(nbytes),
+        shards=tuple(str(s) for s in shards))
 
 
 def production_census(production_model: Path | str = PRODUCTION_MODEL
