@@ -333,3 +333,140 @@ def test_final_annotation_seal_fault_keeps_original_warrant_and_numeric_result(m
     monkeypatch.setattr(beliefs, "finish", finish)
     with pytest.raises(ValueError, match="does not rederive"):
         beliefs.export(None, {"comparison": final}, campaign_id="c", epoch="e", recorded_at="date")
+
+
+# ---- SL-2: target_sample_steps_est block (estimated verifier steps/s, reporting only) ----
+import os
+from pathlib import Path
+
+_ROOT_READER = Path(os.environ.get("EPYC_ROOT", "/workspace")) / "scripts/vidya/adapters/autokernel_legacy_serving.py"
+_ROOT_READER_FALLBACK = Path("/mnt/raid0/llm/worktrees/vidya-vb-sl2-steps/scripts/vidya/adapters/autokernel_legacy_serving.py")
+
+
+def _timings(predicted_n=64, ms=1000.0, **extra):
+    return {"predicted_n": predicted_n, "predicted_ms": ms, **extra}
+
+
+def test_slot_estimators_and_unavailable_reasons():
+    slot = serving._target_steps_slot(_timings(64, 1000.0, draft_n=40, draft_n_accepted=24))
+    assert slot["status"] == "ok" and slot["estimator"] == "predicted_n_minus_draft_n_accepted"
+    assert slot["target_sample_steps_est"] == 40
+    assert slot["target_sample_steps_per_second_est"] == pytest.approx(40.0)
+    assert slot["tokens_per_step"] == pytest.approx(1.6)
+    # a server exporting the counter wins
+    slot = serving._target_steps_slot(_timings(64, 500.0, draft_verif_steps=20, draft_n=40,
+                                               draft_n_accepted=24))
+    assert slot["estimator"] == "server_n_draft_verif_steps"
+    assert slot["target_sample_steps_per_second_est"] == pytest.approx(40.0)
+    # no counters at all: every token was a plain target step
+    slot = serving._target_steps_slot(_timings(10, 100.0))
+    assert slot["estimator"] == "predicted_n_no_speculation" and slot["target_sample_steps_est"] == 10
+    for bad in (None, _timings(ms=0), _timings(64, 1000.0, draft_n=3, draft_n_accepted=9),
+                _timings(64, 1000.0, draft_n=3), _timings(0, 1000.0), {"predicted_n": True}):
+        assert serving._target_steps_slot(bad)["status"] == "unavailable"
+
+
+def test_summary_is_complete_or_unavailable_never_partial():
+    ok = serving._target_steps_aggregate([serving._target_steps_slot(_timings(64, 1000.0))], 64.0)
+    assert ok["status"] == "ok" and ok["value"] == pytest.approx(64.0)
+    bad = serving._target_steps_aggregate([serving._target_steps_slot(None)], 64.0)
+    assert bad["status"] == "unavailable" and bad["value"] is None
+    summary = serving._target_steps_summary([ok, ok, bad])
+    assert summary["status"] == "unavailable" and summary["median"] is None
+    assert serving._target_steps_summary([])["status"] == "unavailable"
+    summary = serving._target_steps_summary([ok, {**ok, "value": 80.0}])
+    assert summary["median"] == pytest.approx(72.0) and summary["estimators"] == ["predicted_n_no_speculation"]
+
+
+def steps_comparison(monkeypatch, *, anchor_ms=(1000.0, 1000.0), candidate_ms=(800.0, 800.0)):
+    """compare() whose fake launches report synthetic response timings through the real helpers."""
+    recipe = serving.Recipe(name="fixture", model="/fixture-model", device="none", ngl=0, np=1)
+    launch = _resolve(recipe, backend="cpu")
+    requests = (("fixture-prompt", b'{"prompt":[1,2],"n_predict":64}'),)
+    ms = {"anchor": iter(anchor_ms), "candidate": iter(candidate_ms)}
+    arms = iter(["anchor", "candidate"] * 2)
+
+    def measure(recipe, build, port, *, evidence, target_sample_steps=None, **kwargs):
+        arm = next(arms)
+        started = time.time()
+        evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
+                         "status": "not_applicable", "samples": 1, "vram_reads": 1,
+                         "peak_vram_bytes": 0, "median_vram_bytes": 0,
+                         "peak_kfd_processes": 0, "resident_floor_bytes": 1 << 30,
+                         "window_start": started, "window_end": time.time(),
+                         "window_s": 0.001, "request_start": started, "request_end": time.time(),
+                         "covers_request_phase": True, "sampled": True,
+                         "cpu_placement": "unproven", "contention": "unproven",
+                         "cpu_lifecycle": {"scope": "synthetic observation boundary",
+                                           "status": "unavailable", "samples": [],
+                                           "errors": ["fixture missing affinity"], "truncated": False}})
+        slot = serving._target_steps_slot(_timings(64, next(ms[arm]), draft_n=40, draft_n_accepted=24))
+        if target_sample_steps is not None:
+            target_sample_steps.append(serving._target_steps_aggregate([slot], 10.0))
+        return 10.0
+
+    monkeypatch.setattr(serving, "_measure_once", measure)
+    return serving.compare(recipe, BUILD, BUILD, pairs=2, floor_pct=5.0,
+                           floor_unit=serving.COMPARE_EFFECT_UNIT,
+                           anchor_resolved_recipe=launch, candidate_resolved_recipe=launch,
+                           frozen_requests=requests,
+                           floor_request_digest=serving.request_digest(recipe, requests))
+
+
+def test_compare_emits_block_and_seals_it_into_native_sha256(monkeypatch):
+    row = steps_comparison(monkeypatch)
+    block = row["target_sample_steps_est"]
+    assert block["schema"] == "epyc.autokernel.serving_target_sample_steps_est.v1"
+    assert block["metric"] == "aggregate_target_sample_steps_s_est"
+    assert block["anchor"]["status"] == block["candidate"]["status"] == "ok"
+    assert block["anchor"]["median"] == pytest.approx(40.0)
+    assert block["candidate"]["median"] == pytest.approx(50.0)
+    assert block["effect"] == pytest.approx(0.25)
+    assert block["anchor"]["estimators"] == ["predicted_n_minus_draft_n_accepted"]
+    capture = row["belief_capture"]
+    assert capture["native_sha256"] == beliefs.digest(beliefs.native_body(row))
+    tampered = copy.deepcopy(row)
+    tampered["target_sample_steps_est"]["candidate"]["median"] = 51.0
+    assert beliefs.digest(beliefs.native_body(tampered)) != capture["native_sha256"]
+
+
+def test_unreported_launches_leave_the_block_unavailable_not_invented(monkeypatch):
+    row, _ = comparison(monkeypatch)   # fake launches that report no timings
+    block = row["target_sample_steps_est"]
+    assert block["anchor"]["status"] == block["candidate"]["status"] == "unavailable"
+    assert block["effect"] is None and block["anchor"]["median"] is None
+
+
+def _load_root_reader(monkeypatch):
+    """The root's own reader, imported under its real package name (one registration per process)."""
+    for path in (_ROOT_READER, _ROOT_READER_FALLBACK):
+        if path.exists() and "native_rows_steps" in path.read_text():
+            monkeypatch.syspath_prepend(str(path.parents[1]))
+            import importlib
+            reader = importlib.import_module("adapters.autokernel_legacy_serving")
+            if Path(reader.__file__).resolve() == path.resolve():
+                return reader
+    pytest.skip("no root vidya reader with native_rows_steps available")
+
+
+def test_test_produced_capture_projects_through_the_root_reader_with_zero_refusals(tmp_path, monkeypatch):
+    reader = _load_root_reader(monkeypatch)
+    row = steps_comparison(monkeypatch)
+    attempt = {"status": "measured_null", "mechanism_id": "fixture-source", "comparison": row}
+    assert archive.record(tmp_path, attempt, epoch="e", recorded_at="2026-09-10T01:00:00Z", campaign_id="c")
+    path = tmp_path / "serving-beliefs" / f"{row['belief_capture']['capture_id']}.json"
+    raw = path.read_bytes()
+    receipt = json.loads(raw)
+    refusals = 0
+    try:
+        rows = reader.native_rows_steps(receipt, receipt_locator=f"autokernel:{path}",
+                                        receipt_sha256=hashlib.sha256(raw).hexdigest())
+    except reader.ProjectionError:
+        refusals += 1
+        rows = []
+    assert refusals == 0 and len(rows) == 2
+    by_arm = {item["claim"]["extra"]["arm"]: item["claim"] for item in rows}
+    assert by_arm["anchor"]["value"] == pytest.approx(40.0)
+    assert by_arm["candidate"]["value"] == pytest.approx(50.0)
+    assert by_arm["anchor"]["extra"]["estimator"] == "predicted_n_minus_draft_n_accepted"
+    assert by_arm["anchor"]["extra"]["native_sha256"] == row["belief_capture"]["native_sha256"]
