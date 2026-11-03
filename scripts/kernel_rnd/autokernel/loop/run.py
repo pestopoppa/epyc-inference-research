@@ -4169,14 +4169,14 @@ def _main(argv: list[str] | None = None) -> int:
             **({"pending_accepted_hypotheses": list(pending_view[0])}
                if pending_view[0] else {}),
             "current_regime": {
-                "model": {"path": str(args.model)}, "quant": census.dominant_quant,
+                "model": {"path": str(args.model)}, "quant": census.quant_label,
                 "backend": "cpu" if cpu_launch else "gpu",
                 "recipe": {"build_recipe": recipe.to_dict()},
                 "measurement_surface": args.surface},
             **({"operator_unblock_artifacts": operator_unblocks}
                if operator_unblocks else {}),
             **({"shared_prior_experiments": shared_history.recall(scope={
-                "model": str(args.model), "quant": census.dominant_quant,
+                "model": str(args.model), "quant": census.quant_label,
                 "backend": "cpu" if cpu_launch else "gpu", "measurement_surface": args.surface})}
                if args.shared_history_root else {}),
             "serving_observations": feedback.context(lambda: serving_beliefs.feedback_scope(
@@ -6623,7 +6623,7 @@ def _main(argv: list[str] | None = None) -> int:
                 attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
             retain_critic2(outcome, attempt)
             attempt["research_scope"] = archive.original_research_scope(
-                attempt, model=args.model, quant=census.dominant_quant,
+                attempt, model=args.model, quant=census.quant_label,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
                 surface=outcome.comparison.surface if outcome.comparison is not None else args.surface)
             if screen_state is not None:
@@ -6713,7 +6713,7 @@ def _main(argv: list[str] | None = None) -> int:
                      "status": candidate.status, "retained_patch": candidate.retained_patch})
                 attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
             attempt["research_scope"] = archive.original_research_scope(
-                attempt, model=args.model, quant=census.dominant_quant,
+                attempt, model=args.model, quant=census.quant_label,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
                 surface=args.surface)
             if screen_state is not None:
@@ -6750,7 +6750,7 @@ def _main(argv: list[str] | None = None) -> int:
         def record_resume_rejected(attempt) -> None:
             """A checkpoint that failed re-validation before reaching a lane."""
             attempt["research_scope"] = archive.original_research_scope(
-                attempt, model=args.model, quant=census.dominant_quant,
+                attempt, model=args.model, quant=census.quant_label,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
                 surface=args.surface)
             if screen_state is not None:
@@ -8357,7 +8357,7 @@ def _main(argv: list[str] | None = None) -> int:
                         # this routing nor the validation wrapper grades it anew.
                         attempt = outcomes[0].to_attempt()
                         attempt["research_scope"] = archive.original_research_scope(
-                            attempt, model=args.model, quant=census.dominant_quant,
+                            attempt, model=args.model, quant=census.quant_label,
                             backend="cpu" if cpu_launch else "gpu",
                             build_recipe=recipe.to_dict(),
                             surface=validation_comparison_view.surface)

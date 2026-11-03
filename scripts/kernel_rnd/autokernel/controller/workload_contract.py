@@ -107,6 +107,10 @@ _BLOCK_LAYOUT = {
 }
 
 
+_LABEL_RE = re.compile(
+    r"-(UD-[A-Z0-9_]+|Q\d\w*|IQ\d\w*)(?:-\d{5}-of-\d{5})?\.gguf$")
+
+
 class WorkloadContractError(ValueError):
     """The workload does not dispatch production's kernels."""
 
@@ -136,6 +140,17 @@ class WorkloadCensus:
         return max(quantised.items(), key=lambda item: (item[1], item[0]))[0]
 
     @property
+    def quant_label(self) -> str | None:
+        """The claim-scope quant label: the filename variant when it names one
+        (`-UD-IQ4_XS-00001-of-00003.gguf`, `-Q8_0.gguf`), else `dominant_quant`.
+
+        Same rule as vidya `inf66_r2364._applicability`, so a regime and a claim scope
+        compare on one axis. The ggml fact stays in `dominant_quant` (by bytes).
+        """
+        match = _LABEL_RE.search(Path(self.path).name)
+        return match.group(1) if match else self.dominant_quant
+
+    @property
     def superblock_compatible(self) -> bool:
         return isinstance(self.n_embd, int) and self.n_embd % K_SUPERBLOCK == 0
 
@@ -157,6 +172,7 @@ class WorkloadCensus:
             "n_embd": self.n_embd,
             "superblock_compatible": self.superblock_compatible,
             "dominant_quant": self.dominant_quant,
+            "quant_label": self.quant_label,
             "tensor_types": dict(sorted(self.tensor_types.items())),
             **({"tensor_bytes": dict(sorted(self.tensor_bytes.items())),
                 "shards": list(self.shards)} if self.tensor_bytes else {}),

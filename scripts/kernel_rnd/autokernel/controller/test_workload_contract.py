@@ -386,6 +386,23 @@ class SplitShardCensusTests(unittest.TestCase):
             with self.assertRaises(wc.WorkloadContractError):
                 wc.read_split_census(d / "m-00001-of-00002.gguf")
 
+    def test_quant_label_follows_filename_variant(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as raw:
+            d = Path(raw)
+            n = "Qwen3.8-Flash-Next-UD-IQ4_XS"
+            self._shard(d / f"{n}-00001-of-00002.gguf", [])
+            self._shard(d / f"{n}-00002-of-00002.gguf", [(21, 1 << 22)])
+            c = wc.read_split_census(d / f"{n}-00001-of-00002.gguf")
+            self.assertEqual(c.quant_label, "UD-IQ4_XS")
+            self.assertEqual(c.dominant_quant, "IQ4_NL")
+            self._shard(d / "model-Q8_0.gguf", [(Q4_K, 1 << 20)])
+            p = wc.read_split_census(d / "model-Q8_0.gguf")
+            self.assertEqual((p.quant_label, p.dominant_quant), ("Q8_0", "Q4_K"))
+            self._shard(d / "plainname.gguf", [(Q4_K, 1 << 20)])
+            self.assertEqual(wc.read_split_census(d / "plainname.gguf").quant_label,
+                             "Q4_K")
+
     def test_unsplit_file_unchanged(self):
         import tempfile
         with tempfile.TemporaryDirectory() as raw:
