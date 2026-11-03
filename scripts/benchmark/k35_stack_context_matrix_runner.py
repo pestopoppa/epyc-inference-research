@@ -86,6 +86,152 @@ AUTOPILOT_MARKERS = (
 )
 
 
+# --- Loader threads (--load-threads) -----------------------------------------
+# A LOADER knob: it sets how many threads read the GGUF into memory and cannot
+# change any measured result, so it is emitted by default and is never part of
+# a recipe seal or plan digest.  Without it a --no-mmap/--mlock load runs
+# single-threaded: 2026-11-02 a server loaded 87 GiB single-threaded on the
+# 96-core host; with --load-threads 96 it loaded 100 GiB in 25 s.
+# The champion llama-server has it (common/arg.cpp, env LLAMA_ARG_LOAD_THREADS,
+# v11 manifest row V11-002; 0 = auto, 1 = single-threaded); the v10 production
+# store binary does NOT, so support is probed from the binary's own bytes.
+LOAD_THREADS_FLAG = "--load-threads"
+LOAD_THREADS_ENV = "LLAMA_ARG_LOAD_THREADS"
+_LOAD_THREADS_SUPPORT_CACHE: dict[str, bool | None] = {}
+
+
+class LoaderThreadsRefusal(ValueError):
+    """--mlock --no-mmap without --load-threads on a binary that supports it."""
+
+
+def has_load_threads_arg(args: Any) -> bool:
+    return any(
+        str(arg) == LOAD_THREADS_FLAG or str(arg).startswith(LOAD_THREADS_FLAG + "=")
+        for arg in args
+    )
+
+
+def strip_loader_args(args: Any) -> tuple[str, ...]:
+    """Drop --load-threads (both spellings) so seals and digests ignore it."""
+    kept: list[str] = []
+    skip_value = False
+    for arg in args:
+        arg = str(arg)
+        if skip_value:
+            skip_value = False
+            continue
+        if arg == LOAD_THREADS_FLAG:
+            skip_value = True
+            continue
+        if arg.startswith(LOAD_THREADS_FLAG + "="):
+            continue
+        kept.append(arg)
+    return tuple(kept)
+
+
+def cpu_list_count(cpu_list: str | None) -> int:
+    """Count the CPUs in a taskset/region-lock list such as '0-47,96-143' or '0-95:2'."""
+    cpus: set[int] = set()
+    for part in (cpu_list or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        span, _, stride = part.partition(":")
+        lo, _, hi = span.partition("-")
+        try:
+            first = int(lo)
+            last = int(hi) if hi else first
+            step = int(stride) if stride else 1
+        except ValueError:
+            return 0
+        if first < 0 or last < first or step <= 0:
+            return 0
+        cpus.update(range(first, last + 1, step))
+    return len(cpus)
+
+
+def loader_thread_count(scenario: Any) -> int:
+    """CPUs the launch is pinned to (taskset list), else the -t thread count."""
+    count = cpu_list_count(getattr(scenario, "cpu_affinity", None))
+    return count if count > 0 else int(scenario.threads)
+
+
+def _file_contains(path: Path, needle: bytes, chunk: int = 1 << 20) -> bool:
+    tail = b""
+    with path.open("rb") as handle:
+        while True:
+            block = handle.read(chunk)
+            if not block:
+                return False
+            if needle in tail + block:
+                return True
+            tail = block[-(len(needle) - 1):]
+
+
+def binary_supports_load_threads(binary: Path) -> bool | None:
+    """Probe the server binary and its llama.cpp libraries for --load-threads.
+
+    True/False when at least one artifact could be read; None when nothing
+    probe-able exists (dry-run plans for a binary not on this host), in which
+    case the default flag is still emitted.  Cached per resolved binary path.
+    """
+    try:
+        resolved = Path(binary).expanduser().resolve()
+    except OSError:
+        resolved = Path(binary)
+    key = str(resolved)
+    if key in _LOAD_THREADS_SUPPORT_CACHE:
+        return _LOAD_THREADS_SUPPORT_CACHE[key]
+    candidates = [resolved]
+    for pattern in ("libllama-common.so*", "libllama-server-impl.so*"):
+        try:
+            candidates.extend(sorted(resolved.parent.glob(pattern)))
+        except OSError:
+            pass
+    probed = False
+    found = False
+    for path in candidates:
+        try:
+            if not path.is_file():
+                continue
+            probed = True
+            if _file_contains(path, LOAD_THREADS_FLAG.encode()):
+                found = True
+                break
+        except OSError:
+            continue
+    result: bool | None = found if probed else None
+    _LOAD_THREADS_SUPPORT_CACHE[key] = result
+    return result
+
+
+def check_loader_threads(argv: list[str], *, supported: bool | None) -> None:
+    """Refuse a --mlock --no-mmap launch that would load single-threaded."""
+    if "--mlock" not in argv or "--no-mmap" not in argv or has_load_threads_arg(argv):
+        return
+    if supported is False:
+        print(
+            "WARNING: --mlock --no-mmap without --load-threads: this binary does not "
+            "advertise --load-threads (e.g. v10 production), so the model loads single-threaded.",
+            file=sys.stderr,
+        )
+        return
+    raise LoaderThreadsRefusal(
+        "refusing --mlock --no-mmap without --load-threads: the model would load "
+        "single-threaded (87 GiB took minutes on the 96-core host; --load-threads 96 "
+        "loaded 100 GiB in 25 s). Restore the default --load-threads <claimed cpus>."
+    )
+
+
+def add_loader_threads(argv: list[str], scenario: Any, binary: Path) -> list[str]:
+    """Append the default --load-threads unless the sealed args already carry it."""
+    supported = binary_supports_load_threads(binary)
+    if not has_load_threads_arg(argv) and supported is not False:
+        argv.extend([LOAD_THREADS_FLAG, str(loader_thread_count(scenario))])
+    check_loader_threads(argv, supported=supported)
+    return argv
+
+
 def runtime_library_dir(binary: Path) -> Path:
     return binary.expanduser().resolve().parent
 
@@ -731,6 +877,7 @@ def build_server_argv(
     if scenario.slot_save_path is not None:
         argv.extend(["--slot-save-path", str(scenario.slot_save_path)])
     argv.extend(scenario.extra_args)
+    add_loader_threads(argv, scenario, binary)
     return argv
 
 
@@ -1271,6 +1418,7 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
     request_path = cell_dir / "request.json"
     response_path = cell_dir / "response.json"
     result_path = cell_dir / "result.json"
+    check_loader_threads(cell["server_argv"], supported=binary_supports_load_threads(args.binary))
     argv_path = cell_dir / "server_argv.json"
     write_json(argv_path, cell["server_argv"])
     memory_samples: list[dict[str, Any]] = [
@@ -1686,8 +1834,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    try:
+        plan = build_plan(args)
+    except LoaderThreadsRefusal as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    plan = build_plan(args)
     write_json(args.output_dir / "plan.json", plan)
     (args.output_dir / "commands.sh").write_text(render_commands(plan), encoding="utf-8")
     operator_run = args.output_dir / "operator_run.sh"
