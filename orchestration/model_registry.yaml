@@ -10083,6 +10083,9 @@ roles:
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   bonsai_27b_q1_0:
+    deprecated: true
+    deprecated_date: 2026-11-03
+    deprecated_reason: "Operator-approved 2026-11-03 (model-download-test-audit-20261103: STALE row). Bonsai-27B Q1_0 GGUF deleted 2026-09-01 in the zero-consumer purge (graveyard rows `bonsai-27b (Q1_0 + dspark + mmproj)` / `ternary-bonsai-27b (Q2_g64, Q2_0, dspark, mmproj)` in deprecated_models); failed the strict quality gate (v7-era, 2026-07-17/18), no named fix, no live role bound, candidate_roles cleared. Admission and throughput history kept below as provenance."
     tier: C
     description: PrismML Bonsai-27B Q1_0 - 1-bit Qwen3.6-27B post-training candidate; load/decode works, but role-readiness remains gated on prompt/instruction quality.
     model:
@@ -10122,10 +10125,7 @@ roles:
             revision: 0cf7e3d21581b169b4df1de8bf01316000e2fbb7
             source_hash_kind: hf_lfs_etag_sha256
             source_hash: eb561d41a7bbeb0fcf04883c8af11078ef6cae0a66862a0b68443cfca495269d
-    candidate_roles:
-    - worker
-    - reasoning
-    - frontdoor
+    candidate_roles: []
     acceleration:
       type: none
     constraints:
@@ -10183,6 +10183,9 @@ roles:
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   ternary_bonsai_27b_q2_0:
+    deprecated: true
+    deprecated_date: 2026-11-03
+    deprecated_reason: "Operator-approved 2026-11-03 (model-download-test-audit-20261103: STALE row). Ternary-Bonsai-27B Q2_0 GGUF deleted 2026-09-01 in the zero-consumer purge (graveyard rows `bonsai-27b (Q1_0 + dspark + mmproj)` / `ternary-bonsai-27b (Q2_g64, Q2_0, dspark, mmproj)` in deprecated_models); failed the strict quality gate (v7-era, 2026-07-17/18), no named fix, no live role bound, candidate_roles cleared. Admission and throughput history kept below as provenance."
     tier: C
     description: PrismML Ternary Bonsai-27B Q2_0 - staged for refreshed upstream/v7 Q2_0 support.
     model:
@@ -10222,10 +10225,7 @@ roles:
             revision: 20e435f518bd5b882795954aba81e80a91894321
             source_hash_kind: hf_lfs_etag_sha256
             source_hash: eb561d41a7bbeb0fcf04883c8af11078ef6cae0a66862a0b68443cfca495269d
-    candidate_roles:
-    - worker
-    - reasoning
-    - frontdoor
+    candidate_roles: []
     acceleration:
       type: none
     constraints:
@@ -10255,6 +10255,9 @@ roles:
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   ternary_bonsai_27b_q2_g64:
+    deprecated: true
+    deprecated_date: 2026-11-03
+    deprecated_reason: "Operator-approved 2026-11-03 (model-download-test-audit-20261103: STALE row). Ternary-Bonsai-27B Q2_g64 GGUF deleted 2026-09-01 in the zero-consumer purge (graveyard rows `bonsai-27b (Q1_0 + dspark + mmproj)` / `ternary-bonsai-27b (Q2_g64, Q2_0, dspark, mmproj)` in deprecated_models); failed the strict quality gate (v7-era, 2026-07-17/18), no named fix, no live role bound, candidate_roles cleared. Admission and throughput history kept below as provenance."
     tier: C
     description: PrismML Ternary Bonsai-27B Q2_g64 - staged variant; runtime and preliminary throughput observed, quality gate blocks role claims.
     model:
@@ -10272,10 +10275,7 @@ roles:
         revision: 20e435f518bd5b882795954aba81e80a91894321
         source_hash_kind: hf_lfs_etag_sha256
         source_hash: 59a45d1ecef702b14531b06d22949f33b25c1897da31a8c0b298e01e4d9138eb
-    candidate_roles:
-    - worker
-    - reasoning
-    - frontdoor
+    candidate_roles: []
     acceleration:
       type: none
     constraints:
