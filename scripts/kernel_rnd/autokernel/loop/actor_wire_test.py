@@ -20,11 +20,11 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
-import tempfile
-import threading
+import tempfile, threading
 import time
 from unittest import mock
 
+from .. import actor_wire_final as final
 from . import actors, actor_wire_gate as gate
 
 FINAL = json.dumps({"accepted": True, "reason": "wire-" + "x" * 140000 + "-é-END"},
@@ -699,8 +699,7 @@ def run_seat(row, evidence_dir=None):
 
 def run(request, evidence_dir=None, *, stop_file=None, deadline_s=850):
     gate.validate_request(request)
-    results = {}
-    outcomes = []
+    results, outcomes = {}, []
     deadline = time.monotonic() + deadline_s
 
     def summary(status, abort=None):
@@ -710,35 +709,36 @@ def run(request, evidence_dir=None, *, stop_file=None, deadline_s=850):
         if evidence_dir is not None:
             gate.write(Path(evidence_dir) / "matrix-results.json", data)
 
-    for row in request["seats"]:
-        key = gate.digest(row)
-        try:
-            if (stop_file is not None and Path(stop_file).exists()) or time.monotonic() >= deadline:
-                raise RuntimeError("matrix STOP or deadline reached before next seat")
-            results[key] = run_seat(row, evidence_dir)
-        except AssertionError as exc:
-            # run_seat rethrows only expected assertions after owned-call cleanup;
-            # cleanup uncertainty, interrupts and unexpected infrastructure abort.
+    with final.finalization(request, evidence_dir, results, outcomes):
+        for row in request["seats"]:
+            key = gate.digest(row)
+            try:
+                if (stop_file is not None and Path(stop_file).exists()) or time.monotonic() >= deadline:
+                    raise RuntimeError("matrix STOP or deadline reached before next seat")
+                results[key] = run_seat(row, evidence_dir)
+            except AssertionError as exc:
+                # run_seat rethrows only expected assertions after owned-call cleanup;
+                # cleanup uncertainty, interrupts and unexpected infrastructure abort.
+                outcomes.append({"seat": key, "backend": row["backend"]["kind"],
+                                 "role": row["role"], "status": "FAIL", "error": str(exc)})
+                summary("FAIL")
+                print("NATIVE SEAT FAIL", key, str(exc), flush=True)
+                continue
+            except BaseException as exc:
+                summary("FAIL", f"{type(exc).__name__}: {exc}")
+                raise
             outcomes.append({"seat": key, "backend": row["backend"]["kind"],
-                             "role": row["role"], "status": "FAIL", "error": str(exc)})
+                             "role": row["role"], "status": "PASS"})
+            summary("FAIL" if any(r["status"] == "FAIL" for r in outcomes) else "RUNNING")
+            print("NATIVE SEAT PASS", key, row["backend"]["kind"], row["role"],
+                  time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), flush=True)
+        failures = [r for r in outcomes if r["status"] == "FAIL"]
+        if failures:
             summary("FAIL")
-            print("NATIVE SEAT FAIL", key, str(exc), flush=True)
-            continue
-        except BaseException as exc:
-            summary("FAIL", f"{type(exc).__name__}: {exc}")
-            raise
-        outcomes.append({"seat": key, "backend": row["backend"]["kind"],
-                         "role": row["role"], "status": "PASS"})
-        summary("FAIL" if any(r["status"] == "FAIL" for r in outcomes) else "RUNNING")
-        print("NATIVE SEAT PASS", key, row["backend"]["kind"], row["role"],
-              time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), flush=True)
-    failures = [r for r in outcomes if r["status"] == "FAIL"]
-    if failures:
-        summary("FAIL")
-        raise AssertionError(f"native matrix {len(failures)}/{len(outcomes)} failed: "
-                             + "; ".join(r["error"] for r in failures))
-    summary("PASS")
-    return gate.passed(request, results)
+            raise AssertionError(f"native matrix {len(failures)}/{len(outcomes)} failed: "
+                                 + "; ".join(r["error"] for r in failures))
+        summary("PASS")
+        return gate.passed(request, results)
 
 
 def matrix_seats():
