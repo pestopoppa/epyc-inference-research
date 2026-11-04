@@ -1012,7 +1012,7 @@ server_mode:
       evidence: 'CT-1b A/B artifacts: /workspace/artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/.
         E-7: frontdoor''s calibration stamps are voided by the template axis and must re-measure.'
     model_role: qwen36_35b_a3b_mtp_q8_local  # 2026-09-22: was qwen36_q8_0, whose model is the
-    # NON-MTP Qwen_Qwen3.6-35B-A3B-Q8_0.gguf, while roles.frontdoor / roles.worker_general
+    # NON-MTP Qwen_Qwen3.6-35B-A3B-Q8_0.gguf (deleted 2026-11-04; the row now points at the MTP file), while roles.frontdoor / roles.worker_general
     # and the live server all use Qwen3.6-35B-A3B-MTP-Q8_0.gguf. compile_descriptors
     # refused the mismatch ('Role-server conflict') once the worker lane joined this
     # server via shared_with. Points at the exact-artifact row, the same *_local
@@ -5199,7 +5199,7 @@ roles:
     agent_file_compression_operating_point: medium
     model:
       name: Qwen3.6-35B-A3B
-      path: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
+      path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
       quant: Q8_0
       size_gb: 37
       architecture: qwen35moe  # MoE variant, arch=qwen35moe in GGUF metadata
@@ -5231,7 +5231,7 @@ roles:
       max_output_tokens: 32768  # 81920 for complex tasks
     candidate_roles:
     # frontdoor REMOVED 2026-09-22 (lineup change). This row is the NON-MTP
-    # Qwen_Qwen3.6-35B-A3B-Q8_0.gguf; the frontdoor server now runs the MTP
+    # Qwen_Qwen3.6-35B-A3B-Q8_0.gguf (since deleted, 2026-11-04; path repointed to the MTP file); the frontdoor server now runs the MTP
     # artifact (Qwen3.6-35B-A3B-MTP-Q8_0.gguf, row qwen36_35b_a3b_mtp_q8_local),
     # and the worker lane joined that same server via shared_with. A catalogue row
     # claiming a role whose server runs a DIFFERENT artifact is what
@@ -5249,7 +5249,7 @@ roles:
       # 2026-07-31 (Directive 3): qwen36_q8_0 is now SOLELY frontdoor's family row (plus its
       # worker_summarize routing alias on the same :8070 process). coder_escalation moved to
       # the Qwen3.6-27B dense Q8 on :8083. NOTE the deployed artifact is the MTP file
-      # (qwen36_35b_a3b_mtp_q8_local, L8891); this row's `path` is the non-MTP Qwen_ file.
+      # (qwen36_35b_a3b_mtp_q8_local, L8891); this row's `path` was the non-MTP Qwen_ file until 2026-11-04, when that file was deleted and the path repointed to the MTP file.
       type: speculative_decoding
       spec_type: draft-mtp
       draft_max: 4                      # matches server_mode.frontdoor (MTP n-max)
@@ -11846,8 +11846,8 @@ roles:
     description: >
       Qwen3.6-35B-A3B MTP Q8_0 exact local artifact. This is the file frontdoor (and its
       worker_summarize alias) actually launches — note server_mode.frontdoor.model_role points
-      at `qwen36_q8_0`, whose path is the NON-MTP /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf.
-      THIS row is the deployed artifact; qwen36_q8_0 is the family row.
+      at `qwen36_q8_0`, whose path was the NON-MTP Qwen_Qwen3.6-35B-A3B-Q8_0.gguf (deleted 2026-11-04;
+      qwen36_q8_0 now points at this same MTP file). THIS row is the deployed artifact; qwen36_q8_0 is the family row.
       2026-07-31 (Directive 3): coder_escalation REMOVED — it moved to Qwen3.6-27B-MTP-Q8_0
       (qwen36_27b_mtp_q8_local) on :8083.
     model:
@@ -12712,6 +12712,11 @@ runtime_quirks:
 # Models deleted 2026-01-18 during MiniMax M2.1 download cleanup
 # Based on BLIND_RESCORE_2026-01-16.md analysis
 deprecated_models:
+  - model: Qwen_Qwen3.6-35B-A3B-Q8_0.gguf (plain non-MTP)
+    path_was: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
+    size_gb: 37
+    reason: 'DELETED 2026-11-04 by operator order to free disk. The plain non-MTP Qwen3.6-35B-A3B Q8_0 (different weights from the MTP artifact; ~37 GB, re-downloadable from HF Qwen/Qwen3.6-35B-A3B / bartowski Qwen_Qwen3.6-35B-A3B-GGUF). Row qwen36_q8_0 (catalogue family row, never the launched artifact since 2026-09-22) repointed to the MTP file that frontdoor actually launches (Qwen3.6-35B-A3B-MTP-Q8_0.gguf). No serving-stack change: launch argv, topology and recipes untouched.'
+    deleted: 2026-11-04
   - model: cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M
     path_was: /mnt/raid0/llm/models/bartowski/cerebras_Qwen3-Coder-REAP-25B-A3B-GGUF/cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M.gguf
     size_gb: 15.2
