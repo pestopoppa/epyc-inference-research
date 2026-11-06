@@ -798,7 +798,7 @@ def classify_patch_rejection(reason: str, *, scope_rule: str = "",
 #: not prove path engagement), never wrong-kernel evidence: it spends no authoring
 #: attempt and its build checkpoint resumes once the gate or oracle code changes
 #: (DS41-C67: a witness defect burned 2 of 3 attempts of a critic-accepted patch).
-_RULE_GATES = frozenset({"op_scope", "oracle_unavailable"})
+_RULE_GATES = frozenset({"op_scope", "oracle_unavailable", "oracle_suite_empty"})
 
 
 def _mark_report_source(outcome: "Outcome", progress: Mapping[str, Any]) -> None:

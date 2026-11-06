@@ -17,6 +17,7 @@ import tempfile
 from typing import Iterable, Sequence
 
 from ..execution import reward_hack_scan
+from . import prebuild_rules
 
 
 class IntegrityRefused(RuntimeError):
@@ -442,6 +443,9 @@ def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
         raise IntegrityRefused("outside_kernel_allowlist", repr(outside))
     diff = _git(worktree, "diff", "--no-ext-diff", "HEAD", "--").decode(
         "utf-8", "replace")
+    blank = prebuild_rules.blank_only_hunk_refusal(diff)   # AK-FAILRULE-1 rule 2
+    if blank is not None:
+        raise IntegrityRefused(prebuild_rules.BLANK_HUNK_CLASS, blank)
     scan = reward_hack_scan.scan_unified_diff(diff)
     findings = tuple(finding for value in (
         _without_preexisting_env_reads(worktree, diff, scan.environment_probe_findings),

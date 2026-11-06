@@ -97,6 +97,7 @@ from . import floor_registry
 from . import epoch_aliases
 from . import scratch
 from . import procguard
+from . import prebuild_rules
 from . import ak_check
 from . import noop_build
 from . import cpu_window
@@ -4352,6 +4353,15 @@ def _main(argv: list[str] | None = None) -> int:
                                              file_texts=file_texts, **scope_texts)
             if isinstance(scope, gates.Verdict):
                 return False, [scope]
+            # AK-FAILRULE-1 rule 1: an empty oracle suite on the ANCHOR binary is
+            # refused here, before the build (cached per anchor digest + op).
+            suite_refusal = suite_preflight.refusal(
+                anchor_build[0], scope,
+                "CPU" if cpu_launch else (direct_launch.template.device
+                                          if direct_launch else "ROCm0"))
+            if suite_refusal is not None:
+                return False, [gates.Verdict(prebuild_rules.SUITE_EMPTY_GATE, False,
+                                             suite_refusal)]
             # Several routes may name one body (2026-10-03): the gate below must be the
             # one of the route that ADMITTED this patch, never merely the first named.
             admitted_route = (gates.admit_cpu_route(changed[0], hypothesis.target_symbol,
@@ -4597,6 +4607,7 @@ def _main(argv: list[str] | None = None) -> int:
     #: The anchor's own seeded GPU op_correctness verdict, per (anchor build, op): run at
     #: most once per anchor, and only when a candidate is refused for `correctness`.
     anchor_gate_cache: dict = {}
+    suite_preflight = prebuild_rules.SuitePreflight(selector=gates.backend_ops_selector)
 
     def _anchor_gate(op):
         key = (str(anchor_build[0]), op)
