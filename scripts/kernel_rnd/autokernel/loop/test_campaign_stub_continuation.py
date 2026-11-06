@@ -109,7 +109,9 @@ def test_signal_during_stub_calibration_publishes_stopped_and_releases_claim():
                     mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
                     mock.patch.object(run.os, "sched_setaffinity"), \
                     mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
-                        n_embd=1536, dominant_quant="Q5_0")), \
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
+                    mock.patch.object(run.workload_contract, "read_split_census", return_value=SimpleNamespace(
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
                     mock.patch.object(cpu_profile, "profile_loop", side_effect=cpu_profile.CpuProfileRefused("stub")), \
                     mock.patch.object(serving, "_measure_once", observe), \
                     mock.patch.object(serving, "_matched_frame", return_value={}), \

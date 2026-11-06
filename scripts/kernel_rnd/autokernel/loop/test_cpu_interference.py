@@ -141,7 +141,7 @@ def test_existing_pool_and_archive_keep_invalid_distinct_from_null(tmp_path):
     outcome = result[0]
     assert outcome.status == "measurement_invalid" and outcome.hypothesis == _hypothesis()
     assert outcome.comparison is None and outcome.invalid_measurement == original
-    assert "effect_fraction" not in captured[0] and "comparison" not in captured[0]
+    assert "effect_fraction" not in captured[0] and captured[0]["comparison"] is None  # explicit null: no Comparison
     retained = archive.recall(tmp_path, epoch="fixture")
     assert retained[0]["status"] == "measurement_invalid"
     with sqlite3.connect(tmp_path / "experiments.db") as db:

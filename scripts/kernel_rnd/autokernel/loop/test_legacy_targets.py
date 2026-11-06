@@ -49,6 +49,11 @@ def _argv(tmp_path, resolved, launch, *, cpu, envelope=False):
     return argv
 
 
+def _fixture_backend_for(real):
+    """A real Backend (the actor wire gate serializes it via dataclasses.asdict) with no installed client."""
+    return lambda *args: replace(real(*args), binary="/nonexistent/fixture-cli")
+
+
 def _forbid_execution(monkeypatch):
     def forbidden(*_args, **_kwargs):
         pytest.fail("selection reached execution or a provider")
@@ -96,16 +101,18 @@ def test_actual_main_selects_target_and_retains_existing_dry_run(
 
     def census(model):
         censuses.append(model)
-        return SimpleNamespace(n_embd=4096, dominant_quant="Q4_K")
+        return SimpleNamespace(n_embd=4096, dominant_quant="Q4_K", quant_label="Q4_K")
 
     monkeypatch.setattr(run.champion, "verify_startup", startup)
     monkeypatch.setattr(run, "_git", lambda *_args: "a" * 40)
     monkeypatch.setattr(run.workload_contract, "read_census", census if backend == "cpu"
                         else lambda *_args: pytest.fail("GPU bypassed production workload check"))
+    monkeypatch.setattr(run.workload_contract, "read_split_census", census if backend == "cpu"
+                        else lambda *_args: pytest.fail("GPU bypassed production workload check"))
     monkeypatch.setattr(run.workload_contract, "verify_workload", census if backend == "gpu"
                         else lambda *_args: pytest.fail("CPU used GPU workload check"))
     monkeypatch.setattr(run, "noise_floor_pct", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(run.actors, "backend_for", lambda *_args: SimpleNamespace(describe=lambda: "fixture"))
+    monkeypatch.setattr(run.actors, "backend_for", _fixture_backend_for(run.actors.backend_for))
     assert run.main(argv) == 0
     assert censuses == [Path(launch.model.path)]
     assert startups == [{"worktree": tmp_path / "source",
@@ -135,10 +142,12 @@ def test_actual_main_accepts_exact_scheduled_selection_without_ambient_src_packa
     monkeypatch.setattr(run.champion, "verify_startup", lambda **_kwargs: "a" * 40)
     monkeypatch.setattr(run, "_git", lambda *_args: "a" * 40)
     monkeypatch.setattr(run.workload_contract, "read_census", lambda _model: SimpleNamespace(
-        n_embd=4096, dominant_quant="Q4_K"))
+        n_embd=4096, dominant_quant="Q4_K", quant_label="Q4_K"))
+    monkeypatch.setattr(run.workload_contract, "read_split_census", lambda _model: SimpleNamespace(
+        n_embd=4096, dominant_quant="Q4_K", quant_label="Q4_K"))
     monkeypatch.setattr(run, "noise_floor_pct", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(run.actors, "backend_for",
-                        lambda *_args: SimpleNamespace(describe=lambda: "fixture"))
+                        _fixture_backend_for(run.actors.backend_for))
     assert run.main(argv) == 0
 
 
@@ -194,10 +203,12 @@ def test_actual_main_reopens_digest_bound_latest_shared_source_anchor(
                         lambda _target, source, _commit: (Path(source), "c" * 40))
     monkeypatch.setattr(run, "_git", lambda *_args: "b" * 40)
     monkeypatch.setattr(run.workload_contract, "read_census", lambda _model: SimpleNamespace(
-        n_embd=4096, dominant_quant="Q4_K"))
+        n_embd=4096, dominant_quant="Q4_K", quant_label="Q4_K"))
+    monkeypatch.setattr(run.workload_contract, "read_split_census", lambda _model: SimpleNamespace(
+        n_embd=4096, dominant_quant="Q4_K", quant_label="Q4_K"))
     monkeypatch.setattr(run, "noise_floor_pct", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(run.actors, "backend_for",
-                        lambda *_args: SimpleNamespace(describe=lambda: "fixture"))
+                        _fixture_backend_for(run.actors.backend_for))
     assert run.main(argv) == 0
     assert startups[0]["anchor_build"] == latest_build
 
@@ -229,8 +240,10 @@ def test_cli_refuses_bad_selection_before_startup_or_provider(tmp_path, monkeypa
     _forbid_execution(monkeypatch)
     monkeypatch.setattr(run.champion, "verify_startup", lambda **_kwargs: pytest.fail("startup before refusal"))
     monkeypatch.setattr(run.actors, "backend_for", lambda *_args: pytest.fail("provider setup before refusal"))
+    # In-process seam: run.main() would hand a --store run to lane_watchdog.supervise (daed7b39f),
+    # which both moves the argparse refusal into a child and flips this process to a subreaper.
     with pytest.raises((SystemExit, planned_serving.PlannedServingError)) as error:
-        run.main(argv)
+        run._main(argv)
     if isinstance(error.value, SystemExit):
         assert error.value.code == 2
         assert capsys.readouterr().err

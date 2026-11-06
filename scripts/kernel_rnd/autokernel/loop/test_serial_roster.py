@@ -286,7 +286,9 @@ def test_generated_dry_run_reaches_actual_owner_without_side_effects(
     monkeypatch.setattr(run.champion, "verify_startup", lambda **kw: starts.append(kw) or "a" * 40)
     monkeypatch.setattr(run, "_git", lambda *_a: "a" * 40)
     monkeypatch.setattr(run.workload_contract, "read_census",
-        lambda *_a: SimpleNamespace(n_embd=4096, dominant_quant="Q4_K"))
+        lambda *_a: SimpleNamespace(n_embd=4096, dominant_quant="Q4_K", quant_label="Q4_K"))
+    monkeypatch.setattr(run.workload_contract, "read_split_census",
+        lambda *_a: SimpleNamespace(n_embd=4096, dominant_quant="Q4_K", quant_label="Q4_K"))
     backend_for = run.actors.backend_for
     monkeypatch.setattr(run.actors, "backend_for",
                         lambda model, effort: replace(backend_for(model, effort), binary="/nonexistent/fixture-cli"))
@@ -651,7 +653,9 @@ def test_shared_author_sandbox_reaches_owner_parser_with_default_unchanged(
     monkeypatch.setattr(run.champion, "verify_startup", lambda **_kw: "a" * 40)
     monkeypatch.setattr(run, "_git", lambda *_a: "a" * 40)
     monkeypatch.setattr(run.workload_contract, "read_census",
-                        lambda *_a: SimpleNamespace(n_embd=4096, dominant_quant="Q4_K"))
+                        lambda *_a: SimpleNamespace(n_embd=4096, dominant_quant="Q4_K", quant_label="Q4_K"))
+    monkeypatch.setattr(run.workload_contract, "read_split_census",
+                        lambda *_a: SimpleNamespace(n_embd=4096, dominant_quant="Q4_K", quant_label="Q4_K"))
     backend_for = run.actors.backend_for
     monkeypatch.setattr(run.actors, "backend_for",
                         lambda model, effort: replace(backend_for(model, effort), binary="/nonexistent/fixture-cli"))

@@ -15,6 +15,8 @@ from . import test_promotion_targets as promotion_fixture
 from . import test_existing_cpu_run as cpu_fixture
 from .test_legacy_targets import _argv, _resolved
 
+_PUBLIC_RUN_MAIN = run.main
+
 
 CHILD = r'''
 import json
@@ -1068,7 +1070,9 @@ def test_continuation_cor_candidates_walk_legacy_chain_to_root(tmp_path):
 ])
 def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
         validation_failure, cross_worktree):
-    original_main = run._main
+    # Run through a caller-patched `run.main` (e.g. test_matched_serving's instrument wrapper),
+    # else the native in-process seam (daed7b39f).
+    original_main = run._main if run.main is _PUBLIC_RUN_MAIN else run.main
     observed = []
 
     def exercise(argv):

@@ -198,7 +198,7 @@ def test_actual_run_reads_shared_history_and_records_original_scope_through_keep
     source = tmp_path / "history"
     _record(source)
     before = (source / "experiments.db").read_bytes()
-    real_main, real_recall, real_record = run.main, archive.SharedHistory.recall, archive.record
+    real_main, real_recall, real_record = run._main, archive.SharedHistory.recall, archive.record
     reads, writes = [], []
 
     def recall(self, **kwargs):

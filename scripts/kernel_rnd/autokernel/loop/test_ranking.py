@@ -43,7 +43,7 @@ def _parse(argv):
 
     with mock.patch.object(argparse.ArgumentParser, "parse_args", spy):
         try:
-            run.main(argv)
+            run._main(argv)  # main() would hand --store runs to the lane watchdog (daed7b39f)
         except _Stop:
             pass
     return captured["ns"]
@@ -109,7 +109,7 @@ class TheOptIn(unittest.TestCase):
         would drop `prior_experiments` from the names its code object references, and
         with it the flag.
         """
-        referenced = _referenced(run.main.__code__)
+        referenced = _referenced(run._main.__code__)
         self.assertIn("prior_experiments", referenced)
         # Non-vacuity, both directions: the walk must find real references and must not
         # find things that are merely mentioned.

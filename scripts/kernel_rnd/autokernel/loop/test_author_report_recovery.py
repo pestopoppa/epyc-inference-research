@@ -128,6 +128,7 @@ class _Lane(unittest.TestCase):
             measure=lambda h, p: _comparison(), gate=gate,
             commit=lambda h, p, c: "abc1234", hypothesis_rounds=1,
             patch_rounds=patch_rounds,
+            record_abandoned=lambda _outcome: None,   # loop.iterate refuses a candidate with no recorder (c17d0d0b7)
             validate_candidate=lambda h, p: integrity.validate_candidate(self.ws, p).to_dict(),
             author_lane=((self.ws, self.base) if author_lane == "default" else author_lane))
 
@@ -451,12 +452,13 @@ class OutputCappedEmpty(unittest.TestCase):
                  "final_step_capped": final_step_capped}
         with mock.patch.object(actor_metrics, "list_session_ids", return_value=set()), \
                 mock.patch.object(actor_metrics, "collect", return_value=stats), \
-                mock.patch.object(actors, "_record_call"):
+                mock.patch.object(actors, "_record_call", wraps=actors._record_call):  # custody needs the real recorder (c17d0d0b7)
             text = actors._run_agent("p", workspace=self.ws, backend=backend,
                                      schema=role_schema)
         log = self.ws.parent / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG
         rows = [json.loads(line) for line in log.read_text().splitlines()]
-        return text, rows[-1]
+        # the real recorder now also appends the v1 call record; the metrics row is the one asserted
+        return text, [r for r in rows if r.get("schema") == actor_metrics.METRICS_SCHEMA][-1]
 
     def test_a_capped_final_step_with_empty_text_is_classified(self):
         text, row = self._call("", final_step_capped=True)

@@ -90,7 +90,7 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
         selected, manifest, resolved, options, install = _inputs(fixture, experimental=experimental)
         requests = manifest.requests(("glm-fixed2029",), selected.template)
         measured, held, bench_calls, calibration_calls, cpu_held, affinities = [], [], [], [], [], []
-        original_main, original_calibrate = run.main, serving.calibrate_floor
+        original_main, original_calibrate = run._main, serving.calibrate_floor
         real_compare = serving.compare
         comparisons = []
         whole_comparisons = []
@@ -190,7 +190,9 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
                                       affinities.append((pid, cpus))), \
                     mock.patch.object(run, "noise_floor_pct", return_value=99.0), \
                     mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
-                        n_embd=1536, dominant_quant="Q5_0")), \
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
+                    mock.patch.object(run.workload_contract, "read_split_census", return_value=SimpleNamespace(
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
                     mock.patch.object(run.workload_contract, "verify_workload", side_effect=AssertionError(
                         "selected serving is not legacy production K-quant screen")), \
                     mock.patch.object(run.bench, "compare", bench_auxiliary), \
@@ -332,7 +334,7 @@ def test_selected_host_claim_failure_restores_original_affinity_without_launchin
     fixture.setUp()
     try:
         _, _, _, options, _ = _inputs(fixture, experimental=True)
-        real_main = run.main
+        real_main = run._main
         affinity = []
 
         def selected_main(argv):
@@ -348,7 +350,9 @@ def test_selected_host_claim_failure_restores_original_affinity_without_launchin
                     mock.patch.object(run.os, "sched_setaffinity", side_effect=lambda pid, cpus:
                                       affinity.append((pid, cpus))), \
                     mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
-                        n_embd=1536, dominant_quant="Q5_0")), \
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
+                    mock.patch.object(run.workload_contract, "read_split_census", return_value=SimpleNamespace(
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
                     mock.patch.object(run.claim, "hold_cpu", side_effect=run.claim.ClaimRefused("owned region busy")), \
                     mock.patch.object(run.claim, "hold", side_effect=AssertionError("GPU claim after refusal")), \
                     mock.patch.object(run.pool, "provision", side_effect=AssertionError("launch after refusal")):
@@ -399,7 +403,7 @@ def test_gpu_serving_bad_inputs_refuse_before_startup(case):
             (fixture.root / "campaign.json").write_text(json.dumps(resolved.to_dict()))
         with mock.patch.object(run.champion, "verify_startup", side_effect=AssertionError("startup")), \
                 pytest.raises(SystemExit) as error:
-            run.main(argv)
+            run._main(argv)
         assert error.value.code == 2
     finally:
         fixture.doCleanups()
@@ -422,13 +426,15 @@ def test_gpu_serving_rocm_refusal_precedes_startup(version, tmp_path, monkeypatc
         # hardware claim or execution may begin after the invalid version is seen.
         with mock.patch.object(run.champion, "verify_startup", return_value=fixture.tip), \
                 mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
-                    n_embd=1536, dominant_quant="Q5_0")), \
+                    n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
+                mock.patch.object(run.workload_contract, "read_split_census", return_value=SimpleNamespace(
+                    n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
                 mock.patch.object(run.gates, "compiles", side_effect=AssertionError("build")), \
                 mock.patch.object(run.claim, "hold", side_effect=AssertionError("GPU claim")), \
                 mock.patch.object(run.claim, "hold_cpu", side_effect=AssertionError("CPU claim")), \
                 mock.patch.object(run.pool, "provision", side_effect=AssertionError("pool startup")), \
                 pytest.raises(SystemExit) as error:
-            run.main(argv)
+            run._main(argv)
         assert error.value.code == 2
         message = capsys.readouterr().err
         assert f"requires ROCm {run.build_recipe.ROCM_VERSION_REQUIRED}" in message
@@ -448,13 +454,15 @@ def test_gpu_serving_without_fixture_actor_override_refuses_before_execution(cap
                 "--store", str(fixture.store), *options]
         with mock.patch.object(run.champion, "verify_startup", return_value=fixture.tip), \
                 mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
-                    n_embd=1536, dominant_quant="Q5_0")), \
+                    n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
+                mock.patch.object(run.workload_contract, "read_split_census", return_value=SimpleNamespace(
+                    n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
                 mock.patch.object(run.gates, "compiles", side_effect=AssertionError("build")), \
                 mock.patch.object(run.claim, "hold", side_effect=AssertionError("GPU claim")), \
                 mock.patch.object(run.claim, "hold_cpu", side_effect=AssertionError("CPU claim")), \
                 mock.patch.object(run.pool, "provision", side_effect=AssertionError("pool startup")), \
                 pytest.raises(SystemExit) as error:
-            run.main(argv)
+            run._main(argv)
         assert error.value.code == 2
         assert "actor wire gate refused: no passing actor wire record" in capsys.readouterr().err
         assert (fixture.store / "actor-wire-request.json").is_file()

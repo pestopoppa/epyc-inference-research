@@ -28,14 +28,14 @@ def test_resumed_main_preserves_explicit_unverified_anchor_waiver(monkeypatch):
                 "--resume-run", str(fixture.root / "receipt.json"), "--dry-run"]
         monkeypatch.setattr(serial_run, "load_resume", lambda *_args: (prior, "a" * 64))
         monkeypatch.setattr(run.workload_contract, "verify_workload", lambda _model:
-                            SimpleNamespace(n_embd=1536, dominant_quant="Q4_K"))
+                            SimpleNamespace(n_embd=1536, dominant_quant="Q4_K", quant_label="Q4_K"))
         monkeypatch.setattr(run, "noise_floor_pct", lambda *_args, **_kwargs: None)
 
         with pytest.raises(run.champion.StartupRefused, match="allow-unverified-anchor"):
-            run.main(base)
+            run._main(base)
         with mock.patch.object(serial_run, "verify_exact_anchor",
                                wraps=serial_run.verify_exact_anchor) as exact:
-            assert run.main(base + ["--allow-unverified-anchor"]) == 0
+            assert run._main(base + ["--allow-unverified-anchor"]) == 0
         assert exact.call_args.kwargs["allow_unverified"] is True
     finally:
         fixture.doCleanups()
@@ -61,10 +61,11 @@ def test_resumed_cor_preserves_waiver_after_dry_run_boundary(monkeypatch):
             "--store", str(fixture.store),
             "--resume-run", str(fixture.root / "receipt.json"),
             "--allow-unverified-anchor", "--iterations", "0",
+            "--allow-untested-actor-seats", "fixture: no actor is invoked",   # wire gate (OAB-29)
         ]
         monkeypatch.setattr(serial_run, "load_resume", lambda *_args: (prior, "a" * 64))
         monkeypatch.setattr(run.workload_contract, "verify_workload", lambda _model:
-                            SimpleNamespace(n_embd=1536, dominant_quant="Q4_K"))
+                            SimpleNamespace(n_embd=1536, dominant_quant="Q4_K", quant_label="Q4_K"))
         monkeypatch.setattr(run, "noise_floor_pct", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(accumulate, "load_bundle", lambda *_args, **_kwargs:
                             (accumulate.Bundle(fixture.tip, fixture.tip), "restored"))
@@ -85,7 +86,7 @@ def test_resumed_cor_preserves_waiver_after_dry_run_boundary(monkeypatch):
         # build or benchmark is entered by this regression.
         with mock.patch.object(serial_run, "verify_exact_anchor", side_effect=exact), \
                 pytest.raises(ReachedCorGuard):
-            run.main(argv)
+            run._main(argv)
         assert len(exact_calls) == 2
         assert all(call["allow_unverified"] is True for call in exact_calls)
     finally:

@@ -70,7 +70,9 @@ def test_calibration_only_branch_precedes_proposal_pool():
     assert branch > 0
     assert "pooled = pool.PoolResult(outcomes=[]" in source[branch:end]
     assert "elif args.validate_source_continuation:" in source[branch:end]
-    assert "else:\n                pooled = run_pooled()" in source[branch:end]
+    # bebe42b9a: the else-branch first refreshes the headline, then pools.
+    assert "else:" in source[branch:end]
+    assert "                publish_headline()\n                pooled = run_pooled()" in source[branch:end]
 
 
 def test_heldout_floor_survives_accumulator_tip_advance(monkeypatch, tmp_path):

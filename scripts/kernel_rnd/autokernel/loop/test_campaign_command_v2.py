@@ -284,7 +284,9 @@ def test_campaign_service_sigterm_durably_drains_and_exits_owned_child(
             assert process.poll() is None and time.monotonic() < deadline
             time.sleep(0.01)
         os.kill(process.pid, signal.SIGTERM)
-        assert process.wait(timeout=3) == 0
+        # `-m campaign_service --listen` runs under lane_watchdog (daed7b39f), which reports a
+        # requested stop as 128+SIGTERM; the drained snapshot below still proves the clean child drain.
+        assert process.wait(timeout=3) == 128 + signal.SIGTERM
         assert process.poll() is not None
         body = json.loads(snapshot.read_text(encoding="utf-8"))
         assert body["desired_state"] == body["observed_state"] == "drained"

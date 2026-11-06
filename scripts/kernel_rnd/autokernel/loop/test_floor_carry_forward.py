@@ -314,7 +314,7 @@ def test_flag_disables_the_carry(tmp_path):
                                      carry_forward=False)
     assert reading.floor_pct is None and reading.provenance == "absent" and carry is None
     # Both floor-selection sites in the loop honour the CLI escape hatch.
-    source = inspect.getsource(run.main)
+    source = inspect.getsource(run._main)
     assert source.count("carry_forward=args.floor_carry_forward") == 2
 
 

@@ -541,7 +541,7 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
                             timeout_s=.5, cwd=tmp_path)
             else:
                 tree = ast.parse((Path(__file__).parent / "run.py").read_text())
-                main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+                main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_main")
                 forwarder = next(n for n in main.body if isinstance(n, ast.FunctionDef) and n.name == "local_compiles")
                 from contextlib import nullcontext
                 namespace = {"gates": gates, "gpu_local": local, "nullcontext": nullcontext}

@@ -535,7 +535,7 @@ def observed_measure(template, build_dir, port, **kwargs):
     bootstrap_script = tmp_path / "worker_bootstrap.py"
     bootstrap_script.write_bytes(
         Path(wl.__file__).with_name("worker_bootstrap.py").read_bytes())
-    source_root = Path.cwd() / "scripts/kernel_rnd"
+    source_root = Path(__file__).resolve().parents[2]  # scripts/kernel_rnd, cwd-independent
     fixture_cpus = sorted(os.sched_getaffinity(0))[:4]
     worker_script.write_text(f"""
 import argparse, os, sys, types

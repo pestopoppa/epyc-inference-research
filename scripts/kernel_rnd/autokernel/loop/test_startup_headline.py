@@ -128,11 +128,11 @@ def test_restart_refresh_is_claimed_before_lanes_and_failure_still_dispatches(
              mock.patch.object(bench, "measure", measure), \
              mock.patch.object(run.hotspots, "profile", side_effect=hotspots.ProfileFailed("fixture")), \
              mock.patch.object(run.workload_contract, "verify_workload",
-                               return_value=SimpleNamespace(n_embd=1536, dominant_quant="Q4_K")), \
+                               return_value=SimpleNamespace(n_embd=1536, dominant_quant="Q4_K", quant_label="Q4_K")), \
              mock.patch.object(pool, "provision", provision), \
              mock.patch.object(pool, "drive", return_value=pool.PoolResult(outcomes=[])), \
              redirect_stdout(io.StringIO()):
-            assert run.main(argv) == 0
+            assert run._main(argv) == 0
         assert events == (["claim", "refresh", "measure", "refreshed", "lanes", "release"]
                           if carryover else
                           ["claim", "refresh", "build", "compare", "refreshed", "lanes", "release"])

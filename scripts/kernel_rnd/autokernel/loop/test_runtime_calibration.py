@@ -104,7 +104,7 @@ def test_source_research_continues_without_implicit_800_launch_runtime_frame(mon
 def test_explicit_calibration_without_bounded_statistics_refuses_before_claim(monkeypatch):
     from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
     from . import run
-    original_main = run.main
+    original_main = run._main
     def unconfigured(argv):
         def strip(flag):
             index = argv.index(flag)
@@ -299,7 +299,7 @@ def test_existing_run_retains_original_default_without_changing_observation_sema
 def test_actual_run_calibration_option_reaches_same_claim_before_candidates(monkeypatch):
     from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
     from . import run
-    main, selected = run.main, []
+    main, selected = run._main, []
     def with_calibration(argv):
         return main([*argv, "--calibrate-runtime"])
     class CollectorBoundary:

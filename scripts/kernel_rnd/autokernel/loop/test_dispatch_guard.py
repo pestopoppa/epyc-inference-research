@@ -108,7 +108,8 @@ def _iterate_on(tail, base, registry, reserved):
     return loop.iterate(planner=Planner(), critic=Critic(), context={},
                         measure=lambda *a: None, gate=gate, commit=lambda *a: "x",
                         tail_session=lambda: tail.session(base),
-                        reserve_candidate=reserve, patch_rounds=1)
+                        reserve_candidate=reserve, patch_rounds=1,
+                        record_abandoned=lambda _outcome: None)  # recorder is mandatory (c17d0d0b7)
 
 
 def test_superseded_then_reproposed_on_a_new_anchor_is_admitted():

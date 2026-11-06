@@ -442,7 +442,7 @@ def test_targets_that_do_not_opt_in_launch_exactly_as_before(tmp_path, monkeypat
     seen = []
 
     def legacy_measure(recipe, build, port, *, evidence, resolved_recipe=None,
-                       frozen_requests=None):                  # the pre-longctx signature
+                       frozen_requests=None, target_sample_steps=None):  # pre-longctx + f76b62887's sink
         seen.append(Path(build).name)
         evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
                          "status": "not_applicable"})

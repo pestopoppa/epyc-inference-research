@@ -47,6 +47,9 @@ PATH_AGGREGATE_LIMITATION = (
     "NOT a roofline reading. The ROOFLINE GAP table below is the "
     "per-node replacement for that framing.")
 CONTROL_SHA256 = "ad87294ac66c8ceb9ba15823a0503d38b0e16f3141bb64f0cc88c6daad9ecea3"  # P1-G: control + relies_on_claims template delta
+#: What the live planner/author actually send: the control bytes plus `\n\n` + actors.ANTI_GAMING_RULE,
+#: appended by 57f6db044 (R24-6, intentional). Verified equal to sha256(control + that one clause).
+LIVE_PROMPT_SHA256 = "f2a5780f9dde46844093272d2ea030cd2e199e4f368f1f60c2ea1335bd883390"
 NODE_PROFILE_SECTION_CHARS = 3878 + len(PATH_AGGREGATE_LIMITATION) + 1
 RUN8_RECORDED_SHA256 = "72c8677850d955b2598bd9d7254460b0fdead5c0ee2f150c80e897ae0ce47b99"
 CPU_FORMAT = dict(
@@ -300,7 +303,7 @@ class InlineModeIsByteIdentical(unittest.TestCase):
         for seat in (None, actors.ActorSeat(bounded=False), actors.ActorSeat(bounded=False,
                                                                              context_mode="inline")):
             seen = self._captured(seat)
-            self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
+            self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), LIVE_PROMPT_SHA256)
             assert_snapshot_only(self, seen["env"], seen["config"])
             self.assertEqual(seen["bundle_dirs"], [])
 
@@ -311,12 +314,13 @@ class InlineModeIsByteIdentical(unittest.TestCase):
         seen = self._captured(
             None, context_text=_real_context_text(_recorded_prompt(), legacy_suffix=True))
         self.assertEqual(seen["prompt"],
-                         _with_relies_delta(_recorded_prompt() + ABSTAIN_IDENTITY_EXTENSION))
+                         _with_relies_delta(_recorded_prompt() + ABSTAIN_IDENTITY_EXTENSION)
+                         + "\n\n" + actors.ANTI_GAMING_RULE)  # 57f6db044 (R24-6)
 
     def test_variable_mode_is_inline_for_non_opencode_backends(self):
         seen = self._captured(actors.ActorSeat(context_mode="variable"),
                               backend=actors.backend_for("gpt-5.6-sol", "high"))
-        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), LIVE_PROMPT_SHA256)
         self.assertEqual(seen["bundle_dirs"], [])
 
 
@@ -529,14 +533,16 @@ class VariableModeThroughThePlanner(unittest.TestCase):
         self.assertIn(str(bundle), seen["prompt"])
         self.assertNotIn('"full_transfer_target"', seen["prompt"])
         self.assertTrue(seen["prompt"].endswith(
-            '{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION))
+            '{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION
+            + "\n\n" + actors.ANTI_GAMING_RULE))  # 57f6db044 (R24-6)
         self.assertEqual(seen["env"][actors.SEAT_ENV_ARM], "plain+ctx-variable")
         assert_snapshot_only(self, {k: v for k, v in seen["env"].items()
                                     if k != actors.SEAT_ENV_ARM}, seen["config"], seen["ws"])
         manifest = seen["manifests"][bundle]
         self.assertEqual(manifest["prompt"]["sha256"],
                          hashlib.sha256(seen["prompt"].encode()).hexdigest())
-        self.assertEqual(manifest["inline_equivalent_prompt_chars"], len(_real_prompt()))
+        self.assertEqual(manifest["inline_equivalent_prompt_chars"],
+                         len(_real_prompt()) + len("\n\n" + actors.ANTI_GAMING_RULE))  # 57f6db044
 
     def test_bounded_variable_keeps_the_seat_config_and_suffixes_its_arm(self):
         seen = self._run(actors.ActorSeat(bounded=True, context_mode="variable",
@@ -553,7 +559,7 @@ class VariableModeThroughThePlanner(unittest.TestCase):
     def test_an_unwritable_bundle_degrades_to_an_honestly_labelled_inline_call(self):
         with mock.patch.object(actor_context, "materialize", side_effect=OSError("disk full")):
             seen = self._run(actors.ActorSeat(bounded=False, context_mode="variable"))
-        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), LIVE_PROMPT_SHA256)
         self.assertNotIn(actors.SEAT_ENV_ARM, seen["env"],
                          "an inline call is never recorded as the variable arm")
         assert_snapshot_only(self, seen["env"], seen["config"], seen["ws"])
@@ -641,18 +647,20 @@ class OrchestratorVariableMode(unittest.TestCase):
         self.assertIn("ORCHESTRATOR mode", seen["prompt"])
         self.assertNotIn('"full_transfer_target"', seen["prompt"])
         self.assertTrue(seen["prompt"].endswith(
-            '{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION))
+            '{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION
+            + "\n\n" + actors.ANTI_GAMING_RULE))  # 57f6db044 (R24-6)
         self.assertEqual(seen["env"][actors.SEAT_ENV_ARM], "orch+ctx-orch-variable")
         self.assertEqual("".join(e["text"] for e in seen["bundle"]["sections"]), _real_context_text())
         manifest = seen["bundle"]["manifest"]
         self.assertEqual(manifest["prompt"]["sha256"], hashlib.sha256(seen["prompt"].encode()).hexdigest())
-        self.assertEqual(manifest["inline_equivalent_prompt_chars"], len(_real_prompt()))
+        self.assertEqual(manifest["inline_equivalent_prompt_chars"],
+                         len(_real_prompt()) + len("\n\n" + actors.ANTI_GAMING_RULE))  # 57f6db044
         self.assertEqual(seen["bundle_dirs"], [], "no on-disk bundle tree: the REPL holds it")
 
     def test_inline_stays_the_default_for_the_orchestrator_kind(self):
         for seat in (None, actors.ActorSeat(bounded=False)):
             seen = self._propose(actors.backend_for("orch:auto", "high"), seat)
-            self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
+            self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), LIVE_PROMPT_SHA256)
             self.assertNotIn("--context-bundle", seen["argv"])
 
     def test_orchestrator_variable_is_inline_for_every_other_kind(self):
@@ -671,7 +679,7 @@ class OrchestratorVariableMode(unittest.TestCase):
             with mock.patch.object(actors, "render_context", return_value=_real_context_text()), \
                     mock.patch.object(actors, "_run_agent", side_effect=run):
                 planner.propose(_cpu_context())
-        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), LIVE_PROMPT_SHA256)
 
     def test_argv_attaches_the_bundle_only_for_its_own_prompt(self):
         from autokernel.loop import actor_orchestrator as orch

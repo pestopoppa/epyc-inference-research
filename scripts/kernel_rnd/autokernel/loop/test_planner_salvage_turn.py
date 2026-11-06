@@ -577,7 +577,7 @@ class CliFlag(unittest.TestCase):
         from autokernel.loop import run
         tree = ast.parse(Path(run.__file__).read_text(encoding="utf-8"))
         main = next(node for node in tree.body
-                    if isinstance(node, ast.FunctionDef) and node.name == "main")
+                    if isinstance(node, ast.FunctionDef) and node.name == "_main")
         planner = next(node for node in ast.walk(main)
                        if isinstance(node, ast.FunctionDef) and node.name == "make_planner")
 

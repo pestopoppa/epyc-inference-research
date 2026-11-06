@@ -39,7 +39,9 @@ def test_calibration_only_branch_precedes_pool_and_requests_stop():
     assert "pooled = pool.PoolResult(outcomes=[]" in seg
     first_else = seg.index("elif args.validate_source_continuation:")
     assert 'stopping["asked"] = True' in seg[:first_else]
-    assert "else:\n                pooled = run_pooled()" in seg
+    # bebe42b9a: the else-branch first refreshes the headline, then pools.
+    assert "else:" in seg
+    assert "                publish_headline()\n                pooled = run_pooled()" in seg
 
 
 def test_terminal_is_stopped_when_stop_was_asked():

@@ -509,7 +509,7 @@ class RunWiring(unittest.TestCase):
     def test_run_opens_the_run_scope_installs_and_sweeps(self) -> None:
         import inspect
         from autokernel.loop import run
-        src = inspect.getsource(run.main)
+        src = inspect.getsource(run._main)
         for needle in ('scratch.from_args(args, root=args.store / "scratch"',
                        'scope("run", name=scratch_run_id)', "scratch.install(",
                        "scratch.uninstall", ".sweep()", "scratch.adopt_tempfile(run_scope)"):
@@ -544,6 +544,10 @@ class PruneGcBan(unittest.TestCase):
 
     PRUNE = "pr" + "une"
     GC = "g" + "c"
+    #: Test modules holding a recorded provider request body (policy prose that mentions other
+    #: tools' gc/prune commands as data). Their STRING text is not a command; argv-shaped
+    #: sequences are still scanned in every file.
+    RECORDED_PROMPT_FIXTURES = frozenset({"test_actor_wire_gate.py"})
     TEXT = re.compile(r"\bworktree\s+" + "pr" + r"une\b|\bgit\b.*\s" + "g" + r"c\b")
 
     def _offenders(self, path: Path) -> list[str]:
@@ -560,7 +564,8 @@ class PruneGcBan(unittest.TestCase):
         out = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str) \
-                    and id(node) not in exempt and self.TEXT.search(node.value):
+                    and id(node) not in exempt and self.TEXT.search(node.value) \
+                    and path.name not in self.RECORDED_PROMPT_FIXTURES:
                 out.append(f"{path.name}:{node.lineno}: {node.value[:60]!r}")
             seq = None
             if isinstance(node, (ast.List, ast.Tuple)):
@@ -825,10 +830,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     'gates.py:write_bit_exact_record:write_bytes': (1, 'evidence: atomic retained bit-exact source/tree/oracle/verdict/mechanism record'),
     'new_epoch.py:start_new_anchor_epoch:mkdir': (1, 'evidence: new-epoch archive root retaining the previous bundle and journal under the existing owner lock'),
     'new_epoch.py:start_new_anchor_epoch:shutil.move': (2, 'evidence: previous bundle and journal archived under the owner lock before starting a fresh epoch'),
-    'roofline_coverage.py:write_scope_gap:mkdir': (1, 'evidence: campaign scope_gap.json parent; durable stagnation report for route review'),
-    'roofline_coverage.py:write_scope_gap:write_text': (1, 'evidence: durable schema/timestamp/coverage-gap report, emitted only by the stagnation hook'),
-    'run.py:main.ppl_contract_bisect_build:write_text': (1, 'writes inside a run-scope registered bisect build (commit marker); build and source released with the run'),
-    'run.py:main.ppl_contract_tools_build:write_text': (1, 'writes inside a run-scope registered tools build; object/artifact identity marker revalidated on reuse'),
+    'run.py:_main.ppl_contract_bisect_build:write_text': (1, 'writes inside a run-scope registered bisect build (commit marker); build and source released with the run'),
+    'run.py:_main.ppl_contract_tools_build:write_text': (1, 'writes inside a run-scope registered tools build; object/artifact identity marker revalidated on reuse'),
     'run.py:fail_remeasure_request:os.link': (1, "state: atomic no-clobber restore of this process's claimed REMEASURE_REQUEST, preserving a newer request"),
     'served_shape_cases.py:apply_patch_block:write_text': (1, 'source: explicit calibration tool stages the generated case block in experimental tests/test-backend-ops.cpp'),
     'served_shape_cases.py:write_manifest:mkdir': (1, 'evidence: served-shape manifest directory, consumed and checked by the candidate source gate'),
@@ -875,8 +878,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "perf_cache.py:_atomic_write_json:mkstemp": (1, "state: atomic temp+rename of the perf cache"),
     "recal_serving_floor.py:main:copy2": (1, "evidence: operator CLI backup of the replaced floor"),
     "run.py:_publish_preclaim_failure:mkdir": (1, "evidence: batch --out dir (pre-claim failure marker)"),
-    "run.py:main.publish_held_claims:mkdir": (1, "evidence: batch --out dir (held-claim evidence)"),
-    "run.py:main:mkdir": (2, "evidence: batch --out and original GPU child phase event directory; pending markers retain failed release refusal"),
+    "run.py:_main.publish_held_claims:mkdir": (1, "evidence: batch --out dir (held-claim evidence)"),
+    "run.py:_main:mkdir": (2, "evidence: batch --out and original GPU child phase event directory; pending markers retain failed release refusal"),
     "gpu_phases.py:child_build:write_text": (2, "evidence: pending native child-owner marker and completed original CPU build interval; release errors retain pending refusal"),
     "runtime_calibration.py:neutral_material:mkdir": (1, "evidence: direct-neutral executable keyed by launch snapshot"),
     "runtime_calibration.py:neutral_material:os-open-create": (1, "evidence: direct-neutral executable (O_EXCL)"),
@@ -891,8 +894,22 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "serial_run.py:_load_completed_or_recover:mkstemp": (1, "evidence: atomic recovery-validation temp beside its target"),
     "serial_run.py:_publish_current_run:mkdir": (1, "state: current-run pointer"),
     "serial_run.py:_publish_current_run:open-write": (1, "state: current-run pointer lock"),
-    "serial_run.py:main:mkdir": (1, "evidence: serial run root"),
-    "serial_run.py:main:open-write": (1, "state: serial run lock"),
+    "serial_run.py:_main:mkdir": (1, "evidence: serial run root"),
+    "serial_run.py:_main:open-write": (1, "state: serial run lock"),
+    # AK red-loop triage 2026-11-06: reviewed sites added since the last inventory refresh.
+    "accumulate.py:_shared_cor_lock:mkdir": (1, "state: durable store directory holding the shared-COR flock"),
+    "accumulate.py:_shared_cor_lock:open-write": (1, "state: shared-COR lock file in the durable store (flock only, never deleted)"),
+    "keep_screen.py:write_record:mkdir": (1, "evidence: parent of an immutable per-keep AKX screen record"),
+    "keep_screen.py:write_record:mkstemp": (1, "evidence: same-directory temp for the atomic no-clobber record publish (unlinked on failure)"),
+    "keep_screen.py:write_record:os.link": (1, "evidence: atomic no-clobber publish of the immutable keep screen record"),
+    "lane_watchdog.py:_check_serial_capability:open-write": (1, "state: probe-open of the serial capability lock for a non-blocking flock check"),
+    "lane_watchdog.py:_write:open-write": (1, "state: exclusive supervisor state file under the watchdog root (cleared by the supervisor on exit)"),
+    "lane_watchdog.py:supervise:mkdir": (1, "state: private 0700 watchdog root under the canonical store"),
+    "lane_watchdog.py:supervise:open-write": (1, "state: per-lane supervisor flock file under the watchdog root"),
+    "source_build_preparation.py:stage_asm_artifacts:makedirs": (1, "state: parent dirs inside the caller-owned source tree the declared ASM artifacts are staged into"),
+    "source_build_preparation.py:stage_asm_artifacts:os-open-create": (1, "state: O_EXCL|O_NOFOLLOW staging of a declared ASM artifact into the caller-owned source tree"),
+    "validate_keep_screen_contract.py:main:TemporaryDirectory": (1, _SELF_CLEANING),
+    "validate_keep_screen_contract.py:main:write_text": (1, "writes a synthetic fixture inside its own self-cleaning TemporaryDirectory"),
     "serving_beliefs.py:_write_exact:mkdir": (1, "evidence: serving belief exports"),
     "source_build_execution.py:SourceBuildStageExecutor.__call__:mkdir": (1, "evidence: source build logs"),
     "startup_factory.py:_write_new:os-open-create": (1, "evidence: standalone startup package files (O_EXCL)"),
@@ -1102,7 +1119,7 @@ class NewWriterScratchBoundaries(Base):
         from autokernel.loop import gates
         tree = ast.parse((PKG / "run.py").read_text())
         main = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
-                    and node.name == "main")
+                    and node.name == "_main")
         forwarder = next(node for node in main.body if isinstance(node, ast.FunctionDef)
                          and node.name == "local_compiles")
         events = []
@@ -1145,7 +1162,7 @@ class NewWriterScratchBoundaries(Base):
         slot.mkdir()
         reg = self.reg()
         source = ast.parse((PKG / "run.py").read_text())
-        main = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+        main = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "_main")
         names = ("local_compiles", "ppl_contract_tools_build", "ppl_contract_anchor_for_gate", "ppl_contract_bisect_build")
         functions = [node for node in main.body if isinstance(node, ast.FunctionDef) and node.name in names]
         ns = {"Path": Path, "scratch": scratch, "gates": gates, "anchor_integrity": anchor_integrity,
@@ -1331,7 +1348,7 @@ def test_original_cpu_owner_outlives_ppl_cookie_cleanup(native, tmp_path, monkey
     local = gpu_phases.LocalPhases(cpu_list="0", quiet=False, should_stop=lambda: False,
                                    on_wait=lambda kind: pytest.fail("unexpected native wait"))
     source = ast.parse((PKG / "run.py").read_text())
-    main = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+    main = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "_main")
     names = {"local_compiles", "ppl_contract_tools_build", "ppl_contract_anchor_for_gate",
              "ppl_contract_bisect_build"}
     functions = [node for node in main.body if isinstance(node, ast.FunctionDef) and node.name in names]

@@ -257,7 +257,9 @@ def test_actual_gpu_main_runtime_observation_preserves_source_and_skips_unavaila
             with mock.patch.object(run.claim, "hold", gpu), mock.patch.object(run.claim, "hold_cpu", host), \
                     mock.patch.object(run.os, "sched_setaffinity"), \
                     mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
-                        n_embd=1536, dominant_quant="Q5_0")), \
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
+                    mock.patch.object(run.workload_contract, "read_split_census", return_value=SimpleNamespace(
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
                     mock.patch.object(run.actors, "AgentPlanner", return_value=SimpleNamespace(
                         propose=propose, author=forbidden)), \
                     mock.patch.object(run.actors, "AgentCritic", return_value=SimpleNamespace(

@@ -124,7 +124,7 @@ def test_actual_main_refuses_renamed_repeated_runtime_treatment():
         assert [row["status"] for row in rows[1:]] == ["refused_duplicate"] * 4
         assert len({row["mechanism_id"] for row in rows}) == 5
         assert all(row["refusal_gate"] == "runtime_treatment_identity" for row in rows[1:])
-        assert all("comparison" not in row for row in rows[1:])
+        assert all(row["comparison"] is None for row in rows[1:])  # explicit null (991033729)
 
     test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         False, runtime_only=True, repeat_runtime_treatment=True, result_expectation=repeated)

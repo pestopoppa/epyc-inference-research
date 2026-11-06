@@ -213,14 +213,16 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch, allow_syntheti
         launch, prompts, options, _ = cpu_inputs(fixture)
         requests = prompts.requests(("glm-fixed2029",), launch.template)
         calls, comparisons = [], []
-        real_main = run.main
+        real_main = run._main
         actor_reason = "MOCK_ONLY: matched-serving unit fixture replaces planner and critic"
         @contextmanager
         def hold(*_args, **_quiet): yield {"device_id": "synthetic-cpu-claim"}
         def drive(**kwargs):
             measure = kwargs["make_measure"](SimpleNamespace(build_dir=fixture.startup_anchor))
             comparison = measure(SimpleNamespace(runtime_pair=None), ())
-            assert isinstance(comparison, run.ServingComparison)
+            # same_code_tripwire (5412cae12) wraps the native comparison; the wrapper
+            # carries the original unchanged.
+            assert isinstance(getattr(comparison, "original", comparison), run.ServingComparison)
             assert comparison.row["measurement_plan"]["instrument"] == serving.MATCHED_INSTRUMENT
             assert comparison.row["request_digest"] == serving.request_digest(
                 launch.template, requests)
@@ -236,7 +238,9 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch, allow_syntheti
                     mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
                     mock.patch.object(run.os, "sched_setaffinity"), \
                     mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
-                        n_embd=1536, dominant_quant="Q5_0")), \
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
+                    mock.patch.object(run.workload_contract, "read_split_census", return_value=SimpleNamespace(
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
                     mock.patch.object(cpu_profile, "profile_loop", side_effect=cpu_profile.CpuProfileRefused("fixture")), \
                     mock.patch.object(serving, "_measure_once", _measure(calls)), \
                     mock.patch.object(pool, "provision", return_value=[]), \
@@ -252,7 +256,7 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch, allow_syntheti
         with mock.patch.object(run, "main", invoke):
             if not allow_synthetic_actors:
                 with pytest.raises(SystemExit, match="2"):
-                    fixture._run_one_keep()
+                    fixture._run_one_keep(allow_untested_actors=False)  # aa2143357
                 assert (fixture.store / "actor-wire-request.json").is_file()
                 assert not (fixture.store / "loop-run.json").exists()
                 assert calls == comparisons == []
@@ -291,10 +295,16 @@ def test_malformed_matched_plan_has_controlled_validation_refusal(field, value):
 
 def test_actual_matched_keep_validation_reuse_and_other_target_compare():
     from .test_serial_run import test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source
-    real_main = run.main
+    real_main = run._main
     compared = []
     original_compare = serving.compare
     def compare(*args, **kwargs):
+        if kwargs.get("runtime_pair") is not None:
+            # Same-binary runtime observation (run.py runtime_pair branch): floorless,
+            # observation-only, never a source keep, so it carries no matched instrument.
+            row = original_compare(*args, **kwargs)
+            compared.append(row)
+            return row
         assert kwargs["instrument"] == serving.MATCHED_INSTRUMENT
         if kwargs["floor_pct"] is None:
             # The promoted-anchor integrity A/A is not a source candidate and
@@ -320,7 +330,7 @@ def test_actual_matched_keep_validation_reuse_and_other_target_compare():
 
 def test_post_keep_refresh_failure_preserves_keep_and_starts_no_candidate_compare():
     from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
-    real_main = run.main
+    real_main = run._main
     original_calibrate = serving.calibrate_floor
     original_compare = serving.compare
     calibrations, comparisons = [], []

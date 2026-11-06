@@ -3,6 +3,7 @@ from copy import deepcopy
 from dataclasses import replace
 import json
 import os
+from pathlib import Path
 import time
 from unittest import mock
 
@@ -468,7 +469,11 @@ status.write_json(batch, 'loop-runtime-interruption.json', interrupted.to_dict()
 (root / 'original-holder.json').write_text(json.dumps(original))
 '''
     child = subprocess.Popen([sys.executable, '-c', child_code, str(tmp_path)],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             cwd=Path(__file__).resolve().parents[4],  # child imports scripts.kernel_rnd.*
+                             env={**os.environ, "PYTHONPATH": os.pathsep.join(
+                                 [str(Path(__file__).resolve().parents[4]),
+                                  str(Path(__file__).resolve().parents[2])])})  # ... and autokernel.*
     stdout, stderr = child.communicate(timeout=15)
     assert child.returncode == 0, (stdout, stderr)
     original = json.loads((tmp_path / 'original-holder.json').read_text())

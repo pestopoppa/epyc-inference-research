@@ -104,6 +104,7 @@ class _Incident(unittest.TestCase):
     def argv(self, *extra: str) -> list[str]:
         return ["--worktree", str(self.repo), "--anchor-build", str(self.anchor),
                 "--model", str(self.root / f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"), "--store", str(self.store),
+                "--allow-untested-actor-seats", "fixture: no actor is invoked",   # wire gate (OAB-29)
                 *extra]
 
 
@@ -123,7 +124,7 @@ class TheIncidentStateRefusesToStart(_Incident):
              mock.patch.object(run_mod.workload_contract, "verify_workload",
                                side_effect=lambda _m: events.append("census")):
             with self.assertRaises(champion.StartupRefused) as caught:
-                run_mod.main(self.argv())
+                run_mod._main(self.argv())
         # Ordering, not presence: neither the census nor the claim ever ran.
         self.assertEqual(events, [])
         message = str(caught.exception)
@@ -157,7 +158,7 @@ class TheIncidentStateRefusesToStart(_Incident):
 
         def census(_model):
             events.append("census")
-            return mock.Mock(n_embd=1536, dominant_quant="Q4_K")
+            return mock.Mock(n_embd=1536, dominant_quant="Q4_K", quant_label="Q4_K")
 
         with mock.patch.object(run_mod.champion, "verify_startup",
                                side_effect=lambda **kw: (
@@ -165,7 +166,7 @@ class TheIncidentStateRefusesToStart(_Incident):
              mock.patch.object(run_mod.workload_contract, "verify_workload", census), \
              mock.patch.object(run_mod.claim, "hold", hold):
             with self.assertRaises(claim.ClaimRefused):
-                run_mod.main(self.argv())
+                run_mod._main(self.argv())
         self.assertEqual(events, ["verify", "census", "claim"])
 
     def test_a_dry_run_is_gated_too(self):

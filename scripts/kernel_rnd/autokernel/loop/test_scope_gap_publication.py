@@ -47,6 +47,8 @@ def _native_publisher(root):
             iterations=8,
             worktree=root,
             out=None,
+            no_measurement_alarm_n=status.NO_MEASUREMENT_ALARM_N,
+            keep_rate_alarm_window=status.KEEP_RATE_ALARM_WINDOW,
         ),
         "epoch": "e",
         "current_anchor_commit": ["a"],
@@ -66,6 +68,8 @@ def _native_publisher(root):
         "_git": lambda *args: "a",
         "HEARTBEAT_S": 30,
         "roofline_coverage": rc,
+        "resolved_campaign": None,  # run.py:publish projects keep_screen (12c5b907a)
+        "live_tail": [None],
     }
     bindings = [
         n

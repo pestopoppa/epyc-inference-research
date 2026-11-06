@@ -393,7 +393,7 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
                                mock.Mock(side_effect=hotspots.ProfileFailed("e2e"))), \
              mock.patch.object(run_mod.workload_contract, "verify_workload",
                                lambda _m: mock.Mock(n_embd=1536,
-                                                    dominant_quant="Q4_K")), \
+                                                    dominant_quant="Q4_K", quant_label="Q4_K")), \
              mock.patch.object(run_mod.production, "refresh",
                                lambda **kw: run_mod.production.Refresh(
                                    published=False, reason="stubbed for the e2e")), \

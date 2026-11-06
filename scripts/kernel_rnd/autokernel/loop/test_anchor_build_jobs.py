@@ -42,7 +42,7 @@ class AnchorBuildJobs(unittest.TestCase):
     def test_build_champion_uses_the_split(self):
         # build_champion is a closure inside main(); pin that it routes -j through
         # anchor_build_jobs rather than a hardcoded width.
-        node = next(node for node in ast.walk(ast.parse(inspect.getsource(run_mod.main)))
+        node = next(node for node in ast.walk(ast.parse(inspect.getsource(run_mod._main)))
                     if isinstance(node, ast.FunctionDef) and node.name == "build_champion")
         call = next(node.value for node in node.body if isinstance(node, ast.Return))
         self.assertEqual(ast.unparse(call.func), "local_compiles")

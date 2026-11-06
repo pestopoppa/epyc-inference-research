@@ -251,6 +251,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                                           "synthetic fixture observation")), \
                     mock.patch.object(run.actors, "AgentPlanner", planner), \
                     mock.patch.object(run.workload_contract, "read_census", run.workload_contract.verify_workload), \
+                    mock.patch.object(run.workload_contract, "read_split_census", run.workload_contract.verify_workload), \
                     mock.patch.object(claim, "hold_cpu", cpu_hold), \
                     mock.patch.object(claim, "hold", side_effect=AssertionError("GPU claim")), \
                     mock.patch.object(run.bench, "compare", side_effect=AssertionError("GPU bench")), \
@@ -324,7 +325,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             if invalid_once:
                 rows = result["iterations"]
                 assert len(rows) == 5 and rows[0]["status"] == "measurement_invalid"
-                assert "comparison" not in rows[0] and "effect_fraction" not in rows[0]
+                assert rows[0]["comparison"] is None and "effect_fraction" not in rows[0]  # explicit null: no Comparison
                 assert rows[1]["comparison"]["rescheduled_invalid_arms"][0]["failed_arm"] == "candidate"
                 assert run.status.read(fixture.store)["measurements_reached"] == 4
                 assert len(invalidated) == 2

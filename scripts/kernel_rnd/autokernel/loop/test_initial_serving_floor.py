@@ -47,7 +47,7 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
             retained_bytes = retained_path.read_bytes()
 
         held, launches, pool_calls = [], [], []
-        original_main = run.main
+        original_main = run._main
         original_calibrate = serving.calibrate_floor
         stop_requested = [False]
 
@@ -113,7 +113,9 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
                     mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
                     mock.patch.object(run.os, "sched_setaffinity"), \
                     mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
-                        n_embd=1536, dominant_quant="Q5_0")), \
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
+                    mock.patch.object(run.workload_contract, "read_split_census", return_value=SimpleNamespace(
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
                     mock.patch.object(cpu_profile, "profile_loop", side_effect=cpu_profile.CpuProfileRefused(
                         "synthetic test; no hardware profiling")), \
                     mock.patch.object(serving, "_measure_once", observe), \

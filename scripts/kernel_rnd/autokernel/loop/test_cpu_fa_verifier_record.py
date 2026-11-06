@@ -19,7 +19,11 @@ from .test_cpu_fa_route import _builds, _fake_runner, _recipe, _write_capture_fi
 
 @lru_cache(maxsize=1)
 def reader():
-    root = Path(os.environ["EPYC_REALMASK_ROOT"]).resolve(strict=True)
+    # The reader lives in the umbrella repo (epyc-root), not this one; EPYC_ROOT names it.
+    configured = os.environ.get("EPYC_REALMASK_ROOT") or os.environ.get("EPYC_ROOT")
+    if not configured:
+        pytest.skip("EPYC_REALMASK_ROOT (or EPYC_ROOT) must name the epyc-root checkout")
+    root = Path(configured).resolve(strict=True)
     sys.path.insert(0, str(root / "scripts/vidya"))
     spec = importlib.util.spec_from_file_location("real_mask_reader_under_test",
         root / "scripts/vidya/adapters/autokernel_real_mask.py")

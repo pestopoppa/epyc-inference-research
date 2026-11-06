@@ -87,7 +87,7 @@ row = ob.loaded_planned_serving_identity(measurement_callable=serving._measure_o
 print(json.dumps(ob._plain(row), sort_keys=True))
 """
         env = dict(os.environ)
-        env["PYTHONPATH"] = str((__import__("pathlib").Path.cwd() / "scripts/kernel_rnd"))
+        env["PYTHONPATH"] = str(__import__("pathlib").Path(__file__).resolve().parents[2])
         child = subprocess.Popen([sys.executable, "-c", program], stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE, text=True, env=env)
         pid = child.pid

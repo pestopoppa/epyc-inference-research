@@ -749,7 +749,9 @@ def test_main_keep_grade_arm_is_adopted_then_restored_into_a_new_epoch(monkeypat
                     mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
                     mock.patch.object(run.os, "sched_setaffinity"), \
                     mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
-                        n_embd=1536, dominant_quant="Q5_0")), \
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
+                    mock.patch.object(run.workload_contract, "read_split_census", return_value=SimpleNamespace(
+                        n_embd=1536, dominant_quant="Q5_0", quant_label="Q5_0")), \
                     mock.patch.object(cpu_profile, "profile_loop",
                                       side_effect=cpu_profile.CpuProfileRefused("fixture")), \
                     mock.patch.object(serving, "_measure_once", measure_once), \

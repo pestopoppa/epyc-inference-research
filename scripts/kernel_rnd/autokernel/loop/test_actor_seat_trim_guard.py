@@ -349,13 +349,13 @@ class PromptAndCard(_Tmp):
 
     def test_knobs_off_is_the_control_prompt_byte_for_byte(self):
         seen = self._prompt(actors.ActorSeat(bounded=False))
-        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), fx.CONTROL_SHA256)
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), fx.LIVE_PROMPT_SHA256)
         fx.assert_snapshot_only(self, seen["env"], seen["config"], self.lane)
 
     def test_trim_alone_changes_no_prompt_byte(self):
         seen = self._prompt(actors.ActorSeat(bounded=False, trim_instructions=True,
                                              trim_tools=True))
-        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), fx.CONTROL_SHA256)
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), fx.LIVE_PROMPT_SHA256)
 
     def test_the_guarded_prompt_names_the_lane_first_and_the_build_as_a_binary(self):
         seen = self._prompt(actors.ActorSeat(bounded=False, **ALL_ON))
@@ -366,7 +366,7 @@ class PromptAndCard(_Tmp):
         self.assertIn(f"Never read source under `{self.root}`", head)
         self.assertIn("Never build, compile", head)
         self.assertIn("You are read-only", head)
-        self.assertTrue(seen["prompt"].endswith(fx._real_prompt()))
+        self.assertTrue(seen["prompt"].endswith(fx._real_prompt() + "\n\n" + actors.ANTI_GAMING_RULE))  # 57f6db044
         self.assertEqual(seen["env"][actors.SEAT_ENV_ARM],
                          "plain+trim-instr+trim-tools+lane-guard")
 
@@ -378,7 +378,7 @@ class PromptAndCard(_Tmp):
     def test_codex_prompts_are_never_guarded(self):
         seen = self._prompt(actors.ActorSeat(bounded=False, **ALL_ON),
                             backend=actors.backend_for("gpt-5.6-sol", "high"))
-        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), fx.CONTROL_SHA256)
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), fx.LIVE_PROMPT_SHA256)
 
     def test_the_card_names_the_lane_and_labels_the_build_a_binary(self):
         target = {"recipe": {"backend": "cpu", "build_dir": str(self.build)}}
