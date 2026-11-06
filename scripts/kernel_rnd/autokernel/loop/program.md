@@ -692,6 +692,24 @@ Constraints (measured facts, not priors):
   toward the diff-size bound and must not be inlined as text in a patch.
 - Never bypass the diff-size or reward-hack scans for asm. Record `.co` provenance
   (retarget tool sha, source `.co` sha, llvm-mc version) and a hazard audit.
+- A sub-tier (b) candidate (isa_schedule + `asm_artifacts`) may declare up to 8 files, all
+  under `ggml/src/ggml-hip/` or `ggml/src/ggml-cuda/` and including the advised target file
+  (loader, dispatch, CMake sha pin). Every other candidate still binds exactly one file.
+- **Stream-capture probes stay refused** (`hipStreamIsCapturing(` / `cudaStreamIsCapturing(`,
+  `phase_detection` scan). Reason: a branch on capture state splits the code by measurement
+  phase. test-backend-ops correctness and graph-captured timing can then run different paths,
+  and a regex scan cannot prove which side is "the fallback". A fast path that must not run
+  inside a capture gates on `GGML_CUDA_DISABLE_GRAPHS` instead. Every arm (anchor and
+  candidate) then runs with `GGML_CUDA_DISABLE_GRAPHS=1`, so the oracle and the timer see the
+  same path. Graph-on behaviour is a later e2e question, not part of the cheap suite.
+- Shape- or mask-restricted fast paths need oracle cases the stock corpus lacks. A candidate
+  may not edit `tests/test-backend-ops.cpp`. Use a loop-owned case set instead:
+  `evaluator/oracle_cases/<OP>/<name>.{json,txt}`, loaded by `evaluator/oracle_cases.py`
+  (sha-pinned `--test-file`, every line is the target op, a path-witness regex). Run it twice:
+  once where the witness must appear, and once with the kill switch where it must not.
+- Provenance is checked against the research tool's blob sha. H5's fwd_hd128 `.co` regenerate
+  bit-identically with `asm_retarget/retarget_gfx942_gfx90a.py one` from the AITER MI300 inputs
+  (2026-11-06). Regenerate with that tool; do not cite a packet-local tool.
 
 ## MI210 port results 2026-11-06 (AK-ASM, vs C6) — KEEP/DROP receipts
 

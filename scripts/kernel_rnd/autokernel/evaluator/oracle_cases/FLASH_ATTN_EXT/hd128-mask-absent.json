@@ -1,0 +1,9 @@
+{
+ "schema": "epyc.autokernel.oracle_case_set.v1",
+ "op": "FLASH_ATTN_EXT",
+ "name": "hd128-mask-absent",
+ "cases_file": "hd128-mask-absent.txt",
+ "cases_sha256": "bc354cfd9bef4bbd7afa31da047a5d91dc162fce0df3160a7e0d23c412244c62",
+ "n_cases": 6,
+ "witness": "ggml_cuda_fa_asm: gfx90a FA-v3 asm path ran"
+}

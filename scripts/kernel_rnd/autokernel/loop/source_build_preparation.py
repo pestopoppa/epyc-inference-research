@@ -188,6 +188,24 @@ def _validate_materialized_source(capability):
             "materialized source capability is not an original owner issuance")
 
 
+# An isa_schedule candidate that ships asm_artifacts (source-patch v2) cannot be a
+# one-file change: the code object needs a CMake sha pin, a loader and a dispatch
+# hook. Only that shape may declare a bounded set of files, all inside the GPU
+# backend directories; every other candidate stays bound to ONE target file.
+ASM_MULTI_FILE_PREFIXES = ("ggml/src/ggml-hip/", "ggml/src/ggml-cuda/")
+ASM_MULTI_FILE_MAX = 8
+
+
+def _declared_files_admissible(manifest, target_surface):
+    files = manifest.declared_files
+    if files == (target_surface,):
+        return True
+    if manifest.change_class != "isa_schedule" or not manifest.asm_artifacts:
+        return False
+    return (target_surface in files and 1 < len(files) <= ASM_MULTI_FILE_MAX
+            and all(path.startswith(ASM_MULTI_FILE_PREFIXES) for path in files))
+
+
 def _validate_source(row):
     if set(row) != {"schema", "kind", "selected_work", "resolved_campaign", "advice",
                     "actor_profile_digest", "execution_authorized", "assignment",
@@ -212,7 +230,7 @@ def _validate_source(row):
             or driver._pinned_source_revision(resolved) != manifest.instrument_commit
             or manifest.mechanism_id != selected.actor_request.proposal.mechanism_id
             or advice["mechanism"] != manifest.mechanism_id
-            or manifest.declared_files != (advice["target_surface"],)
+            or not _declared_files_admissible(manifest, advice["target_surface"])
             or advice["target_symbol"] not in manifest.declared_symbols[advice["target_surface"]]
             or type(estimate) is not int or estimate < 1):
         raise PreparationBindingRefused("source advice/assignment/immutable artifact differs")
