@@ -150,8 +150,13 @@ def run(a, out=print, *, record_json=None):
             v, det = libcmp.classify(os.path.join(a.base_image, f), os.path.join(a.new_image, nf), ui_ok, (ib, inn))
             if v == 'SAME':
                 cnt['same'] += 1
-            elif v == 'CODE-DIFF' and st in a.expected_changed:
-                out(f'  EXPECTED    {nf}  code differs (this fold changes it)')
+            elif v in ('CODE-DIFF', 'UNEXPLAINED') and st in a.expected_changed:
+                # A declared lib may differ in code OR only in non-code sections (e.g. the non-reproducible llguidance
+                # rust static lib inside libllama-common.so). Only CODE-DIFF used to be honoured, so a declared lib
+                # classified UNEXPLAINED still failed the gate. The detail is still printed for the record.
+                out(f'  EXPECTED    {nf}  {v.lower()} (declared --expected-changed)')
+                for l in det:
+                    out('      ' + l)
                 cnt['expected'] += 1
                 v = 'EXPECTED'
             elif v in ('EXPLAINED', 'EXPLAINED-PATH', 'EXPLAINED-UI'):

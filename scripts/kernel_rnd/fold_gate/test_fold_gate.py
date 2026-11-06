@@ -341,3 +341,20 @@ def test_driver_reports_explained_path_and_passes(tmp_path):
         os.rename(os.path.join(d, 'libfix.so'), os.path.join(d, 'libllama-fix.so'))
     assert fold_gate.run(ns, lines.append), lines
     assert any('EXPLAINED-PATH' in l for l in lines) and any('explained-path=1' in l for l in lines)
+
+
+@needs_gcc
+def test_expected_changed_covers_unexplained_lib(tmp_path):
+    """--expected-changed must also accept a declared lib classified UNEXPLAINED (non-code diff), not only CODE-DIFF;
+    an undeclared UNEXPLAINED lib still fails.  Regression: C6 fold 65da39eb1 gate 4c, libllama-common.so (llguidance)."""
+    ba, nb = tmp_path / 'base' / 'bin', tmp_path / 'new' / 'bin'
+    ba.mkdir(parents=True); nb.mkdir(parents=True)
+    for d, txt in ((ba, 'hello there'), (nb, 'goodbye now')):
+        shutil.move(build(d.parent, 'c', BASE_SRC.replace('BUILDINFO', txt)), d / 'libllama-common.so')
+    assert libcmp.classify(str(ba / 'libllama-common.so'), str(nb / 'libllama-common.so'))[0] == 'UNEXPLAINED'
+    mk = lambda exp: fold_gate.argparse.Namespace(base_image=str(ba), new_image=str(nb), src_repo=None, base_commit=None,
+                                                  cand_commit=None, expected_changed=exp, ui_path=['tools/ui'])
+    lines = []
+    assert fold_gate.run(mk(['libllama-common.so']), lines.append), lines
+    assert any('EXPECTED' in l and 'unexplained' in l for l in lines)
+    assert not fold_gate.run(mk([]), [].append)
