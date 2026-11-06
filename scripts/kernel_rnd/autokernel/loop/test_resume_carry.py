@@ -25,6 +25,7 @@ OTHER_SRC = "ggml/src/ggml-cpu/other.cpp"
 EPOCH_A = base.EPOCH
 EPOCH_B = "b" * 64
 FAMILY = "f" * 64
+MEAS = "c" * 64
 TARGET = base.TARGET
 HALF_TARGET = resume.target_identity(
     measurement_surface="serving:demo.cpu-half-0123456789abcdef", model="/models/demo.gguf")
@@ -338,6 +339,38 @@ class WhatIsNeverCarried(Fixture):
         queue, report = self.prepare_at(new)
         self.assertEqual(len(queue), 0)
         self.assertIn("already consumed: resumed at", report["carry_refused"][0]["reason"])
+
+    def _measurement_bound_checkpoint(self):
+        """A checkpoint bound on a measurement epoch that survives the anchor moving."""
+        self.owner = Owner(self.store, self.repo, self.anchor, measurement_epoch=MEAS)
+        self.pend_at_author()
+
+    def test_a_settled_bound_checkpoint_is_not_re_rejected_as_anchor_changed(self):
+        # AK-FAILRULE-1: 24 checkpoints already resumed and settled at the old anchor were
+        # re-claimed "rejected: anchor changed" (and recorded as attempt rows) after every
+        # champion move, though their anchor was an ancestor.
+        self._measurement_bound_checkpoint()
+        queue, _ = resume.prepare(self.store, epoch=EPOCH_A, anchor_commit=self.anchor,
+                                  target=TARGET, repo=self.repo, scratch=self.tmp,
+                                  rules_fingerprint=base.CHANGED_RULES, measurement_epoch=MEAS)
+        point = queue.take(base.Worker(self.repo), self.anchor)
+        with resume.ClaimLedger(self.store) as ledger:
+            ledger.settle(point.checkpoint_id, self.anchor, result_status="measured_null")
+        before = len(self.claims())
+        new = self.keep()
+        queue, report = self.prepare_at(new, epoch=EPOCH_B, measurement_epoch=MEAS)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(report["rejected"], [])
+        self.assertEqual(len(self.claims()), before)
+        self.assertEqual(base.rows_with(self.store, "resume_rejected"), [])
+        self.assertIn("already consumed", report["carry_refused"][0]["reason"])
+
+    def test_negative_control_an_unsettled_bound_checkpoint_still_carries(self):
+        self._measurement_bound_checkpoint()
+        new = self.keep()
+        queue, report = self.prepare_at(new, epoch=EPOCH_B, measurement_epoch=MEAS)
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(report["rejected"], [])
 
     def test_an_anchor_change_rejection_does_not_consume_it(self):
         self.pend_at_author()

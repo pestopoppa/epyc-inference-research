@@ -1272,6 +1272,13 @@ def consumed_elsewhere(checkpoint_id: str, anchor_commit: str,
     return None
 
 
+#: `carry_refusal` prefix for a checkpoint already used up at another anchor. That is the
+#: claim ledger working as designed, not a candidate verdict: never claimed or recorded as a
+#: rejected attempt again (AK-FAILRULE-1: 24 settled checkpoints were re-listed as
+#: "anchor changed" rejections after each champion move).
+CONSUMED_PREFIX = "already consumed:"
+
+
 def carry_refusal(candidate: Candidate, *, bound: bool, scope: CarryScope) -> str | None:
     """Why this checkpoint cannot follow the champion to `scope.anchor_commit`, or None.
 
@@ -1311,7 +1318,7 @@ def carry_refusal(candidate: Candidate, *, bound: bool, scope: CarryScope) -> st
             return f"target {key} family differs: {then[key]} != {now[key]}"
     used = consumed_elsewhere(candidate.checkpoint_id, scope.anchor_commit, scope.claim_rows)
     if used is not None:
-        return f"already consumed: {used}"
+        return f"{CONSUMED_PREFIX} {used}"
     return None
 
 
@@ -1704,12 +1711,13 @@ class ResumeQueue:
                 continue
             if scope is not None and not (
                     bound and candidate.checkpoint.get("anchor_commit") == self.anchor_commit):
-                if carry_refusal(candidate, bound=bound, scope=scope) is None:
+                why = carry_refusal(candidate, bound=bound, scope=scope)
+                if why is None:
                     if ineligible_reason(candidate, rules_fingerprint=rules,
                                          scope_fingerprint=scope_fp) is not None:
                         continue
                     candidate = carry_checkpoint(candidate, scope=scope)
-                elif not bound:
+                elif not bound or why.startswith(CONSUMED_PREFIX):
                     continue
             groups.setdefault(candidate.group, []).append(candidate)
         for members in groups.values():
@@ -1919,6 +1927,14 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
                 if why is not None:
                     if not bound:
                         # Not this launch's: never claimed, only listed.
+                        report["carry_refused_count"] += 1
+                        if len(report["carry_refused"]) < CARRY_REFUSED_LISTED:
+                            report["carry_refused"].append({**candidate.summary(),
+                                                            "reason": why})
+                        continue
+                    if why.startswith(CONSUMED_PREFIX):
+                        # Settled at an earlier anchor: not this launch's work, and not a
+                        # rejection either. Listed only, never claimed or recorded.
                         report["carry_refused_count"] += 1
                         if len(report["carry_refused"]) < CARRY_REFUSED_LISTED:
                             report["carry_refused"].append({**candidate.summary(),
