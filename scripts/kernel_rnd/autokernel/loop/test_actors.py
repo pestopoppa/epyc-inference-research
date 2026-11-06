@@ -819,7 +819,8 @@ class Backends(unittest.TestCase):
     def test_a_provider_slash_model_routes_to_opencode(self):
         b = actors.backend_for("deepseek/deepseek-v4-flash", "max")
         self.assertEqual(b.kind, "opencode")
-        argv = b.argv("PROMPT", Path("/ws"))
+        with mock.patch.object(actors, "opencode_uses_v2_flags", return_value=False):
+            argv = b.argv("PROMPT", Path("/ws"))
         self.assertEqual(argv[0], actors.OPENCODE)
         self.assertEqual(argv[1], "run")
         self.assertIn("--auto", argv)
@@ -964,6 +965,44 @@ class Backends(unittest.TestCase):
         self.assertEqual(argv, b.argv("PROMPT", workspace))
         self.assertEqual(ran.call_args.kwargs["cwd"], str(workspace))
 
+
+
+class OpencodeFlagStyle(unittest.TestCase):
+    """opencode v2.2.5 rejects `--dir` and `--variant` (AK planner seat died at launch)."""
+
+    V1 = "FLAGS\n  --dir string\n  --model, -m string\n  --variant string\n"
+    V2 = "FLAGS\n  --model, -m string  Model, provider/model#variant\n  --auto\n"
+
+    def fake(self, help_text, rc=0):
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        path = d / "opencode"
+        path.write_text(f"#!/bin/sh\ncat <<'EOF'\n{help_text}EOF\nexit {rc}\n")
+        path.chmod(0o755)
+        actors._OPENCODE_FLAG_STYLE.pop(str(path), None)
+        return str(path)
+
+    def argv(self, binary):
+        b = actors.Backend("opencode", "deepseek/deepseek-v4-flash", "max", binary)
+        return b.argv("PROMPT", Path("/ws"))
+
+    def test_v2_cli_gets_no_dir_or_variant_and_the_variant_rides_the_model(self):
+        argv = self.argv(self.fake(self.V2))
+        self.assertNotIn("--dir", argv)
+        self.assertNotIn("--variant", argv)
+        self.assertEqual(argv[argv.index("-m") + 1], "deepseek/deepseek-v4-flash#max")
+        self.assertIn("--auto", argv)
+
+    def test_negative_control_a_v1_cli_keeps_the_legacy_flags(self):
+        argv = self.argv(self.fake(self.V1))
+        self.assertEqual(argv[argv.index("--dir") + 1], "/ws")
+        self.assertEqual(argv[argv.index("--variant") + 1], "max")
+        self.assertEqual(argv[argv.index("-m") + 1], "deepseek/deepseek-v4-flash")
+
+    def test_an_unreadable_help_falls_back_to_legacy_and_is_not_cached(self):
+        self.assertFalse(actors.opencode_uses_v2_flags("/nonexistent/opencode"))
+        self.assertNotIn("/nonexistent/opencode", actors._OPENCODE_FLAG_STYLE)
+        self.assertFalse(actors.opencode_uses_v2_flags(self.fake(self.V2, rc=1)))
 
 
 class RawReplyPersistenceAndStreamFallback(unittest.TestCase):

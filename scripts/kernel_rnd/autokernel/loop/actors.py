@@ -108,6 +108,27 @@ _CLAUDE_CRITIC_NOTE = (
     "delete, build, compile, benchmark, or test anything. Reply exactly as instructed.")
 
 
+_OPENCODE_FLAG_STYLE: dict[str, bool] = {}
+
+
+def opencode_uses_v2_flags(binary: str) -> bool:
+    """True when `<binary> run --help` no longer offers `--dir` (opencode v2.x: no
+    `--dir`/`--variant`, model is `provider/model#variant`). Probed once per binary; an
+    unreadable help (missing binary, timeout) keeps the legacy flags."""
+    cached = _OPENCODE_FLAG_STYLE.get(binary)
+    if cached is not None:
+        return cached
+    try:
+        done = subprocess.run([binary, "run", "--help"], capture_output=True, text=True,
+                              timeout=20, stdin=subprocess.DEVNULL)
+        text = (done.stdout or "") + (done.stderr or "")
+        result = done.returncode == 0 and "--model" in text and "--dir" not in text
+    except (OSError, subprocess.SubprocessError):
+        return False  # not cached: a transient failure must not pin the style
+    _OPENCODE_FLAG_STYLE[binary] = result
+    return result
+
+
 @dataclass(frozen=True)
 class Backend:
     """One external coding agent: which binary, which model, how much reasoning.
@@ -162,9 +183,18 @@ class Backend:
             # inner quote backslash-escaped (2,982 of them in the DS41 2026-09-24
             # planner prompt, all JSON). Stdin is appended verbatim. It also keeps a
             # ~100 KB prompt clear of the kernel's 128 KiB per-argument limit.
+            # opencode v2 (2.2.5) dropped `--dir` and `--variant`: the working dir is the
+            # process cwd (every caller passes `cwd=workspace`) and the variant rides the
+            # model as `provider/model#variant`. Older CLIs keep the legacy flags.
+            if opencode_uses_v2_flags(self.binary):
+                model_args = ["-m", f"{self.model}#{self.effort}" if self.effort
+                              and "#" not in self.model else self.model]
+                dir_args: list[str] = []
+            else:
+                model_args = ["-m", self.model, "--variant", self.effort]
+                dir_args = ["--dir", str(workspace)]
             return [self.binary, "run", *([] if read_only else ["--auto"]),
-                    "--dir", str(workspace),
-                    "-m", self.model, "--variant", self.effort,
+                    *dir_args, *model_args,
                     *(["--agent", self.agent] if self.agent else [])]
         raise ValueError(f"unknown backend kind {self.kind!r}")
 
