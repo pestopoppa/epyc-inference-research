@@ -16,12 +16,12 @@ mechanism is already a measured negative: `akm-hist-q8-prefetch` (-12%/-18% on 2
 Run only as a 5-pair confirmation on C6 if a free GPU slot exists. Do not author new prefetch code.
 **Falsifier:** median on/off < 1.03 over 5 interleaved valid pairs (expected, per akm-hist-q8-prefetch).
 
-## AK-ASM-H8 -- fused MoE expert GEMM (sorted tiles + fused gate/up + GLU) for A3B / Q38FN
+## AK-ASM-H8 -- fused MoE expert GEMM (sorted tiles + fused gate/up + GLU) for A3B (Q38FN cells only if a hybrid deployment is adopted)
 
 Open: r1 crashed in correctness (MUL_MAT_ID rc=-6); r3 (store cb973fc37) produced perf cells but no
 verdict. Arms: technique port into `mmid.cu` (current), CK 2-stage MoE (sorting unsupported on gfx90a per
 the AITER step-1 trial), per-channel int8 requant (quality gate). Est. A3B/Q38FN prefill +10-20%,
-verify +5-10% [inferred].
+verify +5-10% [inferred]. Q38FN is CPU-served in production (does not fit VRAM); its cells are informational.
 **Falsifier:** geomean C6/new < 1.10 over A3B/Q38FN MUL_MAT_ID cells at M >= 512, any M <= 8 cell slower
 than 0.97x, or MUL_MAT_ID correctness failure.
 
@@ -58,13 +58,19 @@ the FA share at long context].
 **Falsifier:** pp32k gain < 3% vs C6, or graph-captured run fails/regresses.
 Effort S (measurement on an existing store).
 
-## AK-ASM-H19 (proposed) -- A3B on GPU: graph-split census, then fusion where splits remain
+## AK-ASM-H19 (proposed) -- A3B on GPU: zero graph splits (MANDATORY objective)
 
-H13 won +11.7% on Q38FN mainly by removing CPU/GPU splits (294 -> 100 per token). Count splits per token
-for Qwen3.6-35B-A3B on C6 (`GGML_SCHED_DEBUG`), and port the H13 recipe (GPU-side op coverage) to any op
-that forces a split. Expected +3-10% A3B decode if splits/token > 50 [inferred from H13].
-**Falsifier:** A3B splits/token <= 10 (nothing to remove), or decode gain < 2%.
-Effort S-M.
+Operator policy 2026-11-06: Qwen3.8-27B and Qwen3.6-35B-A3B each run entirely on CPU or entirely on GPU.
+Zero backend graph splits (CPU fallbacks) on their GPU decode and prefill path is a MANDATORY objective,
+not an optimisation. A3B on MI210 (Q8_0, ~37 GB) fits. Enumerate every CPU fallback / graph split on the A3B
+GPU graph, decode AND prefill (`GGML_SCHED_DEBUG` / GGML_SCHED split count, per token and per ubatch), and give
+each offending op a GPU kernel using the H13 recipe (GPU-side op coverage; H13 took Q38FN splits 294 -> 100).
+Repeat until splits == 0. The same zero-split requirement applies to Qwen3.8-27B on GPU: run the census on its
+decode and prefill graphs and close every split the same way.
+**Falsifier / done:** split count 0 (decode and prefill) with a `test-backend-ops` correctness pass for every
+new kernel. Any remaining split is a blocker to be closed, not a tolerated cost; a decode-speed gain is
+reported but is not the done criterion.
+Effort S-M per split class.
 
 ## AK-ASM-H20 (proposed) -- prefill GEMM: shape-tuned rocBLAS / hipBLASLt selection for 27B and A3B
 
@@ -75,9 +81,20 @@ epilogue (convert is ~15% of prefill). Expected 27B pp2048 +5-10% [inferred].
 **Falsifier:** best tuned algorithm within 3% of the default at every production shape.
 Effort S-M.
 
-## AK-ASM-H21 (proposed) -- QSA + MoE sparse path for Q38FN prefill at long context
+## AK-ASM-H21 (proposed) -- QSA + MoE sparse path for Q38FN prefill at long context (if a hybrid deployment is adopted)
 
-H12 was measured at kv=32k op level. Extend the fused QSA kernel to the prefill (n_q >= 512) path and time
+Q38FN does not fit 64 GB VRAM and is a fully CPU model in production; this seed applies only if a hybrid
+CPU+GPU deployment is adopted (see H22). H12 was measured at kv=32k op level. Extend the fused QSA kernel to the prefill (n_q >= 512) path and time
 pp32k/pp80k on Q38FN end to end. Expected +10-25% long-context prefill [inferred: dense masked FA reads all KV].
 **Falsifier:** pp32k gain < 5%, or output mismatch beyond FA tolerance.
+Effort M.
+
+## AK-ASM-H22 (proposed, INFORMATIONAL) -- Q38FN hybrid CPU+GPU investigation
+
+Q38FN does not fit 64 GB VRAM; in production it is fully CPU-served. Hybrid CPU+GPU is uncommitted and worth
+measuring only to inform the next stack decision; here graph splits are structural (CPU experts), not a defect.
+Measure (a) the per-token cost of the structural CPU-expert round trips under `--n-cpu-moe` (sync + PCIe per
+MoE layer), with and without HIP graphs; (b) a GPU-assists-prefill-only mode vs CPU-only prefill.
+**Output:** a decision table (t/s decode, pp t/s, per-split cost) vs the CPU-only production baseline.
+No champion claim, no promotion gate; informational only.
 Effort M.
