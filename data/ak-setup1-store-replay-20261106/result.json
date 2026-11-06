@@ -1,0 +1,14 @@
+{
+ "anchor_hit_rate": 0.8444444444444444,
+ "anchor_tree_hits": 38,
+ "baseline_build_key_hits": 0,
+ "candidate_hit_rate": 0.022222222222222223,
+ "candidate_tree_hits": 1,
+ "entries_with_logs": 13,
+ "jobs_seen": [
+  1
+ ],
+ "n_entries": 45,
+ "schema": "epyc.autokernel.setup1_store_replay.v1",
+ "skipped_seconds_estimate": 39485.4
+}

@@ -29,6 +29,7 @@ from ..execution import instrument_integrity
 from ..evaluator import integrity
 from ..resource import device_claim
 from . import build_recipe
+from . import build_store_lookup
 from . import discovery_controller as controller
 from . import discovery_deployment as deployment
 from . import gpu_source_adapter
@@ -2174,7 +2175,8 @@ def _static_registry(config: deployment.DiscoveryDeployment,
         # was previously ABSENT here and fell to the CMake default OFF, which is
         # unsafe on gfx90a under -fa on (non-finite values at longer sequence
         # lengths). Nobody decided that; it was an unset variable.
-        cmake_defines=build_recipe.HOUSE_GPU_RECIPE.cmake_defines())
+        cmake_defines=build_recipe.HOUSE_GPU_RECIPE.cmake_defines(),
+        kernel_store=build_store_lookup.DEFAULT_STORE)
     snapshot_files, snapshot_semantics = _production_runtime_snapshot(config.production_path)
     snapshot = ProductionSnapshotBinding(
         config.production_path, snapshot_files, snapshot_semantics,

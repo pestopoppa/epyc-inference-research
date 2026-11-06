@@ -27,6 +27,7 @@ from ..execution import t0_provider, worktree
 from ..resource import device_claim
 from . import discovery_controller as controller
 from . import gpu_source_evidence as evidence
+from . import build_store_lookup
 from . import gpu_source_proofs
 from . import split_runtime_verifier
 
@@ -1974,6 +1975,10 @@ class StaticGpuSourceBuilder:
     #: of real cmake builds and 64-way contention destabilises the timing-sensitive
     #: ones. Recorded in the build key, so changing it invalidates the cache.
     build_jobs: int = _BUILD_JOBS
+    #: AK-SETUP-1: content-addressed candidate build index (verified lookup, hard-link reuse).
+    #: None disables it (the default, so tests never write the shared store); the production
+    #: factory passes `build_store_lookup.DEFAULT_STORE`.
+    kernel_store: Path | None = None
     build_cpu_list: str | None = _BUILD_CPU_LIST
 
     def _sealed_cmake_defines(self) -> tuple[tuple[str, str], ...]:
@@ -3314,9 +3319,26 @@ class StaticGpuSourceBuilder:
                     cmake_defines=self._sealed_cmake_defines(),
                     cmake=str(contract["toolchain"]["programs"]["cmake"]["resolved"]))))
             results = []
+            store_hits: dict[str, dict[str, Any]] = {}
+            candidate_store_key = build_store_lookup.store_key(contract)
             for ident, snapshot, build_dir, plan in plans:
                 log = cache_root / "logs" / f"{ident}.log"
                 log.parent.mkdir(parents=True, exist_ok=True)
+                if ident != "akc-anchor":
+                    # AK-SETUP-1: kernel store first. A verified hit is materialised and
+                    # its recorded BuildResult replayed; anything else builds fresh.
+                    entry = (build_store_lookup.lookup(self.kernel_store, candidate_store_key)
+                             if self.kernel_store is not None else None)
+                    if (entry is not None and set(_REQUIRED_TARGETS).issubset(
+                            set(entry["result"].get("facts", {}).get("built_targets", ())))
+                            and build_store_lookup.materialize(entry, Path(build_dir.path))):
+                        store_hits[ident] = {"store_hit": True, "store_key": candidate_store_key,
+                                             "skipped_seconds": entry.get("build_seconds")}
+                        results.append((ident, snapshot, build_dir, _ReplayedBuild(entry["result"])))
+                        continue
+                    store_hits[ident] = {"store_hit": False, "store_key": candidate_store_key,
+                                         "skipped_seconds": None}
+                _build_started = time.monotonic()
                 if ident == "akc-anchor":
                     reused = _reuse_anchor_build(
                         Path(build_dir.path), snapshot=snapshot,
@@ -3336,6 +3358,10 @@ class StaticGpuSourceBuilder:
                 if not set(_REQUIRED_TARGETS).issubset(set(result.facts.built_targets)):
                     raise _CompileFailure(
                         f"build did not prove required targets for {ident}")
+                if ident != "akc-anchor" and self.kernel_store is not None:
+                    build_store_lookup.publish(
+                        self.kernel_store, candidate_store_key, build_dir=Path(build_dir.path),
+                        result=result.to_dict(), build_seconds=time.monotonic() - _build_started)
                 if ident == "akc-anchor":
                     _publish_anchor_build(
                         Path(build_dir.path), snapshot=snapshot,
@@ -3439,6 +3465,7 @@ class StaticGpuSourceBuilder:
                 "patch_applied": True,
                 "production_tree": False,
                 "builds": {ident: result.to_dict() for ident, _snapshot, _build, result in results},
+                "store_hit": {ident: dict(rec) for ident, rec in store_hits.items()},
                 "anchor_identity": vars(anchor_identity),
                 "candidate_identity": vars(candidate_identity),
                 "anchor_source_tree_receipt": str(anchor_source_receipt),

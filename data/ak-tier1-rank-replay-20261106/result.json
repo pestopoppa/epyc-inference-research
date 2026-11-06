@@ -1,0 +1,54 @@
+{
+ "flip_rate_by_duration_gap": {
+  "0-600s": {
+   "flips": 0,
+   "pairs": 0,
+   "rate": null
+  },
+  "3600-infs": {
+   "flips": 0,
+   "pairs": 0,
+   "rate": null
+  },
+  "600-3600s": {
+   "flips": 1,
+   "pairs": 1,
+   "rate": 1.0
+  },
+  "unknown": {
+   "flips": 0,
+   "pairs": 0,
+   "rate": null
+  }
+ },
+ "n_pairs": 2,
+ "pairs": [
+  {
+   "confirmed": 0.0013235495210608406,
+   "confirmed_status": "kept",
+   "diff": "5d9d6e5268d646db1de4fd7e5814be064a2adb6c7f5a0606597c5f577da7f1a6",
+   "gap_s": 2662.18587,
+   "screen": -0.022029107488138133,
+   "screen_status": "measured_null"
+  },
+  {
+   "confirmed": -0.0010089898224888705,
+   "confirmed_status": "measured_null",
+   "diff": "c9f97560a028124b4b6da52b1040ef07a75bc6fa048e7cad0c6e348d8854fbff",
+   "gap_s": 2264.935646,
+   "screen": -0.0062501960499238285,
+   "screen_status": "measured_null"
+  }
+ ],
+ "rho_ci95": null,
+ "schema": "epyc.autokernel.tier1_rank_replay.v1",
+ "sign_agreement": {
+  "agree": 1,
+  "judgeable": 2,
+  "rate": 0.5
+ },
+ "spearman_rho": null,
+ "stop_on_answer_met": false,
+ "threshold": 0.7,
+ "verdict": "UNDERDETERMINED: fewer than 3 pairs or degenerate ranks"
+}
