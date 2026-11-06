@@ -14,8 +14,9 @@ estimate is marked [inferred] with its arithmetic and symbolic where a model dim
 
 Ordering (prerequisites):
 
-    AK-GDN-S1 (share probe, CPU) --core share < 5% both phases--> close LinQuant line (oracle keeps correctness value only)
-                                 --core share >= 5% either phase--> AK-GDN-O1 (oracle) --> any GDN kernel seed (none filed yet)
+    AK-GDN-S1 (share probe, CPU) --core < 5% of WALL in prefill AND decode, every unit, both models--> close the CPU device for the LinQuant line
+                                 --core >= 5% of wall in any prefill or decode unit--> AK-GDN-O1 (oracle) --> any GDN kernel seed (none filed yet)
+    (the MI210 device is decided separately by main-inf22's row gdn-share-mi210-20261106; the line closes only where a device closes)
     AK-QH-A (audit) --> AK-QH-B (one Q4_K head arm, per model)
     AK-QR-1 (offline, no kernel) --> only a positive arm may seed a converter/kernel hypothesis later
 
@@ -24,19 +25,23 @@ Ordering (prerequisites):
 - **Target:** DS41 and Q38FN, CPU lane, C7r; op `GGML_OP_GATED_DELTA_NET` (chunked GDN graph: WY prep +
   state pass), separated from projections, attention and MLP.
 - **change_class:** none (measurement only; no source change; not authorable).
-- **Metric (shared definition with the MI210 half, main-inf22):** `gdn_core_share[phase] =
-  sum(time in the GDN recurrence-core ops) / total step wall time`, reported separately for
-  phase = decode (tg, per token) and phase = prefill (pp, per ubatch). Method on CPU = the loop's
-  existing CPU profile path (`loop/cpu_profile.py`, perf sampling attributed to symbols), at the codified
-  DS41 / Q38FN serving recipe and shape. The MI210 half must use the same numerator/denominator per
-  phase (rocprofv3 kernel time) so the halves compare; if main-inf22 has published a different
-  definition, this one is the CPU statement and the difference must be reconciled before closing.
+- **Metric (shared definition, set by main-inf22 in the GDN-SHARE-1 box of
+  `model-architecture-readiness.md`, 2026-11-06; this seed adopts it verbatim):** share =
+  sum(GDN_CORE time) / (a) total compute time and (b) wall time, per unit of work. GDN_CORE = the
+  `GGML_OP_GATED_DELTA_NET` node(s), or on the unfused path the `build_delta_net_chunking` /
+  `build_delta_net_autoregressive` nodes. Units: pp2048, pp32768, decode at depth 0 / 4k / 32k, and one
+  speculative verify step where the codified DS41 / Q38FN CPU recipe has one (record "n/a" otherwise).
+  Report both (a) and (b) for every unit. Method on CPU = the loop's existing CPU profile path
+  (`loop/cpu_profile.py`, per-node timing) at the codified serving recipe; the MI210 half is row
+  gdn-share-mi210-20261106 on C7r.
 - **Expected effect:** none (it decides routing). Prior [inferred]: GDN layers in a hybrid stack are a
   minority of per-token bytes, so decode share is likely small; prefill share is the open question.
-- **Stop-on-answer:** both phases measured on both models with two valid samples each, or the first
-  model whose two phases both clear 5% (line stays open).
-- **Stop-on-futility / falsifier (pre-registered):** core share < 5% in BOTH phases on BOTH campaigns ->
-  close the LinQuant implementation line as no-transfer; AK-GDN-O1 then lands for correctness value only.
+- **Stop-on-answer:** every unit measured on both models with two valid samples each, or the first
+  prefill or decode unit whose share of wall clears 5% (CPU stays open; stop).
+- **Stop-on-futility / falsifier (pre-registered, per device):** the CPU device closes for the LinQuant line
+  only if the core is < 5% of WALL for BOTH prefill (pp2048, pp32768) AND decode (all three depths) on
+  BOTH models. The compute-denominator share (a) is reported but does not decide. AK-GDN-O1 then lands
+  for correctness value only.
 - **Correctness gate:** none (no code change). Estimate: ~2 CPU-hours (handoff box).
 - **Citation:** intake-2641#record, intake-2642#record.
 
