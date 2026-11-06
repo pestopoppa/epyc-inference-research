@@ -1916,10 +1916,20 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
                              measurement_epoch=measurement_epoch, target=target,
                              claim_rows=ledger.rows(), immutable=dry_run)
                  if carry is not None else None)
+        # A harness fault on a resumed round re-emits the checkpoint it was resuming
+        # (same stage) on its `lane_error` row. That copy is NOT new work: the source's
+        # ledger claim already owns its bounded retry (`ClaimLedger.settle_outcome`),
+        # and queueing the copy would mint a fresh id with a fresh budget per fault.
+        faulted = {(row["checkpoint_id"], row["stage"]) for row in ledger.rows()
+                   if row.get("result_status") == "lane_error"}
         groups: dict[tuple, list[Candidate]] = {}
         for candidate, bound in pairs:
             if bound and candidate.checkpoint_id in claimed:
                 report["already_claimed"] += 1
+                continue
+            if (candidate.row_status == "lane_error"
+                    and (candidate.checkpoint.get("resumed_from"), candidate.stage) in faulted):
+                report["fault_reemissions"] = report.get("fault_reemissions", 0) + 1
                 continue
             if scope is not None and not (
                     bound and candidate.checkpoint.get("anchor_commit") == anchor_commit):
