@@ -335,5 +335,94 @@ class TestCodegenSummary(unittest.TestCase):
         self.assertIn("attempt_with_codegen(outcome, codegen_by_head)", source)
 
 
+H5_FA_CO_CANDIDATES = (
+    Path(__file__).parent / "fixtures" / "h5_fa_hd128.gfx90a.co",
+    Path("/mnt/raid0/llm/tmp/ak-asm-h5-fa-retarget-20261105/build/"
+         "fwd_hd128_bf16_rtne.gfx90a.co"),
+)
+
+
+class TestGfx90aIsaSidecar(unittest.TestCase):
+    NOTES = """\
+amdhsa.kernels:
+  - .name:           k0
+    .symbol:         k0.kd
+    .vgpr_count:     64
+    .agpr_count:     32
+    .sgpr_count:     40
+    .vgpr_spill_count: 3
+    .sgpr_spill_count: 0
+    .private_segment_fixed_size: 16
+    .group_segment_fixed_size: 8192
+amdhsa.target:   amdgcn-amd-amdhsa--gfx90a
+"""
+    DIS = """\
+1000 <k0>:
+\ts_setprio 3                                                  // 1000: BF8F0003
+\tv_mfma_f32_32x32x8_f16 a[0:15], v[0:1], v[2:3], a[0:15]       // 1004: D3D48000
+\tglobal_load_dwordx4 v[4:7], v[8:9], off                       // 1008: DC380000
+\ts_barrier                                                     // 100C: BF8A0000
+\tv_mfma_f32_32x32x8_f16 a[0:15], v[0:1], v[2:3], a[0:15]       // 1010: D3D48000
+\tv_add_u32 v0, v0, v1                                          // 1014: 68000101
+\tds_read_b128 v[4:7], v8                                       // 1018: D9FE0000
+\tv_mfma_f32_32x32x8_f16 a[0:15], v[0:1], v[2:3], a[0:15]       // 101C: D3D48000
+\ts_endpgm                                                      // 1020: BF810000
+"""
+
+    def test_text_fixture_gap_histogram_and_barrier_counts(self):
+        out = codegen_summary.gfx90a_isa_from_texts(self.NOTES, self.DIS)
+        block = out["k0"]["gfx90a_isa"]
+        self.assertEqual((block["vgpr"], block["agpr"], block["sgpr"]), (64, 32, 40))
+        self.assertEqual(block["vgpr_spill_count"], 3)
+        self.assertEqual(block["scratch_bytes"], 16)
+        self.assertEqual(block["lds_bytes"], 8192)
+        self.assertEqual(block["mfma"], 3)
+        gap = block["mfma_to_load_gap"]
+        # mfma#1 -> load immediately (gap 0); mfma#2 -> 2 insts to ds_read (gap 1);
+        # mfma#3 has no later load.
+        self.assertEqual((gap["0"], gap["1"], gap["none"]), (1, 1, 1))
+        self.assertEqual(sum(gap.values()), block["mfma"])
+        self.assertEqual(block["mfma_after_barrier"], 2)
+        self.assertEqual(block["mfma_within_16_after_barrier"], 2)
+        self.assertEqual(block["s_setprio"], 1)
+        self.assertEqual(block["instruction_mix"]["matrix"], 3)
+
+    def test_schedule_stats_pure(self):
+        stats = codegen_summary.schedule_stats(
+            ["v_mfma_x"] + ["v_nop"] * 40 + ["buffer_load_dword", "s_barrier", "v_mfma_y"])
+        self.assertEqual(stats["mfma_to_load_gap"]["33+"], 1)
+        self.assertEqual(stats["mfma_to_load_gap"]["none"], 1)
+        self.assertEqual(stats["mfma_after_barrier"], 1)
+
+    def test_sidecar_is_not_part_of_summary_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = codegen_summary.summarize_codegen("llama_gpu", tmp)
+        self.assertNotIn("gfx90a_isa", json.dumps(summary))
+
+    def test_h5_fa_hd128_code_object(self):
+        co = next((p for p in H5_FA_CO_CANDIDATES if p.is_file()), None)
+        if co is None:
+            self.skipTest("SKIP-MARKER: H5 FA hd128 .co fixture absent")
+        audit = codegen_summary._isa_audit()
+        if not (audit.LLVM_BIN / "llvm-readelf").is_file():
+            self.skipTest("SKIP-MARKER: ROCm llvm tools absent")
+        data = co.read_bytes()
+        doc = codegen_summary.gfx90a_isa_sidecar(data)
+        self.assertEqual(doc["status"], "ok", doc["reason"])
+        self.assertEqual(doc["code_object_sha256"], hashlib.sha256(data).hexdigest())
+        blocks = [v["gfx90a_isa"] for v in doc["kernels"].values()]
+        self.assertTrue(blocks)
+        top = max(blocks, key=lambda b: b["mfma"])
+        self.assertGreater(top["mfma"], 0)
+        self.assertGreater(top["vgpr"], 0)
+        self.assertEqual(sum(top["mfma_to_load_gap"].values()), top["mfma"])
+        with tempfile.TemporaryDirectory() as tmp:
+            ref = codegen_summary.retain_gfx90a_isa_sidecar(Path(tmp), data)
+            again = codegen_summary.retain_gfx90a_isa_sidecar(Path(tmp), data)
+            self.assertEqual(ref, again)
+            payload = (Path(tmp) / ref["ref"]).read_bytes()
+            self.assertEqual(hashlib.sha256(payload).hexdigest(), ref["sha256"])
+
+
 if __name__ == "__main__":
     unittest.main()

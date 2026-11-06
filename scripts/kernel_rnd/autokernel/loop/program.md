@@ -666,6 +666,33 @@ Each of these cost a gate re-run. Design the measurement around them up front.
 - **INT8 MFMA = f16 rate on MI210** (same shapes, same 181 TOPS/TFLOPS peak). Int8 arms can only
   win by removing bytes or conversions, never by compute headroom (H4 0.48x, H9 0.52x).
 
+## gfx90a low-level tier — ISA-schedule operator catalogue
+
+Sub-tier (a), source-only: a text diff to HIP source (builtins / pragmas / attributes). Its
+cheap suite is an ISA-audit diff (`gfx90a_isa_audit.py diff`) plus a paired A/B on the target
+op. Read the candidate's `gfx90a_isa` sidecar (`codegen_summary.retain_gfx90a_isa_sidecar`:
+VGPR/AGPR/SGPR, spill/scratch, LDS, MFMA-to-load gap histogram, MFMAs after `s_barrier`,
+`s_setprio` count) before timing; a spill or AGPR regression fails before any timing.
+
+| Operator id | Mechanism |
+|---|---|
+| `gfx90a.iglp_opt0` | `__builtin_amdgcn_iglp_opt(0)` — interleave DS/VMEM with MFMA in the loop body |
+| `gfx90a.iglp_opt1` | `__builtin_amdgcn_iglp_opt(1)` — alternate MFMA/DS-read pipeline |
+| `gfx90a.sched_group_barrier` | `__builtin_amdgcn_sched_group_barrier(mask, size, syncid)` sequences, explicit MFMA/VMEM/DS interleave |
+| `gfx90a.sched_barrier` | `__builtin_amdgcn_sched_barrier(mask)` — pin what the scheduler may not move across |
+| `gfx90a.mfma_before_barrier` | reorder so MFMAs issue before `__syncthreads()` (target: MFMAs-after-barrier count) |
+| `gfx90a.s_setprio` | `__builtin_amdgcn_s_setprio(n)` around the MFMA / load phases |
+
+Constraints (measured facts, not priors):
+- No fp8 MFMA on gfx90a (`mfma_f32_16x16x32_fp8_fp8` does not exist). int8 MFMA runs at the
+  f16/bf16 rate, so an int8 arm can only win by removing bytes or conversions.
+- Sub-tier (b), hand-written asm (`.co`), is allowed only after sub-tier (a) failed on the
+  same op. The `.co` bytes are content-addressed, hash-bound dependencies (sha256 pinned in
+  the build, fail closed on mismatch) and are never authored source; they do not count
+  toward the diff-size bound and must not be inlined as text in a patch.
+- Never bypass the diff-size or reward-hack scans for asm. Record `.co` provenance
+  (retarget tool sha, source `.co` sha, llvm-mc version) and a hazard audit.
+
 ## MI210 port results 2026-11-06 (AK-ASM, vs C6) — KEEP/DROP receipts
 
 Evidence: `/mnt/raid0/llm/tmp/<packet>/out*/RESULT.json`; summary

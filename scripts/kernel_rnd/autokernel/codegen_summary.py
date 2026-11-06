@@ -676,3 +676,190 @@ def retain_summary(store: Path, champion_head: str, *, backend: str,
         if os.path.exists(temporary):
             os.unlink(temporary)
     return summary
+
+
+# ---------------------------------------------------------------------------
+# gfx90a ISA sidecar (AK-GFX90A-ASM-SURFACE slice 1).
+#
+# Diagnostic only. It is retained as its own content-addressed file and is
+# referenced by its sha256; it is deliberately NOT embedded in summarize_codegen's
+# output, retain_summary's build frame, or any hashed candidate manifest.
+# Register/spill/LDS metadata comes from ``llvm-readelf --notes`` through
+# scripts/kernel_rnd/gfx90a_isa_audit.py; the schedule statistics below are
+# computed here from the textual disassembly.
+# ---------------------------------------------------------------------------
+GFX90A_ISA_SCHEMA = "epyc.autokernel.gfx90a_isa_sidecar.v1"
+_GAP_BUCKETS = ((0, 0, "0"), (1, 1, "1"), (2, 2, "2"), (3, 4, "3-4"), (5, 8, "5-8"),
+                (9, 16, "9-16"), (17, 32, "17-32"), (33, None, "33+"))
+_LOAD_PREFIXES = ("global_load", "buffer_load", "ds_read", "ds_load")
+_AFTER_BARRIER_WINDOW = 16
+_isa_audit_module: Any = None
+
+
+def _isa_audit():
+    """Load scripts/kernel_rnd/gfx90a_isa_audit.py (not a package) once."""
+    global _isa_audit_module
+    if _isa_audit_module is None:
+        import importlib.util
+        path = Path(__file__).resolve().parents[1] / "gfx90a_isa_audit.py"
+        spec = importlib.util.spec_from_file_location("gfx90a_isa_audit_for_codegen", path)
+        module = importlib.util.module_from_spec(spec)
+        import sys
+        sys.modules[spec.name] = module  # dataclasses need the module registered
+        spec.loader.exec_module(module)
+        _isa_audit_module = module
+    return _isa_audit_module
+
+
+def _gap_bucket(gap: int) -> str:
+    for low, high, label in _GAP_BUCKETS:
+        if gap >= low and (high is None or gap <= high):
+            return label
+    return _GAP_BUCKETS[-1][2]
+
+
+def schedule_stats(ops: list[str]) -> dict[str, Any]:
+    """Schedule statistics over one kernel's ordered opcode list.
+
+    ``mfma_to_load_gap``: for each v_mfma, the number of instructions between it
+    and the next global_load/buffer_load/ds_read (``none`` when no load follows).
+    ``mfma_after_barrier``: MFMAs with any earlier s_barrier in the kernel;
+    ``mfma_within_16_after_barrier`` counts those inside the 16 instructions
+    following the most recent barrier.
+    """
+    hist = {label: 0 for _, _, label in _GAP_BUCKETS}
+    hist["none"] = 0
+    next_load: list[int | None] = [None] * len(ops)
+    upcoming: int | None = None
+    for i in range(len(ops) - 1, -1, -1):
+        next_load[i] = upcoming
+        if ops[i].startswith(_LOAD_PREFIXES):
+            upcoming = i
+    mfma = after = near = setprio = 0
+    last_barrier: int | None = None
+    for i, op in enumerate(ops):
+        if op == "s_barrier":
+            last_barrier = i
+        elif op == "s_setprio":
+            setprio += 1
+        elif op.startswith("v_mfma"):
+            mfma += 1
+            nxt = next_load[i]
+            if nxt is None:
+                hist["none"] += 1
+            else:
+                hist[_gap_bucket(nxt - i - 1)] += 1
+            if last_barrier is not None:
+                after += 1
+                near += (i - last_barrier) <= _AFTER_BARRIER_WINDOW
+    return {"mfma": mfma, "mfma_to_load_gap": hist, "mfma_after_barrier": after,
+            "mfma_within_16_after_barrier": near, "s_setprio": setprio}
+
+
+def _kernel_isa_block(name: str, insts: list, meta: Mapping[str, Any],
+                      mix: dict[str, int]) -> dict[str, Any]:
+    spill_v = int(meta.get(".vgpr_spill_count") or 0)
+    spill_s = int(meta.get(".sgpr_spill_count") or 0)
+    block = {
+        "vgpr": int(meta.get(".vgpr_count") or 0),
+        "agpr": int(meta.get(".agpr_count") or 0),
+        "sgpr": int(meta.get(".sgpr_count") or 0),
+        "vgpr_spill_count": spill_v, "sgpr_spill_count": spill_s,
+        "scratch_bytes": int(meta.get(".private_segment_fixed_size") or 0),
+        "lds_bytes": int(meta.get(".group_segment_fixed_size") or 0),
+        "instruction_mix": mix,
+        "instructions": len(insts),
+    }
+    block.update(schedule_stats([ins.op for ins in insts]))
+    return block
+
+
+def gfx90a_isa_from_texts(notes_text: str, disassembly: str) -> dict[str, dict[str, Any]]:
+    """Per-kernel ``gfx90a_isa`` blocks from llvm-readelf --notes + llvm-objdump -d text."""
+    audit = _isa_audit()
+    meta = audit.parse_notes_text(notes_text)
+    # Hand-written .co files carry local ``label_XXXX`` symbols that
+    # llvm-objdump reports as section headers; fold them into the enclosing
+    # kernel so its instruction stream is not truncated at the first label.
+    dis: dict[str, list] = {}
+    current: str | None = None
+    for symbol, insts in audit.split_disassembly(disassembly).items():
+        if symbol in meta:
+            current = symbol
+            dis.setdefault(symbol, []).extend(insts)
+        elif current is not None and symbol.startswith(("label_", ".L")):
+            dis[current].extend(insts)
+        else:
+            current = None
+    out: dict[str, dict[str, Any]] = {}
+    for name in sorted(meta):
+        insts = dis.get(name, [])
+        counts = {"scalar": 0, "vector": 0, "matrix": 0, "memory": 0, "other": 0}
+        for ins in insts:
+            op = ins.op
+            kind = ("matrix" if "mfma" in op or "wmma" in op else
+                    "memory" if any(t in op for t in
+                                    ("load", "store", "buffer", "flat_", "ds_")) else
+                    "vector" if op.startswith("v_") else
+                    "scalar" if op.startswith("s_") else "other")
+            counts[kind] += 1
+        out[name] = {"gfx90a_isa": _kernel_isa_block(name, insts, meta[name], counts)}
+    return out
+
+
+def gfx90a_isa_sidecar(code_object: bytes) -> dict[str, Any]:
+    """Build the sidecar document for one gfx90a code object (bytes).
+
+    Returns ``status: unavailable`` with a reason when the ROCm llvm tools are
+    absent; never fabricates a block.
+    """
+    doc: dict[str, Any] = {
+        "schema": GFX90A_ISA_SCHEMA, "authority": "diagnostic_only",
+        "code_object_sha256": hashlib.sha256(code_object).hexdigest(),
+        "code_object_bytes": len(code_object), "kernels": {}, "status": "unavailable",
+        "reason": None}
+    audit = _isa_audit()
+    readelf, objdump = audit.LLVM_BIN / "llvm-readelf", audit.LLVM_BIN / "llvm-objdump"
+    if not (readelf.is_file() and objdump.is_file()):
+        doc["reason"] = "llvm-readelf/llvm-objdump unavailable"
+        return doc
+    try:
+        with tempfile.TemporaryDirectory(prefix="ak-isa-") as temporary:
+            path = Path(temporary) / "kernel.gfx90a.o"
+            path.write_bytes(code_object)
+            notes = audit._run("llvm-readelf", "--notes", str(path))
+            text = audit._run("llvm-objdump", "-d", "--no-show-raw-insn", str(path))
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        doc["reason"] = f"isa inspection failed: {type(exc).__name__}"
+        return doc
+    doc["kernels"] = gfx90a_isa_from_texts(notes, text)
+    doc["status"] = "ok" if doc["kernels"] else "unavailable"
+    doc["reason"] = None if doc["kernels"] else "no amdhsa kernels in notes"
+    return doc
+
+
+def retain_gfx90a_isa_sidecar(store: Path, code_object: bytes) -> dict[str, str]:
+    """Write the sidecar create-only under ``<store>/codegen/gfx90a_isa/`` and
+    return ``{"ref", "sha256"}`` for the caller to cite. The reference is NOT
+    added to any hashed manifest by this module."""
+    doc = gfx90a_isa_sidecar(code_object)
+    payload = (json.dumps(doc, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    digest = hashlib.sha256(payload).hexdigest()
+    directory = Path(store) / "codegen" / "gfx90a_isa"
+    directory.mkdir(parents=True, exist_ok=True)
+    destination = directory / f"{doc['code_object_sha256']}.{digest}.json"
+    if not destination.exists():
+        descriptor, temporary = tempfile.mkstemp(prefix=".isa.", dir=directory)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(temporary, destination)
+            except FileExistsError:
+                pass
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+    return {"ref": f"codegen/gfx90a_isa/{destination.name}", "sha256": digest}
