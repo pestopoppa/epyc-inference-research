@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 import hashlib
 import json
 import math
+import os
 import weakref
 from typing import Any, Mapping
 
@@ -38,22 +39,48 @@ def _bytes(value: Any) -> bytes:
 
 def _manifest(value: Mapping[str, Any]) -> source.SourcePatchManifest:
     # The native constructor owns patch/scope/reward policy; no path is re-opened.
-    if (set(value) != {"schema", "campaign_id", "proposal_id", "candidate_id", "source_tree",
-                      "production_base_commit", "instrument_commit", "change_class",
-                      "declared_files", "declared_symbols", "mechanism_id", "patch_sha256",
-                      "patch_encoding", "patch_base64"}
-            or value["schema"] != source.SCHEMA_SOURCE_PATCH
-            or value["patch_encoding"] != "base64"):
-        raise PreparationBindingRefused("authored manifest carrier differs")
-    return source.SourcePatchManifest(
-        campaign_id=value["campaign_id"], proposal_id=value["proposal_id"],
-        candidate_id=value["candidate_id"], source_tree=value["source_tree"],
-        production_base_commit=value["production_base_commit"],
-        instrument_commit=value["instrument_commit"], change_class=value["change_class"],
-        declared_files=tuple(value["declared_files"]),
-        declared_symbols={key: tuple(item) for key, item in value["declared_symbols"].items()},
-        mechanism_id=value["mechanism_id"], patch_sha256=value["patch_sha256"],
-        patch_bytes=base64.b64decode(value["patch_base64"], validate=True))
+    # v1 and v2 (asm_artifacts by store sha) carriers share one parser.
+    try:
+        return source.manifest_from_payload(value)
+    except (source.SourceCandidateError, KeyError, TypeError, ValueError) as exc:
+        raise PreparationBindingRefused(f"authored manifest carrier differs: {exc}") from exc
+
+
+def stage_asm_artifacts(manifest: source.SourcePatchManifest, *, source_root: str,
+                        store_root: str | None = None) -> dict[str, Any]:
+    """Write verified asm artifact bytes into the build tree before configure.
+
+    Artifact bytes are not authored source: they never enter the text patch, so
+    they neither count toward nor relax the diff-size bound or reward-hack scan
+    that the patch itself already passed. The patch's CMake sha pin binds them.
+    Refuses to overwrite any existing path (tracked source or stale staging).
+    """
+    if not isinstance(manifest, source.SourcePatchManifest):
+        raise PreparationBindingRefused("staging requires a typed source manifest")
+    try:
+        resolved = source.resolve_asm_artifacts(manifest, store_root)
+    except source.SourceCandidateError as exc:
+        raise PreparationBindingRefused(f"asm artifact store verification failed: {exc}") from exc
+    root = os.path.realpath(source_root)
+    staged = []
+    for item, data in resolved:
+        target = os.path.join(root, item.name)
+        parent = os.path.realpath(os.path.dirname(target))
+        if os.path.commonpath([root, parent]) != root \
+                or parent != os.path.normpath(os.path.dirname(target)):
+            raise PreparationBindingRefused(f"asm artifact {item.name!r} staging path escapes")
+        if os.path.lexists(target):
+            raise PreparationBindingRefused(f"asm artifact {item.name!r} would overwrite {target}")
+        os.makedirs(parent, exist_ok=True)
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        with open(target, "rb") as handle:
+            if hashlib.sha256(handle.read()).hexdigest() != item.sha256:
+                raise PreparationBindingRefused(f"asm artifact {item.name!r} staged bytes differ")
+        staged.append({"name": item.name, "sha256": item.sha256, "bytes": item.bytes})
+    return {"schema": "epyc.autokernel.asm_artifact_staging.v1",
+            "patch_bundle_sha256": manifest.patch_bundle_sha256, "staged": staged}
 
 
 def _common(selected, result, resolved, kind):
@@ -387,7 +414,9 @@ def bind_build_preparation(*, selected_actor_work, preparation_result, resolved_
 
 def delegate_build(bound: BoundBuildPreparation, *, campaign_driver, runner, source_worktree,
                    log_path: str, configure_timeout_s: float, build_timeout_s: float,
-                   env: Mapping[str, str], sandbox_cgroup_root: str):
+                   env: Mapping[str, str], sandbox_cgroup_root: str,
+                   asm_manifest: source.SourcePatchManifest | None = None,
+                   asm_store_root: str | None = None):
     """Forward exact native run_build arguments to an explicitly owned runner.
 
     There is deliberately no default runner, invented permit, or success wrapper.
@@ -417,6 +446,14 @@ def delegate_build(bound: BoundBuildPreparation, *, campaign_driver, runner, sou
             or not isinstance(sandbox_cgroup_root, str)
             or not sandbox_cgroup_root.startswith("/")):
         raise PreparationBindingRefused("explicit build environment/log/containment is required")
+    if asm_manifest is not None and asm_manifest.asm_artifacts:
+        # Bind to the materialized patch: the artifacts belong to this candidate only.
+        capability = checked.source_capability
+        receipt = json.loads(capability.canonical) if capability is not None else {}
+        if receipt.get("patch_bundle_sha256") != asm_manifest.patch_bundle_sha256:
+            raise PreparationBindingRefused("asm artifacts do not belong to the materialized source")
+        stage_asm_artifacts(asm_manifest, source_root=checked.plan.source_root.path,
+                            store_root=asm_store_root)
     return runner(checked.plan, log_path=log_path, configure_timeout_s=configure_timeout_s,
                   build_timeout_s=build_timeout_s, env=dict(env),
                   require_fresh_build_dir=True, sandbox_cgroup_root=sandbox_cgroup_root)

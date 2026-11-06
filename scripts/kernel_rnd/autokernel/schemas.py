@@ -177,7 +177,16 @@ RECIPE_CLASSES = frozenset({"production_optimal"})
 CHANGE_CLASSES = frozenset({
     "parameter", "dispatcher", "arithmetic", "layout", "fusion",
     "moe_scheduling", "recurrent", "scheduler_policy", "oracle_port",
-    "core_header",
+    "core_header", "isa_schedule",
+})
+
+# `isa_schedule` (AK-GFX90A-ASM-SURFACE): an instruction-schedule mutation of a
+# gfx90a kernel (scheduling intrinsics/attributes in source, or a sha-pinned
+# retargeted code object staged by build preparation). Its mechanism ids are a
+# closed namespaced set so a planner cannot invent an unaudited ISA lever.
+GFX90A_ISA_SCHEDULE_MECHANISMS = frozenset({
+    "gfx90a.iglp_opt0", "gfx90a.iglp_opt1", "gfx90a.sched_group_barrier",
+    "gfx90a.sched_barrier", "gfx90a.mfma_before_barrier", "gfx90a.s_setprio",
 })
 
 # §9.5 selects the cheap suite deterministically from `change_class`; a class
@@ -193,6 +202,8 @@ CHANGE_CLASS_CHEAP_SUITE = {
     "scheduler_policy": "variable_arrival_replay",
     "oracle_port": "underlying_change_class_suite",
     "core_header": "full_tree_per_backend_binary_comparison",
+    # ISA-audit diff (scripts/kernel_rnd/gfx90a_isa_audit.py) + target-op paired A/B.
+    "isa_schedule": "gfx90a_isa_audit_diff_plus_target_op_paired_ab",
 }
 
 CAMPAIGN_KINDS = frozenset({

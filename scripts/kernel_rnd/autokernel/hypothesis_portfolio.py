@@ -26,6 +26,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
+try:  # package import (normal); direct script execution falls back below
+    from . import schemas
+except ImportError:  # pragma: no cover
+    import schemas  # type: ignore[no-redef]
+
 
 SCHEMA = "epyc.autokernel.discovery_hypothesis_portfolio.v2"
 STATUSES = frozenset({"queued", "candidate_incumbent", "retired", "needs-template"})
@@ -44,6 +49,7 @@ PRIORITY_TIERS = frozenset({"P0", "P1", "P2", "P3"})
 SOURCE_MANIFEST_CHANGE_CLASSES = frozenset({
     "dispatcher", "arithmetic", "layout", "fusion", "moe_scheduling",
     "recurrent", "scheduler_policy", "oracle_port", "core_header",
+    "isa_schedule",
 })
 EPISTEMIC_GRADES = frozenset({
     "design_prior", "profile_routing", "dirty_diagnostic", "correctness_only",
@@ -314,6 +320,11 @@ def mechanism_fingerprint(facets: Mapping[str, Any]) -> str:
         )
     _text(facets["mechanism"], "mechanism.facets.mechanism")
     _text(facets["change_class"], "mechanism.facets.change_class")
+    if (facets["change_class"] == "isa_schedule"
+            and facets["mechanism"] not in schemas.GFX90A_ISA_SCHEDULE_MECHANISMS):
+        raise PortfolioError(
+            "isa_schedule mechanism must be one of "
+            f"{sorted(schemas.GFX90A_ISA_SCHEDULE_MECHANISMS)}")
     for key in ("ops", "files", "symbols"):
         _text_list(facets[key], f"mechanism.facets.{key}")
     return content_sha256(dict(facets))

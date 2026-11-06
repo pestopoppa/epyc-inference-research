@@ -27,10 +27,23 @@ __all__ = [
     "SCHEMA_SOURCE_PATCH", "SourceCandidateError", "SourcePatchManifest",
     "AppliedSourceCandidate", "source_patch_manifest_bytes", "load_source_patch_manifest",
     "apply_source_candidate", "parameter_patch_bundle_sha256",
-    "hunk_identities",
+    "hunk_identities", "SCHEMA_SOURCE_PATCH_V2", "AsmArtifact",
+    "manifest_from_payload", "resolve_asm_artifacts", "DEFAULT_ASM_ARTIFACT_STORE",
+    "ASM_RETARGET_TOOL_PATH", "asm_artifact_store_path",
 ]
 
 SCHEMA_SOURCE_PATCH = "epyc.autokernel.source-patch.v1"
+# v2 = v1 + optional `asm_artifacts`. A manifest with no artifacts is still
+# serialized as v1, so every pre-existing digest is byte-identical.
+SCHEMA_SOURCE_PATCH_V2 = "epyc.autokernel.source-patch.v2"
+# Content-addressed store for retargeted code objects, next to the kernel
+# strategy store (kernel_store.py DEFAULT_DB). Layout: <root>/sha256/<hex>.
+DEFAULT_ASM_ARTIFACT_STORE = os.environ.get(
+    "AK_ASM_ARTIFACT_STORE", "/mnt/raid0/llm/tmp/mi210-build/campaign/asm_artifact_store")
+# provenance.retarget_tool_sha is the git blob sha of this research-repo path.
+ASM_RETARGET_TOOL_PATH = "scripts/kernel_rnd/autokernel/asm_retarget/retarget_gfx942_gfx90a.py"
+ASM_STAGE_PREFIX = "ggml/src/ggml-hip/"
+_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SOURCE_TREE = "llama.cpp"
 FILE_SCOPE = "<file-scope>"
 
@@ -226,6 +239,49 @@ def _validate_patch_text(
     return text, paths, hunk_ids, symbols, symbols_by_file, deleted
 
 
+def asm_artifact_store_path(sha256: str) -> str:
+    return f"sha256/{sha256}"
+
+
+@dataclass(frozen=True)
+class AsmArtifact:
+    """A binary member referenced by sha, never embedded in the text patch."""
+    name: str
+    sha256: str
+    bytes: int
+    store_path: str
+    provenance: Mapping[str, str]
+
+    def __post_init__(self) -> None:
+        name = _safe_path(self.name, "asm_artifacts[].name")
+        if not name.startswith(ASM_STAGE_PREFIX):
+            raise SourceCandidateError(
+                f"asm artifact {name!r} must stage under {ASM_STAGE_PREFIX!r}")
+        schemas.require.sha256(self.sha256, "asm_artifacts[].sha256", error=SourceCandidateError)
+        if isinstance(self.bytes, bool) or not isinstance(self.bytes, int) or self.bytes < 1:
+            raise SourceCandidateError("asm_artifacts[].bytes must be a positive integer")
+        if self.store_path != asm_artifact_store_path(self.sha256):
+            raise SourceCandidateError(
+                "asm_artifacts[].store_path must be the content address sha256/<sha256>")
+        prov = self.provenance
+        if not isinstance(prov, Mapping) or set(prov) != {
+                "retarget_tool_sha", "src_co_sha", "llvm_mc_ver"}:
+            raise SourceCandidateError(
+                "asm_artifacts[].provenance keys must be retarget_tool_sha, src_co_sha, llvm_mc_ver")
+        if not isinstance(prov["retarget_tool_sha"], str) or not _GIT_SHA.match(prov["retarget_tool_sha"]):
+            raise SourceCandidateError(
+                f"provenance.retarget_tool_sha must be the git blob sha of {ASM_RETARGET_TOOL_PATH}")
+        schemas.require.sha256(prov["src_co_sha"], "provenance.src_co_sha", error=SourceCandidateError)
+        if not isinstance(prov["llvm_mc_ver"], str) or not prov["llvm_mc_ver"].strip():
+            raise SourceCandidateError("provenance.llvm_mc_ver must be a non-empty string")
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "provenance", dict(sorted(prov.items())))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "sha256": self.sha256, "bytes": self.bytes,
+                "store_path": self.store_path, "provenance": dict(self.provenance)}
+
+
 @dataclass(frozen=True)
 class SourcePatchManifest:
     campaign_id: str
@@ -240,6 +296,7 @@ class SourcePatchManifest:
     mechanism_id: str
     patch_sha256: str
     patch_bytes: bytes
+    asm_artifacts: tuple[AsmArtifact, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.campaign_id.startswith("ak-") or not self.proposal_id.startswith("akp-") \
@@ -296,6 +353,16 @@ class SourcePatchManifest:
                     f"patch hunks in {path!r} derive undeclared enclosing symbol(s) {outside}")
         if not text.endswith("\n"):
             raise SourceCandidateError("patch bytes must end in a newline")
+        if not isinstance(self.asm_artifacts, tuple) or any(
+                not isinstance(item, AsmArtifact) for item in self.asm_artifacts):
+            raise SourceCandidateError("asm_artifacts must be a tuple of AsmArtifact")
+        names = [item.name for item in self.asm_artifacts]
+        if len(set(names)) != len(names):
+            raise SourceCandidateError("asm_artifacts names must be unique")
+        if set(names) & set(files):
+            raise SourceCandidateError("an asm artifact may not shadow a patched source file")
+        object.__setattr__(self, "asm_artifacts",
+                           tuple(sorted(self.asm_artifacts, key=lambda item: item.name)))
 
     @property
     def patch_text(self) -> str:
@@ -335,7 +402,7 @@ def source_patch_manifest_bytes(manifest: SourcePatchManifest) -> bytes:
     """Return the sole canonical byte carrier for a typed source patch."""
     if not isinstance(manifest, SourcePatchManifest):
         raise SourceCandidateError("source patch carrier requires a typed manifest")
-    return schemas.canonical_bytes({
+    payload = {
         "schema": SCHEMA_SOURCE_PATCH,
         "campaign_id": manifest.campaign_id,
         "proposal_id": manifest.proposal_id,
@@ -352,7 +419,91 @@ def source_patch_manifest_bytes(manifest: SourcePatchManifest) -> bytes:
         "patch_sha256": manifest.patch_sha256,
         "patch_encoding": "base64",
         "patch_base64": base64.b64encode(manifest.patch_bytes).decode("ascii"),
-    })
+    }
+    artifacts = getattr(manifest, "asm_artifacts", ())
+    if artifacts:
+        payload["schema"] = SCHEMA_SOURCE_PATCH_V2
+        payload["asm_artifacts"] = [item.to_dict() for item in artifacts]
+    return schemas.canonical_bytes(payload)
+
+
+_V1_FIELDS = frozenset({
+    "schema", "campaign_id", "proposal_id", "candidate_id", "source_tree",
+    "production_base_commit", "instrument_commit", "change_class",
+    "declared_files", "declared_symbols", "mechanism_id", "patch_sha256",
+    "patch_encoding", "patch_base64",
+})
+
+
+def manifest_from_payload(payload: Any) -> SourcePatchManifest:
+    """Parse a v1 or v2 carrier; v2 must carry a non-empty asm_artifacts list."""
+    if not isinstance(payload, Mapping):
+        raise SourceCandidateError("source patch manifest must be an object")
+    schema = payload.get("schema")
+    required = set(_V1_FIELDS) | ({"asm_artifacts"} if schema == SCHEMA_SOURCE_PATCH_V2 else set())
+    if set(payload) != required:
+        raise SourceCandidateError(
+            f"source patch manifest fields must be exactly {sorted(required)}")
+    if schema not in (SCHEMA_SOURCE_PATCH, SCHEMA_SOURCE_PATCH_V2) \
+            or payload["patch_encoding"] != "base64":
+        raise SourceCandidateError("source patch manifest schema/encoding is unsupported")
+    artifacts: tuple[AsmArtifact, ...] = ()
+    if schema == SCHEMA_SOURCE_PATCH_V2:
+        rows = payload["asm_artifacts"]
+        if not isinstance(rows, list) or not rows:
+            raise SourceCandidateError("v2 asm_artifacts must be a non-empty list")
+        keys = {"name", "sha256", "bytes", "store_path", "provenance"}
+        if any(not isinstance(row, Mapping) or set(row) != keys for row in rows):
+            raise SourceCandidateError(f"asm_artifacts[] fields must be exactly {sorted(keys)}")
+        artifacts = tuple(AsmArtifact(**row) for row in rows)
+    try:
+        patch_bytes = base64.b64decode(payload["patch_base64"], validate=True)
+    except (TypeError, ValueError) as exc:
+        raise SourceCandidateError(f"patch_base64 is invalid: {exc}") from exc
+    symbols = payload["declared_symbols"]
+    if not isinstance(symbols, Mapping):
+        raise SourceCandidateError("declared_symbols must be a mapping")
+    manifest = SourcePatchManifest(
+        campaign_id=payload["campaign_id"], proposal_id=payload["proposal_id"],
+        candidate_id=payload["candidate_id"], source_tree=payload["source_tree"],
+        production_base_commit=payload["production_base_commit"],
+        instrument_commit=payload["instrument_commit"],
+        change_class=payload["change_class"],
+        declared_files=tuple(payload["declared_files"]),
+        declared_symbols={key: tuple(value) for key, value in symbols.items()},
+        mechanism_id=payload["mechanism_id"], patch_sha256=payload["patch_sha256"],
+        patch_bytes=patch_bytes, asm_artifacts=artifacts)
+    return manifest
+
+
+def resolve_asm_artifacts(manifest: SourcePatchManifest,
+                          store_root: Optional[str] = None) -> tuple[tuple[AsmArtifact, bytes], ...]:
+    """Read each referenced artifact from the content-addressed store, fail closed."""
+    if not isinstance(manifest, SourcePatchManifest):
+        raise SourceCandidateError("artifact resolution requires a typed manifest")
+    root = os.path.realpath(store_root or DEFAULT_ASM_ARTIFACT_STORE)
+    out = []
+    for item in manifest.asm_artifacts:
+        candidate = os.path.join(root, _safe_path(item.store_path, "store_path"))
+        real = os.path.realpath(candidate)
+        if os.path.commonpath([root, real]) != root or real != os.path.normpath(candidate):
+            raise SourceCandidateError(f"asm artifact {item.name!r} store entry escapes the store")
+        try:
+            info = os.lstat(real)
+        except FileNotFoundError as exc:
+            raise SourceCandidateError(
+                f"asm artifact {item.name!r} is missing from the store ({item.store_path})") from exc
+        if not stat.S_ISREG(info.st_mode):
+            raise SourceCandidateError(f"asm artifact {item.name!r} store entry is not a regular file")
+        with open(real, "rb") as handle:
+            data = handle.read()
+        if len(data) != item.bytes:
+            raise SourceCandidateError(
+                f"asm artifact {item.name!r} byte count {len(data)} != declared {item.bytes}")
+        if _sha256(data) != item.sha256:
+            raise SourceCandidateError(f"asm artifact {item.name!r} sha256 mismatch")
+        out.append((item, data))
+    return tuple(out)
 
 
 def load_source_patch_manifest(path: Any) -> SourcePatchManifest:
@@ -362,34 +513,7 @@ def load_source_patch_manifest(path: Any) -> SourcePatchManifest:
         payload = json.loads(raw.decode("utf-8", "strict"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise SourceCandidateError(f"source patch manifest is not strict JSON: {exc}") from exc
-    required = {
-        "schema", "campaign_id", "proposal_id", "candidate_id", "source_tree",
-        "production_base_commit", "instrument_commit", "change_class",
-        "declared_files", "declared_symbols", "mechanism_id", "patch_sha256",
-        "patch_encoding", "patch_base64",
-    }
-    if not isinstance(payload, Mapping) or set(payload) != required:
-        raise SourceCandidateError(
-            f"source patch manifest fields must be exactly {sorted(required)}")
-    if payload["schema"] != SCHEMA_SOURCE_PATCH or payload["patch_encoding"] != "base64":
-        raise SourceCandidateError("source patch manifest schema/encoding is unsupported")
-    try:
-        patch_bytes = base64.b64decode(payload["patch_base64"], validate=True)
-    except (TypeError, ValueError) as exc:
-        raise SourceCandidateError(f"patch_base64 is invalid: {exc}") from exc
-    symbols = payload["declared_symbols"]
-    if not isinstance(symbols, Mapping):
-        raise SourceCandidateError("declared_symbols must be a mapping")
-    return SourcePatchManifest(
-        campaign_id=payload["campaign_id"], proposal_id=payload["proposal_id"],
-        candidate_id=payload["candidate_id"], source_tree=payload["source_tree"],
-        production_base_commit=payload["production_base_commit"],
-        instrument_commit=payload["instrument_commit"],
-        change_class=payload["change_class"],
-        declared_files=tuple(payload["declared_files"]),
-        declared_symbols={key: tuple(value) for key, value in symbols.items()},
-        mechanism_id=payload["mechanism_id"], patch_sha256=payload["patch_sha256"],
-        patch_bytes=patch_bytes)
+    return manifest_from_payload(payload)
 
 
 @dataclass(frozen=True)
