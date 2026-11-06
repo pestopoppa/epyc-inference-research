@@ -28,7 +28,7 @@ __all__ = [
     "AppliedSourceCandidate", "source_patch_manifest_bytes", "load_source_patch_manifest",
     "apply_source_candidate", "parameter_patch_bundle_sha256",
     "hunk_identities", "SCHEMA_SOURCE_PATCH_V2", "AsmArtifact",
-    "manifest_from_payload", "resolve_asm_artifacts", "DEFAULT_ASM_ARTIFACT_STORE",
+    "manifest_from_payload", "resolve_asm_artifacts", "verify_retarget_tool_sha", "retarget_tool_blob_sha", "DEFAULT_ASM_ARTIFACT_STORE",
     "ASM_RETARGET_TOOL_PATH", "asm_artifact_store_path",
 ]
 
@@ -330,6 +330,13 @@ class SourcePatchManifest:
             normalized[path] = tuple(sorted(set(symbols)))
         object.__setattr__(self, "declared_symbols", normalized)
         schemas.require.str(self.mechanism_id, "mechanism_id", error=SourceCandidateError)
+        if self.change_class == "isa_schedule" \
+                and self.mechanism_id not in schemas.GFX90A_ISA_SCHEDULE_MECHANISMS:
+            raise SourceCandidateError(
+                f"isa_schedule mechanism_id {self.mechanism_id!r} is not one of "
+                f"{sorted(schemas.GFX90A_ISA_SCHEDULE_MECHANISMS)}")
+        if self.asm_artifacts and self.change_class != "isa_schedule":
+            raise SourceCandidateError("asm_artifacts require change_class isa_schedule")
         text, paths, _hunks, _actual_symbols, actual_by_file, _deleted = \
             _validate_patch_text(self.patch_bytes)
         scan = reward_hack_scan.scan_unified_diff(text)
@@ -474,6 +481,27 @@ def manifest_from_payload(payload: Any) -> SourcePatchManifest:
         mechanism_id=payload["mechanism_id"], patch_sha256=payload["patch_sha256"],
         patch_bytes=patch_bytes, asm_artifacts=artifacts)
     return manifest
+
+
+def retarget_tool_blob_sha(repo_root: Any) -> str:
+    """Git blob sha1 of the retarget tool, computed without a subprocess."""
+    data = (Path(repo_root) / ASM_RETARGET_TOOL_PATH).read_bytes()
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def verify_retarget_tool_sha(manifest: "SourcePatchManifest", repo_root: Any) -> None:
+    """Refuse artifacts whose provenance names a retarget tool other than the checked-in one."""
+    if not manifest.asm_artifacts:
+        return
+    try:
+        expected = retarget_tool_blob_sha(repo_root)
+    except OSError as exc:
+        raise SourceCandidateError(f"retarget tool is unreadable for provenance check: {exc}") from exc
+    for item in manifest.asm_artifacts:
+        if item.provenance["retarget_tool_sha"] != expected:
+            raise SourceCandidateError(
+                f"asm artifact {item.name!r} retarget_tool_sha does not match "
+                f"the checked-in {ASM_RETARGET_TOOL_PATH} blob {expected}")
 
 
 def resolve_asm_artifacts(manifest: SourcePatchManifest,

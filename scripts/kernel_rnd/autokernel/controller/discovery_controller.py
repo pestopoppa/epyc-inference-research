@@ -1016,6 +1016,36 @@ class CodexPlanner:
                     "or a following function is invalid. Before exit, decode patch_base64, "
                     "recount every hunk, and recompute patch_sha256."),
             },
+            "isa_schedule_contract": {
+                "change_class": "isa_schedule",
+                "mechanism_ids": sorted(schemas.GFX90A_ISA_SCHEDULE_MECHANISMS),
+                "mechanism_rule": (
+                    "For change_class isa_schedule, mechanism_id MUST be exactly one of "
+                    "mechanism_ids; any other id is refused."),
+                "sub_tier_a": (
+                    "Source-level schedule mutation (scheduling intrinsics/attributes in the "
+                    "reviewed .cu/.cuh text) carried in the ordinary v1 source-patch.json."),
+                "sub_tier_b_hand_asm": (
+                    "Hand-retargeted code objects are allowed ONLY after sub-tier (a) has been "
+                    "tried and failed on the SAME op (see context.prior_results and "
+                    "context.do_not_repeat). Do not open with asm_artifacts."),
+                "v2_schema": {
+                    "schema": source_candidate.SCHEMA_SOURCE_PATCH_V2,
+                    "exact_keys": "the v1 keys plus asm_artifacts (non-empty list)",
+                    "asm_artifacts_item_keys": ["name", "sha256", "bytes", "store_path", "provenance"],
+                    "provenance_keys": ["retarget_tool_sha", "src_co_sha", "llvm_mc_ver"],
+                    "name_rule": f"name stages under {source_candidate.ASM_STAGE_PREFIX!r}",
+                    "store_rule": (
+                        "Reference an artifact ONLY by its content address already present in the "
+                        "strategy store: sha256 = hex digest, store_path = sha256/<that hex>. "
+                        "NEVER emit raw bytes, base64 or hex of a code object in any field; extra "
+                        "keys are refused. The patch carries only the CMake sha pin and dispatch."),
+                    "provenance_rule": (
+                        "retarget_tool_sha must equal the git blob sha of "
+                        f"{source_candidate.ASM_RETARGET_TOOL_PATH}; do not invent provenance."),
+                    "change_class_rule": "asm_artifacts is valid only with change_class isa_schedule",
+                },
+            },
             "proposal_schema": {
                 "exact_keys": ["proposal_id", "change_class", "change"],
                 "change_exact_keys": ["files_and_symbols", "estimated_diff_size"],
@@ -1410,7 +1440,17 @@ _RETRYABLE_PLANNER_SOURCE_ERRORS = (
     "hunk appears before a diff --git header",
     "source patch contains no accounted hunk",
     "patch bytes must end in a newline",
+    "v2 asm_artifacts must be",
+    "asm_artifacts[]",
+    "asm_artifacts names must be unique",
+    "asm_artifacts must be",
+    "asm_artifacts require change_class",
+    "isa_schedule mechanism_id",
+    "asm artifact ",
+    "provenance.",
 )
+
+_REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 def _load_planner_manifest(path: Path) -> source_candidate.SourcePatchManifest:
@@ -1421,7 +1461,9 @@ def _load_planner_manifest(path: Path) -> source_candidate.SourcePatchManifest:
     fail closed.
     """
     try:
-        return source_candidate.load_source_patch_manifest(path)
+        manifest = source_candidate.load_source_patch_manifest(path)
+        source_candidate.verify_retarget_tool_sha(manifest, _REPO_ROOT)
+        return manifest
     except source_candidate.SourceCandidateError as exc:
         reason = str(exc)
         if any(reason.startswith(prefix) for prefix in
