@@ -14,7 +14,7 @@
   },
   "captured_dispatches": 9,
   "captured_duration_ns": 57442,
-  "catalogue_sha256": "b72af2542a9d487ea23debb38eff43ac7191b954a39e77dfe944d6233bfd7f2b",
+  "catalogue_sha256": "b8ccd643b6cf475f3d520c9e972ecdb09681dd38867789b7fec963b56518bd25",
   "cumulative_floor": 0.01,
   "existing_or_port_dominates": true,
   "findings": [

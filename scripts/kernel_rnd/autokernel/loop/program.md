@@ -645,6 +645,54 @@ These are receipts, not priors. A hypothesis that contradicts one is dead on arr
   reason to decline one.
   (Source for all three: `handoffs/active/agentic-rocm-kernel-authoring.md`.)
 
+## gfx90a measurement pitfalls (MI210 port night, 2026-11-06)
+
+Each of these cost a gate re-run. Design the measurement around them up front.
+
+- **`test-backend-ops perf` appends the returned node `n_runs` times.** If the op under test
+  returns a view / no-op tail node (reshape, permute, a fused-away output), the timed loop
+  times nothing. Override `op_size` (or build the case so one whole graph is timed) and check
+  that the timed node is the kernel you mean.
+- **CUDA-graph warmup lines split the case header from its `us/run`.** Parse the first
+  `us/run` *after* the case header, not the same line.
+- **`llama-server` hides ggml INFO.** A "route taken" witness logged at INFO is invisible in a
+  server run; log witnesses at WARN, and treat a missing witness line as unproven, not absent.
+- **Op tests cannot reproduce graph-allocator aliasing / tensor lifetime.** H12 faulted only in
+  a real graph (top_k/mask must be FA `src[5]/src[6]` so the allocator keeps them alive) and H15
+  was rejected 12 times before the real-model run exposed the issue. Every op-level KEEP needs a
+  real-model witness (route line at WARN) **plus** a PPL/KLD check before it counts.
+- **The keeper VRAM residency sampler needs ONE VRAM-resident process for >= 40 s** — a smoke
+  that finishes faster, or splits across short processes, reads 0 VRAM and fails residency.
+- **INT8 MFMA = f16 rate on MI210** (same shapes, same 181 TOPS/TFLOPS peak). Int8 arms can only
+  win by removing bytes or conversions, never by compute headroom (H4 0.48x, H9 0.52x).
+
+## MI210 port results 2026-11-06 (AK-ASM, vs C6) — KEEP/DROP receipts
+
+Evidence: `/mnt/raid0/llm/tmp/<packet>/out*/RESULT.json`; summary
+`progress/2026-11/2026-11-06-main-inf22.md` (epyc-root). Do not re-propose a DROP without new
+evidence that addresses the stated reason.
+
+| Verdict | Mechanism | Result | Packet |
+|---|---|---|---|
+| KEEP | H10 GQA-packed multi-token verify attention hd256 | op 2.63x (kv>=32k, n_q 2..16); 27B DFlash2 decode +4.8/+4.3/+14.6% @8k/32k/64k | ak-asm-h10-gate-20261106, ak-asm-h10-e2e-20261106 |
+| KEEP | H1b wvSplitK Q8_0 GEMV, weights >6 MiB, M 5..11 | 1.73x geomean, 927 vs 545 GB/s; 27B pp5/pp8 123/183 vs 79.5/127 t/s; M>=12 loses | ak-asm-h1b-gate-20261106 |
+| KEEP | H1+H7 skinny GEMM <=6 MiB (stream-K + LDS-DMA, f32-atomic split-K) | 1.94x selected cells; A3B 1.51x, no regression | ak-asm-h1h7-gate-20261105 |
+| KEEP | H12 fused QSA sparse attention (Q38FN) | 3.16x vs dense masked FA @ kv=32k | ak-asm-h12-gate-20261105 |
+| KEEP | H13 hyper-connection fusion + GPU MEAN_D1 (Q38FN) | decode +11.7% (18.62 vs 16.68 t/s); splits/token 294 -> 100 | ak-asm-h13b-gate-r2-20261106 |
+| KEEP | H11 topksoftmax asm (A3B router) | router 1.25x; A3B tg +2% (104.8 vs 102.6) | ak-asm-h11h13-gate-20261106 |
+| KEEP | H15 fused GDN decode | 27B tg +1.3% (PPL on/off still owed) | ak-asm-h14h15-gate-20261106 |
+| KEEP | H5-PORT CK FMHA hd256 | op 3.71x; 27B pp2048 +3% | fa-ck-hd256-gate-20261105 |
+| DROP | H4 HIP int8 MMQ (prefill) | 0.48x vs dequant+rocBLAS (pp2048 587 vs 835) | ak-asm-h4h6-gate-20261105 |
+| DROP | H9 HIP int8 GEMM, per-32 scales | 0.52x | ak-asm-h9-gate-20261106 |
+| DROP | H9B fused Q8_0-dequant f16 MFMA GEMM | 0.64x vs C6 (LDS-bound, 1 block/CU) | ak-asm-h9b-gate-20261106 |
+| DROP | H6 fused rmsnorm + q8_1 quantize | 1.02x | ak-asm-h4h6-gate-20261105 |
+| DROP | H14 fused qk-norm + RoPE + KV write | op 1.13x, e2e within +-1% under HIP graphs | ak-asm-h14h15-gate-20261106 |
+| DROP | H2a rocWMMA-off MMA path | MMA_INVALID on gfx90a | ak-asm-h2a-gate-20261105 |
+| DROP | H1 v1-v3 skinny on 27B large shapes | 0.70/0.75/0.83x (superseded by H1b) | ak-asm-h1h7-gate-20261105 |
+
+Pattern: under HIP graphs, launch-removal fusions of small elementwise ops (H6, H14) do not
+move end-to-end time; wins came from bytes (H1b, H10, H12) or from removing CPU/GPU splits (H13).
+
 ## Half of the prefill profile runs in a vendor kernel — BY OUR OWN DISPATCH
 
 Measured on the contracted surface (pp512, DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M,

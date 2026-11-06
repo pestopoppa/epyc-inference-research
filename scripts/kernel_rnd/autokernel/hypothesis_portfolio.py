@@ -87,6 +87,11 @@ GFX90A_LOW_PRECISION_DNR_POLICY = {
         "shape": "composable-kernel-fp8-gemm",
     },
 }
+#: MI210 port night 2026-11-06: measured-negative DNRs that must stay present.
+#: The low-precision rows above may carry later measurement refs AFTER the ISA ref.
+GFX90A_MI210_PORT_REQUIRED_DNRS = frozenset({
+    "dnr-gfx90a-launch-removal-fusion-under-hip-graphs",
+})
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -864,9 +869,13 @@ def _validate_dnr(rows: Any, evidence_ids: set[str]) -> set[str]:
             or regime["model_or_frame"] != "MI210-current-v9"
             or regime["quant"] != expected["quant"]
             or regime["shape"] != expected["shape"]
-            or row["evidence_refs"] != [GFX90A_LOW_PRECISION_EVIDENCE_ID]
+            or not row["evidence_refs"]
+            or row["evidence_refs"][0] != GFX90A_LOW_PRECISION_EVIDENCE_ID
         ):
             raise PortfolioError(f"{dnr_id} contradicts required gfx90a low-precision policy")
+    missing_port = sorted(GFX90A_MI210_PORT_REQUIRED_DNRS - set(by_id))
+    if missing_port:
+        raise PortfolioError(f"missing required gfx90a MI210-port DNRs: {missing_port}")
     native_fp8 = by_id["dnr-gfx90a-native-fp8-mfma-decode"]
     if not any(
         "software-storage" in condition and "native FP8 compute" in condition

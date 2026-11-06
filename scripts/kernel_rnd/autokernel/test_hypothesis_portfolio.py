@@ -427,8 +427,13 @@ class HypothesisPortfolioTest(unittest.TestCase):
             self.assertEqual(row["regime"]["quant"], expected["quant"])
             self.assertEqual(row["regime"]["shape"], expected["shape"])
             self.assertEqual(
-                row["evidence_refs"], (P.GFX90A_LOW_PRECISION_EVIDENCE_ID,)
+                row["evidence_refs"][0], P.GFX90A_LOW_PRECISION_EVIDENCE_ID
             )
+        int8 = portfolio.dnr_record("dnr-gfx90a-int8-mfma-compute-headroom")
+        self.assertIn("ev-mi210-asm-port-drops-20261106", int8["evidence_refs"])
+        self.assertIn("H4 HIP int8 MMQ 0.48x", int8["falsifier_result"])
+        fusion = portfolio.dnr_record("dnr-gfx90a-launch-removal-fusion-under-hip-graphs")
+        self.assertEqual(fusion["classification"], "measured_negative")
         native_fp8 = portfolio.dnr_record("dnr-gfx90a-native-fp8-mfma-decode")
         self.assertIn("software FP8 weight storage", native_fp8["statement"])
         self.assertIn("no native-compute or compute-headroom claim", native_fp8["statement"])
@@ -548,7 +553,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
             self.assertEqual(P.main(["validate", str(P.DEFAULT_PORTFOLIO)]), 0)
         result = json.loads(stdout.getvalue())
         self.assertEqual(result["hypotheses"], 21)
-        self.assertEqual(result["do_not_repeat"], 22)
+        self.assertEqual(result["do_not_repeat"], 23)
         self.assertEqual(result["eligible"], 4)
         stdout = StringIO()
         with redirect_stdout(stdout):
@@ -556,7 +561,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
         summary = json.loads(stdout.getvalue())
         self.assertEqual(summary["sha256"], result["sha256"])
         self.assertEqual(len(summary["eligible_records"]), 4)
-        self.assertEqual(len(summary["do_not_repeat"]), 22)
+        self.assertEqual(len(summary["do_not_repeat"]), 23)
 
     def test_duplicate_json_key_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:
