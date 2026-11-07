@@ -57,3 +57,11 @@ actors.py ~991/995) pass the workspace, so the author still edits the candidate 
 **Custody-neutral as of dd3ab6326**, with one latent risk: any future caller that omits `cwd` would let
 an opencode-v2 author write into the process cwd (edits escape the candidate tree -> empty diff /
 foreign-tree edits). Recommend an assert `cwd is not None` for opencode v2 in the next port.
+
+## resume.py — FIXED and PINNED (follow-up, same day)
+`prepare()` now treats a `lane_error` re-emission C as owned by its source when ANY claim row exists
+for `(C.resumed_from, C.stage)`, whatever its status (released, exhausted, settled, or in-flight NULL).
+A copy at a different stage is still queued as new authored work, because the key includes the stage.
+The re-review found no remaining path where a settled or in-flight source's copy gets a fresh id or
+budget. Tests: `..._after_its_source_settles` (expectedFailure removed) and the new
+`..._while_its_source_retry_is_in_flight` (mid-retry death) both pass, and the bounded-retry test stays green.

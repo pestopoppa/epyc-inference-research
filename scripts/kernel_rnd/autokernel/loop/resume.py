@@ -1920,8 +1920,10 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
         # (same stage) on its `lane_error` row. That copy is NOT new work: the source's
         # ledger claim already owns its bounded retry (`ClaimLedger.settle_outcome`),
         # and queueing the copy would mint a fresh id with a fresh budget per fault.
-        faulted = {(row["checkpoint_id"], row["stage"]) for row in ledger.rows()
-                   if row.get("result_status") == "lane_error"}
+        # ANY claim row on the source owns it, whatever its status: a re-claim clears
+        # `result_status` and the retry settles to its own verdict (custody review
+        # 2026-11-07, CUSTODY-REVIEW.md). A copy at another stage is new authored work.
+        faulted = {(row["checkpoint_id"], row["stage"]) for row in ledger.rows()}
         groups: dict[tuple, list[Candidate]] = {}
         for candidate, bound in pairs:
             if bound and candidate.checkpoint_id in claimed:

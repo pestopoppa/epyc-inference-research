@@ -22,7 +22,7 @@ REVIEWED = {
     "loop.py": "41fa6423376206b5240de18763f35bf3365d3b2fc01f86514c7e332e50f23f70",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "pipeline.py": "642b5ade0bd6dc972fa22ca93a5249889b1f1ba564af248a31e69604bdcadfcf",
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
-    "resume.py": "ed9c0bbc0bdd584e76fb5abbcfc9ccb80ae4cc0379a5d5531cebb47659a82c3f",
+    "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
     "run.py": "f60a74a92949d42070c06fdcfbccfdda35fe8a83b007f3c646e88991cdf93601",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
