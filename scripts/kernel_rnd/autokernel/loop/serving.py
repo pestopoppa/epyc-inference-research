@@ -1579,8 +1579,14 @@ def _spread(runs: Sequence[float]) -> dict:
 # same estimator shape (sum over slots of each slot's own count / its own
 # `predicted_ms`), so `tok_s == steps_s * tokens_per_step` holds per slot exactly.
 #
-# REPORTING ONLY, today. The keep gate still reads `recipe.metric`; moving the gate to
-# steps/s needs a floor recalibrated on this metric and lands at a run boundary.
+# THE KEEP GATE (SL-2 gate, 2026-11-07). For a NON-speculative comparison nothing here
+# is read by a decision: the gate is `recipe.metric` against the tok/s floor, unchanged.
+# When EITHER arm is speculative, `compare` decides `decisive` on this steps/s effect
+# against a STEPS/S floor (`steps_floor_path`, schema `STEPS_FLOOR_SCHEMA`) while the
+# headline (`effect`, `anchor_tok_s`, `noise_floor_pct`) stays tok/s. A floor calibrated
+# on tok/s is NEVER reused as the steps/s bar: without a steps/s floor record the
+# speculative gate fails closed (`decisive: None`, `gate.refusal`). The per-launch and
+# comparison blocks below keep their `role` strings, which downstream readers key on.
 #
 # ESTIMATOR. The server counts `n_draft_verif_steps` per slot (server-context.cpp) but
 # does NOT export it in `timings`: only `predicted_n`, `predicted_ms`, `draft_n` and
@@ -1655,7 +1661,13 @@ def _target_steps_aggregate(slots: Sequence[Mapping], aggregate_tok_s: float) ->
                 "tokens_per_step": None}
     estimators = sorted({slot["estimator"] for slot in slots})
     value = sum(slot["target_sample_steps_per_second_est"] for slot in slots)
-    return {**out, "status": "ok", "value": value,
+    # SL-2 acceptance guard: accepted draft tokens per target step, pooled over slots, from
+    # the SAME counters. None unless every slot exported `draft_n_accepted` (a slot with no
+    # draft counters cannot state acceptance, so a speculative keep fails closed on it).
+    accepted = [slot.get("draft_n_accepted") for slot in slots]
+    acceptance = (sum(accepted) / sum(slot["target_sample_steps_est"] for slot in slots)
+                  if all(type(a) is int for a in accepted) else None)
+    return {**out, "status": "ok", "value": value, "accepted_per_step": acceptance,
             "estimator": estimators[0] if len(estimators) == 1 else "mixed:" + ",".join(estimators),
             "tokens_per_step": aggregate_tok_s / value if value > 0 else None}
 
@@ -1673,8 +1685,14 @@ def _target_steps_summary(launches: Sequence[Mapping]) -> dict:
                          if isinstance(launch, Mapping) and launch.get("estimator")})
     tps = [launch.get("tokens_per_step") if isinstance(launch, Mapping) else None
            for launch in launches]
+    acc = [launch.get("accepted_per_step") if isinstance(launch, Mapping) else None
+           for launch in launches]
+    acc_complete = bool(acc) and all(type(v) in (int, float) and math.isfinite(v) for v in acc)
     return {"metric": TARGET_STEPS_METRIC, "n": len(values),
             "status": "ok" if complete else "unavailable",
+            "acceptance_status": "ok" if acc_complete else "unavailable",
+            "acceptance_samples": acc,
+            "median_accepted_per_step": statistics.median(acc) if acc_complete else None,
             "estimators": estimators,
             "median": statistics.median(values) if complete else None,
             "spread": _spread(values) if complete else None,
@@ -1690,11 +1708,289 @@ def _target_steps_comparison(anchor: Sequence[Mapping], candidate: Sequence[Mapp
     a, c = _target_steps_summary(anchor), _target_steps_summary(candidate)
     effect = (c["median"] / a["median"] - 1.0
               if a["status"] == c["status"] == "ok" else None)
+    am, cm = a["median_accepted_per_step"], c["median_accepted_per_step"]
+    acc_effect = (cm / am - 1.0 if am is not None and cm is not None and am > 0
+                  else (0.0 if am == 0 and cm == 0 else None))
     return {"schema": TARGET_STEPS_SCHEMA, "metric": TARGET_STEPS_METRIC,
             "role": "reporting_only_not_gate", "anchor": a, "candidate": c,
             "effect": effect, "effect_pct": None if effect is None else effect * 100.0,
+            "acceptance_effect": acc_effect,
+            "acceptance_effect_pct": None if acc_effect is None else acc_effect * 100.0,
             "anchor_launches": [dict(row) for row in anchor],
             "candidate_launches": [dict(row) for row in candidate]}
+
+
+def _target_steps_calibration(launches: Sequence[Mapping]) -> dict:
+    """Legacy A/A on target steps/s from the calibration's own launches: `floor_pct` is the
+    same p95 |deviation from median| statistic the tok/s legacy floor uses."""
+    summary = _target_steps_summary(launches)
+    return {"schema": TARGET_STEPS_SCHEMA, **summary,
+            "floor_statistic": "p95_abs_dev_from_median_pct_pooled_launches",
+            "floor_pct": None if summary["spread"] is None else summary["spread"]["p95_dev_pct"],
+            "acceptance_floor_pct": _acceptance_floor_legacy(summary["acceptance_samples"]),
+            "estimator_family": _steps_estimator_family(summary["estimators"]),
+            "launches": [dict(row) for row in launches]}
+
+
+def _target_steps_matched_calibration(anchor: Sequence[Mapping], candidate: Sequence[Mapping],
+                                      pairs: int) -> dict:
+    """Matched A/A on target steps/s: the identical paired-bootstrap scalar the matched tok/s
+    floor uses (`_matched_summary`), over the SAME launches, index-aligned per arm."""
+    a, c = _target_steps_summary(anchor), _target_steps_summary(candidate)
+    ok = a["status"] == c["status"] == "ok" and len(a["samples"]) == len(c["samples"])
+    estimators = sorted(set(a["estimators"]) | set(c["estimators"]))
+    return {"schema": TARGET_STEPS_SCHEMA, "metric": TARGET_STEPS_METRIC,
+            "status": "ok" if ok else "unavailable", "estimators": estimators,
+            "estimator_family": _steps_estimator_family(estimators),
+            "floor_statistic": MATCHED_ESTIMATOR,
+            "anchor_samples": a["samples"], "candidate_samples": c["samples"],
+            "floor_pct": (_matched_summary(a["samples"], c["samples"], pairs)["floor_pct"]
+                          if ok else None),
+            "acceptance_floor_pct": (
+                _matched_summary(a["acceptance_samples"], c["acceptance_samples"], pairs)["floor_pct"]
+                if a["acceptance_status"] == c["acceptance_status"] == "ok"
+                and len(a["acceptance_samples"]) == len(c["acceptance_samples"])
+                and all(v > 0 for v in a["acceptance_samples"] + c["acceptance_samples"])
+                else None),
+            "anchor_acceptance_samples": a["acceptance_samples"],
+            "candidate_acceptance_samples": c["acceptance_samples"],
+            "anchor_launches": [dict(row) for row in anchor],
+            "candidate_launches": [dict(row) for row in candidate]}
+
+
+def _acceptance_floor_legacy(samples: Sequence) -> float | None:
+    """p95 |dev from median| % of per-launch accepted-per-step, or None when incomplete."""
+    if (len(samples) < 2 or not all(type(v) in (int, float) and math.isfinite(v) and v > 0
+                                    for v in samples)):
+        return None
+    return _spread(list(samples))["p95_dev_pct"]
+
+
+def _steps_estimator_family(estimators: Sequence[str]) -> str | None:
+    """`exact` only when EVERY launch read the server counter, `estimated` when every one
+    used `predicted_n - draft_n_accepted` (or no drafting), else None. A floor of one family
+    never bars an effect of the other: they are different counts."""
+    found = set(estimators)
+    if not found:
+        return None
+    if found == {TARGET_STEPS_ESTIMATOR_SERVER}:
+        return "exact"
+    if found <= {TARGET_STEPS_ESTIMATOR_TARGET_STEPS, TARGET_STEPS_ESTIMATOR_NO_SPEC}:
+        return "estimated"
+    return None
+
+
+def is_speculative(recipe: Recipe) -> bool:
+    """True when the recipe launches with speculative decoding of any type."""
+    sd = recipe.spec_decode if isinstance(recipe.spec_decode, Mapping) else {}
+    return sd.get("type", "none") != "none"
+
+
+# ---------------------------------------------------------------------------
+# The STEPS/S floor (SL-2). Its own file, its own schema, its own key: a bar calibrated on
+# tok/s carries the drafter's acceptance-trajectory variance and must never be read as a
+# steps/s bar, nor the reverse. Derived ONLY from a calibration row's own sealed/recorded
+# steps block (no number is supplied by the caller), and refused unless that row's
+# launches all stated their target steps/s.
+# ---------------------------------------------------------------------------
+STEPS_FLOOR_SCHEMA = "epyc.autokernel.serving_steps_floor.v1"
+STEPS_FLOOR_KEY_TAG = "steps-s-est"
+
+
+def _floor_suffix(recipe: Recipe, frozen_requests, instrument, pairs) -> str:
+    identity = request_digest(recipe, frozen_requests)
+    suffix = "" if identity is None else f".requests-{identity}"
+    if _instrument(instrument, pairs):
+        suffix += f".{MATCHED_INSTRUMENT}.pairs-{pairs}"
+    return suffix
+
+
+def steps_floor_path(store: Path | str, recipe: Recipe, *, frozen_requests=None,
+                     instrument=LEGACY_INSTRUMENT, pairs=None) -> Path:
+    """Where THIS recipe's steps/s floor lives -- never the tok/s floor's file."""
+    suffix = _floor_suffix(recipe, frozen_requests, instrument, pairs)
+    return Path(store) / f"serving-floor.{floor_key(recipe.name)}.{STEPS_FLOOR_KEY_TAG}{suffix}.json"
+
+
+def steps_floor_row(recipe: Recipe, calibration_row: Mapping, *, frozen_requests=None,
+                    instrument=LEGACY_INSTRUMENT, pairs=None) -> dict:
+    """The steps/s floor a calibration row supports, or raise. Never invents a number."""
+    if not is_speculative(recipe):
+        raise ServingFloorMismatch("a steps/s floor is only meaningful for a speculative recipe")
+    matched = _instrument(instrument, pairs)
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
+    expected_schema = ("epyc.autokernel.serving_floor.v2" if matched
+                       else "epyc.autokernel.serving_floor.v1")
+    if not isinstance(calibration_row, Mapping) or calibration_row.get("schema") != expected_schema:
+        raise ServingFloorMismatch("steps/s floor needs the calibration row of its own instrument")
+    if calibration_row.get("recipe_hash") != recipe.recipe_hash:
+        raise ServingFloorMismatch("calibration row was produced by another recipe")
+    if calibration_row.get("request_digest") != request_digest(recipe, frozen_requests):
+        raise ServingFloorMismatch("calibration row does not identify these exact requests")
+    if matched:
+        _validate_matched_floor(dict(calibration_row), recipe, frozen_requests, pairs)
+    block = calibration_row.get("target_sample_steps_est")
+    if (not isinstance(block, Mapping) or block.get("status") != "ok"
+            or block.get("metric") != TARGET_STEPS_METRIC
+            or block.get("estimator_family") not in ("exact", "estimated")):
+        raise ServingFloorMismatch(
+            "calibration row carries no complete target steps/s A/A: recalibrate; a tok/s "
+            "floor is never reused as a steps/s bar")
+    floor = block.get("floor_pct")
+    if type(floor) not in (int, float) or not math.isfinite(floor) or floor < 0:
+        raise ServingFloorMismatch("calibration steps/s A/A has no finite non-negative floor")
+    n = calibration_row.get("n")
+    if type(n) is not int or n <= 0:
+        raise ServingFloorMismatch("calibration row does not state its n")
+    row = {"schema": STEPS_FLOOR_SCHEMA, "metric": TARGET_STEPS_METRIC,
+           "headline_metric": recipe.metric, "instrument": instrument,
+           "comparison_pairs": pairs if matched else None,
+           "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
+           "recipe_describe": recipe.describe(), "np": recipe.np,
+           "request_digest": calibration_row.get("request_digest"),
+           "unit": calibration_row.get("unit"), "n": n,
+           "estimators": list(block.get("estimators") or ()),
+           "estimator_family": block["estimator_family"],
+           "floor_statistic": block.get("floor_statistic"), "floor_pct": float(floor),
+           # The acceptance A/A (None when the calibration could not state it): the
+           # acceptance guard's own bar. Absent -> the guard falls back to tok/s.
+           "acceptance_floor_pct": (float(block["acceptance_floor_pct"])
+                                    if type(block.get("acceptance_floor_pct")) in (int, float)
+                                    and math.isfinite(block["acceptance_floor_pct"])
+                                    and block["acceptance_floor_pct"] >= 0 else None),
+           "source_calibration_sha256": _digest(json.loads(json.dumps(calibration_row))),
+           "residency": _stamped_residency(calibration_row.get("residency"))}
+    if matched:
+        row.update(anchor_samples=block.get("anchor_samples"),
+                   candidate_samples=block.get("candidate_samples"))
+    else:
+        row["samples"] = block.get("samples")
+    check_unit(row["unit"], CALIBRATION_UNIT, what="steps/s floor")
+    row["content_sha256"] = _digest(row)
+    return row
+
+
+def _validate_steps_floor(row: object, recipe: Recipe, frozen_requests, *,
+                          instrument=LEGACY_INSTRUMENT, pairs=None) -> dict:
+    """Admit a steps/s floor record for THIS recipe/requests/instrument, or raise."""
+    matched = _instrument(instrument, pairs)
+    if not isinstance(row, Mapping) or row.get("schema") != STEPS_FLOOR_SCHEMA:
+        raise ServingFloorMismatch(
+            "steps/s gate needs a steps/s floor record; a tok/s floor is never reused")
+    body = {k: v for k, v in row.items() if k != "content_sha256"}
+    if row.get("content_sha256") != _digest(body):
+        raise ServingFloorMismatch("steps/s floor seal does not match its content")
+    if (row.get("metric") != TARGET_STEPS_METRIC or row.get("recipe_hash") != recipe.recipe_hash
+            or row.get("request_digest") != request_digest(recipe, frozen_requests)
+            or row.get("instrument") != instrument
+            or row.get("comparison_pairs") != (pairs if matched else None)
+            or row.get("estimator_family") not in ("exact", "estimated")):
+        raise ServingFloorMismatch("steps/s floor was calibrated under another frame")
+    check_unit(row.get("unit"), COMPARE_EFFECT_UNIT, what="steps/s floor")
+    floor = row.get("floor_pct")
+    if type(floor) not in (int, float) or not math.isfinite(floor) or floor < 0:
+        raise ServingFloorMismatch("steps/s floor has no finite non-negative floor_pct")
+    return dict(row)
+
+
+def write_steps_floor(store: Path | str, recipe: Recipe, calibration_row: Mapping, *,
+                      frozen_requests=None, instrument=LEGACY_INSTRUMENT, pairs=None) -> Path:
+    """Derive and persist the steps/s floor from a calibration row (the one writer)."""
+    row = steps_floor_row(recipe, calibration_row, frozen_requests=frozen_requests,
+                          instrument=instrument, pairs=pairs)
+    target = steps_floor_path(store, recipe, frozen_requests=frozen_requests,
+                              instrument=instrument, pairs=pairs)
+    return status.write_json(target.parent, target.name, row, prefix=".sv-steps-floor-")
+
+
+def load_steps_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
+                     instrument=LEGACY_INSTRUMENT, pairs=None) -> dict | None:
+    """The validated steps/s floor record for `recipe`, None when absent, or raise."""
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
+    path = steps_floor_path(store, recipe, frozen_requests=frozen_requests,
+                            instrument=instrument, pairs=pairs)
+    if not path.is_file():
+        return None
+    return _validate_steps_floor(json.loads(path.read_text(encoding="utf-8")), recipe,
+                                 frozen_requests, instrument=instrument, pairs=pairs)
+
+
+def _acceptance_guard(steps_view: Mapping, steps_floor: Mapping, tok_effect: float,
+                      tok_floor_pct: float | None) -> dict:
+    """No-acceptance-regression guard for a speculative KEEP. A kernel can be faster per
+    target step yet verify fewer drafts (numeric drift moves which drafts survive), so real
+    tok/s falls while steps/s says keep. Passes only when the candidate's accepted-per-step
+    is not lower than the anchor's by more than the acceptance A/A floor; with no
+    calibrated acceptance floor, falls back to tok/s non-regression under the tok/s floor.
+    Missing counters or bars fail closed."""
+    delta = steps_view.get("acceptance_effect")
+    acc_floor = steps_floor.get("acceptance_floor_pct")
+    out = {"acceptance_effect": delta,
+           "acceptance_effect_pct": None if delta is None else delta * 100.0,
+           "anchor_accepted_per_step": steps_view.get("anchor", {}).get("median_accepted_per_step"),
+           "candidate_accepted_per_step": steps_view.get("candidate", {}).get("median_accepted_per_step"),
+           "acceptance_floor_pct": acc_floor, "basis": None, "passed": False, "reason": None}
+    if delta is None:
+        out.update(basis="acceptance", reason="acceptance_unavailable: draft acceptance "
+                   "counters missing on some launch")
+    elif acc_floor is not None:
+        out["basis"] = "acceptance_floor"
+        if delta * 100.0 < -acc_floor:
+            out["reason"] = (f"acceptance_regression: {delta * 100.0:+.3f}% beyond its "
+                             f"{acc_floor:.3f}% A/A floor")
+        else:
+            out["passed"] = True
+    else:
+        out["basis"] = "tok_s_fallback_no_acceptance_floor"
+        out["tok_s_floor_pct"] = tok_floor_pct
+        if tok_floor_pct is None:
+            out["reason"] = "no acceptance floor and no tok/s floor for the fallback check"
+        elif tok_effect * 100.0 <= -tok_floor_pct:
+            out["reason"] = (f"tok_s_regression: {tok_effect * 100.0:+.3f}% beyond the "
+                             f"{tok_floor_pct:.3f}% tok/s floor")
+        else:
+            out["passed"] = True
+    return out
+
+
+def _speculative_gate(steps_view: Mapping, steps_floor: Mapping | None,
+                      tok_effect: float, tok_floor_pct: float | None = None) -> dict:
+    """The keep decision for a speculative comparison: steps/s effect vs its steps/s floor.
+    Fails closed (`decisive: None`) with a named refusal, never by falling back to tok/s."""
+    gate = {"metric": TARGET_STEPS_METRIC, "basis": "speculative_steps_s",
+            "headline_metric": "aggregate_tok_s", "effect": steps_view.get("effect"),
+            "effect_pct": steps_view.get("effect_pct"),
+            "floor_pct": None if steps_floor is None else steps_floor["floor_pct"],
+            "floor_sha256": None if steps_floor is None else steps_floor["content_sha256"],
+            "estimator_family": None, "steps_decisive": None, "acceptance_guard": None,
+            "decisive": None, "refusal": None}
+    estimators = sorted(set(steps_view.get("anchor", {}).get("estimators") or ())
+                        | set(steps_view.get("candidate", {}).get("estimators") or ()))
+    family = _steps_estimator_family(estimators)
+    gate["estimator_family"] = family
+    effect = steps_view.get("effect")
+    if steps_floor is None:
+        gate["refusal"] = ("speculative_requires_steps_floor: no steps/s floor record; the "
+                           "tok/s floor is not reused")
+    elif effect is None:
+        gate["refusal"] = "steps_unavailable: not every launch stated its target steps/s"
+    elif family is None or family != steps_floor.get("estimator_family"):
+        gate["refusal"] = (f"estimator_family_mismatch: comparison {family!r} vs floor "
+                           f"{steps_floor.get('estimator_family')!r}")
+    else:
+        decisive = abs(effect) * 100.0 >= steps_floor["floor_pct"]
+        gate["steps_decisive"] = decisive
+        guard = _acceptance_guard(steps_view, steps_floor, tok_effect, tok_floor_pct)
+        gate["acceptance_guard"] = guard
+        if decisive and effect > 0 and not guard["passed"]:
+            # A steps/s win is only a keep with no acceptance regression.
+            gate["refusal"] = f"acceptance_guard: {guard['reason']}"
+        elif decisive and (effect > 0) != (tok_effect > 0):
+            gate["refusal"] = ("steps_tok_s_sign_disagreement: steps/s moved beyond its floor "
+                               "but tok/s moved the other way")
+        else:
+            gate["decisive"] = decisive
+    return gate
 
 
 def _frozen_requests(recipe: Recipe, rows) -> tuple | None:
@@ -1738,7 +2034,7 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             frozen_requests=None, floor_request_digest: str | None = None,
             runtime_pair=None, instrument=LEGACY_INSTRUMENT, floor_record=None,
             floor_unit: str | None = None, runtime_evidence: str | None = None,
-            longctx=None) -> dict:
+            longctx=None, steps_floor_record=None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
     `decisive` is None when uncalibrated (no floor), so the keep gate fails closed.
@@ -1753,6 +2049,13 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     source candidate clears. The floor is validated against the anchor arm (its recipe,
     requests and placement/environment frame); the candidate arm may differ from it only
     by the pair's single registered runtime dimension (`RuntimeArmPair.validate`).
+
+    SL-2: when EITHER arm is speculative, `decisive` is decided on target steps/s against
+    `steps_floor_record` (a `STEPS_FLOOR_SCHEMA` record, see `load_steps_floor`), and the
+    decision is recorded in `gate`; `effect`/`anchor_tok_s`/`noise_floor_pct` stay the tok/s
+    headline and `tok_s_decisive` reports the headline's own floor verdict. No steps/s floor
+    -> `decisive: None` (fail closed). Non-speculative comparisons are unchanged and refuse
+    a steps/s floor.
     """
     matched = _instrument(instrument, pairs)
     keep_grade = runtime_evidence == "keep_grade"
@@ -1796,6 +2099,25 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     frozen_requests = _frozen_requests(recipe, frozen_requests)
     _frozen_requests(candidate_recipe, frozen_requests)
     requests_digest = request_digest(recipe, frozen_requests)
+    speculative = is_speculative(recipe) or is_speculative(candidate_recipe)
+    steps_floor_source = None
+    if steps_floor_record is not None:
+        if not speculative:
+            raise ServingFloorMismatch("a steps/s floor cannot gate a non-speculative comparison")
+        steps_floor_record = _validate_steps_floor(steps_floor_record, recipe, frozen_requests,
+                                                   instrument=instrument, pairs=pairs)
+        steps_floor_source = "explicit_steps_floor_record"
+    elif speculative and floor_pct is not None and isinstance(floor_record, dict):
+        # The calibration row (matched: sealed) carries its own steps/s A/A over the same
+        # launches; derive the steps/s bar from THAT block (never from its tok/s
+        # floor_pct). A row that predates SL-2 or could not state steps fails closed.
+        try:
+            steps_floor_record = steps_floor_row(recipe, floor_record,
+                                                 frozen_requests=frozen_requests,
+                                                 instrument=instrument, pairs=pairs)
+            steps_floor_source = "derived_from_floor_record_steps_aa"
+        except ServingFloorMismatch:
+            steps_floor_record = None
     if floor_request_digest != (requests_digest if floor_pct is not None else None):
         raise ServingFloorMismatch("serving floor does not identify these exact request bytes")
     if (anchor_resolved_recipe is None) != (candidate_resolved_recipe is None):
@@ -1931,6 +2253,13 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
         a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
         effect = c_med / a_med - 1.0
         decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
+        steps_view = _target_steps_comparison(a_steps, c_steps)
+        gate = None
+        if speculative:
+            tok_s_decisive = decisive
+            gate = _speculative_gate(steps_view, steps_floor_record, effect, floor_pct)
+            gate["steps_floor_source"] = steps_floor_source
+            decisive = gate["decisive"]
         out = {"schema": "epyc.autokernel.serving_ab.v1", "recipe": recipe.name,
                 # The recipe is part of the artifact, so its identity travels with the number:
                 # a reader (or a gate) can tell whether this row and the floor it was judged
@@ -1954,9 +2283,11 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                 # after the fact, which is the one thing no re-analysis can supply.
                 "residency": _residency_fold(a_residency + c_residency),
                 "anchor_residency": a_residency, "candidate_residency": c_residency,
-                # SL-2: estimated target steps/s BESIDE the tok/s effect. Reporting only -- the
-                # decision above reads `recipe.metric`; see `_target_steps_aggregate`.
-                "target_sample_steps_est": _target_steps_comparison(a_steps, c_steps)}
+                # SL-2: target steps/s BESIDE the tok/s effect. For a speculative
+                # comparison `gate` (below) decides on it; otherwise reporting only.
+                "target_sample_steps_est": steps_view}
+        if gate is not None:
+            out.update(gate=gate, gate_metric=gate["metric"], tok_s_decisive=tok_s_decisive)
         if matched:
             out.update(schema="epyc.autokernel.serving_ab.v2",
                        measurement_plan=measurement_plan, launch_membership=launch_membership,
@@ -2099,7 +2430,7 @@ def _evidence_pairs(anchor_windows: Sequence[Mapping],
 
 def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: dict,
                          plan: dict, values: dict, windows: dict,
-                         should_stop=None) -> dict:
+                         should_stop=None, steps: dict | None = None) -> dict:
     """Exclude/bounded-remeasure ONLY the pairs with INDEPENDENT evidence of a
     compromised launch, and (if still contaminated) REFUSE the calibration. A pair
     flagged ONLY by its own |effect| (no evidence) is left completely untouched and
@@ -2142,14 +2473,24 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
         order = plan["orders"][i]
         fresh_values: dict[str, float] = {}
         fresh_windows: dict[str, list] = {"anchor": [], "candidate": []}
+        fresh_steps: dict[str, list] = {"anchor": [], "candidate": []}
         for arm in order:
             if should_stop is not None and should_stop():
                 raise ActorStopped("stop requested before serving-floor calibration launch")
             fresh_values[arm] = _measure_once(recipe, build_dir, port,
-                                              evidence=fresh_windows[arm], **options)
+                                              evidence=fresh_windows[arm],
+                                              **({"target_sample_steps": fresh_steps[arm]}
+                                                 if steps is not None else {}), **options)
         anchor[i], candidate[i] = fresh_values["anchor"], fresh_values["candidate"]
         windows["anchor"][i] = fresh_windows["anchor"][0] if fresh_windows["anchor"] else {}
         windows["candidate"][i] = fresh_windows["candidate"][0] if fresh_windows["candidate"] else {}
+        if steps is not None:
+            # SL-2: the steps/s A/A must describe the SAME launches as the tok/s one.
+            # A launch that stated nothing leaves the list short, so the block reports
+            # `unavailable` rather than pairing a replaced tok/s with a stale steps/s.
+            for arm in ("anchor", "candidate"):
+                if i < len(steps[arm]):
+                    steps[arm][i] = fresh_steps[arm][0] if fresh_steps[arm] else {}
         replaced.append(i)
     final_effects, final_evidence, final_mad = evaluate()
     still_flagged = sorted(final_evidence)
@@ -2202,15 +2543,17 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
         plan = _matched_plan(samples)
         values = {"anchor": [], "candidate": []}
         windows = {"anchor": [], "candidate": []}
+        steps = {"anchor": [], "candidate": []}
         for order in plan["orders"]:
             for arm in order:
                 if should_stop():
                     raise ActorStopped("stop requested before serving-floor calibration launch")
                 values[arm].append(_measure_once(recipe, build_dir, port,
-                                   evidence=windows[arm], **options))
+                                   evidence=windows[arm], target_sample_steps=steps[arm],
+                                   **options))
         outlier_guard = _apply_outlier_guard(recipe, build_dir, port, options,
                                              plan, values, windows,
-                                             should_stop=should_stop)
+                                             should_stop=should_stop, steps=steps)
         # AKX-AUTO-4: a contiguous degraded block (a level shift both arms share) is
         # invisible to the per-pair evidence guard above; refuse it like any other
         # host-degraded calibration rather than file the inflated floor.
@@ -2246,15 +2589,21 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                # means an unexplained MAD-outlier A/A pair was KEPT in the floor with no
                # independent evidence it was compromised -- file a REMEASURE_REQUEST.
                "suspect": outlier_guard["suspect"],
-               **_matched_summary(values["anchor"], values["candidate"], pairs)}
+               **_matched_summary(values["anchor"], values["candidate"], pairs),
+               # SL-2: the steps/s A/A over the same launches, INSIDE the seal. A steps/s
+               # floor is derived from it only by `steps_floor_row`.
+               "target_sample_steps_est": _target_steps_matched_calibration(
+                   steps["anchor"], steps["candidate"], pairs)}
         row["content_sha256"] = _digest(row)
         return row
     launch_residency: list[dict] = []
+    launch_steps: list[dict] = []
     runs = []
     for _ in range(samples):
         if should_stop():
             raise ActorStopped("stop requested before serving-floor calibration launch")
-        runs.append(_measure_once(recipe, build_dir, port, evidence=launch_residency, **options))
+        runs.append(_measure_once(recipe, build_dir, port, evidence=launch_residency,
+                                  target_sample_steps=launch_steps, **options))
     # `floor_pct` IS this arm's p95 deviation from its own median -- taken from `_spread`
     # so the floor and the per-arm spread reported by `compare` can never drift apart.
     sp = _spread(runs)
@@ -2277,7 +2626,9 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             # whether the launches that DEFINED it were proven resident. `write_floor`
             # carries this to disk.
             "residency": _residency_fold(launch_residency),
-            "launch_residency": launch_residency}
+            "launch_residency": launch_residency,
+            # SL-2: the same A/A on target steps/s from the same launches.
+            "target_sample_steps_est": _target_steps_calibration(launch_steps)}
     if frozen_requests is not None:
         out["request_digest"] = request_digest(recipe, frozen_requests)
     return out
@@ -2317,10 +2668,7 @@ def floor_path(store: Path | str, recipe: Recipe, *, frozen_requests=None,
                instrument=LEGACY_INSTRUMENT, pairs=None) -> Path:
     """Where THIS recipe's serving floor lives. One place, so a reader and a writer can
     never disagree about the filename."""
-    identity = request_digest(recipe, frozen_requests)
-    suffix = "" if identity is None else f".requests-{identity}"
-    if _instrument(instrument, pairs):
-        suffix += f".{MATCHED_INSTRUMENT}.pairs-{pairs}"
+    suffix = _floor_suffix(recipe, frozen_requests, instrument, pairs)
     return Path(store) / f"serving-floor.{floor_key(recipe.name)}{suffix}.json"
 
 
@@ -2549,7 +2897,16 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
                 f"refusing to write a floor for {recipe.name!r}: it states a floor_ci but "
                 f"not the n={count} runs it would be derived from, so nothing can check it")
     target = floor_path(store, recipe, frozen_requests=frozen_requests, instrument=instrument, pairs=pairs)
-    return status.write_json(target.parent, target.name, body, prefix=".sv-floor-")
+    written = status.write_json(target.parent, target.name, body, prefix=".sv-floor-")
+    if is_speculative(recipe):
+        # SL-2 companion: the steps/s floor under its OWN key, derived from this same
+        # calibration. A row that cannot support one writes none (the gate fails closed).
+        try:
+            write_steps_floor(store, recipe, body, frozen_requests=frozen_requests,
+                              instrument=instrument, pairs=pairs)
+        except ServingFloorMismatch:
+            pass
+    return written
 
 
 def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
@@ -2575,6 +2932,8 @@ def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
     if not path.is_file():
         return FloorReading(None, "absent", path, {})
     row = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(row, Mapping) and row.get("schema") == STEPS_FLOOR_SCHEMA:
+        raise ServingFloorMismatch(f"{path.name} is a steps/s floor, not a tok/s floor")
     if matched:
         _validate_matched_floor(row, recipe, frozen_requests, pairs)
         return FloorReading(row["floor_pct"], "verified", path, row)
@@ -2613,4 +2972,6 @@ __all__ = ["CALIBRATION_UNIT", "COMPARE_EFFECT_UNIT", "FLOOR_KEY_MAX", "FLOOR_UN
            "RecipeError", "ServerDied",
            "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "check_unit",
            "compare", "covers_request_phase", "floor_key", "floor_path", "load_floor",
+           "STEPS_FLOOR_SCHEMA", "TARGET_STEPS_METRIC", "is_speculative", "load_steps_floor",
+           "steps_floor_path", "steps_floor_row", "write_steps_floor",
            "request_digest", "unit_refusal", "verify_env_readback", "write_floor"]

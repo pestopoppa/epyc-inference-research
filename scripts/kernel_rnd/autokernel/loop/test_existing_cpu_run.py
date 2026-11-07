@@ -115,7 +115,21 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 held.append(False)
 
         def observe(recipe, build, port, *, evidence=None, resolved_recipe=None,
-                    frozen_requests=None, **kwargs):
+                    frozen_requests=None, target_sample_steps=None, **kwargs):
+            assert held[-1] is True   # keeps `held` in this closure (test_serial_run reads it)
+            value = _observe(recipe, build, port, evidence=evidence,
+                             resolved_recipe=resolved_recipe, frozen_requests=frozen_requests,
+                             **kwargs)
+            if target_sample_steps is not None:
+                # SL-2: synthetic counters at a constant 1.5 tokens/step, so steps/s tracks
+                # tok/s exactly and acceptance is equal across arms (no inference claim).
+                slot = serving._target_steps_slot({"predicted_n": 300, "draft_n": 200,
+                    "draft_n_accepted": 100, "predicted_ms": 300.0 / value * 1000.0})
+                target_sample_steps.append(serving._target_steps_aggregate([slot], value))
+            return value
+
+        def _observe(recipe, build, port, *, evidence=None, resolved_recipe=None,
+                     frozen_requests=None, **kwargs):
             assert held[-1] is True
             assert frozen_requests == expected_requests
             resolved_recipe.validate_launch(recipe, build, port)

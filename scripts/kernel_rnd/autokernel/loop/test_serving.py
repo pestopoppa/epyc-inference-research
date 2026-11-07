@@ -21,6 +21,9 @@ RECIPE = serving.Recipe(
     np=4, ctx=16384)
 
 
+PLAIN = dataclasses.replace(RECIPE, name="t-plain", spec_decode={"type": "none"})
+
+
 class RecipeArgv(unittest.TestCase):
     def test_the_dflash_recipe_emits_the_drafter_flags(self):
         argv = RECIPE.server_argv(Path("/B"), 18311)
@@ -64,13 +67,21 @@ class Arithmetic(unittest.TestCase):
 
     def test_compare_is_decisive_above_the_floor(self):
         with mock.patch.object(serving, "_measure_once", side_effect=[100.0, 120.0]):
-            out = serving.compare(RECIPE, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
+            out = serving.compare(PLAIN, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
                                   floor_unit=serving.COMPARE_EFFECT_UNIT)
         self.assertTrue(out["decisive"])
 
+    def test_speculative_tok_s_floor_alone_fails_closed(self):
+        # SL-2: a speculative keep is decided on steps/s against its OWN floor.
+        with mock.patch.object(serving, "_measure_once", side_effect=[100.0, 120.0]):
+            out = serving.compare(RECIPE, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
+                                  floor_unit=serving.COMPARE_EFFECT_UNIT)
+        self.assertIsNone(out["decisive"])
+        self.assertTrue(out["tok_s_decisive"])
+
     def test_a_within_floor_effect_is_not_decisive(self):
         with mock.patch.object(serving, "_measure_once", side_effect=[100.0, 100.4]):
-            out = serving.compare(RECIPE, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
+            out = serving.compare(PLAIN, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
                                   floor_unit=serving.COMPARE_EFFECT_UNIT)
         self.assertFalse(out["decisive"])
 
