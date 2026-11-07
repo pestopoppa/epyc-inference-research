@@ -23,7 +23,7 @@ REVIEWED = {
     "pipeline.py": "642b5ade0bd6dc972fa22ca93a5249889b1f1ba564af248a31e69604bdcadfcf",
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
-    "run.py": "f1e7eedff5d34da723cd0de6b11cb532377c7ad862ac55f5dc8d218b125bceb3",  # custody review 2026-11-07 AutoKernel: provider breaker observes after record + finish_custody_hold, gates dispatch only (test_provider_breaker)
+    "run.py": "67d40786542eeb3a6d302609d37a79e96d540a832eb3a9356493c4afd7b517e7",  # custody review 2026-11-07 AutoKernel: keep-path timing wrappers (same args/returns/raises; timer never raises) on top of the provider breaker
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 
