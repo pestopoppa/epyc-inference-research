@@ -133,7 +133,9 @@ class ServingComparison:
 
     @property
     def effect(self):
-        return self.row["effect"]
+        # SL-2: the effect `decisive` refers to (steps/s keep, either-metric regression);
+        # the tok/s headline stays in row["effect"]. Identical for non-speculative rows.
+        return serving.verdict_effect(self.row)
 
     @property
     def decisive(self):
@@ -5094,8 +5096,8 @@ def _main(argv: list[str] | None = None) -> int:
             anchor_resolved_recipe=anchor_recipe,
             candidate_resolved_recipe=candidate_recipe,
             frozen_requests=frozen_requests, floor_request_digest=floor_request_digest,
-            **({"instrument": args.serving_instrument, "floor_record": floor_record}
-               if source_instrument else {})),
+            floor_record=floor_record,
+            **({"instrument": args.serving_instrument} if source_instrument else {})),
             "experimental_candidate_not_champion" if experimental
             else "canonical_candidate_vs_current_anchor",
             measurement_window=cpu_measurement_window)
@@ -6092,7 +6094,8 @@ def _main(argv: list[str] | None = None) -> int:
                                      "candidate_resolved_recipe": _cpu_arm(direct_launch, anchor_build[0]),
                                      "frozen_requests": frozen_requests,
                                      "floor_request_digest": floor_request_digest,
-                                     **({"instrument": args.serving_instrument, "floor_record": floor_record}
+                                     "floor_record": floor_record,
+                                     **({"instrument": args.serving_instrument}
                                         if source_instrument else {})}
                                     if direct_launch else {}))
         plan = accumulate.resolve(bundle[0], sv_row, accum_policy, store=args.store)
@@ -7122,8 +7125,8 @@ def _main(argv: list[str] | None = None) -> int:
                     candidate_resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
                     frozen_requests=heldout_requests,
                     floor_request_digest=heldout_digest,
-                    **({"instrument": args.serving_instrument,
-                        "floor_record": heldout_floor.row}
+                    floor_record=heldout_floor.row or None,
+                    **({"instrument": args.serving_instrument}
                        if source_instrument else {})),
                     "integrity_heldout_candidate_not_champion")
                 verdict = heldout_serving.decide(
@@ -8483,7 +8486,8 @@ def _main(argv: list[str] | None = None) -> int:
                             candidate_resolved_recipe=candidate_launch,
                             frozen_requests=frozen_requests,
                             floor_request_digest=floor_request_digest,
-                            **({"instrument": args.serving_instrument, "floor_record": floor_record}
+                            floor_record=floor_record,
+                            **({"instrument": args.serving_instrument}
                                if source_instrument else {}))
                     except (loop.MeasurementInvalid, serving.ServerDied) as exc:
                         failure = (dict(exc.record) if isinstance(exc, loop.MeasurementInvalid)

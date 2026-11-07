@@ -23,7 +23,7 @@ REVIEWED = {
     "pipeline.py": "d17f3ed2dada812aba24bee16decd0140a21ec53ca8042789cc61f86c6d2b36f",  # custody review 2026-11-07 AutoKernel: tail_timing wrappers re-raise unchanged, tail session entered as before (AK-TAIL-SPLIT phase 1)
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
-    "run.py": "be64f6c325e2d75482d3aa87324bbcf85a1d9b11df87de4ab0b042c49a89ee73",  # custody review 2026-11-07 AutoKernel: AKX-AUTO-4 floor_selfcheck.check_before_write before both _write_new_source_floor sites (refusal unwinds through the existing fail_remeasure_request path), on top of the same-state stop
+    "run.py": "7eec18fbcde41ec62bd36de48a6496ad277caac998e9ad5356ed46a0098d4d07",  # custody review 2026-11-07 AutoKernel: SL-2/SL-4 call sites pass floor_record= on the legacy serving path and ServingComparison.effect routes through serving.verdict_effect; no drop or keep path added, on top of AKX-AUTO-4
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 
