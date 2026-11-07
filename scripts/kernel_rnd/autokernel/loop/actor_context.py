@@ -77,6 +77,8 @@ import time
 import uuid
 from typing import Any, Iterable
 
+from . import champion_context, figure_lint
+
 #: Sibling of the lane worktree (never inside it: a file there would ride into the
 #: authored diff and into the author's `git status` ground-truth check).
 BUNDLE_DIR = "actor-context"
@@ -364,6 +366,30 @@ CARD_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 GUARDED_BUILD_LABEL = "build dir (anchor BINARY: read-only, binaries only; never read source there)"
 
 
+def _rulings_block() -> list[str]:
+    """The champion/rulings block (AK-TOOL-CHAMPION-CONTEXT); a load failure is rendered,
+    never swallowed."""
+    try:
+        return champion_context.render()
+    except (OSError, ValueError, KeyError) as exc:
+        return [champion_context.HEADING, f"- UNAVAILABLE: {type(exc).__name__}: {exc}"]
+
+
+def _unsourced_block(sections: list[Section]) -> list[str]:
+    """AK-TOOL-UNSOURCED-LINT: name every ratio/percent figure whose SECTION cites no
+    resolvable raw path. Flag, never mutate: sections are shown verbatim."""
+    rows = []
+    for sec in sections:
+        _text, flagged = figure_lint.mark_text(sec.text, section_level=True)
+        if flagged:
+            rows.append(f"- `{sec.key}`: " + ", ".join(flagged[:6])
+                        + (f" (+{len(flagged) - 6} more)" if len(flagged) > 6 else ""))
+    if not rows:
+        return []
+    return [f"{figure_lint.UNSOURCED_MARK} figures below have no resolvable raw RESULT path "
+            "anywhere in their section; treat them as unverified priors:", *rows, ""]
+
+
 def target_card(target: Any, *, lane: Path | str | None = None) -> list[str]:
     """The resolved facts every proposal needs. With `lane` (the lane guard), the first
     row names the lane as THE source tree and the build dir is labelled a binary."""
@@ -542,6 +568,9 @@ def _index_text(directory: Path, rows: list[tuple[Section, str]],
         out.append("Target card (resolved from the target section; full JSON in `json/target/`):")
         out.extend(card)
         out.append("")
+    out.extend(_rulings_block())
+    out.append("")
+    out.extend(_unsourced_block([sec for sec, _rel in rows]))
     out.append("=== INLINE sections (verbatim) ===")
     out.append("")
     index = "\n".join(out)
@@ -683,6 +712,9 @@ def _orch_index_text(sections: list[Section], payloads: dict[str, Any], *,
                    "context['target']):")
         out.extend(card)
         out.append("")
+    out.extend(_rulings_block())
+    out.append("")
+    out.extend(_unsourced_block(sections))
     out.append("=== INLINE sections (verbatim) ===")
     out.append("")
     index = "\n".join(out)

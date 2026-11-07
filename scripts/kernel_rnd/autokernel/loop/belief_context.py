@@ -468,6 +468,17 @@ def check_seeds(items: Iterable[Mapping[str, Any]], config: BeliefConfig | None 
                            "flagged_premises": []} for item in items]}
 
 
+def unsourced_figures(record: Any, *, strict: bool = False, exists: Callable[[str], bool] | None = None
+                      ) -> list[str]:
+    """AK-TOOL-UNSOURCED-LINT over a nested seed/belief record: dotted paths of numeric
+    leaves with no resolvable raw RESULT path on or above them (see `figure_lint`)."""
+    from . import figure_lint
+    found = figure_lint.find_unsourced(record, exists=exists)
+    if strict and found:
+        raise figure_lint.UnsourcedFigureRefused(found)
+    return found
+
+
 # ------------------------------------------------------------------------------ receipt
 
 

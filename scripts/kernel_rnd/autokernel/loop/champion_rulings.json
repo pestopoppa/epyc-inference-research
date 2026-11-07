@@ -1,0 +1,17 @@
+{
+  "schema": "epyc.autokernel.champion_rulings.v1",
+  "note": "Rulings in force + per-port e2e status for the planner. Every entry cites a source path:line (relative to the epyc-root repo) and, where one exists, a commit. Edit this file, never the renderer; a row without a resolvable source is rendered marked UNSOURCED.",
+  "champion": {"name": "C7r", "commit": "62cb6a6af", "source": "handoffs/active/autokernel-loop.md:5683"},
+  "rulings": [
+    {"id": "R-C7R-CHAMPION", "text": "Current champion is C7r 62cb6a6af (CAS 65da39eb1 -> 62cb6a6af). Anchor and re-scope every result to it; C5/C6-era results are not comparable.", "source": "handoffs/active/autokernel-loop.md:5683", "commit": "62cb6a6af"},
+    {"id": "R-27B-PPL", "text": "27B Q8_0 PPL with H15 in is accepted at the measured delta (within 1 SE rule, operator-accepted).", "source": "handoffs/active/autokernel-loop.md:5670", "commit": "62cb6a6af"},
+    {"id": "R-H14-OFF", "text": "H14 (fused qk norm+rope+kv write) ships default OFF in the champion.", "source": "handoffs/active/autokernel-loop.md:5685", "commit": "c420b9d1a"},
+    {"id": "R-FA128-OFF", "text": "hd128 asm FA path is gated default-off (bf16 end to end costs PPL on small models).", "source": "handoffs/active/autokernel-loop.md:5690", "commit": "e93f9417e"}
+  ],
+  "ports": [
+    {"port": "H15", "e2e_status": "folded (IN); PPL gate covered by the C7r gate", "source": "handoffs/active/autokernel-loop.md:5670"},
+    {"port": "H14", "e2e_status": "folded default OFF", "source": "handoffs/active/autokernel-loop.md:5685"},
+    {"port": "H8b", "e2e_status": "NO_KEEP: e2e pp512 below parity despite an op-level win on uniform routing; real routing is skewed", "source": "handoffs/active/autokernel-loop.md:5658", "commit": "3597d6c3b"},
+    {"port": "FA hd128 asm", "e2e_status": "folded default OFF", "source": "handoffs/active/autokernel-loop.md:5690", "commit": "e93f9417e"}
+  ]
+}

@@ -62,6 +62,8 @@ INCIDENT = ("This guard exists because of the 2026-08-31 single-champion inciden
 
 
 class StartupRefused(SystemExit):
+    #: typed reason (see REASON_*); None for the legacy untyped refusals.
+    reason: str | None = None
     """The worktree or anchor is not the single champion. Non-zero exit, loud message.
 
     A `SystemExit` subclass so an unhandled refusal exits 1 with the message on
@@ -201,6 +203,55 @@ def verify_anchor(anchor_build: Path, worktree: Path, head: str, *,
             f"ancestor-or-equal of worktree HEAD {head}. {INCIDENT}")
 
 
+#: Typed refusal reasons (AK-TOOL-CHAMPION-CONTEXT). A caller or test branches on
+#: `StartupRefused.reason`, never on message text.
+REASON_STALE_ANCHOR = "stale_anchor"
+REASON_NO_ATTESTATION = "anchor_unattested"
+
+
+def verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
+                          experimental_identity: bool = False) -> None:
+    """The anchor must have been built FROM the current champion tip, not merely a
+    descendant-ancestor of it.
+
+    `verify_anchor` accepts any ancestor ("a few keeps old"), leaving the A/A guard to
+    catch the staleness after a build. Operator corrections "use the champion / re-scope
+    to C7" (~16x in main-inf22, 11-03..11-07) show that tolerance costs re-runs: C5/lbt
+    results were redone against a stale base. Here the provenance `champion_commit`
+    must EQUAL the verified worktree head, else `StartupRefused(reason="stale_anchor")`.
+    An anchor with no provenance.json cannot be proven current and is refused with
+    `reason="anchor_unattested"` -- `--allow-unverified-anchor` waives only the
+    ancestry check in `verify_anchor`, never currency.
+    """
+    prov = Path(anchor_build) / "provenance.json"
+    named = ""
+    if experimental_identity and not prov.is_file():
+        # `_verify_experimental_identity` already proved IDENTITY.json head == head.
+        return
+    if prov.is_file():
+        try:
+            named = str(json.loads(prov.read_text(encoding="utf-8")).get(
+                "champion_commit") or "")
+        except (OSError, ValueError):
+            named = ""
+    if not named:
+        refusal = StartupRefused(
+            f"REFUSED [{REASON_NO_ATTESTATION}]: anchor {anchor_build} carries no "
+            f"champion_commit, so it cannot be proven to be the CURRENT champion "
+            f"{head}. {INCIDENT}")
+        refusal.reason = REASON_NO_ATTESTATION
+        raise refusal
+    resolved = _git(worktree, "rev-parse", "--verify", f"{named}^{{commit}}").stdout.strip()
+    if resolved != head:
+        refusal = StartupRefused(
+            f"REFUSED [{REASON_STALE_ANCHOR}]: anchor {anchor_build} was built from "
+            f"champion_commit {named}, but the current champion is {head}. Rebuild the "
+            f"anchor from the champion tip (pool.promote_anchor) before measuring. "
+            f"{INCIDENT}")
+        refusal.reason = REASON_STALE_ANCHOR
+        raise refusal
+
+
 def warn_divergence(worktree: Path, branch: str) -> None:
     """`--champion-branch <other>` never passes silently once it has forked.
 
@@ -227,7 +278,8 @@ def warn_divergence(worktree: Path, branch: str) -> None:
 
 def verify_startup(*, worktree: Path, branch: str, anchor_build: Path,
                    allow_unverified_anchor: bool = False,
-                   experimental_identity: bool = False) -> str:
+                   experimental_identity: bool = False,
+                   require_current_anchor: bool = True) -> str:
     """The whole gate. Runs before the claim, the census, even the dry run's wiring
     proof — a refusal that costs four git reads must never queue behind anything.
     Returns the verified champion head."""
@@ -235,8 +287,12 @@ def verify_startup(*, worktree: Path, branch: str, anchor_build: Path,
     warn_divergence(worktree, branch)
     verify_anchor(anchor_build, worktree, head, allow_unverified=allow_unverified_anchor,
                   experimental_identity=experimental_identity)
+    if require_current_anchor:
+        verify_anchor_current(anchor_build, worktree, head,
+                              experimental_identity=experimental_identity)
     return head
 
 
 __all__ = ["CANONICAL_BRANCH", "INCIDENT", "StartupRefused", "verify_anchor",
+           "REASON_NO_ATTESTATION", "REASON_STALE_ANCHOR", "verify_anchor_current",
            "verify_startup", "verify_worktree", "warn_divergence"]
