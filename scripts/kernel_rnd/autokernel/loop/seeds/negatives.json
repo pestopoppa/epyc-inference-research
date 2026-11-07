@@ -74,6 +74,16 @@
       "target_symbol": "flash_attn_ext_f16",
       "effect_fraction": -0.0254,
       "reason": "MEASURED NO-GO on C6 729599d69, MI210. Spec-off decode B/C mean 0.9746 over 2 ABBA pairs (0.986, 0.963); pp512@d16384 B/C 0.789 (P), 0.769 (K2), 0.753 (K3), D256-cap and CDNA-tune knobs do not recover it. Top regressing family is a Tensile Cijk_Alik_Bljk_HSS MT128x96x64 GEMM present only on the 10.1 side. The earlier Stage-1 decode +8.7% (r2 median 1.087) was DRAFT ACCEPTANCE, not kernel speed. Ratio higher=better. A static audit looked good (spills 145->96, FA-MMA 53->2) and did not predict the runtime loss. Caveats: F0 cells invalid (-fa 0 with q8_0 KV cannot create a context), decision unaffected; only 2 valid pairs. Source: /mnt/raid0/llm/tmp/q38p3a-verdict.json, q38p3-r2-verdict.json, docs/reference/mi210-serving-program-findings-20261105.md. Evidence /mnt/raid0/llm/tmp/q38p3a-verdict.json (+ q38p3-r2-verdict.json). Measured on C6 729599d69 (2026-11-05), NOT this file's historical epoch: mechanism transfers, magnitude is cross-epoch."
+    },
+    {
+      "status": "measured_null",
+      "mechanism_id": "akm-lsa-h12-pca-indexer-gpu",
+      "statement": "A GPU flat-PCA per-key top-k indexer feeding the H12 fused sparse FA beats dense FA on the 27B global layers at kv=32768.",
+      "falsifier": "geomean dense_us/lsa_us at kv=32768 < 1.10 (flag ratio 1.1, 5 reps).",
+      "target_surface": "ggml/src/ggml-cuda (QSA indexer + fused sparse FA, LSA-H12-INDEXER)",
+      "target_symbol": "lsa_indexer_pca_topk",
+      "effect_fraction": -0.632,
+      "reason": "MEASURED FUTILE on build 289207e31 (store gpu-20261106-289207e31-lsah12) vs C7 c420b9d1a, MI210. geomean dense/lsa at kv=32768 = 0.368 (lsa SLOWER). Cells dense_us/lsa_us -> ratio: kv32768 nb1 342.7/722.9=0.474, nb8 400.4/1269.2=0.315, nb16 519.7/1564.6=0.332, nb512 5482/14820=0.370; kv16384 nb512 0.202; kv65536 nb1 0.574. Ratio higher=better. Packet caveat: selection is a flat per-key PCA top-k (+ window 512, sinks 4), NOT the author Ward bucket selector (only the map and scorer math ported), so this refutes the flat-PCA-indexer variant, not Ward/bucketed LSA. Source: /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json (perf.json, correct.json). Evidence /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json. Measured on C7 (2026-11-06), not this file's historical epoch."
     }
   ]
 }

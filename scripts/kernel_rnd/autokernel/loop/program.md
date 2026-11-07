@@ -740,12 +740,21 @@ evidence that addresses the stated reason.
 
 | Verdict | Mechanism | Result | Packet |
 |---|---|---|---|
-| DROP (op-KEEP / e2e-NO_KEEP) | H8b A3B MoE expert-density tiling, shape-aware window, M<=8 fused-GLU excluded | op gate MUL_MAT_ID geomean 1.2905 over M 64..1024 (uniform routing ids), but pre-registered e2e NO_KEEP: A3B MTP Q8_0 C8-h8b 3597d6c3b vs C7r, 5 interleaved reps: pp512 0.949x, pp1024 0.968x, tg128 0.998x. Cause: op test uses uniform expert routing, real A3B routing is skewed | ak-asm-h8b-gate-r2-20261106 (op), ak-asm-h8b-e2e-20261106 (e2e) |
+| DROP (op-KEEP / e2e-NO_KEEP) | H8b A3B MoE expert-density tiling, shape-aware window, M<=8 fused-GLU excluded | op gate MUL_MAT_ID geomean 1.2905 over M 64..1024 (uniform routing ids), but pre-registered e2e NO_KEEP: A3B MTP Q8_0 C8-h8b 3597d6c3b vs C7r, 5 interleaved reps: pp512 0.949x (inside the keep-tail floor F 5.18%: REFUSED, not a resolved loss), pp1024 0.968x (resolved loss), tg128 0.998x. Cause: op test uses uniform expert routing, real A3B routing is skewed | ak-asm-h8b-gate-r2-20261106 (op), ak-asm-h8b-e2e-20261106 (e2e) |
 | DROP | H3 Q8_0 GEMV prefetch confirmation (GGML_CUDA_Q8_PREFETCH=1, C6) | 27B Q8_0 tg128 0.9465 (31.46 vs 33.24 t/s, n 5/5); second receipt for negative akm-hist-q8-prefetch | ak-asm-t0-h3-gate-20261105 |
 | NO-GO | ROCm 10.1 toolchain for the HIP build (C6) | spec-off decode 0.9746 (2 ABBA pairs), pp512@16k 0.75-0.79; the earlier +8.7% decode was draft acceptance | q38p3a-verdict.json (negatives.json akm-c6-rocm-10-1-llamacpp-build) |
 | BENCH RULE | Pinned host memory when the HIP backend is merely loaded into a CPU-served process (C6, Q38FN) | CPU decode TPOT 1.880x of CPU-only; GGML_CUDA_NO_PINNED=1 -> 1.028x | npd1-step4-20261105/out/PILOT-COMPLETE.json |
 
 Bench rule from the last row: any candidate that loads the HIP backend into a CPU-served process is timed with AND without `GGML_CUDA_NO_PINNED=1` in the same run, or a CPU decode loss is misattributed to the kernel. Stack note (not a kernel change): Q38FN `-ngl 0 -ub 2048` + NO_PINNED gives TTFT 2.61x (8k) / 2.87x (32k) at TPOT 1.052 (npd1-step5-20261105).
+
+
+**Added 2026-11-07, harvest #2 (`[belief: cc]`; evidence paths under `/mnt/raid0/llm/tmp/`):**
+
+- **C7r is a BUNDLE verdict, and its gate is FAIL (operator-accepted), not PASS.** `c7r-gate-20261106` = C7R_GATE_FAIL on PPL part c only (27B mean ln +0.0017 vs 1 SE 0.0005); correctness and e2e parts pass; operator accepted and promoted. e2e c7r/c6: 27B DFlash2 decode 1.336/1.388/1.449 @8k/32k/64k, 27B pp2048 1.020 / pp32768 1.195, A3B pp2048 1.038 / tg128 1.060. Per-port e2e exists only for H10 (alone 1.048/1.043/1.146, far below the bundle) and H5-PORT hd256 R5 (27B pp32768 1.195, `fa-ck-hd256-gate-r5-20261106`); H1b, H1+H7, H12, H11, H13, H15 are op-level only, per-port e2e pending (seed 10 AK-ASM-PORT-ABLATE).
+- **Per-op oracles cannot see allocator-lifetime bugs.** H13b hc seam fusions passed test-backend-ops (CPU 8253/0) and per-op oracles but broke Q38FN in the real graph: `c7-q38-ppl-bisect-20261106` CULPRIT_FOUND, C7 default ln 0.1099 (PPL 3.850 vs C6 3.450, same-top 88.6%), GGML_CUDA_HC_FUSE=0 ln 0.00096; radix TOP_K off only 0.0835 (partial), CK hd256 off 0.1138, H13c off 0.1146. Fixed in C7r (e4d460c16). Any multi-node fusion candidate needs a graph-level KLD smoke (seed 10 AK-FUSE-GRAPH-KLD).
+- **Q38FN KLD floor:** with every C7 switch off, Q38FN KLD vs C6 is still 0.0168 (same-top 96.1%) at ln ~0; do not read ln alone as sufficient until the C6-vs-C6 repeat floor is known (seed 10 AK-Q38-KLD-FLOOR).
+- **GDN share on MI210 (C7r, `gdn-share-mi210-20261106`, MEASURED):** GDN_CORE kernel share 27B pp2048 0.158, A3B pp2048 0.212, decode 0.014-0.023, verify 0.034-0.065 -> prefill > 5%, decode < 5% (MI210 device NOT closed for the GDN line). pp32768 figures are invalid (gdn_count_ok False).
+- **DROP (do-not-repeat):** LSA flat-PCA top-k indexer + H12 fused sparse FA, 0.368x at kv 32768 (`akm-lsa-h12-pca-indexer-gpu`).
 
 Pattern: under HIP graphs, launch-removal fusions of small elementwise ops (H6, H14) do not
 move end-to-end time; wins came from bytes (H1b, H10, H12) or from removing CPU/GPU splits (H13).
