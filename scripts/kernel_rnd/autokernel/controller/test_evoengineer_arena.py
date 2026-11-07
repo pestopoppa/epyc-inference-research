@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import importlib.util
 import unittest
 from unittest import mock
 
@@ -325,6 +326,9 @@ class EvoEngineerArenaTest(unittest.TestCase):
 
     @unittest.skipUnless(E.DEFAULT_SOURCE_ROOT.is_dir(),
                          "exact admitted EvoEngineer checkout is absent")
+    @unittest.skipUnless(importlib.util.find_spec("scipy") is not None,
+                         "the in-process upstream import needs scipy, which "
+                         "only the pinned runtime python carries")
     def test_exact_upstream_run_completes_full_policy_with_fixture_bridges(self):
         """Exercise the real historical loop without model, GPU, or inference."""
         output = self.workspace / "exact-upstream-run"

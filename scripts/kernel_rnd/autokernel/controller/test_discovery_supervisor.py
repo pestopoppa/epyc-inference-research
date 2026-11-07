@@ -19,6 +19,24 @@ from . import discovery_supervisor as S
 from . import discovery_supervisor_secure as R
 
 
+_PRIOR_BYTECODE = (sys.dont_write_bytecode, os.environ.get("PYTHONDONTWRITEBYTECODE"))
+
+
+def setUpModule() -> None:
+    # Sealed execution refuses a Python that can write bytecode; the launcher
+    # normally exports this, a bare pytest invocation does not.
+    sys.dont_write_bytecode = True
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+
+
+def tearDownModule() -> None:
+    sys.dont_write_bytecode = _PRIOR_BYTECODE[0]
+    if _PRIOR_BYTECODE[1] is None:
+        os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
+    else:
+        os.environ["PYTHONDONTWRITEBYTECODE"] = _PRIOR_BYTECODE[1]
+
+
 CANARY = {"hold_seconds": 1.0, "exit_code": 0, "spawn_descendant": False}
 
 

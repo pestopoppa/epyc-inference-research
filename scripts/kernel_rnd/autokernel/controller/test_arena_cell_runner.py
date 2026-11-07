@@ -254,8 +254,29 @@ class FakeSampler:
         return FakeSampling()
 
 
+def _pinned_evaluator_python_present() -> bool:
+    try:
+        R._evaluator_python_identity()
+    except R.ArenaCellRunnerError:
+        return False
+    return True
+
+
+PINNED_EVALUATOR_PRESENT = _pinned_evaluator_python_present()
+
+
 class ArenaCellRunnerTest(unittest.TestCase):
     def setUp(self):
+        if not PINNED_EVALUATOR_PRESENT:
+            # Host without the ROCm evaluator interpreter (its path here is a
+            # symlink to a different python).  Runner logic is hardware-free,
+            # so fall back to the declared identity; the tests that assert the
+            # REAL binary identity skip themselves instead.
+            patcher = mock.patch.object(
+                R, "_evaluator_python_identity",
+                R._declared_evaluator_python_identity)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -1507,6 +1528,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 sampler_factory=FakeSampler)
         self.assertTrue(claim.released)
 
+    @unittest.skipUnless(PINNED_EVALUATOR_PRESENT,
+                         "pinned ROCm evaluator interpreter is not on this host")
     def test_worker_subprocess_uses_the_pinned_rocm_evaluator_python(self):
         cell = self.root / "cells" / "001"
         output = cell / "worker-result.json"
