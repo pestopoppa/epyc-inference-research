@@ -98,6 +98,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
+from . import keep_timing
 from . import actor_opencode_config
 from . import belief_context
 from . import actor_passthrough
@@ -5697,6 +5698,15 @@ def _main(argv: list[str] | None = None) -> int:
         if outcome.carryover:
             print(f"headline  carry-over: {outcome.carryover}")
 
+    #: Per-stage keep-path timing (keep_timing.py): set for the duration of one keep,
+    #: attached to that keep's `kept` row. Observability only, never control flow.
+    keep_timer: list[keep_timing.KeepTimer | None] = [None]
+    keep_timing_by_head: dict[str, dict] = {}
+
+    def keep_stage(name: str, **identity):
+        timer = keep_timer[0]
+        return nullcontext({}) if timer is None else timer.stage(name, **identity)
+
     def verify_anchor(*, guard_floor=None) -> None:
         """Prove the promoted binary IS the champion; `RunAborted` if not. Runs in the
         serialized tail holding the claim: `commit` is called inside `tail_session`."""
@@ -5724,23 +5734,52 @@ def _main(argv: list[str] | None = None) -> int:
             return (f"this run's previous anchor-guard A/A passed inside the floor "
                     f"{age / 60.0:.0f} min ago (--anchor-guard-aa-window-s {window:g})")
 
-        anchor.verify(
-            champion_commit=_git(args.worktree, "rev-parse", "HEAD"),
-            anchor_build=anchor_build[0],
-            noise_floor_pct=floor if guard_floor is None else guard_floor,
-            # 2026-09-06: OBJECT digest, not the linked .so. The compiler is reproducible
-            # (0/379 objects ever differed); the linker is not (four distinct .so digests
-            # for one commit aborted every keep on link noise). Objects prove identity.
-            digest=anchor_integrity.object_digest,
-            on_verdict=keep_verdict, build=build_champion, aa_skip=aa_skip,
-            compare=lambda promoted, fresh: (
+        guard_commit = _git(args.worktree, "rev-parse", "HEAD")
+        guard_scratch = (args.store / ("anchor-verify-cpu" if cpu_launch else
+                                       "anchor-verify-gpu-serving")
+                         if direct_launch else anchor.SCRATCH_BUILD)
+        guard_builds = [0]
+
+        def timed_build(path):
+            guard_builds[0] += 1
+            name = "anchor_guard_build" if guard_builds[0] == 1 else "anchor_guard_heal_build"
+            with keep_stage(name, commit=guard_commit, build_dir=str(path)):
+                return build_champion(path)
+
+        def timed_digest(path):
+            with keep_stage("anchor_guard_digest", build_dir=str(path)):
+                return anchor_integrity.object_digest(path)
+
+        def timed_aa_skip():
+            reason = aa_skip()
+            if reason and keep_timer[0] is not None:
+                keep_timer[0].skip("anchor_guard_aa", reason)
+            return reason
+
+        def guard_compare(promoted, fresh):
+            return (
                 cpu_anchor_guard_compare(promoted, fresh)
                 if direct_launch and source_instrument and source_floor_refresh[0]
                 else cpu_compare(promoted, fresh)) if direct_launch else measured_bench_compare(
                 bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),
                 bench.Arm("fresh_champion", fresh / "bin" / "llama-bench"),
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
-                surface=args.surface, ubatch=ubatch, calibrated=calibrated),
+                surface=args.surface, ubatch=ubatch, calibrated=calibrated)
+
+        def timed_compare(promoted, fresh):
+            with keep_stage("anchor_guard_aa"):
+                return guard_compare(promoted, fresh)
+
+        anchor.verify(
+            champion_commit=guard_commit,
+            anchor_build=anchor_build[0],
+            noise_floor_pct=floor if guard_floor is None else guard_floor,
+            # 2026-09-06: OBJECT digest, not the linked .so. The compiler is reproducible
+            # (0/379 objects ever differed); the linker is not (four distinct .so digests
+            # for one commit aborted every keep on link noise). Objects prove identity.
+            digest=timed_digest,
+            on_verdict=keep_verdict, build=timed_build, aa_skip=timed_aa_skip,
+            compare=timed_compare,
             on_step=lambda label: publish("running", latest,
                                           hotspot_rows=hotspot_rows, step=label),
             **({"scratch_build": args.store / ("anchor-verify-cpu" if cpu_launch else
@@ -5756,15 +5795,18 @@ def _main(argv: list[str] | None = None) -> int:
         # reprofile + accumulate) and the dashboard read the loop as dead. Heartbeat every sub-stage.
         publish("running", latest, hotspot_rows=hotspot_rows,
                 step="keep: building the new anchor generation (clean build)")
-        anchor_build[0] = pool.promote_anchor(
-            args.store, build=build_champion, recipe=recipe.to_dict(),
-            champion_commit=_git(args.worktree, "rev-parse", "HEAD"),
-            # 2026-10-06 follow-up: widen to PPL_CONTRACT_TOOL_TARGETS only when this
-            # store has a ppl_contract obligation (an admitted mechanism, or an
-            # unreadable ledger failing wide) -- a store with no ppl_contract history
-            # keeps getting exactly gates.PROMOTION_TARGETS, so an existing run's
-            # resume is unaffected.
-            ppl_contract_obligated=gates.ppl_contract_anchor_obligated(args.store))
+        clean_commit = _git(args.worktree, "rev-parse", "HEAD")
+        with keep_stage("anchor_clean_build", commit=clean_commit) as clean_stage:
+            anchor_build[0] = pool.promote_anchor(
+                args.store, build=build_champion, recipe=recipe.to_dict(),
+                champion_commit=clean_commit,
+                # 2026-10-06 follow-up: widen to PPL_CONTRACT_TOOL_TARGETS only when this
+                # store has a ppl_contract obligation (an admitted mechanism, or an
+                # unreadable ledger failing wide) -- a store with no ppl_contract history
+                # keeps getting exactly gates.PROMOTION_TARGETS, so an existing run's
+                # resume is unaffected.
+                ppl_contract_obligated=gates.ppl_contract_anchor_obligated(args.store))
+            clean_stage["build_dir"] = str(anchor_build[0])
         current_anchor_commit[0] = _git(args.worktree, "rev-parse", "HEAD")
         print(f"anchor    advanced to {anchor_build[0].name} — subsequent effects are "
               f"MARGINAL against this {'experimental candidate' if experimental else 'champion'}, "
@@ -5786,7 +5828,8 @@ def _main(argv: list[str] | None = None) -> int:
         # FIRST, before the loop draws any further work: nothing below is worth doing
         # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
         try:
-            verify_anchor(guard_floor=prior_floor)
+            with keep_stage("anchor_guard"):
+                verify_anchor(guard_floor=prior_floor)
         except loop.RunAborted as aborted:
             # The keep's commit already landed; name its head on the abort so the
             # run_aborted row can carry it (loop.iterate adds the rest).
@@ -5809,7 +5852,8 @@ def _main(argv: list[str] | None = None) -> int:
         publish("running", latest, hotspot_rows=hotspot_rows,
                 step=("keep: experimental serving candidate retained" if experimental else
                       "keep: champion-vs-production headline bench"))
-        publish_headline()
+        with keep_stage("headline"):
+            publish_headline()
         publish("running", latest, hotspot_rows=hotspot_rows,
                 step=("keep: CPU profiling unavailable" if cpu_launch else
                       "keep: selected GPU serving profiling unavailable" if direct_launch else
@@ -5818,12 +5862,14 @@ def _main(argv: list[str] | None = None) -> int:
         # accepted patch changed the very distribution the next hypothesis should aim
         # at. Re-profiling here is what makes a long run keep aiming at the truth
         # rather than at wherever the time went hours ago.
-        reprofile()
+        with keep_stage("reprofile"):
+            reprofile()
         runtime_original_build = (runtime_owner[0].retained_build(runtime_recipe_reference[0])
             if runtime_recipe_reference[0] is not None and runtime_owner[0] is not None else None)
-        cleanup = pool.prune_anchor_generations(
-            args.store, current=anchor_build[0],
-            protect=[cor_build[0]] + ([runtime_original_build] if runtime_original_build is not None else []))
+        with keep_stage("prune_anchor_generations"):
+            cleanup = pool.prune_anchor_generations(
+                args.store, current=anchor_build[0],
+                protect=[cor_build[0]] + ([runtime_original_build] if runtime_original_build is not None else []))
         if cleanup.removed:
             print(f"anchor    pruned {len(cleanup.removed)} superseded generation(s); "
                   "reclaimed bytes unknown (not scanned on measurement path)")
@@ -6735,6 +6781,8 @@ def _main(argv: list[str] | None = None) -> int:
                         "metadata_file": str(kept.with_suffix(".json").resolve()),
                         "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
             attempt = attempt_with_codegen(outcome, codegen_by_head)
+            if outcome.status == "kept" and outcome.champion_head in keep_timing_by_head:
+                attempt[keep_timing.FIELD] = keep_timing_by_head.pop(outcome.champion_head)
             if outcome.hypothesis is not None:
                 hypothesis_record = _write_custody_record(
                     args.store, "hypothesis-disposition",
@@ -7254,17 +7302,20 @@ def _main(argv: list[str] | None = None) -> int:
                 except Exception as exc:  # a missed propagation; the keep stands
                     print(f"warning: cross-target lineage step failed after keep: "
                           f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            # keep_timing: the keep path starts at the committed keep; timed until return.
+            keep_timer[0] = keep_timing.KeepTimer(head=head)
             # The lane build is the exact candidate whose patch was just committed.
             # Write this immediately: anchor promotion can take 30+ minutes or abort,
             # but the champion commit already exists. Missing toolchain evidence is
             # represented explicitly and must never veto that KEEP.
             try:
-                codegen_by_head[head] = codegen_summary.retain_summary(
-                    args.store, head,
-                    backend="llama_cpu" if cpu_launch else "llama_gpu",
-                    build_dir=worker.build_dir, recipe=recipe.to_dict(),
-                    attempt_identity=evidence["attempt_identity"],
-                    source_tree_oid=_git(worker.worktree, "rev-parse", f"{head}^{{tree}}"))
+                with keep_stage("codegen_summary"):
+                    codegen_by_head[head] = codegen_summary.retain_summary(
+                        args.store, head,
+                        backend="llama_cpu" if cpu_launch else "llama_gpu",
+                        build_dir=worker.build_dir, recipe=recipe.to_dict(),
+                        attempt_identity=evidence["attempt_identity"],
+                        source_tree_oid=_git(worker.worktree, "rev-parse", f"{head}^{{tree}}"))
             except Exception as exc:  # diagnostics cannot undo an accepted commit
                 codegen_by_head[head] = {
                     "schema": codegen_summary.SCHEMA, "status": "unavailable",
@@ -7272,7 +7323,8 @@ def _main(argv: list[str] | None = None) -> int:
                     "reason": f"codegen sidecar failed: {type(exc).__name__}"}
                 print(f"codegen   unavailable for {head[:12]}: {type(exc).__name__}: {exc}",
                       file=sys.stderr)
-            promote_anchor()
+            with keep_stage("promote_anchor"):
+                promote_anchor()
             if source_fold_candidate and patch_path is not None and parent is not None:
                 original_source_keeps.append({
                     "surface": args.surface, "mechanism_id": hypothesis.mechanism_id,
@@ -7288,9 +7340,14 @@ def _main(argv: list[str] | None = None) -> int:
                 })
             # The accumulator advanced; batch this keep and, if the bundle now clears the
             # serving floor, spend the one serving gate that can advance the champion of record.
-            accumulate_after_keep(hypothesis.mechanism_id)
+            with keep_stage("accumulate_after_keep"):
+                accumulate_after_keep(hypothesis.mechanism_id)
             if lane_binding is not None and cpu_launch is not None:
-                fold_check_held(worker)
+                with keep_stage("fold_check_held"):
+                    fold_check_held(worker)
+            if keep_timer[0] is not None:
+                keep_timing_by_head[head] = keep_timer[0].to_dict()
+                keep_timer[0] = None
             return head
 
         def fold_check_held(worker):
