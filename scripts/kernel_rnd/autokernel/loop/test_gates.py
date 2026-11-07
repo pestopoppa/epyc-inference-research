@@ -1418,7 +1418,13 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         calls = _calls(verify_node, "verify")
         self.assertEqual(len(calls), 1)
         keywords = {item.arg: ast.unparse(item.value) for item in calls[0].keywords}
-        self.assertEqual(keywords.get("digest"), "anchor_integrity.object_digest")
+        # 2026-11-07 keep-path timing wraps the digest in `timed_digest`; the wrapper must
+        # still call the real object digest, or the triad silently reverts.
+        digest = keywords.get("digest")
+        if digest != "anchor_integrity.object_digest":
+            self.assertEqual(digest, "timed_digest")
+            wrapper = _function_node(source, "timed_digest")
+            self.assertIn("anchor_integrity.object_digest(", ast.unparse(wrapper))
 
     def test_an_excursion_note_reaches_the_headline_refresh(self):
         """The excursion-flagged promotion still publishes -- the anchor is

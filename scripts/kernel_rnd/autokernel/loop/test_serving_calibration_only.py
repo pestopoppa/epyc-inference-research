@@ -45,7 +45,13 @@ def test_calibration_only_branch_precedes_pool_and_requests_stop():
 
 
 def test_terminal_is_stopped_when_stop_was_asked():
-    assert 'terminal="stopped" if should_stop() else "complete"' in RUN
+    # 2026-11-07: the terminal is computed by provider_breaker.terminal (an operator
+    # stop wins over a provider park); run.py must route through it.
+    assert "terminal=run_terminal()" in RUN
+    assert "provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker)" in RUN
+    from autokernel.loop import provider_breaker
+    assert provider_breaker.terminal(stop_asked=True, breaker=None) == "stopped"
+    assert provider_breaker.terminal(stop_asked=False, breaker=None) == "complete"
 
 
 def test_serial_roster_admits_the_floor_window_switches():
