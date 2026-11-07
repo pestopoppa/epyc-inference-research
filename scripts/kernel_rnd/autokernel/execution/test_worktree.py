@@ -1229,6 +1229,18 @@ class TestRunBuildEndToEnd(_TmpMixin):
             cmake_defines=(("GGML_CCACHE", "OFF"),))
         self.log = os.path.join(self.tmp, "logs", "build.log")
 
+    def test_build_phases_run_under_the_build_resource_ceiling(self):
+        # 2026-11-07: an iglp_opt(1) candidate drove two device compiles to
+        # 222 GB RSS each under the 2 TiB benchmark default.  Both phases must
+        # carry the tighter BUILD ceiling, and it must stay below host RAM.
+        result = W.run_build(self.plan, log_path=self.log)
+        self.assertTrue(result.succeeded, result.facts.errors)
+        expected = W.BUILD_RESOURCE_LIMITS.to_dict()
+        for disposition in (result.configure, result.build):
+            self.assertEqual(disposition.sandbox_receipt["resource_limits"], expected)
+        self.assertLessEqual(W.BUILD_RESOURCE_LIMITS.address_space_bytes, 64 * (1 << 30))
+        self.assertLessEqual(W.BUILD_RESOURCE_LIMITS.cpu_time_s, 3600)
+
     def test_a_real_build_produces_a_fresh_dir_receipt_and_a_binary(self):
         result = W.run_build(self.plan, log_path=self.log)
 

@@ -2872,6 +2872,19 @@ class BuildResult:
                 "result_receipt_sha256": self.result_receipt_sha256}
 
 
+# Per-process ceilings for candidate CONFIGURE and BUILD (benchmarks keep the
+# sandbox defaults, whose 2 TiB address space covers HIP VA reservations).
+# Origin: 2026-11-07 proof row ak-surface-proof-a -- a gfx90a.iglp_opt(1)
+# candidate drove two clang-18 device compiles (mmq-instance-iq1_s/iq2_s) to
+# 37 min and 222 GB RSS each on a 1.1 TB shared host; the clean iglp_opt(0)
+# build of the same tree finished in 230 s.  The host exposes no cgroup memory
+# controller, so RLIMIT_AS / RLIMIT_CPU per process is the enforceable cap: a
+# pathological TU now dies with an allocation failure or SIGXCPU and the
+# candidate scores build_fail instead of taking the host.
+BUILD_RESOURCE_LIMITS = process_sandbox.ResourceLimits(
+    address_space_bytes=64 * (1 << 30), cpu_time_s=3600)
+
+
 def run_build(plan: BuildPlan, *, log_path: Any,
               configure_timeout_s: float = 900.0,
               build_timeout_s: float = 14400.0,
@@ -2922,7 +2935,7 @@ def run_build(plan: BuildPlan, *, log_path: Any,
                 or not cgroup_root.is_dir()):
             raise WorktreeError("sandbox cgroup root is not an exact directory")
     sandbox_policy = process_sandbox.SandboxPolicy(
-        writable_root=plan.build_dir.path,
+        writable_root=plan.build_dir.path, limits=BUILD_RESOURCE_LIMITS,
         **({"cgroup_root": sandbox_cgroup_root}
            if sandbox_cgroup_root is not None else {}))
     configure_sandbox_receipt = log + ".configure-sandbox.json"
