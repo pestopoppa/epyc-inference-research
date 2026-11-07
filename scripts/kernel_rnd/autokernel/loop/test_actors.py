@@ -1005,6 +1005,37 @@ class OpencodeFlagStyle(unittest.TestCase):
         self.assertFalse(actors.opencode_uses_v2_flags(self.fake(self.V2, rc=1)))
 
 
+class OpencodeCwdGuard(unittest.TestCase):
+    """v2 dropped --dir: cwd is the only workspace binding, so it is asserted pre-spawn."""
+
+    def test_missing_cwd_refused(self):
+        for bad in (None, "", "/nonexistent/ak-ws"):
+            with self.assertRaises(actors.OpencodeCwdRefused):
+                actors.assert_opencode_cwd(bad)
+
+    def test_cwd_outside_the_tree_refused_and_spawn_never_happens(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "tree").mkdir()
+            (tmp / "elsewhere").mkdir()
+            link = tmp / "tree" / "ws"
+            link.symlink_to(tmp / "elsewhere")
+            with self.assertRaises(actors.OpencodeCwdRefused):
+                actors.assert_opencode_cwd(link)
+            b = actors.Backend("opencode", "m/x", "max", "/nonexistent/opencode")
+            with mock.patch.object(actors.subprocess, "run") as ran, \
+                    mock.patch.object(actors.subprocess, "Popen") as popen:
+                # The reply-custody wrapper re-raises as RunAborted naming the refusal.
+                with self.assertRaisesRegex(Exception, "OpencodeCwdRefused"):
+                    actors._run_agent("P", workspace=link, backend=b)
+            ran.assert_not_called()
+            popen.assert_not_called()
+
+    def test_real_dir_inside_tree_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(actors.assert_opencode_cwd(tmp), Path(tmp).resolve())
+
+
 class RawReplyPersistenceAndStreamFallback(unittest.TestCase):
     """A complete reply must never become a transient because of which stream
     carried it, and every raw exchange must be on disk (DS41 2026-09-24)."""

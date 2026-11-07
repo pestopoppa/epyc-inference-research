@@ -41,7 +41,11 @@ MODEL = "qwen-gpu/qwen3.8-27b"
 KWARG = {"enable_thinking": False}
 SCHEMA = "https://opencode.ai/config.json"
 REAL_GLOBAL = Path.home() / ".config" / "opencode" / "opencode.jsonc"
-OPENCODE = shutil.which("opencode")
+#: The wire tests run the REAL installed opencode (v2.2.5 `run` claims the host's managed
+#: service port, which a live `opencode serve --service` already holds, and it spawns
+#: processes). They are opt-in -- AK_OPENCODE_WIRE=1 on a host with no opencode service --
+#: and the argv shape is covered offline by fake binaries (`test_actors.OpencodeFlagStyle`).
+OPENCODE = shutil.which("opencode") if os.environ.get("AK_OPENCODE_WIRE") == "1" else None
 #: Scratch space for the wire test (the host blocks /tmp for some sessions).
 SCRATCH_BASE = Path("/mnt/raid0/llm/tmp")
 

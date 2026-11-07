@@ -129,6 +129,29 @@ def opencode_uses_v2_flags(binary: str) -> bool:
     return result
 
 
+class OpencodeCwdRefused(RuntimeError):
+    """opencode v2 has no `--dir`: the process cwd IS the author's workspace, so a missing
+    or escaping cwd would let it edit the wrong tree. Refused before any spawn."""
+
+
+def assert_opencode_cwd(workspace) -> Path:
+    """The cwd handed to opencode must be set, exist, and resolve (realpath) inside the
+    directory it lexically names: a workspace that is a symlink out of its parent (or a
+    `..` escape) is outside the candidate tree and is refused."""
+    if workspace is None or str(workspace) == "":
+        raise OpencodeCwdRefused("opencode cwd is not set (v2 has no --dir)")
+    lexical = Path(os.path.abspath(str(workspace)))
+    real = Path(os.path.realpath(str(workspace)))
+    if not real.is_dir():
+        raise OpencodeCwdRefused(f"opencode cwd {str(workspace)!r} is not a directory")
+    parent = Path(os.path.realpath(str(lexical.parent)))
+    if real != parent and parent not in real.parents:
+        raise OpencodeCwdRefused(
+            f"opencode cwd {str(workspace)!r} resolves to {str(real)!r}, outside the "
+            f"candidate tree {str(parent)!r}")
+    return real
+
+
 @dataclass(frozen=True)
 class Backend:
     """One external coding agent: which binary, which model, how much reasoning.
@@ -934,6 +957,8 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
                   schema: Mapping[str, Any] | None, env: Mapping[str, str] | None,
                   should_stop: Callable[[], bool] | None, budget_s: float | None,
                   session_id: str | None = None, raise_provisional: bool = False) -> str:
+    if backend.kind == "opencode":
+        assert_opencode_cwd(workspace)   # v2: cwd is the only workspace binding
     # The orchestrator kind sends the caller's schema to the server (`--schema`), so
     # its argv is the one that needs it (INF-78 OAB-2, `actor_orchestrator`).
     argv = (backend.argv(prompt, workspace, read_only=read_only, schema=schema)

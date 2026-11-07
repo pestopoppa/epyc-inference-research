@@ -83,6 +83,16 @@ import sandbox3  # noqa: E402  (run 3: Landlock policy)
 import proxy3  # noqa: E402  (run 3: request transforms, replayed offline by dry-run)
 import copy  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "kernel_rnd"))
+from autokernel.loop.actors import Backend as _AkBackend  # noqa: E402  (shared flag-style helper)
+
+
+def _opencode_run_argv(lane: Path) -> list[str]:
+    """`opencode run` argv in the flag style the installed binary accepts (v1 `--dir`/
+    `--variant`, v2 `-m provider/model#variant`); the same probe the AK actors use."""
+    return _AkBackend("opencode", MODEL_OC, "high", OPENCODE).argv("", lane, read_only=False)
+
+
 RESULTS = BASE / "results"
 WORK = BASE / "work"
 CONTEXTS = BASE / "contexts"
@@ -641,7 +651,7 @@ def arm_oc(ws: Workspace, out: Path, prompt: str, port: int, budget: float, salv
     env = base_env(ws.tmp)
     env.update(seat_config.TRIM_ENV)
     env.update({"OPENCODE_CONFIG": str(seat), "XDG_DATA_HOME": str(xdg)})
-    argv = [OPENCODE, "run", "--auto", "--dir", str(ws.lane), "-m", MODEL_OC, "--variant", "high"]
+    argv = _opencode_run_argv(ws.lane)
     (out / "command.txt").write_text(" ".join(argv) + "  < prompt (stdin)\n")
     res = run_budgeted(
         argv,
