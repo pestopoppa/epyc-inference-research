@@ -53,7 +53,14 @@ def test_hold_survives_process_exit_and_blocks_reset(tmp_path):
     code = ('from pathlib import Path; from autokernel.loop import pool,pipeline; '
             'import os; w=pipeline.Worker(name="lane0",worktree=Path(os.environ["LANE"]),'
             'build_dir=Path(os.environ["LANE"])); pool.begin_custody_hold(w,"m"); os._exit(17)')
-    env = dict(os.environ, LANE=str(lane))
+    # Bind the child to THIS tree: the research venv's .pth puts the shared clone on
+    # sys.path, so from a lane worktree the child would import the shared clone's
+    # scripts.lib.canonical_recipe and recipes.py rightly refuses it as foreign.
+    here = Path(__file__).resolve()
+    tree_path = os.pathsep.join([str(here.parents[4]), str(here.parents[2])])
+    env = dict(os.environ, LANE=str(lane),
+               PYTHONPATH=tree_path + (os.pathsep + os.environ['PYTHONPATH']
+                                       if os.environ.get('PYTHONPATH') else ''))
     child = subprocess.run([sys.executable, '-c', code], env=env)
     assert child.returncode == 17
     worker = pipeline.Worker(name='lane0', worktree=lane, build_dir=lane)
