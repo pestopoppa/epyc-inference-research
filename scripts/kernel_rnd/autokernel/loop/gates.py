@@ -4362,3 +4362,124 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "ppl_wikitext2", "ppl_contract_op_nmse", "prefix_token_agreement",
            "ppl_contract_coherence", "ppl_contract_long_canary", "ppl_contract_gate",
            "cpu_route_witness_quants"]
+
+
+# --- AK-FUSE-GRAPH-KLD-1: graph-level KLD / same-top gate for cross-node fusions -----
+# H13b passed every op oracle (8253/0) yet its seam fusions read inputs ggml-alloc had
+# reused: Q38FN PPL 3.905 vs 3.4425, KLD ~0.19, same-top ~88%. Only a graph-level check
+# sees that. The CODE lives here; the THRESHOLD touches the measurement trust boundary
+# and has NO default: `KldThresholds` is supplied by explicit config, and without it the
+# verdict is `threshold_unset` (a refusal that is reported -- never a pass, never a skip).
+GRAPH_KLD_GATE = "graph_kld"
+GRAPH_KLD_THRESHOLD_UNSET = "threshold_unset"
+_FUSION_PATH_RES = (
+    re.compile(r"(^|/)ggml-cuda/[^/]*fus[^/]*$"),     # ggml-cuda/*fusion*
+    re.compile(r"(^|/)ggml-alloc\.[A-Za-z]+$"),       # allocator
+    re.compile(r"(^|/)ggml-[^/]*graph[^/]*\.[A-Za-z]+$"),
+    re.compile(r"(^|/)ggml-cuda/[^/]*(match|plan)[^/]*$"),  # graph matchers / fuse plans
+)
+_KLD_NUM = r"([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)"
+
+
+def touches_graph_fusion(changed_paths) -> bool:
+    """True when any changed path is a graph-fusion / allocator / graph-matcher file."""
+    return any(rx.search(str(p)) for p in changed_paths for rx in _FUSION_PATH_RES)
+
+
+@dataclass(frozen=True)
+class KldThresholds:
+    """Operator-supplied limits. No defaults: constructing one is an explicit act."""
+    max_mean_kld: float
+    min_same_top_pct: float
+
+    @classmethod
+    def from_config(cls, cfg) -> "KldThresholds | None":
+        """None unless BOTH limits are present and numeric in `cfg`."""
+        try:
+            return cls(float(cfg["max_mean_kld"]), float(cfg["min_same_top_pct"]))
+        except (KeyError, TypeError, ValueError):
+            return None
+
+
+def graph_kld_argv(perplexity: str, *, model: str, corpus: str, base_logits: str,
+                   mode: str, chunks: int = 16, ctx: int = 4096,
+                   extra: "tuple[str, ...]" = ()) -> list[str]:
+    """llama-perplexity argv. mode 'base' saves the reference logits (champion, once);
+    mode 'kld' compares the candidate against them."""
+    if mode not in ("base", "kld"):
+        raise ValueError(f"mode must be 'base' or 'kld', got {mode!r}")
+    argv = [perplexity, "-m", model, "-f", corpus, "-c", str(ctx), "--chunks", str(chunks),
+            "-b", str(ctx), "-ub", "512", "-fa", "on", "-ctk", "f16", "-ctv", "f16",
+            "--kl-divergence-base", base_logits, *extra]
+    if mode == "kld":
+        argv.append("--kl-divergence")
+    return argv
+
+
+def parse_graph_kld(text: str) -> dict:
+    """Mean KLD (+se), same-top % and the ln PPL ratio from llama-perplexity output."""
+    r: dict = {}
+    m = re.search(r"Mean\s+KLD:\s*" + _KLD_NUM + r"\s*±\s*" + _KLD_NUM, text)
+    if m:
+        r["kld_mean"], r["kld_se"] = float(m.group(1)), float(m.group(2))
+    m = re.search(r"Same top p:\s*" + _KLD_NUM, text)
+    if m:
+        r["same_top_p_pct"] = float(m.group(1))
+    m = re.search(r"Mean ln\(PPL\(Q\)/PPL\(base\)\)\s*:\s*" + _KLD_NUM, text)
+    if m:
+        r["ln_ratio"] = float(m.group(1))
+    return r
+
+
+def graph_kld_verdict(metrics: dict, thresholds: "KldThresholds | None") -> Verdict:
+    """threshold_unset and unparseable output both REFUSE; only measured-within-limits passes."""
+    if thresholds is None:
+        return Verdict(GRAPH_KLD_GATE, False, GRAPH_KLD_THRESHOLD_UNSET,
+                       "no operator-supplied KLD/same-top thresholds; measured "
+                       + json.dumps(metrics, sort_keys=True))
+    if "kld_mean" not in metrics or "same_top_p_pct" not in metrics:
+        return Verdict(GRAPH_KLD_GATE, False, "kld_unparsed",
+                       "llama-perplexity output carried no Mean KLD / Same top p")
+    bad = []
+    if metrics["kld_mean"] > thresholds.max_mean_kld:
+        bad.append(f"mean KLD {metrics['kld_mean']:.4f} > {thresholds.max_mean_kld}")
+    if metrics["same_top_p_pct"] < thresholds.min_same_top_pct:
+        bad.append(f"same-top {metrics['same_top_p_pct']:.2f}% < {thresholds.min_same_top_pct}%")
+    if bad:
+        return Verdict(GRAPH_KLD_GATE, False, "graph_kld_exceeded",
+                       "; ".join(bad) + " -- graph-level divergence the op oracles cannot see")
+    return Verdict(GRAPH_KLD_GATE, True, "",
+                   f"mean KLD {metrics['kld_mean']:.4f}, same-top {metrics['same_top_p_pct']:.2f}%")
+
+
+def graph_kld_gate(changed_paths, *, thresholds: "KldThresholds | None",
+                   run_kld: "Callable[[], str]") -> "Verdict | None":
+    """None when the patch fuses nothing across graph nodes (gate not triggered; `run_kld`
+    is never called). Otherwise run the candidate-vs-champion comparison (`run_kld` returns
+    llama-perplexity text) and return the verdict."""
+    if not touches_graph_fusion(changed_paths):
+        return None
+    return graph_kld_verdict(parse_graph_kld(run_kld()), thresholds)
+
+
+GRAPH_KLD_TIMEOUT_S = 3600
+
+
+def graph_kld_run(anchor_build: Path, candidate_build: Path, *, model: str, corpus: str,
+                  base_logits: str, chunks: int = 16, timeout: int = GRAPH_KLD_TIMEOUT_S) -> str:
+    """Execute the two llama-perplexity runs (champion saves base logits once, candidate
+    compares) and return the candidate's output. Each binary gets its OWN build's libs on
+    LD_LIBRARY_PATH (three-ggml-generations hazard). Needs a granted GPU window and the
+    store to ship llama-perplexity; raises FileNotFoundError when it does not."""
+    def one(build: Path, mode: str) -> str:
+        exe = Path(build) / "bin" / "llama-perplexity"
+        if not exe.is_file():
+            raise FileNotFoundError(f"{exe} missing: champion store must ship llama-perplexity")
+        env = dict(os.environ, LD_LIBRARY_PATH=f"{Path(build) / 'bin'}")
+        p = subprocess.run(graph_kld_argv(str(exe), model=model, corpus=corpus,
+                                          base_logits=base_logits, mode=mode, chunks=chunks),
+                           capture_output=True, text=True, timeout=timeout, env=env)
+        return p.stdout + p.stderr
+    if not Path(base_logits).is_file():
+        one(Path(anchor_build), "base")
+    return one(Path(candidate_build), "kld")
