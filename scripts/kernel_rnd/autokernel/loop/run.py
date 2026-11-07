@@ -99,6 +99,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import keep_timing
+from . import floor_selfcheck
 from . import tail_timing
 from . import actor_opencode_config
 from . import belief_context
@@ -5013,6 +5014,7 @@ def _main(argv: list[str] | None = None) -> int:
                     samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
                     port=direct_launch.port, resolved_recipe=anchor_recipe, frozen_requests=frozen_requests,
                     **source_instrument)
+                floor_selfcheck.check_before_write(args.store, value)  # AKX-AUTO-4
                 written_path = _write_new_source_floor(
                     floor_store, serving_recipe, anchor_recipe, value,
                     frozen_requests=frozen_requests, instrument=args.serving_instrument,
@@ -8358,6 +8360,7 @@ def _main(argv: list[str] | None = None) -> int:
                         port=direct_launch.port,
                         resolved_recipe=calibration_recipe,
                         frozen_requests=frozen_requests, **source_instrument)
+                    floor_selfcheck.check_before_write(args.store, calibration)  # AKX-AUTO-4
                     written_path = _write_new_source_floor(
                         floor_store, serving_recipe, calibration_recipe, calibration,
                         frozen_requests=frozen_requests, instrument=args.serving_instrument,
