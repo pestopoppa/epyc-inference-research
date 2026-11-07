@@ -178,3 +178,81 @@ def test_retry_budget_shadow_annotates_only_at_threshold(tmp_path):
     assert ss.retry_budget_shadow(store, {"mechanism_id": "akm-other"}) is None
     assert ss.retry_budget_shadow(store, {}) is None
     assert ss.retry_budget_shadow(tmp_path / "nope" / "x", attempt) is None
+
+
+def _measured(lane):
+    return SimpleNamespace(status="measured_null", branch_id=f"detached:{lane}")
+
+
+def test_two_lanes_parked_lane_wakes_on_other_lanes_evidence_and_reasks(tmp_path):
+    import threading
+    repo = _git_repo(tmp_path / "wt")
+    guard = ss.SameStateGuard(1, lanes=2)
+    guard.POLL_S = 0.05
+    inner = _Abstainer()
+    contexts = iter([_ctx(prior_experiments=[{"status": "kept", "mechanism_id": "k"}])])
+    planner = ss.GuardedPlanner(inner, guard, workspace=repo, lane="lane0",
+                                refresh_context=lambda: next(contexts))
+    assert _iterate(planner, _ctx()).status == "abstained"
+    result = {}
+    worker = threading.Thread(target=lambda: result.setdefault(
+        "status", _iterate(planner, _ctx()).status))
+    worker.start()
+    for _ in range(200):
+        if guard.to_dict()["parked"]:
+            break
+        threading.Event().wait(0.01)
+    assert "lane0" in guard.to_dict()["parked"] and not guard.tripped
+    assert not guard.observe(_measured("lane1"))
+    worker.join(5)
+    assert result["status"] == "abstained" and inner.calls == 2   # re-asked
+    assert not guard.tripped
+    waits = guard.to_dict()["same_state_waits"]["lane0"]
+    assert waits["n"] == 1 and waits["seconds"] >= 0
+
+
+def test_both_lanes_parked_trips_the_guard():
+    import threading
+    guard = ss.SameStateGuard(1, lanes=2)
+    guard.POLL_S = 0.05
+    out = []
+    first = threading.Thread(target=lambda: out.append(guard.park_wait("lane0")))
+    first.start()
+    for _ in range(200):
+        if guard.to_dict()["parked"]:
+            break
+        threading.Event().wait(0.01)
+    assert not guard.tripped
+    assert guard.park_wait("lane1") is False
+    first.join(5)
+    assert out == [False] and guard.tripped
+    assert pb.terminal(stop_asked=False, breaker=None, same_state=guard) == ss.SAME_STATE_PARKED
+
+
+def test_stop_while_parked_raises_promptly(tmp_path):
+    import time
+    repo = _git_repo(tmp_path / "wt")
+    guard = ss.SameStateGuard(1, lanes=2)
+    guard.POLL_S = 0.05
+    inner = _Abstainer()
+    stop = {"asked": False}
+    planner = ss.GuardedPlanner(inner, guard, workspace=repo, lane="lane0",
+                                should_stop=lambda: stop["asked"])
+    _iterate(planner, _ctx())
+    import threading
+    threading.Timer(0.2, lambda: stop.update(asked=True)).start()
+    began = time.monotonic()
+    outcome = _iterate(planner, _ctx())
+    assert outcome.status == ss.PLANNER_SAME_STATE_SKIP
+    assert time.monotonic() - began < 3 and inner.calls == 1
+    assert pb.terminal(stop_asked=True, breaker=None, same_state=guard) == "stopped"
+
+
+def test_self_statuses_do_not_wake_parked_lanes():
+    guard = ss.SameStateGuard(1, lanes=2)
+    for status in ("abstained", ss.PLANNER_SAME_STATE_SKIP, "planner_transient"):
+        before = guard.epoch
+        guard.observe(SimpleNamespace(status=status, branch_id="detached:x"))
+        assert guard.epoch == before
+    guard.observe(_measured("x"))
+    assert guard.epoch == 1

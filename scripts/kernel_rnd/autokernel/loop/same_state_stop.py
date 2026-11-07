@@ -143,14 +143,28 @@ class PlannerSameStateSkip(Exception):
 
 
 class SameStateGuard:
-    """Per-lane last-abstention keys; trips (parks the run) on the first skip."""
+    """Per-lane last-abstention keys. A lane whose next planner state equals its last
+    abstention PARKS (`park_wait`) until another lane records real evidence (the
+    change epoch moves); the guard trips -- the whole run parks -- only when every
+    lane is parked at once. A single-lane run trips on its first skip."""
 
-    def __init__(self, skip_after: int = DEFAULT_SKIP_AFTER) -> None:
+    #: Poll granularity for `should_stop` while parked (as `pipeline._belief_wait`).
+    POLL_S = 5.0
+
+    def __init__(self, skip_after: int = DEFAULT_SKIP_AFTER, lanes: int = 1) -> None:
         self.skip_after = validate_skip_after(skip_after)
+        if type(lanes) is not int or lanes < 1:
+            raise ValueError("lanes must be a positive integer")
+        self.lanes = lanes
         self.tripped = False
+        self._announced = False
         self.last_skip: dict[str, Any] | None = None
+        self.epoch = 0
         self._last: dict[str, dict[str, Any]] = {}
+        self._parked: dict[str, tuple[float, str]] = {}
+        self._waits: dict[str, dict[str, float]] = {}
         self._lock = threading.Lock()
+        self._changed = threading.Condition(self._lock)
 
     @property
     def enabled(self) -> bool:
@@ -169,6 +183,31 @@ class SameStateGuard:
             self.last_skip = skip.to_dict()
         raise skip
 
+    def park_wait(self, lane: str, should_stop=None) -> bool:
+        """Park `lane` until new evidence (True: re-check), or the run parks or is
+        stopped (False: skip). Every lane parked at once trips the guard."""
+        import time
+        from datetime import datetime, timezone
+        start = time.monotonic()
+        with self._changed:
+            epoch0 = self.epoch
+            self._parked[lane] = (start, datetime.now(timezone.utc).isoformat())
+            if len(self._parked) >= self.lanes:
+                self.tripped = True
+                self._changed.notify_all()
+            try:
+                while self.epoch == epoch0 and not self.tripped:
+                    if should_stop is not None and should_stop():
+                        break
+                    self._changed.wait(self.POLL_S)
+                woke = self.epoch != epoch0 and not self.tripped
+            finally:
+                self._parked.pop(lane, None)
+                row = self._waits.setdefault(lane, {"n": 0, "seconds": 0.0})
+                row["n"] += 1
+                row["seconds"] = round(row["seconds"] + time.monotonic() - start, 3)
+        return woke and not (should_stop is not None and should_stop())
+
     def note_answer(self, lane: str, key: str | None, abstained: bool) -> None:
         """Fold one planner answer: an abstention records (or repeats) its key."""
         with self._lock:
@@ -181,50 +220,77 @@ class SameStateGuard:
                                 "pending": True}
 
     def observe(self, outcome: Any) -> bool:
-        """Fold one RECORDED outcome; True exactly when this observation trips."""
+        """Fold one RECORDED outcome; True exactly when this observation trips.
+        Any status outside `_SELF_STATUSES` is new evidence: it wakes parked lanes."""
         lane = str(getattr(outcome, "branch_id", None) or "").partition(":")[2]
         status = getattr(outcome, "status", None)
-        with self._lock:
+        with self._changed:
             last = self._last.get(lane)
             if status == "abstained" and last is not None and last.get("pending"):
                 receipt = getattr(outcome, "journal_receipt", None)
                 last["abstention_id"] = (receipt.get("attempt_id")
                                          if isinstance(receipt, Mapping) else None)
                 last["pending"] = False
-            if status == PLANNER_SAME_STATE_SKIP and not self.tripped:
-                self.tripped = True
+            if status not in _SELF_STATUSES:
+                self.epoch += 1
+                self._changed.notify_all()
+            if status == PLANNER_SAME_STATE_SKIP and not self._announced:
+                # The trip itself happened in `park_wait` (all lanes parked); this
+                # recorded skip row is where the run announces it, once.
+                self.tripped = self._announced = True
+                self._changed.notify_all()
                 return True
             return False
 
     def to_dict(self) -> dict[str, Any]:
         with self._lock:
             return {"skip_after": self.skip_after, "tripped": self.tripped,
+                    "lane_count": self.lanes, "change_epoch": self.epoch,
                     "last_skip": self.last_skip,
+                    "parked": {lane: {"since": since}
+                               for lane, (_m, since) in sorted(self._parked.items())},
+                    "same_state_waits": {lane: dict(row)
+                                         for lane, row in sorted(self._waits.items())},
                     "lanes": {lane: {k: v for k, v in row.items() if k != "pending"}
                               for lane, row in sorted(self._last.items())}}
 
 
 class GuardedPlanner:
-    """Wraps a lane's planner: key before `propose`, record after; all else delegated."""
+    """Wraps a lane's planner: key before `propose`, record after; all else delegated.
+
+    On a repeated state the lane parks; when another lane's evidence wakes it, the
+    context is rebuilt (`refresh_context`, merged into the iteration's own dict) and
+    the key recomputed, so the planner is asked only if the state really changed."""
 
     def __init__(self, inner: Any, guard: SameStateGuard, *, workspace: Path | str,
-                 lane: str) -> None:
+                 lane: str, should_stop=None, refresh_context=None) -> None:
         self._inner, self._guard = inner, guard
         self._workspace, self._lane = workspace, lane
+        self._should_stop, self._refresh = should_stop, refresh_context
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
 
+    def _key(self, context: Mapping[str, Any]) -> str | None:
+        backend = getattr(self._inner, "backend", None)
+        describe = getattr(backend, "describe", None)
+        return state_key(context, worktree=worktree_identity(self._workspace),
+                         lane=self._lane,
+                         planner=str(describe()) if callable(describe) else "")
+
     def propose(self, context: Mapping[str, Any]):
         from .loop import Abstain
         key = None
-        if self._guard.enabled:
-            backend = getattr(self._inner, "backend", None)
-            describe = getattr(backend, "describe", None)
-            key = state_key(context, worktree=worktree_identity(self._workspace),
-                            lane=self._lane,
-                            planner=str(describe()) if callable(describe) else "")
-            self._guard.check(self._lane, key)
+        while self._guard.enabled:
+            key = self._key(context)
+            try:
+                self._guard.check(self._lane, key)
+                break
+            except PlannerSameStateSkip:
+                if not self._guard.park_wait(self._lane, self._should_stop):
+                    raise
+            if self._refresh is not None and isinstance(context, dict):
+                context.update(self._refresh())
         result = self._inner.propose(context)
         self._guard.note_answer(self._lane, key, isinstance(result, Abstain))
         return result

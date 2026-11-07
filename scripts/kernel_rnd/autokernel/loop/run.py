@@ -5525,11 +5525,12 @@ def _main(argv: list[str] | None = None) -> int:
         return stopping["asked"] or pool.stop_requested(args.store)
 
     # Identical-state abstention stop (same_state_stop.py): a lane whose planner
-    # abstained on exactly the state it would see again is not re-asked; the skip parks
-    # the run at the next iteration boundary, via `should_stop`, like the breaker.
+    # abstained on exactly the state it would see again is not re-asked: it parks until
+    # another lane records evidence; all lanes parked at once park the run at the next
+    # iteration boundary, via `should_stop`, like the breaker.
     same_state = same_state_stop.SameStateGuard(same_state_stop.resolve_skip_after(
         resolved_campaign.resources.planner_same_state_skip_after
-        if resolved_campaign is not None else None))
+        if resolved_campaign is not None else None), lanes=max(1, int(args.workers)))
 
     def should_stop() -> bool:
         return stop_asked() or breaker.tripped or same_state.tripped
@@ -7568,7 +7569,9 @@ def _main(argv: list[str] | None = None) -> int:
                                                **_actor_reasoning_history(args),
                                                **_actor_serving(args))))
             ordinary = same_state_stop.GuardedPlanner(ordinary, same_state,
-                                                      workspace=worker.worktree, lane=worker.name)
+                                                      workspace=worker.worktree, lane=worker.name,
+                                                      should_stop=should_stop,
+                                                      refresh_context=build_context)
             planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                        if pending_pair is not None else ordinary)
             if runtime_arm_declaration is not None and (runtime_enabled or runtime_keep_grade):
