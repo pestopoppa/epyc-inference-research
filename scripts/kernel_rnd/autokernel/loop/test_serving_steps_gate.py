@@ -156,3 +156,45 @@ def test_calibration_without_steps_refuses_steps_floor(monkeypatch):
     row = serving.calibrate_floor(SPEC, Path("/a"), samples=4)
     with pytest.raises(serving.ServingFloorMismatch, match="no complete target steps/s"):
         serving.steps_floor_row(SPEC, row)
+
+
+# ---- SL-4 (a): legacy arm order ----------------------------------------------------
+
+def _orders(monkeypatch, recipe, **kw):
+    seen = []
+
+    def measure(recipe_, build, port, *, evidence=None, target_sample_steps=None, **_):
+        seen.append(Path(build).name)
+        if evidence is not None:
+            evidence.append({})
+        return 100.0
+    monkeypatch.setattr(serving, "_measure_once", measure)
+    out = serving.compare(recipe, Path("/a"), Path("/c"), pairs=8, floor_pct=None, **kw)
+    return out, [seen[i:i + 2] for i in range(0, len(seen), 2)]
+
+
+def test_short_legacy_stays_anchor_first_and_row_unchanged(monkeypatch):
+    out, orders = _orders(monkeypatch, PLAIN)
+    assert all(o == ["a", "c"] for o in orders) and "arm_order_plan" not in out
+
+
+def test_prefill_heavy_legacy_is_randomized_seeded_and_recorded(monkeypatch):
+    import json
+    body = json.dumps({"prompt": [1] * serving.PREFILL_HEAVY_TOKENS}).encode()
+    requests = (("p0", body), ("p1", body + b" "))
+    assert serving.prefill_heavy(requests)
+    out, orders = _orders(monkeypatch, PLAIN, frozen_requests=requests, arm_order_seed="ab" * 16)
+    plan = out["arm_order_plan"]
+    assert plan["reason"] == "prefill_heavy" and plan["seed"] == "ab" * 16
+    assert plan == {**serving._legacy_order_plan(8, seed="ab" * 16), "reason": "prefill_heavy"}
+    assert [["a" if arm == "anchor" else "c" for arm in o] for o in plan["orders"]] == orders
+    assert any(o == ["c", "a"] for o in orders) and any(o == ["a", "c"] for o in orders)
+    with pytest.raises(serving.RecipeError, match="anchor-first"):
+        _orders(monkeypatch, PLAIN, frozen_requests=requests, arm_order="anchor_first")
+
+
+def test_requested_randomization_and_matched_refusal(monkeypatch):
+    out, _ = _orders(monkeypatch, PLAIN, arm_order="randomized")
+    assert out["arm_order_plan"]["reason"] == "requested"
+    with pytest.raises(serving.RecipeError, match="needs a randomized"):
+        _orders(monkeypatch, PLAIN, arm_order_seed="ab" * 16)

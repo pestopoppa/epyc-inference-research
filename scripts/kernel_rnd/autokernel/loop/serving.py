@@ -135,6 +135,43 @@ def _matched_plan(pairs, *, seed=None):
             "order_algorithm": MATCHED_ORDER, "seed": seed, "orders": orders}
 
 
+#: SL-4: a prompt of at least this many tokens (or 4 bytes/token of text) makes the
+#: workload PREFILL-HEAVY. After a prefill-heavy arm the next arm reads low (external:
+#: cc64 -15..20% after a 128k sweep), so a fixed anchor-first order biases the effect.
+PREFILL_HEAVY_TOKENS = 8192
+LEGACY_ORDER_ANCHOR_FIRST = "anchor_first"
+LEGACY_ORDER_RANDOMIZED = "randomized"
+LEGACY_ORDER_PLAN_SCHEMA = "epyc.autokernel.serving_legacy_order_plan.v1"
+
+
+def _legacy_order_plan(pairs, *, seed=None):
+    """The legacy instrument's seeded, counterbalanced arm order, drawn BEFORE the first
+    launch and recorded in the comparison, by the same `OrderSchedule` matched uses."""
+    from ..evaluator.statistics import OrderSchedule, ORDER_ANCHOR_FIRST
+    seed = seed or os.urandom(16).hex()
+    schedule = OrderSchedule.derive(campaign_seed=seed, candidate_id="serving-process-legacy",
+                                    base_blocks=pairs)
+    orders = [["anchor", "candidate"] if schedule.order_for(i) == ORDER_ANCHOR_FIRST
+              else ["candidate", "anchor"] for i in range(pairs)]
+    return {"schema": LEGACY_ORDER_PLAN_SCHEMA, "instrument": LEGACY_INSTRUMENT,
+            "pairs": pairs, "order_algorithm": MATCHED_ORDER, "seed": seed,
+            "orders": orders}
+
+
+def prefill_heavy(frozen_requests) -> bool:
+    """True when any frozen request body carries a prefill-heavy prompt."""
+    for _prompt_id, body in frozen_requests or ():
+        try:
+            prompt = json.loads(body).get("prompt")
+        except (ValueError, AttributeError, TypeError):
+            continue
+        if isinstance(prompt, list) and len(prompt) >= PREFILL_HEAVY_TOKENS:
+            return True
+        if isinstance(prompt, str) and len(prompt) >= 4 * PREFILL_HEAVY_TOKENS:
+            return True
+    return False
+
+
 def comparison_instrument_matches(comparison, *, instrument, pairs):
     """Reuse an original observation only on its original instrument, never upgrade it."""
     if not isinstance(comparison, Mapping):
@@ -2034,7 +2071,8 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             frozen_requests=None, floor_request_digest: str | None = None,
             runtime_pair=None, instrument=LEGACY_INSTRUMENT, floor_record=None,
             floor_unit: str | None = None, runtime_evidence: str | None = None,
-            longctx=None, steps_floor_record=None) -> dict:
+            longctx=None, steps_floor_record=None, arm_order=None,
+            arm_order_seed=None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
     `decisive` is None when uncalibrated (no floor), so the keep gate fails closed.
@@ -2056,6 +2094,11 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     headline and `tok_s_decisive` reports the headline's own floor verdict. No steps/s floor
     -> `decisive: None` (fail closed). Non-speculative comparisons are unchanged and refuse
     a steps/s floor.
+
+    SL-4: the legacy instrument runs a seeded randomized arm order (`arm_order_plan` on
+    the row) whenever the workload is prefill-heavy (`longctx`, or a frozen prompt of
+    >= `PREFILL_HEAVY_TOKENS`), or when `arm_order="randomized"`; otherwise it stays
+    anchor-first and the row is unchanged. Matched serving keeps its own frozen order.
     """
     matched = _instrument(instrument, pairs)
     keep_grade = runtime_evidence == "keep_grade"
@@ -2125,6 +2168,20 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     a_options = _resolved_launch_options(recipe, anchor_build, port, anchor_resolved_recipe)
     c_options = _resolved_launch_options(candidate_recipe, candidate_build, port, candidate_resolved_recipe)
     measurement_plan = _matched_plan(pairs) if matched else None
+    if arm_order not in (None, LEGACY_ORDER_ANCHOR_FIRST, LEGACY_ORDER_RANDOMIZED):
+        raise RecipeError("unknown legacy arm order")
+    if matched and (arm_order is not None or arm_order_seed is not None):
+        raise RecipeError("matched serving owns its frozen order; no legacy arm order applies")
+    legacy_order_plan = None
+    if not matched:
+        heavy = longctx is not None or prefill_heavy(frozen_requests)
+        if heavy and arm_order == LEGACY_ORDER_ANCHOR_FIRST:
+            raise RecipeError("a prefill-heavy legacy comparison may not fix anchor-first order")
+        if heavy or arm_order == LEGACY_ORDER_RANDOMIZED:
+            legacy_order_plan = _legacy_order_plan(pairs, seed=arm_order_seed)
+            legacy_order_plan["reason"] = "prefill_heavy" if heavy else "requested"
+        elif arm_order_seed is not None:
+            raise RecipeError("an arm-order seed needs a randomized legacy order")
     if matched:
         frame = _matched_frame(recipe, anchor_resolved_recipe, frozen_requests)
         other = _matched_frame(candidate_recipe, candidate_resolved_recipe, frozen_requests)
@@ -2190,7 +2247,9 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             arms = {"anchor": (recipe, anchor_build, a_options, a_runs, a_residency, a_steps),
                     "candidate": (candidate_recipe, candidate_build, c_options, c_runs,
                                   c_residency, c_steps)}
-            order = measurement_plan["orders"][pair_index] if matched else ("anchor", "candidate")
+            order = (measurement_plan["orders"][pair_index] if matched
+                     else legacy_order_plan["orders"][pair_index] if legacy_order_plan
+                     else ("anchor", "candidate"))
             for position, arm in enumerate(order):
                 arm_recipe, build, options, runs, records, steps = arms[arm]
                 ordinal = 2 * pair_index + position
@@ -2288,6 +2347,8 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                 "target_sample_steps_est": steps_view}
         if gate is not None:
             out.update(gate=gate, gate_metric=gate["metric"], tok_s_decisive=tok_s_decisive)
+        if legacy_order_plan is not None:
+            out["arm_order_plan"] = legacy_order_plan
         if matched:
             out.update(schema="epyc.autokernel.serving_ab.v2",
                        measurement_plan=measurement_plan, launch_membership=launch_membership,
@@ -2973,5 +3034,7 @@ __all__ = ["CALIBRATION_UNIT", "COMPARE_EFFECT_UNIT", "FLOOR_KEY_MAX", "FLOOR_UN
            "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "check_unit",
            "compare", "covers_request_phase", "floor_key", "floor_path", "load_floor",
            "STEPS_FLOOR_SCHEMA", "TARGET_STEPS_METRIC", "is_speculative", "load_steps_floor",
+           "LEGACY_ORDER_ANCHOR_FIRST", "LEGACY_ORDER_RANDOMIZED", "PREFILL_HEAVY_TOKENS",
+           "prefill_heavy",
            "steps_floor_path", "steps_floor_row", "write_steps_floor",
            "request_digest", "unit_refusal", "verify_env_readback", "write_floor"]
