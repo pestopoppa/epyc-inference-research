@@ -369,12 +369,12 @@
     {
       "evidence_id": "ev-mi210-asm-port-drops-20261106",
       "path": "repo://scripts/kernel_rnd/autokernel/evidence/mi210-asm-port-20261106/mi210-port-drops-20261106.md",
-      "sha256": "f2ad7348fe66160584efad6fe644e2cbb52adeab5b312e81f7aee8889528b2ed",
+      "sha256": "9955cae91b6425cd3a84c9cdb3a3294c328fff1232b98e9e2cd429a798b39963",
       "authority": "governance_snapshot",
       "temporal_status": "current_v9",
       "claims": [
         "H4 HIP int8 MMQ 0.48x vs C6 dequant+rocBLAS (27B pp2048 587 vs 835 t/s); H9 HIP int8 per-32-scale GEMM 0.52x; H9B fused dequant-f16 MFMA GEMM 0.642x",
-        "H6 fused rmsnorm+q8_1 1.017x; H14 fused qk-norm+RoPE+KV-write op 1.13x but e2e decode 1.0006/0.992 under HIP graphs",
+        "H6 fused rmsnorm+q8_1 INCONCLUSIVE (one cell, h6off/new 0.9997); H14 fused qk-norm+RoPE+KV-write op 1.13x but e2e decode 1.0006/0.992 under HIP graphs",
         "Gate packets ak-asm-h4h6-gate-20261105, ak-asm-h9-gate-20261106, ak-asm-h9b-gate-20261106, ak-asm-h14h15-gate-20261106 against C6 gpu-20261030-729599d69-c6"
       ]
     }
@@ -6110,7 +6110,7 @@
         "measurement_graphs": true,
         "target_runtime_graphs": true
       },
-      "falsifier_result": "H6 fused rmsnorm+q8_1 measured 1.017x; H14 fused qk-norm+RoPE+KV-cache write measured 1.13x at op level but 1.0006 and 0.992 end to end (noise) with HIP graphs on.",
+      "falsifier_result": "H6 fused rmsnorm+q8_1 measured INCONCLUSIVE, one cell h6off/new 0.9997 (ak-asm-h4h6-gate-20261105/out/RESULT.json); H14 fused qk-norm+RoPE+KV-cache write measured 1.13x at op level but 1.0006 and 0.992 end to end (noise) with HIP graphs on.",
       "evidence_refs": [
         "ev-mi210-asm-port-drops-20261106"
       ],

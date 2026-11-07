@@ -606,8 +606,8 @@ _PROFILE_V3_AGENT_CSV_SHA256 = "50189a58f15ffb0008e840a8a6d18db1a88f73e3492b686b
 # Re-sealed 2026-11-07 after review of f8167767a (MI210-port DNR + H4/H9 evidence) and
 # a4e2201bf (isa_schedule validation only; existing fingerprints recomputed identical).
 # Review: scripts/kernel_rnd/autokernel/evidence/portfolio-reseal-20261107-REVIEW.md
-_PORTFOLIO_SEMANTIC_SHA256 = "9dcb51a8e3d2c037eaa6ffbf10248b31e625e67cf3f498ff71ae5c8d70c2cb43"
-_PORTFOLIO_FILE_SHA256 = "276623643c9b540970be73067797e217183a55212e57ffed4e9f518aec5c6f1f"
+_PORTFOLIO_SEMANTIC_SHA256 = "3344de10fa51558966c7ee8ae1dcb4f7bf4026351cf074c2d797af2802b91d33"
+_PORTFOLIO_FILE_SHA256 = "9fe26e7d5bbd6a1d985b3e664cd67250d9a1b691d5e6fbf7df9a56d681a9488f"
 _PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948aaec086b3facd4"
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(

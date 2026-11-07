@@ -35,3 +35,6 @@ and the semantic-sha assertion in `controller/test_discovery_deployment_factory.
 - file `276623643c9b540970be73067797e217183a55212e57ffed4e9f518aec5c6f1f`
 - semantic `9dcb51a8e3d2c037eaa6ffbf10248b31e625e67cf3f498ff71ae5c8d70c2cb43`
 - contract `96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948aaec086b3facd4` (unchanged)
+
+## Addendum 2026-11-07 (main-inf22) — H6 citation corrected, pins re-sealed
+Searched for a raw packet producing H6 1.017x: `/mnt/raid0/llm/tmp/ak-asm-*` (every RESULT.json), `/mnt/raid0/llm/tmp/ak-asm-h4h6-gate-20261105/` (no other outputs), root `progress/2026-11/`, `handoffs/active/autokernel-loop.md`. The figure appears only in prose (progress 2026-11-06-main-inf22, autokernel-loop.md AK-ASM-H6 RESULT line); no measurement file contains it. Both citations (DNR `dnr-gfx90a-launch-removal-fusion-under-hip-graphs` falsifier_result, carrier `ev-mi210-asm-port-drops-20261106` claim + its md table row) now state the on-disk value: INCONCLUSIVE, one cell h6off/new 0.9997. Text-only change; DNR verdict unchanged (both values < 1.10). Carrier md sha256 -> `9955cae9…`; `validate --verify-evidence` passes (23 DNR, 21 hypotheses). New pins: file `9fe26e7d5bbd6a1d985b3e664cd67250d9a1b691d5e6fbf7df9a56d681a9488f`, semantic `3344de10fa51558966c7ee8ae1dcb4f7bf4026351cf074c2d797af2802b91d33`, contract unchanged.
