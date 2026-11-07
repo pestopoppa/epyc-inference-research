@@ -701,7 +701,16 @@ def test_main_keep_grade_arm_is_adopted_then_restored_into_a_new_epoch(monkeypat
                              "status": "not_applicable", "window_start": time.time(),
                              "window_end": time.time(), "samples": 0})
             base = 10 + len(calls) / 1000  # monotone: no modulo discontinuity for the AKX-FLOOR-REMEASURE-1 outlier guard
-            return base * 1.2 if recipe.threads == launch.template.threads + 1 else base
+            value = base * 1.2 if recipe.threads == launch.template.threads + 1 else base
+            steps_out = kwargs.get("target_sample_steps")
+            if steps_out is not None:
+                # SL-2: the fixture recipe is speculative (draft-mtp), so the server also
+                # states target-step counters; steps/s tracks tok/s, acceptance is constant.
+                steps = int(value * 1000)
+                slot = serving._target_steps_slot({"predicted_n": 2 * steps, "predicted_ms": 1000.0,
+                                                   "draft_n": 2 * steps, "draft_n_accepted": steps})
+                steps_out.append(serving._target_steps_aggregate([slot], value))
+            return value
 
         @contextmanager
         def hold(*_args, **_quiet):

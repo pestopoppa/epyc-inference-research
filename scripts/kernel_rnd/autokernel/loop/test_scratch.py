@@ -701,6 +701,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "cpu_repack_cases.py:run_probe:write_text": (1, "scratch: case TSV inside callers' with-block temporary probe directory"),
     "floor_selfcheck.py:record_refusal:mkdir": (1, "evidence: lineage dir of the AKX-AUTO-4 refused-floor record"),
     "floor_selfcheck.py:record_refusal:open-write": (1, "evidence: append-only refused-floor record (persistence proof for AKX-AUTO-4)"),
+    "longctx_c8_comparison.py:_exclusive_floor_lock:mkdir": (1, "evidence: parent of the persistent per-target C8 floor-calibration lock (lives beside the floor)"),
+    "longctx_c8_comparison.py:_exclusive_floor_lock:open-write": (1, "evidence: persistent flock file guarding C8 floor calibration; never unlinked by design"),
     "floor_registry.py:_write_atomic:mkdir": (1, "evidence: parent of immutable floor-registry records"),
     "floor_registry.py:_write_atomic:os.link": (1, "evidence: exclusive atomic publication of immutable floor-registry record"),
     "floor_registry.py:_write_atomic:write_text": (1, "evidence: temporary sibling atomically linked/replaced as floor-registry record"),

@@ -184,7 +184,8 @@ def test_actual_owner_reduced_positive_automatically_confirms_same_source_build(
             claims.append(cpus)
             yield {"device_id": "synthetic-cpu-region-owner"}
 
-        def observe(recipe, build, port, *, resolved_recipe, frozen_requests, evidence=None, **_kw):
+        def observe(recipe, build, port, *, resolved_recipe, frozen_requests, evidence=None,
+                    target_sample_steps=None, **_kw):
             assert frozen_requests == requests
             resolved_recipe.validate_launch(recipe, build, port)
             measurements.append((recipe.threads, recipe.cpu_list, str(build)))
@@ -193,7 +194,15 @@ def test_actual_owner_reduced_positive_automatically_confirms_same_source_build(
                                  "backend": "cpu", "status": serving.RESIDENCY_NOT_APPLICABLE,
                                  "fixture": "synthetic window, not placement evidence"})
             candidate = Path(build).name == "lane0-build"
-            return 11.0 if candidate and (recipe.threads == 24 or confirm_gain) else 10.0
+            value = 11.0 if candidate and (recipe.threads == 24 or confirm_gain) else 10.0
+            if target_sample_steps is not None:
+                # SL-2: the recipe is speculative (draft-mtp), so a real server also states
+                # its target-step counters; steps/s and acceptance track tok/s here.
+                steps = int(value * 100)
+                slot = serving._target_steps_slot({"predicted_n": 2 * steps, "predicted_ms": 1000.0,
+                                                   "draft_n": 2 * steps, "draft_n_accepted": steps})
+                target_sample_steps.append(serving._target_steps_aggregate([slot], value))
+            return value
 
         def invoke(original):
             base_compile, base_planner = gates.compiles, run.actors.AgentPlanner
