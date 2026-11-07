@@ -18,7 +18,7 @@ import threading
 import time
 import uuid
 
-from . import belief_context, campaign_cli, champion, legacy_targets, status, worker_lifecycle
+from . import belief_context, campaign_cli, champion, legacy_targets, provider_breaker, status, worker_lifecycle
 
 CONTINUATION_SCHEMA = "epyc.autokernel.loop_continuation.v1"
 CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
@@ -781,7 +781,7 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         expected_fields = expected_fields | {"recovered_result_sha256"}
     if not isinstance(row, dict) or set(row) != expected_fields \
             or row["schema"] not in {CONTINUATION_SCHEMA, CONTINUATION_SCHEMA_V2} \
-            or row["terminal"] not in {"complete", "stopped"}:
+            or row["terminal"] not in provider_breaker.TERMINALS:
         raise SerialRefused("missing or malformed terminal continuation")
     if row["schema"] == CONTINUATION_SCHEMA_V2:
         row["held_claim_evidence"] = _held_reference(row["held_claim_evidence"])
@@ -2661,7 +2661,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             state["last_reconciliation"] = recovered
             state["active"] = None
             state["next_batch"] += 1
-            if recovered["terminal"] == "stopped":
+            if recovered["terminal"] in provider_breaker.STOP_TERMINALS:
                 request_stop(None, None)
             save()  # original result and progress committed before selecting another batch
         while not stopped() and (rounds == 0 or state["next_batch"] < rounds * len(targets)):
@@ -2910,7 +2910,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 if scheduler_manifest is not None:
                     state["scheduler_state"] = _scheduled_account(
                         state, scheduler_manifest, active, body, directory).to_dict()
-                if body["terminal"] == "stopped":
+                if body["terminal"] in provider_breaker.STOP_TERMINALS:
                     request_stop(None, None)
             except (OSError, ValueError) as exc:
                 state["failed_targets"][key] = f"{type(exc).__name__}: {exc}"

@@ -125,13 +125,23 @@ class ResourceRequest:
     build_timeout_s: int
     build_jobs: int
     max_builds: int
+    #: Consecutive provider-terminal iterations before the run parks
+    #: (`provider_breaker`). None = default; omitted from `to_dict` so existing
+    #: manifest digests are unchanged.
+    provider_park_after: int | None = None
+
+    @property
+    def effective_provider_park_after(self) -> int:
+        from .provider_breaker import DEFAULT_PARK_AFTER
+        return DEFAULT_PARK_AFTER if self.provider_park_after is None \
+            else self.provider_park_after
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "ResourceRequest":
         row = _mapping(value, "resources")
         _keys(row, required={"schema", "cpu_logical", "gpu_ids", "stage_timeout_s",
                              "build_timeout_s", "build_jobs", "max_builds"},
-              optional=set(), label="resources")
+              optional={"provider_park_after"}, label="resources")
         if row["schema"] != RESOURCE_SCHEMA:
             raise ManifestError(f"resources: unsupported schema {row['schema']!r}")
         cpus = row["cpu_logical"]
@@ -147,13 +157,18 @@ class ResourceRequest:
                    build_timeout_s=_positive_int(row["build_timeout_s"],
                                                  "resources.build_timeout_s"),
                    build_jobs=_positive_int(row["build_jobs"], "resources.build_jobs"),
-                   max_builds=_positive_int(row["max_builds"], "resources.max_builds"))
+                   max_builds=_positive_int(row["max_builds"], "resources.max_builds"),
+                   provider_park_after=(None if "provider_park_after" not in row else
+                                        _positive_int(row["provider_park_after"],
+                                                      "resources.provider_park_after")))
 
     def to_dict(self) -> dict[str, Any]:
         return {"schema": RESOURCE_SCHEMA, "cpu_logical": list(self.cpu_logical),
                 "gpu_ids": list(self.gpu_ids), "stage_timeout_s": self.stage_timeout_s,
                 "build_timeout_s": self.build_timeout_s, "build_jobs": self.build_jobs,
-                "max_builds": self.max_builds}
+                "max_builds": self.max_builds,
+                **({"provider_park_after": self.provider_park_after}
+                   if self.provider_park_after is not None else {})}
 
 
 @dataclass(frozen=True)

@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
-from . import scheduling
+from . import provider_breaker, scheduling
 
 MANIFEST_SCHEMA = "epyc.autokernel.serial_scheduler_manifest.v1"
 VALID_COMPARISONS = frozenset({"kept", "keep_candidate", "measured_null", "regression",
@@ -268,7 +268,7 @@ def duration_forecast(history, selected_id, scope_digest, *, proposal, max_stage
 
 
 def one_iteration_outcome(terminal: str, outcome_counts: Mapping[str, int]) -> str:
-    if terminal == "stopped":
+    if terminal in provider_breaker.STOP_TERMINALS:
         return "failed"
     if terminal != "complete" or not isinstance(outcome_counts, Mapping) \
             or len(outcome_counts) != 1:
@@ -312,7 +312,7 @@ def stage_outcome(terminal: str, outcome_counts: Mapping[str, int], iterations: 
         raise SerialSchedulingRefused("scheduled child iteration count is invalid")
     if iterations == 1:
         return one_iteration_outcome(terminal, outcome_counts)
-    if terminal == "stopped":
+    if terminal in provider_breaker.STOP_TERMINALS:
         return "failed"
     if (terminal != "complete" or not isinstance(outcome_counts, Mapping) or not outcome_counts
             or any(not isinstance(key, str) or type(value) is not int or value < 1

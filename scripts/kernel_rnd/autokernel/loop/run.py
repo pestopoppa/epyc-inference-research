@@ -106,6 +106,7 @@ from . import longctx
 from . import floor_registry
 from . import epoch_aliases
 from . import scratch
+from . import provider_breaker
 from . import procguard
 from . import prebuild_rules
 from . import ak_check
@@ -5495,8 +5496,20 @@ def _main(argv: list[str] | None = None) -> int:
     for _sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(_sig, _ask_stop)
 
-    def should_stop() -> bool:
+    # Provider circuit breaker (provider_breaker.py): N consecutive provider-terminal
+    # iterations park the run at the next iteration boundary, via `should_stop`.
+    breaker = provider_breaker.ProviderBreaker(
+        resolved_campaign.resources.effective_provider_park_after
+        if resolved_campaign is not None else provider_breaker.DEFAULT_PARK_AFTER)
+
+    def stop_asked() -> bool:
         return stopping["asked"] or pool.stop_requested(args.store)
+
+    def should_stop() -> bool:
+        return stop_asked() or breaker.tripped
+
+    def run_terminal() -> str:
+        return provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker)
 
     #: Per-thread nesting depth of the quiet window: a measurement called from inside
     #: another's window must not re-acquire a flock this process already holds (flock
@@ -6775,6 +6788,11 @@ def _main(argv: list[str] | None = None) -> int:
             latest.append(outcome)
             publish("running", latest, hotspot_rows=hotspot_rows)
             pool.finish_custody_hold(hold)
+            if breaker.observe(outcome):
+                print(f"parked    provider breaker tripped: {breaker.streak} consecutive "
+                      f"provider-terminal iterations (threshold {breaker.threshold}); no new "
+                      f"iterations are dispatched; terminal {provider_breaker.PROVIDER_PARKED} "
+                      f"(resumable with --resume-run). last: {breaker.last_reason}", flush=True)
 
         def record_abandoned_pooled(worker, candidate) -> None:
             """Durable disposition for a candidate abandoned INSIDE an iteration.
@@ -8545,11 +8563,12 @@ def _main(argv: list[str] | None = None) -> int:
                 "phase_seconds": pooled_body.pop("phase_lane_seconds"),
                 "phase_seconds_are_lane_seconds": True,
                 "pool": pooled_body,
+                "provider_breaker": breaker.to_dict(),
                 **({"scratch": scratch_registry[0].stats()}
                    if scratch_registry[0] is not None else {}),
                 "continuation": serial_run.continuation(
                     argv=original_argv, binding=original_binding,
-                    terminal="stopped" if should_stop() else "complete",
+                    terminal=run_terminal(),
                     worktree=continuation_worktree, branch=continuation_branch, model=args.model,
                     selected_target=selected_identity,
                     anchor_build=anchor_build[0], anchor_commit=current_anchor_commit[0],
@@ -8611,7 +8630,7 @@ def _main(argv: list[str] | None = None) -> int:
         if args.out:
             # Same owner, after full output and terminal heartbeat close. Only
             # routing metadata; no reparsing large native observation payloads.
-            body["continuation"]["terminal"] = "stopped" if should_stop() else "complete"
+            body["continuation"]["terminal"] = run_terminal()
             status.write_json(args.out, "loop-continuation.json", body["continuation"],
                               prefix=".loop-continuation-")
 
