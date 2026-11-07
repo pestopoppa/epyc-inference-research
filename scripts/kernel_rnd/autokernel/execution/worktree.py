@@ -2883,6 +2883,21 @@ class BuildResult:
 # candidate scores build_fail instead of taking the host.
 BUILD_RESOURCE_LIMITS = process_sandbox.ResourceLimits(
     address_space_bytes=64 * (1 << 30), cpu_time_s=3600)
+# RLIMIT_AS is per process, so N parallel compiles could still take N x the cap
+# together.  The per-process ceiling is therefore the WHOLE-BUILD budget divided
+# by the declared job count (floor 16 GiB, ceiling the 64 GiB above): -j8 gets
+# 32 GiB per process, i.e. at most 256 GiB for the build on a 1.1 TB shared host.
+BUILD_MEMORY_BUDGET_BYTES = 256 * (1 << 30)
+_BUILD_PER_PROCESS_FLOOR_BYTES = 16 * (1 << 30)
+
+
+def build_resource_limits(jobs: int) -> "process_sandbox.ResourceLimits":
+    if isinstance(jobs, bool) or not isinstance(jobs, int) or jobs <= 0:
+        raise ValueError("build jobs must be a positive int")
+    per_process = max(_BUILD_PER_PROCESS_FLOOR_BYTES,
+                      min(BUILD_RESOURCE_LIMITS.address_space_bytes,
+                          BUILD_MEMORY_BUDGET_BYTES // jobs))
+    return dataclasses.replace(BUILD_RESOURCE_LIMITS, address_space_bytes=per_process)
 
 
 def run_build(plan: BuildPlan, *, log_path: Any,
@@ -2935,7 +2950,8 @@ def run_build(plan: BuildPlan, *, log_path: Any,
                 or not cgroup_root.is_dir()):
             raise WorktreeError("sandbox cgroup root is not an exact directory")
     sandbox_policy = process_sandbox.SandboxPolicy(
-        writable_root=plan.build_dir.path, limits=BUILD_RESOURCE_LIMITS,
+        writable_root=plan.build_dir.path,
+        limits=build_resource_limits(plan.parallelism.jobs),
         **({"cgroup_root": sandbox_cgroup_root}
            if sandbox_cgroup_root is not None else {}))
     configure_sandbox_receipt = log + ".configure-sandbox.json"

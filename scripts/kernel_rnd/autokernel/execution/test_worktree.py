@@ -1229,13 +1229,25 @@ class TestRunBuildEndToEnd(_TmpMixin):
             cmake_defines=(("GGML_CCACHE", "OFF"),))
         self.log = os.path.join(self.tmp, "logs", "build.log")
 
+    def test_per_process_ceiling_divides_the_whole_build_budget(self):
+        gib = 1 << 30
+        self.assertEqual(W.build_resource_limits(1).address_space_bytes, 64 * gib)
+        self.assertEqual(W.build_resource_limits(8).address_space_bytes, 32 * gib)
+        self.assertEqual(W.build_resource_limits(96).address_space_bytes, 16 * gib)
+        for jobs in (1, 2, 4, 8, 16):
+            self.assertLessEqual(jobs * W.build_resource_limits(jobs).address_space_bytes,
+                                 max(W.BUILD_MEMORY_BUDGET_BYTES, jobs * 16 * gib))
+        for bad in (0, -1, True, 2.0):
+            with self.assertRaises(ValueError):
+                W.build_resource_limits(bad)
+
     def test_build_phases_run_under_the_build_resource_ceiling(self):
         # 2026-11-07: an iglp_opt(1) candidate drove two device compiles to
         # 222 GB RSS each under the 2 TiB benchmark default.  Both phases must
         # carry the tighter BUILD ceiling, and it must stay below host RAM.
         result = W.run_build(self.plan, log_path=self.log)
         self.assertTrue(result.succeeded, result.facts.errors)
-        expected = W.BUILD_RESOURCE_LIMITS.to_dict()
+        expected = W.build_resource_limits(self.plan.parallelism.jobs).to_dict()
         for disposition in (result.configure, result.build):
             self.assertEqual(disposition.sandbox_receipt["resource_limits"], expected)
         self.assertLessEqual(W.BUILD_RESOURCE_LIMITS.address_space_bytes, 64 * (1 << 30))
