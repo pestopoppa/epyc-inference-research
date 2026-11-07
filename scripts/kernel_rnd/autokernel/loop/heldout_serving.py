@@ -47,7 +47,7 @@ def decide(*, store: Path, mechanism_id: str, screen, heldout,
              and row.get("request_digest") == heldout_digest
              and row.get("effect_unit") == serving.COMPARE_EFFECT_UNIT
              and row.get("floor_unit") == serving.COMPARE_EFFECT_UNIT)
-    promoted = valid and not (decisive and effect < 0)
+    promoted = valid and not serving.is_regression(row)
     reason = ("held-out serving comparison invalid or uncalibrated" if not valid else
               "held-out serving decisive regression" if decisive and effect < 0 else
               "held-out serving did not show a decisive regression")

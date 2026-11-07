@@ -226,7 +226,10 @@ def require_shared_cor(store: Path, cor: str, surface: str) -> str | None:
 
 
 def negative_beyond_floor(comparison: dict, fallback_floor_pct: float | None = None) -> bool:
-    """True only for a measured negative whose magnitude exceeds its applicable floor."""
+    """True only for a measured negative whose magnitude exceeds its applicable floor.
+    SL-2: a speculative row flagged `regression` (either metric) counts as well."""
+    if comparison.get("regression") is True:
+        return True
     effect_pct = comparison.get("effect_pct")
     if effect_pct is None and isinstance(comparison.get("effect"), (int, float)):
         effect_pct = float(comparison["effect"]) * 100.0
@@ -1077,9 +1080,10 @@ def classify_serving(serving_row: dict) -> Outcome:
     only on a decisive, positive serving effect; anything else -- uncalibrated (decisive
     None), within-floor, or a regression -- is DIVERGED, and the champion of record holds.
     This is the same fail-closed grammar as R23-43's per-keep gate, applied to the bundle."""
-    if not serving_row.get("decisive"):
+    from . import serving
+    if not serving_row.get("decisive") or serving.is_regression(serving_row):
         return Outcome.DIVERGED
-    if serving_row.get("effect", 0.0) <= 0:
+    if (serving.verdict_effect(serving_row) or 0.0) <= 0:
         return Outcome.DIVERGED
     return Outcome.PROMOTE
 

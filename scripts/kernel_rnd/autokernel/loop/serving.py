@@ -1817,6 +1817,28 @@ def _steps_estimator_family(estimators: Sequence[str]) -> str | None:
     return None
 
 
+def verdict_effect(row: Mapping) -> float | None:
+    """The effect `decisive` refers to: `verdict_effect` on a speculative (SL-2) row --
+    the regressing effect on a regression, the steps/s effect on a keep -- else the
+    tok/s `effect`. Every keep/regression reader must read the sign from here."""
+    if not isinstance(row, Mapping):
+        return None
+    value = row.get("verdict_effect", row.get("effect"))
+    if type(value) not in (int, float) and type(row.get("effect_pct")) in (int, float):
+        value = row["effect_pct"] / 100.0
+    return value if type(value) in (int, float) else None
+
+
+def is_regression(row: Mapping) -> bool:
+    """A decisive regression on the row's verdict effect (SL-2 aware)."""
+    if not isinstance(row, Mapping):
+        return False
+    if row.get("regression") is True:
+        return True
+    effect = verdict_effect(row)
+    return row.get("decisive") is True and effect is not None and effect < 0
+
+
 def is_speculative(recipe: Recipe) -> bool:
     """True when the recipe launches with speculative decoding of any type."""
     sd = recipe.spec_decode if isinstance(recipe.spec_decode, Mapping) else {}
@@ -2319,6 +2341,25 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             gate = _speculative_gate(steps_view, steps_floor_record, effect, floor_pct)
             gate["steps_floor_source"] = steps_floor_source
             decisive = gate["decisive"]
+            # FAIL-CLOSED ON REGRESSIONS TOO: a decisive regression on EITHER metric is a
+            # decisive regression of the row, whatever the steps/s gate could or could not
+            # establish (no steps floor, unavailable steps, sign disagreement). The row's
+            # `verdict_effect` carries the regressing effect, so every reader that tests
+            # `decisive and effect < 0` through `verdict_effect` sees it.
+            steps_regressed = gate["steps_decisive"] is True and gate["effect"] < 0
+            tok_regressed = tok_s_decisive is True and effect < 0
+            gate["regression"] = steps_regressed or tok_regressed
+            gate["regression_basis"] = [name for name, hit in (
+                ("steps_s", steps_regressed), ("tok_s", tok_regressed)) if hit]
+            if gate["regression"]:
+                decisive = True
+                verdict_effect = min(e for e, hit in ((gate["effect"], steps_regressed),
+                                                      (effect, tok_regressed)) if hit)
+            elif decisive is True:
+                verdict_effect = gate["effect"]
+            else:
+                verdict_effect = effect
+            gate["verdict_effect"] = verdict_effect
         out = {"schema": "epyc.autokernel.serving_ab.v1", "recipe": recipe.name,
                 # The recipe is part of the artifact, so its identity travels with the number:
                 # a reader (or a gate) can tell whether this row and the floor it was judged
@@ -2346,7 +2387,8 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                 # comparison `gate` (below) decides on it; otherwise reporting only.
                 "target_sample_steps_est": steps_view}
         if gate is not None:
-            out.update(gate=gate, gate_metric=gate["metric"], tok_s_decisive=tok_s_decisive)
+            out.update(gate=gate, gate_metric=gate["metric"], tok_s_decisive=tok_s_decisive,
+                       regression=gate["regression"], verdict_effect=verdict_effect)
         if legacy_order_plan is not None:
             out["arm_order_plan"] = legacy_order_plan
         if matched:
@@ -3035,6 +3077,6 @@ __all__ = ["CALIBRATION_UNIT", "COMPARE_EFFECT_UNIT", "FLOOR_KEY_MAX", "FLOOR_UN
            "compare", "covers_request_phase", "floor_key", "floor_path", "load_floor",
            "STEPS_FLOOR_SCHEMA", "TARGET_STEPS_METRIC", "is_speculative", "load_steps_floor",
            "LEGACY_ORDER_ANCHOR_FIRST", "LEGACY_ORDER_RANDOMIZED", "PREFILL_HEAVY_TOKENS",
-           "prefill_heavy",
+           "prefill_heavy", "verdict_effect", "is_regression",
            "steps_floor_path", "steps_floor_row", "write_steps_floor",
            "request_digest", "unit_refusal", "verify_env_readback", "write_floor"]

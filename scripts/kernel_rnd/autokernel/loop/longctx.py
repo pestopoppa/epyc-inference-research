@@ -629,7 +629,7 @@ def verdict(row: Mapping, floor_row: Mapping | None, pairs: int) -> dict:
     p_effect = (statistics.median(c) / statistics.median(a) - 1.0) if a and c else None
     p_decisive = (None if p_floor is None or p_effect is None
                   else abs(p_effect) * 100.0 >= p_floor)
-    decode_regressed = row.get("decisive") is True and row.get("effect", 0) < 0
+    decode_regressed = serving.is_regression(row)
     prefill_regressed = p_decisive is True and p_effect < 0
     out = {"schema": VERDICT_SCHEMA, "decode_effect": row.get("effect"),
            "decode_decisive": row.get("decisive"),

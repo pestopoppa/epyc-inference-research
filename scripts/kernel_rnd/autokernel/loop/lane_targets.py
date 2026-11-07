@@ -401,7 +401,10 @@ def decide(row: Mapping[str, Any] | None, bar: Mapping[str, Any]) -> tuple[bool,
         return False, "peer comparison produced no finite effect"
     pct = row["effect"] * 100.0
     if bar["mode"] == "floor":
-        if row.get("decisive") is True and pct < 0:
+        from . import serving
+        if serving.is_regression(row):
+            # SL-2: a speculative row's regression may be on steps/s (verdict_effect).
+            pct = serving.verdict_effect(row) * 100.0
             return False, (f"peer regressed {pct:+.3f}% beyond its {bar['floor_pct']:.3f}% "
                            "matched floor")
         return True, f"peer {pct:+.3f}% within/above its {bar['floor_pct']:.3f}% floor"

@@ -178,8 +178,8 @@ def dispatch_verdict(returncode: int, graph: dict) -> str:
 def ab_verdict(comparison: dict) -> str:
     """G5: FAIL only on a DECISIVE negative. A within-floor move is not evidence the CPU
     levers cost the GPU headline, and refusing on it would refuse noise."""
-    return ("FAIL" if bool(comparison["decisive"]) and comparison["effect_pct"] < 0
-            else "PASS")
+    # SL-2: a speculative row may regress on steps/s while tok/s rises.
+    return "FAIL" if serving.is_regression(comparison) else "PASS"
 
 
 def run_backend_op(candidate_build: Path, op: str, *, timeout: int = 1800,

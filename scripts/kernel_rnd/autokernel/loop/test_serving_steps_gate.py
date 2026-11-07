@@ -103,7 +103,9 @@ def test_no_acceptance_floor_falls_back_to_tok_s_non_regression(monkeypatch):
     assert kept["decisive"] is True
     assert kept["gate"]["acceptance_guard"]["basis"] == "tok_s_fallback_no_acceptance_floor"
     refused = _compare(monkeypatch, steps, cand_steps=1100.0, cand_acc=0.3, cand_tok=95.0)
-    assert refused["decisive"] is None and "tok_s_regression" in refused["gate"]["refusal"]
+    # A tok/s regression beyond its floor is a decisive regression of the row.
+    assert refused["decisive"] is True and refused["regression"] is True
+    assert "tok_s_regression" in refused["gate"]["refusal"]
 
 
 def test_speculative_without_steps_floor_fails_closed_even_with_tok_floor(monkeypatch):
@@ -198,3 +200,45 @@ def test_requested_randomization_and_matched_refusal(monkeypatch):
     assert out["arm_order_plan"]["reason"] == "requested"
     with pytest.raises(serving.RecipeError, match="needs a randomized"):
         _orders(monkeypatch, PLAIN, arm_order_seed="ab" * 16)
+
+
+# ---- SL-2 fail-closed on regressions (either metric) -------------------------------
+
+def test_no_steps_floor_with_tok_s_regression_is_flagged(monkeypatch):
+    from autokernel.loop import accumulate, fold2_gates, lane_targets
+    out = _compare(monkeypatch, None, cand_steps=900.0, cand_acc=0.5, cand_tok=90.0)
+    assert out["regression"] is True and out["decisive"] is True
+    assert out["gate"]["regression_basis"] == ["tok_s"]
+    assert serving.is_regression(out) and serving.verdict_effect(out) < 0
+    assert fold2_gates.ab_verdict(out) == "FAIL"
+    assert accumulate.classify_serving(out) is accumulate.Outcome.DIVERGED
+    assert accumulate.negative_beyond_floor(out)
+    assert lane_targets.decide(out, {"mode": "floor", "floor_pct": 1.0})[0] is False
+
+
+def test_steps_up_with_tok_s_decisively_down_is_flagged(monkeypatch):
+    from autokernel.loop import accumulate, fold2_gates
+    _, steps = _floor(monkeypatch)
+    out = _compare(monkeypatch, steps, cand_steps=1100.0, cand_acc=0.3, cand_tok=80.0)
+    assert out["gate"]["steps_decisive"] is True and out["gate"]["effect"] > 0
+    assert out["regression"] is True and out["decisive"] is True
+    assert out["gate"]["regression_basis"] == ["tok_s"]
+    assert serving.verdict_effect(out) == pytest.approx(-0.2)
+    assert fold2_gates.ab_verdict(out) == "FAIL"
+    assert accumulate.classify_serving(out) is accumulate.Outcome.DIVERGED
+
+
+def test_steps_down_with_tok_s_up_is_flagged_not_kept(monkeypatch):
+    from autokernel.loop import accumulate, fold2_gates
+    _, steps = _floor(monkeypatch)
+    out = _compare(monkeypatch, steps, cand_steps=900.0, cand_acc=0.8, cand_tok=105.0)
+    assert out["effect"] > 0 and out["regression"] is True and out["decisive"] is True
+    assert out["gate"]["regression_basis"] == ["steps_s"] and serving.verdict_effect(out) < 0
+    assert fold2_gates.ab_verdict(out) == "FAIL"
+    assert accumulate.classify_serving(out) is accumulate.Outcome.DIVERGED
+
+
+def test_keep_row_verdict_effect_is_the_steps_effect(monkeypatch):
+    _, steps = _floor(monkeypatch)
+    out = _compare(monkeypatch, steps, cand_steps=1100.0, cand_acc=0.5, cand_tok=110.0)
+    assert out["regression"] is False and serving.verdict_effect(out) == out["gate"]["effect"]
