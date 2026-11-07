@@ -20,10 +20,10 @@ REVIEWED = {
     "bestof.py": "a42ade5e6075eaff43d5cf065c93015ff2445e80546bed3eb7d2a7f279012959",
     "cross_target.py": "8a4afa59ce62645b23f9f1e02e4bd17e0b7ba1cc997ad25cdcc1aa91e9900409",
     "loop.py": "41fa6423376206b5240de18763f35bf3365d3b2fc01f86514c7e332e50f23f70",  # custody review CUSTODY-REVIEW.md 2026-11-07
-    "pipeline.py": "642b5ade0bd6dc972fa22ca93a5249889b1f1ba564af248a31e69604bdcadfcf",
+    "pipeline.py": "d17f3ed2dada812aba24bee16decd0140a21ec53ca8042789cc61f86c6d2b36f",  # custody review 2026-11-07 AutoKernel: tail_timing wrappers re-raise unchanged, tail session entered as before (AK-TAIL-SPLIT phase 1)
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
-    "run.py": "67d40786542eeb3a6d302609d37a79e96d540a832eb3a9356493c4afd7b517e7",  # custody review 2026-11-07 AutoKernel: keep-path timing wrappers (same args/returns/raises; timer never raises) on top of the provider breaker
+    "run.py": "4496d7780731b9ec7e98bae8a3418f2635ee9d082851d6659b2b44aad3fe88f7",  # custody review 2026-11-07 AutoKernel: copies tail_path_timing onto rows (observe-only), on top of keep-path timing
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 
