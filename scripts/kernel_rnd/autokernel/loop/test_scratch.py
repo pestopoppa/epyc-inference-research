@@ -834,6 +834,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     'run.py:_main.ppl_contract_tools_build:write_text': (1, 'writes inside a run-scope registered tools build; object/artifact identity marker revalidated on reuse'),
     'run.py:fail_remeasure_request:os.link': (1, "state: atomic no-clobber restore of this process's claimed REMEASURE_REQUEST, preserving a newer request"),
     'served_shape_cases.py:apply_patch_block:write_text': (1, 'source: explicit calibration tool stages the generated case block in experimental tests/test-backend-ops.cpp'),
+    'campaign_status.py:publish:mkdir': (1, 'state: <flags>/campaign-status/ surface read by queue_status; never under a campaign store'),
+    'campaign_status.py:publish:open-write': (1, 'state: dotted tmp of the status JSON, fsynced then os.replace-d onto <row-id>.json (atomic publish)'),
     'served_shape_cases.py:write_manifest:mkdir': (1, 'evidence: served-shape manifest directory, consumed and checked by the candidate source gate'),
     'served_shape_cases.py:write_manifest:write_text': (1, 'evidence: atomic retained served-shape case/bound/profile/seed manifest, used by the source gate'),
     # -- store evidence / state ----------------------------------------------------------
