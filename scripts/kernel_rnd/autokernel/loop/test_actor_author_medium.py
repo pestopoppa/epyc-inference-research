@@ -248,8 +248,12 @@ class ActionRule(unittest.TestCase):
         self.assertEqual(on["planner"], control["planner"])
         self.assertEqual(on["author"],
                          control["author"] + "\n\n" + actors.AUTHOR_ACTION_RULE)
-        self.assertTrue(on["author"].endswith(actors.CONCISE_RULE + "\n\n"
-                                              + actors.AUTHOR_ACTION_RULE))
+        # The action rule is the author prompt's LAST block and follows the
+        # concise rule; other advisories (e.g. the anti-caching note) may sit
+        # between them, so order is asserted, not adjacency.
+        self.assertTrue(on["author"].endswith("\n\n" + actors.AUTHOR_ACTION_RULE))
+        self.assertLess(on["author"].index(actors.CONCISE_RULE),
+                        on["author"].index(actors.AUTHOR_ACTION_RULE))
 
     def test_off_is_byte_identical(self):
         backend = actors.backend_for(MODEL, "high")
