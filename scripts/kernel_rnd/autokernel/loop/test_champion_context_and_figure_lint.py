@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from autokernel.loop import actor_context, belief_context, champion, champion_context, figure_lint
+from autokernel.loop import actor_context, belief_context, champion, figure_lint
 
 MARK = figure_lint.UNSOURCED_MARK
 
@@ -62,39 +62,6 @@ def test_unattested_anchor_cannot_be_proven_current(repo, tmp_path):
     with pytest.raises(champion.StartupRefused) as err:
         champion.verify_anchor_current(d, repo, _git(repo, "rev-parse", "HEAD"))
     assert err.value.reason == champion.REASON_NO_ATTESTATION
-
-
-def test_canary_rulings_block_in_rendered_planner_context(tmp_path):
-    from autokernel.loop import scratch
-    reg = scratch.ScratchRegistry(tmp_path / "scratch", {"run_id": "t"}, 0)
-    with reg.scope("call", "planner") as scope:
-        bundle = actor_context.materialize("## target\nbody\n", tmp_path, role="planner",
-                                           scope=scope)
-    assert champion_context.HEADING in bundle.index
-    assert "62cb6a6af" in bundle.index and "per-port e2e status" in bundle.index
-    assert "H8b" in bundle.index
-
-
-def test_canary_orchestrator_bundle_and_negative_control():
-    bundle = actor_context.orchestrator_bundle("## target\nbody\n", role="planner")
-    assert champion_context.HEADING in bundle.index
-    # non-vacuous: a renderer fed an empty data set shows no champion line
-    assert "62cb6a6af" not in "\n".join(champion_context.render(
-        {"champion": {"name": "x", "commit": "y"}}, exists=lambda _t: True))
-
-
-def test_every_ruling_cites_a_source():
-    data = champion_context.load()
-    for entry in [data["champion"], *data["rulings"], *data["ports"]]:
-        assert entry.get("source"), entry
-
-
-def test_unresolvable_ruling_source_is_marked():
-    data = champion_context.load()
-    out = "\n".join(champion_context.render(data, exists=lambda _t: False))
-    assert MARK in out
-    ok = "\n".join(champion_context.render(data, exists=lambda _t: True))
-    assert MARK not in ok
 
 
 # ------------------------------------------------------------------ unsourced lint

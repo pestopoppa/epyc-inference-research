@@ -77,7 +77,7 @@ import time
 import uuid
 from typing import Any, Iterable
 
-from . import champion_context, figure_lint
+from . import figure_lint
 
 #: Sibling of the lane worktree (never inside it: a file there would ride into the
 #: authored diff and into the author's `git status` ground-truth check).
@@ -366,15 +366,6 @@ CARD_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 GUARDED_BUILD_LABEL = "build dir (anchor BINARY: read-only, binaries only; never read source there)"
 
 
-def _rulings_block() -> list[str]:
-    """The champion/rulings block (AK-TOOL-CHAMPION-CONTEXT); a load failure is rendered,
-    never swallowed."""
-    try:
-        return champion_context.render()
-    except (OSError, ValueError, KeyError) as exc:
-        return [champion_context.HEADING, f"- UNAVAILABLE: {type(exc).__name__}: {exc}"]
-
-
 def _unsourced_block(sections: list[Section]) -> list[str]:
     """AK-TOOL-UNSOURCED-LINT: name every ratio/percent figure whose SECTION cites no
     resolvable raw path. Flag, never mutate: sections are shown verbatim."""
@@ -568,8 +559,6 @@ def _index_text(directory: Path, rows: list[tuple[Section, str]],
         out.append("Target card (resolved from the target section; full JSON in `json/target/`):")
         out.extend(card)
         out.append("")
-    out.extend(_rulings_block())
-    out.append("")
     out.extend(_unsourced_block([sec for sec, _rel in rows]))
     out.append("=== INLINE sections (verbatim) ===")
     out.append("")
@@ -712,8 +701,6 @@ def _orch_index_text(sections: list[Section], payloads: dict[str, Any], *,
                    "context['target']):")
         out.extend(card)
         out.append("")
-    out.extend(_rulings_block())
-    out.append("")
     out.extend(_unsourced_block(sections))
     out.append("=== INLINE sections (verbatim) ===")
     out.append("")

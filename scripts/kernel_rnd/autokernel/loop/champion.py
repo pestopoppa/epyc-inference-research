@@ -209,47 +209,77 @@ REASON_STALE_ANCHOR = "stale_anchor"
 REASON_NO_ATTESTATION = "anchor_unattested"
 
 
+#: Explicit launch override (run.py is custody-pinned, so no argv flag): a NON-EMPTY
+#: reason in this env var lets a non-champion anchor start (calibration, replay of an
+#: older candidate). The reason is printed; an empty value is no override.
+OVERRIDE_ENV = "AK_NON_CHAMPION_ANCHOR_REASON"
+REASON_NOT_CHAMPION = "anchor_not_current_champion"
+
+
+def _refuse(reason: str, message: str) -> None:
+    refusal = StartupRefused(f"REFUSED [{reason}]: {message} Override: set "
+                             f"{OVERRIDE_ENV}='<why>'. {INCIDENT}")
+    refusal.reason = reason
+    raise refusal
+
+
+def project_champion_tip(worktree: Path) -> str:
+    """The CURRENT project champion = the tip of `CANONICAL_BRANCH` (the branch the
+    kernel manifests name, docs/reference/kernel-manifests/llama-v11-manifest.md),
+    resolved from git at launch -- never a hardcoded sha."""
+    return _git(worktree, "rev-parse", "--verify", "-q",
+                f"refs/heads/{CANONICAL_BRANCH}^{{commit}}").stdout.strip()
+
+
 def verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
                           experimental_identity: bool = False) -> None:
-    """The anchor must have been built FROM the current champion tip, not merely a
-    descendant-ancestor of it.
+    """LAUNCH-TIME refusal (AK-TOOL-CHAMPION-CONTEXT, narrowed): the anchor must be the
+    current project champion, or carry it.
 
-    `verify_anchor` accepts any ancestor ("a few keeps old"), leaving the A/A guard to
-    catch the staleness after a build. Operator corrections "use the champion / re-scope
-    to C7" (~16x in main-inf22, 11-03..11-07) show that tolerance costs re-runs: C5/lbt
-    results were redone against a stale base. Here the provenance `champion_commit`
-    must EQUAL the verified worktree head, else `StartupRefused(reason="stale_anchor")`.
-    An anchor with no provenance.json cannot be proven current and is refused with
-    `reason="anchor_unattested"` -- `--allow-unverified-anchor` waives only the
-    ancestry check in `verify_anchor`, never currency.
-    """
-    prov = Path(anchor_build) / "provenance.json"
+    The anchor commit is provenance `champion_commit` (or, for an experimental-identity
+    build without provenance, the IDENTITY.json-proven `head`). It must (a) equal the
+    verified worktree head and (b) contain the current tip of `CANONICAL_BRANCH`
+    (equal, or an experimental branch freshly cut from it). An experimental branch cut
+    from an OLD champion (C5 after the C7r CAS) is refused `anchor_not_current_champion`;
+    a provenance commit behind head is `stale_anchor`; no attestation is
+    `anchor_unattested`. Any refusal is waived only by a non-empty `OVERRIDE_ENV`."""
+    override = os.environ.get(OVERRIDE_ENV, "").strip()
+    try:
+        _verify_anchor_current(Path(anchor_build), Path(worktree), head,
+                               experimental_identity=experimental_identity)
+    except StartupRefused as refusal:
+        if not override:
+            raise
+        print(f"WARNING: champion-currency refusal OVERRIDDEN by {OVERRIDE_ENV}="
+              f"{override!r}: {refusal}", file=__import__("sys").stderr)
+
+
+def _verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
+                           experimental_identity: bool) -> None:
+    prov = anchor_build / "provenance.json"
     named = ""
-    if experimental_identity and not prov.is_file():
-        # `_verify_experimental_identity` already proved IDENTITY.json head == head.
-        return
     if prov.is_file():
         try:
             named = str(json.loads(prov.read_text(encoding="utf-8")).get(
                 "champion_commit") or "")
         except (OSError, ValueError):
             named = ""
+    elif experimental_identity:
+        named = head  # `_verify_experimental_identity` proved IDENTITY.json head == head
     if not named:
-        refusal = StartupRefused(
-            f"REFUSED [{REASON_NO_ATTESTATION}]: anchor {anchor_build} carries no "
-            f"champion_commit, so it cannot be proven to be the CURRENT champion "
-            f"{head}. {INCIDENT}")
-        refusal.reason = REASON_NO_ATTESTATION
-        raise refusal
+        _refuse(REASON_NO_ATTESTATION, f"anchor {anchor_build} carries no champion_commit, "
+                f"so it cannot be proven to be the CURRENT champion.")
     resolved = _git(worktree, "rev-parse", "--verify", f"{named}^{{commit}}").stdout.strip()
     if resolved != head:
-        refusal = StartupRefused(
-            f"REFUSED [{REASON_STALE_ANCHOR}]: anchor {anchor_build} was built from "
-            f"champion_commit {named}, but the current champion is {head}. Rebuild the "
-            f"anchor from the champion tip (pool.promote_anchor) before measuring. "
-            f"{INCIDENT}")
-        refusal.reason = REASON_STALE_ANCHOR
-        raise refusal
+        _refuse(REASON_STALE_ANCHOR, f"anchor {anchor_build} was built from {named}, but the "
+                f"verified worktree head is {head}. Rebuild the anchor (pool.promote_anchor).")
+    tip = project_champion_tip(worktree)
+    if not tip:
+        _refuse(REASON_NOT_CHAMPION, f"{CANONICAL_BRANCH} does not resolve in {worktree}; "
+                f"the current project champion is unknown.")
+    if _git(worktree, "merge-base", "--is-ancestor", tip, head).returncode != 0:
+        _refuse(REASON_NOT_CHAMPION, f"anchor {head[:12]} does not contain the current "
+                f"project champion {CANONICAL_BRANCH} @ {tip[:12]}.")
 
 
 def warn_divergence(worktree: Path, branch: str) -> None:
@@ -294,5 +324,6 @@ def verify_startup(*, worktree: Path, branch: str, anchor_build: Path,
 
 
 __all__ = ["CANONICAL_BRANCH", "INCIDENT", "StartupRefused", "verify_anchor",
-           "REASON_NO_ATTESTATION", "REASON_STALE_ANCHOR", "verify_anchor_current",
+           "OVERRIDE_ENV", "REASON_NO_ATTESTATION", "REASON_NOT_CHAMPION", "REASON_STALE_ANCHOR",
+           "project_champion_tip", "verify_anchor_current",
            "verify_startup", "verify_worktree", "warn_divergence"]
