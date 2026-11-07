@@ -109,3 +109,13 @@ def test_check_before_write_refuses_then_accepts_persistent(tmp_path):
         fs.check_before_write(tmp_path, high)
     assert fs.check_before_write(tmp_path, {**high, "floor_pct": 5.8}).persisted
     assert fs.check_before_write(tmp_path, clean).ok
+
+
+def test_check_before_write_abstains_without_per_pair_samples(tmp_path):
+    """A calibration row with no per-pair samples cannot be judged: the check abstains
+    (returns None, writes nothing) instead of crashing the caller's floor write."""
+    from autokernel.loop import floor_selfcheck as fs
+    assert fs.check_before_write(tmp_path, {"floor_pct": 1.0, "recipe_hash": "r"}) is None
+    assert fs.check_before_write(tmp_path, {"anchor_samples": [1.0], "candidate_samples": None,
+                                            "recipe_hash": "r"}) is None
+    assert not (tmp_path / "runtime-source-floors").exists()

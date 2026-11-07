@@ -233,14 +233,19 @@ class FloorSelfcheckRefused(RuntimeError):
         self.assessment = assessment
 
 
-def check_before_write(store: Path | str, row: Mapping) -> Assessment:
+def check_before_write(store: Path | str, row: Mapping) -> "Assessment | None":
     """The call-site entry: judge a calibration row BEFORE it is written to the lineage
     `<store>/runtime-source-floors/<recipe_hash>/`. Raises `FloorSelfcheckRefused` (a
     spread refusal is recorded so an agreeing re-measure is accepted next time). Any
     exception unwinds through the caller's existing failure path, which restores a
     claimed REMEASURE_REQUEST to pending: the re-measure is therefore automatic."""
+    if not isinstance(row, Mapping) or not all(
+            row.get(k) is not None for k in ("anchor_samples", "candidate_samples", "recipe_hash")):
+        # No per-pair samples to judge (legacy/abbreviated calibration row): nothing to
+        # assess, so this check abstains; the existing floor guards still apply.
+        return None
     lineage = Path(store) / "runtime-source-floors" / str(row["recipe_hash"])
-    assessment = assess_floor(row["anchor_samples"], row["candidate_samples"], row["floor_pct"],
+    assessment = assess_floor(row["anchor_samples"], row["candidate_samples"], row.get("floor_pct"),
                               prior_floor_pcts(lineage), refused_floor_pcts=refused_floor_pcts(lineage))
     if not assessment.ok:
         if assessment.verdict == RECALIBRATE_SPREAD:
