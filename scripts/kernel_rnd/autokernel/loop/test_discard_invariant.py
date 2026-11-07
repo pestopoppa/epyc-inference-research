@@ -19,11 +19,11 @@ REVIEWED = {
     "archive.py": "4a8cdaaf7469ae915358e2f06cfdd7adbb8bbdb2a6186a5641f3ae95aecad6c1",
     "bestof.py": "a42ade5e6075eaff43d5cf065c93015ff2445e80546bed3eb7d2a7f279012959",
     "cross_target.py": "8a4afa59ce62645b23f9f1e02e4bd17e0b7ba1cc997ad25cdcc1aa91e9900409",
-    "loop.py": "add46ea62614dc0f1dffa32fec2d3d9c81753aac6a6ff62e3529fe1d22a723a0",
+    "loop.py": "41fa6423376206b5240de18763f35bf3365d3b2fc01f86514c7e332e50f23f70",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "pipeline.py": "642b5ade0bd6dc972fa22ca93a5249889b1f1ba564af248a31e69604bdcadfcf",
-    "pool.py": "807fe1b7e6e9f26b9d036b29489fe4a5a5e975b4e63f22129e5e72e77467a23c",
+    "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "ed9c0bbc0bdd584e76fb5abbcfc9ccb80ae4cc0379a5d5531cebb47659a82c3f",
-    "run.py": "8b37c71c5a63b60bec97695e675c0ef6aaf2a08856e90dbb9c8b89c83d16bdca",
+    "run.py": "f60a74a92949d42070c06fdcfbccfdda35fe8a83b007f3c646e88991cdf93601",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 

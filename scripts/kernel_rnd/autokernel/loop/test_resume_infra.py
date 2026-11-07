@@ -226,6 +226,23 @@ class InfrastructureFaultsReleaseTheClaim(Base):
         queue, report = self.prepare()
         self.assertEqual((len(queue), report["already_claimed"]), (0, 1))
 
+    @unittest.expectedFailure  # custody VIOLATION, resume.py prepare(): see CUSTODY-REVIEW.md
+    def test_a_fault_reemission_stays_unqueued_after_its_source_settles(self):
+        """Custody review 2026-11-07 (3d2467a49): the lane_error row's copy of a
+        resumed checkpoint must not become fresh work once the source's retry
+        re-claims it (re-claim clears result_status) and settles on a verdict."""
+        self.refuse_once()
+        first = self.resumed_round_that_faults()
+        self.assertEqual(first.status, "lane_error")
+        queue, report = self.prepare()
+        self.assertEqual(len(report["queued"]), 1)
+        self.assertEqual(report.get("fault_reemissions"), 1)
+        (outcome,) = self.pool(self.repo, gate=refusing_gate, point_source=queue.take)
+        claim = self.claim(first.resumed_from)
+        self.assertEqual(claim["result_status"], loop.RESUME_REJECTED)
+        queue, report = self.prepare()
+        self.assertEqual(len(report["queued"]), 0, report)
+
     def test_a_validity_refusal_consumes_it(self):
         self.refuse_once()
         queue, _report = self.prepare()
