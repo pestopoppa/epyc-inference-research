@@ -105,9 +105,10 @@ def test_index_names_unsourced_figures_without_mutating_sections(tmp_path):
     with reg.scope("call", "planner") as scope:
         bundle = actor_context.materialize(ctx, tmp_path, role="planner", scope=scope)
     assert MARK in bundle.index and "1.017x" in bundle.index
-    assert "H6 measured 1.017x\n" in bundle.index  # inline section stays verbatim
+    inline = bundle.index.split("=== INLINE sections (verbatim) ===", 1)[1]
+    assert "H6 measured 1.017x" in inline and MARK not in inline  # inline stays verbatim
     # negative control: no figures -> no block
-    with reg.scope("call2", "planner") as scope:
+    with reg.scope("call", "planner") as scope:
         clean = actor_context.materialize("## evidence\nnothing numeric\n", tmp_path,
                                           role="planner", scope=scope)
     assert MARK not in clean.index
@@ -117,3 +118,21 @@ def test_section_level_resolution_clears_a_cited_table():
     text = "Record: /raw/RESULT.json\n| 50.02% | a |\n"
     assert figure_lint.mark_text(text, exists=_exists, section_level=True)[1] == []
     assert figure_lint.mark_text(text, exists=lambda _t: False, section_level=True)[1] == ["50.02%"]
+
+
+def test_non_champion_anchor_refused_and_override(repo, tmp_path, monkeypatch):
+    """An experimental branch cut from an OLD champion is refused; a stated reason overrides."""
+    old = _git(repo, "rev-parse", "HEAD~1")
+    _git(repo, "checkout", "-q", "-b", "experimental/old", old)
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "exp")
+    head = _git(repo, "rev-parse", "HEAD")
+    anchor = _anchor(tmp_path, head)
+    monkeypatch.delenv(champion.OVERRIDE_ENV, raising=False)
+    with pytest.raises(champion.StartupRefused) as err:
+        champion.verify_anchor_current(anchor, repo, head)
+    assert err.value.reason == champion.REASON_NOT_CHAMPION
+    monkeypatch.setenv(champion.OVERRIDE_ENV, "   ")  # empty reason is no override
+    with pytest.raises(champion.StartupRefused):
+        champion.verify_anchor_current(anchor, repo, head)
+    monkeypatch.setenv(champion.OVERRIDE_ENV, "C5 calibration")
+    champion.verify_anchor_current(anchor, repo, head)

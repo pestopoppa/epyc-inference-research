@@ -23,10 +23,11 @@ gate must not rely on that field, and this fixture proves it cannot.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -332,7 +333,14 @@ class TheGateIsAssembledWhole(_Incident):
         _commit(self.repo, "diverged work")
         _provenance(self.anchor, _sh(self.repo, "rev-parse", "HEAD"))
         out = io.StringIO()
-        with redirect_stdout(out):
+        # A diverged branch no longer contains the current champion tip, so the
+        # launch-time currency check refuses it unless a reason is stated.
+        with self.assertRaises(champion.StartupRefused) as refused:
+            champion.verify_startup(worktree=self.repo, branch=SIBLING,
+                                    anchor_build=self.anchor)
+        self.assertEqual(refused.exception.reason, champion.REASON_NOT_CHAMPION)
+        with mock.patch.dict(os.environ, {champion.OVERRIDE_ENV: "test: diverged fork"}), \
+                redirect_stdout(out), redirect_stderr(io.StringIO()):
             champion.verify_startup(worktree=self.repo, branch=SIBLING,
                                     anchor_build=self.anchor)
         self.assertIn("DIVERGED", out.getvalue())
