@@ -721,7 +721,7 @@ evidence that addresses the stated reason.
 |---|---|---|---|
 | KEEP | H10 GQA-packed multi-token verify attention hd256 | op 2.63x (kv>=32k, n_q 2..16); 27B DFlash2 decode +4.8/+4.3/+14.6% @8k/32k/64k | ak-asm-h10-gate-20261106, ak-asm-h10-e2e-20261106 |
 | KEEP (post-hoc dispatch gate) | H1b wvSplitK Q8_0 GEMV, weights >6 MiB, M 5..11 | 1.73x geomean, 927 vs 545 GB/s; 27B pp5/pp8 123/183 vs 79.5/127 t/s; M>=12 loses | ak-asm-h1b-gate-20261106 |
-| KEEP | H1+H7 skinny GEMM <=6 MiB (stream-K + LDS-DMA, f32-atomic split-K) | 1.94x geomean over the 12 selected <=6 MiB cells (worst cell 0.9876); 27B all-cells 1.026 (no-op outside selection); an earlier run of the same sha was GATE_FAIL (worst 0.9689) | ak-asm-h1h7-gate-20261105 |
+| KEEP | H1+H7 skinny GEMM <=6 MiB (stream-K + LDS-DMA, f32-atomic split-K) | A3B context geomean 1.51x (a3b_context, M 5/8/16 all ~1.51); 1.94x selected-cell geomean is mostly A3B (27B selected only ~1.21x); 27B all-cells 1.026 (no-op outside the post-hoc 6 MiB selection); worst cell 0.9876; r6 on the same sha GATE_FAIL (worst 0.9689), r7 PASS | ak-asm-h1h7-gate-20261105 |
 | KEEP (post-hoc dispatch gate) | H12 fused QSA sparse attention (Q38FN) | 3.16x vs dense masked FA @ kv=32k; LOSES at kv=8192 (nb=1 0.94x, nb=16 0.78-0.81x); MIN_KV_RATIO=8 chosen from r4 data | ak-asm-h12-gate-20261105 |
 | KEEP | H13 hyper-connection fusion + GPU MEAN_D1 (Q38FN) | decode +11.7% (18.62 vs 16.68 t/s); splits/token 294 -> 100 | ak-asm-h13b-gate-r2-20261106 |
 | KEEP | H11 topksoftmax asm (A3B router) | router 1.25x; A3B tg +2% (104.8 vs 102.6) | ak-asm-h11h13-gate-20261106 |
