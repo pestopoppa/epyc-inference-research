@@ -377,3 +377,52 @@ def project(store_root: Path | str, *, keeps: Sequence[str],
                               if not fresh else "current")},
             "rows": rows})
     return envelope
+
+
+# --- op-level win -> e2e confirmation (AK-OP-E2E-PENDING) -------------------------------
+#: An op-level win is NOT a keep until a same-run ABBA e2e confirms it. This is a status
+#: the planner sees; it carries no floor or threshold of its own -- the e2e row brings the
+#: floor it was judged against (serving.compare's `floor_pct`), and nothing here changes it.
+OP_NO_WIN = "no_op_win"
+OP_PENDING_E2E = "op_keep_pending_e2e"
+OP_CONFIRMED_E2E = "confirmed_e2e"
+OP_REFUTED_E2E = "refuted_e2e"
+OP_STATUSES = (OP_NO_WIN, OP_PENDING_E2E, OP_CONFIRMED_E2E, OP_REFUTED_E2E)
+
+
+def op_keep_status(op: Mapping[str, Any] | None,
+                   e2e: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Classify an op-level win. `op`: {"ratio": float (>1 faster), "decisive": bool}.
+    `e2e` (optional): {"design": "ABBA", "same_run": bool, "effect_pct": float,
+    "floor_pct": float, "decisive": bool}. Returns {"status", "reason"}.
+
+    Only a SAME-RUN ABBA e2e that is decisive and positive confirms; a decisive negative
+    refutes; anything else (absent, cross-run, non-ABBA, noise, malformed) stays pending.
+    Fail-closed: malformed input is never `confirmed_e2e`."""
+    if not isinstance(op, Mapping):
+        return {"status": OP_NO_WIN, "reason": "no op evidence"}
+    ratio, decisive = op.get("ratio"), op.get("decisive")
+    if (isinstance(ratio, bool) or not isinstance(ratio, (int, float))
+            or ratio != ratio or ratio <= 1.0 or decisive is not True):
+        return {"status": OP_NO_WIN, "reason": "op result is not a decisive win"}
+    if not isinstance(e2e, Mapping):
+        return {"status": OP_PENDING_E2E, "reason": "awaiting same-run ABBA e2e"}
+    if e2e.get("design") != "ABBA" or e2e.get("same_run") is not True:
+        return {"status": OP_PENDING_E2E,
+                "reason": "e2e is not a same-run ABBA; cross-run ratios do not confirm"}
+    effect, floor = e2e.get("effect_pct"), e2e.get("floor_pct")
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v
+           for v in (effect, floor)) or floor <= 0:
+        return {"status": OP_PENDING_E2E, "reason": "e2e effect/floor malformed"}
+    if e2e.get("decisive") is not True or abs(effect) < floor:
+        return {"status": OP_PENDING_E2E, "reason": "e2e within noise floor"}
+    if effect > 0:
+        return {"status": OP_CONFIRMED_E2E, "reason": "same-run ABBA e2e decisive positive"}
+    return {"status": OP_REFUTED_E2E, "reason": "same-run ABBA e2e decisive negative"}
+
+
+def awaiting_e2e(records: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Planner-context list: ids of op wins still awaiting e2e confirmation.
+    Each record: {"id", "op", "e2e"?}."""
+    return [str(r.get("id")) for r in records
+            if op_keep_status(r.get("op"), r.get("e2e"))["status"] == OP_PENDING_E2E]

@@ -35,7 +35,7 @@ import subprocess
 import sys
 import time
 
-from . import accumulate, instruments, pool, serving, status
+from . import accumulate, instruments, keep_screen, pool, serving, status
 
 
 def measure(recipe: serving.Recipe, cor_build: Path, tip_build: Path, *,
@@ -53,6 +53,19 @@ def measure(recipe: serving.Recipe, cor_build: Path, tip_build: Path, *,
     """
     return serving.compare(recipe, cor_build, tip_build, pairs=pairs, floor_pct=floor_pct,
                            floor_unit=floor_unit)
+
+
+def e2e_evidence(row: dict) -> dict:
+    """Project a `serving.compare` row into the same-run ABBA e2e evidence that
+    `keep_screen.op_keep_status` consumes. `serving.compare` alternates arms within one
+    invocation; a row lacking effect/floor yields malformed evidence (stays pending)."""
+    return {"design": "ABBA", "same_run": True, "effect_pct": row.get("effect_pct"),
+            "floor_pct": row.get("noise_floor_pct", row.get("floor_pct")), "decisive": row.get("decisive")}
+
+
+def op_win_verdict(op: dict, row: dict | None) -> dict:
+    """Status of an op-level win given an (optional) serving-gate row."""
+    return keep_screen.op_keep_status(op, e2e_evidence(row) if row is not None else None)
 
 
 def _ppl_contract_fold_blocked(args, bundle) -> bool:

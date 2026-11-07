@@ -277,6 +277,67 @@ def route_ids(n_mats: int, n_used: int, row: int) -> tuple[int, ...]:
     return tuple(n_mats - 1 - (row * 29 + j * step) % n_mats for j in range(n_used))
 
 
+ROUTING_UNIFORM = "uniform"
+ROUTING_REPLAY = "replay"
+ROUTING_DISTRIBUTIONS = (ROUTING_UNIFORM, ROUTING_REPLAY)
+
+
+def zipf_histogram(n_mats: int, exponent: float = 1.0) -> tuple[float, ...]:
+    """A synthetic skewed expert histogram (rank-r weight 1/r^s), expert 0 hottest.
+
+    Stand-in until a per-model captured histogram exists; callers with a real capture
+    pass its counts to `routed_ids` directly."""
+    if n_mats <= 0 or exponent < 0:
+        raise ValueError("zipf_histogram needs n_mats > 0 and exponent >= 0")
+    return tuple(1.0 / ((rank + 1) ** exponent) for rank in range(n_mats))
+
+
+def skew_summary(histogram: "tuple[float, ...] | list[float]", top: int = 8) -> dict:
+    """Planner target-card line: how much of the routed mass the `top` experts carry."""
+    total = float(sum(histogram))
+    if total <= 0 or any(w < 0 for w in histogram):
+        raise ValueError("histogram must be non-negative with positive mass")
+    carried = sum(sorted(histogram, reverse=True)[:top]) / total
+    return {"top": top, "top_share": carried, "uniform_top_share": min(1.0, top / len(histogram))}
+
+
+def replay_route_ids(histogram: "tuple[float, ...] | list[float]", n_used: int, row: int,
+                     seed: int = 0) -> tuple[int, ...]:
+    """Histogram-replay routing: `n_used` DISTINCT experts for row `row`, drawn without
+    replacement with probability proportional to `histogram` (Efraimidis-Spirakis keys),
+    deterministic in (histogram, n_used, row, seed). Hot experts recur across rows, which
+    is the skew `route_ids` removes by construction."""
+    import math
+    import random
+    n_mats = len(histogram)
+    if not 0 < n_used <= n_mats:
+        raise ValueError("n_used must be in 1..len(histogram)")
+    if any(w < 0 for w in histogram) or sum(1 for w in histogram if w > 0) < n_used:
+        raise ValueError("histogram needs at least n_used experts with positive weight")
+    rng = random.Random(f"replay:{seed}:{row}:{n_mats}:{n_used}")
+    keyed = []
+    for expert, weight in enumerate(histogram):
+        if weight > 0:
+            keyed.append((math.log(rng.random() or 1e-300) / weight, expert))
+    keyed.sort(reverse=True)
+    return tuple(expert for _, expert in keyed[:n_used])
+
+
+def routed_ids(n_mats: int, n_used: int, row: int, *, distribution: str = ROUTING_UNIFORM,
+               histogram: "tuple[float, ...] | list[float] | None" = None,
+               seed: int = 0) -> tuple[int, ...]:
+    """Routing selector. The DEFAULT stays the uniform strided `route_ids`, so every
+    existing oracle is unchanged; `replay` requires an explicit histogram (never a silent
+    fallback to uniform, which would report a uniform result as a skewed one)."""
+    if distribution == ROUTING_UNIFORM:
+        return route_ids(n_mats, n_used, row)
+    if distribution == ROUTING_REPLAY:
+        if histogram is None or len(histogram) != n_mats:
+            raise ValueError("replay routing needs a histogram of length n_mats")
+        return replay_route_ids(histogram, n_used, row, seed)
+    raise ValueError(f"unknown routing distribution {distribution!r}")
+
+
 def lane_served_shapes(lane: str) -> tuple[ServedShape, ...]:
     """Round-15 partition: the candidate corpus a lane measures -- its OWN served shapes
     plus any other lane's shape with the identical (op, k, m), i.e. a shape this lane's
@@ -1181,7 +1242,8 @@ __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "PATCH_CALL", "calibration_vars", "canonical_triples", "calibration_regex",
            "calibration_patch_block", "parse_calibration", "apply_patch_block",
            "binary_has_calibration", "ROUTED_CASE_SET_ID", "routed_shapes",
-           "routed_types", "ROUTED_WIDTHS", "LANE_PROFILES", "MoeProfile", "route_ids",
+           "routed_types", "ROUTED_WIDTHS", "LANE_PROFILES", "MoeProfile", "route_ids", "routed_ids", "replay_route_ids", "zipf_histogram",
+           "skew_summary", "ROUTING_UNIFORM", "ROUTING_REPLAY", "ROUTING_DISTRIBUTIONS",
            "candidate_experts", "lane_for_model", "moe_profile_from_gguf", "BLOCK_SIZE",
            "type_fits", "anchor_exceeds_generic", "SEED_SCHEME", "AK_SERVED_SHAPE_SEED",
            "case_key", "case_seed_index", "lane_served_shapes", "BACKEND_THREADS_ENV", "corpus",

@@ -96,12 +96,18 @@ class Hotspot:
     total_duration_ns: int
     calls: int
     share_of_device_time: float
+    #: Second denominator (AK-PROF-TWO-DENOM). None = no wall denominator was available;
+    #: never a fabricated zero or a kernel-sum stand-in.
+    share_of_wall: float | None = None
 
     def to_dict(self) -> dict:
-        return {"signature": self.signature,
-                "total_duration_ns": self.total_duration_ns,
-                "calls": self.calls,
-                "share_of_device_time": self.share_of_device_time}
+        row = {"signature": self.signature,
+               "total_duration_ns": self.total_duration_ns,
+               "calls": self.calls,
+               "share_of_device_time": self.share_of_device_time}
+        if self.share_of_wall is not None:   # absent (not null) keeps legacy digests stable
+            row["share_of_wall"] = self.share_of_wall
+        return row
 
 
 def parse_kernel_trace(csv_text: str, *, limit: int = 12) -> list[Hotspot]:
@@ -138,6 +144,100 @@ def parse_kernel_trace(csv_text: str, *, limit: int = 12) -> list[Hotspot]:
             for name, (duration, calls) in totals.items()]
     rows.sort(key=lambda row: -row.total_duration_ns)
     return rows[:limit]
+
+
+def kernel_totals(csv_text: str) -> dict[str, tuple[int, int]]:
+    """name -> (total_ns, calls) over a rocprofv3 kernel trace (same row rules as
+    `parse_kernel_trace`: nameless / unparsable / non-positive-duration rows dropped)."""
+    totals: dict[str, list[int]] = {}
+    for row in csv.DictReader(io.StringIO(csv_text)):
+        name = (row.get("Kernel_Name") or row.get("kernel_name")
+                or row.get("Name") or "").strip()
+        if not name:
+            continue
+        try:
+            duration = int(row.get("End_Timestamp") or row.get("end_ns") or "0") - \
+                int(row.get("Start_Timestamp") or row.get("start_ns") or "0")
+        except (TypeError, ValueError):
+            continue
+        if duration <= 0:
+            continue
+        bucket = totals.setdefault(name, [0, 0])
+        bucket[0] += duration
+        bucket[1] += 1
+    return {k: (v[0], v[1]) for k, v in totals.items()}
+
+
+def unit_work(long_csv: str, short_csv: str, units: float) -> dict[str, tuple[float, float]]:
+    """Per-unit kernel work from a same-binary PAIR of traces: (long - short) / units, so
+    warmup, model load and depth fill cancel (lifted from gdn-share job.py `cell_pair` /
+    `unit_vec`). Same-binary, same-run subtraction; it does not cross runs (AK-PROF-ATTR-1).
+    name -> (ns_per_unit, calls_per_unit); names with a non-positive delta are dropped."""
+    if not units or units <= 0:
+        raise ValueError("units must be positive")
+    long_t, short_t = kernel_totals(long_csv), kernel_totals(short_csv)
+    out: dict[str, tuple[float, float]] = {}
+    for name, (ns, calls) in long_t.items():
+        s_ns, s_calls = short_t.get(name, (0, 0))
+        if ns - s_ns > 0:
+            out[name] = ((ns - s_ns) / units, (calls - s_calls) / units)
+    return out
+
+
+def two_denominator(work: dict[str, tuple[float, float]], *, wall_ns: float | None,
+                    expected_calls: dict[str, tuple[int, ...]] | None = None,
+                    top: int = 12) -> dict:
+    """Share with BOTH denominators for one unit of work.
+
+    `work`: name -> (ns, calls) per unit. `wall_ns`: wall of the same unit from an
+    UNPROFILED run (None if not measured). `expected_calls`: kernel-name substring ->
+    allowed per-unit dispatch counts (e.g. {"gated_delta_net": (30, 36)}); `count_ok` is
+    True only if every named check finds dispatches within the allowed set, False if any
+    does not (including a check whose kernel never ran), None if no checks were given.
+
+    Wall-derived fields are None when wall_ns is missing/non-positive, and also when the
+    kernel sum exceeds wall (overlapping streams or a mismatched pair: a negative launch
+    gap would be fabricated), with `wall_valid` False."""
+    total = sum(ns for ns, _ in work.values())
+    wall_ok = wall_ns is not None and wall_ns > 0
+    gap_ok = wall_ok and total <= wall_ns
+    rows = sorted(work.items(), key=lambda kv: -kv[1][0])[:top]
+    hot = [Hotspot(signature=n, total_duration_ns=round(ns), calls=round(c),
+                   share_of_device_time=(ns / total if total else 0.0),
+                   share_of_wall=(ns / wall_ns if wall_ok else None)) for n, (ns, c) in rows]
+    count_ok = None
+    if expected_calls:
+        count_ok = True
+        for key, allowed in expected_calls.items():
+            seen = sum(c for n, (_, c) in work.items() if key in n)
+            if seen <= 0 or round(seen) not in allowed:
+                count_ok = False
+    return {"total_kernel_ns": total, "wall_ns": wall_ns if wall_ok else None,
+            "wall_valid": bool(gap_ok) if wall_ok else None,
+            "launch_gap_ns": (wall_ns - total) if gap_ok else None,
+            "launch_gap_frac": ((wall_ns - total) / wall_ns) if gap_ok else None,
+            "count_ok": count_ok, "hotspots": hot}
+
+
+def render_two_denominator(result: dict, *, limit: int = 8) -> str:
+    """Planner text for `two_denominator`. Unpinned replacement for the wall columns that
+    `actors._render_gpu_serving_profile` (custody-pinned) cannot yet show. A missing
+    denominator prints 'n/a', never 0; an invalid count prints a loud warning."""
+    def pct(x):
+        return "n/a" if x is None else f"{100 * x:.1f}%"
+    lines = [f"launch_gap {pct(result['launch_gap_frac'])} of wall "
+             f"(kernel sum {result['total_kernel_ns'] / 1e6:.3f} ms, wall "
+             f"{'n/a' if result['wall_ns'] is None else format(result['wall_ns'] / 1e6, '.3f') + ' ms'})"]
+    if result["wall_valid"] is False:
+        lines.append("WARNING: kernel sum exceeds wall; launch gap and wall shares not trustworthy")
+    if result["count_ok"] is False:
+        lines.append("WARNING: dispatch-count check FAILED; shares below are not attributable")
+    elif result["count_ok"] is None:
+        lines.append("count check: not run")
+    lines.append("kernel | share_of_device_time | share_of_wall")
+    for h in result["hotspots"][:limit]:
+        lines.append(f"{h.signature[:80]} | {pct(h.share_of_device_time)} | {pct(h.share_of_wall)}")
+    return "\n".join(lines)
 
 
 def profile(binary: Path, model: Path, *, pp: int, tg: int,
@@ -231,4 +331,5 @@ def serving_profile(launch, frozen_requests, *, store: Path, anchor_commit: str,
 
 __all__ = ["Hotspot", "ProfileFailed", "ROCPROF", "ROCPROF_CANDIDATES",
            "ROCPROF_SUPPORT_LIBS",
-           "parse_kernel_trace", "profile", "serving_profile"]
+           "parse_kernel_trace", "profile", "serving_profile",
+           "kernel_totals", "unit_work", "two_denominator", "render_two_denominator"]
