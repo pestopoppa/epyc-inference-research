@@ -756,6 +756,14 @@ Bench rule from the last row: any candidate that loads the HIP backend into a CP
 - **GDN share on MI210 (C7r, `gdn-share-mi210-20261106`, MEASURED):** GDN_CORE kernel share 27B pp2048 0.158, A3B pp2048 0.212, decode 0.014-0.023, verify 0.034-0.065 -> prefill > 5%, decode < 5% (MI210 device NOT closed for the GDN line). pp32768 figures are invalid (gdn_count_ok False).
 - **DROP (do-not-repeat):** LSA flat-PCA top-k indexer + H12 fused sparse FA, 0.368x at kv 32768 (`akm-lsa-h12-pca-indexer-gpu`).
 
+**Added 2026-11-07, harvest #3 (`[belief: cc]`; evidence under `/mnt/raid0/llm/tmp/`; epoch C7r `62cb6a6af`):**
+
+- **DROP (op-level futility, e2e never ran):** H16 MFMA skinny Q8_0 GEMM at M=36 (np4 x 9 verify), `c8-h16-gate-20261107`, candidate a60768af3 vs C7r: op base/new 0.854x (-14.6%, outside keep-tail F 3.15%), per-M geomean 0.74-0.89 for M 12..36, correctness passed (negatives.json `akm-c8-h16-mfma-skinny-q8-m36`). Closes the "M 12..16" intent of seed 07 H16 as measured-null.
+- **H17 profile (a MEASUREMENT, not a keep; row verdict INCONCLUSIVE on 2 of 12 cells, neither decisive):** `c8-h17-profile-20261107`, rocprofv3, C7r, 8 threads, HIP graphs on, FA achieved KV-read GB/s (fraction of 1.6 TB/s) at d8k / d32k / d128k. No-draft decode n_q=1 `flash_attn_ext_vec<256,1,q8_0,q8_0>`: 102 (6.4%) / 133 (8.3%) / 132 (8.2%), FA 52% of step at 128k (spread 0.12 > 0.10 limit, the one invalid cell). v9 verify `gv_fattn_kernel`: 92 / 177 / 222 (5.7 / 11.1 / 13.9%). **v36 np4 verify `flash_attn_ext_f16<256,16,4,64>`** (MMA-f16 tile path, NOT gv_fattn): 28 / 27 / 25 (1.7 / 1.7 / 1.6%), FA 67% of step at 128k (271.5 ms/step). DFlash2 server step `gv_fattn_kernel`: 89 / 175 / 226 (5.5 / 11.0 / 14.1%); d8k has 1 of 2 valid reps (GDN step count 834 not a multiple of 48). Packet keys: `cells/<cell>/fa_frac_of_peak_med`, `fa_gbs_spread`, `class_share_med/ATTN_FA`, `reasons`; root commit 166062c6a (handoffs/active/kernel-champion-and-promotion.md). MATMUL weight streaming at tg@d8k is about 1.04 TB/s (65%), from the same row's prose (not re-derived).
+- **Attention-class targets now named (C8-1-LCATTN, seeds/hypotheses/11):** (a) route the M=36 np4 verify onto a KV-split `gv_fattn` (multi-sequence), (b) re-split the n_q=1 vec kernel for n_kv >= 32k. Nothing is built or measured yet: these are design priors, not results. The per-target keep rule (amended before the first grant, root e410bd029) is in seed 11.
+- Planner reading: do NOT spend ports on GEMM at M 12..36 (H16 closed above); attention at long context is where the profile shows the unspent bandwidth.
+- LSA-QUALITY-32K r8 was PARKED (root 25ced1b42): resumable, no verdict, no new measurement. Not a negative.
+
 Pattern: under HIP graphs, launch-removal fusions of small elementwise ops (H6, H14) do not
 move end-to-end time; wins came from bytes (H1b, H10, H12) or from removing CPU/GPU splits (H13).
 

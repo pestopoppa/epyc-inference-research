@@ -84,6 +84,16 @@
       "target_symbol": "lsa_indexer_pca_topk",
       "effect_fraction": -0.632,
       "reason": "MEASURED FUTILE on build 289207e31 (store gpu-20261106-289207e31-lsah12) vs C7 c420b9d1a, MI210. geomean dense/lsa at kv=32768 = 0.368 (lsa SLOWER). Cells dense_us/lsa_us -> ratio: kv32768 nb1 342.7/722.9=0.474, nb8 400.4/1269.2=0.315, nb16 519.7/1564.6=0.332, nb512 5482/14820=0.370; kv16384 nb512 0.202; kv65536 nb1 0.574. Ratio higher=better. Packet caveat: selection is a flat per-key PCA top-k (+ window 512, sinks 4), NOT the author Ward bucket selector (only the map and scorer math ported), so this refutes the flat-PCA-indexer variant, not Ward/bucketed LSA. Source: /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json (perf.json, correct.json). Evidence /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json. Measured on C7 (2026-11-06), not this file's historical epoch."
+    },
+    {
+      "status": "measured_null",
+      "mechanism_id": "akm-c8-h16-mfma-skinny-q8-m36",
+      "statement": "An MFMA-based skinny Q8_0 GEMM (H16 family, kill-switched knob) speeds up the 27B verify-step matmuls at M=36 (np4 x 9) over C7r MMQ.",
+      "falsifier": "Op-level verify-step matmul ratio base/new < 1.0 outside the keep-tail (futility stop before e2e).",
+      "target_surface": "ggml/src/ggml-cuda (mmq / skinny Q8_0 matmul dispatch, gfx90a)",
+      "target_symbol": "H16 skinny MFMA Q8_0 GEMM (C8-2-H16-M36)",
+      "effect_fraction": -0.1458,
+      "reason": "MEASURED NO_KEEP_OP_FUTILE on candidate a60768af3 (store gpu-20261107-a60768af3-c8h16) vs C7r 62cb6a6af, MI210 gfx90a, row c8-h16-gate-20261107. Correctness passed on 5 suites; kill-switch parity 1.0018. Op-level M=36 verify-step matmul over the real 27B shape census (7 shapes, 407 matmuls): base/new = 0.8542 (effect -14.58%, keep_tail P 2.23% / F 3.15%, effect_inside_tail False, enforced), so a resolved loss; e2e never ran. Per-M geomean base/new: M12 0.802, M16 0.776, M18 0.839, M24 0.848, M27 0.810, M32 0.742, M36 0.890 (M9 reads 0.558 under the key geomean_base_over_h16, a differently named key). The slow cells are the large GEMMs (5120x17408@32 0.708, 5120x6144@32 0.612); only 6144x5120@36 won (1.109). Ratio higher=better (base/new). Do not re-propose an MFMA f16 skinny Q8_0 kernel for M 12..36 without a mechanism that explains the M=12..32 loss. Source: /mnt/raid0/llm/tmp/c8-h16-gate-20261107/out/RESULT.json keys /b/op_ratio_M36, /b/keep_tail, /b/per_M, /b/cases, /b/killsw_over_base_geomean, /verdict; root commit d3f97494f handoffs/active/kernel-champion-and-promotion.md (C8-2-H16-M36). Measured on C7r (2026-11-07), not this file's historical epoch."
     }
   ]
 }
