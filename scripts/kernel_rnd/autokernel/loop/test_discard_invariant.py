@@ -15,7 +15,7 @@ HERE = Path(__file__).parent
 REVIEWED = {
     "actor_metrics.py": "48f0e9495d7d4ca375cacfa6fd70cd007136ffbbd1205a5ffea3b80871aa0614",
     "../custody.py": "187c9cc71c35c0c94e44430202667505f45e616f7c70790d64a59d159ade1b55",
-    "actors.py": "c5cbfbe1694fe777a53533e7a603c4663818748a0cb88f3f4c028b5c44734fc4",  # custody review 2026-11-07: dd3ab6326 argv v2 + 189b1d29b pre-spawn cwd guard; no artifact path changed
+    "actors.py": "da3a5d7ce6bbc6c279305c3b8b48f5819fee409f3299cf16c0d7ebff28e0a494",  # custody review 2026-11-07 AutoKernel: hotspots import + optional two-denominator render block in render_context; no artifact path
     "archive.py": "4a8cdaaf7469ae915358e2f06cfdd7adbb8bbdb2a6186a5641f3ae95aecad6c1",
     "bestof.py": "a42ade5e6075eaff43d5cf065c93015ff2445e80546bed3eb7d2a7f279012959",
     "cross_target.py": "8a4afa59ce62645b23f9f1e02e4bd17e0b7ba1cc997ad25cdcc1aa91e9900409",
