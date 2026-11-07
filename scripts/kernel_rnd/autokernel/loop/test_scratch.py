@@ -699,6 +699,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "cpu_repack_cases.py:fixture_regression:mkdir": (2, "scratch: per-mode and negative probes inside the function's with-block temporary directory"),
     "cpu_repack_cases.py:main:write_text": (1, "evidence: explicit CLI --report output"),
     "cpu_repack_cases.py:run_probe:write_text": (1, "scratch: case TSV inside callers' with-block temporary probe directory"),
+    "floor_selfcheck.py:record_refusal:mkdir": (1, "evidence: lineage dir of the AKX-AUTO-4 refused-floor record"),
+    "floor_selfcheck.py:record_refusal:open-write": (1, "evidence: append-only refused-floor record (persistence proof for AKX-AUTO-4)"),
     "floor_registry.py:_write_atomic:mkdir": (1, "evidence: parent of immutable floor-registry records"),
     "floor_registry.py:_write_atomic:os.link": (1, "evidence: exclusive atomic publication of immutable floor-registry record"),
     "floor_registry.py:_write_atomic:write_text": (1, "evidence: temporary sibling atomically linked/replaced as floor-registry record"),
