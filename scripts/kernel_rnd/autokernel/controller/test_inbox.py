@@ -89,8 +89,22 @@ class TheReaderContract(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         return Path(tmp.name)
 
-    def test_a_missing_inbox_is_an_empty_context_not_an_error(self):
-        self.assertEqual(inbox.read_inbox(self._dir() / "never-created"), [])
+    def test_a_missing_inbox_refuses_not_silently_empty(self):
+        """C2b negative control: the old path returned [] for a mistyped store."""
+        with self.assertRaises(inbox.InboxMissing):
+            inbox.read_inbox(self._dir() / "never-created")
+
+    def test_an_existing_empty_inbox_is_still_empty(self):
+        self.assertEqual(inbox.read_inbox(self._dir()), [])
+
+    def test_non_md_files_are_warned_not_read(self):
+        root = self._dir()
+        (root / "a.md").write_text("seed")
+        (root / "b.txt").write_text("typo extension")
+        notes: list[str] = []
+        self.assertEqual(inbox.read_inbox(root, note=notes.append), ["seed"])
+        self.assertEqual(len(notes), 1)
+        self.assertIn("b.txt", notes[0])
 
     def test_seeds_come_back_sorted_and_stripped(self):
         root = self._dir()

@@ -391,6 +391,24 @@ def epoch_sha256(*, anchor_commit: str | None, build_recipe: Mapping[str, Any] |
     ).hexdigest()
 
 
+class StoreMissing(ValueError):
+    """`--store` names a directory that holds no experiments.db (C2a)."""
+
+
+def require_existing_store(root: Path | str, *, new_store: bool = False) -> Path:
+    """Refuse to silently CREATE a store at a mistyped `--store` path (LOOP-SAFETY-C C2a).
+
+    A typo'd path used to open a fresh empty database and run a whole campaign
+    against no history. Creation now needs the explicit `--new-store` opt-in.
+    """
+    root = Path(root)
+    if new_store or (root / "experiments.db").is_file():
+        return root
+    raise StoreMissing(
+        f"store {root} has no experiments.db; refusing to create one silently "
+        "(pass --new-store if creating a fresh store is intended)")
+
+
 class ExperimentStore:
     """Append-only experiment memory keyed by attempt identity."""
 

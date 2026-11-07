@@ -31,6 +31,10 @@ from pathlib import Path
 from typing import Callable
 
 
+class InboxMissing(FileNotFoundError):
+    """The inbox directory is absent (C2b)."""
+
+
 def read_inbox(inbox_dir: Path,
                note: Callable[[str], object] = print) -> list[str]:
     """Every readable `*.md` seed, sorted by name; unreadable files noted, never raised.
@@ -44,9 +48,17 @@ def read_inbox(inbox_dir: Path,
     still propagate.
     """
     if not inbox_dir.is_dir():
-        return []
+        # C2b: a missing inbox used to read as "no seeds" -- a mistyped store
+        # silently dropped every operator injection.
+        raise InboxMissing(f"inbox directory {inbox_dir} does not exist; refusing to "
+                           "read nothing silently (create it, or pass --new-store)")
     texts: list[str] = []
-    for path in sorted(inbox_dir.glob("*.md")):
+    for path in sorted(inbox_dir.iterdir()):
+        if path.suffix != ".md":
+            if not path.name.startswith("."):
+                note(f"inbox     inbox_file_ignored {path.name}: not a .md file — "
+                     "never read as a seed")
+            continue
         try:
             texts.append(path.read_text(encoding="utf-8").strip())
         except (OSError, UnicodeDecodeError) as exc:
@@ -55,4 +67,4 @@ def read_inbox(inbox_dir: Path,
     return texts
 
 
-__all__ = ["read_inbox"]
+__all__ = ["InboxMissing", "read_inbox"]

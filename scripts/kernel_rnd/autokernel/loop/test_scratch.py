@@ -885,7 +885,7 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "recal_serving_floor.py:main:copy2": (1, "evidence: operator CLI backup of the replaced floor"),
     "run.py:_publish_preclaim_failure:mkdir": (1, "evidence: batch --out dir (pre-claim failure marker)"),
     "run.py:_main.publish_held_claims:mkdir": (1, "evidence: batch --out dir (held-claim evidence)"),
-    "run.py:_main:mkdir": (2, "evidence: batch --out and original GPU child phase event directory; pending markers retain failed release refusal"),
+    "run.py:_main:mkdir": (3, "evidence: batch --out, GPU child phase event dir (pending markers), and --new-store inbox dir"),
     "gpu_phases.py:child_build:write_text": (2, "evidence: pending native child-owner marker and completed original CPU build interval; release errors retain pending refusal"),
     "runtime_calibration.py:neutral_material:mkdir": (1, "evidence: direct-neutral executable keyed by launch snapshot"),
     "runtime_calibration.py:neutral_material:os-open-create": (1, "evidence: direct-neutral executable (O_EXCL)"),

@@ -2185,9 +2185,13 @@ def prior_experiments(args, epoch: str, measurement_epoch: str | None = None) ->
             # Ranking already returns an order of merit over `RANKING_POOL`; every
             # row it hands back carries `ranking_authorized=True` (`P-AK-SEARCH-1-A3`
             # boundary), and appending an unranked supplemental fetch here would break
-            # that invariant for no benefit -- a ranked pool of 2000 already dwarfs the
-            # recency window the pinned-history gap below exists to patch.
-            return rows
+            # that invariant. D-A3: the pinned supplement is still required --
+            # `render_context` promises the current-epoch keep_candidate is always
+            # shown, and a ranked pool does not guarantee it. Supplement rows are
+            # re-recalled with ranking authorised so the invariant still holds.
+            return _with_pinned_history(rows, store, epoch=epoch,
+                                        measurement_epoch=measurement_epoch,
+                                        ranking_authorized=True)
         return _with_pinned_history(rows, store, epoch=epoch,
                                     measurement_epoch=measurement_epoch)
 
@@ -2202,7 +2206,8 @@ _PINNED_HISTORY_POOL = 500
 
 
 def _with_pinned_history(rows: list[dict], store, *, epoch: str,
-                         measurement_epoch: str | None) -> list[dict]:
+                         measurement_epoch: str | None,
+                         ranking_authorized: bool = False) -> list[dict]:
     """Append (never reorder or drop) rows a plain `recall(limit=40)` may have aged
     out, so a kept candidate or an abstained/null-mechanism family outside the
     recency window still reaches the planner. `render_context` does the actual
@@ -2213,7 +2218,8 @@ def _with_pinned_history(rows: list[dict], store, *, epoch: str,
     seen = {row.get("attempt_id") for row in rows if row.get("attempt_id")}
     extra = store.recall(epoch=epoch, limit=_PINNED_HISTORY_POOL,
                          statuses=_PINNED_HISTORY_STATUSES, include_claims=True,
-                         measurement_epoch=measurement_epoch)
+                         measurement_epoch=measurement_epoch,
+                         **({"ranking_authorized": True} if ranking_authorized else {}))
     pinned = [row for row in extra
              if row.get("same_epoch") and row.get("attempt_id") not in seen]
     return [*rows, *pinned]
@@ -2426,6 +2432,9 @@ def _main(argv: list[str] | None = None) -> int:
                         help="existing resolved campaign or campaign_cli output; selects inputs only")
     parser.add_argument("--target-id", help="exact enrolled target ID/alias; requires --resolved-campaign")
     parser.add_argument("--store", type=Path, required=True)
+    parser.add_argument("--new-store", action="store_true",
+                        help="EXPLICIT opt-in to create a fresh experiments.db/inbox at "
+                             "--store; without it a store lacking experiments.db is refused")
     parser.add_argument("--bundle-surface", choices=accumulate.SURFACES,
                         help="opt in to isolated CPU/GPU bundle storage; omitted preserves the "
                              "legacy unscoped accumulator paths")
@@ -3082,6 +3091,13 @@ def _main(argv: list[str] | None = None) -> int:
                              "events as `status` broadcasts; 'off' (or empty) disables the bus "
                              "(the window file and its events.jsonl remain) (default: %(default)s)")
     args = parser.parse_args(argv)
+    if not args.dry_run:
+        try:
+            experiments.require_existing_store(args.store, new_store=args.new_store)
+        except experiments.StoreMissing as exc:
+            parser.error(str(exc))
+        if args.new_store:
+            (args.store / "inbox").mkdir(parents=True, exist_ok=True)
     if args.rebaseline_stale and args.bundle_surface is None:
         parser.error("--rebaseline-stale requires --bundle-surface")
     if args.rebaseline_stale and args.new_anchor_epoch:

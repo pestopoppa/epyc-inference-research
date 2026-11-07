@@ -735,3 +735,27 @@ class MemorySurvivesADeployment(unittest.TestCase):
             context = dc._context({"iterations": [_attempt()]},
                                   dc._tracker(dc.DurableState(root)), 1, config, None)
             self.assertEqual(context["prior_experiments"], [])
+
+
+class RequireExistingStoreTest(unittest.TestCase):
+    """C2a: a mistyped --store must not silently become a fresh empty store."""
+
+    def test_missing_db_refuses_without_new_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ex.StoreMissing):
+                ex.require_existing_store(Path(tmp))
+            self.assertFalse((Path(tmp) / "experiments.db").exists())
+
+    def test_new_store_opt_in_and_existing_store_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(ex.require_existing_store(tmp, new_store=True), Path(tmp))
+            ex.ExperimentStore(tmp).close()
+            self.assertEqual(ex.require_existing_store(tmp), Path(tmp))
+
+    def test_run_cli_refuses_missing_store_and_new_store_creates_inbox(self):
+        from autokernel.loop import run
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "typo"
+            with self.assertRaises(SystemExit):
+                run._main(["--store", str(store)])
+            self.assertFalse(store.exists())

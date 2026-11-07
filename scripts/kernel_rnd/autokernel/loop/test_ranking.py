@@ -157,6 +157,32 @@ class TheOptIn(unittest.TestCase):
                                 [row["attempt_id"] for row in plain])
 
 
+class RankedPinnedKeepCandidateTest(unittest.TestCase):
+    """D-A3: ranking on must not drop the pinned current-epoch keep_candidate."""
+
+    def test_ranked_path_includes_pinned_keep_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = fx.store(Path(tmp))
+            store.record({"mechanism_id": "pin-m", "target_surface": "s",
+                          "target_symbol": "sym", "status": "keep_candidate",
+                          "statement": "pinned", "effect_fraction": 0.0,
+                          "result_sha256": "e" * 64},
+                         epoch=fx.CURRENT_EPOCH, recorded_at="2020-01-01T00:00:00Z",
+                         campaign_id="ak-loop")
+            store.close()
+            args = argparse.Namespace(store=Path(tmp), rank_prior_experiments=True)
+            ranked = run.prior_experiments(args, fx.CURRENT_EPOCH)
+            keeps = [r for r in ranked if r["status"] == "keep_candidate"]
+            self.assertEqual(len(keeps), 1)
+            self.assertTrue(all(r["ranking_authorized"] for r in ranked))
+            # Negative control: the old ranked path (bare recall) lacks the keep.
+            with ex.ExperimentStore(tmp) as old:
+                bare = old.recall(epoch=fx.CURRENT_EPOCH, ranking_authorized=True,
+                                  include_claims=True)
+            self.assertFalse([r for r in bare if r["status"] == "keep_candidate"],
+                             "control is vacuous: keep_candidate already in bare ranked pool")
+
+
 class _StaleMagnitudeTrap(dict):
     """A cross-epoch row that raises if anyone reads its measured value."""
 

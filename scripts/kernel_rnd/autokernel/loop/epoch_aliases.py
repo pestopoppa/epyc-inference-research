@@ -298,6 +298,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if store is None:
         parser.error("--store or --campaign-dir is required")
     try:
+        experiments.require_existing_store(store)
         report = backfill(store, loop_runs=loop_runs, resolved_paths=resolved,
                           apply=args.apply)
     except (OSError, ValueError) as exc:

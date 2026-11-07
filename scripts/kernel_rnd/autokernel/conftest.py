@@ -66,6 +66,27 @@ def _isolate_host_claims(tmp_path_factory):
         yield holds
 
 
+@pytest.fixture(autouse=True)
+def _loop_tests_may_create_stores(request):
+    """C2a/C2b: production refuses a `--store` with no experiments.db and a missing
+    inbox. The pre-existing loop tests drive `run._main` on fresh tmp dirs; they get a
+    permissive guard that materialises the inbox. Tests outside `loop/` (the guard's
+    own tests live in controller/) see the real, refusing function."""
+    from pathlib import Path as _P
+    if "/loop/" not in str(request.node.fspath):
+        yield
+        return
+    from .controller import experiments
+
+    def permissive(root, *, new_store=False):
+        (_P(root) / "inbox").mkdir(parents=True, exist_ok=True)
+        return _P(root)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(experiments, "require_existing_store", permissive)
+        yield
+
+
 @pytest.fixture
 def gpu_quiet_holds(_isolate_host_claims):
     return _isolate_host_claims
