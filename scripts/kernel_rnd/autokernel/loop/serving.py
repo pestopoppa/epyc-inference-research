@@ -45,7 +45,7 @@ from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
-from . import (headline_admissibility, hip_launch_proof, kernel_coverage, launch_affinity,
+from . import (floor_selfcheck, headline_admissibility, hip_launch_proof, kernel_coverage, launch_affinity,
                loadgen_selfcheck, lifecycle_observation, procguard, ram_admit, residency, status)
 from . import native_server_response as server_response
 from .floor_units import FLOOR_UNITS, UNIT_ARM, UNIT_PROCESS, UNIT_SESSION
@@ -2211,6 +2211,15 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
         outlier_guard = _apply_outlier_guard(recipe, build_dir, port, options,
                                              plan, values, windows,
                                              should_stop=should_stop)
+        # AKX-AUTO-4: a contiguous degraded block (a level shift both arms share) is
+        # invisible to the per-pair evidence guard above; refuse it like any other
+        # host-degraded calibration rather than file the inflated floor.
+        selfcheck = floor_selfcheck.assess_floor(values["anchor"], values["candidate"])
+        if selfcheck.verdict == floor_selfcheck.REJECT_DEGRADED_BLOCK:
+            raise HostDegradedDuringCalibration(
+                f"host degraded during floor calibration: {selfcheck.reasons[0]}. "
+                f"Re-measure once the host is quiet; refusing rather than filing a "
+                f"floor built on a degraded block [AKX-AUTO-4].")
         row = {"schema": "epyc.autokernel.serving_floor.v2", "instrument": instrument,
                "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
                "recipe_env": dict(recipe.env or {}), "recipe_describe": recipe.describe(),
