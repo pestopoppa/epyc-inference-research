@@ -20,7 +20,7 @@ Run only as a 5-pair confirmation on C6 if a free GPU slot exists. Do not author
 
 ## AK-ASM-H8 -- fused MoE expert GEMM (sorted tiles + fused gate/up + GLU) for A3B (Q38FN cells only if a hybrid deployment is adopted)
 
-**STATUS 2026-11-07: H8 r4 FAIL 1.0981; successor H8b KEEP op-level 1.2905 on C7 (`ak-asm-h8b-gate-r2-20261106`). Open caveats -> seed 09 AK-ASM-H8c.**
+**STATUS 2026-11-07: H8 r4 FAIL 1.0981; successor H8b op-gate 1.2905 but pre-registered e2e NO_KEEP (pp512 0.949x, pp1024 0.968x, tg128 0.998x; `ak-asm-h8b-e2e-20261106`): H8 and H8b are DROP. Low-priority successor -> seed 09 AK-ASM-H8c.**
 
 Open: r1 crashed in correctness (MUL_MAT_ID rc=-6); r3 (store cb973fc37) produced perf cells but no
 verdict. Arms: technique port into `mmid.cu` (current), CK 2-stage MoE (sorting unsupported on gfx90a per

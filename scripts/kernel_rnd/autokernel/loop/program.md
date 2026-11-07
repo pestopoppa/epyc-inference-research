@@ -740,7 +740,7 @@ evidence that addresses the stated reason.
 
 | Verdict | Mechanism | Result | Packet |
 |---|---|---|---|
-| KEEP (op-level only, bar lowered 1.10->1.05) | H8b A3B MoE expert-density tiling, shape-aware window, M<=8 fused-GLU excluded (vs C7) | MUL_MAT_ID geomean 1.2905 over M 64..1024, correctness 64/64; Q38FN 1.196 informational; uniform routing ids; no e2e yet | ak-asm-h8b-gate-r2-20261106 (predecessor H8 r4 FAIL 1.0981) |
+| DROP (op-KEEP / e2e-NO_KEEP) | H8b A3B MoE expert-density tiling, shape-aware window, M<=8 fused-GLU excluded | op gate MUL_MAT_ID geomean 1.2905 over M 64..1024 (uniform routing ids), but pre-registered e2e NO_KEEP: A3B MTP Q8_0 C8-h8b 3597d6c3b vs C7r, 5 interleaved reps: pp512 0.949x, pp1024 0.968x, tg128 0.998x. Cause: op test uses uniform expert routing, real A3B routing is skewed | ak-asm-h8b-gate-r2-20261106 (op), ak-asm-h8b-e2e-20261106 (e2e) |
 | DROP | H3 Q8_0 GEMV prefetch confirmation (GGML_CUDA_Q8_PREFETCH=1, C6) | 27B Q8_0 tg128 0.9465 (31.46 vs 33.24 t/s, n 5/5); second receipt for negative akm-hist-q8-prefetch | ak-asm-t0-h3-gate-20261105 |
 | NO-GO | ROCm 10.1 toolchain for the HIP build (C6) | spec-off decode 0.9746 (2 ABBA pairs), pp512@16k 0.75-0.79; the earlier +8.7% decode was draft acceptance | q38p3a-verdict.json (negatives.json akm-c6-rocm-10-1-llamacpp-build) |
 | BENCH RULE | Pinned host memory when the HIP backend is merely loaded into a CPU-served process (C6, Q38FN) | CPU decode TPOT 1.880x of CPU-only; GGML_CUDA_NO_PINNED=1 -> 1.028x | npd1-step4-20261105/out/PILOT-COMPLETE.json |
