@@ -19,11 +19,11 @@ REVIEWED = {
     "archive.py": "4a8cdaaf7469ae915358e2f06cfdd7adbb8bbdb2a6186a5641f3ae95aecad6c1",
     "bestof.py": "a42ade5e6075eaff43d5cf065c93015ff2445e80546bed3eb7d2a7f279012959",
     "cross_target.py": "8a4afa59ce62645b23f9f1e02e4bd17e0b7ba1cc997ad25cdcc1aa91e9900409",
-    "loop.py": "41fa6423376206b5240de18763f35bf3365d3b2fc01f86514c7e332e50f23f70",  # custody review CUSTODY-REVIEW.md 2026-11-07
+    "loop.py": "6c64bd6a835076ab4fad12f4a3bcc37787e89ea13ee7ef85045761654992bc27",  # custody review 2026-11-07 AutoKernel: PlannerSameStateSkip -> typed planner_same_state_skip outcome (no hypothesis, no artifact; recorded by the normal path) + planner_same_state row field
     "pipeline.py": "d17f3ed2dada812aba24bee16decd0140a21ec53ca8042789cc61f86c6d2b36f",  # custody review 2026-11-07 AutoKernel: tail_timing wrappers re-raise unchanged, tail session entered as before (AK-TAIL-SPLIT phase 1)
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
-    "run.py": "4496d7780731b9ec7e98bae8a3418f2635ee9d082851d6659b2b44aad3fe88f7",  # custody review 2026-11-07 AutoKernel: copies tail_path_timing onto rows (observe-only), on top of keep-path timing
+    "run.py": "3afaaf0526358bd9cd4031850d4b3142dcb2c04a2b18733bd5546a3231029977",  # custody review 2026-11-07 AutoKernel: same-state guard wraps planner, folds into should_stop/terminal like provider_breaker; retry_budget_shadow log-only key added to attempt before archive.record in both record paths
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 

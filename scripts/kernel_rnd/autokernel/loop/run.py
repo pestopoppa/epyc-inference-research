@@ -109,6 +109,7 @@ from . import floor_registry
 from . import epoch_aliases
 from . import scratch
 from . import provider_breaker
+from . import same_state_stop
 from . import procguard
 from . import prebuild_rules
 from . import ak_check
@@ -5523,11 +5524,19 @@ def _main(argv: list[str] | None = None) -> int:
     def stop_asked() -> bool:
         return stopping["asked"] or pool.stop_requested(args.store)
 
+    # Identical-state abstention stop (same_state_stop.py): a lane whose planner
+    # abstained on exactly the state it would see again is not re-asked; the skip parks
+    # the run at the next iteration boundary, via `should_stop`, like the breaker.
+    same_state = same_state_stop.SameStateGuard(same_state_stop.resolve_skip_after(
+        resolved_campaign.resources.planner_same_state_skip_after
+        if resolved_campaign is not None else None))
+
     def should_stop() -> bool:
-        return stop_asked() or breaker.tripped
+        return stop_asked() or breaker.tripped or same_state.tripped
 
     def run_terminal() -> str:
-        return provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker)
+        return provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker,
+                                         same_state=same_state)
 
     #: Per-thread nesting depth of the quiet window: a measurement called from inside
     #: another's window must not re-acquire a flock this process already holds (flock
@@ -6824,6 +6833,9 @@ def _main(argv: list[str] | None = None) -> int:
                                         actor_config=launch_actor_config,
                                         carry_family=resume_carry.family)
             resume_mod.stamp_actor_diff(attempt, resume_queue[0])
+            shadow = same_state_stop.retry_budget_shadow(args.store, attempt)
+            if shadow is not None:
+                attempt["retry_budget_shadow"] = shadow
             journal_receipts = []
             try:
                 archive.record(args.store, attempt, epoch=epoch,
@@ -6855,6 +6867,11 @@ def _main(argv: list[str] | None = None) -> int:
             latest.append(outcome)
             publish("running", latest, hotspot_rows=hotspot_rows)
             pool.finish_custody_hold(hold)
+            if same_state.observe(outcome):
+                print(f"parked    {same_state_stop.PLANNER_SAME_STATE_SKIP}: "
+                      f"{same_state.last_skip}; no new iterations are dispatched; terminal "
+                      f"{same_state_stop.SAME_STATE_PARKED} (resumable with --resume-run)",
+                      flush=True)
             if breaker.observe(outcome):
                 print(f"parked    provider breaker tripped: {breaker.streak} consecutive "
                       f"provider-terminal iterations (threshold {breaker.threshold}); no new "
@@ -6919,6 +6936,9 @@ def _main(argv: list[str] | None = None) -> int:
                                         actor_config=launch_actor_config,
                                         carry_family=resume_carry.family)
             resume_mod.stamp_actor_diff(attempt, resume_queue[0])
+            shadow = same_state_stop.retry_budget_shadow(args.store, attempt)
+            if shadow is not None:
+                attempt["retry_budget_shadow"] = shadow
             archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
                            campaign_id="ak-loop")
             settle_resume(candidate)
@@ -7547,6 +7567,8 @@ def _main(argv: list[str] | None = None) -> int:
                                                **_actor_salvage(args),
                                                **_actor_reasoning_history(args),
                                                **_actor_serving(args))))
+            ordinary = same_state_stop.GuardedPlanner(ordinary, same_state,
+                                                      workspace=worker.worktree, lane=worker.name)
             planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                        if pending_pair is not None else ordinary)
             if runtime_arm_declaration is not None and (runtime_enabled or runtime_keep_grade):
@@ -8640,6 +8662,7 @@ def _main(argv: list[str] | None = None) -> int:
                 "phase_seconds_are_lane_seconds": True,
                 "pool": pooled_body,
                 "provider_breaker": breaker.to_dict(),
+                "planner_same_state": same_state.to_dict(),
                 **({"scratch": scratch_registry[0].stats()}
                    if scratch_registry[0] is not None else {}),
                 "continuation": serial_run.continuation(

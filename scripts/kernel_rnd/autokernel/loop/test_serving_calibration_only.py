@@ -48,10 +48,14 @@ def test_terminal_is_stopped_when_stop_was_asked():
     # 2026-11-07: the terminal is computed by provider_breaker.terminal (an operator
     # stop wins over a provider park); run.py must route through it.
     assert "terminal=run_terminal()" in RUN
-    assert "provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker)" in RUN
+    assert ("provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker,\n"
+            "                                         same_state=same_state)") in RUN
     from autokernel.loop import provider_breaker
     assert provider_breaker.terminal(stop_asked=True, breaker=None) == "stopped"
     assert provider_breaker.terminal(stop_asked=False, breaker=None) == "complete"
+    parked = type("G", (), {"tripped": True})()
+    assert provider_breaker.terminal(stop_asked=True, breaker=None,
+                                     same_state=parked) == "stopped"
 
 
 def test_serial_roster_admits_the_floor_window_switches():

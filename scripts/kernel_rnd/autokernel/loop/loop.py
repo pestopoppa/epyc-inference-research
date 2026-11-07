@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from . import belief_context, bench, gates, history_fields, integrity, runtime_identity
+from . import same_state_stop
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
@@ -620,6 +621,8 @@ class Outcome:
     # known-good ledger state. None (absent) for every ordinary and historical row.
     belief_mode: str | None = None
     belief_refusal: dict | None = None
+    # `planner_same_state_skip` only: the lane, state key and prior abstention id.
+    planner_same_state: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -681,6 +684,8 @@ class Outcome:
         for key in ("spawn_parent", "branch_id", "width", "depth"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
+        if self.planner_same_state is not None:
+            row["planner_same_state"] = dict(self.planner_same_state)
         if self.belief_mode is not None:
             row["belief_mode"] = self.belief_mode
             row["belief_refusal"] = dict(self.belief_refusal or {})
@@ -1252,6 +1257,11 @@ def iterate(*, planner: Planner, critic: Critic,
         # Raised outside the four formation calls (a wrapper planner): still a stop.
         return observed(Outcome("stopped_mid_formation", getattr(exc, "hypothesis", None),
                                 [STOPPED_MID_FORMATION, str(exc)]))
+    except same_state_stop.PlannerSameStateSkip as exc:
+        # No planner call was made: its last abstention saw this exact state
+        # (`same_state_stop`). Typed, so the run parks instead of re-asking.
+        return observed(Outcome(same_state_stop.PLANNER_SAME_STATE_SKIP, None, [str(exc)],
+                                planner_same_state=exc.to_dict()))
     except ActorTransient as exc:
         # The provider failed, not the science. This ends the ITERATION and is
         # recorded as such; the run continues, and a streak becomes visible in
