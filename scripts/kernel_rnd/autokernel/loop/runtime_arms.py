@@ -707,3 +707,20 @@ __all__ = ["ADOPTION_SCHEMA", "ArmDeclarationRefused", "ArmLanes", "DeclaredArmP
            "RuntimeArm", "RuntimeArmDeclaration", "SCHEMA", "adoption_receipt", "arm_state",
            "load", "runtime_surface", "selection_current_recipe", "surface_digest",
            "write_adoption_receipt"]
+
+
+# --- kill-switch bisect declaration (AK-TOOL-SWITCH-BISECT) -------------------
+# Arm declaration side of the bisect: env switches -> SwitchSpec. The state machine
+# lives in experiment_plan.SwitchBisect (pure; launches nothing).
+def switch_bisect(switches: Mapping[str, Mapping[str, Any]], *, tol: float, repro_min: float,
+                  default_witnesses=(), max_void: int = 2):
+    """`switches`: name -> {env: {K: '0'}, witnesses: [..], suspicion: int, breadth: int}."""
+    from . import experiment_plan as ep
+    specs = [ep.SwitchSpec(name=n, env=dict(d["env"]), witnesses=tuple(d.get("witnesses", ())),
+                           suspicion=int(d.get("suspicion", 100)), breadth=int(d.get("breadth", 1)))
+             for n, d in switches.items()]
+    return ep.SwitchBisect(specs, tol=tol, repro_min=repro_min,
+                           default_witnesses=default_witnesses, max_void=max_void)
+
+
+__all__.append("switch_bisect")
