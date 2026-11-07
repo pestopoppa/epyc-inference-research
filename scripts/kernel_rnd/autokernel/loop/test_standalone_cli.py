@@ -110,7 +110,8 @@ def test_real_service_controls_distinguish_requested_applied_and_refused(
 
     code, refused, _ = _invoke(
         capsys, monkeypatch, running, "drain", "--request-id", "stale-drain",
-        "--expected-revision", "0")
+        "--expected-revision", "0",
+        "--confirm-drain", running.controller.resolved.campaign_id)
     assert code == 3 and refused["disposition"] == "refused"
     assert refused["http_status"] == 400
 
@@ -596,3 +597,22 @@ def test_packaging_is_parseable_pinned_and_deliberately_not_installable():
     assert parsed.sections() == ["Unit", "Service"]
     assert parsed["Service"]["WorkingDirectory"] == "@PINNED_CHECKOUT@"
     assert parsed["Service"]["ExecStart"].split()[0] == "@PYTHON@"
+
+
+def test_drain_refused_without_or_with_wrong_confirmation(
+        running, capsys, monkeypatch):
+    for extra in ([], ["--confirm-drain", "some-other-lane"]):
+        code, body, err = _invoke(
+            capsys, monkeypatch, running, "drain", "--request-id", "d1",
+            "--expected-revision", "0", *extra)
+        assert code == 2 and body is None
+        assert "NOT resumable" in err and "STOP" in err and "--resume-run" in err
+    assert running.controller.desired_state != "drained"
+
+
+def test_drain_confirmed_by_lane_name_is_issued(running, capsys, monkeypatch):
+    code, body, _ = _invoke(
+        capsys, monkeypatch, running, "drain", "--request-id", "d2",
+        "--expected-revision", "0",
+        "--confirm-drain", running.controller.resolved.campaign_id)
+    assert code == 0 and body["command_result"]["operation"] == "drain"

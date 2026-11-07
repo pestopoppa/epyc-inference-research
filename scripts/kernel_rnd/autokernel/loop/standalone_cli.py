@@ -395,6 +395,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--expect-supervisor-incarnation", type=int)
     parser.add_argument("--request-id")
     parser.add_argument("--expected-revision", type=int)
+    parser.add_argument("--confirm-drain", metavar="LANE",
+                        help="required for `drain`: must equal --expect-campaign-id; drain is terminal")
     parser.add_argument("--retries", type=int, default=0,
                         help="transport retries reuse the exact command body")
     return parser
@@ -409,6 +411,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("standalone CLI refused: authenticated operations require all --expect-* pins",
                   file=sys.stderr)
             return 2
+    if args.action == "drain" and args.confirm_drain != args.expect_campaign_id:
+        print("standalone CLI refused: drain is TERMINAL and NOT resumable for this "
+              "campaign generation (the controller refuses all further work; recovery "
+              "needs a new campaign generation). To stop a lane safely use the STOP "
+              "file; to continue interrupted work use --resume-run. If you really mean "
+              f"to drain, repeat with --confirm-drain {args.expect_campaign_id}",
+              file=sys.stderr)
+        return 2
     try:
         result = execute(args)
     except (CLIRefused, control.ControlRefused, ValueError) as exc:
