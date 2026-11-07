@@ -99,6 +99,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import keep_timing
+from . import tail_timing
 from . import actor_opencode_config
 from . import belief_context
 from . import actor_passthrough
@@ -6783,6 +6784,8 @@ def _main(argv: list[str] | None = None) -> int:
             attempt = attempt_with_codegen(outcome, codegen_by_head)
             if outcome.status == "kept" and outcome.champion_head in keep_timing_by_head:
                 attempt[keep_timing.FIELD] = keep_timing_by_head.pop(outcome.champion_head)
+            if isinstance(getattr(outcome, tail_timing.ATTR, None), dict):
+                attempt[tail_timing.FIELD] = getattr(outcome, tail_timing.ATTR)
             if outcome.hypothesis is not None:
                 hypothesis_record = _write_custody_record(
                     args.store, "hypothesis-disposition",

@@ -52,6 +52,7 @@ from typing import Any, Callable, Sequence
 
 from . import loop as loop_mod
 from . import scratch
+from . import tail_timing
 
 #: Outcomes that reached a measurement: an iteration ending any other way counts as
 #: FAILED for `--scratch-keep failed` (its scratch is retained, still marked).
@@ -284,11 +285,14 @@ class _TailSession:
     `iterate` it may pass one; a plain callable (`nullcontext`) is called bare."""
     accepts_hypothesis = True
 
-    def __init__(self, tail: SerializedTail, base: str) -> None:
+    def __init__(self, tail: SerializedTail, base: str, timer=None) -> None:
         self._tail, self._base = tail, base
+        #: AK-TAIL-SPLIT observability: records wait (ready -> lock held) and held time.
+        self._timer = timer
 
     def __call__(self, hypothesis: Any = None):
-        return self._tail.session(self._base, hypothesis=hypothesis)
+        return tail_timing.timed_session(
+            self._timer, self._tail.session(self._base, hypothesis=hypothesis))
 
 
 def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_context,
@@ -404,6 +408,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             reservation = None
             resumed = None
             close_iteration(None)  # never left open across draws
+            # AK-TAIL-SPLIT: observe-only per-stage timing of this draw (tail_timing).
+            timer = tail_timing.IterationTimer(lane=worker.name)
             iteration_scope = registry.scope("iteration", name=f"{worker.name}-{depth}",
                                              parent=batch_scope).__enter__()
             registry.sweep()
@@ -426,16 +432,17 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             # All three run INSIDE one `tail.session`, so they need no lock of their
             # own: the session is the atomic unit and the staleness check happens once,
             # at its start, while the lock is held.
-            def gate(hypothesis, paths, _w=worker):
-                return make_gate(_w)(hypothesis, paths)
+            def gate(hypothesis, paths, _w=worker, _t=timer):
+                return _t.timed("gate", make_gate(_w), hypothesis, paths)
 
-            def measure(hypothesis, paths, _w=worker):
-                return make_measure(_w)(hypothesis, paths)
+            def measure(hypothesis, paths, _w=worker, _t=timer):
+                return _t.timed("measure", make_measure(_w), hypothesis, paths)
 
-            def commit_one(hypothesis, paths, comparison, _w=worker):
-                return commit(_w, hypothesis, paths, comparison)
+            def commit_one(hypothesis, paths, comparison, _w=worker, _t=timer):
+                return _t.timed("commit", commit, _w, hypothesis, paths, comparison)
 
-            def step(label, _w=worker):
+            def step(label, _w=worker, _t=timer):
+                _t.step(label)
                 if on_step is not None:
                     on_step(_w.name, label)
 
@@ -498,7 +505,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
-                    tail_session=_TailSession(tail, base),
+                    tail_session=_TailSession(tail, base, timer),
                     should_abandon=should_stop, record_reschedule=record_reschedule,
                     accumulate_valid_positive=accumulate_valid_positive,
                     # Per-hypothesis authoring budget across iterations (loop.py).
@@ -564,6 +571,10 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 outcome.attempt_identity = reservation.identity
                 outcome.exact_repeat_dispatch_count = reservation.dispatch_count
                 outcome.candidate_diff_sha256 = reservation.candidate_diff_sha256
+            try:
+                setattr(outcome, tail_timing.ATTR, timer.to_dict(outcome.status))
+            except Exception:      # noqa: BLE001 -- observability never fails an iteration
+                pass
             close_iteration(outcome)
             keep_lane(outcome)
             if outcome.status == loop_mod.BELIEF_REFUSED:
