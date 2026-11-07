@@ -409,7 +409,8 @@ def op_keep_status(op: Mapping[str, Any] | None,
         return {"status": OP_PENDING_E2E, "reason": "awaiting same-run ABBA e2e"}
     if e2e.get("design") != "ABBA" or e2e.get("same_run") is not True:
         return {"status": OP_PENDING_E2E,
-                "reason": "e2e is not a same-run ABBA; cross-run ratios do not confirm"}
+                "reason": ("e2e is not a verified same-run ABBA (design=%s); op win stays pending"
+                           % e2e.get("design"))}
     effect, floor = e2e.get("effect_pct"), e2e.get("floor_pct")
     if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v
            for v in (effect, floor)) or floor <= 0:

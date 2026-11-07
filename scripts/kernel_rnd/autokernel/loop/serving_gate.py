@@ -55,17 +55,93 @@ def measure(recipe: serving.Recipe, cor_build: Path, tip_build: Path, *,
                            floor_unit=floor_unit)
 
 
-def e2e_evidence(row: dict) -> dict:
-    """Project a `serving.compare` row into the same-run ABBA e2e evidence that
-    `keep_screen.op_keep_status` consumes. `serving.compare` alternates arms within one
-    invocation; a row lacking effect/floor yields malformed evidence (stays pending)."""
-    return {"design": "ABBA", "same_run": True, "effect_pct": row.get("effect_pct"),
-            "floor_pct": row.get("noise_floor_pct", row.get("floor_pct")), "decisive": row.get("decisive")}
+#: e2e designs `classify_e2e_design` can return. Only `ABBA` may confirm an op-level win.
+E2E_DESIGNS = ("ABBA", "fixed_order_pairs", "separate_runs", "unpaired", "unknown_design")
+_ARMS = ("anchor", "candidate")
 
 
-def op_win_verdict(op: dict, row: dict | None) -> dict:
+def _min_pairs() -> int:
+    from . import bench
+    return bench.MIN_PAIRS
+
+
+def _is_int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def classify_e2e_design(row, declared: dict | None = None) -> tuple[str, list[str]]:
+    """Verify, FROM THE RECORD, how an e2e row was measured. Returns (design, reasons);
+    `design == "ABBA"` only when every check passes (reasons is then empty).
+
+    ABBA = one invocation (a single measurement-plan seed), both arms sampled pairs times
+    with launches interleaved by the plan's per-pair order (anchor-first and
+    candidate-first both present), every launch accounted for in `launch_membership`
+    (ordinal = 2*pair + position), pairs >= bench.MIN_PAIRS, and any digest in `declared`
+    (request_digest, recipe_hash, anchor_build_digest, candidate_build_digest) equal to
+    the row's. Missing field => not ABBA (fail closed)."""
+    if not isinstance(row, dict):
+        return "unknown_design", ["row is not a mapping"]
+    # Explicit separate-run markers win: two run/session ids is the definition.
+    for kind in ("run_id", "session_id"):
+        a, c = row.get(f"anchor_{kind}"), row.get(f"candidate_{kind}")
+        if a is not None and c is not None and a != c:
+            return "separate_runs", [f"anchor_{kind} != candidate_{kind}"]
+    a_s, c_s = row.get("anchor_samples"), row.get("candidate_samples")
+    if not (isinstance(a_s, list) and isinstance(c_s, list)) or not a_s or not c_s:
+        return "unpaired", ["anchor/candidate samples missing or empty"]
+    if len(a_s) != len(c_s):
+        return "unpaired", ["arm sample counts differ"]
+    n, pairs = len(a_s), row.get("pairs")
+    why: list[str] = []
+    if not _is_int(pairs) or pairs != n:
+        why.append("pairs missing or != samples per arm")
+    elif pairs < _min_pairs():
+        why.append(f"pairs {pairs} < minimum {_min_pairs()}")
+    plan, members = row.get("measurement_plan"), row.get("launch_membership")
+    if not isinstance(plan, dict) or not isinstance(members, list):
+        # legacy v1 rows: fixed anchor-then-candidate per pair, not interleaved.
+        return "fixed_order_pairs", why + ["no measurement_plan/launch_membership: fixed AB order"]
+    seed, orders = plan.get("seed"), plan.get("orders")
+    if not isinstance(seed, str) or not seed:
+        why.append("measurement_plan.seed missing")
+    ok_orders = (isinstance(orders, list) and len(orders) == n and all(
+        isinstance(o, (list, tuple)) and sorted(o) == sorted(_ARMS) for o in orders))
+    if not ok_orders:
+        return "unknown_design", why + ["measurement_plan.orders invalid"]
+    firsts = {o[0] for o in orders}
+    if firsts != set(_ARMS):
+        return "fixed_order_pairs", why + ["orders not counterbalanced (one arm always first)"]
+    seen = {}
+    for m in members:
+        if not isinstance(m, dict) or not _is_int(m.get("ordinal")) or not _is_int(m.get("pair_index")):
+            return "unknown_design", why + ["launch_membership entry malformed"]
+        seen[m["ordinal"]] = (m["pair_index"], m.get("arm"))
+    expected = {2 * i + pos: (i, arm) for i, o in enumerate(orders) for pos, arm in enumerate(o)}
+    if len(members) != len(expected) or seen != expected:
+        why.append("launch_membership does not match the plan's interleaved order")
+    for key, val in (declared or {}).items():
+        if val is None or row.get(key) != val:
+            why.append(f"declared {key} not matched by row")
+    return ("ABBA", []) if not why else ("unknown_design", why)
+
+
+def e2e_evidence(row: dict, declared: dict | None = None) -> dict:
+    """Project a `serving.compare` row into e2e evidence for `keep_screen.op_keep_status`.
+    The design is VERIFIED from the row (`classify_e2e_design`), never assumed; only a
+    verified ABBA carries `same_run=True`. Anything else keeps its true design label and
+    the op win stays pending."""
+    design, reasons = classify_e2e_design(row, declared)
+    row = row if isinstance(row, dict) else {}
+    return {"design": design, "same_run": design == "ABBA", "design_reasons": reasons,
+            "effect_pct": row.get("effect_pct"),
+            "floor_pct": row.get("noise_floor_pct", row.get("floor_pct")),
+            "decisive": row.get("decisive")}
+
+
+def op_win_verdict(op: dict, row: dict | None, declared: dict | None = None) -> dict:
     """Status of an op-level win given an (optional) serving-gate row."""
-    return keep_screen.op_keep_status(op, e2e_evidence(row) if row is not None else None)
+    return keep_screen.op_keep_status(
+        op, e2e_evidence(row, declared) if row is not None else None)
 
 
 def _ppl_contract_fold_blocked(args, bundle) -> bool:
