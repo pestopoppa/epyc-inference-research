@@ -256,7 +256,8 @@ def verify_contains_champion(worktree: Path, head: str) -> None:
 
 
 def verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
-                          experimental_identity: bool = False) -> None:
+                          experimental_identity: bool = False,
+                          allow_unverified: bool = False) -> None:
     """LAUNCH-TIME refusal (AK-TOOL-CHAMPION-CONTEXT, narrowed): the anchor must be the
     current project champion, or carry it.
 
@@ -270,7 +271,8 @@ def verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
     override = os.environ.get(OVERRIDE_ENV, "").strip()
     try:
         _verify_anchor_current(Path(anchor_build), Path(worktree), head,
-                               experimental_identity=experimental_identity)
+                               experimental_identity=experimental_identity,
+                               allow_unverified=allow_unverified)
     except StartupRefused as refusal:
         if not override:
             raise
@@ -279,7 +281,7 @@ def verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
 
 
 def _verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
-                           experimental_identity: bool) -> None:
+                           experimental_identity: bool, allow_unverified: bool = False) -> None:
     prov = anchor_build / "provenance.json"
     named = ""
     if prov.is_file():
@@ -290,6 +292,11 @@ def _verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
             named = ""
     elif experimental_identity:
         named = head  # `_verify_experimental_identity` proved IDENTITY.json head == head
+    if not named and allow_unverified:
+        # --allow-unverified-anchor is the explicit, logged waiver for a hand-built anchor
+        # with no provenance; champion currency is still enforced on the worktree head by
+        # `verify_contains_champion` (called from `verify_worktree`).
+        return
     if not named:
         _refuse(REASON_NO_ATTESTATION, f"anchor {anchor_build} carries no champion_commit, "
                 f"so it cannot be proven to be the CURRENT champion.")
@@ -343,7 +350,8 @@ def verify_startup(*, worktree: Path, branch: str, anchor_build: Path,
                   experimental_identity=experimental_identity)
     if require_current_anchor:
         verify_anchor_current(anchor_build, worktree, head,
-                              experimental_identity=experimental_identity)
+                              experimental_identity=experimental_identity,
+                              allow_unverified=allow_unverified_anchor)
     return head
 
 
