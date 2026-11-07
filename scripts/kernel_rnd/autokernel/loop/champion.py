@@ -41,6 +41,7 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import sys
 
 #: THE single champion branch, as of the 2026-08-31 reconciliation. This name changes
 #: at a production promotion and nowhere else.
@@ -92,6 +93,7 @@ def verify_worktree(worktree: Path, branch: str) -> str:
             f"REFUSED: worktree {worktree} is on {attached or 'a detached HEAD'} at "
             f"{head}, not the champion branch '{branch}' at {tip.stdout.strip()}. "
             f"{INCIDENT}")
+    verify_contains_champion(worktree, head)
     return head
 
 
@@ -231,6 +233,28 @@ def project_champion_tip(worktree: Path) -> str:
                 f"refs/heads/{CANONICAL_BRANCH}^{{commit}}").stdout.strip()
 
 
+def verify_contains_champion(worktree: Path, head: str) -> None:
+    """LAUNCH-TIME refusal on EVERY startup path that verifies the worktree (including
+    the store-anchor path, which never reaches `verify_anchor_current`): the verified
+    head must contain the current project champion tip. Waived only by a non-empty
+    `OVERRIDE_ENV`."""
+    override = os.environ.get(OVERRIDE_ENV, "").strip()
+    tip = project_champion_tip(worktree)
+    if not tip:
+        problem = (f"{CANONICAL_BRANCH} does not resolve in {worktree}; the current "
+                   f"project champion is unknown.")
+    elif _git(worktree, "merge-base", "--is-ancestor", tip, head).returncode != 0:
+        problem = (f"worktree head {head[:12]} does not contain the current project "
+                   f"champion {CANONICAL_BRANCH} @ {tip[:12]}.")
+    else:
+        return
+    if override:
+        print(f"WARNING: champion-currency refusal OVERRIDDEN by {OVERRIDE_ENV}="
+              f"{override!r}: {problem}", file=sys.stderr)
+        return
+    _refuse(REASON_NOT_CHAMPION, problem)
+
+
 def verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
                           experimental_identity: bool = False) -> None:
     """LAUNCH-TIME refusal (AK-TOOL-CHAMPION-CONTEXT, narrowed): the anchor must be the
@@ -251,7 +275,7 @@ def verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
         if not override:
             raise
         print(f"WARNING: champion-currency refusal OVERRIDDEN by {OVERRIDE_ENV}="
-              f"{override!r}: {refusal}", file=__import__("sys").stderr)
+              f"{override!r}: {refusal}", file=sys.stderr)
 
 
 def _verify_anchor_current(anchor_build: Path, worktree: Path, head: str, *,
@@ -325,5 +349,5 @@ def verify_startup(*, worktree: Path, branch: str, anchor_build: Path,
 
 __all__ = ["CANONICAL_BRANCH", "INCIDENT", "StartupRefused", "verify_anchor",
            "OVERRIDE_ENV", "REASON_NO_ATTESTATION", "REASON_NOT_CHAMPION", "REASON_STALE_ANCHOR",
-           "project_champion_tip", "verify_anchor_current",
+           "project_champion_tip", "verify_anchor_current", "verify_contains_champion",
            "verify_startup", "verify_worktree", "warn_divergence"]
