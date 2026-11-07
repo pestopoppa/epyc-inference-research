@@ -134,9 +134,21 @@ def _belief_runner(argv, **_kw):
 
 
 @pytest.fixture(autouse=True)
-def _isolate_belief_reader():
+def _isolate_belief_reader(tmp_path_factory):
+    """The canned reader above replaces the child process, but the ROOT checkout is resolved
+    before the child is called (EPYC_ROOT_REPO, then EPYC_ROOT; production never guesses one).
+    When the caller names no root, give the test a throwaway one with the adapter dir, so
+    canned-reader tests do not fail on the caller's environment. A caller-named root is left
+    alone: integration tests read real root files through it. Tests that exercise resolution
+    itself still `monkeypatch.delenv`/`setenv` and override this."""
+    import os
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(belief_context, "RUNNER", _belief_runner)
+        if not (os.environ.get("EPYC_ROOT_REPO") or os.environ.get("EPYC_ROOT")):
+            root = tmp_path_factory.mktemp("epyc-root")
+            (root / "scripts/vidya/adapters").mkdir(parents=True)
+            patch.setenv("EPYC_ROOT_REPO", str(root))
+            patch.setenv("EPYC_ROOT", str(root))
         yield
 
 

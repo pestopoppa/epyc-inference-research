@@ -694,7 +694,10 @@ def test_serial_run_resolves_the_same_root(tmp_path, monkeypatch):
 
 # -------------------------------------------- integration: the REAL ROOT child process
 
-ROOT = bc.root_repo()
+try:
+    ROOT = bc.root_repo()
+except CaptureUnavailable:  # no root named: the integration test below skips, the rest run
+    ROOT = Path("/nonexistent-epyc-root (set EPYC_ROOT_REPO or EPYC_ROOT)")
 VIDYA = ROOT / "scripts" / "vidya"
 KVQ = "kv-quant-27b-v10-measurement"
 WRITTEN = "2026-09-24T10:00:00+00:00"
