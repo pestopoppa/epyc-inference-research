@@ -204,6 +204,8 @@ def _disc(text: str) -> dict[str, tuple[str, ...]]:
 def _dispatch_sites(hunks: Sequence[Hunk]) -> tuple[DispatchSite, ...]:
     out: list[DispatchSite] = []
     for h in hunks:
+        if h.kind == "comment":
+            continue  # comment text names types/knobs but compiles to nothing
         # A switch label and its return predicate commonly occupy adjacent lines
         # (the historical MMVQ crossover is exactly that shape).  Preserve the
         # site line, but union discriminators over the hunk so the case's type and
@@ -246,6 +248,8 @@ def _default_for(name: str, lines: Sequence[str]) -> str:
 def _env_knobs(hunks: Sequence[Hunk]) -> tuple[EnvKnob, ...]:
     found: dict[tuple[str, str], EnvKnob] = {}
     for h in hunks:
+        if h.kind == "comment":
+            continue
         lines = h.text.splitlines()
         old = [x[1:] for x in lines if not x.startswith("+")]
         new = [x[1:] for x in lines if not x.startswith("-")]
