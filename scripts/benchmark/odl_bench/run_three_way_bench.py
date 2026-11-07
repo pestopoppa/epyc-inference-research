@@ -63,6 +63,12 @@ import time
 from pathlib import Path
 
 ENGINES = ("pdftotext", "opendataloader", "liteparse")
+# PIP-04 / ODL-013 re-run (operator 2026-11-07): the orchestrator's ORIGINAL document pipeline
+# (src/services/pdf_router.py with PDF_EXTRACTOR=pdftotext: pdftotext -layout, then the entropy/garbage/word-length quality
+# gate that decides born-digital fast path vs LightOnOCR) as a baseline arm. Opt-in so the three-way default is unchanged.
+OPTIONAL_ENGINES = ("legacy_router",)
+ALL_ENGINES = ENGINES + OPTIONAL_ENGINES
+LEGACY_ROUTER_PROBE = Path(__file__).with_name("legacy_router_probe.py")
 
 LITEPARSE_OUTPUT_FORMAT = "markdown"  # LiteParse-output-aware mode (SDK option)
 
@@ -177,6 +183,35 @@ def _parse_liteparse(pdf: Path, out_dir: Path, stem: str) -> float:
     return latency
 
 
+def _parse_legacy_router(pdf: Path, out_dir: Path, stem: str) -> float:
+    """Orchestrator legacy PDF router (pdftotext fast path + quality gate), run as a subprocess in the orchestrator venv.
+
+    LEGACY_ROUTER_ORCH_ROOT = the pinned orchestrator checkout, LEGACY_ROUTER_PY = its interpreter. The OCR leg
+    (LightOnOCR) is NOT exercised: a document the gate flags needs_ocr is still scored on its pdftotext text and the
+    decision is recorded in <engine>/routing.jsonl. Fail closed on any probe error or empty text.
+    """
+    import os
+
+    root = os.environ.get("LEGACY_ROUTER_ORCH_ROOT")
+    py = os.environ.get("LEGACY_ROUTER_PY")
+    if not root or not py:
+        raise RuntimeError("LEGACY_ROUTER_ORCH_ROOT and LEGACY_ROUTER_PY must be set")
+    r = subprocess.run(
+        [py, "-I", "-B", str(LEGACY_ROUTER_PROBE), "--orch-root", root, "--pdf", str(pdf)],
+        capture_output=True, text=True, timeout=120,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"legacy_router probe exited {r.returncode}: {(r.stderr or r.stdout).strip()[:500]}")
+    rec = json.loads(r.stdout.strip().splitlines()[-1])
+    text = rec.pop("text")
+    if not text.strip():
+        raise RuntimeError(f"legacy_router returned empty text for {stem}")
+    (out_dir / f"{stem}.md").write_text(text, encoding="utf-8")
+    with (out_dir.parent / "routing.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"stem": stem, **{k: v for k, v in rec.items() if k != "latency_ms"}}) + "\n")
+    return float(rec["latency_ms"])
+
+
 def _remove_prediction(out_dir: Path, stem: str) -> None:
     """Never leave a failed doc's (possibly partial) prediction on disk."""
     for stale in out_dir.glob(f"{stem}*"):
@@ -187,6 +222,7 @@ _PARSERS = {
     "pdftotext": _parse_pdftotext,
     "opendataloader": _parse_opendataloader,
     "liteparse": _parse_liteparse,
+    "legacy_router": _parse_legacy_router,
 }
 
 
@@ -202,6 +238,7 @@ def phase_parse(corpus: Path, run_dir: Path, engines: tuple[str, ...]) -> None:
     for engine in engines:
         out_dir = run_dir / "prediction" / engine / "markdown"
         out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir.parent / "routing.jsonl").unlink(missing_ok=True)
         # Wipe stale predictions from a previous run of the same engine.
         for stale in out_dir.glob("*.md"):
             stale.unlink()
@@ -302,6 +339,12 @@ def _pinned_engine_version(engine: str) -> str:
 def _engine_version(engine: str) -> str:
     """Version probe for unpinned (system-binary) engines, e.g. pdftotext."""
     try:
+        if engine == "legacy_router":
+            import os
+
+            root = os.environ.get("LEGACY_ROUTER_ORCH_ROOT", "")
+            r = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"], capture_output=True, text=True)
+            return f"orchestrator@{r.stdout.strip() or '?'}"
         if engine == "pdftotext":
             r = subprocess.run(["pdftotext", "-v"], capture_output=True, text=True)
             m = re.search(r"version (\S+)", r.stderr or r.stdout)
@@ -413,7 +456,7 @@ def _render_report(results: dict[str, dict], run_dir: Path) -> str:
         "| engine | NID (reading order) | TEDS (tables) | MHS (headings) | overall |",
         "|---|---|---|---|---|",
     ]
-    for engine in ENGINES:
+    for engine in ENGINES + tuple(e for e in OPTIONAL_ENGINES if e in results):
         r = results.get(engine)
         if not r:
             lines.append(f"| {engine} | — | — | — | — |")
@@ -425,7 +468,7 @@ def _render_report(results: dict[str, dict], run_dir: Path) -> str:
     lines += ["", "## Speed (per doc)", "",
               "| engine | median ms | p90 ms | elapsed_per_doc (s) |",
               "|---|---|---|---|"]
-    for engine in ENGINES:
+    for engine in ENGINES + tuple(e for e in OPTIONAL_ENGINES if e in results):
         summary_path = run_dir / "prediction" / engine / "summary.json"
         if summary_path.exists():
             with summary_path.open(encoding="utf-8") as fh:
@@ -465,9 +508,9 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     engines = tuple(e.strip() for e in args.engines.split(",") if e.strip())
-    unknown = set(engines) - set(ENGINES)
+    unknown = set(engines) - set(ALL_ENGINES)
     if unknown:
-        sys.exit(f"Unknown engine(s): {sorted(unknown)}; known: {ENGINES}")
+        sys.exit(f"Unknown engine(s): {sorted(unknown)}; known: {ALL_ENGINES}")
 
     if args.cmd == "parse":
         phase_parse(args.corpus, args.run_dir, engines)

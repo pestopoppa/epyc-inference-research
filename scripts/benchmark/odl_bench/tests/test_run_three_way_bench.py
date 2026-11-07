@@ -333,3 +333,43 @@ class TestPhaseScoreFailClosed(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class LegacyRouterArmTests(unittest.TestCase):
+    """PIP-04: the orchestrator legacy PDF router baseline arm (opt-in; default engines unchanged)."""
+
+    def test_default_engines_unchanged_and_arm_is_opt_in(self):
+        self.assertEqual(r3wb.ENGINES, ("pdftotext", "opendataloader", "liteparse"))
+        self.assertIn("legacy_router", r3wb.ALL_ENGINES)
+        self.assertNotIn("legacy_router", r3wb.ENGINES)
+
+    def test_parse_writes_prediction_and_routing(self):
+        rec = {"text": "hello world " * 20, "latency_ms": 12.5, "method": "pdftotext",
+               "needs_ocr": False, "quality_score": 0.9, "chars": 240}
+        proc = types.SimpleNamespace(returncode=0, stdout="noise\n" + json.dumps(rec), stderr="")
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(
+            "os.environ", {"LEGACY_ROUTER_ORCH_ROOT": "/x", "LEGACY_ROUTER_PY": "/y"}
+        ), mock.patch.object(r3wb.subprocess, "run", return_value=proc):
+            out = Path(td) / "legacy_router" / "markdown"
+            out.mkdir(parents=True)
+            lat = r3wb._parse_legacy_router(Path("d.pdf"), out, "d")
+            self.assertEqual(lat, 12.5)
+            self.assertTrue((out / "d.md").read_text().startswith("hello"))
+            row = json.loads((out.parent / "routing.jsonl").read_text())
+            self.assertEqual(row["stem"], "d")
+            self.assertFalse(row["needs_ocr"])
+
+    def test_fails_closed_on_probe_error_empty_text_and_missing_env(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            with mock.patch.dict("os.environ", {}, clear=True), self.assertRaises(RuntimeError):
+                r3wb._parse_legacy_router(Path("d.pdf"), out, "d")
+            env = {"LEGACY_ROUTER_ORCH_ROOT": "/x", "LEGACY_ROUTER_PY": "/y"}
+            bad = types.SimpleNamespace(returncode=3, stdout="", stderr="boom")
+            empty = types.SimpleNamespace(returncode=0, stdout=json.dumps(
+                {"text": "  ", "latency_ms": 1.0, "needs_ocr": True, "quality_score": 0.0, "chars": 0}), stderr="")
+            for proc in (bad, empty):
+                with mock.patch.dict("os.environ", env), mock.patch.object(r3wb.subprocess, "run", return_value=proc):
+                    with self.assertRaises(RuntimeError):
+                        r3wb._parse_legacy_router(Path("d.pdf"), out, "d")
+            self.assertFalse(list(out.glob("*.md")))
