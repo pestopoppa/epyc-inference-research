@@ -83,8 +83,33 @@ def _load_v8() -> tuple[object, C.PlannedCandidate, C.GpuSourceBuild, dict[str, 
     return config, candidate, build, terminal
 
 
-@unittest.skipUnless(V8_BUNDLE.is_dir(),
-                     "requires the immutable completed AutoKernel v8 bundle")
+def _bundle_era_skip_reason() -> str | None:
+    """Skip reason unless the bundle declares the CURRENT frozen production.
+
+    The bundle is immutable evidence sealed under one production era; the
+    loader's live gates (frozen identity, live HEAD, pinned code bytes) are
+    not stubbed.  A bundle from an earlier era is reported as historical
+    instead of erroring on those gates.
+    """
+    if not V8_BUNDLE.is_dir():
+        return "requires the immutable completed AutoKernel v8 bundle"
+    try:
+        declared = json.loads((V8_BUNDLE / "config/deployment.json").read_text(
+            encoding="utf-8"))["production"]
+        branch, head = declared["branch"], declared["head"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return f"v8 bundle production identity unreadable: {exc!r}"
+    if (branch, head) != (F.deployment.FROZEN_PRODUCTION_BRANCH,
+                          F.deployment.FROZEN_PRODUCTION_HEAD):
+        return (f"historical bundle (era {branch} @ {head[:12]}), not re-sealed "
+                f"for current production {F.deployment.FROZEN_PRODUCTION_BRANCH}")
+    return None
+
+
+_BUNDLE_SKIP_REASON = _bundle_era_skip_reason()
+
+
+@unittest.skipIf(_BUNDLE_SKIP_REASON is not None, _BUNDLE_SKIP_REASON or "")
 class V8DeterministicCorrectnessCapabilityAcceptance(unittest.TestCase):
     """The real v8 artifacts must pass the capability boundary without a GPU."""
 

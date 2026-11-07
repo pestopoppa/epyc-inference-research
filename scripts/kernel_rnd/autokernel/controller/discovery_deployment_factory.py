@@ -603,8 +603,11 @@ _PROFILE_V3_TRACE_CSV = Path(
 _PROFILE_V3_TRACE_CSV_SHA256 = "fb818d7b135becc5bfd773c1075cbdea91809d1f5c22ed8d8817560678b03c69"
 _PROFILE_V3_AGENT_CSV = _PROFILE_V3_TRACE_CSV.with_name("v13_sdk_agent_info.csv")
 _PROFILE_V3_AGENT_CSV_SHA256 = "50189a58f15ffb0008e840a8a6d18db1a88f73e3492b686b167d773de6b9323e"
-_PORTFOLIO_SEMANTIC_SHA256 = "c894690f56041ae355a50fffe23688abed1fa3eea9df4b7201faee2e565b4e78"
-_PORTFOLIO_FILE_SHA256 = "f9db2032d14e77f013e1a356d94a7cc7c5d0bc0d3c035368832066c9dfb66eb0"
+# Re-sealed 2026-11-07 after review of f8167767a (MI210-port DNR + H4/H9 evidence) and
+# a4e2201bf (isa_schedule validation only; existing fingerprints recomputed identical).
+# Review: scripts/kernel_rnd/autokernel/evidence/portfolio-reseal-20261107-REVIEW.md
+_PORTFOLIO_SEMANTIC_SHA256 = "9dcb51a8e3d2c037eaa6ffbf10248b31e625e67cf3f498ff71ae5c8d70c2cb43"
+_PORTFOLIO_FILE_SHA256 = "276623643c9b540970be73067797e217183a55212e57ffed4e9f518aec5c6f1f"
 _PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948aaec086b3facd4"
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(

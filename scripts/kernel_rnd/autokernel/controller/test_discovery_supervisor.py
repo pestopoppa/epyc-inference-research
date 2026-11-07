@@ -40,6 +40,13 @@ def tearDownModule() -> None:
 CANARY = {"hold_seconds": 1.0, "exit_code": 0, "spawn_descendant": False}
 
 
+
+def _skip_without_site_model(case) -> None:
+    """Host-environment gate: the bundle initializer binds the site model."""
+    from . import discovery_deployment_factory as _factory
+    if not _factory._SITE_MODEL.is_file():
+        case.skipTest(f"site model absent on this host: {_factory._SITE_MODEL}")
+
 class ImmutableAuthorityTests(unittest.TestCase):
     def _spec(self, root: Path, **overrides):
         values = dict(
@@ -503,6 +510,7 @@ class DetachedCanaryTests(unittest.TestCase):
         self.assertEqual(terminal["exit_code"], 0)
 
     def test_direct_validate_graph_reopens_byte_identically_from_root_closure(self):
+        _skip_without_site_model(self)
         bundle = Path(self.temporary.name) / "deployment"
         deployment = F.initialize_static_deployment_bundle(bundle)
         command = (
