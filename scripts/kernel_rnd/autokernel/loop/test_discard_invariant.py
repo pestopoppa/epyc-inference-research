@@ -23,7 +23,7 @@ REVIEWED = {
     "pipeline.py": "d17f3ed2dada812aba24bee16decd0140a21ec53ca8042789cc61f86c6d2b36f",  # custody review 2026-11-07 AutoKernel: tail_timing wrappers re-raise unchanged, tail session entered as before (AK-TAIL-SPLIT phase 1)
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
-    "run.py": "3afaaf0526358bd9cd4031850d4b3142dcb2c04a2b18733bd5546a3231029977",  # custody review 2026-11-07 AutoKernel: same-state guard wraps planner, folds into should_stop/terminal like provider_breaker; retry_budget_shadow log-only key added to attempt before archive.record in both record paths
+    "run.py": "2b1c346419ad3bc8001e912fefd4835420e13687912bec596d4f2561c6201688",  # custody review 2026-11-07 AutoKernel: same-state stop (planner wrap, should_stop/terminal fold, retry_budget_shadow log-only) + reviewed peer commit 86319c468 LOOP-SAFETY-C (refuse missing store unless --new-store, missing inbox; ranked path keeps pinned supplement)
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 
