@@ -51,7 +51,7 @@ from typing import Any, Callable, Mapping, Sequence
 import uuid
 
 from ..custody import append_rows, sync_path as _sync_path
-from . import actor_metrics, belief_context, history_fields, integrity, procguard, scratch
+from . import actor_metrics, belief_context, history_fields, hotspots, integrity, procguard, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
                    Review, RunAborted)
 
@@ -2879,6 +2879,9 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
         lines.extend(_render_node_profile(context["node_profile"], limit=limit))
     if not cpu and context.get("gpu_serving_profile"):
         lines.extend(_render_gpu_serving_profile(context["gpu_serving_profile"], limit=limit))
+        if context.get("two_denominator"):   # AK-PROF-TWO-DENOM: wall share + launch gap
+            lines.extend(["", "## GPU share by two denominators",
+                          hotspots.render_two_denominator(context["two_denominator"])])
     if cpu and context.get("long_context"):
         lines.extend(_render_long_context(context["long_context"], limit=limit))
 
