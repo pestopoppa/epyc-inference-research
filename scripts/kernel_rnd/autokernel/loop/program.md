@@ -720,9 +720,9 @@ evidence that addresses the stated reason.
 | Verdict | Mechanism | Result | Packet |
 |---|---|---|---|
 | KEEP | H10 GQA-packed multi-token verify attention hd256 | op 2.63x (kv>=32k, n_q 2..16); 27B DFlash2 decode +4.8/+4.3/+14.6% @8k/32k/64k | ak-asm-h10-gate-20261106, ak-asm-h10-e2e-20261106 |
-| KEEP | H1b wvSplitK Q8_0 GEMV, weights >6 MiB, M 5..11 | 1.73x geomean, 927 vs 545 GB/s; 27B pp5/pp8 123/183 vs 79.5/127 t/s; M>=12 loses | ak-asm-h1b-gate-20261106 |
-| KEEP | H1+H7 skinny GEMM <=6 MiB (stream-K + LDS-DMA, f32-atomic split-K) | 1.94x selected cells; A3B 1.51x, no regression | ak-asm-h1h7-gate-20261105 |
-| KEEP | H12 fused QSA sparse attention (Q38FN) | 3.16x vs dense masked FA @ kv=32k | ak-asm-h12-gate-20261105 |
+| KEEP (post-hoc dispatch gate) | H1b wvSplitK Q8_0 GEMV, weights >6 MiB, M 5..11 | 1.73x geomean, 927 vs 545 GB/s; 27B pp5/pp8 123/183 vs 79.5/127 t/s; M>=12 loses | ak-asm-h1b-gate-20261106 |
+| KEEP | H1+H7 skinny GEMM <=6 MiB (stream-K + LDS-DMA, f32-atomic split-K) | 1.94x geomean over the 12 selected <=6 MiB cells (worst cell 0.9876); 27B all-cells 1.026 (no-op outside selection); an earlier run of the same sha was GATE_FAIL (worst 0.9689) | ak-asm-h1h7-gate-20261105 |
+| KEEP (post-hoc dispatch gate) | H12 fused QSA sparse attention (Q38FN) | 3.16x vs dense masked FA @ kv=32k; LOSES at kv=8192 (nb=1 0.94x, nb=16 0.78-0.81x); MIN_KV_RATIO=8 chosen from r4 data | ak-asm-h12-gate-20261105 |
 | KEEP | H13 hyper-connection fusion + GPU MEAN_D1 (Q38FN) | decode +11.7% (18.62 vs 16.68 t/s); splits/token 294 -> 100 | ak-asm-h13b-gate-r2-20261106 |
 | KEEP | H11 topksoftmax asm (A3B router) | router 1.25x; A3B tg +2% (104.8 vs 102.6) | ak-asm-h11h13-gate-20261106 |
 | KEEP | H15 fused GDN decode | 27B tg +1.3% (PPL on/off still owed) | ak-asm-h14h15-gate-20261106 |
@@ -730,10 +730,22 @@ evidence that addresses the stated reason.
 | DROP | H4 HIP int8 MMQ (prefill) | 0.48x vs dequant+rocBLAS (pp2048 587 vs 835) | ak-asm-h4h6-gate-20261105 |
 | DROP | H9 HIP int8 GEMM, per-32 scales | 0.52x | ak-asm-h9-gate-20261106 |
 | DROP | H9B fused Q8_0-dequant f16 MFMA GEMM | 0.64x vs C6 (LDS-bound, 1 block/CU) | ak-asm-h9b-gate-20261106 |
-| DROP | H6 fused rmsnorm + q8_1 quantize | 1.02x | ak-asm-h4h6-gate-20261105 |
+| DROP | H6 fused rmsnorm + q8_1 quantize | INCONCLUSIVE: one cell only, 0.9997 (the 1.017x/1.02x figure has no raw source) | ak-asm-h4h6-gate-20261105 |
 | DROP | H14 fused qk-norm + RoPE + KV write | op 1.13x, e2e within +-1% under HIP graphs | ak-asm-h14h15-gate-20261106 |
 | DROP | H2a rocWMMA-off MMA path | MMA_INVALID on gfx90a | ak-asm-h2a-gate-20261105 |
 | DROP | H1 v1-v3 skinny on 27B large shapes | 0.70/0.75/0.83x (superseded by H1b) | ak-asm-h1h7-gate-20261105 |
+
+
+**Added 2026-11-07 (AutoKernel harvest of main-inf22 results; `[belief: cc]`):**
+
+| Verdict | Mechanism | Result | Packet |
+|---|---|---|---|
+| KEEP (op-level only, bar lowered 1.10->1.05) | H8b A3B MoE expert-density tiling, shape-aware window, M<=8 fused-GLU excluded (vs C7) | MUL_MAT_ID geomean 1.2905 over M 64..1024, correctness 64/64; Q38FN 1.196 informational; uniform routing ids; no e2e yet | ak-asm-h8b-gate-r2-20261106 (predecessor H8 r4 FAIL 1.0981) |
+| DROP | H3 Q8_0 GEMV prefetch confirmation (GGML_CUDA_Q8_PREFETCH=1, C6) | 27B Q8_0 tg128 0.9465 (31.46 vs 33.24 t/s, n 5/5); second receipt for negative akm-hist-q8-prefetch | ak-asm-t0-h3-gate-20261105 |
+| NO-GO | ROCm 10.1 toolchain for the HIP build (C6) | spec-off decode 0.9746 (2 ABBA pairs), pp512@16k 0.75-0.79; the earlier +8.7% decode was draft acceptance | q38p3a-verdict.json (negatives.json akm-c6-rocm-10-1-llamacpp-build) |
+| BENCH RULE | Pinned host memory when the HIP backend is merely loaded into a CPU-served process (C6, Q38FN) | CPU decode TPOT 1.880x of CPU-only; GGML_CUDA_NO_PINNED=1 -> 1.028x | npd1-step4-20261105/out/PILOT-COMPLETE.json |
+
+Bench rule from the last row: any candidate that loads the HIP backend into a CPU-served process is timed with AND without `GGML_CUDA_NO_PINNED=1` in the same run, or a CPU decode loss is misattributed to the kernel. Stack note (not a kernel change): Q38FN `-ngl 0 -ub 2048` + NO_PINNED gives TTFT 2.61x (8k) / 2.87x (32k) at TPOT 1.052 (npd1-step5-20261105).
 
 Pattern: under HIP graphs, launch-removal fusions of small elementwise ops (H6, H14) do not
 move end-to-end time; wins came from bytes (H1b, H10, H12) or from removing CPU/GPU splits (H13).

@@ -11,12 +11,16 @@ witness at WARN plus PPL).
 
 ## AK-ASM-H3 -- C6 Q8_0 GEMV prefetch confirmation A/B (low priority, likely closeable)
 
+**CLOSED 2026-11-07: measured DROP 0.9465 (n 5/5), `ak-asm-t0-h3-gate-20261105`; see program.md MI210 table.**
+
 `GGML_CUDA_Q8_PREFETCH=1` vs 0 at idle decode, Qwen3.8-27B Q8_0, tg128. The same async weight prefetch
 mechanism is already a measured negative: `akm-hist-q8-prefetch` (-12%/-18% on 27B dense, 2026-07-11).
 Run only as a 5-pair confirmation on C6 if a free GPU slot exists. Do not author new prefetch code.
 **Falsifier:** median on/off < 1.03 over 5 interleaved valid pairs (expected, per akm-hist-q8-prefetch).
 
 ## AK-ASM-H8 -- fused MoE expert GEMM (sorted tiles + fused gate/up + GLU) for A3B (Q38FN cells only if a hybrid deployment is adopted)
+
+**STATUS 2026-11-07: H8 r4 FAIL 1.0981; successor H8b KEEP op-level 1.2905 on C7 (`ak-asm-h8b-gate-r2-20261106`). Open caveats -> seed 09 AK-ASM-H8c.**
 
 Open: r1 crashed in correctness (MUL_MAT_ID rc=-6); r3 (store cb973fc37) produced perf cells but no
 verdict. Arms: technique port into `mmid.cu` (current), CK 2-stage MoE (sorting unsupported on gfx90a per
