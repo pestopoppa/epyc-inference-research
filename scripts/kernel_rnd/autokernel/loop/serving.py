@@ -1158,10 +1158,19 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             # DS41-W8d: DS41-class launches need RAM admission BEFORE Popen. Pre-launch
             # check only: argv/env and every recipe identity are untouched.
             ram_admit.guard_launch(argv)
-            srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
-                                   stderr=(subprocess.DEVNULL if coverage_sink is None
-                                           else coverage_sink.handle),
-                                   env=launch_env)
+            # Diagnostic only: AK_SERVING_STDERR_LOG keeps the server's stderr for a row
+            # chasing a server-side failure. Unset, this launch is unchanged.
+            stderr_log = os.environ.get("AK_SERVING_STDERR_LOG")
+            stderr_file = open(stderr_log, "ab") if stderr_log and coverage_sink is None else None
+            try:
+                srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+                                       stderr=(stderr_file if stderr_file is not None
+                                               else subprocess.DEVNULL if coverage_sink is None
+                                               else coverage_sink.handle),
+                                       env=launch_env)
+            finally:
+                if stderr_file is not None:
+                    stderr_file.close()
             process_pid = srv.pid
             # G1 round-2 F6: the expiry watcher stops exactly this launch at expected_end.
             residency.OWN_LAUNCHES.register(srv)
