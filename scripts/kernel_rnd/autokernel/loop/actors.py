@@ -69,7 +69,11 @@ BELIEF_ENV = belief_context.ENV_KEY
 CODEX_DAEMON = Path.home() / ".codex/packages/app-server-daemon/current/bin/codex"
 CODEX = (str(CODEX_DAEMON) if os.access(CODEX_DAEMON, os.X_OK)
          else "/usr/local/share/npm-global/bin/codex")
-CLAUDE = "/home/node/.local/bin/claude"
+#: The user-local install when present, else the container's npm global (as CODEX above);
+#: a hardcoded local path crashed every claude-* actor in a container without it.
+_CLAUDE_LOCAL = Path.home() / ".local/bin/claude"
+CLAUDE = (str(_CLAUDE_LOCAL) if os.access(_CLAUDE_LOCAL, os.X_OK)
+          else "/usr/local/share/npm-global/bin/claude")
 #: DS41-C85 (2026-09-30): Linux caps ONE argv string at MAX_ARG_STRLEN = 131072 bytes.
 #: The first Opus critic pass-2 (diff review) prompt exceeded it and the lane died with
 #: "OSError: [Errno 7] Argument list too long". Above this, codex/claude read the
