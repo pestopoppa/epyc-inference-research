@@ -1372,7 +1372,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     sched_log.require_valid(requested_n=recipe.np)
                 toks = [row[0] for row in rows]
                 if any(row[3]["error"] for row in warmup_rows + rows):
-                    raise ServerDied("one or more serving slots failed; see collected observation")
+                    slot_errors = []
+                    for row in warmup_rows + rows:
+                        text = str(row[3]["error"] or "")[:300]
+                        if text and text not in slot_errors:
+                            slot_errors.append(text)
+                    raise ServerDied("one or more serving slots failed; see collected observation"
+                                     + (": " + " | ".join(slot_errors[:3]) if slot_errors else ""))
                 if frozen_requests is None and min(toks) < recipe.n_predict // 2:
                     raise ServerDied(f"degenerate measurement: tokens={toks}")
                 if frozen_requests is not None and not all(row[2] for row in warmup_rows + rows):
