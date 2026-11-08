@@ -1274,6 +1274,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                             opened = urllib.request.urlopen(req, timeout=600)
                         except urllib.error.HTTPError as exc:
                             if response_capture is None and cpu_profile_capture is None:
+                                try:  # the server's stderr is discarded; its error body is the only reason left
+                                    detail = exc.read(240).decode("utf-8", "replace")
+                                except Exception:
+                                    detail = ""
+                                if detail:
+                                    exc.msg = f"{exc.msg}: {detail}"
                                 exc.close()
                                 raise
                             opened, http_error = exc, exc
