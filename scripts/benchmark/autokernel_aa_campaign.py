@@ -74,14 +74,15 @@ def permutation_null(values, *, samples: int = 20000, seed: int = 20260829):
 
 def one_condition(name: str, anchor: Path, model: Path, *, pairs: int, warmup: int,
                   floor: float | None, surface_pp: int, surface_tg: int,
-                  surface: str | None = None, ubatch: int | None = None) -> dict:
+                  surface: str | None = None, ubatch: int | None = None,
+                  kv_type: str | None = None) -> dict:
     print(f"\n=== {name}: {pairs} A/A pairs, {warmup} warm-up pair(s) discarded")
     started = time.monotonic()
     comparison = bench.compare(
         bench.Arm("anchor-a", anchor), bench.Arm("anchor-b", anchor),
         model, pp=surface_pp, tg=surface_tg, pairs=pairs,
         noise_floor_pct=floor, warmup_pairs=warmup,
-        surface=surface, ubatch=ubatch, calibrated=False)
+        surface=surface, ubatch=ubatch, calibrated=False, kv_type=kv_type)
     body = comparison.to_dict()
     body["condition"] = name
     body["warmup_pairs"] = warmup
@@ -114,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
                                      "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"))
     parser.add_argument("--surface", choices=tuple(bench.SURFACES), default="tg128")
     parser.add_argument("--pairs", type=int, default=PAIRS)
+    parser.add_argument("--kv-type", default=None,
+                        help="llama-bench -ctk/-ctv; absent = no flag (f16). Stamped on the floor.")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--write-calibration", type=Path, default=None, metavar="STORE",
                         help="also write STORE/calibration/<surface>.<model-stem>.json — the "
@@ -124,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
-    rows_now = bench.floor_rows(args.surface, args.model)
+    rows_now = bench.floor_rows(args.surface, args.model, kv_type=args.kv_type)
     floor = rows_now.get(9, 1.175) if rows_now else None
     anchor = args.anchor_build / "bin" / "llama-bench"
     conditions = []
@@ -139,14 +142,14 @@ def main(argv: list[str] | None = None) -> int:
         conditions.append(one_condition(
             "SETTLED", anchor, args.model, pairs=args.pairs, warmup=1,
             floor=floor, surface_pp=pp, surface_tg=tg,
-            surface=args.surface, ubatch=ubatch))
+            surface=args.surface, ubatch=ubatch, kv_type=args.kv_type))
 
         # PREHEATED — same as SETTLED but six warm-up pairs instead of one. Differs
         # from SETTLED only in device warm-up, so it isolates H2b.
         conditions.append(one_condition(
             "PREHEATED", anchor, args.model, pairs=args.pairs, warmup=6,
             floor=floor, surface_pp=pp, surface_tg=tg,
-            surface=args.surface, ubatch=ubatch))
+            surface=args.surface, ubatch=ubatch, kv_type=args.kv_type))
 
         # POST_BUILD — a real -j64 build immediately before measuring, which is what
         # the loop actually does every iteration. Differs from SETTLED only in host
@@ -160,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         conditions.append(one_condition(
             "POST_BUILD", anchor, args.model, pairs=args.pairs, warmup=1,
             floor=floor, surface_pp=pp, surface_tg=tg,
-            surface=args.surface, ubatch=ubatch))
+            surface=args.surface, ubatch=ubatch, kv_type=args.kv_type))
 
     # ---- analysis -----------------------------------------------------------
     print("\n" + "=" * 72)
@@ -228,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
                 "surface": args.surface, "model": args.model.name,
                 "anchor_commit": head,
                 "bench_args": {"pp": pp, "tg": tg, "ubatch": ubatch},
+                "kv_type": args.kv_type or bench.KV_DEFAULT,
                 "pairs_per_condition": args.pairs,
                 # The UNIT of this floor and the `n` it was estimated from, as REQUIRED
                 # fields (R23-55 / R23-61). Every sample is its own llama-bench invocation

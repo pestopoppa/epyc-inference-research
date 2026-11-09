@@ -86,13 +86,14 @@ def run_process(argv: list[str], *, env: dict, timeout: int) -> subprocess.Compl
 
 
 def compare_tg128(anchor_binary: Path, candidate_binary: Path, model: Path, *,
-                  pairs: int, floor_pct: float) -> dict:
+                  pairs: int, floor_pct: float, kv_type: str | None = None) -> dict:
     """THE MEASUREMENT SEAM for G5 -- the loop's own paired A/B, tg128 surface."""
     pp, tg, ubatch = bench.SURFACES["tg128"]
     return bench.compare(bench.Arm("champion", anchor_binary),
                          bench.Arm("fold_candidate", candidate_binary),
                          model, pp=pp, tg=tg, pairs=pairs, noise_floor_pct=floor_pct,
-                         surface="tg128", ubatch=ubatch, calibrated=True).to_dict()
+                         surface="tg128", ubatch=ubatch, calibrated=True,
+                         kv_type=kv_type, recipe_kv_type=kv_type).to_dict()
 
 
 def tally(text: str) -> dict:
@@ -282,6 +283,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-ref", default=None, help="G0: the fold candidate ref")
     parser.add_argument("--declarations", type=Path, default=None,
                         help="G0: file of KERNEL-REPLACES: <old> => <new> lines")
+    parser.add_argument("--kv-type", default=None,
+                        help="G5: -ctk/-ctv of the recipe this fold speaks for "
+                             "(default: no flag, an f16 cell, recorded as f16)")
     parser.add_argument("--only-correctness", action="store_true",
                         help="G1-G4 only; G5 (comparative) after the keep decision")
     instruments.add_posture_args(parser)
@@ -361,7 +365,8 @@ def main(argv: list[str] | None = None) -> int:
           f"floor {args.floor}% (unit {args.floor_unit})")
     comparison = compare_tg128(Path(args.anchor_build) / "bin" / "llama-bench",
                                Path(args.candidate_build) / "bin" / "llama-bench",
-                               args.model, pairs=args.pairs, floor_pct=args.floor)
+                               args.model, pairs=args.pairs, floor_pct=args.floor,
+                               kv_type=args.kv_type)
     g5 = {"effect_pct": comparison["effect_pct"], "decisive": comparison["decisive"],
           "drifting": comparison.get("drifting"), "verdict": ab_verdict(comparison)}
     print(f"  effect {comparison['effect_pct']:+.3f}% decisive={comparison['decisive']} "

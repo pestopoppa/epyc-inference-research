@@ -587,3 +587,41 @@ class TheBootstrapFloorReproducesTheD8Row(unittest.TestCase):
         rows = bench.bootstrap_floor([100.0] * 20, [100.0] * 20)
         self.assertEqual(set(rows.values()), {0.0},
                          "identical arms have a zero floor at every k")
+
+
+class KvTypePin(unittest.TestCase):
+    MODEL = "/m/Qwen3.8-27B-Q8_0.gguf"
+
+    def test_argv_is_unchanged_without_a_kv_type_and_pins_both_flags_with_one(self):
+        plain = bench.llama_bench_argv("b", self.MODEL, pp=0, tg=128)
+        self.assertNotIn("-ctk", plain)
+        pinned = bench.llama_bench_argv("b", self.MODEL, pp=0, tg=128, kv_type="q8_0")
+        self.assertEqual(pinned, plain + ["-ctk", "q8_0", "-ctv", "q8_0"])
+
+    def _comparison(self, **kw):
+        return bench.Comparison("tg128", [100.0] * 5, [110.0] * 5, 0.1, "m", 5, 1.0, {}, **kw)
+
+    def test_kv_type_is_recorded_and_a_mismatch_cannot_decide(self):
+        row = self._comparison().to_dict()
+        self.assertEqual(row["kv_type"], "f16")           # a plain cell is named f16
+        self.assertTrue(self._comparison(kv_type="q8_0", recipe_kv_type="q8_0").decisive)
+        bad = self._comparison(recipe_kv_type="q8_0")      # f16 cell for a q8_0 recipe
+        self.assertTrue(bad.kv_mismatch)
+        self.assertIsNone(bad.decisive)
+
+    def test_floor_of_another_kv_type_reads_as_uncalibrated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            (store / "calibration").mkdir()
+            record = {"schema": bench.CALIBRATION_SCHEMA, "model": "Qwen3.8-27B-Q8_0.gguf",
+                      "n": 24, "unit": bench.FLOOR_UNIT, "floor_pct": {"1": 3.0}}
+            path = store / "calibration" / "tg128.Qwen3.8-27B-Q8_0.json"
+            path.write_text(json.dumps(record))
+            self.assertEqual(bench.floor_rows("tg128", self.MODEL, store), {1: 3.0})
+            self.assertIsNone(bench.floor_rows("tg128", self.MODEL, store, kv_type="q8_0"))
+            path.write_text(json.dumps({**record, "kv_type": "q8_0"}))
+            self.assertEqual(bench.floor_rows("tg128", self.MODEL, store, kv_type="q8_0"), {1: 3.0})
+            self.assertIsNone(bench.floor_rows("tg128", self.MODEL, store))
+        builtin = "/m/" + bench.MEASURED_FLOOR_MODEL_STEM + ".gguf"
+        self.assertIsNotNone(bench.floor_rows("tg128", builtin))
+        self.assertIsNone(bench.floor_rows("tg128", builtin, kv_type="q8_0"))

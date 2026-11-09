@@ -90,6 +90,11 @@ MEASURED_FLOOR_N = 20
 #: takes. What it does NOT express is PARALLEL-sequence decode (K seqs x 1 token --
 #: that is llama-batched-bench, a different harness); for the kernel-dispatch question
 #: the seeds ask (ne11 in 2..8 on the weight GEMMs) the regimes are identical.
+#: llama-bench's own KV default, which every cell without `-ctk` runs. Serving recipes
+#: usually differ (production GPU: q8_0), and C8-FOLD2-GATE FOLD_FAIL (root e8d71b209)
+#: was exactly a q8_0-specific lever read as a regression on f16 KV.
+KV_DEFAULT = "f16"
+
 SURFACES = {"pp512": (512, 0, None), "tg128": (0, 128, None),
             "dec-b2": (512, 0, 2), "dec-b4": (512, 0, 4), "dec-b8": (512, 0, 8)}
 
@@ -138,6 +143,10 @@ class Comparison:
     #: (§5.3): with two rungs, an effect without its model is a number without its
     #: instrument, and run histories across rungs must never merge.
     model: str | None = None
+    #: The KV cache type the cells ran, and the one the recipe they speak for serves
+    #: (None: the cell claims no recipe). A mismatch cannot decide anything.
+    kv_type: str = KV_DEFAULT
+    recipe_kv_type: str | None = None
     # Opt-in, report-only summaries. Full op-suite stdout belongs in the
     # caller's bounded sidecar, not in the ranked comparison/status payload.
     fresh_correctness: tuple[dict, ...] = ()
@@ -181,6 +190,10 @@ class Comparison:
         return trending and self.drift_explains_the_effect
 
     @property
+    def kv_mismatch(self) -> bool:
+        return self.recipe_kv_type is not None and self.recipe_kv_type != self.kv_type
+
+    @property
     def decisive(self) -> bool | None:
         """True only if the effect clears the instrument's own noise floor.
 
@@ -192,7 +205,7 @@ class Comparison:
         how a stale floor row once manufactured decisive keeps. None is falsy, so
         every keep gate refuses it; `loop._null_reason` names it to the planner.
         """
-        if not self.calibrated:
+        if not self.calibrated or self.kv_mismatch:
             return None
         if self.noise_floor_pct is None:
             return False
@@ -205,6 +218,8 @@ class Comparison:
     def to_dict(self) -> dict:
         row = {
             "surface": self.surface, "model": self.model, "effect": self.effect,
+            "kv_type": self.kv_type, "recipe_kv_type": self.recipe_kv_type,
+            "kv_mismatch": self.kv_mismatch,
             "effect_pct": self.effect * 100.0, "estimator": self.estimator,
             "pairs": self.pairs, "noise_floor_pct": self.noise_floor_pct,
             # Both units, stated: `floor_rows` admits only a FLOOR_UNIT floor, so they
@@ -266,7 +281,8 @@ def hardened_row(stdout: str, *, pp: int, tg: int, reps: int):
 
 def llama_bench_argv(binary: Path | str, model: Path | str, *, pp: int, tg: int,
                      reps: int = 9, ubatch: int | None = None,
-                     hardening_seed: int | str = "<seed>") -> list[str]:
+                     hardening_seed: int | str = "<seed>",
+                     kv_type: str | None = None) -> list[str]:
     """The ONE argv every measured llama-bench invocation in this module runs.
 
     Factored out of `run_once` so a recorded protocol (`production.protocol`) is the
@@ -274,12 +290,16 @@ def llama_bench_argv(binary: Path | str, model: Path | str, *, pp: int, tg: int,
     baseline recorded under one argv and compared under another would be an
     unpaired comparison across two instruments. `hardening_seed` defaults to a
     placeholder for exactly that use; `run_once` always passes a real seed.
+
+    `kv_type` None adds no flag, so the argv of every existing cell and floor is
+    byte-unchanged (and runs `KV_DEFAULT`); a value pins both `-ctk` and `-ctv`.
     """
     return (["taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
              str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
              "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json",
              "--autokernel-harden", str(hardening_seed)]
-            + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else []))
+            + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else [])
+            + (["-ctk", kv_type, "-ctv", kv_type] if kv_type else []))
 
 
 def _launch(argv, *, timeout: float, env, sampler) -> subprocess.CompletedProcess:
@@ -320,7 +340,8 @@ def _ceiling_breach(sampler) -> dict | None:
 
 def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None = None,
              reps: int = 9, timeout_s: int = 3600, sleep=time.sleep,
-             capture=None, hardening_seed: int | None = None) -> tuple[float, dict]:
+             capture=None, hardening_seed: int | None = None,
+             kv_type: str | None = None) -> tuple[float, dict]:
     """One llama-bench invocation with residency proven while it runs.
 
     Retries an EXTERNAL kill, because losing a whole run to a memory-pressure reaper
@@ -333,7 +354,7 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
     """
     seed = _candidate_seed() if hardening_seed is None else hardening_seed
     argv = llama_bench_argv(binary, model, pp=pp, tg=tg, reps=reps, ubatch=ubatch,
-                            hardening_seed=seed)
+                            hardening_seed=seed, kv_type=kv_type)
     for attempt in range(KILL_RETRIES + 1):
         env = residency.loader_env(binary)
         with (nullcontext() if capture is None else capture.invocation(argv, env, attempt)):
@@ -366,7 +387,8 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
             noise_floor_pct: float | None = None,
             warmup_pairs: int = WARMUP_PAIRS, surface: str | None = None,
             ubatch: int | None = None, calibrated: bool = True,
-            fresh_check: Callable[[Arm, int, int], dict] | None = None) -> Comparison:
+            fresh_check: Callable[[Arm, int, int], dict] | None = None,
+            kv_type: str | None = None, recipe_kv_type: str | None = None) -> Comparison:
     """Alternating paired A/B. The arms swap every pair, never run as two blocks.
 
     `warmup_pairs` are run and DISCARDED first. Without them the first measured pair
@@ -390,7 +412,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
     for _ in range(max(0, warmup_pairs)):
         for arm in (anchor, candidate):
             run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch, reps=reps,
-                     hardening_seed=hardening_seed)
+                     hardening_seed=hardening_seed, kv_type=kv_type)
     anchor_samples: list[float] = []
     candidate_samples: list[float] = []
     proofs: list[dict] = []
@@ -399,7 +421,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
     for pair_index in range(pairs):
         for arm, sink in ((anchor, anchor_samples), (candidate, candidate_samples)):
             value, proof = run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch,
-                                    reps=reps, hardening_seed=hardening_seed)
+                                    reps=reps, hardening_seed=hardening_seed, kv_type=kv_type)
             sink.append(value)
             proofs.append(proof)
             if fresh_check is not None:
@@ -473,6 +495,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         anchor_drift_pct=drift_pct(anchor_samples),
         candidate_drift_pct=drift_pct(candidate_samples),
         fresh_correctness=tuple(fresh_summaries),
+        kv_type=kv_type or KV_DEFAULT, recipe_kv_type=recipe_kv_type,
     )
 
 
@@ -492,9 +515,11 @@ class Measurement:
     residency: dict
     device_seconds: float = 0.0
     drift_pct: float = 0.0
+    kv_type: str = KV_DEFAULT
 
     def to_dict(self) -> dict:
         return {"surface": self.surface, "model": self.model, "launches": self.launches,
+                "kv_type": self.kv_type,
                 "samples": self.samples, "sample_unit": FLOOR_UNIT,
                 "estimator": "median", "median": st.median(self.samples),
                 "drift_pct": self.drift_pct, "trend_rho": trend_rho(self.samples),
@@ -503,7 +528,7 @@ class Measurement:
 
 def measure(arm: Arm, model: Path, *, pp: int, tg: int, launches: int = MIN_PAIRS,
             reps: int = 9, warmup: int = WARMUP_PAIRS, surface: str | None = None,
-            ubatch: int | None = None) -> Measurement:
+            ubatch: int | None = None, kv_type: str | None = None) -> Measurement:
     """Single-arm measurement under the SAME argv and warmup discipline as `compare`.
 
     Each launch is its own process (the floor unit), `warmup` launches are run and
@@ -515,13 +540,13 @@ def measure(arm: Arm, model: Path, *, pp: int, tg: int, launches: int = MIN_PAIR
     hardening_seed = _candidate_seed()
     for _ in range(max(0, warmup)):
         run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch, reps=reps,
-                 hardening_seed=hardening_seed)
+                 hardening_seed=hardening_seed, kv_type=kv_type)
     samples: list[float] = []
     proofs: list[dict] = []
     started = time.monotonic()
     for _ in range(launches):
         value, proof = run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch,
-                                reps=reps, hardening_seed=hardening_seed)
+                                reps=reps, hardening_seed=hardening_seed, kv_type=kv_type)
         samples.append(value)
         proofs.append(proof)
     resident = [proof for proof in proofs if proof["resident"]]
@@ -539,7 +564,8 @@ def measure(arm: Arm, model: Path, *, pp: int, tg: int, launches: int = MIN_PAIR
                    "sclk_min_mhz": min((p.get("sclk_min_mhz") or 0) for p in proofs),
                    "sclk_max_mhz": max((p.get("sclk_max_mhz") or 0) for p in proofs),
                    "clock_stable": all(p.get("clock_stable") for p in proofs)},
-        device_seconds=time.monotonic() - started, drift_pct=drift_pct(samples))
+        device_seconds=time.monotonic() - started, drift_pct=drift_pct(samples),
+        kv_type=kv_type or KV_DEFAULT)
 
 
 #: |rho| for a two-tailed Spearman test at alpha=0.05, by sample count. Distribution-
@@ -626,8 +652,8 @@ def spread_is_suspect(samples: Sequence[float], ratio: float = 1.3) -> bool:
     return bool(values) and (max(values) / min(values)) > ratio
 
 
-def floor_rows(surface: str, model: Path | str,
-               store: Path | None = None) -> dict[int, float] | None:
+def floor_rows(surface: str, model: Path | str, store: Path | None = None,
+               *, kv_type: str | None = None) -> dict[int, float] | None:
     """The floor table for (surface, workload-class), or None when UNCALIBRATED.
 
     Keyed by BOTH axes since 2026-09-01 (§5.2): floors are workload properties, and
@@ -647,15 +673,19 @@ def floor_rows(surface: str, model: Path | str,
     derived from `CALIBRATION_SCHEMA` rather than guessed; anything else cannot gate.
     """
     stem = Path(model).stem
+    # A floor is measured on one KV type. The built-in table and every record without
+    # the field predate `kv_type`, and ran no `-ctk`: they are KV_DEFAULT floors.
+    wanted_kv = kv_type or KV_DEFAULT
     if surface in MEASURED_FLOOR_PCT and stem == MEASURED_FLOOR_MODEL_STEM:
-        return MEASURED_FLOOR_PCT[surface]
+        return MEASURED_FLOOR_PCT[surface] if wanted_kv == KV_DEFAULT else None
     if store is None:
         return None
     for name in (f"{surface}.{stem}.json", f"{surface}.json"):
         path = store / "calibration" / name
         if path.is_file():
             body = json.loads(path.read_text(encoding="utf-8"))
-            if Path(str(body.get("model") or "")).stem != stem:
+            if (Path(str(body.get("model") or "")).stem != stem
+                    or (body.get("kv_type") or KV_DEFAULT) != wanted_kv):
                 return None
             unit = record_unit(body)
             if unit != FLOOR_UNIT:
@@ -735,7 +765,7 @@ def bootstrap_floor(anchor: Sequence[float], candidate: Sequence[float],
 
 
 __all__ = ["Arm", "BenchFailed", "CALIBRATION_SCHEMA", "CPU_LIST", "Comparison",
-           "FLOOR_UNIT", "MEASURED_FLOOR_MODEL_STEM", "MEASURED_FLOOR_N",
+           "FLOOR_UNIT", "KV_DEFAULT", "MEASURED_FLOOR_MODEL_STEM", "MEASURED_FLOOR_N",
            "MEASURED_FLOOR_PCT", "MIN_PAIRS", "Measurement",
            "SURFACES", "WARMUP_PAIRS", "bootstrap_floor", "compare", "drift_pct",
            "floor_rows", "llama_bench_argv", "measure", "record_n", "record_unit",

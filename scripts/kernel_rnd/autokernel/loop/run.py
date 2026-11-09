@@ -2076,7 +2076,8 @@ def attempt_with_codegen(outcome: loop.Outcome, summaries: dict[str, dict]) -> d
 
 
 def noise_floor_pct(surface: str, pairs: int, model: Path | str,
-                    store: Path | None = None) -> float | None:
+                    store: Path | None = None, *,
+                    kv_type: str | None = None) -> float | None:
     """The bar for THIS run, scaled to the pairs actually being run.
 
     This was a dict of constants computed at 5 pairs, so `--pairs 9` still enforced
@@ -2110,12 +2111,22 @@ def noise_floor_pct(surface: str, pairs: int, model: Path | str,
     properties, and a second rung must never inherit the first rung's floor.
     """
     pairs = max(1, pairs)
-    rows = bench.floor_rows(surface, model, store)
+    rows = bench.floor_rows(surface, model, store, kv_type=kv_type)
     if rows is None:
         return None
     parametric = rows[1] / (pairs ** 0.5)
     measured = rows[max(count for count in rows if count <= pairs)]
     return max(parametric, measured)
+
+
+def _recipe_kv_type(launch) -> str | None:
+    """The single KV type a resolved launch serves, None without a launch."""
+    if launch is None:
+        return None
+    if launch.template.ctk != launch.template.ctv:
+        raise ValueError(f"bench cells pin one KV type; recipe has -ctk {launch.template.ctk} "
+                         f"-ctv {launch.template.ctv}")
+    return launch.template.ctk
 
 
 def refuse_uncalibrated_keep(surface: str, calibrated: bool, comparison) -> None:
@@ -2404,6 +2415,7 @@ def calibrate(args, run=subprocess.run) -> int:
                 "--pairs", str(args.calibrate_surface),
                 "--anchor-build", str(args.anchor_build),
                 "--worktree", str(args.worktree), "--model", str(args.model),
+                *(["--kv-type", args.bench_kv_type] if getattr(args, "bench_kv_type", None) else []),
                 "--out", str(args.store / "calibration"
                              / f"aa-{args.surface}.{args.model.stem}"),
                 "--write-calibration", str(args.store)]).returncode
@@ -3005,6 +3017,11 @@ def _main(argv: list[str] | None = None) -> int:
     # tokens on the thinking-on 27B), batch 8 on the output cap in between. The planner
     # phase holds no CPU measurement (the CPU window is open to peers), so the longer
     # wall costs only GPU time; 4500 s matches the thinking-on author's member budget.
+    parser.add_argument("--bench-kv-type", default=None,
+                        help="llama-bench -ctk/-ctv for a bench surface with no resolved "
+                             "recipe (a resolved recipe's own KV type always wins). Default: "
+                             "no flag, an f16 cell. Floors are per KV type: a value other "
+                             "than f16 needs its own --calibrate-surface first.")
     parser.add_argument("--actor-planner-budget-s", type=int, default=4500,
                         help="opencode planner (OAB-23): wall budget per proposal call, under "
                              "--actor-timeout-s. Past it the call is ended through the stop "
@@ -4044,7 +4061,8 @@ def _main(argv: list[str] | None = None) -> int:
         return calibrate(args)
     # Never borrow a GPU bench floor for the selected CPU request.
     bench_floor = (None if experimental else
-             noise_floor_pct(args.surface, args.pairs, args.model, store=args.store))
+             noise_floor_pct(args.surface, args.pairs, args.model, store=args.store,
+                             kv_type=_recipe_kv_type(direct_launch) or args.bench_kv_type))
     floor = None if direct_launch else bench_floor
     calibrated = floor is not None
     # A direct (serving) launch never reads the bench floor: keeps are gated on the
@@ -5769,14 +5787,21 @@ def _main(argv: list[str] | None = None) -> int:
             stopping["asked"] = True
             raise
 
+    # AK-BENCH-KV-TYPE-PIN: a bench cell speaks for the recipe under test when there is
+    # one, else for the operator's explicit --bench-kv-type, else it is an f16 cell.
+    bench_kv = _recipe_kv_type(direct_launch) or args.bench_kv_type
+
     @counter_phase("benchmark_with_warmup")
     def measured_bench_compare(*args_, **kwargs_):
         # Legacy GPU bench A/Bs are GPU measurements too: same q3 window.
+        kwargs_.setdefault("kv_type", bench_kv)
+        kwargs_.setdefault("recipe_kv_type", _recipe_kv_type(direct_launch))
         with cpu_measurement_window():
             return bench.compare(*args_, **kwargs_)
 
     @counter_phase("benchmark_with_warmup")
     def measured_bench_measure(*args_, **kwargs_):
+        kwargs_.setdefault("kv_type", bench_kv)
         with cpu_measurement_window():
             return bench.measure(*args_, **kwargs_)
 
