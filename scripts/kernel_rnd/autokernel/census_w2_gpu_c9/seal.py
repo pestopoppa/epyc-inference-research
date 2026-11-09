@@ -103,7 +103,7 @@ core = ['job.py', 'work.py', 'gpu_probe.py', 'gpu_mm_evidence.py', 'server_evide
 prod = [f'producer/autokernel/{x}' for x in ('loop/census.py', 'loop/census_capture.py', 'loop/residency.py', 'loop/serving_server_owner.py', 'controller/workload_contract.py')]
 (D / 'CAPTURE-SOURCES.sha256').write_text(''.join(f'{sha(D / f)}  {D / f}\n' for f in core + prod))
 everything = sorted(p for p in D.rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.name != 'SOURCES.sha256' and not p.name.endswith('.pyc')
-                    and p.relative_to(D).parts[0].split('-')[0] not in ('smoke', 'run') and p.name not in ('STOP', 'RESULT.json', 'LAST-RESULT.json', '.smoke-ok'))
+                    and p.relative_to(D).parts[0].split('-')[0] not in ('smoke', 'run') and p.name not in ('STOP', 'RESULT.json', 'LAST-RESULT.json', 'spec.json'))
 hdr = [SRC / h for h in HEADERS]
 (D / 'SOURCES.sha256').write_text(''.join(f'{sha(p)}  {p}\n' for p in everything + hdr))
 dump(D / 'spec.json', {
