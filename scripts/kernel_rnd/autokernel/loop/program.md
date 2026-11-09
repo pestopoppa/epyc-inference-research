@@ -1004,3 +1004,18 @@ identity cannot be established is compared on its full epoch only.
 - DFlash2 `block_size=8` caps the draft at 7: draft-length sweeps use {3,5,7}.
 - Spec-verify timing: CAFE-2 r1 T(5)/T(1)=1.72 with interval 0.25-3.18 at loadavg ~46 is INCONCLUSIVE (noise), not a verify-cost estimate; the expert-union census (8.0/17.9/34.4 unique experts per layer at 1/5/9 rows, E=256, K=8) is valid.
 - DF2-13 warm/cold divergence at token 33 is UNCLASSIFIED (n=1 pair); do not read it as a cache-reuse correctness defect or as a near-tie.
+
+## Launching a live loop through the keeper
+
+Learned from `ak-fulltest-c9-20261109` r1-r5 (2026-11-09); r5 is the first run to clear every startup check. Requires an operator exception while OP-AK-HOLD stands.
+
+1. **Sources.** Code root: a clean research checkout at `origin/main`, run from `scripts/kernel_rnd` with `PYTHONPATH=$PWD:$PWD/..`, as `python3 -m autokernel.loop.run`. Kernel tree: a clean worktree ON the champion branch (`ak/champion/llama-cpp-ffc1bac82eec`), not detached.
+2. **Anchor.** Use a kernel-store image with `VERSION.txt`, `SHA256SUMS` and `PROVENANCE.md`, and pass `--floor-registry`: a store anchor is then attested by its `VERSION.txt` commit. Without `--floor-registry` it is treated as hand-built and needs `--allow-unverified-anchor` (r5 did this; do not copy it).
+3. **New store.** Pass `--new-store`. A store with no history still needs an explicit surface: `--bundle-surface gpu` (or `cpu`).
+4. **Actors.** Set `--planner-model`/`--critic-model` while Codex is out. Generate the request with one `--dry-run` (it prints the JSON on stdout), then `python3 -m autokernel.loop.actor_wire_test --request <file> --record <store>/actor-wire-record.json --evidence-dir <dir>`, and pass `--actor-wire-test-record <record>`. The record is bound to the code: after any merge into the code root, redo this and the dry run.
+5. **Beliefs.** Pass `--belief-root-repo /mnt/raid0/llm/views/epyc-root-main`.
+6. **GPU lock.** `filler_run15.sh` holds the device flock and does not hand it down, so a keeper-launched loop refuses against its own launcher unless the launcher uses a row-private path (`FILLER_GPU_LOCK`, r5's workaround) or the handoff fix on `ak/watchdog-lock-20261109` has landed.
+7. **Row.** `--class gpu --gpu-quiet exclusive --claim-cpus 184-191 --gpu-threads 184-191` with `--cpu-measurement-gpu-quiet off`; declare `regions=mi210_0,96-191` because builds use 96-183.
+8. **Job script.** Propagate the loop's exit code. A smoke must fail when the loop's `--dry-run` fails, load the model for about 45 s to satisfy GPU residency (not longer), and its result must not satisfy the live `--complete-cmd`.
+9. **Publishing.** Publish as soon as ready; the keeper orders rows. One publish per id at a time: a republish during its smoke unpublishes the row.
+10. **Reading the outcome.** An abstain is a valid result, read from `experiments.db` `refusal_reason`. A proof of belief use needs a reliance-accepted receipt.
