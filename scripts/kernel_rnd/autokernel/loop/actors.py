@@ -1375,6 +1375,7 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             repair_ran = orchestrator_stats.get("repair_ran")
         record = {
             "schema": actor_metrics.METRICS_SCHEMA,
+            "lane": Path(workspace).name,
             "role": role,
             # The seat arm as the caller labelled it (`plain+ctx-variable`, ...), or
             # None for a call that set no arm: the same free-text label the v1 record
@@ -1412,7 +1413,8 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             record["ak_check"] = ak_check.usage_summary(env.get(ak_check.ENV_LOG),
                                                         env.get(ak_check.ENV_CALL_ID))
     except Exception as exc:   # noqa: BLE001 -- evidence, never a reason to fail the call
-        record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role, "seat_arm": arm,
+        record = {"schema": actor_metrics.METRICS_SCHEMA, "lane": Path(workspace).name,
+                  "role": role, "seat_arm": arm,
                   "backend_kind": backend.kind, "backend_model": backend.model,
                   "failure_class": failure_class,
                   "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

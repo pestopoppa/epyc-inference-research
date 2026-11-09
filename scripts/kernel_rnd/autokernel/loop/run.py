@@ -111,6 +111,7 @@ from . import epoch_aliases
 from . import scratch
 from . import provider_breaker
 from . import deadline_reserve
+from ..controller import run_budget
 from . import same_state_stop
 from . import procguard
 from . import prebuild_rules
@@ -2511,6 +2512,8 @@ def _native_stale_rebaseline(store: Path, worktree: Path, bundle, harness: str,
 def _main(argv: list[str] | None = None) -> int:
     live_tail = [None]
     gfx_counter = [None]
+    budget_debit: list = [None]
+
     def counter_phase(label):
         """Observe phase boundaries without changing the wrapped outcome."""
         def decorate(function):
@@ -2524,10 +2527,13 @@ def _main(argv: list[str] | None = None) -> int:
                         print(f"GPU counter observation unavailable: {type(exc).__name__}: {exc}",
                               file=sys.stderr)
                 sample("start")
+                began = time.monotonic()
                 try:
                     return function(*args, **kwargs)
                 finally:
                     sample("end")
+                    if budget_debit[0] is not None:
+                        budget_debit[0](label, time.monotonic() - began)
             return observed
         return decorate
     # Publish can be reached by startup/refusal paths before campaign resolution.
@@ -3017,6 +3023,13 @@ def _main(argv: list[str] | None = None) -> int:
     # tokens on the thinking-on 27B), batch 8 on the output cap in between. The planner
     # phase holds no CPU measurement (the CPU window is open to peers), so the longer
     # wall costs only GPU time; 4500 s matches the thinking-on author's member budget.
+    for flag, kind, what in (("--max-run-wall-s", float, "elapsed wall seconds"),
+                             ("--max-run-gpu-s", float, "GPU-seconds (measurement stages)"),
+                             ("--max-run-decoded-tokens", int,
+                              "decoded tokens; a seat that meters none fails this closed")):
+        parser.add_argument(flag, type=kind, default=None,
+                            help=f"run-level ceiling on {what}: park at the next boundary "
+                                 "with terminal budget_parked (default: none)")
     parser.add_argument("--bench-kv-type", default=None,
                         help="llama-bench -ctk/-ctv for a bench surface with no resolved "
                              "recipe (a resolved recipe's own KV type always wins). Default: "
@@ -3282,6 +3295,10 @@ def _main(argv: list[str] | None = None) -> int:
     budget_error = _actor_budget_error(args) or _reasoning_history_error(args)
     if budget_error:
         parser.error(budget_error)
+    try:
+        run_budget.Ceilings(args.max_run_wall_s, args.max_run_gpu_s, args.max_run_decoded_tokens)
+    except ValueError as exc:
+        parser.error(str(exc))
     from . import lane_actors
     try:
         lane_actor_models = lane_actors.parse(args.lane_actor_models, workers=args.workers)
@@ -5704,12 +5721,19 @@ def _main(argv: list[str] | None = None) -> int:
 
     deadline_guard = deadline_reserve.DeadlineReserve.from_env(args.store)
 
+    budget = run_budget.RunBudget(run_budget.Ceilings(
+        wall_s=args.max_run_wall_s, gpu_s=args.max_run_gpu_s,
+        decoded_tokens=args.max_run_decoded_tokens), args.worker_root)
+    budget_debit[0] = lambda label, wall_s: budget.debit_stage(label, wall_s, gpu=not cpu_launch)
+
     def should_stop() -> bool:
-        return stop_asked() or breaker.tripped or same_state.tripped or deadline_guard.tripped
+        return (stop_asked() or breaker.tripped or same_state.tripped or deadline_guard.tripped
+                or budget.tripped)
 
     def run_terminal() -> str:
         return provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker,
-                                         same_state=same_state, deadline=deadline_guard)
+                                         same_state=same_state, deadline=deadline_guard,
+                                         budget=budget)
 
     #: Per-thread nesting depth of the quiet window: a measurement called from inside
     #: another's window must not re-acquire a flock this process already holds (flock
@@ -8848,6 +8872,7 @@ def _main(argv: list[str] | None = None) -> int:
                 "pool": pooled_body,
                 "provider_breaker": breaker.to_dict(),
                 "planner_same_state": same_state.to_dict(),
+                "run_budget": budget.snapshot(),
                 **({"scratch": scratch_registry[0].stats()}
                    if scratch_registry[0] is not None else {}),
                 "continuation": serial_run.continuation(
