@@ -30,7 +30,9 @@ import time
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .. import hypothesis_portfolio, journal, schemas, source_candidate
-from ..evaluator import integrity
+from scripts.kernel_rnd import c6_reward_integrity
+from ..evaluator import integrity, hawkeye_measurement
+from ..execution import physical_bounds
 from . import (claude_fable5_critic_actor, codex_container_actor,
                discovery_telemetry, do_not_repeat, hypotheses)
 from . import experiments, gate_parameters, gpu_source_evidence, gpu_source_proofs
@@ -576,6 +578,14 @@ class SealedScreen:
     # WHERE the time goes; the profiler ran on every attempt for a month and only its
     # single scalar was ever read.
     hotspots: tuple[Mapping[str, Any], ...] = ()
+    # C6 admission authority.  All absent unless the governed GPU screen sealed them.
+    build_identity_sha256: str | None = None
+    correctness_receipt_sha256: str | None = None
+    c6_correctness_receipt_sha256: str | None = None
+    c6_correctness_ref: Mapping[str, Any] | None = None
+    attribution_receipt_sha256: str | None = None
+    graphs_off_receipt_sha256: str | None = None
+    graphs_on_receipt_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if self.classification not in {"candidate", "screened_out", "inconclusive", "failed", "top_k_replicated_candidate", "replicated_but_subadditive"}: raise DiscoveryControllerError("unknown screen class")
@@ -597,6 +607,19 @@ class SealedScreen:
             raise DiscoveryControllerError(
                 "primary screen effect must be the target-runtime effect")
         if not self.candidate_only or self.promotion_claim: raise DiscoveryControllerError("discovery screen must remain nonpromotable")
+        receipts = (
+            self.build_identity_sha256, self.correctness_receipt_sha256,
+            self.attribution_receipt_sha256,
+            self.graphs_off_receipt_sha256, self.graphs_on_receipt_sha256)
+        if any(value is not None for value in receipts):
+            if not all(isinstance(value, str) and HASH.fullmatch(value)
+                       for value in receipts):
+                raise DiscoveryControllerError(
+                    "screen replication evidence is incomplete")
+        if self.c6_correctness_ref is not None and not isinstance(
+                self.c6_correctness_ref, Mapping):
+            raise DiscoveryControllerError(
+                "screen C6 correctness reference must be typed")
         if tuple(self.stages) not in {
                 ("materialized", "built", "correctness", "attribution", "screen"),
                 ("materialized", "built", "correctness", "attribution",
@@ -1806,12 +1829,17 @@ class GpuSourceScreener:
                     "GPU runner terminal governance differs from its borrowed phase")
             return result_path, raw
 
-        _graphs_off_path, _graphs_off = run_stage(args, graph_mode="off")
+        graphs_off_path, _graphs_off = run_stage(args, graph_mode="off")
         result_path, raw = run_stage(target_args, graph_mode="on")
         projection = autokernel_progression._gpu_screen(result_path, raw)
         if projection is None: raise DiscoveryControllerError("GPU result failed canonical progression validation")
         target_effect = float(raw["median_relative"])
-        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, hotspots=tuple(gpu_source_evidence.kernel_hotspots(comparison)), stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"))
+        c6_ref = (bundle.correctness.get("body", {}).get("c6_correctness")
+                  if isinstance(bundle.correctness, Mapping) else None)
+        if c6_ref is not None and not isinstance(c6_ref, Mapping):
+            raise DiscoveryControllerError(
+                "source proof carries a malformed C6 correctness reference")
+        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, hotspots=tuple(gpu_source_evidence.kernel_hotspots(comparison)), stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"), build_identity_sha256=schemas.content_hash(vars(build.candidate_identity)), correctness_receipt_sha256=bundle.correctness["file_sha256"], c6_correctness_receipt_sha256=(None if c6_ref is None else str(c6_ref["file_sha256"])), c6_correctness_ref=(None if c6_ref is None else dict(c6_ref)), attribution_receipt_sha256=bundle.attribution["file_sha256"], graphs_off_receipt_sha256=hashlib.sha256(graphs_off_path.read_bytes()).hexdigest(), graphs_on_receipt_sha256=hashlib.sha256(result_path.read_bytes()).hexdigest())
 
 
 @dataclass(frozen=True)
@@ -1882,6 +1910,13 @@ class ControllerConfig:
     # that never had a production tree -- tests, dry runs -- are unaffected.
     production_tree_path: Path | None = None
     production_binary_sha256: Mapping[str, str] | None = None
+    c6_admission_store_path: Path | None = None
+    c6_admission_alpha: float | None = None
+    c6_admission_beta: float | None = None
+    c6_roofline_authority: Mapping[str, Any] | None = None
+    c6_reopen_when: str | None = None
+    c6_evaluator_commit: str | None = None
+
     def __post_init__(self) -> None:
         for name in ("planner_backoff_base_s", "planner_backoff_max_s"):
             value = getattr(self, name)
@@ -1920,6 +1955,51 @@ class ControllerConfig:
                      or self.hypothesis_portfolio.sha256 != self.hypothesis_portfolio_sha256)):
             raise DiscoveryControllerError(
                 "controller portfolio must be one loader-validated immutable authority")
+        c6_values = (
+            self.c6_admission_store_path, self.c6_admission_alpha,
+            self.c6_admission_beta, self.c6_roofline_authority,
+            self.c6_reopen_when, self.c6_evaluator_commit)
+        if any(value is not None for value in c6_values):
+            if not all(value is not None for value in c6_values):
+                raise DiscoveryControllerError(
+                    "C6 admission configuration is incomplete")
+            if (self.evidence_root is None
+                    or not isinstance(self.c6_admission_store_path, Path)
+                    or not self.c6_admission_store_path.is_absolute()
+                    or self.c6_admission_store_path !=
+                       self.evidence_root / "c6-admission.jsonl"
+                    or not isinstance(self.c6_reopen_when, str)
+                    or not self.c6_reopen_when.strip()
+                    or not isinstance(self.c6_evaluator_commit, str)
+                    or not re.fullmatch(
+                        r"[0-9a-f]{40}", self.c6_evaluator_commit)):
+                raise DiscoveryControllerError(
+                    "C6 admission store/reopen authority is invalid")
+            authority = self.c6_roofline_authority
+            facts_path = (Path(str(authority.get("facts_path", "")))
+                          if isinstance(authority, Mapping) else Path("."))
+            try:
+                facts_bytes = facts_path.read_bytes()
+                facts = json.loads(facts_bytes)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise DiscoveryControllerError(
+                    "C6 roofline authority is unreadable") from exc
+            if (not isinstance(authority, Mapping)
+                    or authority.get("schema") !=
+                       "epyc.autokernel.c6_roofline_authority.v1"
+                    or authority.get("gpu_part") != "gfx90a"
+                    or authority.get("facts_sha256") !=
+                       hashlib.sha256(facts_bytes).hexdigest()
+                    or facts.get("hardware") != "AMD Instinct MI210 (gfx90a)"
+                    or facts.get("facts", {}).get("memory_bandwidth_gbps", {}).get(
+                        "measured") != 1433.3
+                    or facts.get("facts", {}).get("compute_tflops", {}).get(
+                        "measured") != 172.2
+                    or authority.get("workload") != "decode_tg128"
+                    or authority.get("batch_size") != 1
+                    or authority.get("dense_model_bytes_per_token") is not True):
+                raise DiscoveryControllerError(
+                    "C6 roofline authority is not the reviewed MI210 decode frame")
         sealed = (self.planner_context_sha256, self.production_base_commit,
                   self.instrument_commit, self.experiment_template_registry_sha256,
                   self.admission_corpus_sha256, self.admission_corpus_version,
@@ -2551,7 +2631,7 @@ def _classified_result(state: Mapping[str, Any], item: PlannedCandidate,
         # Route/device-time and target-runtime throughput are conjunctive.  A
         # disagreement is measured evidence, but never a candidate/nomination.
         classification = "inconclusive"
-    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,exact_attribution_effect_fraction=result.exact_attribution_effect_fraction,target_runtime_effect_fraction=result.target_runtime_effect_fraction,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
+    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,exact_attribution_effect_fraction=result.exact_attribution_effect_fraction,target_runtime_effect_fraction=result.target_runtime_effect_fraction,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)),build_identity_sha256=result.build_identity_sha256,correctness_receipt_sha256=result.correctness_receipt_sha256,c6_correctness_receipt_sha256=result.c6_correctness_receipt_sha256,c6_correctness_ref=result.c6_correctness_ref,attribution_receipt_sha256=result.attribution_receipt_sha256,graphs_off_receipt_sha256=result.graphs_off_receipt_sha256,graphs_on_receipt_sha256=result.graphs_on_receipt_sha256)
 
 
 def _screen_iteration_fields(result: SealedScreen, *, repetition: int,
@@ -2591,6 +2671,518 @@ def _screen_iteration_fields(result: SealedScreen, *, repetition: int,
         "repetition": repetition,
         "scientific_budget_spent": True,
     }
+
+
+_C6_ADMISSION_LEG_SCHEMA = "epyc.autokernel.c6_admission_leg.v2"
+
+
+def _c6_admission_enabled(config: ControllerConfig) -> bool:
+    return config.c6_admission_store_path is not None
+
+
+def _c6_admission_config(config: ControllerConfig) -> dict[str, Any] | None:
+    if not _c6_admission_enabled(config):
+        return None
+    body = {
+        "schema": "epyc.autokernel.c6_admission_controller_config.v1",
+        "store_path": str(config.c6_admission_store_path),
+        "alpha": config.c6_admission_alpha,
+        "beta": config.c6_admission_beta,
+        "roofline_authority": dict(config.c6_roofline_authority),
+        "reopen_when": config.c6_reopen_when,
+        "evaluator_commit": config.c6_evaluator_commit,
+    }
+    body["config_sha256"] = _sha(body)
+    return body
+
+
+def _c6_full_gate_reached(result: SealedScreen) -> bool:
+    return tuple(result.stages) == (
+        "materialized", "built", "correctness", "attribution",
+        "measurement_graphs_off_screen", "target_runtime_graphs_on_screen")
+
+
+def _reopen_c6_admission_correctness(
+        reference: object, expected_sha256: object) -> Mapping[str, Any]:
+    """Reopen the exact native C6 pass used by an admission leg."""
+    if (not isinstance(reference, Mapping)
+            or not isinstance(expected_sha256, str)
+            or HASH.fullmatch(expected_sha256) is None):
+        raise DiscoveryControllerError(
+            "C6 admission native correctness reference is malformed")
+    try:
+        loaded = gpu_source_proofs.load_receipt(
+            Path(str(reference.get("path", ""))),
+            schema="epyc.autokernel.c6_correctness_receipt.v1")
+    except (gpu_source_proofs.ProofError, OSError) as exc:
+        raise DiscoveryControllerError(
+            "C6 admission cannot reopen its native correctness receipt") from exc
+    c6_path = Path(str(loaded["path"]))
+    if (c6_path.name != "c6-receipt.json"
+            or c6_path.parent.name != "correctness"):
+        raise DiscoveryControllerError(
+            "C6 admission correctness receipt escaped its evidence bundle")
+    bundle_path = c6_path.parent.parent / "proof-bundle.json"
+    try:
+        bundle = gpu_source_evidence.load_gpu_source_evidence_bundle(bundle_path)
+    except (gpu_source_evidence.EvidenceProducerError,
+            gpu_source_proofs.ProofError, OSError) as exc:
+        raise DiscoveryControllerError(
+            "C6 admission cannot recursively reopen its full evidence bundle") from exc
+    nested = (bundle.correctness.get("body", {}).get("c6_correctness")
+              if isinstance(bundle.correctness, Mapping) else None)
+    if not isinstance(nested, Mapping) or any(
+            nested.get(key) != loaded.get(key)
+            for key in ("path", "file_sha256", "native_sha256", "body")):
+        raise DiscoveryControllerError(
+            "C6 admission receipt is not the full bundle correctness child")
+    if (any(loaded.get(key) != reference.get(key)
+            for key in ("path", "file_sha256", "native_sha256", "body"))
+            or loaded["file_sha256"] != expected_sha256
+            or loaded["body"].get("result") != "PASS"
+            or loaded["body"].get("native_execution") is not True
+            or loaded["body"].get("wrapper_used") is not False
+            or loaded["body"].get("semantic_judge_gating") is not False
+            or loaded["body"].get("determinism", {}).get("correct") is not True
+            or not isinstance(loaded["body"].get("numeric_verdicts"), list)
+            or not loaded["body"]["numeric_verdicts"]
+            or any(not isinstance(row, Mapping)
+                   or row.get("correct") is not True for row in
+                   loaded["body"]["numeric_verdicts"])):
+        raise DiscoveryControllerError(
+            "C6 admission native correctness receipt is not an exact pass")
+    return loaded
+
+
+def _c6_roofline_cap(
+        config: ControllerConfig, *, raw: Mapping[str, Any],
+        baseline_center: float, frame_sha256: str) -> dict[str, Any]:
+    """Derive the exact batch-1 dense-decode ceiling from sealed evidence."""
+    authority = config.c6_roofline_authority
+    frame = raw.get("frame")
+    model_size = raw.get("model_size_bytes")
+    if (not isinstance(authority, Mapping) or not isinstance(frame, Mapping)
+            or frame.get("backend") != "llama_gpu"
+            or frame.get("recipe") != authority.get("workload")
+            or frame.get("metric") != "tokens_per_second"
+            or frame.get("n_prompt") != 0 or frame.get("n_gen") != 128
+            or frame.get("architecture") != "gfx90a"
+            or isinstance(model_size, bool) or not isinstance(model_size, int)
+            or model_size <= 0):
+        raise DiscoveryControllerError(
+            "C6 roofline cap requires the exact batch-1 dense decode frame")
+    facts_path = Path(str(authority["facts_path"]))
+    try:
+        facts_bytes = facts_path.read_bytes()
+        facts = json.loads(facts_bytes)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DiscoveryControllerError("C6 roofline facts are unreadable") from exc
+    if hashlib.sha256(facts_bytes).hexdigest() != authority.get("facts_sha256"):
+        raise DiscoveryControllerError("C6 roofline facts changed after launch")
+    measured = facts.get("facts", {})
+    bandwidth = measured.get("memory_bandwidth_gbps", {}).get("measured")
+    compute = measured.get("compute_tflops", {}).get("measured")
+    if bandwidth != 1433.3 or compute != 172.2:
+        raise DiscoveryControllerError("C6 roofline facts are not the pinned MI210 values")
+    envelope = physical_bounds.PhysicalEnvelope(
+        shape_id="dense-batch1-decode-model-read-per-token-v1",
+        delivered_unit="token",
+        # No reviewed exact ops/token authority exists.  One flop/token makes
+        # compute non-limiting; the full model-file read is the conservative
+        # workload-specific memory lower bound.
+        flops_per_unit=1.0,
+        bytes_per_unit=float(model_size),
+        peak_compute_flops_s=float(compute) * 1e12,
+        peak_memory_bytes_s=float(bandwidth) * 1e9,
+        measurement_frame_sha256=frame_sha256,
+        work_derivation_ref=(
+            "sealed result.model_size_bytes; batch-1 dense decode reads the full "
+            "model per delivered token"),
+        hardware_peak_ref=(
+            f"{facts_path}@sha256:{authority['facts_sha256']}#measured"))
+    cap = hawkeye_measurement.derive_roofline_speedup_cap(
+        gpu_part=str(authority["gpu_part"]), envelope=envelope,
+        baseline_throughput_units_s=float(baseline_center))
+    carrier = hawkeye_measurement.serialize_carrier(cap)
+    if cap.max_speedup <= 1.0:
+        raise DiscoveryControllerError("C6 roofline speedup cap is not above unity")
+    return carrier
+
+
+def _validate_c6_roofline_carrier(value: object) -> float:
+    if (not isinstance(value, Mapping)
+            or value.get("schema") != "epyc.autokernel.roofline_speedup_cap.v1"
+            or value.get("gpu_part") != "gfx90a"
+            or value.get("shape_id") !=
+               "dense-batch1-decode-model-read-per-token-v1"
+            or value.get("carrier_sha256") != _sha({
+                key: item for key, item in value.items()
+                if key != "carrier_sha256"})):
+        raise DiscoveryControllerError("C6 roofline carrier is invalid")
+    maximum = value.get("max_speedup")
+    baseline = value.get("baseline_throughput_units_s")
+    ceiling = value.get("roofline_throughput_ceiling_units_s")
+    if (isinstance(maximum, bool) or not isinstance(maximum, (int, float))
+            or isinstance(baseline, bool) or not isinstance(baseline, (int, float))
+            or isinstance(ceiling, bool) or not isinstance(ceiling, (int, float))
+            or not all(math.isfinite(float(item)) and float(item) > 0
+                       for item in (maximum, baseline, ceiling))
+            or not math.isclose(float(maximum), float(ceiling) / float(baseline),
+                                rel_tol=0.0, abs_tol=0.0)
+            or float(maximum) <= 1.0):
+        raise DiscoveryControllerError("C6 roofline carrier does not rederive")
+    return float(maximum)
+
+
+def _c6_admission_leg(
+        config: ControllerConfig, item: PlannedCandidate, result: SealedScreen, *,
+        evaluator_commit: str) -> dict[str, Any]:
+    """Reopen one fully-gated screen as an immutable C6 admission leg.
+
+    The leg is built only after source materialization, build, correctness,
+    exact-route attribution, native same-input three-run bitwise determinism,
+    and the target runtime throughput screen have all completed.  It converts
+    throughput to latency-per-1000-tokens; the ratio is therefore exactly the native
+    candidate/anchor throughput ratio used by the controller.
+    """
+    if (not _c6_full_gate_reached(result)
+            or result.target_runtime_effect_fraction is None
+            or not isinstance(result.c6_correctness_ref, Mapping)
+            or not all(isinstance(value, str) and HASH.fullmatch(value)
+                       for value in (
+                           result.build_identity_sha256,
+                           result.correctness_receipt_sha256,
+                           result.c6_correctness_receipt_sha256,
+                           result.attribution_receipt_sha256,
+                           result.graphs_off_receipt_sha256,
+                           result.graphs_on_receipt_sha256))):
+        raise DiscoveryControllerError(
+            "C6 admission cannot precede the complete governed screen gate")
+    _reopen_c6_admission_correctness(
+        result.c6_correctness_ref, result.c6_correctness_receipt_sha256)
+    result_path = Path(result.receipt_path)
+    if (not result_path.is_absolute() or result_path.is_symlink()
+            or not result_path.is_file()):
+        raise DiscoveryControllerError(
+            "C6 admission result path is not immutable authority")
+    try:
+        loaded = gpu_source_proofs.require_result_file(
+            result_path,
+            {"result_sha256": result.result_sha256})
+    except gpu_source_proofs.ProofError as exc:
+        raise DiscoveryControllerError(
+            "C6 admission result receipt is invalid") from exc
+    raw = loaded["body"]
+    raw_effect = raw.get("median_relative")
+    if (isinstance(raw_effect, bool)
+            or not isinstance(raw_effect, (int, float))
+            or not math.isfinite(float(raw_effect))):
+        raise DiscoveryControllerError(
+            "C6 admission result carries a malformed throughput effect")
+    if (loaded["file_sha256"] != result.graphs_on_receipt_sha256
+            or raw.get("result_sha256") != result.result_sha256
+            or raw.get("baseline_sha256") != result.baseline_sha256
+            or raw.get("runtime_graphs") != "on"
+            or raw.get("ok") is not True
+            or raw.get("hip_residency_proved") is not True
+            or float(raw_effect) !=
+               float(result.target_runtime_effect_fraction)):
+        raise DiscoveryControllerError(
+            "C6 admission result differs from the sealed screen")
+    baseline_path = result_path.with_name("baseline-bank.json")
+    if baseline_path.is_symlink() or not baseline_path.is_file():
+        raise DiscoveryControllerError("C6 admission lacks its baseline bank")
+    try:
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DiscoveryControllerError(
+            "C6 admission baseline bank is unreadable") from exc
+    if not isinstance(baseline, Mapping):
+        raise DiscoveryControllerError("C6 admission baseline bank is malformed")
+    unsigned_baseline = {key: value for key, value in baseline.items()
+                         if key != "baseline_sha256"}
+    if (baseline.get("schema") !=
+            "epyc.autokernel.gpu_screening_baseline.v2"
+            or baseline.get("baseline_sha256") !=
+               schemas.content_hash(unsigned_baseline)
+            or baseline.get("baseline_sha256") != result.baseline_sha256
+            or raw.get("candidate_identity") !=
+               baseline.get("candidate_identity")):
+        raise DiscoveryControllerError(
+            "C6 admission baseline identity is invalid")
+    center = raw.get("baseline_center")
+    samples = raw.get("candidate_samples")
+    if (isinstance(center, bool) or not isinstance(center, (int, float))
+            or not math.isfinite(float(center)) or float(center) <= 0
+            or not isinstance(samples, list) or not samples
+            or any(isinstance(value, bool)
+                   or not isinstance(value, (int, float))
+                   or not math.isfinite(float(value)) or float(value) <= 0
+                   for value in samples)):
+        raise DiscoveryControllerError(
+            "C6 admission throughput samples are malformed")
+    effects = [(float(value) - float(center)) / float(center)
+               for value in samples]
+    if float(raw_effect) != float(statistics.median(effects)):
+        raise DiscoveryControllerError(
+            "C6 admission throughput reduction changed")
+    candidate_identity = raw.get("candidate_identity")
+    anchor_identity = baseline.get("anchor_identity")
+    candidate_commit = (candidate_identity.get("source_commit")
+                        if isinstance(candidate_identity, Mapping) else None)
+    anchor_commit = (anchor_identity.get("source_commit")
+                     if isinstance(anchor_identity, Mapping) else None)
+    if not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value)
+               for value in (candidate_commit, anchor_commit,
+                             evaluator_commit)):
+        raise DiscoveryControllerError(
+            "C6 admission lacks exact candidate/anchor/evaluator commits")
+    candidate_center = float(statistics.median(float(v) for v in samples))
+    frame_sha256 = _sha({
+        "frame": raw.get("frame"),
+        "sole_factor": raw.get("sole_factor"),
+        "baseline_sha256": result.baseline_sha256,
+    })
+    roofline = _c6_roofline_cap(
+        config, raw=raw, baseline_center=float(center),
+        frame_sha256=frame_sha256)
+    body = {
+        "schema": _C6_ADMISSION_LEG_SCHEMA,
+        "task_id": _sha({
+            "candidate_semantic_sha256": _candidate_semantic_identity(item),
+            "frame_sha256": frame_sha256,
+        }),
+        "candidate_commit": candidate_commit,
+        "anchor_commit": anchor_commit,
+        "evaluator_commit": evaluator_commit,
+        "frame_sha256": frame_sha256,
+        "anchor_latency_ms": 1000.0 / float(center),
+        "candidate_latency_ms": 1000.0 / candidate_center,
+        "correctness_receipt_sha256": result.correctness_receipt_sha256,
+        "c6_correctness_receipt_sha256":
+            result.c6_correctness_receipt_sha256,
+        "c6_correctness_ref": dict(result.c6_correctness_ref),
+        "throughput_result_sha256": result.result_sha256,
+        "throughput_result_file_sha256": loaded["file_sha256"],
+        "roofline_speedup_cap": roofline,
+    }
+    body["leg_sha256"] = _sha(body)
+    return body
+
+
+def _emit_c6_admission(
+        config: ControllerConfig, *, first: Mapping[str, Any],
+        verification: Mapping[str, Any]) -> dict[str, Any]:
+    for leg in (first, verification):
+        if (not isinstance(leg, Mapping)
+                or leg.get("schema") != _C6_ADMISSION_LEG_SCHEMA
+                or leg.get("leg_sha256") !=
+                   _sha({key: value for key, value in leg.items()
+                         if key != "leg_sha256"})):
+            raise DiscoveryControllerError("C6 admission leg is invalid")
+        _validate_c6_roofline_carrier(leg.get("roofline_speedup_cap"))
+    stable = ("task_id", "candidate_commit", "anchor_commit",
+              "evaluator_commit", "frame_sha256")
+    if any(first.get(key) != verification.get(key) for key in stable):
+        raise DiscoveryControllerError(
+            "C6 verification rerun changed candidate or frame authority")
+    try:
+        caps = tuple(_validate_c6_roofline_carrier(
+            leg["roofline_speedup_cap"]) for leg in (first, verification))
+        policy = c6_reward_integrity.AdmissionPolicy(
+            alpha=config.c6_admission_alpha,
+            beta=config.c6_admission_beta,
+            implausible_speedup_cap=min(caps))
+        receipt = c6_reward_integrity.build_admission_receipt(
+            task_id=str(first["task_id"]),
+            candidate_commit=str(first["candidate_commit"]),
+            anchor_commit=str(first["anchor_commit"]),
+            evaluator_commit=str(first["evaluator_commit"]),
+            first_turn_anchor_latency_ms=float(first["anchor_latency_ms"]),
+            first_turn_candidate_latency_ms=float(first["candidate_latency_ms"]),
+            verification_anchor_latency_ms=
+                float(verification["anchor_latency_ms"]),
+            verification_candidate_latency_ms=
+                float(verification["candidate_latency_ms"]),
+            first_turn_correct=True, verification_correct=True,
+            first_turn_c6_correctness_receipt_sha256=str(
+                first["c6_correctness_receipt_sha256"]),
+            verification_c6_correctness_receipt_sha256=str(
+                verification["c6_correctness_receipt_sha256"]),
+            reopen_when=str(config.c6_reopen_when), policy=policy)
+        producer_path = Path(c6_reward_integrity.__file__).resolve(strict=True)
+        producer_sha256 = hashlib.sha256(producer_path.read_bytes()).hexdigest()
+        envelope = c6_reward_integrity.AdmissionReceiptStore(
+            config.c6_admission_store_path).append(
+                receipt, producer_sha256=producer_sha256)
+    except (c6_reward_integrity.EvaluatorPolicyError,
+            c6_reward_integrity.AdmissionReceiptError, OSError) as exc:
+        raise DiscoveryControllerError(
+            "C6 admission store failed closed") from exc
+    capture = envelope["belief_capture"]
+    return {
+        "schema": "epyc.autokernel.c6_admission_controller_binding.v2",
+        "store_path": str(config.c6_admission_store_path),
+        "first_leg_sha256": first["leg_sha256"],
+        "verification_leg_sha256": verification["leg_sha256"],
+        "receipt_sha256": receipt["receipt_sha256"],
+        "capture_sha256": capture["capture_sha256"],
+        "admitted": receipt["admitted"],
+        "reason": receipt["reason"],
+    }
+
+
+def _apply_c6_admission(
+        config: ControllerConfig, item: PlannedCandidate,
+        result: SealedScreen, row: dict[str, Any], *,
+        confirmation: bool) -> None:
+    if not _c6_admission_enabled(config):
+        return
+    first = row.pop("c6_admission_leg", None) if confirmation else None
+    if not _c6_full_gate_reached(result):
+        if confirmation:
+            row["c6_admission"] = {
+                "schema": "epyc.autokernel.c6_admission_not_reached.v1",
+                "reason": "verification_stopped_before_target_throughput_gate",
+            }
+        return
+    leg = _c6_admission_leg(
+        config, item, result, evaluator_commit=str(config.c6_evaluator_commit))
+    if not confirmation:
+        row["c6_admission_leg"] = leg
+        return
+    if not isinstance(first, Mapping):
+        raise DiscoveryControllerError(
+            "C6 verification lacks its durable first-turn leg")
+    row["c6_admission_first_leg"] = dict(first)
+    row["c6_admission_verification_leg"] = leg
+    row["c6_admission"] = _emit_c6_admission(
+        config, first=first, verification=leg)
+
+
+def _validate_c6_admission_state(
+        config: ControllerConfig, state: Mapping[str, Any]) -> None:
+    expected = _c6_admission_config(config)
+    if state.get("c6_admission_config") != expected:
+        raise DiscoveryControllerError(
+            "durable C6 admission configuration changed")
+    if expected is None:
+        if any(isinstance(row, Mapping)
+               and ("c6_admission" in row or "c6_admission_leg" in row)
+               for row in state.get("iterations", [])):
+            raise DiscoveryControllerError(
+                "durable C6 admission evidence lacks configuration authority")
+        return
+    try:
+        records = c6_reward_integrity.AdmissionReceiptStore(
+            config.c6_admission_store_path).records()
+    except (c6_reward_integrity.AdmissionReceiptError, OSError) as exc:
+        raise DiscoveryControllerError(
+            "durable C6 admission store failed validation") from exc
+    producer_path = Path(c6_reward_integrity.__file__).resolve(strict=True)
+    live_producer_sha256 = hashlib.sha256(producer_path.read_bytes()).hexdigest()
+    if any(record["belief_capture"].get("producer_sha256") !=
+           live_producer_sha256 for record in records):
+        raise DiscoveryControllerError(
+            "durable C6 capture producer differs from the live module")
+    by_receipt = {
+        row["receipt"]["receipt_sha256"]: row for row in records}
+    if len(by_receipt) != len(records):
+        raise DiscoveryControllerError(
+            "durable C6 admission store duplicates a receipt")
+    claimed: set[str] = set()
+    for row in state.get("iterations", []):
+        if not isinstance(row, Mapping):
+            continue
+        binding = row.get("c6_admission")
+        if not isinstance(binding, Mapping) or binding.get("schema") == \
+                "epyc.autokernel.c6_admission_not_reached.v1":
+            continue
+        receipt_sha256 = binding.get("receipt_sha256")
+        envelope = by_receipt.get(receipt_sha256)
+        first_leg = row.get("c6_admission_first_leg")
+        verification_leg = row.get("c6_admission_verification_leg")
+        if (binding.get("schema") !=
+                "epyc.autokernel.c6_admission_controller_binding.v2"
+                or binding.get("store_path") !=
+                   str(config.c6_admission_store_path)
+                or envelope is None
+                or not isinstance(first_leg, Mapping)
+                or not isinstance(verification_leg, Mapping)
+                or first_leg.get("leg_sha256") != binding.get("first_leg_sha256")
+                or verification_leg.get("leg_sha256") !=
+                   binding.get("verification_leg_sha256")
+                or first_leg.get("leg_sha256") != _sha({
+                    key: value for key, value in first_leg.items()
+                    if key != "leg_sha256"})
+                or verification_leg.get("leg_sha256") != _sha({
+                    key: value for key, value in verification_leg.items()
+                    if key != "leg_sha256"})
+                or binding.get("capture_sha256") !=
+                   envelope["belief_capture"]["capture_sha256"]
+                or binding.get("admitted") is not
+                   envelope["receipt"]["admitted"]
+                or binding.get("reason") != envelope["receipt"]["reason"]):
+            raise DiscoveryControllerError(
+                "durable C6 admission row differs from its store")
+        _reopen_c6_admission_correctness(
+            first_leg.get("c6_correctness_ref"),
+            first_leg.get("c6_correctness_receipt_sha256"))
+        _reopen_c6_admission_correctness(
+            verification_leg.get("c6_correctness_ref"),
+            verification_leg.get("c6_correctness_receipt_sha256"))
+        first_cap = _validate_c6_roofline_carrier(
+            first_leg.get("roofline_speedup_cap"))
+        verification_cap = _validate_c6_roofline_carrier(
+            verification_leg.get("roofline_speedup_cap"))
+        try:
+            rebuilt = c6_reward_integrity.build_admission_receipt(
+                task_id=str(first_leg["task_id"]),
+                candidate_commit=str(first_leg["candidate_commit"]),
+                anchor_commit=str(first_leg["anchor_commit"]),
+                evaluator_commit=str(first_leg["evaluator_commit"]),
+                first_turn_anchor_latency_ms=float(first_leg["anchor_latency_ms"]),
+                first_turn_candidate_latency_ms=float(first_leg["candidate_latency_ms"]),
+                verification_anchor_latency_ms=float(
+                    verification_leg["anchor_latency_ms"]),
+                verification_candidate_latency_ms=float(
+                    verification_leg["candidate_latency_ms"]),
+                first_turn_correct=True, verification_correct=True,
+                first_turn_c6_correctness_receipt_sha256=str(
+                    first_leg["c6_correctness_receipt_sha256"]),
+                verification_c6_correctness_receipt_sha256=str(
+                    verification_leg["c6_correctness_receipt_sha256"]),
+                reopen_when=str(config.c6_reopen_when),
+                policy=c6_reward_integrity.AdmissionPolicy(
+                    alpha=config.c6_admission_alpha,
+                    beta=config.c6_admission_beta,
+                    implausible_speedup_cap=min(
+                        first_cap, verification_cap)))
+        except (KeyError, TypeError, ValueError,
+                c6_reward_integrity.EvaluatorPolicyError) as exc:
+            raise DiscoveryControllerError(
+                "durable C6 admission legs cannot rebuild their receipt") from exc
+        if rebuilt != envelope["receipt"]:
+            raise DiscoveryControllerError(
+                "durable C6 admission receipt differs from rebuilt legs")
+        claimed.add(str(receipt_sha256))
+    unowned = set(by_receipt) - claimed
+    if unowned:
+        inflight = state.get("inflight")
+        inflight_row = (inflight.get("row")
+                        if isinstance(inflight, Mapping) else None)
+        first = (inflight_row.get("c6_admission_leg")
+                 if isinstance(inflight_row, Mapping) else None)
+        recoverable = [
+            digest for digest in unowned
+            if (isinstance(inflight, Mapping)
+                and inflight.get("confirmation") is True
+                and isinstance(first, Mapping)
+                and by_receipt[digest]["receipt"]["task_id"] ==
+                    first.get("task_id"))]
+        if len(unowned) != 1 or len(recoverable) != 1:
+            raise DiscoveryControllerError(
+                "C6 admission store contains an unowned receipt")
 
 
 def _row_spends_scientific_budget(row: Mapping[str, Any]) -> bool:
@@ -3355,6 +3947,15 @@ def _seed_champion_if_absent(config: ControllerConfig, store: DurableState,
 
 def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease, store: DurableState) -> dict[str, Any]:
     state=store.load()
+    configured_c6 = _c6_admission_config(config)
+    if configured_c6 is not None and "c6_admission_config" not in state:
+        if (state.get("iterations") or state.get("pending") is not None
+                or state.get("inflight") is not None
+                or state.get("planning") is not None):
+            raise DiscoveryControllerError(
+                "legacy durable state lacks C6 admission authority")
+        state["c6_admission_config"] = configured_c6
+    _validate_c6_admission_state(config, state)
     existing_deployment = state.get("deployment_identity_sha256")
     if (existing_deployment is None and config.deployment_identity_sha256 is not None
             and (state.get("iterations") or state.get("pending") is not None
@@ -3526,6 +4127,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 _screen_iteration_fields(
                     result, repetition=int(inflight["lease"].get(
                         "repetition", 2 if inflight.get("confirmation") else 1))))
+            _apply_c6_admission(
+                config, item, result, row,
+                confirmation=bool(inflight.get("confirmation")))
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
             state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row)
             if isinstance(row.get("portfolio_hypothesis_id"), str):
@@ -3904,6 +4508,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             policy=row.get("portfolio_decision_policy")
             result=_classified_result(state,item,result,policy); row.update(
                 _screen_iteration_fields(result, repetition=repetition))
+            _apply_c6_admission(
+                config, item, result, row,
+                confirmation=bool(state["inflight"].get("confirmation")))
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)

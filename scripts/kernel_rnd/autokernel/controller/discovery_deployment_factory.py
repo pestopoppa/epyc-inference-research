@@ -341,6 +341,8 @@ def _execution_module_sources() -> dict[str, tuple[str, Path]]:
         "instrument_integrity": Path(instrument_integrity.__file__),
         "t0_provider": Path(t0_provider.__file__),
         "evaluator_integrity": Path(integrity.__file__),
+        "c6_reward_integrity": Path(controller.c6_reward_integrity.__file__),
+        "hawkeye_measurement": Path(controller.hawkeye_measurement.__file__),
         "gpu_source_evidence": Path(evidence.__file__),
         "gpu_source_proofs": Path(gpu_source_proofs.__file__),
         "gpu_discovery_beliefs": Path(autokernel_gpu_discovery_beliefs.__file__),
