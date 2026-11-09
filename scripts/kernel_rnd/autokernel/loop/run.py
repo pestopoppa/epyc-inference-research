@@ -102,7 +102,7 @@ from . import keep_timing
 from . import floor_selfcheck
 from . import tail_timing
 from . import actor_opencode_config
-from . import belief_context
+from . import belief_context, planner_only
 from . import actor_passthrough
 from . import cross_target, kernel_coverage
 from . import longctx
@@ -949,16 +949,19 @@ def measurement_epoch_inputs(epoch_inputs: Mapping[str, Any],
         if resolved_campaign is not None else None)
 
 
+def _actor_seat_common(args) -> dict[str, Any]:
+    return {"bounded": args.actor_seat == "bounded", "fan_out": args.actor_fan_out,
+            "steps": args.actor_steps, "context_mode": args.actor_context_mode,
+            **_actor_knobs(args), **_actor_limits(args), **_actor_budgets(args),
+            **_actor_thinking(args), **_actor_sandbox(args), **_actor_salvage(args),
+            **_actor_reasoning_history(args), **_actor_serving(args)}
+
+
 def _actor_wire_seats(args, planner_backend, critic_backend, lane_backends,
                       author_plan, resolved_campaign=None):
     """Effective factory seats, including lane overrides and every author member."""
     from . import actor_wire_gate
-    common = {"bounded": args.actor_seat == "bounded", "fan_out": args.actor_fan_out,
-              "steps": args.actor_steps, "context_mode": args.actor_context_mode,
-              **_actor_knobs(args), **_actor_limits(args), **_actor_budgets(args),
-              **_actor_thinking(args), **_actor_sandbox(args), **_actor_salvage(args),
-              **_actor_reasoning_history(args), **_actor_serving(args)}
-    seat = actors.ActorSeat(**common)
+    seat = actors.ActorSeat(**_actor_seat_common(args))
     launch = _actor_config(args, resolved_campaign)
     seats = []
     def add(role, backend, config):
@@ -2525,7 +2528,8 @@ def _main(argv: list[str] | None = None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--worktree", type=Path, required=True,
                         help="candidate source tree the planner edits")
-    parser.add_argument("--anchor-build", type=Path, required=True)
+    parser.add_argument("--anchor-build", type=Path, required="--planner-only" not in original_argv)
+    planner_only.add_arguments(parser)
     parser.add_argument("--cor-build", type=Path,
                         help="original champion-of-record build when it differs from the current anchor")
     parser.add_argument("--resume-run", type=Path,
@@ -3209,6 +3213,8 @@ def _main(argv: list[str] | None = None) -> int:
                              "events as `status` broadcasts; 'off' (or empty) disables the bus "
                              "(the window file and its events.jsonl remain) (default: %(default)s)")
     args = parser.parse_args(argv)
+    if args.planner_only:
+        return planner_only.run(args, seat_common=_actor_seat_common(args))
     if args.dry_run:
         _DRY_RUN_REFUSALS.clear()
     try:
@@ -8938,7 +8944,7 @@ def main(argv: list[str] | None = None) -> int:
             _report_dry_run_refusals()
             raise
         return (rc or 1) if _report_dry_run_refusals() else rc
-    if lane_watchdog._SUPERVISED or not stores:
+    if lane_watchdog._SUPERVISED or not stores or "--planner-only" in actual:
         return _main(actual)
     if len(stores) != 1:
         raise lane_watchdog.WatchdogRefused("exactly one canonical store is required")
