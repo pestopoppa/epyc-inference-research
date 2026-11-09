@@ -29,6 +29,7 @@
     "belief_context.py": 580,
     "bench.py": 385,
     "bestof.py": 1056,
+    "blast_radius.py": 106,
     "calibrate_served_shapes.py": 619,
     "campaign.py": 714,
     "campaign_cli.py": 226,
@@ -74,10 +75,13 @@
     "figure_lint.py": 80,
     "floor_registry.py": 827,
     "floor_selfcheck.py": 162,
+    "floor_units.py": 5,
     "fold2_gates.py": 242,
+    "forward_admission.py": 128,
     "fresh_correctness.py": 163,
     "gates.py": 2988,
     "gdn_reference.py": 98,
+    "gpu_counter.py": 202,
     "gpu_phases.py": 130,
     "gpu_serving_profile.py": 697,
     "gpu_window.py": 75,
@@ -97,10 +101,14 @@
     "iqk_gdb_probe.py": 51,
     "iqk_witness.py": 282,
     "journal_feed_owner.py": 249,
+    "keep_screen.py": 378,
+    "keep_timing.py": 152,
     "kernel_coverage.py": 556,
     "kernel_mutation_guard.py": 22,
     "lane_actors.py": 67,
     "lane_targets.py": 267,
+    "lane_watchdog.py": 450,
+    "lane_watchdog_child.py": 68,
     "launch_affinity.py": 241,
     "legacy_migration.py": 550,
     "legacy_targets.py": 76,
@@ -109,6 +117,8 @@
     "lineage_capture.py": 74,
     "loadgen_selfcheck.py": 88,
     "longctx.py": 729,
+    "longctx_c8.py": 97,
+    "longctx_c8_comparison.py": 76,
     "longctx_tools.py": 143,
     "loop.py": 1394,
     "maintenance_execution.py": 630,
@@ -131,6 +141,7 @@
     "node_profile.py": 398,
     "noise_relative_tolerance.py": 124,
     "noop_build.py": 51,
+    "numerics_gates.py": 214,
     "observation_binding.py": 784,
     "paired_loadgen.py": 157,
     "perf_cache.py": 148,
@@ -138,13 +149,17 @@
     "planned_serving.py": 752,
     "planned_unit_selection.py": 201,
     "pool.py": 441,
+    "prebuild_rules.py": 79,
     "process_metrics.py": 173,
     "procguard.py": 614,
     "production.py": 1311,
     "production_enrollment.py": 430,
     "production_surfaces.py": 50,
     "profile_preparation.py": 577,
+    "provider_breaker.py": 67,
+    "provider_factories.py": 34,
     "ram_admit.py": 98,
+    "readiness/u3_express.py": 150,
     "recal_serving_floor.py": 88,
     "residency.py": 477,
     "resolved_recipe.py": 1364,
@@ -161,6 +176,8 @@
     "runtime_identity.py": 240,
     "runtime_recovery.py": 189,
     "runtime_window.py": 321,
+    "same_code_tripwire.py": 106,
+    "same_state_stop.py": 221,
     "scheduling.py": 1927,
     "scheduling_cli.py": 143,
     "scoped_evidence.py": 1753,
@@ -192,11 +209,13 @@
     "status.py": 262,
     "surface_fold.py": 225,
     "surface_validation.py": 388,
+    "tail_timing.py": 273,
     "target_profile_execution.py": 267,
     "tool_output.py": 8,
     "unified_driver.py": 1231,
     "unified_planner.py": 1229,
     "unified_worker.py": 2247,
+    "validate_keep_screen_contract.py": 121,
     "validation_claim_receipt.py": 131,
     "validation_consumer.py": 568,
     "validation_loo_evidence.py": 249,
@@ -209,29 +228,149 @@
     "worker_lifecycle.py": 2259
   },
   "exceptions": {
+    "actor_context.py": {
+      "ceiling": 511,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +14 lines over 497, 2 commit(s) since cdf6faa44, latest 460cfc464 autokernel: narrow AK-TOOL-CHAMPION-CONTEXT to launch-time refusal against CANON); operator countersign pending"
+    },
+    "actor_wire_gate.py": {
+      "ceiling": 117,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 115, 1 commit(s) since cdf6faa44, latest 0fe366b53 autokernel: make --dry-run evaluate the live startup refusals); operator countersign pending"
+    },
     "actors.py": {
-      "ceiling": 3037,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+      "ceiling": 3075,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +38 lines over 3037, 10 commit(s) since cdf6faa44, latest f212ddb5d autokernel: resolve the claude actor binary per container); operator countersign pending"
+    },
+    "ak_check.py": {
+      "ceiling": 1081,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 1080, 1 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign pending"
+    },
+    "archive.py": {
+      "ceiling": 500,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +31 lines over 469, 2 commit(s) since cdf6faa44, latest 4ede8b2fa fix(research): resolve belief and decision ROOT paths explicitly); operator countersign pending"
+    },
+    "belief_context.py": {
+      "ceiling": 598,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +18 lines over 580, 2 commit(s) since cdf6faa44, latest 3bd5d85d9 autokernel: AK-TOOL-CHAMPION-CONTEXT stale-anchor refusal + AK-TOOL-UNSOURCED-LI); operator countersign pending"
+    },
+    "bench.py": {
+      "ceiling": 414,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +29 lines over 385, 2 commit(s) since cdf6faa44, latest e50adce0b feat(autokernel/G1): round-2 AK fixes -- window-scoped device flock, live comput); operator countersign pending"
     },
     "bestof.py": {
       "ceiling": 1135,
       "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
     },
+    "campaign.py": {
+      "ceiling": 733,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +19 lines over 714, 2 commit(s) since cdf6faa44, latest e33cf3cd1 autokernel: identical-state planner abstention stop + log-only retry_budget_shad); operator countersign pending"
+    },
+    "campaign_service.py": {
+      "ceiling": 714,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +11 lines over 703, 1 commit(s) since cdf6faa44, latest daed7b39f Supervise AutoKernel lane entry points); operator countersign pending"
+    },
+    "champion_reanchor.py": {
+      "ceiling": 566,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +101 lines over 465, 5 commit(s) since cdf6faa44, latest ebfeec4aa AutoKernel: close re-anchor tool gaps and the dry-run COR check); operator countersign pending"
+    },
+    "cpu_fa_reference.py": {
+      "ceiling": 481,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 480, 1 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign pending"
+    },
+    "cpu_route_witness.py": {
+      "ceiling": 278,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 277, 1 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign pending"
+    },
+    "epoch_aliases.py": {
+      "ceiling": 233,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 232, 1 commit(s) since cdf6faa44, latest 86319c468 autokernel: LOOP-SAFETY-C C2a/C2b + D-A3 (refuse missing store/inbox, ranked pat); operator countersign pending"
+    },
+    "experiment_plan.py": {
+      "ceiling": 922,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +75 lines over 847, 1 commit(s) since cdf6faa44, latest 0a9bc7b9f autokernel: switch bisect plan + campaign_status run-end/heartbeat (handback)); operator countersign pending"
+    },
+    "gates.py": {
+      "ceiling": 3104,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +116 lines over 2988, 4 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign pending"
+    },
+    "gpu_serving_profile.py": {
+      "ceiling": 699,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 697, 1 commit(s) since cdf6faa44, latest 78382e01f fix: score MMQ launcher candidates with their device kernels); operator countersign pending"
+    },
+    "integrity.py": {
+      "ceiling": 368,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +30 lines over 338, 2 commit(s) since cdf6faa44, latest 9b436c770 autokernel: refuse symlink, submodule and actor-commit escapes at candidate vali); operator countersign pending"
+    },
+    "iqk_witness.py": {
+      "ceiling": 283,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 282, 1 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign pending"
+    },
+    "lane_targets.py": {
+      "ceiling": 327,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +60 lines over 267, 2 commit(s) since cdf6faa44, latest f30243373 autokernel: SL-2 fail-closed on regressions from either metric); operator countersign pending"
+    },
+    "longctx.py": {
+      "ceiling": 809,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +80 lines over 729, 3 commit(s) since cdf6faa44, latest 6e6c2f705 longctx: write the VB-AK-LONGCTX record per launch and refusal (AKX-ALL-4)); operator countersign pending"
+    },
     "loop.py": {
-      "ceiling": 1427,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+      "ceiling": 1458,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +31 lines over 1427, 9 commit(s) since cdf6faa44, latest e33cf3cd1 autokernel: identical-state planner abstention stop + log-only retry_budget_shad); operator countersign pending"
     },
     "pipeline.py": {
-      "ceiling": 355,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+      "ceiling": 364,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +9 lines over 355, 4 commit(s) since cdf6faa44, latest 9b436c770 autokernel: refuse symlink, submodule and actor-commit escapes at candidate vali); operator countersign pending"
     },
     "pool.py": {
-      "ceiling": 488,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+      "ceiling": 490,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 488, 5 commit(s) since cdf6faa44, latest 5afd1ae08 Record autokernel build completion timestamps); operator countersign pending"
+    },
+    "production.py": {
+      "ceiling": 1312,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 1311, 1 commit(s) since cdf6faa44, latest 61af96a93 Preserve per-workload serving measurement recipes); operator countersign pending"
+    },
+    "resolved_recipe.py": {
+      "ceiling": 1374,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +10 lines over 1364, 1 commit(s) since cdf6faa44, latest 6cf25cfab feat: bind explicit CPU NUMA policy in serving recipe identity); operator countersign pending"
+    },
+    "resume.py": {
+      "ceiling": 2916,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +43 lines over 2873, 6 commit(s) since cdf6faa44, latest 5bf3e074e resume.prepare: any source claim owns a lane_error re-emission (custody fix); pi); operator countersign pending"
+    },
+    "roofline_coverage.py": {
+      "ceiling": 227,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +14 lines over 213, 1 commit(s) since cdf6faa44, latest d717f5884 fix(autokernel): publish scope gaps once per transition atomically); operator countersign pending"
     },
     "run.py": {
-      "ceiling": 6588,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings"
+      "ceiling": 6905,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +317 lines over 6588, 37 commit(s) since cdf6faa44, latest 46472498c autokernel: stop dispatching at the grant's cleanup reserve, end resumably); operator countersign pending"
+    },
+    "runtime_arms.py": {
+      "ceiling": 510,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +9 lines over 501, 1 commit(s) since cdf6faa44, latest 0a9bc7b9f autokernel: switch bisect plan + campaign_status run-end/heartbeat (handback)); operator countersign pending"
+    },
+    "serial_run.py": {
+      "ceiling": 2558,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +218 lines over 2340, 5 commit(s) since cdf6faa44, latest cb5100276 autokernel: provider circuit breaker parks a run after N provider-terminal itera); operator countersign pending"
+    },
+    "served_shape_cases.py": {
+      "ceiling": 858,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +40 lines over 818, 1 commit(s) since cdf6faa44, latest 625b5000a autokernel: AK-PROF-TWO-DENOM hotspot denominators + AK-OP-E2E-PENDING op keep s); operator countersign pending"
+    },
+    "serving_beliefs.py": {
+      "ceiling": 203,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +22 lines over 181, 2 commit(s) since cdf6faa44, latest 037e08ff3 fix(autokernel): seal prospective serving diagnostics before export); operator countersign pending"
+    },
+    "source_build_preparation.py": {
+      "ceiling": 385,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +36 lines over 349, 2 commit(s) since cdf6faa44, latest d68c43922 AK-GFX90A-ASM-SURFACE slice 4: asm multi-file set, loop-owned oracle cases, capt); operator countersign pending"
+    },
+    "standalone_cli.py": {
+      "ceiling": 384,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +10 lines over 374, 1 commit(s) since cdf6faa44, latest c8b3cbbc5 autokernel: AKX-AUTO-7 guard drain command (--confirm-drain <lane> required; dra); operator countersign pending"
+    },
+    "unified_driver.py": {
+      "ceiling": 1293,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +62 lines over 1231, 1 commit(s) since cdf6faa44, latest daed7b39f Supervise AutoKernel lane entry points); operator countersign pending"
     }
   }
 }
