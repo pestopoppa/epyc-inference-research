@@ -2911,7 +2911,9 @@ def _c6_admission_leg(
                schemas.content_hash(unsigned_baseline)
             or baseline.get("baseline_sha256") != result.baseline_sha256
             or raw.get("candidate_identity") !=
-               baseline.get("candidate_identity")):
+               baseline.get("candidate_identity")
+            or raw.get("frame") != baseline.get("frame")
+            or raw.get("sole_factor") != baseline.get("sole_factor")):
         raise DiscoveryControllerError(
             "C6 admission baseline identity is invalid")
     center = raw.get("baseline_center")
@@ -2993,42 +2995,29 @@ def _c6_recomputed_candidate_statistic(
     """Re-derive screen_effect()'s statistic under the sealed metric contract.
 
     The estimator is taken from the frame's metric contract, never trusted from
-    the record alone: pair-max compares one run's metric on each arm, while
-    every other contract compares median to median.
+    the record alone.  Admission requires graphs on and the producer selects
+    pair-max only with graphs off, so a pair-max record is refused outright.
     """
     frame = raw.get("frame")
     contract = frame.get("metric_contract") if isinstance(frame, Mapping) else None
     if not isinstance(contract, Mapping):
         raise DiscoveryControllerError(
             "C6 admission result lacks its metric contract")
-    pair_max = contract.get("schema") == _C6_PAIR_MAX_METRIC_SCHEMA
-    estimator = ("pair_max_metric_over_pair_max_metric" if pair_max
-                 else "median_over_median")
+    if contract.get("schema") == _C6_PAIR_MAX_METRIC_SCHEMA:
+        raise DiscoveryControllerError(
+            "C6 admission refuses a pair-max record on the graphs-on gate")
+    estimator = "median_over_median"
     if raw.get("estimator") != estimator or baseline.get("estimator") != estimator:
         raise DiscoveryControllerError(
             "C6 admission estimator differs from its metric contract")
-    if pair_max:
-        candidate_runs, anchor_runs = (
-            raw.get("candidate_runs"), baseline.get("anchor_runs"))
-        if (not isinstance(candidate_runs, list) or not candidate_runs
-                or not isinstance(candidate_runs[0], Mapping)
-                or not isinstance(anchor_runs, list) or not anchor_runs
-                or not isinstance(anchor_runs[0], Mapping)):
-            raise DiscoveryControllerError(
-                "C6 admission pair-max runs are malformed")
-        statistic = _c6_finite_positive(
-            candidate_runs[0].get("metric"), "candidate pair-max metric")
-        expected_center = _c6_finite_positive(
-            anchor_runs[0].get("metric"), "anchor pair-max metric")
-    else:
-        anchor_samples = baseline.get("anchor_samples")
-        if not isinstance(anchor_samples, list) or not anchor_samples:
-            raise DiscoveryControllerError(
-                "C6 admission anchor samples are malformed")
-        statistic = float(statistics.median(float(v) for v in samples))
-        expected_center = _c6_finite_positive(
-            statistics.median(_c6_finite_positive(v, "anchor sample")
-                              for v in anchor_samples), "anchor centre")
+    anchor_samples = baseline.get("anchor_samples")
+    if not isinstance(anchor_samples, list) or not anchor_samples:
+        raise DiscoveryControllerError(
+            "C6 admission anchor samples are malformed")
+    statistic = float(statistics.median(float(v) for v in samples))
+    expected_center = _c6_finite_positive(
+        statistics.median(_c6_finite_positive(v, "anchor sample")
+                          for v in anchor_samples), "anchor centre")
     if (expected_center != center
             or raw.get("candidate_statistic") != statistic):
         raise DiscoveryControllerError(

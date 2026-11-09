@@ -1870,12 +1870,63 @@ def _c6_route_reviewed(template: ExperimentTemplate) -> bool:
 def _c6_bundle_max_iterations(
         portfolio: hypothesis_portfolio.Portfolio,
         templates: ExperimentTemplateRegistry) -> int:
-    """Size a C6 bundle to its sealed native capacity at initialization."""
+    """Size a C6 bundle to its sealed native capacity at initialization.
+
+    The controller charges both the S1 screen and its S2 replication, and
+    admission needs the pair, so every sealed slot is budgeted twice.
+    """
     capacity = _native_c6_portfolio_capacity(portfolio, templates)
     if capacity < 1:
         raise DeploymentFactoryError(
             "sealed portfolio has no native C6 route to deploy")
-    return capacity
+    return 2 * capacity
+
+
+def _require_c6_iteration_budget(
+        portfolio: hypothesis_portfolio.Portfolio,
+        templates: ExperimentTemplateRegistry, max_iterations: int) -> None:
+    budget = _c6_bundle_max_iterations(portfolio, templates)
+    if budget < max_iterations:
+        raise DeploymentFactoryError(
+            "sealed native C6 S1+S2 capacity is below max_iterations: "
+            f"{budget} < {max_iterations}")
+
+
+# Symbols each route's native harness actually exercises.  A template may allow
+# more (other quant types, MMQ quantizers, other norms); a C6 PASS on this route
+# would say nothing about those, so they are refused rather than admitted.
+_C6_ROUTE_SYMBOLS = MappingProxyType({
+    "cuda-vecdotq-v1": frozenset({"vec_dot_q5_0_q8_1", "vec_dot_q5_0_q8_1_impl"}),
+    "cuda-quantize-q8-v1": frozenset({"quantize_q8_1", "quantize_row_q8_1_cuda"}),
+    "cuda-norm-v2": frozenset({"rms_norm_f32", "rms_norm_mul_f32_cuda"}),
+    "cuda-fattn-tile-v1": frozenset({
+        "ggml_cuda_fattn_tile_get_config_amd", "ggml_cuda_fattn_tile_get_config",
+        "ggml_cuda_fattn_tile_get_nthreads", "ggml_cuda_fattn_tile_get_occupancy",
+        "ggml_cuda_fattn_tile_get_nbatch_fa", "ggml_cuda_fattn_tile_get_nbatch_K",
+        "flash_attn_tile_load_tile", "flash_attn_tile_iter_KQ",
+        "flash_attn_tile_iter", "flash_attn_tile",
+        "launch_fattn_tile_switch_ncols1", "launch_fattn_tile_switch_ncols2",
+        "ggml_cuda_flash_attn_ext_tile_case", "ggml_cuda_flash_attn_ext_tile"}),
+    "cuda-fattn-common-v1": frozenset({
+        "launch_fattn", "flash_attn_combine_results"}),
+})
+
+
+def _require_c6_reachable_symbols(
+        candidate: controller.PlannedCandidate,
+        template: ExperimentTemplate) -> None:
+    """Refuse a patch its route's harness could not exercise, before any build."""
+    reachable = _C6_ROUTE_SYMBOLS.get(template.template_id, frozenset())
+    manifests = [candidate.source_manifest]
+    composition = getattr(candidate, "composition_plan", None)
+    if composition is not None:
+        manifests.extend(row.manifest for row in composition.candidate.accepted)
+    for manifest in manifests:
+        for symbols in manifest.declared_symbols.values():
+            if not set(symbols) <= reachable:
+                raise controller.C6OperatorUnsupportedRefusal(
+                    "native C6 route cannot exercise symbols declared for "
+                    f"{template.template_id!r}")
 
 
 def _c6_mul_mat_route_type(template_id: str) -> tuple[str, int]:
@@ -2385,6 +2436,7 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             if not _c6_route_reviewed(template):
                 raise controller.C6OperatorUnsupportedRefusal(
                     f"native C6 has no reviewed route for {template.template_id!r}")
+            _require_c6_reachable_symbols(candidate, template)
             c6_correctness = _c6_native_capability(
                 config, candidate, build_, template, repetition)
         candidate_rows, anchor_rows = _expected_rocprofv3_rows(dispatch)
@@ -3394,6 +3446,8 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             raise controller.C6OperatorUnsupportedRefusal(
                 "native C6 has no reviewed route for "
                 f"{template.template_id!r} before build")
+        if config.c6_admission is True:
+            _require_c6_reachable_symbols(candidate, template)
         candidate.source_manifest.bind(
             proposal=candidate.proposal, campaign_id=candidate.source_manifest.campaign_id,
             candidate_id=candidate.source_manifest.candidate_id,
@@ -3493,12 +3547,9 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
     config.revalidate()
     c6_kwargs: dict[str, Any] = {}
     if config.c6_admission is True:
-        c6_capacity = _native_c6_portfolio_capacity(
-            config.hypothesis_portfolio.value, _template_registry())
-        if c6_capacity < config.max_iterations:
-            raise DeploymentFactoryError(
-                "sealed native C6 S1 capacity is below max_iterations: "
-                f"{c6_capacity} < {config.max_iterations}")
+        _require_c6_iteration_budget(
+            config.hypothesis_portfolio.value, _template_registry(),
+            config.max_iterations)
         c6_kwargs = dict(
             c6_admission_store_path=config.evidence_root / "c6-admission.jsonl",
             c6_admission_alpha=1.2,

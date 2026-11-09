@@ -1453,10 +1453,78 @@ class C6PortfolioRouteTests(unittest.TestCase):
 
     def test_real_portfolio_capacity_counts_all_routable_rows(self):
         self.assertEqual(F._c6_bundle_max_iterations(
-            self.portfolio, self.templates), 10)
+            self.portfolio, self.templates), 20)
         with self.assertRaisesRegex(F.DeploymentFactoryError, "no native C6 route"):
             F._c6_bundle_max_iterations(
                 SimpleNamespace(eligible_hypotheses=lambda: []), self.templates)
+
+    def test_budget_gate_admits_s1_plus_s2_and_refuses_beyond(self):
+        F._require_c6_iteration_budget(self.portfolio, self.templates, 20)
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "below max_iterations"):
+            F._require_c6_iteration_budget(self.portfolio, self.templates, 21)
+
+    def test_last_s1_can_schedule_its_s2_and_s2_is_charged(self):
+        budget = F._c6_bundle_max_iterations(self.portfolio, self.templates)
+        self.assertEqual(budget, 2 * F._native_c6_portfolio_capacity(
+            self.portfolio, self.templates))
+        spent = {"scientific_budget_spent": True}
+        item = mock.Mock()
+        authorization = mock.Mock()
+        authorization.to_dict.return_value = {}
+        result = SimpleNamespace(classification="candidate", result_sha256="r",
+                                 series_key="s", component_series_keys=())
+        with mock.patch.object(C, "_pending_item", return_value={}):
+            # Every slot's S1 and every earlier S2 spent: the last S2 remains.
+            state = {"iterations": [spent] * (budget - 1), "pending": None,
+                     "next": budget}
+            C._schedule_replication(
+                state, item=item, authorization=authorization, row={},
+                result=result, max_iterations=budget)
+            self.assertTrue(state["pending"]["confirmation"])
+            exhausted = {"iterations": [spent] * budget, "pending": None,
+                         "next": budget + 1}
+            C._schedule_replication(
+                exhausted, item=item, authorization=authorization, row={},
+                result=result, max_iterations=budget)
+            self.assertIsNone(exhausted["pending"])
+
+    def _candidate(self, symbol: str):
+        return SimpleNamespace(source_manifest=SimpleNamespace(
+            declared_symbols={"x": (symbol,)}))
+
+    def test_route_symbols_stay_inside_their_template_and_cover_the_portfolio(self):
+        self.assertEqual(set(F._C6_ROUTE_SYMBOLS), {
+            *F._C6_MUL_MAT_ROUTE_TYPES, *F._C6_FLASH_KV_BY_TEMPLATE,
+            "cuda-norm-v2"})
+        for template_id, symbols in F._C6_ROUTE_SYMBOLS.items():
+            allowed = set().union(
+                *self.templates.templates[template_id].allowed_symbols.values())
+            self.assertTrue(symbols)
+            self.assertLessEqual(set(symbols), allowed)
+        for record in self.portfolio.eligible_hypotheses():
+            template_id = record["current_bundle_eligibility"]["template_ids"][0]
+            self.assertLessEqual(set(record["target"]["source_symbols"]),
+                                 set(F._C6_ROUTE_SYMBOLS[template_id]))
+
+    def test_symbols_the_route_harness_cannot_reach_are_refused(self):
+        cases = (("cuda-vecdotq-v1", "vec_dot_q4_K_q8_1", "vec_dot_q5_0_q8_1"),
+                 ("cuda-fattn-common-v1", "dequantize_V_q8_0",
+                  "flash_attn_combine_results"),
+                 ("cuda-quantize-q8-v1", "quantize_mmq_nvfp4", "quantize_q8_1"),
+                 ("cuda-norm-v2", "l2_norm_f32", "rms_norm_f32"))
+        for template_id, unreachable, reachable in cases:
+            template = self.templates.templates[template_id]
+            with self.subTest(template_id=template_id):
+                F._require_c6_reachable_symbols(
+                    self._candidate(reachable), template)
+                with self.assertRaises(C.C6OperatorUnsupportedRefusal):
+                    F._require_c6_reachable_symbols(
+                        self._candidate(unreachable), template)
+
+    def test_reachability_gate_precedes_the_build_entry(self):
+        source = inspect.getsource(F.materialize)
+        gate = source.index("_require_c6_reachable_symbols(candidate, template)")
+        self.assertLess(gate, source.index("return source.build(candidate"))
 
     def test_capacity_ignores_a_row_without_a_reviewed_route(self):
         record = {"current_bundle_eligibility": {"template_ids": ["cuda-mmvq-v2"]},
@@ -1472,8 +1540,8 @@ class C6PortfolioRouteTests(unittest.TestCase):
             on = F.deployment.load_deployment_config(
                 F.initialize_static_deployment_bundle(
                     base / "on", c6_admission=True))
-            self.assertEqual(on.max_iterations, 10)
-            self.assertEqual(F.controller_config(on, dry_run=True).max_iterations, 10)
+            self.assertEqual(on.max_iterations, 20)
+            self.assertEqual(F.controller_config(on, dry_run=True).max_iterations, 20)
             off = F.deployment.load_deployment_config(
                 F.initialize_static_deployment_bundle(base / "off"))
             self.assertEqual(off.max_iterations, 100)

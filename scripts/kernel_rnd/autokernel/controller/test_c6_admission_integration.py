@@ -68,6 +68,22 @@ class GatedScreens:
     def sealed_effect(self, result: dict) -> float:
         return self.measured_effect
 
+    def mutate_baseline(self, baseline: dict) -> None:
+        """Test seam: alter the bank before it is hashed."""
+
+    def model_label(self) -> str:
+        return "fixture"
+
+    def frame(self) -> dict:
+        return {
+            "backend": "llama_gpu", "recipe": "decode_tg128",
+            "metric": "tokens_per_second", "n_prompt": 0, "n_gen": 128,
+            "model": self.model_label(), "architecture": "gfx90a",
+            "metric_contract": {"schema": (
+                "epyc.autokernel.serialized_pair_max_metric.v1"
+                if self.pair_max else
+                "epyc.autokernel.native_llama_bench_metric.v1")}}
+
     def reconcile(self, _inflight):
         return D.Recovery("safe_to_start")
 
@@ -104,7 +120,10 @@ class GatedScreens:
             "anchor_samples": anchor_samples,
             "anchor_runs": anchor_runs,
             "estimator": estimator,
+            "frame": self.frame(),
+            "sole_factor": {"kind": "source_patch"},
         }
+        self.mutate_baseline(baseline)
         baseline["baseline_sha256"] = D.schemas.content_hash(baseline)
         _write_json(output / "baseline-bank.json", baseline)
         oracle = {
@@ -132,14 +151,7 @@ class GatedScreens:
             "baseline_sha256": baseline["baseline_sha256"],
             "candidate_identity": candidate_identity,
             "graphs_on_output_oracle": oracle,
-            "frame": {
-                "backend": "llama_gpu", "recipe": "decode_tg128",
-                "metric": "tokens_per_second", "n_prompt": 0, "n_gen": 128,
-                "model": "fixture", "architecture": "gfx90a",
-                "metric_contract": {"schema": (
-                    "epyc.autokernel.serialized_pair_max_metric.v1"
-                    if self.pair_max else
-                    "epyc.autokernel.native_llama_bench_metric.v1")}},
+            "frame": self.frame(),
             "sole_factor": {"kind": "source_patch"},
         }
         self.mutate_result(result)
@@ -299,19 +311,39 @@ class TestC6AdmissionIntegration(unittest.TestCase):
             self.assertEqual(len(store.records()), 1)
             self.assertIn("c6_admission", resumed["iterations"][1])
 
-    def test_pair_max_estimator_recomputes_from_the_run_metric(self):
+    def test_pair_max_contract_is_refused_on_admission(self):
+        # The producer selects pair-max only with graphs off; admission
+        # requires graphs on, so such a receipt can only be malformed.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            config = _config(root)
-            state = D.run_controller(
-                config, planner=Planner(), critic=FakeCritic(["accept"]),
-                screener=GatedScreens(root / "screens", pair_max=True),
-                lease=Lease())
-            self.assertTrue(state["iterations"][1]["c6_admission"]["admitted"])
-            receipt = D.c6_reward_integrity.AdmissionReceiptStore(
-                config.c6_admission_store_path).records()[0]["receipt"]
-            # The sample median is deliberately 2% away from the run metric.
-            self.assertAlmostEqual(receipt["verification_speedup"], 1.22)
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError, "pair-max"):
+                D._c6_admission_leg(
+                    _config(root), Planner().plan(context=None, workspace=None),
+                    GatedScreens(root / "screens", pair_max=True).screen(),
+                    evaluator_commit="d" * 40)
+
+    def test_baseline_frame_or_factor_differing_from_result_is_refused(self):
+        class FrameForged(GatedScreens):
+            def mutate_baseline(self, baseline):
+                baseline["frame"] = {**baseline["frame"], "model": "other"}
+
+        class FactorForged(GatedScreens):
+            def mutate_baseline(self, baseline):
+                baseline["sole_factor"] = {"kind": "other"}
+
+        for forged in (FrameForged, FactorForged):
+            with self.subTest(forged=forged.__name__), \
+                    tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                with self.assertRaisesRegex(
+                        D.DiscoveryControllerError,
+                        "baseline identity is invalid"):
+                    D._c6_admission_leg(
+                        _config(root),
+                        Planner().plan(context=None, workspace=None),
+                        forged(root / "screens").screen(),
+                        evaluator_commit="d" * 40)
 
     def test_effect_differing_by_one_ulp_from_producer_formula_is_refused(self):
         class Forged(GatedScreens):
@@ -351,9 +383,8 @@ class TestC6AdmissionIntegration(unittest.TestCase):
 
     def test_real_frame_change_still_breaks_verification_identity(self):
         class FrameDrift(GatedScreens):
-            def mutate_result(self, result):
-                if self.calls == 2:
-                    result["frame"]["model"] = "a-different-model"
+            def model_label(self):
+                return "a-different-model" if self.calls == 2 else "fixture"
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
