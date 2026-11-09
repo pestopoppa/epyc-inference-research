@@ -49,7 +49,7 @@ def test_terminal_is_stopped_when_stop_was_asked():
     # stop wins over a provider park); run.py must route through it.
     assert "terminal=run_terminal()" in RUN
     assert ("provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker,\n"
-            "                                         same_state=same_state)") in RUN
+            "                                         same_state=same_state, deadline=deadline_guard)") in RUN
     from autokernel.loop import provider_breaker
     assert provider_breaker.terminal(stop_asked=True, breaker=None) == "stopped"
     assert provider_breaker.terminal(stop_asked=False, breaker=None) == "complete"

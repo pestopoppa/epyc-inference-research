@@ -110,6 +110,7 @@ from . import floor_registry
 from . import epoch_aliases
 from . import scratch
 from . import provider_breaker
+from . import deadline_reserve
 from . import same_state_stop
 from . import procguard
 from . import prebuild_rules
@@ -5683,12 +5684,14 @@ def _main(argv: list[str] | None = None) -> int:
         resolved_campaign.resources.planner_same_state_skip_after
         if resolved_campaign is not None else None), lanes=max(1, int(args.workers)))
 
+    deadline_guard = deadline_reserve.DeadlineReserve.from_env(args.store)
+
     def should_stop() -> bool:
-        return stop_asked() or breaker.tripped or same_state.tripped
+        return stop_asked() or breaker.tripped or same_state.tripped or deadline_guard.tripped
 
     def run_terminal() -> str:
         return provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker,
-                                         same_state=same_state)
+                                         same_state=same_state, deadline=deadline_guard)
 
     #: Per-thread nesting depth of the quiet window: a measurement called from inside
     #: another's window must not re-acquire a flock this process already holds (flock

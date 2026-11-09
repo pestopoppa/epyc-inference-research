@@ -32,7 +32,9 @@ PROVIDER_PARKED = "provider_parked"
 #: stops scheduling on either; only `stopped` refuses a `--resume-run`.
 #: `same_state_stop.SAME_STATE_PARKED`: the planner abstained on an unchanged state.
 SAME_STATE_PARKED = "planner_same_state_parked"
-STOP_TERMINALS = frozenset({"stopped", PROVIDER_PARKED, SAME_STATE_PARKED})
+#: The granted window reached its cleanup reserve (`deadline_reserve`).
+DEADLINE_PARKED = "deadline_parked"
+STOP_TERMINALS = frozenset({"stopped", PROVIDER_PARKED, SAME_STATE_PARKED, DEADLINE_PARKED})
 TERMINALS = frozenset({"complete"}) | STOP_TERMINALS
 
 DEFAULT_PARK_AFTER = 8
@@ -94,14 +96,16 @@ class ProviderBreaker:
 
 
 def terminal(*, stop_asked: bool, breaker: ProviderBreaker | None,
-             same_state: Any = None) -> str:
-    """The continuation terminal: an operator stop wins over either park."""
+             same_state: Any = None, deadline: Any = None) -> str:
+    """The continuation terminal: an operator stop wins over any park."""
     if stop_asked:
         return "stopped"
     if breaker is not None and breaker.tripped:
         return PROVIDER_PARKED
     if same_state is not None and getattr(same_state, "tripped", False):
         return SAME_STATE_PARKED
+    if deadline is not None and getattr(deadline, "tripped", False):
+        return DEADLINE_PARKED
     return "complete"
 
 
