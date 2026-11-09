@@ -62,6 +62,7 @@ import argparse
 import calendar
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -74,6 +75,7 @@ from . import floor_registry as fr
 SPEC_SCHEMA = "epyc.autokernel.reanchor_spec.v1"
 DEFAULT_BUILDS_ROOT = Path("/mnt/raid0/llm/kernels/builds")
 STATES = ("current", "behind", "diverged", "unreadable")
+DEVICES = ("cpu", "gpu")
 
 
 class ReanchorRefused(RuntimeError):
@@ -183,14 +185,40 @@ def _image_defect(build: Path) -> str | None:
         return "missing " + ", ".join(missing)
     if (build / "provenance.json").exists():
         return "has provenance.json (an in-tree build, not a store image)"
+    try:
+        fr._version_info(build)
+    except fr.FloorRegistryError as exc:
+        return f"unreadable VERSION.txt: {exc}"
     return None
+
+
+def _commit_named_by_directory(build: Path) -> str | None:
+    """The commit in a `<device>-<date>-<commit>[-label]` store directory name, or None.
+    A directory name is no proof of contents: this may only explain a REFUSAL, never select a build."""
+    match = re.fullmatch(r"(?:cpu|gpu)-\d{8}-([0-9a-f]{7,40})(?:-.*)?", build.name)
+    return match.group(1) if match else None
+
+
+def _device_pattern(device: str) -> str:
+    if device not in DEVICES:
+        raise ReanchorRefused(f"unknown device {device!r}; expected one of {DEVICES}")
+    return f"{device}-*"
+
+
+def _store_device(store: Path) -> str | None:
+    """The device a campaign store's own files show, or None when absent or ambiguous."""
+    shows = {device for device, names in (
+        ("cpu", ("accumulator-bundle-cpu.json", "journal-cpu", "cpu-profiles")),
+        ("gpu", ("accumulator-bundle-gpu.json", "journal-gpu", "gpu-serving-profiles")))
+        if any((store / name).exists() for name in names)}
+    return shows.pop() if len(shows) == 1 else None
 
 
 def diagnose_store_builds(champion: dict, worktree: Path | str,
                           builds_root: Path | str = DEFAULT_BUILDS_ROOT, *,
-                          reference_build: Path | str | None = None) -> dict:
+                          reference_build: Path | str | None = None, device: str = "cpu") -> dict:
     """`{match, rejected, other}`. `match` is the newest acceptable build's equivalence record (or None).
-    `rejected` lists every `cpu-*` image that carries the champion's SOURCE TREE yet was refused, as
+    `rejected` lists every `<device>-*` image that carries the champion's SOURCE TREE yet was refused, as
     `{build, commit, reason}` -- so a blocker can name the image that is one defect away from usable
     instead of saying none exists. Images with another tree (or no readable commit) are only counted."""
     reference = None
@@ -199,12 +227,18 @@ def diagnose_store_builds(champion: dict, worktree: Path | str,
     rejected: list[dict] = []
     other = 0
     match = None
-    for build in sorted(Path(builds_root).glob("cpu-*"), key=lambda p: p.stat().st_mtime, reverse=True):
+    for build in sorted(Path(builds_root).glob(_device_pattern(device)), key=lambda p: p.stat().st_mtime, reverse=True):
         defect = _image_defect(build)
         try:
             if defect is not None:
-                # tree identity needs only VERSION.txt's commit; no recipe/SHA256SUMS required
-                commit, _ = fr._version_info(build)
+                # tree identity needs only a commit; no recipe/SHA256SUMS required
+                try:
+                    commit, _ = fr._version_info(build)
+                except fr.FloorRegistryError:
+                    commit = _commit_named_by_directory(build)
+                    if commit is None:
+                        raise
+                    defect += "; commit taken from the directory name only"
                 full = fr._git(Path(worktree), "rev-parse", "--verify", f"{commit}^{{commit}}")
                 tree, eq = fr.source_tree_hash(worktree, full), None
             else:
@@ -236,22 +270,23 @@ def diagnose_store_builds(champion: dict, worktree: Path | str,
 
 
 def find_store_build(champion: dict, worktree: Path | str, builds_root: Path | str = DEFAULT_BUILDS_ROOT,
-                     *, reference_build: Path | str | None = None) -> dict | None:
-    """Newest kernel-store `cpu-*` build whose equivalence tree hash is the champion's (and, when a
+                     *, reference_build: Path | str | None = None, device: str = "cpu") -> dict | None:
+    """Newest kernel-store `<device>-*` build whose equivalence tree hash is the champion's (and, when a
     reference build is given, whose CMake recipe digest equals the reference's). See
     `diagnose_store_builds` for the tree-matching images that were rejected, and why."""
     return diagnose_store_builds(champion, worktree, builds_root,
-                                 reference_build=reference_build)["match"]
+                                 reference_build=reference_build, device=device)["match"]
 
 
 def find_exact_store_build(commit: str, worktree: Path | str,
-                           builds_root: Path | str = DEFAULT_BUILDS_ROOT) -> str | None:
-    """Newest kernel-store `cpu-*` image built from EXACTLY `commit` (VERSION.txt), or None.
+                           builds_root: Path | str = DEFAULT_BUILDS_ROOT, *,
+                           device: str = "cpu") -> str | None:
+    """Newest kernel-store `<device>-*` image built from EXACTLY `commit` (VERSION.txt), or None.
 
     CH-27 (2026-10-23): on a plain advance (no new anchor epoch) run.py restores the campaign's
     champion_of_record and refuses to start unless `--cor-build` names that commit's exact build;
     the champion's tree-equivalent image is not enough there (exact arm, never an ancestor)."""
-    for build in sorted(Path(builds_root).glob("cpu-*"), key=lambda p: p.stat().st_mtime, reverse=True):
+    for build in sorted(Path(builds_root).glob(_device_pattern(device)), key=lambda p: p.stat().st_mtime, reverse=True):
         if _image_defect(build) is not None:
             continue
         try:
@@ -280,11 +315,15 @@ def store_floor_identity(store: Path | str) -> dict | None:
     return best[1] if best else None
 
 
-def _would_refuse(store: Path, worktree: Path, anchor_commit: str) -> dict:
+def _would_refuse(store: Path, worktree: Path, anchor_commit: str, device: str = "cpu") -> dict:
     from . import accumulate
+    # An explicit-surface store keeps its journal under the device's name, not the legacy path.
+    surface = device if ((store / f"accumulator-bundle-{device}.json").exists()
+                         or (store / f"journal-{device}").exists()) else None
     refuses, reason, kind = accumulate.would_refuse_anchor(
         store, anchor_commit=anchor_commit,
-        is_ancestor=lambda older, newer: _git_ok(worktree, "merge-base", "--is-ancestor", older, newer))
+        is_ancestor=lambda older, newer: _git_ok(worktree, "merge-base", "--is-ancestor", older, newer),
+        surface=surface)
     return {"refuses": refuses, "reason": reason, "kind": kind,
             "needs_new_anchor_epoch": bool(refuses and kind == accumulate.REFUSAL_KIND_ANCESTRY),
             "blocking": bool(refuses and kind != accumulate.REFUSAL_KIND_ANCESTRY)}
@@ -416,7 +455,8 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
          numerics_epoch: str = "default", require_grade: str = "decision",
          co_tenancy: str = "quiet", floor_identity: dict | None = None,
          reference_build: Path | str | None = None, launch: dict | None = None,
-         allow_stale_upstream: bool = False, preview_dir: Path | str | None = None) -> dict:
+         allow_stale_upstream: bool = False, preview_dir: Path | str | None = None,
+         device: str = "cpu") -> dict:
     """Read-only (except `preview_dir`, the one place launch artifacts may be written). Everything
     `apply` would do, with the floor decision made WITHOUT claiming. With `launch` (see
     `launch_paths`) the output also carries both relaunch paths, validated by `serial_roster`."""
@@ -427,10 +467,16 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
         out["blockers"].append(f"state {found['state']}: " + "; ".join(found["reasons"]))
         return out
     champion = found["champion"]
-    diag = diagnose_store_builds(champion, worktree, builds_root, reference_build=reference_build)
+    store_device = _store_device(store)
+    if store_device is not None and store_device != device:
+        out["blockers"].append(f"campaign store holds {store_device} state but this plan is for device "
+                               f"{device}: pass --device {store_device}")
+        return out
+    diag = diagnose_store_builds(champion, worktree, builds_root, reference_build=reference_build,
+                                 device=device)
     equivalence = diag["match"]
     if equivalence is None:
-        msg = (f"no usable kernel-store cpu-* build has the champion's source tree "
+        msg = (f"no usable kernel-store {device}-* build has the champion's source tree "
                f"({champion['commit'][:12]}) under {builds_root}")
         if diag["rejected"]:
             msg += ("; tree-matching image(s) REJECTED: "
@@ -446,7 +492,7 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
     out["anchor_build"] = equivalence["build_dir"]
     out["equivalence_key"] = equivalence["equivalence_key"]
     try:
-        out["anchor_preflight"] = _would_refuse(store, worktree, champion["commit"])
+        out["anchor_preflight"] = _would_refuse(store, worktree, champion["commit"], device)
     except Exception as exc:  # noqa: BLE001 -- preflight failure blocks, never crashes the watcher
         out["blockers"].append(f"anchor preflight failed: {type(exc).__name__}: {exc}")
         return out
@@ -458,10 +504,10 @@ def plan(store: Path | str, worktree: Path | str, *, master: Path | str, role: s
     if not out["anchor_preflight"]["needs_new_anchor_epoch"] and cor_full and cor_full != champion["commit"]:
         # Plain advance: the store keeps its champion_of_record and run.py refuses without that
         # commit's exact build ("supply its original --cor-build"). Name its store image here.
-        out["cor_build"] = find_exact_store_build(cor_full, worktree, builds_root)
+        out["cor_build"] = find_exact_store_build(cor_full, worktree, builds_root, device=device)
         if out["cor_build"] is None:
             out["blockers"].append(f"plain advance keeps champion_of_record {cor_full[:12]}, but no kernel-"
-                                   f"store cpu-* image built from exactly that commit exists under "
+                                   f"store {device}-* image built from exactly that commit exists under "
                                    f"{builds_root} (run.py needs it as --cor-build)")
             return out
     identity = floor_identity or store_floor_identity(store)
@@ -625,6 +671,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--allow-stale-upstream", action="store_true",
                    help="proceed although origin/main cannot be refreshed and the last fetch is >24h old")
     p.add_argument("--builds-root", type=Path, default=DEFAULT_BUILDS_ROOT)
+    p.add_argument("--device", choices=DEVICES, default="cpu",
+                   help="which kernel-store images may anchor this campaign (cpu-* or gpu-*)")
     p.add_argument("--reference-build", type=Path,
                    help="require the store build's raw CMake recipe to equal this explicit reference "
                         "(no normalization or floor carry-forward is implied)")
@@ -656,7 +704,7 @@ def main(argv: list[str] | None = None) -> int:
             facts = fr.floor_facts(json.loads(args.floor.read_text(encoding="utf-8")))
             identity = {k: facts[k] for k in ("recipe_hash", "request_digest", "model_sha",
                                               "frame_digest", "pairs")}
-        kw = dict(master=args.master, role=args.role, allow_stale_upstream=args.allow_stale_upstream, claims_root=args.claims, branch=args.champion_branch, builds_root=args.builds_root,
+        kw = dict(master=args.master, role=args.role, allow_stale_upstream=args.allow_stale_upstream, claims_root=args.claims, branch=args.champion_branch, builds_root=args.builds_root, device=args.device,
                   numerics_epoch=args.numerics_epoch, require_grade=args.require_grade,
                   co_tenancy=args.co_tenancy, floor_identity=identity,
                   reference_build=args.reference_build)

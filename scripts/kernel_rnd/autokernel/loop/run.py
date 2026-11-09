@@ -623,6 +623,49 @@ def _verify_cor_build(path, worktree, commit: str, *, experimental: bool,
                                    allow_unverified=allow_unverified)
 
 
+def _dry_run_check_cor(args, cor_commit: str, *, anchor_commit: str, experimental: bool) -> None:
+    """Read-only copy of the live champion-of-record check, for a known restored COR."""
+    if args.cor_build is None and cor_commit == anchor_commit:
+        print(f"cor       (dry) champion of record {anchor_commit[:12]} = current anchor")
+        return
+    if args.cor_build is None:
+        raise champion.StartupRefused(
+            "REFUSED (dry run): restored champion of record "
+            f"{cor_commit[:12]} differs from current anchor "
+            f"{anchor_commit[:12]}; supply its original --cor-build or "
+            "--resume-run, never relabel the tip build")
+    _verify_cor_build(args.cor_build, args.worktree, cor_commit,
+                      experimental=experimental,
+                      allow_unverified=args.allow_unverified_anchor)
+    print(f"cor       (dry) champion of record {cor_commit[:12]} = "
+          f"{args.cor_build} — exact build identity verified; tip "
+          f"{anchor_commit[:12]} = {args.anchor_build}")
+
+
+def _dry_run_cor_for_restore(args, *, anchor_commit: str, experimental: bool,
+                             surface: str | None, has_bundle: bool) -> None:
+    """The COR check for the startups `_dry_run_accumulator_and_resume` leaves unchecked.
+
+    With no durable bundle the live run starts with COR = anchor, so a --cor-build of any other
+    commit is refused live; this reports that in the dry run. Call only after the restore itself
+    was found acceptable. A restore with no read-only form is reported, not guessed."""
+    cor_commit = anchor_commit
+    if has_bundle:
+        def is_ancestor(a: str, b: str) -> bool:
+            return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
+                                   "--is-ancestor", a, b],
+                                  capture_output=True).returncode == 0
+        try:
+            peek, _note = accumulate.load_bundle(args.store, anchor_commit=anchor_commit,
+                                                 is_ancestor=is_ancestor, read_only=True,
+                                                 surface=surface)
+        except accumulate.BundleRecoveryRequired:
+            print("cor       (dry) restore needs recovery with no read-only form; not evaluated")
+            return
+        cor_commit = peek.champion_of_record
+    _dry_run_check_cor(args, cor_commit, anchor_commit=anchor_commit, experimental=experimental)
+
+
 #: Dry-run refusals gathered across startup; every one is reported, not only the first.
 _DRY_RUN_REFUSALS: list[str] = []
 
@@ -747,21 +790,8 @@ def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: b
             raise champion.StartupRefused(
                 f"REFUSED (dry run): accumulator cannot be restored: {exc}") from exc
         print(f"accum     (dry) {note}; keeps={list(peek.keeps)}")
-        if args.cor_build is not None or peek.champion_of_record != anchor_commit:
-            if args.cor_build is None:
-                raise champion.StartupRefused(
-                    "REFUSED (dry run): restored champion of record "
-                    f"{peek.champion_of_record[:12]} differs from current anchor "
-                    f"{anchor_commit[:12]}; supply its original --cor-build or "
-                    "--resume-run, never relabel the tip build")
-            _verify_cor_build(args.cor_build, args.worktree, peek.champion_of_record,
-                              experimental=experimental,
-                              allow_unverified=args.allow_unverified_anchor)
-            print(f"cor       (dry) champion of record {peek.champion_of_record[:12]} = "
-                  f"{args.cor_build} — exact build identity verified; tip "
-                  f"{anchor_commit[:12]} = {args.anchor_build}")
-        else:
-            print(f"cor       (dry) champion of record {anchor_commit[:12]} = current anchor")
+        _dry_run_check_cor(args, peek.champion_of_record, anchor_commit=anchor_commit,
+                           experimental=experimental)
     else:
         print("accum     (dry) no durable accumulator in this store yet (the live run "
               "initializes or refuses it before the claim)")
@@ -4212,12 +4242,20 @@ def _main(argv: list[str] | None = None) -> int:
             except champion.StartupRefused as exc:
                 _DRY_RUN_REFUSALS.append(str(exc))
         bundle_name, bundle_journal = accumulate._surface_paths(args.store, args.bundle_surface)
-        if direct_launch is None or not ((args.store / bundle_journal).exists()
-                                         or (args.store / bundle_name).exists()):
+        has_bundle = ((args.store / bundle_journal).exists()
+                      or (args.store / bundle_name).exists())
+        if direct_launch is None or not has_bundle:
             refusal = _accumulator_startup_refusal(args, anchor_commit=anchor_commit,
                                                    experimental=experimental)
             if refusal:
                 _DRY_RUN_REFUSALS.append(refusal)
+            else:
+                try:
+                    _dry_run_cor_for_restore(
+                        args, anchor_commit=anchor_commit, experimental=experimental,
+                        surface=args.bundle_surface, has_bundle=has_bundle)
+                except champion.StartupRefused as exc:
+                    _DRY_RUN_REFUSALS.append(str(exc))
         # Export a wire request without claiming admission or running any client.
         from . import actor_wire_gate
         wire_seats = _actor_wire_seats(

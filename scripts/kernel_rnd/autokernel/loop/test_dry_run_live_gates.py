@@ -225,3 +225,58 @@ def test_main_names_refusals_found_before_a_startup_refusal(monkeypatch, capsys)
         run.main(["--dry-run", "--store", "x"])
     out = capsys.readouterr().out
     assert "DRY RUN REFUSED: store missing" in out and "DRY RUN REFUSED: late" in out
+
+
+def _cor_world(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from . import test_floor_registry as tfr
+    repo = tmp_path / "llama"
+    repo.mkdir()
+    tfr.git(repo, "init", "-q", "-b", tfr.BRANCH)
+    anchor_old = tfr.commit(repo, {"a.c": "1"}, "old")
+    anchor = tfr.commit(repo, {"a.c": "2"}, "new")
+    monkeypatch.setattr(run, "_FLOOR_REGISTRY", object())
+    def image(name, commit):
+        path = tmp_path / name
+        path.mkdir()
+        (path / "VERSION.txt").write_text(f"version: 1 ({commit[:9]})\nbuilt with GNU 15.2.0 for Linux x86_64\n")
+        (path / "SHA256SUMS").write_text("")
+        (path / "PROVENANCE.md").write_text("store\n")
+        return path
+    store = tmp_path / "store"
+    store.mkdir()
+    args = SimpleNamespace(store=store, worktree=repo, cor_build=None, anchor_build=tmp_path / "tip",
+                           allow_unverified_anchor=False)
+    return args, image, anchor_old, anchor
+
+
+def _check_no_bundle(args, anchor):
+    run._dry_run_cor_for_restore(args, anchor_commit=anchor, experimental=False,
+                                 surface=None, has_bundle=False)
+
+
+def test_cor_build_of_another_commit_refused_on_store_with_no_accumulator(tmp_path, monkeypatch):
+    args, image, old, anchor = _cor_world(tmp_path, monkeypatch)
+    args.cor_build = image("cor", old)
+    with pytest.raises(champion.StartupRefused, match="exact arm required"):
+        _check_no_bundle(args, anchor)
+
+
+def test_cor_build_of_the_anchor_passes_on_store_with_no_accumulator(tmp_path, monkeypatch, capsys):
+    args, image, _old, anchor = _cor_world(tmp_path, monkeypatch)
+    args.cor_build = image("cor", anchor)
+    _check_no_bundle(args, anchor)
+    assert "exact build identity verified" in capsys.readouterr().out
+
+
+def test_no_cor_build_on_store_with_no_accumulator_needs_nothing(tmp_path, monkeypatch, capsys):
+    args, _image, _old, anchor = _cor_world(tmp_path, monkeypatch)
+    _check_no_bundle(args, anchor)
+    assert "current anchor" in capsys.readouterr().out
+
+
+def test_dry_run_reaches_the_cor_check_when_the_restore_is_acceptable():
+    source = Path(run.__file__).read_text()
+    site = source[source.index("has_bundle = ((args.store / bundle_journal)"):]
+    site = site[:site.index("actor_wire_gate.request")]
+    assert "_dry_run_cor_for_restore(" in site and "_DRY_RUN_REFUSALS.append(str(exc))" in site
