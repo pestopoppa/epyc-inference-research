@@ -1791,6 +1791,49 @@ def _as_bool(value: Any) -> bool:
     raise BenchOutputError(f"cannot read {value!r} as a boolean flag")
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+_ARRAY_OPEN_RE = re.compile(r"(?m)^\[[ \t]*$")
+_ARRAY_CLOSE_RE = re.compile(r"(?m)^\][ \t]*$")
+_ROW_OPEN_RE = re.compile(r"(?m)^[ \t]*\{")
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI CSI sequences (colour, cursor) from tool output before parsing."""
+    return _ANSI_RE.sub("", text)
+
+
+def _recover_interleaved_rows(text: str) -> Optional[list]:
+    """Recover `llama-bench -o json` rows from a log that also holds stderr.
+
+    Finds the `[` line, then decodes each row object that starts a line, ignoring
+    whatever stderr text sits between/after them, until the `]` line. Returns None
+    when nothing row-shaped is found (md/csv output, no receipt), so the caller
+    keeps its original refusal. Non-row objects (no `avg_ts`) are skipped, never
+    guessed at.
+    """
+    decoder = json.JSONDecoder()
+    for opened in _ARRAY_OPEN_RE.finditer(text):
+        end_match = _ARRAY_CLOSE_RE.search(text, opened.end())
+        limit = end_match.start() if end_match else len(text)
+        rows: list = []
+        pos = opened.end()
+        while True:
+            nxt = _ROW_OPEN_RE.search(text, pos, limit)
+            if nxt is None:
+                break
+            start = text.index("{", nxt.start())
+            try:
+                obj, pos = decoder.raw_decode(text, start)
+            except json.JSONDecodeError:
+                pos = start + 1
+                continue
+            if isinstance(obj, dict) and "avg_ts" in obj:
+                rows.append(obj)
+        if rows and end_match is not None:
+            return rows
+    return None
+
+
 def parse_llama_bench_json(text: str) -> tuple:
     """Parse `llama-bench -o json` output into `BenchRow`s. Raises rather than guessing.
 
@@ -1804,18 +1847,22 @@ def parse_llama_bench_json(text: str) -> tuple:
     """
     if not isinstance(text, str):
         raise TypeError("parse_llama_bench_json takes the tool's stdout as a string")
-    stripped = text.strip()
+    stripped = strip_ansi(text).strip()
     if not stripped:
         raise BenchOutputError("llama-bench produced no stdout at all")
     try:
         payload = json.loads(stripped)
     except json.JSONDecodeError as exc:
-        head = stripped.splitlines()[0][:120] if stripped.splitlines() else ""
-        raise BenchOutputError(
-            f"stdout is not JSON ({exc}); first line was {head!r}. `-o md`, `-o csv` and "
-            f"`-o sql` all parse-fail here on purpose: they print get_fields(), which "
-            f"stops at avg_ns/stddev_ns and carries NO per-repetition samples."
-        ) from exc
+        # stdout and stderr captured into ONE log (`stderr=STDOUT`) interleave: stderr
+        # lines precede the array and trail the last row's `}` before the closing `]`.
+        payload = _recover_interleaved_rows(stripped)
+        if payload is None:
+            head = stripped.splitlines()[0][:120] if stripped.splitlines() else ""
+            raise BenchOutputError(
+                f"stdout is not JSON ({exc}); first line was {head!r}. `-o md`, `-o csv` and "
+                f"`-o sql` all parse-fail here on purpose: they print get_fields(), which "
+                f"stops at avg_ns/stddev_ns and carries NO per-repetition samples."
+            ) from exc
     if not isinstance(payload, list):
         raise BenchOutputError(
             f"expected a JSON array of result rows, got {type(payload).__name__}")
