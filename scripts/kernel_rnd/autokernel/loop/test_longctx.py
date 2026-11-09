@@ -7,6 +7,7 @@ protocol with synthetic timings, and every A/B uses a mocked `_measure_once`.
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -883,3 +884,59 @@ def test_identity_targets_strips_speculative_decoding_from_both_oracle_arms(tmp_
     assert "-md" not in a_arm.command_argv and "-md" not in c_arm.command_argv
     assert requests == spec.requests(anchor.template) and callable(prepare)
     assert record_dir == surface.root / "identity-divergence"
+
+
+def _belief_rows(surface):
+    path = surface.root / longctx.BELIEF_FILE
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def test_surface_writes_the_vb_ak_longctx_record_per_launch_and_per_refusal(tmp_path, monkeypatch):
+    spec = _spec(tmp_path)
+    surface = longctx.Surface(spec, store=tmp_path / "store")
+    anchor = surface.launch_for(_launch(tmp_path / "anchor"))
+    candidate = surface.launch_for(_launch(tmp_path / "candidate"))
+    launches = []
+
+    def measure(recipe, build, port, *, longctx=None, evidence=None, **kwargs):
+        if longctx.mode == "generate":
+            (surface.slot_dir / longctx.slot_filename).write_bytes(b"slot")
+            Path(longctx.identity_receipt).write_text(json.dumps(
+                {"schema": "epyc.autokernel.longctx_identity.v1", "passed": True,
+                 "slot": longctx.slot_filename, "prefix_digest": spec.prefix_digest,
+                 "spec_digest": spec.digest, "identity_tokens": spec.body["identity_tokens"]}))
+            return 0.0
+        launches.append(Path(build).name)
+        n = len(launches)
+        evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
+                         "status": "not_applicable", "window_start": float(n),
+                         "window_end": n + 0.5,
+                         "longctx": {"slot": longctx.slot_filename,
+                                     "a": {"prompt_per_second": 100.0 + n % 3,
+                                           "restore": {"n_restored": 1}},
+                                     "b": {"predicted_per_second": 20.0, "prompt_n": 20,
+                                           "restore": {"n_restored": 1}}}})
+        return 20.0 + (n % 3) * 0.01
+
+    monkeypatch.setattr(serving, "_measure_once", measure)
+    surface.compare(anchor, candidate, pairs=5, log=lambda *_: None)
+    rows = _belief_rows(surface)
+    assert [row["phase"] for row in rows].count("floor") == 48
+    assert [row["phase"] for row in rows].count("compare") == 10
+    row = rows[-1]
+    assert row["record"] == "launch" and row["arm"] == "candidate"
+    assert row["request_b_prompt_n"] == 20 and row["request_a_prompt_per_second"] > 0
+    assert row["held_claims"] == "not_recorded" and row["floor_id"] and row["floor_pct"] is not None
+    assert row["slot_sha256"] == hashlib.sha256(b"slot").hexdigest()
+    unsigned = {key: value for key, value in row.items() if key != "measurement_sha256"}
+    assert row["measurement_sha256"] == longctx._sha(unsigned)
+
+    def refused(*args, **kwargs):
+        raise longctx.LongCtxRefused("restore failed")
+
+    monkeypatch.setattr(surface, "ensure_floor", refused)
+    with pytest.raises(longctx.LongCtxRefused):
+        surface.compare(anchor, candidate, pairs=5, log=lambda *_: None)
+    refusals = [row for row in _belief_rows(surface) if row["record"] == "refusal"]
+    assert len(refusals) == 1 and refusals[0]["reason"] == "restore failed"
+    assert refusals[0]["stage"] == "compare"

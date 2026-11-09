@@ -52,6 +52,7 @@ context histogram (`parse_server_logs`) as the workload weighting (`planner_cont
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+import functools
 import hashlib
 import json
 import os
@@ -72,6 +73,8 @@ SPEC_SCHEMA = "epyc.autokernel.longctx_surface.v1"
 LAUNCH_SCHEMA = "epyc.autokernel.longctx_launch.v1"
 IDENTITY_SCHEMA = "epyc.autokernel.longctx_identity.v1"
 VERDICT_SCHEMA = "epyc.autokernel.longctx_verdict.v1"
+BELIEF_SCHEMA = "epyc.autokernel.longctx_measurement.v1"
+BELIEF_FILE = "belief_measurements.jsonl"
 HISTOGRAM_SCHEMA = "epyc.autokernel.context_histogram.v1"
 FLAG = "--longctx-surface"
 MODES = ("measure", "profile", "generate")
@@ -666,6 +669,22 @@ def attention_route(hypothesis) -> str | None:
 
 # --------------------------------------------------------------------------- surface
 
+def _records_refusals(method):
+    """Write a VB-AK-LONGCTX refusal record before a `LongCtxRefused` leaves the surface.
+
+    Nested surface calls record it once: the exception carries a marker."""
+    @functools.wraps(method)
+    def wrapper(self, anchor_arm, *args, **kwargs):
+        try:
+            return method(self, anchor_arm, *args, **kwargs)
+        except LongCtxRefused as exc:
+            if not getattr(exc, "belief_recorded", False):
+                exc.belief_recorded = True
+                self._record_refusal(anchor_arm, method.__name__, str(exc))
+            raise
+    return wrapper
+
+
 class Surface:
     """A target's long-context surface: slot cache, floor and A/B, under `<store>/longctx`."""
 
@@ -693,6 +712,75 @@ class Surface:
     def slot_name(self, anchor_arm) -> str:
         return (f"{anchor_arm.model.sha256[:16]}-{anchor_arm.execution_digest[:16]}-"
                 f"{self.spec.prefix_digest[:16]}.bin")
+
+    # ----------------------------------------------- VB-AK-LONGCTX write side
+
+    def _append_belief(self, record: Mapping) -> None:
+        """Append one self-hashed record. A capture fault never fails the measurement."""
+        body = dict(record, schema=BELIEF_SCHEMA, target_id=self.spec.target_id,
+                    spec_digest=self.spec.digest, prompt_digest=self.spec.prefix_digest,
+                    depth=self.spec.depth, recorded_at=time.time())
+        body["measurement_sha256"] = _sha(body)
+        try:
+            self.root.mkdir(parents=True, exist_ok=True)
+            with open(self.root / BELIEF_FILE, "ab") as handle:
+                handle.write(json.dumps(body, sort_keys=True, allow_nan=False).encode() + b"\n")
+        except (OSError, TypeError, ValueError) as exc:
+            print(f"longctx   belief capture failed: {type(exc).__name__}: {exc}")
+
+    def _slot_sha256(self, name: str | None) -> str | None:
+        """Digest of the slot file, cached per path, size and mtime (slots are gigabytes)."""
+        path = self.slot_dir / name if name else None
+        if path is None or not path.is_file():
+            return None
+        stat = path.stat()
+        key = (name, stat.st_size, stat.st_mtime_ns)
+        cache = self.__dict__.setdefault("_slot_digests", {})
+        if key not in cache:
+            digest = hashlib.sha256()
+            with open(path, "rb") as handle:
+                while chunk := handle.read(1 << 24):
+                    digest.update(chunk)
+            cache[key] = digest.hexdigest()
+        return cache[key]
+
+    def _record_refusal(self, anchor_arm, stage: str, reason: str) -> None:
+        self._append_belief({"record": "refusal", "stage": stage, "reason": reason[:1024],
+                             "anchor_execution_digest": anchor_arm.execution_digest,
+                             "anchor_build_dir": str(anchor_arm.build_dir)})
+
+    def _record_launches(self, row: Mapping, phase: str, anchor_arm, candidate_arm, *,
+                         floor_id: str | None, floor_pct: float | None) -> None:
+        """One record per measured launch, written where the launches are first in hand.
+
+        Held claims are not visible at this layer and stay `not_recorded`, not guessed."""
+        arms = (("anchor", anchor_arm, row.get("anchor_residency")),
+                ("candidate", candidate_arm, row.get("candidate_residency")))
+        for arm_name, arm, launches in arms:
+            for index, launch in enumerate(launches or ()):
+                facts = launch.get("longctx") if isinstance(launch, Mapping) else None
+                facts = facts if isinstance(facts, Mapping) else {}
+                a, b = facts.get("a") or {}, facts.get("b") or {}
+                complete = a.get("prompt_per_second") is not None \
+                    and b.get("predicted_per_second") is not None
+                self._append_belief({
+                    "record": "launch" if complete else "incomplete_launch",
+                    "phase": phase, "arm": arm_name, "launch_index": index,
+                    "anchor_execution_digest": anchor_arm.execution_digest,
+                    "candidate_execution_digest": candidate_arm.execution_digest,
+                    "anchor_build_dir": str(anchor_arm.build_dir),
+                    "candidate_build_dir": str(candidate_arm.build_dir),
+                    "recipe_execution_digest": arm.execution_digest,
+                    "np": row.get("np", anchor_arm.template.np),
+                    "slot": facts.get("slot"), "slot_sha256": self._slot_sha256(facts.get("slot")),
+                    "request_a_prompt_per_second": a.get("prompt_per_second"),
+                    "request_b_predicted_per_second": b.get("predicted_per_second"),
+                    "request_b_prompt_n": b.get("prompt_n"),
+                    "restore": {"a": a.get("restore"), "b": b.get("restore")},
+                    "backend": launch.get("backend") if isinstance(launch, Mapping) else None,
+                    "held_claims": "not_recorded",
+                    "floor_id": floor_id, "floor_unit": serving.CALIBRATION_UNIT,
+                    "floor_pct": floor_pct})
 
     def _identity_path(self, anchor_arm) -> Path:
         # Keyed like the slot itself: model, ANCHOR EXECUTION DIGEST and prefix. A new
@@ -724,6 +812,7 @@ class Surface:
                                  "receipt removed")
         return receipt
 
+    @_records_refusals
     def ensure_slot(self, anchor_arm, *, measure: Callable | None = None) -> SurfaceLaunch:
         """The measuring launch for this anchor, prefilling and saving the slot if absent."""
         name = self.slot_name(anchor_arm)
@@ -768,6 +857,7 @@ class Surface:
         the bar on the dd3d9721c anchor and would have been on 141e4bcf5)."""
         return self.floor_store / "anchors" / anchor_arm.execution_digest[:16]
 
+    @_records_refusals
     def ensure_floor(self, anchor_arm, launch: SurfaceLaunch, *, pairs: int,
                      calibrate: Callable | None = None, log=print,
                      require_anchor: bool = False, lookup: Callable | None = None,
@@ -813,10 +903,13 @@ class Surface:
             raise LongCtxRefused("calibration launches carry no prefill-at-depth samples")
         written = serving.write_floor(own_store, template, row, unit=serving.CALIBRATION_UNIT,
                                       frozen_requests=requests, **mode)
+        self._record_launches(row, "floor", anchor_arm, anchor_arm,
+                              floor_id=Path(written).name, floor_pct=row.get("floor_pct"))
         if on_written is not None:
             on_written(Path(written), row)
         return serving.load_floor(own_store, template, frozen_requests=requests, **mode)
 
+    @_records_refusals
     def compare(self, anchor_arm, candidate_arm, *, pairs: int, measure: Callable | None = None,
                 compare: Callable | None = None, calibrate: Callable | None = None,
                 log=print) -> dict:
@@ -834,6 +927,9 @@ class Surface:
             floor_request_digest=reading.request_digest,
             instrument=serving.MATCHED_INSTRUMENT, floor_record=reading.row,
             longctx=launch))
+        self._record_launches(row, "compare", anchor_arm, candidate_arm,
+                              floor_id=Path(reading.path).name if reading.path else None,
+                              floor_pct=reading.floor_pct)
         from . import serving_beliefs
         return serving_beliefs.annotate(row, {"longctx": verdict(row, reading.row, pairs)})
 
