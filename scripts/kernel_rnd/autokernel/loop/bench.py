@@ -29,6 +29,7 @@ import subprocess
 import time
 from typing import Callable, Sequence
 
+from ..controller import host_idle
 from ..execution import microbench
 from . import residency
 from .floor_units import FLOOR_UNITS, UNIT_PROCESS
@@ -150,6 +151,8 @@ class Comparison:
     # Opt-in, report-only summaries. Full op-suite stdout belongs in the
     # caller's bounded sidecar, not in the ranked comparison/status payload.
     fresh_correctness: tuple[dict, ...] = ()
+    #: Observe-only pre/post idle reading of every measured process.
+    host_idle: tuple[dict, ...] = ()
 
     @property
     def drift_explains_the_effect(self) -> bool:
@@ -236,6 +239,8 @@ class Comparison:
             "candidate_samples": self.candidate_samples,
             "residency": self.residency,
         }
+        if self.host_idle:
+            row["host_idle"] = list(self.host_idle)
         if self.fresh_correctness:
             row["fresh_correctness"] = list(self.fresh_correctness)
         return row
@@ -355,6 +360,7 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
     seed = _candidate_seed() if hardening_seed is None else hardening_seed
     argv = llama_bench_argv(binary, model, pp=pp, tg=tg, reps=reps, ubatch=ubatch,
                             hardening_seed=seed, kv_type=kv_type)
+    idle_pre = host_idle.observe("pre", CPU_LIST)
     for attempt in range(KILL_RETRIES + 1):
         env = residency.loader_env(binary)
         with (nullcontext() if capture is None else capture.invocation(argv, env, attempt)):
@@ -379,7 +385,8 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
         raise BenchFailed(
             f"llama-bench rc={done.returncode}{killed}: {done.stderr[-400:]}")
     row = hardened_row(done.stdout, pp=pp, tg=tg, reps=reps)
-    return float(row.avg_ts), sampler.proof
+    idle = (idle_pre, host_idle.observe("post", CPU_LIST))
+    return float(row.avg_ts), {**sampler.proof, "host_idle": idle}
 
 
 def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
@@ -496,6 +503,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         candidate_drift_pct=drift_pct(candidate_samples),
         fresh_correctness=tuple(fresh_summaries),
         kv_type=kv_type or KV_DEFAULT, recipe_kv_type=recipe_kv_type,
+        host_idle=tuple(row for proof in proofs for row in proof.get("host_idle", ())),
     )
 
 
