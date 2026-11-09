@@ -142,7 +142,8 @@ class TheCampaignWritesWhatTheLoopReads(unittest.TestCase):
 
     def _fake_compare(self, anchor, candidate, model, *, pp, tg, pairs,
                       noise_floor_pct=None, warmup_pairs=1, surface=None,
-                      ubatch=None, calibrated=True, reps=9):
+                      ubatch=None, calibrated=True, reps=9, kv_type=None,
+                      recipe_kv_type=None):
         a = [100.0 + 0.1 * index for index in range(pairs)]
         c = [100.05 + 0.1 * index for index in range(pairs)]
         return bench.Comparison(

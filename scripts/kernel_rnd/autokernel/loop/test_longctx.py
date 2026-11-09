@@ -685,7 +685,7 @@ def test_identity_targets_restore_the_anchor_slot_before_every_request(tmp_path,
     surface._identity_path(anchor).write_text(json.dumps(
         {"schema": longctx.IDENTITY_SCHEMA, "passed": True, "slot": surface.slot_name(anchor),
          "prefix_digest": spec.prefix_digest, "spec_digest": spec.digest,
-         "identity_tokens": spec.body["identity_tokens"]}))
+         "identity_tokens": spec.body["identity_tokens"], "pristine_tokens": [7]}))
     targets = surface.identity_targets(anchor, candidate)
     assert len(targets) == 1
     label, a_arm, c_arm, requests, prepare, record_dir = targets[0]
@@ -906,7 +906,7 @@ def test_identity_targets_strips_speculative_decoding_from_both_oracle_arms(tmp_
     surface._identity_path(anchor).write_text(json.dumps(
         {"schema": longctx.IDENTITY_SCHEMA, "passed": True, "slot": surface.slot_name(anchor),
          "prefix_digest": spec.prefix_digest, "spec_digest": spec.digest,
-         "identity_tokens": spec.body["identity_tokens"]}))
+         "identity_tokens": spec.body["identity_tokens"], "pristine_tokens": [7]}))
     targets = surface.identity_targets(anchor, candidate)
     assert len(targets) == 1
     label, a_arm, c_arm, requests, prepare, record_dir = targets[0]

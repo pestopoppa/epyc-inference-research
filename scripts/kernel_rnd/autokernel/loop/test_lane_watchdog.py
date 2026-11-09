@@ -475,7 +475,7 @@ def test_unresponsive_owned_child_is_killed_and_reaped(fixture):
             record = next((root / f'autokernel-lane-watchdog-{os.getuid()}').glob('*.termination.json'))
             body = json.loads(record.read_text())
             assert body['reason'] == 'drain_grace_expired' and body['stop_clean'] is True
-            assert body['kill_sent_at'] - body['term_sent_at'] >= 29
+            assert body['kill_sent_at'] - body['term_sent_at'] >= body['drain_grace_s'] > 0
             assert body['exited_at'] >= body['kill_sent_at']
             import select
             poller = select.poll()

@@ -169,10 +169,6 @@ def _legacy_order_plan(pairs, *, seed=None):
 MEASURED_PROMPT_N_MAX = 16
 
 
-class PrefillContaminated(ServerDied):
-    """A decode-only round re-evaluated its prompt, so its rate would time prefill."""
-
-
 def warm_kv_bound(frozen_requests, longctx) -> int | None:
     """`MEASURED_PROMPT_N_MAX` when these requests claim a warm-KV measured round.
 
@@ -708,6 +704,10 @@ class EnvReadbackFailed(RuntimeError):
 
 class ServerDied(MeasurementFailed):
     """The server exited during load or measurement -- a build/config fault, not noise."""
+
+
+class PrefillContaminated(ServerDied):
+    """A decode-only round re-evaluated its prompt, so its rate would time prefill."""
 
 
 def _stderr_tail(path, offset: int, limit: int = 4000) -> str:

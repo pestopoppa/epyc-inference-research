@@ -389,7 +389,8 @@ def baseline_filename(commit: str, protocol: Mapping[str, Any] | None = None) ->
 def protocol(*, model: Path | str, surface: str, reps: int = 9,
              warmup_launches: int = bench.WARMUP_PAIRS,
              argv: Sequence[str] | None = None,
-             argv_provenance: str = "bench.llama_bench_argv (live)") -> dict:
+             argv_provenance: str = "bench.llama_bench_argv (live)",
+             kv_type: str | None = None) -> dict:
     """The measurement protocol a production arm was (or will be) taken under.
 
     `argv` defaults to the instrument's OWN argv (`bench.llama_bench_argv`) with the
@@ -411,8 +412,9 @@ def protocol(*, model: Path | str, surface: str, reps: int = 9,
     pp, tg, ubatch = bench.SURFACES[surface]
     argv = (list(argv) if argv is not None else
             bench.llama_bench_argv("<llama-bench>", model, pp=pp, tg=tg, reps=reps,
-                                   ubatch=ubatch))
-    return {"kind": PROTOCOL_KIND_LLAMA_BENCH,
+                                   ubatch=ubatch, kv_type=kv_type))
+    extra = {"kv_type": kv_type} if kv_type else {}
+    return {**extra, "kind": PROTOCOL_KIND_LLAMA_BENCH,
             "harness": "llama-bench", "model": str(model), "surface": surface,
             "pp": pp, "tg": tg, "ubatch": ubatch, "reps": reps,
             "warmup_launches": warmup_launches, "sample_unit": bench.FLOOR_UNIT,

@@ -82,7 +82,7 @@ class ADriftingArmIsNotAMeasurement(unittest.TestCase):
         calls = []
 
         def fake_run_once(binary, model, *, pp, tg, ubatch=None, reps=9,
-                          timeout_s=3600, hardening_seed=None):
+                          timeout_s=3600, hardening_seed=None, kv_type=None):
             calls.append(str(binary))
             return 100.0, {"resident": True, "peak_vram_bytes": 1 << 31,
                            "peak_kfd_processes": 1}
@@ -391,7 +391,7 @@ class TheSurfaceTableDrivesTheBatchWidth(unittest.TestCase):
         seen = []
 
         def fake_run_once(binary, model, *, pp, tg, ubatch=None, reps=9,
-                          timeout_s=3600, hardening_seed=None):
+                          timeout_s=3600, hardening_seed=None, kv_type=None):
             seen.append(ubatch)
             return 100.0, {"resident": True, "peak_vram_bytes": 1 << 31,
                            "peak_kfd_processes": 1}
@@ -430,7 +430,7 @@ class OneArmMeasuredAlone(unittest.TestCase):
         calls = []
 
         def fake_run_once(binary, model, *, pp, tg, ubatch=None, reps=9,
-                          hardening_seed=None):
+                          hardening_seed=None, kv_type=None):
             calls.append((binary, pp, tg, ubatch, hardening_seed))
             return 30.0 + len(calls), proofs[min(len(calls), len(proofs)) - 1]
 

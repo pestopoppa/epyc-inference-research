@@ -1542,6 +1542,15 @@ class TheServingProbeIsItsOwnProtocolKind(unittest.TestCase):
         with self.assertRaises(ValueError):  # still not a llama-bench surface
             production.protocol(model=MODEL, surface="serving_ab_probe_tg256")
 
+    def test_protocol_argv_pins_kv_type_only_when_given(self):
+        plain = production.protocol(model=MODEL, surface="tg128")
+        pinned = production.protocol(model=MODEL, surface="tg128", kv_type="q8_0")
+        self.assertNotIn("-ctk", plain["argv"])
+        self.assertNotIn("kv_type", plain)
+        self.assertEqual(pinned["kv_type"], "q8_0")
+        for flag in ("-ctk", "-ctv"):
+            self.assertEqual(pinned["argv"][pinned["argv"].index(flag) + 1], "q8_0")
+
     def test_request_identity_by_manifest_or_digest(self):
         argv = WRITER["p_arm"]["protocol"]["argv"]
         manifest = {"prompts": ["a", "b"], "n_predict": {"tg": 256, "pp": 1},
