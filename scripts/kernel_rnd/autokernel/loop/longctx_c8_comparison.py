@@ -12,7 +12,7 @@ from any other request set, recipe, or anchor execution; it never treats an
 uncalibrated comparison as evidence.  Workload/tokenizer validation belongs to
 ``longctx_c8`` and happens before any server is launched. The measured unit is the
 ordinary serving path carrying eight complete 31–33k-token prompt requests from the
-frozen manifest. It does not use the CPU-only ``longctx.SurfaceLaunch`` restored-slot
+frozen manifest, with the measured round decode-only (see ``longctx_c8``). It does not use the CPU-only ``longctx.SurfaceLaunch`` restored-slot
 protocol; that is a separate measurement surface and does not represent this workload.
 """
 from contextlib import contextmanager

@@ -94,6 +94,53 @@ class Arithmetic(unittest.TestCase):
 
 
 class PlannedObservationSeam(unittest.TestCase):
+    def test_warm_kv_round_refuses_a_stub_server_that_reprefilled(self):
+        recipe = serving.Recipe(name="warm", model="/m", np=2, n_predict=4)
+        body = json.dumps({"prompt": [1] * serving.PREFILL_HEAVY_TOKENS,
+                           "cache_prompt": True}).encode()
+        requests = (("p0", body), ("p1", body + b" "))
+
+        class Process:
+            pid, returncode = 4321, None
+            poll = lambda self: None
+            terminate = lambda self: None
+            wait = lambda self, timeout: 0
+
+        class Sampler:
+            proof = {"samples": 2, "vram_reads": 2, "resident": True,
+                     "peak_vram_bytes": 2**30, "median_vram_bytes": 2**30,
+                     "peak_kfd_processes": 1, "sclk_min_mhz": 1000,
+                     "sclk_max_mhz": 1000, "clock_stable": True}
+            __enter__ = lambda self: self
+            __exit__ = lambda self, *a: False
+
+        class Response:
+            def __init__(self, data): self.data = data
+            def read(self): return self.data
+
+        def serve(measured_prompt_n):
+            seen = []
+
+            def urlopen(request, timeout):
+                if isinstance(request, str):
+                    return Response(b"ok")
+                seen.append(1)
+                # The first np requests are the warmup round.
+                n = 32768 if len(seen) <= 2 else measured_prompt_n
+                return Response(json.dumps({"stop": True, "timings": {
+                    "predicted_n": 4, "predicted_per_second": 10.0, "prompt_n": n}}).encode())
+            with mock.patch.object(serving, "require_free_port"), \
+                    mock.patch.object(serving, "ServerPortOwner"), \
+                    mock.patch.object(serving.subprocess, "Popen", return_value=Process()), \
+                    mock.patch.object(serving.residency, "Sampler", return_value=Sampler()), \
+                    mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
+                    mock.patch.object(serving, "verify_env_readback"):
+                return serving._measure_once(recipe, Path("/b"), 18000, frozen_requests=requests)
+
+        self.assertEqual(serve(4), 20.0)
+        with self.assertRaises(serving.PrefillContaminated):
+            serve(32768)
+
     def test_frozen_requests_drive_actual_launcher_seam_and_collect_slots(self):
         recipe = serving.Recipe(name="planned", model="/m", np=2, n_predict=4)
         requests = tuple((f"p{i}", json.dumps({"prompt": f"prompt-{i}"}).encode())

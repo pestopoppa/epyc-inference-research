@@ -3,6 +3,12 @@
 This prepares inputs only; it neither launches inference nor establishes model/tokenizer
 compatibility, GPU capacity, or a calibration floor.  Callers must independently bind
 ``tokenizer_sha256`` to the tokenizer actually used by the served model.
+
+DECODE ONLY (AK-SERVING-LONGCTX-DECODE-ONLY). Requests set ``cache_prompt: true``: the
+serving path's discarded warmup round is phase one (fills the KV) and its measured round
+is phase two, refused by ``serving.require_decode_only`` unless every slot reports a small
+``prompt_n``. With ``cache_prompt: false`` each slot re-prefilled ~32k tokens inside the
+window, and concurrent slots' prefill stalled the others' ``predicted_per_second``.
 """
 from __future__ import annotations
 
@@ -79,6 +85,8 @@ def _capacity(template: serving.Recipe, tokens: list[list[int]]) -> None:
             "speculative recipes must declare draft_n_max so context capacity is bounded")
     elif type(draft) is not int or draft <= 0:
         raise WorkloadRefused("speculative draft_n_max must be a positive integer")
+    if min(map(len, tokens)) < MIN_TOKENS + template.n_predict:
+        raise WorkloadRefused("corpus is shorter than depth + n_predict tokens")
     needed = SLOTS * (max(map(len, tokens)) + template.n_predict + draft + 1)
     if type(template.ctx) is not int or template.ctx < needed:
         raise WorkloadRefused(f"context capacity {template.ctx} is below {needed}")
@@ -95,7 +103,7 @@ def build_manifest(template: serving.Recipe, texts: Sequence[str], encode: Calla
     for i, ids in enumerate(tokens):
         request = {"prompt": ids, "n_predict": template.n_predict,
                    "temperature": template.temperature, "top_p": template.top_p,
-                   "top_k": template.top_k, "cache_prompt": False, "seed": 42,
+                   "top_k": template.top_k, "cache_prompt": True, "seed": 42,
                    "ignore_eos": True, "return_tokens": True, "stream": False}
         row = {"prompt_id": f"{version}-p{i+1:02d}", "request": request,
                "request_digest": _sha256(ps._canonical(request))}

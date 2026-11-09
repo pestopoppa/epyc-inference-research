@@ -161,6 +161,42 @@ def _legacy_order_plan(pairs, *, seed=None):
             "orders": orders}
 
 
+#: Largest `timings.prompt_n` a measured slot may report on a warm-KV (decode-only) round.
+#: Structural, not calibrated: C8-1-LCATTN r3 saw 4 per slot; anything near the tens of
+#: thousands means the "cached" prompt was re-evaluated inside the measured window.
+MEASURED_PROMPT_N_MAX = 16
+
+
+class PrefillContaminated(ServerDied):
+    """A decode-only round re-evaluated its prompt, so its rate would time prefill."""
+
+
+def warm_kv_bound(frozen_requests, longctx) -> int | None:
+    """`MEASURED_PROMPT_N_MAX` when these requests claim a warm-KV measured round.
+
+    The claim is the request itself: a prefill-heavy frozen body with `cache_prompt`
+    true relies on the discarded warmup round having filled the KV. Derived, not passed,
+    so the floor and the compare paths cannot disagree. A `longctx` surface has its own
+    restored-slot `prompt_n` bounds and never reaches the plain HTTP round."""
+    if longctx is not None or not prefill_heavy(frozen_requests):
+        return None
+    try:
+        warm = any(json.loads(body).get("cache_prompt") is True for _id, body in frozen_requests)
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return MEASURED_PROMPT_N_MAX if warm else None
+
+
+def require_decode_only(rows, bound: int | None) -> None:
+    """Refuse a warm-KV round whose measured slots did not all report a small `prompt_n`."""
+    if bound is None:
+        return
+    seen = [row.get("prompt_n") for row in rows if row.get("phase") == "measurement"]
+    if not seen or any(type(n) is not int or not 0 <= n <= bound for n in seen):
+        raise PrefillContaminated(
+            f"measured round is not decode-only: prompt_n per slot {seen}, bound {bound}")
+
+
 def prefill_heavy(frozen_requests) -> bool:
     """True when any frozen request body carries a prefill-heavy prompt."""
     for _prompt_id, body in frozen_requests or ():
@@ -1311,7 +1347,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     record = {"phase": phase, "slot_index": i, "prompt_id": prompt_id,
                               "request_sha256": hashlib.sha256(body).hexdigest(),
                               "predicted_n": None, "predicted_per_second": None,
-                              "terminal": False, "error": None}
+                              "prompt_n": None, "terminal": False, "error": None}
                     response_bytes = None
                     started_monotonic = time.monotonic()
                     if sched_log is not None:   # AKR-SG-1; off by default, no effect then
@@ -1374,7 +1410,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                             rate = float(timings.get("predicted_per_second", 0.0))
                         terminal = response.get("stop") is True
                         record.update(predicted_n=tokens, predicted_per_second=rate,
-                                      terminal=terminal)
+                                      prompt_n=timings.get("prompt_n"), terminal=terminal)
                         result = (tokens, rate, terminal)
                         target_steps = _target_steps_slot(timings)
                     except Exception as exc:
@@ -1443,6 +1479,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     raise ServerDied(f"degenerate measurement: tokens={toks}")
                 if frozen_requests is not None and not all(row[2] for row in warmup_rows + rows):
                     raise ServerDied("frozen request lacks explicit terminal completion")
+                require_decode_only(request_rows, warm_kv_bound(frozen_requests, longctx))
                 value = sum(row[1] for row in rows)
             finally:
                 observe("phase", "teardown")
