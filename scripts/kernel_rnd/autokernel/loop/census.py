@@ -17,13 +17,13 @@ import subprocess
 from typing import Any, Callable, Iterable, Mapping
 
 from autokernel.controller import workload_contract
+from .tool_output import strip_ansi
 
 SCHEMA = "epyc.autokernel.workload_census.v1"
 UNKNOWN = "UNKNOWN"
 OBSERVED = "OBSERVED"
 DEFAULT_CENSUS_STORE = Path("/mnt/raid0/llm/autokernel/loop-memory/census")
 MIN_GRAPH_NODES = 1000
-ANSI = re.compile(r"\x1b\[[0-9;]*m")
 NODE_LINE = re.compile(
     r"^node #\s*\d+\s*\(\s*([A-Z_0-9]+)\s*\):.*?\[\s*([A-Za-z0-9]+)\s*\]",
     flags=re.M,
@@ -63,7 +63,7 @@ def shape_envelope(recipe: Mapping[str, Any]) -> list[Shape]:
 
 def parse_scheduler_graph(log: str) -> dict[str, Any]:
     """Parse scheduler node assignments after removing terminal colour escapes."""
-    plain = ANSI.sub("", log)
+    plain = strip_ansi(log)
     ops: dict[str, dict[str, int]] = {}
     for op, backend in NODE_LINE.findall(plain):
         ops.setdefault(op, {}).setdefault(backend, 0)

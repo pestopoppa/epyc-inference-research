@@ -58,9 +58,8 @@ import sys
 import time
 
 from . import bench, census, instruments, residency, serving
+from .tool_output import UNKNOWN, strip_ansi, vacuous_parse
 
-#: The harness colours its verdicts. Strip before ANY counting -- see the module docstring.
-ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 #: `node #  0 (  GET_ROWS): name (size) [  CPU  ] ...` -- op name and assigned backend.
 NODE_LINE = re.compile(r"^node #\s*\d+\s*\(\s*([A-Z_0-9]+)\s*\):.*?\[\s*([A-Za-z0-9]+)\s*\]",
@@ -104,7 +103,7 @@ def tally(text: str) -> dict:
     rule reads as a pass. `passed`/`total` come from the harness's OWN tally line so the
     counting here can be cross-checked against the counting there.
     """
-    plain = ANSI.sub("", text)
+    plain = strip_ansi(text)
     match = re.search(r"(\d+)/(\d+) tests passed", plain)
     passed, total = (int(match.group(1)), int(match.group(2))) if match else (0, 0)
     return {"ok": len(re.findall(r": OK\b", plain)),
@@ -118,6 +117,8 @@ def backend_op_verdict(returncode: int, counts: dict) -> str:
     """VACUOUS-PASS GUARD (2026-09-08). A gate PASSES only if at least one case ACTUALLY
     RAN and passed, and the harness's own tally agrees with ours. `rc == 0 and fail == 0`
     alone is what a run that counted nothing looks like."""
+    if vacuous_parse(counts["ok"], counts["fail"], counts["total"]):
+        return UNKNOWN  # nothing parsed: a harness fault, never evidence about the patch
     ran_something = counts["ok"] > 0 and counts["total"] > 0
     agrees = counts["passed"] == counts["total"]
     return ("PASS" if returncode == 0 and counts["fail"] == 0 and ran_something and agrees

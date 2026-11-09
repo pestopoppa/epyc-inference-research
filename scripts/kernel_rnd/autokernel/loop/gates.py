@@ -28,6 +28,7 @@ import subprocess
 from .. import schemas
 from ..evaluator import correctness
 from . import bench, census, residency, scratch
+from .tool_output import strip_ansi
 
 #: One op suite, on the backend under test. 53 seconds measured, and it is the gate
 #: that decides whether a candidate is CORRECT -- everything downstream assumes it.
@@ -2904,7 +2905,7 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
     if require_reference and len(output.encode()) > MAX_REFERENCE_OUTPUT_BYTES:
         return Verdict("oracle_unavailable", False,
                        "seeded reference suite output exceeds inspection bound")
-    plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    plain = strip_ansi(output)
     block = re.search(
         rf"(?ms)^Backend \d+/\d+: {re.escape(backend)}\b(.*?)"
         rf"^  Backend {re.escape(backend)}: (OK|FAIL)\b", plain)

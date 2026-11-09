@@ -16,6 +16,7 @@ import re
 import shutil
 import signal
 import subprocess
+from .tool_output import strip_ansi
 
 
 # These two cases are enumerated by the reviewed backend-ops fixture.  The
@@ -52,7 +53,7 @@ def _assess_case(witness: str, stdout: str, stderr: str, returncode: int,
             for record, (role, symbol) in zip(records, expected_hits))):
         return Result("unavailable", "use_ref=true reference and selected IQK helper "
                       "were not both proven in the candidate DSO", str(records)[:1000])
-    plain = re.sub(r"\x1b\[[0-9;]*m", "", stdout + stderr)
+    plain = strip_ansi(stdout + stderr)
     case_line = f"MUL_MAT_ID({case_text}): OK"
     active = re.compile(r"\[iqk\] ACTIVE: MoE mul_mat_id via ik kernels "
                         rf"\(type={type_id} activation=\d+ n_as=4\)")

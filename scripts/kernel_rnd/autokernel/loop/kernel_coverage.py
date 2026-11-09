@@ -61,6 +61,7 @@ import subprocess
 import sys
 import time
 from typing import Any, Iterable, Mapping, Sequence
+from .tool_output import strip_ansi
 
 STATIC_SCHEMA = "epyc.autokernel.kernel_static_manifest.v1"
 SOURCE_SCHEMA = "epyc.autokernel.kernel_source_inventory.v1"
@@ -239,7 +240,6 @@ def source_inventory(repo: Path | str, ref: str, *, paths: Sequence[str] = SOURC
 # ------------------------------------------------------------------ runtime (stderr)
 
 _CAPTURE: dict[str, Any] = {"root": None, "per_shape": 3, "keep_fingerprints": 64}
-_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _IQK_GEMM = re.compile(r"\[iqk\] ACTIVE: ik_llama GEMM kernels engaged \(first mul_mat "
                        r"type=(\d+) activation=(\d+)")
 _IQK_MOE = re.compile(r"\[iqk\] ACTIVE: MoE mul_mat_id via ik kernels \(type=(\d+) "
@@ -269,7 +269,7 @@ def parse_markers(text: str) -> dict[str, Any]:
     markers: set[str] = set()
     buffers: Counter[str] = Counter()
     for raw in text.splitlines():
-        line = _ANSI.sub("", raw).strip()
+        line = strip_ansi(raw).strip()
         gemm, moe = _IQK_GEMM.search(line), _IQK_MOE.search(line)
         if gemm:
             markers.add(f"iqk.gemm:{_type(gemm.group(1))}:act={_type(gemm.group(2))}")
