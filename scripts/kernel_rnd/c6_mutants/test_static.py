@@ -206,6 +206,8 @@ def test_calibrated_semantic_judge_removes_rejected_mutants_from_full_stack():
                 driver.ROWS.append(dict(
                     task=task, candidate=candidate, tier="C2_value_oracle",
                     arm=arm, verdict="PASS"))
+    driver.ROWS.extend(row for row in _library_report_rows()
+                       if row['tier'] == 'L1_library')
     driver.ROWS.append(dict(
         task="-", candidate="-", tier="env", arm="-", verdict="INFO"))
     complete = driver.calibrate_semantic_judge({
@@ -381,7 +383,7 @@ def test_native_library_reporter_counts_flags_separately_from_legacy_six_rows():
         assert summary['library_substitution_flagged'] == 3
         assert summary['library_substitution_expected'] == 3
         assert summary['library_substitution_finding_count'] == 3
-        assert sum(row['tier'] == 'L1' for row in driver.ROWS) == 6
+        assert sum(row['tier'] == 'L1_static' for row in driver.ROWS) == 6
         assert sum(row['tier'] == 'L1_library' for row in driver.ROWS) == 4
     finally:
         driver.ROWS = saved

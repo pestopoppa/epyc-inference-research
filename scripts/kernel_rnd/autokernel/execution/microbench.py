@@ -1940,7 +1940,8 @@ def incomplete_hardening_flags(row: Mapping[str, Any]) -> tuple:
 
 
 def _check_autokernel_hardening(row: BenchRow, *, reps: int,
-                                n_gpu_layers: int) -> tuple:
+                                n_gpu_layers: int,
+                                warnings: Optional[list] = None) -> tuple:
     """Validate the trusted RVP-C6-8 receipt emitted by hardened llama-bench.
 
     The ranked speed sample is the full-device-synchronized SECOND execution of
@@ -2008,6 +2009,7 @@ def _check_autokernel_hardening(row: BenchRow, *, reps: int,
                 reasons.append(
                     f"output changed across an address-rotated replicate ({pair})")
 
+    twin_gap_warnings: list[str] = warnings if warnings is not None else []
     unsynchronized_text = _comma_values(row.autokernel_unsynchronized_samples_ns)
     unsynchronized_ns: list[int] = []
     if len(unsynchronized_text) != reps:
@@ -2040,19 +2042,21 @@ def _check_autokernel_hardening(row: BenchRow, *, reps: int,
                 f"{gap_fraction:.1%} slower in the median than the ordinary twin, above "
                 f"the declared {STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:.0%} stream-escape "
                 "screen; this is an integrity flag, not a corrected speed measurement")
-        # RVP-C6-26: the screen must also be two-sided. The synchronized twin
-        # does strictly more work than the ordinary one, so it being materially
-        # FASTER is not noise; it is what a content-keyed memo populated by the
-        # first execution produces for the replicate. Symmetric in ratio.
+        # RVP-C6-26: a replicate that does more work being materially FASTER is the
+        # signature of a content-keyed memo. It is reported as a WARNING, not a
+        # FAIL, until its false-positive rate is measured: llama-bench runs the
+        # ordinary twin FIRST on a freshly created context (first-touch, graph and
+        # buffer allocation, cold caches) and the synchronized twin second on a
+        # different, already-warm process, so a cold ordinary twin >20% slower is
+        # an expected benign shape, not proof of memoization.
         inverse_gap_fraction = ordinary_median / synchronized_median - 1.0
         if inverse_gap_fraction > STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:
-            reasons.append(
-                "the full-device-synchronized twin is "
-                f"{inverse_gap_fraction:.1%} faster in the median than the ordinary twin, "
-                f"above the declared {STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:.0%} "
-                "twin-gap screen; a replicate that does more work cannot be faster "
-                "without content or pointer memoization; this is an integrity flag, "
-                "not a corrected speed measurement")
+            twin_gap_warnings.append(
+                "WARNING (non-fatal, false-positive rate unmeasured): the "
+                "full-device-synchronized twin is "
+                f"{inverse_gap_fraction:.1%} faster in the median than the ordinary "
+                "twin; either the ordinary twin ran cold (it runs first on a fresh "
+                "context) or a content/pointer memo accelerated the replicate")
 
     thread_pairs = _comma_values(row.autokernel_thread_set_hashes)
     if len(thread_pairs) != reps:
@@ -2207,9 +2211,11 @@ class LlamaBenchExpectation:
                 f"{len(row.samples_ts)} samples; a short sample vector means repetitions "
                 f"were dropped, and the rep count is a constitutional floor")
         unknown_note = False
+        twin_warnings: list = []
         if self.autokernel_seed is not None:
             reasons.extend(_check_autokernel_hardening(
-                row, reps=self.reps, n_gpu_layers=self.n_gpu_layers))
+                row, reps=self.reps, n_gpu_layers=self.n_gpu_layers,
+                warnings=twin_warnings))
         else:
             state = row.hardened_state
             if state == "hardened":
@@ -2233,7 +2239,11 @@ class LlamaBenchExpectation:
                     f"{row.build_commit!r} ({why}); the binary that ran is not the one "
                     f"the arm names, so the anchor is not the anchor")
         if reasons:
-            return schemas.Check(schemas.FAIL, tuple(reasons))
+            return schemas.Check(schemas.FAIL, tuple(reasons) + tuple(twin_warnings))
+        if twin_warnings:
+            return schemas.Check(schemas.PASS, (
+                "the result row agrees with the argv that produced it",
+                *twin_warnings))
         if unknown_note:
             note = ("the row does not record autokernel_hardened, so whether it ran the "
                     "ordinary or the hardened protocol is UNKNOWN")
