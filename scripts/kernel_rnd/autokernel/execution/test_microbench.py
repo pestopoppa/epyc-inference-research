@@ -697,6 +697,11 @@ class TestFixturesAreRealAndUnmodified(unittest.TestCase):
 
 
 class TestLlamaBenchParsing(unittest.TestCase):
+    def test_interleaved_recovery_refuses_a_corrupted_row(self):
+        text = '[\n  {"avg_ts": 1.0, "samples_ns": [1]},\n  {"avg_ts": stderr noise\n]\n'
+        with self.assertRaises(BenchOutputError):
+            parse_llama_bench_json(text)
+
 
     def test_parses_the_real_canonical_run(self):
         rows = M.parse_llama_bench_json(read_fixture(CANONICAL))

@@ -1825,8 +1825,8 @@ def _recover_interleaved_rows(text: str) -> Optional[list]:
             try:
                 obj, pos = decoder.raw_decode(text, start)
             except json.JSONDecodeError:
-                pos = start + 1
-                continue
+                # A corrupted row must refuse, not silently drop a repetition.
+                return None
             if isinstance(obj, dict) and "avg_ts" in obj:
                 rows.append(obj)
         if rows and end_match is not None:
