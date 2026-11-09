@@ -143,13 +143,18 @@ def write(path: Path, row):
     status.write_json(path.parent, path.name, row, prefix=".actor-wire-")
 
 
+def evaluate(seats, *, record_path=None, override=None):
+    """The admission decision alone; writes nothing, so a dry run can share it."""
+    return bind(seats, read(record_path) if record_path else None, override)
+
+
 def admit(seats, *, store, out, record_path=None, override=None):
     """Always write a runnable request; persist the receipt before any actor call."""
     wanted = request(seats)
     path = Path(store) / "actor-wire-request.json"
     write(path, wanted)
     try:
-        receipt = bind(seats, read(record_path) if record_path else None, override)
+        receipt = evaluate(seats, record_path=record_path, override=override)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise WireGateError(f"{exc}; request: {path}") from exc
     # This is an initial loop-run manifest, subsequently enriched by run.py's final

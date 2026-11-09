@@ -7432,6 +7432,9 @@ roles:
       residency: cold
       pinned: false
   thinking_qwen3_4b_thinking_2507:
+    deprecated: true
+    deprecated_date: 2026-11-09
+    deprecated_reason: "Duplicate catalogue row for Qwen3-4B-Thinking-2507 Q8_0; its lmstudio-community path does not resolve on this host and no live role binds it. The only local copy of this GGUF was approved for removal on 2026-11-09 under NIB2-65."
     tier: B
     description: Thinking model - Qwen3-4B-Thinking-2507-Q8_0
     model:
@@ -7440,9 +7443,7 @@ roles:
       quant: Q8_0
       size_gb: 4.0
       architecture: dense
-    candidate_roles:
-    - thinking
-    - worker
+    candidate_roles: []
     thinking_quirks:
       disable_trick: "<think>\n</think>\n"
       disable_suites:
@@ -11166,6 +11167,9 @@ roles:
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   qwen3_4b_thinking_2507_local_q8:
+    deprecated: true
+    deprecated_date: 2026-11-09
+    deprecated_reason: "Catalogue-only local Qwen3-4B-Thinking-2507 Q8_0 candidate with no live role bound and only load-smoke evidence; operator approved removing its GGUF on 2026-11-09 as the last NIB2-65 safe-set item."
     tier: C
     description: Local Qwen3-4B-Thinking-2507 Q8_0 small reasoning candidate; catalogue-only exact-path entry.
     model:
@@ -13553,6 +13557,13 @@ deprecated_models:
       bench_tree_speculation_server.sh, profile_verification_cost.sh, scripts/benchmark/deprecated/*,
       the AA-omniscience measurement commands/manifest under docs/ (historical measurement record).
     deleted: 2026-11-02
+  - model: Qwen3-4B-Thinking-2507-Q8_0.gguf
+    path_was: /mnt/raid0/llm/models/Qwen3-4B-Thinking-2507-GGUF/Qwen3-4B-Thinking-2507-Q8_0.gguf
+    size_gb: 4.0
+    reason: >-
+      Operator-approved 2026-11-09 disk reclaim (NIB2-65 safe set). Catalogue-only candidate, no live role bound;
+      roles.qwen3_4b_thinking_2507_local_q8 and roles.thinking_qwen3_4b_thinking_2507 deprecated in the same change.
+    deleted: 2026-11-09
 
 
 

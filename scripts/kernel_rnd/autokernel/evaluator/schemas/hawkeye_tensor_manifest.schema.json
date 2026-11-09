@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://epyc.local/autokernel/hawkeye_tensor_manifest.schema.json",
+  "title": "AutoKernel adopted Hawkeye tensor manifest",
+  "description": "Derived from Zanatticus/Hawkeye workloads/_tensorset.h at a226e955d56c04be044d46f6fd876191cfce5bf4, Apache-2.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tensors", "outputs"],
+  "properties": {
+    "variants": {"type": "integer", "minimum": 1, "default": 1},
+    "tensors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "file", "dtype", "shape", "numel", "role"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"},
+          "file": {"type": "string", "pattern": "^[^/]+$"},
+          "dtype": {"type": "string", "minLength": 1},
+          "shape": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}},
+          "numel": {"type": "integer", "minimum": 1},
+          "role": {"enum": ["input", "weight"]}
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "dtype", "numel"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"},
+          "dtype": {"type": "string", "minLength": 1},
+          "numel": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}

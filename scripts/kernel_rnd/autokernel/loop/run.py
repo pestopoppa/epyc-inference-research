@@ -623,6 +623,89 @@ def _verify_cor_build(path, worktree, commit: str, *, experimental: bool,
                                    allow_unverified=allow_unverified)
 
 
+#: Dry-run refusals gathered across startup; every one is reported, not only the first.
+_DRY_RUN_REFUSALS: list[str] = []
+
+
+def _report_dry_run_refusals() -> bool:
+    found = bool(_DRY_RUN_REFUSALS)
+    for reason in _DRY_RUN_REFUSALS:
+        print(f"DRY RUN REFUSED: {reason}")
+    _DRY_RUN_REFUSALS.clear()
+    return found
+
+
+def _store_holds_only_startup_scaffold(store: Path) -> bool:
+    """True when the store holds nothing but what this startup itself writes first.
+
+    `--new-store` creates inbox/ and the kernel-coverage dir, and wire admission writes
+    its request (even when it refuses), all before the bundle is opened; counted as
+    history they made a new store permanently unable to start without a bundle surface.
+    """
+    store = Path(store)
+    if store.is_symlink():
+        return False
+    try:
+        entries = list(store.iterdir())
+    except FileNotFoundError:
+        return True
+    for entry in entries:
+        if entry.name in ("inbox", kernel_coverage.CAPTURE_DIR):
+            if not entry.is_dir() or entry.is_symlink() or any(entry.iterdir()):
+                return False
+        elif entry.name == "loop-run.json":
+            try:
+                if json.loads(entry.read_text()).get("state") != "actor_admitted":
+                    return False
+            except (OSError, ValueError, AttributeError):
+                return False
+        elif entry.name != "actor-wire-request.json":
+            return False
+    return True
+
+
+def _initializes_first_bundle(args, *, experimental: bool) -> bool:
+    """Does startup create the first durable bundle instead of restoring one?"""
+    if args.bundle_surface is not None:
+        return False
+    filename, journal_dir = accumulate._surface_paths(args.store, None)
+    if (args.store / journal_dir).exists() or (args.store / filename).exists():
+        return False
+    if (args.store / "experiments.db").is_file():
+        with experiments.ExperimentStore(args.store, read_only=True) as memory:
+            if memory.count() > 0:
+                return False
+    return experimental or (args.new_store and _store_holds_only_startup_scaffold(args.store))
+
+
+def _accumulator_startup_refusal(args, *, anchor_commit: str, experimental: bool) -> str | None:
+    """Read-only: the reason the live bundle restore would refuse, or None."""
+    surface = args.bundle_surface
+    def is_ancestor(a: str, b: str) -> bool:
+        return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
+                               "--is-ancestor", a, b], capture_output=True).returncode == 0
+    try:
+        if _initializes_first_bundle(args, experimental=experimental):
+            return None
+        refused, reason, _kind = accumulate.would_refuse_anchor(
+            args.store, anchor_commit=anchor_commit, is_ancestor=is_ancestor, surface=surface)
+    except accumulate.BundleRecoveryRequired as exc:
+        return f"accumulator: {exc}"
+    if not refused:
+        return None
+    if args.rebaseline_stale and surface is not None:
+        print("accum     (dry) --rebaseline-stale recovery has no read-only form; not evaluated")
+        return None
+    if args.new_anchor_epoch:
+        try:
+            new_epoch.start_new_anchor_epoch(args.store, anchor_commit=anchor_commit,
+                                             is_ancestor=is_ancestor, dry_run=True, surface=surface)
+            return None
+        except ValueError as exc:
+            return f"accumulator: {exc}"
+    return f"accumulator: bundle recovery required: {reason}"
+
+
 def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: bool,
                                     epoch: str, measurement_epoch: str,
                                     actor_config, carry=None,
@@ -3095,13 +3178,24 @@ def _main(argv: list[str] | None = None) -> int:
                              "events as `status` broadcasts; 'off' (or empty) disables the bus "
                              "(the window file and its events.jsonl remain) (default: %(default)s)")
     args = parser.parse_args(argv)
-    if not args.dry_run:
-        try:
-            experiments.require_existing_store(args.store, new_store=args.new_store)
-        except experiments.StoreMissing as exc:
+    if args.dry_run:
+        _DRY_RUN_REFUSALS.clear()
+    try:
+        experiments.require_existing_store(args.store, new_store=args.new_store)
+    except experiments.StoreMissing as exc:
+        if not args.dry_run:
             parser.error(str(exc))
-        if args.new_store:
-            (args.store / "inbox").mkdir(parents=True, exist_ok=True)
+        _DRY_RUN_REFUSALS.append(str(exc))
+    if not args.dry_run and args.new_store:
+        (args.store / "inbox").mkdir(parents=True, exist_ok=True)
+    if args.dry_run:
+        from . import lane_watchdog
+        # A serial_run child is admitted by its parent's capability, never supervised.
+        if (not lane_watchdog._SUPERVISED and "AUTOKERNEL_SERIAL_CAPABILITY" not in os.environ
+                and lane_watchdog._option(original_argv, "--store")):
+            refusal = lane_watchdog.startup_refusal(args.store)
+            if refusal:
+                _DRY_RUN_REFUSALS.append(f"lane watchdog: {refusal}")
     if args.rebaseline_stale and args.bundle_surface is None:
         parser.error("--rebaseline-stale requires --bundle-surface")
     if args.rebaseline_stale and args.new_anchor_epoch:
@@ -4109,18 +4203,40 @@ def _main(argv: list[str] | None = None) -> int:
         if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
             parser.error("direct runtime calibration requires the original serving launch")
         if direct_launch is not None:
-            _dry_run_accumulator_and_resume(
-                args, anchor_commit=anchor_commit, experimental=experimental,
-                epoch=epoch, measurement_epoch=measurement_epoch,
-                actor_config=launch_actor_config, carry=resume_carry,
-                surface=args.bundle_surface)
+            try:
+                _dry_run_accumulator_and_resume(
+                    args, anchor_commit=anchor_commit, experimental=experimental,
+                    epoch=epoch, measurement_epoch=measurement_epoch,
+                    actor_config=launch_actor_config, carry=resume_carry,
+                    surface=args.bundle_surface)
+            except champion.StartupRefused as exc:
+                _DRY_RUN_REFUSALS.append(str(exc))
+        bundle_name, bundle_journal = accumulate._surface_paths(args.store, args.bundle_surface)
+        if direct_launch is None or not ((args.store / bundle_journal).exists()
+                                         or (args.store / bundle_name).exists()):
+            refusal = _accumulator_startup_refusal(args, anchor_commit=anchor_commit,
+                                                   experimental=experimental)
+            if refusal:
+                _DRY_RUN_REFUSALS.append(refusal)
         # Export a wire request without claiming admission or running any client.
         from . import actor_wire_gate
-        wire_request = actor_wire_gate.request(_actor_wire_seats(
+        wire_seats = _actor_wire_seats(
             args, planner_backend, critic_backend, lane_backends, author_plan,
-            resolved_campaign if selected_identity is not None else None))
+            resolved_campaign if selected_identity is not None else None)
+        wire_request = actor_wire_gate.request(wire_seats)
         print("actors    UNTESTED: wire request (dry run; stdout only)")
         print(json.dumps(wire_request, sort_keys=True))
+        try:
+            actor_wire_gate.evaluate(wire_seats, record_path=args.actor_wire_test_record,
+                                     override=args.allow_untested_actor_seats)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            _DRY_RUN_REFUSALS.append(f"actor wire gate: {exc}")
+        if not cpu_launch:
+            refusal = claim.device_claim_refusal()
+            if refusal:
+                _DRY_RUN_REFUSALS.append(f"device claim: {refusal}")
+        if _report_dry_run_refusals():
+            return 1
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
@@ -4765,15 +4881,8 @@ def _main(argv: list[str] | None = None) -> int:
         # history is different: initializing it empty would repeat the exact loss this
         # migration repairs, so it fails closed until recovery seeds the retained
         # patches and measurements.
-        experiment_history = False
-        if (args.store / "experiments.db").is_file():
-            with experiments.ExperimentStore(args.store, read_only=True) as memory:
-                experiment_history = memory.count() > 0
         bundle_surface = args.bundle_surface
-        bundle_filename, bundle_journal = accumulate._surface_paths(args.store, bundle_surface)
-        if (experimental and bundle_surface is None and not (args.store / bundle_journal).exists()
-                and not (args.store / bundle_filename).exists()
-                and not experiment_history):
+        if _initializes_first_bundle(args, experimental=experimental):
             restored = accumulate.Bundle(
                 champion_of_record=anchor_commit, tip=anchor_commit,
                 surface=bundle_surface)
@@ -8775,7 +8884,19 @@ def main(argv: list[str] | None = None) -> int:
     from . import lane_watchdog, serial_run
     actual = list(sys.argv[1:] if argv is None else argv)
     stores = lane_watchdog._option(actual, "--store")
-    if lane_watchdog._SUPERVISED or "--dry-run" in actual or not stores:
+    if "--dry-run" in actual:
+        # Refusals found before an early exit must still be named.
+        try:
+            rc = _main(actual)
+        except champion.StartupRefused as exc:
+            _DRY_RUN_REFUSALS.append(str(exc))
+            _report_dry_run_refusals()
+            raise
+        except SystemExit:
+            _report_dry_run_refusals()
+            raise
+        return (rc or 1) if _report_dry_run_refusals() else rc
+    if lane_watchdog._SUPERVISED or not stores:
         return _main(actual)
     if len(stores) != 1:
         raise lane_watchdog.WatchdogRefused("exactly one canonical store is required")
