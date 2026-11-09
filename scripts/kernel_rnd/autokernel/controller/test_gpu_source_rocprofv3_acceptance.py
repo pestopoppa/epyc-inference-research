@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -607,6 +608,15 @@ class RocprofV3RawClosureAcceptance(unittest.TestCase):
 
 
 class RocprofV3FactoryAcceptance(unittest.TestCase):
+    def setUp(self):
+        python = Path(sys.executable).resolve(strict=True)
+        digest = hashlib.sha256(python.read_bytes()).hexdigest()
+        for patcher in (mock.patch.object(F, "_ROCPROF_V3_PYTHON", python),
+                        mock.patch.object(F, "_ROCPROF_V3_PYTHON_SHA256", digest),
+                        mock.patch.object(E, "ROCPROF_V3_PYTHON", python)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def test_factory_builds_only_the_exact_v3_plan_without_hardware(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw).resolve()

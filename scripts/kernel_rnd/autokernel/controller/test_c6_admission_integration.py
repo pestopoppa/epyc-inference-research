@@ -334,5 +334,28 @@ class TestC6AdmissionIntegration(unittest.TestCase):
                     **config.c6_roofline_authority, "gpu_part": "gfx999"})
 
 
+class TestClassificationCarriers(unittest.TestCase):
+    def test_classified_result_keeps_hotspots_and_c6_receipts(self):
+        digest = lambda label: hashlib.sha256(label.encode()).hexdigest()
+        hotspot = {"symbol": "q5_hot", "share": 0.5}
+        screen = D.SealedScreen(
+            receipt_path="/r", result_sha256=digest("r"), effect_fraction=0.1,
+            classification="candidate", baseline_sha256=digest("b"),
+            source_proof_sha256=digest("s"), dispatch_proof_sha256=digest("d"),
+            series_key=digest("series"), hotspots=(hotspot,),
+            c6_correctness_receipt_sha256=digest("c6"),
+            c6_correctness_ref={"path": "/c6"})
+        item = SimpleNamespace(hypothesis_id="akh-x")
+        with patch.object(D, "_series_identity", return_value=(digest("series"), ()),
+                          create=True), \
+                patch.object(D, "_pooled_component_effects", return_value={}):
+            out = D._classified_result(
+                {"iterations": []}, item, screen, None)
+        self.assertEqual(out.hotspots, (hotspot,))
+        self.assertEqual(out.c6_correctness_ref, {"path": "/c6"})
+        self.assertEqual(
+            out.c6_correctness_receipt_sha256, digest("c6"))
+
+
 if __name__ == "__main__":
     unittest.main()
