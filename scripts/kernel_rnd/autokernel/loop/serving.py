@@ -31,6 +31,9 @@ from dataclasses import dataclass, field, replace
 from functools import lru_cache
 import concurrent.futures as cf
 import base64
+import contextlib
+import functools
+import tempfile
 import hashlib
 import json
 import math
@@ -669,6 +672,42 @@ class ServerDied(MeasurementFailed):
     """The server exited during load or measurement -- a build/config fault, not noise."""
 
 
+def _stderr_tail(path, offset: int, limit: int = 4000) -> str:
+    """Last `limit` chars of what this launch appended to the stderr log; "" if none."""
+    if not path:
+        return ""
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(offset)
+            data = handle.read()
+    except OSError:
+        return ""
+    return data.decode("utf-8", "replace")[-limit:].strip()
+
+
+@contextlib.contextmanager
+def _calibration_stderr_log():
+    """Enable AK_SERVING_STDERR_LOG for a calibration unless the caller already set it.
+
+    The tail of a failing launch rides in the ServerDied record, so the scratch file is
+    removed afterwards; a caller-provided log is left alone and kept.
+    """
+    if os.environ.get("AK_SERVING_STDERR_LOG"):
+        yield
+        return
+    fd, scratch = tempfile.mkstemp(prefix="ak-serving-stderr-", suffix=".log")
+    os.close(fd)
+    os.environ["AK_SERVING_STDERR_LOG"] = scratch
+    try:
+        yield
+    finally:
+        os.environ.pop("AK_SERVING_STDERR_LOG", None)
+        try:
+            os.unlink(scratch)
+        except OSError:
+            pass
+
+
 class ServingNotResident(RuntimeError):
     """The launch was SAMPLED, over a window covering the request phase, and the device
     never held the model. The measurement did not happen on the GPU.
@@ -1145,6 +1184,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     hip_maps = None
     affinity_pin = None
     srv = None
+    stderr_log = None
+    stderr_offset = 0
     try:
         if cpu_profile_capture is None:
             sampler = residency.Sampler()
@@ -1162,6 +1203,10 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             # chasing a server-side failure. Unset, this launch is unchanged.
             stderr_log = os.environ.get("AK_SERVING_STDERR_LOG")
             stderr_file = open(stderr_log, "ab") if stderr_log and coverage_sink is None else None
+            if stderr_file is not None:
+                stderr_offset = os.path.getsize(stderr_log)
+            else:
+                stderr_log = None
             try:
                 srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                        stderr=(stderr_file if stderr_file is not None
@@ -1499,6 +1544,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     if response_reference is not None:
                         exported["server_responses"] = response_reference
                     if isinstance(serving_exception, ServerDied):
+                        # Name the cause: the failing launch's own stderr, so a floor
+                        # that died with an HTTP 500 is not a cause-unknown failure.
+                        tail = _stderr_tail(stderr_log, stderr_offset)
+                        if tail:
+                            exported["server_stderr_tail"] = tail
+                            serving_exception.args = (
+                                f"{serving_exception} | server stderr tail: {tail[-1500:]}",)
                         serving_exception.record = exported
                     if observation is not None:
                         observation.append(exported)
@@ -2645,6 +2697,16 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
             "suspect": bool(unexplained_outliers)}
 
 
+def _with_calibration_stderr_log(fn):
+    """Every calibration launch keeps its stderr tail for a failure record."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _calibration_stderr_log():
+            return fn(*args, **kwargs)
+    return wrapper
+
+
+@_with_calibration_stderr_log
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
                     resolved_recipe=None, frozen_requests=None,
                     instrument=LEGACY_INSTRUMENT, pairs=None, longctx=None,
