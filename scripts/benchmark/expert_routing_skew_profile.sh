@@ -91,6 +91,19 @@ resolve_binary() {
   esac
 
   BINARY_PATH="${resolved}"
+
+  # NIB2-58a: the binary may be a FRESH experimental build. A build that
+  # resolves the FROZEN production ggml via LD_LIBRARY_PATH runs full-CPU while
+  # reporting a GPU device (INC-20260731-ggml-linkage-silent-cpu-fallback), and
+  # the imatrix artifacts it produces would be attributable to the WRONG BUILD.
+  # Verify under the launch recipe the command-plan lines print
+  # (LD_LIBRARY_PATH=${EXPERIMENTAL_BIN_DIR}).
+  LINKAGE_VERIFIER="${LINKAGE_VERIFIER:-/mnt/raid0/llm/epyc-inference-research/scripts/utils/verify_ggml_linkage.sh}"
+  [[ -r "$LINKAGE_VERIFIER" ]] || die "ggml linkage verifier not readable: ${LINKAGE_VERIFIER}"
+  if ! LD_LIBRARY_PATH="${EXPERIMENTAL_BIN_DIR}:${LD_LIBRARY_PATH:-}" \
+       bash "$LINKAGE_VERIFIER" "$BINARY_PATH" "$EXPERIMENTAL_ROOT"; then
+    die "ggml linkage check FAILED for ${BINARY_PATH} — it resolves another tree's ggml; do not calibrate with it"
+  fi
 }
 
 require_no_glm_download() {
