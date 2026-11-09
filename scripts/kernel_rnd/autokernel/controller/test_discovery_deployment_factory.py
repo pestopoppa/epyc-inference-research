@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import stat
+import sys
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -58,6 +59,17 @@ def _skip_without_site_model(case) -> None:
         case.skipTest(f"site model absent on this host: {_factory._SITE_MODEL}")
 
 class DeploymentFactoryTests(unittest.TestCase):
+    def setUp(self):
+        # The sealed rocprofv3 interpreter is a production pin for the host that
+        # runs the deployment; the fixture binds whichever interpreter runs the test.
+        python = Path(sys.executable).resolve(strict=True)
+        digest = hashlib.sha256(python.read_bytes()).hexdigest()
+        for patcher in (mock.patch.object(F, "_ROCPROF_V3_PYTHON", python),
+                        mock.patch.object(F, "_ROCPROF_V3_PYTHON_SHA256", digest),
+                        mock.patch.object(F.evidence, "ROCPROF_V3_PYTHON", python)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def test_live_shape_manifest_and_policy_share_real_operation_namespace(self):
         candidate = planned_source_candidate()
         with tempfile.TemporaryDirectory() as directory:
