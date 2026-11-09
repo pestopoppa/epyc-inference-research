@@ -228,17 +228,29 @@
     "worker_lifecycle.py": 2259
   },
   "exceptions": {
+    "accumulate.py": {
+      "ceiling": 769,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: a25f5ff79, 2f047a7b1 per-surface bundles and shared-COR fencing. OPEN design question, not settled by this ceiling: split _load_bundle_locked (+190 lines as one function) by surface and legacy path?"
+    },
     "actor_context.py": {
       "ceiling": 511,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +14 lines over 497, 2 commit(s) since cdf6faa44, latest 460cfc464 autokernel: narrow AK-TOOL-CHAMPION-CONTEXT to launch-time refusal against CANON); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+    },
+    "actor_metrics.py": {
+      "ceiling": 486,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: c17d0d0b7, 6a3981e4b, 3e9c00e53 reasoning and section-pull metrics; reduction behind the discard-invariant custody pin"
+    },
+    "actor_orchestrator.py": {
+      "ceiling": 323,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 952c4d859 abstain schema carries belief focus fields"
     },
     "actor_wire_gate.py": {
       "ceiling": 117,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 115, 1 commit(s) since cdf6faa44, latest 0fe366b53 autokernel: make --dry-run evaluate the live startup refusals); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "actors.py": {
-      "ceiling": 3075,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +38 lines over 3037, 10 commit(s) since cdf6faa44, latest f212ddb5d autokernel: resolve the claude actor binary per container); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 3084,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +38 lines over 3037, 10 commit(s) since cdf6faa44, latest f212ddb5d autokernel: resolve the claude actor binary per container); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 7caa320c8, f212ddb5d, dd3ab6326 hotspot render, per-container claude binary, opencode v2 argv; reduction behind the custody pin"
     },
     "ak_check.py": {
       "ceiling": 1081,
@@ -249,12 +261,12 @@
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +31 lines over 469, 2 commit(s) since cdf6faa44, latest 4ede8b2fa fix(research): resolve belief and decision ROOT paths explicitly); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "belief_context.py": {
-      "ceiling": 598,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +18 lines over 580, 2 commit(s) since cdf6faa44, latest 3bd5d85d9 autokernel: AK-TOOL-CHAMPION-CONTEXT stale-anchor refusal + AK-TOOL-UNSOURCED-LI); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 624,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +18 lines over 580, 2 commit(s) since cdf6faa44, latest 3bd5d85d9 autokernel: AK-TOOL-CHAMPION-CONTEXT stale-anchor refusal + AK-TOOL-UNSOURCED-LI); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 952c4d859, 3bd5d85d9 profile focus symbols, unsourced-figure lint"
     },
     "bench.py": {
-      "ceiling": 414,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +29 lines over 385, 2 commit(s) since cdf6faa44, latest e50adce0b feat(autokernel/G1): round-2 AK fixes -- window-scoped device flock, live comput); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 439,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +29 lines over 385, 2 commit(s) since cdf6faa44, latest e50adce0b feat(autokernel/G1): round-2 AK fixes -- window-scoped device flock, live comput); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: ak/next-code-20261109 growth, actual count after merge"
     },
     "bestof.py": {
       "ceiling": 1135,
@@ -268,9 +280,21 @@
       "ceiling": 714,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +11 lines over 703, 1 commit(s) since cdf6faa44, latest daed7b39f Supervise AutoKernel lane entry points); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
+    "champion.py": {
+      "ceiling": 218,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 3bd5d85d9, c4976a843, e90b0aa9c stale-anchor and champion-currency refusals"
+    },
     "champion_reanchor.py": {
       "ceiling": 566,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +101 lines over 465, 5 commit(s) since cdf6faa44, latest ebfeec4aa AutoKernel: close re-anchor tool gaps and the dry-run COR check); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+    },
+    "claim.py": {
+      "ceiling": 830,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: e50adce0b, b05e3c3da window-scoped device flock and ancestor-hold resolution"
+    },
+    "clock_policy.py": {
+      "ceiling": 183,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: fd98d5d0e request-phase clock trace and ratifiable droop-band policy, new file"
     },
     "cpu_fa_reference.py": {
       "ceiling": 481,
@@ -280,6 +304,10 @@
       "ceiling": 278,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 277, 1 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
+    "dispatch_guard.py": {
+      "ceiling": 205,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 390daf496 calls the retired-mechanism refusal"
+    },
     "epoch_aliases.py": {
       "ceiling": 233,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 232, 1 commit(s) since cdf6faa44, latest 86319c468 autokernel: LOOP-SAFETY-C C2a/C2b + D-A3 (refuse missing store/inbox, ranked pat); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
@@ -288,6 +316,10 @@
       "ceiling": 922,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +75 lines over 847, 1 commit(s) since cdf6faa44, latest 0a9bc7b9f autokernel: switch bisect plan + campaign_status run-end/heartbeat (handback)); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
+    "fold2_gates.py": {
+      "ceiling": 247,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: NOT in the 2026-11-09 proposal, growth unreviewed; latest a137475bc"
+    },
     "gates.py": {
       "ceiling": 3104,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +116 lines over 2988, 4 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
@@ -295,6 +327,14 @@
     "gpu_serving_profile.py": {
       "ceiling": 699,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 697, 1 commit(s) since cdf6faa44, latest 78382e01f fix: score MMQ launcher candidates with their device kernels); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+    },
+    "gpu_window.py": {
+      "ceiling": 459,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: dc1436210, e50adce0b MI210 window must-fix list, bus-grant and schedule subsystem"
+    },
+    "hotspots.py": {
+      "ceiling": 209,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 625b5000a AK-PROF-TWO-DENOM denominators and rendering"
     },
     "integrity.py": {
       "ceiling": 368,
@@ -308,29 +348,49 @@
       "ceiling": 327,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +60 lines over 267, 2 commit(s) since cdf6faa44, latest f30243373 autokernel: SL-2 fail-closed on regressions from either metric); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
+    "lane_watchdog.py": {
+      "ceiling": 475,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: ak/next-code-20261109 growth, actual count after merge"
+    },
     "longctx.py": {
-      "ceiling": 809,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +80 lines over 729, 3 commit(s) since cdf6faa44, latest 6e6c2f705 longctx: write the VB-AK-LONGCTX record per launch and refusal (AKX-ALL-4)); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 820,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +80 lines over 729, 3 commit(s) since cdf6faa44, latest 6e6c2f705 longctx: write the VB-AK-LONGCTX record per launch and refusal (AKX-ALL-4)); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: NOT in the 2026-11-09 proposal, growth unreviewed; latest c835bd62d"
+    },
+    "longctx_c8.py": {
+      "ceiling": 99,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: NOT in the 2026-11-09 proposal, growth unreviewed; latest 1bc36e200"
     },
     "loop.py": {
-      "ceiling": 1458,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +31 lines over 1427, 9 commit(s) since cdf6faa44, latest e33cf3cd1 autokernel: identical-state planner abstention stop + log-only retry_budget_shad); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 1462,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +31 lines over 1427, 9 commit(s) since cdf6faa44, latest e33cf3cd1 autokernel: identical-state planner abstention stop + log-only retry_budget_shad); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: e33cf3cd1, 9ddf6d38e, 3ab4ffbf1 same-state stop, empty-suite preflight, typed resume ineligibility; reduction behind the custody pin"
+    },
+    "new_epoch.py": {
+      "ceiling": 91,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: a25f5ff79 per-surface anchor epochs"
     },
     "pipeline.py": {
       "ceiling": 364,
       "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +9 lines over 355, 4 commit(s) since cdf6faa44, latest 9b436c770 autokernel: refuse symlink, submodule and actor-commit escapes at candidate vali); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "planner_only.py": {
-      "ceiling": 167,
-      "approval": "operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); RATIFY-AK-C9-20261109 item 3: planner-only 0358db7a3"
+      "ceiling": 221,
+      "approval": "operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); RATIFY-AK-C9-20261109 item 3: planner-only 0358db7a3; operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 3f6301af8 planner-only CPU targets, actual count on the merged tree"
     },
     "pool.py": {
       "ceiling": 490,
       "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 488, 5 commit(s) since cdf6faa44, latest 5afd1ae08 Record autokernel build completion timestamps); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "production.py": {
-      "ceiling": 1312,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 1311, 1 commit(s) since cdf6faa44, latest 61af96a93 Preserve per-workload serving measurement recipes); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 1314,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 1311, 1 commit(s) since cdf6faa44, latest 61af96a93 Preserve per-workload serving measurement recipes); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: NOT in the 2026-11-09 proposal, growth unreviewed; latest a034d16e6"
+    },
+    "provider_breaker.py": {
+      "ceiling": 71,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: NOT in the 2026-11-09 proposal, growth unreviewed; latest f0dfb52de"
+    },
+    "residency.py": {
+      "ceiling": 665,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: dc1436210, e50adce0b, fd98d5d0e VRAM ceiling abort, own-launch tracking, clock trace"
     },
     "resolved_recipe.py": {
       "ceiling": 1374,
@@ -340,17 +400,25 @@
       "ceiling": 2916,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +43 lines over 2873, 6 commit(s) since cdf6faa44, latest 5bf3e074e resume.prepare: any source claim owns a lane_error re-emission (custody fix); pi); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
+    "retired_mechanisms.py": {
+      "ceiling": 201,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 390daf496 retired-mechanism refusal at formation, new file"
+    },
     "roofline_coverage.py": {
       "ceiling": 227,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +14 lines over 213, 1 commit(s) since cdf6faa44, latest d717f5884 fix(autokernel): publish scope gaps once per transition atomically); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "run.py": {
-      "ceiling": 6909,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +317 lines over 6588, 37 commit(s) since cdf6faa44, latest 46472498c autokernel: stop dispatching at the grant's cleanup reserve, end resumably); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); RATIFY-AK-C9-20261109 item 3: planner-only 0358db7a3, ceiling 6905 -> 6909"
+      "ceiling": 6953,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +317 lines over 6588, 37 commit(s) since cdf6faa44, latest 46472498c autokernel: stop dispatching at the grant's cleanup reserve, end resumably); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); RATIFY-AK-C9-20261109 item 3: planner-only 0358db7a3, ceiling 6905 -> 6909; operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 40 commits since baseline plus next-code growth. OPEN design question, not settled by this ceiling: extract the duplicated attempt-record blocks (file is custody-pinned)?; +1 for 390daf496"
     },
     "runtime_arms.py": {
       "ceiling": 510,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +9 lines over 501, 1 commit(s) since cdf6faa44, latest 0a9bc7b9f autokernel: switch bisect plan + campaign_status run-end/heartbeat (handback)); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+    },
+    "seed_bundle.py": {
+      "ceiling": 139,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: a25f5ff79, 2f047a7b1 surface-scoped seeding and stale-COR fence"
     },
     "serial_run.py": {
       "ceiling": 2558,
@@ -360,9 +428,17 @@
       "ceiling": 858,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +40 lines over 818, 1 commit(s) since cdf6faa44, latest 625b5000a autokernel: AK-PROF-TWO-DENOM hotspot denominators + AK-OP-E2E-PENDING op keep s); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
+    "serving.py": {
+      "ceiling": 2201,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 15 commits plus next-code growth; target-steps, acceptance and refused-partial evidence. OPEN design question, not settled by this ceiling: move target-steps helpers into a module?"
+    },
     "serving_beliefs.py": {
       "ceiling": 203,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +22 lines over 181, 2 commit(s) since cdf6faa44, latest 037e08ff3 fix(autokernel): seal prospective serving diagnostics before export); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+    },
+    "serving_gate.py": {
+      "ceiling": 213,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 625b5000a, cae39d8c3 e2e design classification before an op win is confirmed"
     },
     "source_build_preparation.py": {
       "ceiling": 385,
@@ -371,6 +447,14 @@
     "standalone_cli.py": {
       "ceiling": 384,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +10 lines over 374, 1 commit(s) since cdf6faa44, latest c8b3cbbc5 autokernel: AKX-AUTO-7 guard drain command (--confirm-drain <lane> required; dra); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+    },
+    "status.py": {
+      "ceiling": 381,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 991033729 pool_health_signal, 4b4207f3b process identity. OPEN design question, not settled by this ceiling: should the alarm logic live in status?"
+    },
+    "surface_fold.py": {
+      "ceiling": 282,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: d480cac2e refusal of ratified do-not-fold changes"
     },
     "unified_driver.py": {
       "ceiling": 1293,

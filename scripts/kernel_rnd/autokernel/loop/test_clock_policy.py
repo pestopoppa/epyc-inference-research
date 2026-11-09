@@ -25,9 +25,9 @@ def record(mhz=(1000, 980, 970, 1000), load_mhz=600, level="high", **overrides):
                             "mhz": list(clocks), "level_changes": [[0, level]]}, **overrides}
 
 
-def test_shipped_policy_is_strict():
+def test_shipped_policy_is_the_ratified_band():
     active = cp.load()
-    assert active.mode == cp.STRICT and active.droop_band_mhz is None
+    assert active.mode == cp.BAND and active.droop_band_mhz == 120
 
 
 def test_strict_policy_keeps_the_historical_rule():
