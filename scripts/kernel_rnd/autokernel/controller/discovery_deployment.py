@@ -411,6 +411,8 @@ class DiscoveryDeployment:
     # planner proposes its own mechanisms. See
     # ControllerConfig.autonomous_discovery for what it does and does not widen.
     autonomous_discovery: bool = False
+    # Off unless a deployment asks: the native C6 oracle/candidate gate and admission.
+    c6_admission: bool = False
 
     def revalidate(self) -> None:
         """Close the parse-to-start TOCTOU gap for every sealed file reference."""
@@ -564,10 +566,13 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         top["controller"],
         {"state_root", "evidence_root", "operations_root", "build_root",
          "max_iterations", "nomination_threshold"},
-        {"autonomous_discovery"}, "controller")
+        {"autonomous_discovery", "c6_admission"}, "controller")
     autonomous_discovery = controller.get("autonomous_discovery", False)
     if not isinstance(autonomous_discovery, bool):
         raise DeploymentConfigError("controller.autonomous_discovery must be a bool")
+    c6_admission = controller.get("c6_admission", False)
+    if not isinstance(c6_admission, bool):
+        raise DeploymentConfigError("controller.c6_admission must be a bool")
     roots = {key: _validate_root(_absolute(controller[key], f"controller.{key}"), f"controller.{key}") for key in
              ("state_root", "evidence_root", "operations_root", "build_root")}
     if any(_overlaps(left, right) for index, left in enumerate(roots.values())
@@ -657,6 +662,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         operations_root=roots["operations_root"], build_root=roots["build_root"],
         max_iterations=max_iterations,
         autonomous_discovery=autonomous_discovery,
+        c6_admission=c6_admission,
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
         critic_wrapper=critic_wrapper,
         environment_profile_id=environment_profile_id, device_id=device_id,

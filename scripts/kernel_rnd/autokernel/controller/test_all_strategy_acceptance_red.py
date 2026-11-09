@@ -24,7 +24,19 @@ from . import gpu_source_evidence as E
 from . import test_discovery_controller as TD
 from . import test_discovery_static_registry as TSR
 from . import test_gpu_source_adapter as TA
-from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan
+from .test_gpu_source_evidence import ClaimFactory, FakeExecutors
+from .test_gpu_source_evidence import plan as _c6_plan
+
+
+def plan(*args, **kwargs):
+    """These gates pin the stage order of a deployment with C6 off, the default."""
+    current = dataclasses.replace(_c6_plan(*args, **kwargs), c6_correctness=None)
+    path = current.policy.path
+    path.write_text(json.dumps(E._policy_payload(current), sort_keys=True))
+    return dataclasses.replace(current, policy=E.BoundInputFile(
+        "execution_policy", path, hashlib.sha256(path.read_bytes()).hexdigest()))
+
+
 
 
 ELIGIBLE = (
@@ -36,6 +48,12 @@ ELIGIBLE = (
 
 
 class AllStrategyAcceptanceRedGate(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(TA, "plan", plan)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        super().setUp()
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.portfolio = hypothesis_portfolio.load(
@@ -2234,6 +2252,12 @@ class EvidenceStageResumeRedGate(unittest.TestCase):
 
 
 class AdapterStageResumeRedGate(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(TA, "plan", plan)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        super().setUp()
+
     """The controller-facing adapter must reopen partial proof receipts.
 
     Producer-level reuse is insufficient: on a real controller restart,

@@ -188,6 +188,10 @@ class PrecomputeScreenRefusal(DiscoveryControllerError):
     """Typed adapter refusal proving that no governed operation was started."""
 
 
+class C6OperatorUnsupportedRefusal(PrecomputeScreenRefusal):
+    """The operator has no reviewed native C6 harness and cannot be screened."""
+
+
 class PostBuildEvidencePlanRefusal(PrecomputeScreenRefusal):
     """A completed build was refused before claim/proof/runner execution.
 

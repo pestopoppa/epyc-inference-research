@@ -722,6 +722,7 @@ class RocprofV3FactoryAcceptance(unittest.TestCase):
                 candidate_build=candidate_build,
                 anchor_build=anchor_build)
             config = SimpleNamespace(
+                c6_admission=False,
                 operations_root=operations, config_sha256="3" * 64,
                 device_id="mi210_0", model=model, workload=workload,
                 runtime_config=runtime_config)
@@ -743,6 +744,7 @@ class RocprofV3FactoryAcceptance(unittest.TestCase):
                 plan = F._evidence_binding(config).build(
                     candidate, build, template, 1)
 
+            self.assertIsNone(plan.c6_correctness)
             exact_prefix = (
                 str(F._ROCPROF_V3_PYTHON.resolve(strict=True)),
                 str(F._ROCPROF_V3.resolve(strict=True)),

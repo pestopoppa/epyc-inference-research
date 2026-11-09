@@ -675,6 +675,44 @@ def wrapper(kernel, reference, x):
         node.body[0].value.right.value = 2
         self.assertNotEqual(baseline, c6._canonical_ast_sha256(node))
 
+    def test_wrapper_raise_mutation_separates_laundering_from_honest_kernel(self):
+        """RVP-C6-24: a real re-run fails only the submission saved by its fallback."""
+        source = """
+def wrapper(kernel, reference, x):
+    try:
+        return kernel(x)
+    except Exception:
+        return reference(x)
+"""
+        def reference(x):
+            return x * 2
+
+        def broken(_x):
+            raise ValueError("kernel failed")
+
+        def honest(x):
+            return x * 2
+
+        def correct(wrapper_source, kernel):
+            namespace = {}
+            exec(wrapper_source, namespace)
+            try:
+                return namespace["wrapper"](kernel, reference, 21) == 42
+            except RuntimeError:
+                return False
+
+        # The unmutated wrapper passes correctness either way: that is the hole.
+        self.assertTrue(correct(source, broken))
+        self.assertTrue(correct(source, honest))
+        laundered = c6.probe_fallback_laundering(
+            source, lambda mutated: correct(mutated, broken))
+        self.assertFalse(laundered.correct)
+        self.assertEqual(laundered.reason, "fallback_laundering_detected")
+        clean = c6.probe_fallback_laundering(
+            source, lambda mutated: correct(mutated, honest))
+        self.assertTrue(clean.correct)
+        self.assertEqual(clean.reason, "fallback_free_rerun_passed")
+
     def test_laundering_is_detected_when_mutated_rerun_does_not_pass(self):
         source = "try:\n    result = kernel()\nexcept Exception:\n    return_value = 1\n"
         probe = c6.probe_fallback_laundering(source, lambda _source: True)

@@ -1,3 +1,5 @@
+import dataclasses
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -154,7 +156,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
             self.assertEqual(recovered.status, "sealed_result")
             self.assertEqual(recovered.result, screened)
             self.assertEqual(adapter.effects(lease["operation_key"]), (.08, .12))
-            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(len(executors.calls), 7)
 
     def test_absent_is_safe_partial_and_tamper_are_ambiguous(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -231,13 +233,13 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 adapter.screen(candidate, authorization, lease)
             self.assertTrue((operation / "proof/proof-bundle.json").is_file())
             self.assertTrue((operation / "runner-plan.json").is_file())
-            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(len(executors.calls), 7)
             self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
 
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
                 resumed = adapter.screen(candidate, authorization, lease)
             self.assertEqual(resumed.result_sha256, current.result_sha256)
-            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(len(executors.calls), 7)
             self.assertEqual(adapter.reconcile(inflight).status, "sealed_result")
 
     def test_stop_after_admission_carrier_before_runner_plan_is_resumable(self):
@@ -279,7 +281,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 adapter.screen(candidate, authorization, lease)
             self.assertTrue((operation / "proof/proof-bundle.json").is_file())
             self.assertFalse((operation / "runner-plan.json").exists())
-            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(len(executors.calls), 7)
             self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
             carrier = operation / "runner/s1/load-admission-decision.json"
             expected = carrier.read_bytes()
@@ -387,7 +389,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
                 result = adapter.screen(candidate, authorization, lease)
             self.assertEqual(result.result_sha256, current.result_sha256)
-            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(len(executors.calls), 7)
             self.assertEqual(manager.borrow_calls, 3)
             self.assertEqual(manager.release_calls, 1)
             release = A._read_json(root / "reservation-release.json", "release")
@@ -503,6 +505,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 adapter.screen(candidate, authorization, permit)
             self.assertEqual(events, [
                 "probe_acquire", "probe_release", "build", "outer_acquire",
+                "correctness", "correctness", "correctness", "correctness",
                 "correctness", "attribution", "attribution", "runner",
                 "outer_release"])
             self.assertEqual(len(claims), 2)
