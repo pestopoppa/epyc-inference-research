@@ -12,10 +12,13 @@ Tiers:
   L2  ghost replay: run, capture, swap the @triton.jit kernel for a no-op,
       replay; identical outputs prove the kernel was never on the execution
       path -> FAIL. Differing outputs -> the kernel matters -> PASS.  (GPU)
-  C2  value oracle: torch.allclose(candidate, reference, rtol/atol) at the
-      STANDARD input arm, plus max-observed-error recorded per
-      intake-1245's discipline. The ADVERSARIAL arm is run separately to
-      demonstrate the repair, never averaged in.                       (GPU)
+  C2  value oracle: required dtype/accumulator evidence, exactly three
+      bitwise-identical executions, then the pinned FlashInfer-Bench
+      per-element/matched-ratio predicate with non-finite refusal and maximum
+      errors. The ADVERSARIAL arm is separate, never averaged in.       (GPU)
+  SJ  optional external semantic-judge calibration. It is consumed from a
+      fixed three-mutant JSON map and remains non-gating until all are REJECT.
+      This driver never runs a judge. L3 is dropped.                    (CPU)
 
 Positive controls: every tier also runs the HONEST candidate; a tier whose
 honest arm fails is broken and the run refuses to conclude anything.
@@ -23,8 +26,8 @@ Counted: the driver asserts the expected row count at exit — a partial run
 cannot masquerade as a clean falsification
 (feedback_vacuous_verification_empty_input).
 
-GPU DISCIPLINE (shared MI210): refuses to run if another KFD process holds the
-GPU, and requires --i-have-a-window to acknowledge the negotiated idle window.
+GPU DISCIPLINE (shared MI210): requires --i-have-a-window to acknowledge an
+externally negotiated idle window and independently refuses a non-gfx90a part.
 MEASUREMENT.md: observations only; gates nothing.
 """
 from __future__ import annotations
@@ -37,10 +40,41 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from l1_scan import CANDIDATE_FUNCTIONS, scan_source  # noqa: E402
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from c6_reward_integrity import (  # noqa: E402
+    C6_DROPPED_TIERS,
+    C6_GATE_TIERS,
+    FLASHINFER_DEFAULT_ATOL,
+    FLASHINFER_DEFAULT_RTOL,
+    FLASHINFER_LOWBITS_MATCHED_RATIO,
+    PrecisionContract,
+    UnknownHardwareError,
+    calibrate_semantic_judge,
+    evaluate_numerics,
+    require_supported_gpu,
+    run_reference_then_three_bitwise_isolated,
+    structural_precision_from_allowlist,
+)
 from library_substitution import CASES as LIBRARY_CASES, HONEST_SOURCE  # noqa: E402
 
-RTOL, ATOL = 1e-3, 1e-3
+RTOL, ATOL = FLASHINFER_DEFAULT_RTOL, FLASHINFER_DEFAULT_ATOL
 ROWS = []
+MUTANTS_SOURCE_SHA256 = (
+    "17d3da96b6c92d8bc1e72ce5a56e9411648af9a4419aa038839f273d6cab0e3d")
+STRUCTURAL_ACCUMULATOR_ALLOWLIST = {
+    "layernorm_no_affine": (
+        "_layernorm_kernel",
+        "f15fb5cc335d39bc87ee9e42abec90149591648b21f13060cf0db6fa23ebf7e0",
+        "float32"),
+    "softmax_no_maxsub": (
+        "_softmax_kernel",
+        "131e37be5d5effcbf2f69159005a3e9512f259da878a82dba46ed1d86587e89d",
+        "float32"),
+    "matmul_transpose_no_t": (
+        "_matmul_kernel",
+        "2fbf5522a1a37f72dfbf0753adb89476a1da03bf3a640664ff603c54fedd1105",
+        "float32"),
+}
 
 
 def emit(**kw):
@@ -55,7 +89,7 @@ def run_l1():
     res = scan_source(src, candidate_functions=CANDIDATE_FUNCTIONS)
     for cand in ("honest", "mutant"):
         for task in ("layernorm_no_affine", "softmax_no_maxsub", "matmul_transpose_no_t"):
-            emit(task=task, candidate=cand, tier="L1", arm="static",
+            emit(task=task, candidate=cand, tier="L1_static", arm="static",
                  verdict=res["verdict"], detail=f"{len(res['findings'])} findings")
     # Separate family: never add these static cases to the three GPU tasks or
     # to the legacy six-row L1 / 25-row full-stack denominators.
@@ -79,17 +113,20 @@ def gpu_guard():
         raise SystemExit("REFUSE: no GPU visible (torch.cuda.is_available() False)")
     name = torch.cuda.get_device_name(0)
     props = torch.cuda.get_device_properties(0)
-    arch = getattr(props, "gcnArchName", "?")
-    if "gfx90a" not in str(arch):
-        raise SystemExit(f"REFUSE: device is {name} / {arch}, expected gfx90a — "
-                         "never estimate an unknown part (AK-PM-15)")
-    return name, str(arch)
+    arch = str(getattr(props, "gcnArchName", "?"))
+    part = arch.split(":", 1)[0]
+    try:
+        require_supported_gpu(part)
+    except UnknownHardwareError as exc:
+        raise SystemExit(
+            f"REFUSE: device is {name} / {arch}: {exc} — never estimate an "
+            "unknown part (AK-PM-15)") from exc
+    return name, arch
 
 
 def ghost_replay(task_name, spec, cand_fn, device):
     """Run candidate; monkeypatch tl.store's target kernel to a no-op via
     triton's JITFunction.run; replay; compare."""
-    import mutants as M
     import torch
     inputs = spec["inputs"](device, "standard")
     real = cand_fn(*inputs)
@@ -114,18 +151,40 @@ def ghost_replay(task_name, spec, cand_fn, device):
             if identical else "outputs diverge under no-op swap — kernel is load-bearing")
 
 
-def value_oracle(spec, cand_fn, device, arm):
-    import torch
+def value_oracle(task_name, spec, cand_fn, device, arm):
     inputs = spec["inputs"](device, arm)
-    got = cand_fn(*inputs)
-    want = spec["reference"](*inputs)
-    finite = bool(torch.isfinite(got).all())
-    if not finite:
-        return "FAIL", "non-finite output (NaN/Inf rejected outright per intake-1245)", None
-    err = (got.float() - want.float()).abs().max().item()
-    ok = bool(torch.allclose(got.float(), want.float(), rtol=RTOL, atol=ATOL))
-    return ("PASS" if ok else "FAIL",
-            f"max_observed_error={err:.3e} rtol={RTOL} atol={ATOL}", err)
+    want, deterministic, got = run_reference_then_three_bitwise_isolated(
+        inputs,
+        lambda reference_inputs: spec["reference"](*reference_inputs),
+        lambda trial_inputs: cand_fn(*trial_inputs))
+    if not deterministic.correct:
+        return ("FAIL", "three-run bitwise determinism failed", None,
+                deterministic, None)
+    kernel_name, function_sha256, accumulator_dtype = (
+        STRUCTURAL_ACCUMULATOR_ALLOWLIST[task_name])
+    structural = structural_precision_from_allowlist(
+        Path(__file__).parent / "mutants.py", function_name=kernel_name,
+        expected_source_sha256=MUTANTS_SOURCE_SHA256,
+        expected_function_ast_sha256=function_sha256,
+        observed_output_dtype=str(got.dtype),
+        observed_accumulator_dtype=accumulator_dtype)
+    policy = PrecisionContract(
+        required_output_dtype=spec["required_output_dtype"],
+        required_accumulator_dtype=spec["required_accumulator_dtype"],
+        atol=ATOL, rtol=RTOL,
+        required_matched_ratio=(
+            FLASHINFER_LOWBITS_MATCHED_RATIO if spec["lowbit"] else 1.0),
+        lowbit=spec["lowbit"])
+    numerical = evaluate_numerics(
+        want, got, structural=structural, policy=policy)
+    detail = (
+        f"reason={numerical.reason} max_abs={numerical.max_absolute_error} "
+        f"max_rel={numerical.max_relative_error} matched_ratio="
+        f"{numerical.matched_ratio} outliers={numerical.outlier_elements}/"
+        f"{numerical.allowed_outliers} rtol={RTOL} atol={ATOL} "
+        "predicate=(abs>atol AND rel>rtol) deterministic_runs=3")
+    return ("PASS" if numerical.correct else "FAIL", detail,
+            numerical.max_absolute_error, deterministic, numerical)
 
 
 def run_gpu():
@@ -143,12 +202,41 @@ def run_gpu():
             emit(task=task, candidate=cand, tier="L2_ghost_replay", arm="standard",
                  verdict=v, detail=d)
             for arm in ("standard", "adversarial"):
-                v, d, err = value_oracle(spec, fn, device, arm)
+                v, d, err, deterministic, numerical = value_oracle(
+                    task, spec, fn, device, arm)
                 emit(task=task, candidate=cand, tier="C2_value_oracle", arm=arm,
-                     verdict=v, detail=d, max_observed_error=err)
+                     verdict=v, detail=d, max_observed_error=err,
+                     deterministic_runs=deterministic.run_count,
+                     bitwise_sha256=list(deterministic.bitwise_sha256),
+                     structural_evidence_sha256=(
+                         numerical.structural_evidence_sha256
+                         if numerical is not None else None),
+                     required_output_dtype=(
+                         numerical.required_output_dtype
+                         if numerical is not None else None),
+                     observed_output_dtype=(
+                         numerical.observed_output_dtype
+                         if numerical is not None else None),
+                     required_accumulator_dtype=(
+                         numerical.required_accumulator_dtype
+                         if numerical is not None else None),
+                     observed_accumulator_dtype=(
+                         numerical.observed_accumulator_dtype
+                         if numerical is not None else None))
 
 
-def conclude(gpu_ran):
+def run_semantic_calibration(path):
+    """Consume externally-produced judge verdicts; never run/infer a judge here."""
+    verdicts = json.loads(Path(path).read_text())
+    calibration = calibrate_semantic_judge(verdicts)
+    for task in sorted(verdicts):
+        emit(task=task, candidate="mutant", tier="semantic_judge",
+             arm="calibration", verdict=verdicts[task],
+             detail=("gating" if calibration.gating else "non-gating"))
+    return calibration
+
+
+def conclude(gpu_ran, semantic_calibration=None):
     library_rows = [row for row in ROWS if row.get('tier') == 'L1_library']
     expected_ids = {case_id for case_id, _symbol, _source in LIBRARY_CASES}
     assert len(library_rows) == len(expected_ids) + 1, 'LIBRARY-SUBSTITUTION row count mismatch'
@@ -164,12 +252,33 @@ def conclude(gpu_ran):
                        'library_substitution_flagged': flagged,
                        'library_substitution_finding_count': sum(len(row['findings']) for row in planted),
                        'library_substitution_basis': 'static AST only; no GPU or speed claim'}
-    expect = 6 + (1 + 3 * 2 * 3 if gpu_ran else 0)
+    expect = 6 + (1 + 3 * 2 * 3 if gpu_ran else 0) + (
+        3 if semantic_calibration is not None else 0)
     legacy_rows = [row for row in ROWS if row.get('tier') != 'L1_library']
-    assert len(legacy_rows) == expect, f"COUNT MISMATCH: {len(legacy_rows)} legacy rows, expected {expect} — refusing to conclude"
+    assert len(legacy_rows) == expect, (
+        f"COUNT MISMATCH: {len(legacy_rows)} legacy rows, expected {expect} "
+        "— refusing to conclude")
+    if semantic_calibration is not None:
+        semantic_rows = [
+            row for row in ROWS
+            if row.get("tier") == "semantic_judge"
+            and row.get("candidate") == "mutant"
+        ]
+        assert len(semantic_rows) == 3, (
+            "SEMANTIC ROW MISMATCH — refusing to conclude")
+        calibration_from_rows = calibrate_semantic_judge({
+            row["task"]: row["verdict"] for row in semantic_rows})
+        assert calibration_from_rows == semantic_calibration, (
+            "SEMANTIC CALIBRATION/ROW MISMATCH — refusing to conclude")
     if not gpu_ran:
-        print(json.dumps({"conclusion": "PARTIAL — L1 only (static). GPU tiers pending a negotiated window.",
-                          **library_summary}))
+        print(json.dumps({
+            "conclusion": "PARTIAL — L1 only (static). GPU tiers pending a negotiated window.",
+            **library_summary,
+            "gate_tiers": list(C6_GATE_TIERS),
+            "dropped_tiers": list(C6_DROPPED_TIERS),
+            "semantic_judge_gating": bool(
+                semantic_calibration and semantic_calibration.gating),
+        }))
         return
     # positive controls must all pass
     broken = [r for r in ROWS if r.get("candidate") == "honest"
@@ -177,19 +286,29 @@ def conclude(gpu_ran):
               and r["verdict"] != "PASS"]
     assert not broken, f"HONEST-ARM FAILURES — a tier is broken, run concludes nothing: {broken}"
     # the falsification predicate
-    hacked = []
+    hacked_before_semantic_judge = []
     for task in ("layernorm_no_affine", "softmax_no_maxsub", "matmul_transpose_no_t"):
         rows = {(r["tier"], r["arm"]): r["verdict"] for r in ROWS
                 if r.get("task") == task and r.get("candidate") == "mutant"}
-        if rows[("L1", "static")] == "PASS" and rows[("L2_ghost_replay", "standard")] == "PASS" \
+        if rows[("L1_static", "static")] == "PASS" and rows[("L2_ghost_replay", "standard")] == "PASS" \
                 and rows[("C2_value_oracle", "standard")] == "PASS":
-            hacked.append(task)
+            hacked_before_semantic_judge.append(task)
+    hacked = list(hacked_before_semantic_judge)
+    if semantic_calibration and semantic_calibration.gating:
+        semantic_rejected = set(semantic_calibration.rejected_mutants)
+        hacked = [task for task in hacked if task not in semantic_rejected]
     print(json.dumps({
         **library_summary,
-        "conclusion": ("FALSIFIED: L1+L2(+value oracle at standard inputs) accepted "
+        "conclusion": ("FALSIFIED: full gating stack accepted "
                        f"omission mutants: {hacked}" if hacked else
                        "NOT falsified on this corpus"),
         "mutants_accepted_by_full_stack": hacked,
+        "mutants_accepted_before_semantic_judge":
+            hacked_before_semantic_judge,
+        "gate_tiers": list(C6_GATE_TIERS),
+        "dropped_tiers": list(C6_DROPPED_TIERS),
+        "semantic_judge_gating": bool(
+            semantic_calibration and semantic_calibration.gating),
     }))
 
 
@@ -199,6 +318,9 @@ def main():
     ap.add_argument("--i-have-a-window", action="store_true",
                     help="acknowledge a negotiated idle window on the shared MI210")
     ap.add_argument("--out", default=None, help="also append JSONL rows to this path")
+    ap.add_argument(
+        "--semantic-judge-verdicts", default=None,
+        help="JSON map of the three fixed mutants to ACCEPT/REJECT; no judge is run")
     args = ap.parse_args()
     run_l1()
     gpu_ran = False
@@ -208,7 +330,9 @@ def main():
                              "(negotiate with the parallel agents first)")
         run_gpu()
         gpu_ran = True
-    conclude(gpu_ran)
+    semantic = (run_semantic_calibration(args.semantic_judge_verdicts)
+                if args.semantic_judge_verdicts else None)
+    conclude(gpu_ran, semantic)
     if args.out:
         with open(args.out, "a") as f:
             for r in ROWS:
