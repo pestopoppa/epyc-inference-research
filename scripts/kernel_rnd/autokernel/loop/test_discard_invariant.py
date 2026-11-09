@@ -15,7 +15,7 @@ HERE = Path(__file__).parent
 REVIEWED = {
     "actor_metrics.py": "48f0e9495d7d4ca375cacfa6fd70cd007136ffbbd1205a5ffea3b80871aa0614",
     "../custody.py": "187c9cc71c35c0c94e44430202667505f45e616f7c70790d64a59d159ade1b55",
-    "actors.py": "da3a5d7ce6bbc6c279305c3b8b48f5819fee409f3299cf16c0d7ebff28e0a494",  # custody review 2026-11-07 AutoKernel: hotspots import + optional two-denominator render block in render_context; no artifact path
+    "actors.py": "ac0d0a20896ca12425740720c182aecec85f42374c680d1c26929016e538cafc",  # custody review 2026-11-09: claude binary path only
     "archive.py": "4a8cdaaf7469ae915358e2f06cfdd7adbb8bbdb2a6186a5641f3ae95aecad6c1",
     "bestof.py": "a42ade5e6075eaff43d5cf065c93015ff2445e80546bed3eb7d2a7f279012959",
     "cross_target.py": "8a4afa59ce62645b23f9f1e02e4bd17e0b7ba1cc997ad25cdcc1aa91e9900409",
@@ -23,7 +23,7 @@ REVIEWED = {
     "pipeline.py": "d17f3ed2dada812aba24bee16decd0140a21ec53ca8042789cc61f86c6d2b36f",  # custody review 2026-11-07 AutoKernel: tail_timing wrappers re-raise unchanged, tail session entered as before (AK-TAIL-SPLIT phase 1)
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
-    "run.py": "7eec18fbcde41ec62bd36de48a6496ad277caac998e9ad5356ed46a0098d4d07",  # custody review 2026-11-07 AutoKernel: SL-2/SL-4 call sites pass floor_record= on the legacy serving path and ServingComparison.effect routes through serving.verdict_effect; no drop or keep path added, on top of AKX-AUTO-4
+    "run.py": "deb98ef8a6b20e36d7e2c917d817617269080274ea1496aae92b58865f6ce182",  # custody review 2026-11-09: dry-run/startup refusals only
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 
