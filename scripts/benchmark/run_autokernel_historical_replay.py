@@ -77,7 +77,7 @@ def create_worktree(*, repo: Path, path: Path, commit: str) -> None:
         check=True, stdin=subprocess.DEVNULL)
 
 
-def verify_linkage(binary: Path, build_dir: Path) -> None:
+def verify_linkage(binary: Path, build_dir: Path, arm: str = "") -> None:
     """Prove the freshly built binary resolves ITS OWN ggml (NIB2-58a).
 
     Runs the canonical verifier under the same launch recipe `run_benchmark`
@@ -138,7 +138,7 @@ def build_arm(*, arm: str, tree: Path, output_dir: Path,
     binary = build / "bin" / "llama-batched-bench"
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(f"{arm} historical binary is not executable: {binary}")
-    verify_linkage(binary, build)
+    verify_linkage(binary, build, arm)
     commit = subprocess.check_output(
         ("git", "rev-parse", "HEAD"), cwd=tree, text=True).strip()
     status = subprocess.check_output(
