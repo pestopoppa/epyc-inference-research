@@ -177,3 +177,19 @@ def test_cpu_target_refuses_gpu_only_tree(tmp_path):
     (tmp_path / "tree" / po.CPU_SOURCE_DIR / "a.cpp").unlink()
     code, made = _run(tmp_path, None, **kw)
     assert code == 2 and not made
+
+
+def test_cpu_card_and_report_name_profile_anchor_mismatch():
+    profile = {"node_profile": {"status": "observed", "anchor_commit": "a" * 40}}
+    assert po.anchor_mismatch(profile, "a" * 40) is None
+    assert po.anchor_mismatch({"node_profile": {"status": "observed"}}, "b" * 40) is None
+    named = po.anchor_mismatch(profile, "b" * 40)
+    assert "aaaaaaaaaaaa" in named and "bbbbbbbbbbbb" in named
+
+
+def test_cpu_profile_record_carries_anchor(tmp_path):
+    prof = tmp_path / "p.json"
+    prof.write_text(json.dumps({
+        "schema": po.NODE_PROFILE_SCHEMA, "cache_key": {"anchor_commit": "c" * 40},
+        "section": {"status": "observed"}}))
+    assert po.load_profile(prof, cpu=True)["node_profile"]["anchor_commit"] == "c" * 40

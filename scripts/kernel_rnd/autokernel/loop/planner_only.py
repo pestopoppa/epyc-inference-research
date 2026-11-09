@@ -72,7 +72,10 @@ def load_profile(path: Path, *, cpu: bool = False) -> dict[str, Any]:
     found = dict(raw)
     if cpu:
         if found.get("schema") == NODE_PROFILE_SCHEMA:
-            found = {"node_profile": found.get("section")}
+            anchor = (found.get("cache_key") or {}).get("anchor_commit")
+            section = found.get("section")
+            found = {"node_profile": {**section, "anchor_commit": anchor}
+                     if isinstance(section, Mapping) else section}
         profile = {key: found[key] for key in CPU_PROFILE_KEYS
                    if isinstance(found.get(key), Mapping) and found[key].get("status") == "observed"}
         if not profile:
@@ -86,6 +89,15 @@ def load_profile(path: Path, *, cpu: bool = False) -> dict[str, Any]:
         raise Refused(f"profile {path} has no hotspot rows: pass --profile with a captured "
                       "profile, or a --store whose loop-status.json holds `hotspots`")
     return profile
+
+
+def anchor_mismatch(profile: Mapping[str, Any], source_commit: str) -> str | None:
+    """Names a retained profile whose anchor is not the commit the planner reads."""
+    anchor = (profile.get("node_profile") or {}).get("anchor_commit")
+    if not anchor or anchor == source_commit:
+        return None
+    return (f"profile anchor {anchor[:12]} differs from source commit {source_commit[:12]}: "
+            "the shares describe the anchor build, not this source")
 
 
 def _git(tree: Path, *argv: str) -> str:
@@ -212,10 +224,12 @@ def run(args, *, seat_common: Mapping[str, Any],
     census = workload_contract.read_split_census(args.model)
     backend = actors.backend_for(args.planner_model, args.planner_effort)
     store = Path(args.store).resolve()
+    mismatch = anchor_mismatch(profile, source_commit)
     cpu_context = {
         "target": {"scope": "experimental candidate, NOT canonical champion; planner-only, "
                             "nothing is built or measured", "recipe": launch,
-                   "hotspot_status": "retained node profile; no sampled perf record"},
+                   "hotspot_status": "retained node profile; no sampled perf record",
+                   "profile_anchor_mismatch": mismatch},
         "cpu_profile": {"status": "not_collected",
                         "reason": "planner-only supplies only a retained node profile"},
         "inbox": inbox.read_inbox(store / "inbox"),
@@ -255,6 +269,7 @@ def run(args, *, seat_common: Mapping[str, Any],
         status, detail, code = "actor_error", f"{type(exc).__name__}: {exc}"[:500], 1
     report = _report(planner, result, status=status, source_commit=source_commit,
                      profile_ref=str(profile_path), author=author, detail=detail)
+    report["profile_anchor_mismatch"] = mismatch
     (out / REPORT_NAME).write_text(json.dumps(report, indent=2, default=str) + "\n",
                                    encoding="utf-8")
     print(f"planner-only {status}: report {out / REPORT_NAME}; stopped before build")
