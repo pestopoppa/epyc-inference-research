@@ -15,6 +15,14 @@ from .test_glm_frozen_requests import _canonical_launch, _manifest as _prompts, 
 from . import test_promotion_targets as promotion_fixture
 
 
+@pytest.fixture(autouse=True)
+def _startup_gates_are_covered_elsewhere(monkeypatch):
+    """These fixtures carry no wire record/bundle; test_dry_run_live_gates owns those refusals."""
+    monkeypatch.setattr(run, "_report_dry_run_refusals",
+                        lambda: run._DRY_RUN_REFUSALS.clear() or False)
+
+
+
 def _resolved(*, backend="cpu", seed=False, changes=None, missing=False):
     _, launch = _canonical_launch(18311)
     row = _target("selected", backend=backend, context=launch.template.ctx,

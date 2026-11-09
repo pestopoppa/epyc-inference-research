@@ -204,6 +204,25 @@ def accept_serial_capability(store):
     return True
 
 
+_UNRESOLVED_STATE = 'prior supervisor state unresolved; recovery held'
+
+
+def _state_root():
+    return Path(tempfile.gettempdir()) / f'autokernel-lane-watchdog-{os.getuid()}'
+
+
+def startup_refusal(store):
+    """Read-only twin of supervise()'s pre-launch refusals for a dry run.
+
+    The lane flock is deliberately not probed: even a momentary hold could make a
+    supervisor starting at that instant refuse, and a live supervisor has a state file.
+    """
+    if any(name.startswith('AUTOKERNEL_WATCHDOG_') for name in os.environ):
+        return 'reserved supervisor environment already set'
+    digest = hashlib.sha256(str(Path(store).absolute().resolve()).encode()).hexdigest()
+    return _UNRESOLVED_STATE if (_state_root() / (digest + '.json')).exists() else None
+
+
 def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files=(), recovery_checkpoint=None, max_restarts=2):
     """Run main in a child; normal exit and requested signals are terminal."""
     if any(name.startswith('AUTOKERNEL_WATCHDOG_') for name in os.environ):
@@ -216,7 +235,7 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
     if not identities or any(p == str(Path('None').resolve()) for p in identities):
         raise WatchdogRefused('canonical target stores are required')
     digests = [hashlib.sha256(p.encode()).hexdigest() for p in identities]
-    root = Path(tempfile.gettempdir()) / f'autokernel-lane-watchdog-{os.getuid()}'
+    root = _state_root()
     root.mkdir(mode=0o700, exist_ok=True)
     if root.is_symlink() or root.stat().st_uid != os.getuid() or root.stat().st_mode & 0o077:
         raise WatchdogRefused('unsafe watchdog directory')
@@ -236,7 +255,7 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
         # A previous supervisor may have died while descendants escaped its process
         # group. Its state is never cleared by guessing from a recycled PID.
         if any(path.exists() for path in state_paths):
-            raise WatchdogRefused('prior supervisor state unresolved; recovery held')
+            raise WatchdogRefused(_UNRESOLVED_STATE)
         if threading.active_count() != 1:
             raise WatchdogRefused('supervision requires a dedicated single-threaded owner')
         try:

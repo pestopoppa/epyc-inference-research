@@ -335,6 +335,44 @@ def publish_intervals(store, selection, contexts, *, target, phases=None, cpu_se
 INHERITED_DEVICE_LOCK_ENV = "AUTOKERNEL_GPU_DEVICE_LOCK_INHERITED"
 
 
+def device_claim_refusal(lock_path: Path | None = None, *, device_id: str = DEVICE_ID) -> str | None:
+    """Would `hold()` refuse because this process tree itself holds the device flock?
+
+    A launcher that takes the flock and runs us without the inherited-hold env blocks
+    its own child: `hold()` opens a new file description, which conflicts. A holder
+    OUTSIDE this tree is transient contention, not a defect of this start, so it is not
+    a refusal. The probe opens a fresh description (never an inherited fd, where flock
+    would convert the holder's own lock), creates nothing, and closes at once; SHARED
+    cannot displace an exclusive holder.
+    """
+    lock_path = DEVICE_LOCK if lock_path is None else Path(lock_path)
+    if _inherited_device_fd(lock_path) is not None:
+        return None
+    try:
+        probe = os.open(lock_path, os.O_RDONLY | os.O_CLOEXEC)
+    except OSError:
+        return None  # absent: nothing holds it, and hold() would create it
+    try:
+        fcntl.flock(probe, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        return None
+    except OSError:
+        pass
+    finally:
+        os.close(probe)  # also drops the probe's lock
+    target = os.stat(lock_path)
+    for pid in [os.getpid(), *_ancestor_pids(os.getpid())]:
+        try:
+            for entry in os.scandir(f"/proc/{pid}/fd"):
+                held = os.stat(entry.path)
+                if (held.st_dev, held.st_ino) == (target.st_dev, target.st_ino):
+                    return (f"{device_id} flock {lock_path} is held by this process tree "
+                            f"(pid {pid}); the live claim would refuse -- start the loop "
+                            "without the launcher's hold or pass it via the inherited-hold env")
+        except OSError:
+            continue
+    return None
+
+
 def _inherited_device_fd(lock_path: Path) -> tuple[int, int] | None:
     """(fd, parent pid) when this process inherited its parent's window-scoped hold on
     `lock_path`, else None. Every mismatch (no env, closed fd, another inode) is None,
@@ -993,6 +1031,7 @@ class WindowDeviceHold:
 
 
 __all__ = ["ClaimRefused", "CpuClaimLease", "DEVICE_ID", "DEVICE_LOCK", "GPU_QUIET_ROLE",
+           "device_claim_refusal",
            "INHERITED_DEVICE_LOCK_ENV", "WindowDeviceHold",
            "gpu_quiet_preflight", "hold", "hold_cpu", "hold_gpu_quiet_measurement",
            "region_lock_busy", "yield_lease"]
