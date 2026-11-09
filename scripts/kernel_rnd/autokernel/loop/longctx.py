@@ -35,7 +35,10 @@ whole restored prefix would silently re-prefill 64k tokens -- which is exactly w
 RESTORE-VS-FRESH IDENTITY (DS41-B14: dsv4 caches mutate on state write). The first slot
 generation per (model, prefix) also serves the probe greedily from the in-process prefix,
 restores the saved file and serves it again: the continuations must be identical, or the
-surface refuses forever (receipt `identity-*.json`; delete it after a fix).
+surface refuses forever (receipt `identity-*.json`; delete it after a fix). The reference
+is taken BEFORE any state_write (AKX-ALL-5): a probe of the never-saved prefill, then the
+slot is erased and prefilled afresh for the file. A post-save "fresh" probe alone cannot
+see B14 -- save mutating the live caches makes it agree with the file it produced.
 
 GATES. Scalar = decode at depth, judged by the ordinary matched instrument and a
 matched floor calibrated ONCE per target (24 pairs, `ensure_floor`; the frame excludes
@@ -496,12 +499,22 @@ class SurfaceLaunch:
                 "the request to extend the restored state exactly)")
         return prompt_n
 
-    def _generate(self, port: int) -> dict:
+    def _prefill(self, port: int) -> tuple[dict, int]:
         response, _raw = self._completion(port, self.spec.request_prefill, GENERATE_TIMEOUT_S)
         prompt_n = _timing(response, "prompt_n", int)
         if prompt_n != self.spec.depth:
             raise LongCtxRefused(f"slot generation evaluated {prompt_n} prompt tokens, not "
                                  f"the {self.spec.depth}-token prefix (was the cache warm?)")
+        return response, prompt_n
+
+    def _generate(self, port: int) -> dict:
+        response, prompt_n = self._prefill(port)
+        pristine = None
+        if self.identity_receipt is not None:
+            pristine, _ = self._completion(port, self.spec.request_identity, REQUEST_TIMEOUT_S)
+            self._bounded(pristine, "b")
+            self._slot(port, "erase")
+            response, prompt_n = self._prefill(port)
         saved = self._slot(port, "save")
         facts = {"prefill_prompt_n": prompt_n,
                  "prefill_prompt_per_second": _timing(response, "prompt_per_second"),
@@ -517,14 +530,14 @@ class SurfaceLaunch:
                                            REQUEST_TIMEOUT_S)
             self._bounded(restored, "b")
             want = self.spec.body["identity_tokens"]
-            a, b = fresh.get("tokens"), restored.get("tokens")
-            passed = (isinstance(a, list) and a == b and len(a) == want)
+            a, b, reference = fresh.get("tokens"), restored.get("tokens"), pristine.get("tokens")
+            passed = (isinstance(a, list) and a == b == reference and len(a) == want)
             receipt = {"schema": IDENTITY_SCHEMA, "passed": passed,
                        "slot": self.slot_filename, "prefix_digest": self.spec.prefix_digest,
                        "spec_digest": self.spec.digest, "identity_tokens": want,
-                       "fresh_tokens": a, "restored_tokens": b,
-                       "method": "in-process prefix vs restored slot file, same probe "
-                                 "batch, greedy; must be token-identical",
+                       "pristine_tokens": reference, "fresh_tokens": a, "restored_tokens": b,
+                       "method": "never-saved prefill vs post-save prefix vs restored slot "
+                                 "file, same probe batch, greedy; must be token-identical",
                        "at": time.time()}
             target = Path(self.identity_receipt)
             partial = target.with_name(target.name + f".{os.getpid()}.part")
@@ -533,7 +546,8 @@ class SurfaceLaunch:
             facts["identity"] = {"passed": passed, "receipt": self.identity_receipt}
             if not passed:
                 raise LongCtxRefused("LONGCTX_REFUSED restore-vs-fresh greedy identity "
-                                     f"FAILED (DS41-B14 risk); receipt {self.identity_receipt}")
+                                     f"FAILED (DS41-B14 risk); receipt {self.identity_receipt}; "
+                                     "this surface needs fresh prefill, file under INF-77")
         return facts
 
     def serve(self, port: int, index: int, phase: str, request: tuple[str, bytes], *,
@@ -806,6 +820,8 @@ class Surface:
         if mismatch:
             raise LongCtxRefused(f"identity receipt {path} is for another slot/spec "
                                  f"({mismatch}); remove it to re-prove")
+        if receipt.get("passed") is True and receipt.get("pristine_tokens") is None:
+            return None  # predates the pre-save reference: re-prove, never trust it
         if receipt.get("passed") is not True:
             raise LongCtxRefused(f"restore-vs-fresh identity FAILED earlier ({path}); the "
                                  "surface stays refused until the cause is fixed and the "
