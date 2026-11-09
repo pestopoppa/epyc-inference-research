@@ -13557,6 +13557,13 @@ deprecated_models:
       bench_tree_speculation_server.sh, profile_verification_cost.sh, scripts/benchmark/deprecated/*,
       the AA-omniscience measurement commands/manifest under docs/ (historical measurement record).
     deleted: 2026-11-02
+  - model: Qwen3-4B-Thinking-2507-Q8_0.gguf
+    path_was: /mnt/raid0/llm/models/Qwen3-4B-Thinking-2507-GGUF/Qwen3-4B-Thinking-2507-Q8_0.gguf
+    size_gb: 4.0
+    reason: >-
+      Operator-approved 2026-11-09 disk reclaim (NIB2-65 safe set). Catalogue-only candidate, no live role bound;
+      roles.qwen3_4b_thinking_2507_local_q8 and roles.thinking_qwen3_4b_thinking_2507 deprecated in the same change.
+    deleted: 2026-11-09
 
 
 
