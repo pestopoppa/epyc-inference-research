@@ -7896,6 +7896,7 @@ def _main(argv: list[str] | None = None) -> int:
             validate_candidate=validate_pooled,
             formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
                 hypothesis, {**context, "epoch_sha256": epoch,
+                             "retired_mechanisms_path": Path(args.store) / "retired-mechanisms.jsonl",
                              "measurement_epoch_sha256": measurement_epoch}),
             reserve_candidate=reserve_pooled,
             record_abandoned=record_abandoned_pooled,
