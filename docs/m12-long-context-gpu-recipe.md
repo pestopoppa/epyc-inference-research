@@ -78,6 +78,7 @@ Both readers therefore give every slot **196,608** tokens:
 | `qwen3.6-35b-a3b-q8-gpu-mtp-longctx196k-np4` **(reader, recommended)** | Qwen3.6-35B-A3B-MTP-Q8_0 | 4 | 786432 | 196608 | draft-mtp, n_max 4 | `--ctx-checkpoints 8 --cache-ram 16384` | `54674144…9c37` |
 | `qwen3.8-27b-q8-gpu-dflash2-longctx196k-np1` (reader, fallback) | Qwen3.8-27B-Q8_0 + DFlash2 drafter | 1 | 196608 | 196608 | draft-dflash, n_max 8 | `--ctx-checkpoints 8 --cache-ram 32768` | `9285043f…d8d9` |
 | `gemma-4-26b-a4b-orig-q8-gpu-judge-np4` **(judge, §6)** | gemma-4-26B-A4B-it-ORIG-Q8_0 | 4 | 32768 | 8192 | none | `--reasoning off` | `2fdeeef2…54eb` |
+| `qwen3.8-27b-q8-gpu-judge-np4` **(judge, 2026-11-03 re-scope; recipe added 2026-11-09)** | Qwen3.8-27B-Q8_0 + DFlash2 drafter | 4 | 32768 | 8192 | draft-dflash, n_max 8 (the 27B always runs DFlash2) | `--reasoning off`, n_predict 512 | `b7212e84…074c` |
 
 Everything else is the canonical GPU recipe, unchanged (`test_m12_eval_recipes.py`
 enforces this):
@@ -276,6 +277,8 @@ scorer refuses a set mismatch.
 > (Claude is not the Qwen3.6 reader family; held fixed across arms). There is no judge server, no GPU phase and no co-residency concern;
 > `run_hs_prof1_beam_arm.sh PHASE=judge JUDGE_BACKEND=cloud` keeps the 5-question smoke first. The history below is the 2026-09-16
 > decision and is left as written.
+>
+> **2026-11-09:** the 2026-11-03 re-scope of the M-12 judge to Qwen3.8-27B-Q8_0 (GPU) has its recipe: `artifacts/serving-recipes/eval/qwen3.8-27b-q8-gpu-judge-np4.json` (canonical `qwen3.8-27b-q8-gpu-dflash2-np4` with ctx 32768 = 4 x 8192, `--reasoning off`, n_predict 512; DFlash2 stays on). It is untested as a judge: run the 5-question judge smoke first. A Qwen judge scoring a Qwen3.6 reader is a different model but the same family; the 27B reader fallback would be judging itself.
 
 **What was decided (operator, 2026-09-16):**
 - The M-12 judge is **gemma-4-26B-A4B-it-ORIG**.
