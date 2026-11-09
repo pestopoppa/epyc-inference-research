@@ -14,6 +14,7 @@
 # fork upstream-mtp-verify @7c28056b7, Qwen3.6-27B-MTP-Q8_0). Reproduced +~3% tg128 and a large
 # MemUnitStalled reduction on mul_mat_vec_q8_0_prefetch. See fixes vs the first draft inline (FIX:).
 set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # ============================================================================
 # DEPRECATED 2026-08-02 — DO NOT RUN. Superseded by the AutoKernel trusted
@@ -123,6 +124,16 @@ fi
 if [ "$DO_BUILD" = 1 ]; then
   echo "[build] make ggml-hip ..."; ( cd "$BUILD_DIR" && timeout 600 make ggml-hip -j8 ) > "$TMP/build.log" 2>&1 \
     || emit_fail build "$(tail -3 "$TMP/build.log")"
+  # NIB2-58a: a build that ends with an unverified binary is the failure mode.
+  # The 2026-07-31 incident was a HIP build silently loading the FROZEN
+  # production CPU-only ggml via LD_LIBRARY_PATH. Fail the harness here, before
+  # any correctness/speed number, if any ggml binary in this build dir resolves
+  # another tree's libraries (rc=1) or if nothing verifiable was produced
+  # (rc=2 — e.g. a fresh dir where `make ggml-hip` built only libraries).
+  echo "[build] verifying ggml linkage ..."
+  "$HERE/../utils/verify_build_linkage.sh" "$BUILD_DIR" > "$TMP/build_linkage.log" 2>&1 \
+    || emit_fail build_linkage "$(tail -3 "$TMP/build_linkage.log")"
+  cat "$TMP/build_linkage.log"
 fi
 
 # ---- 2. CORRECTNESS GATE FIRST (lexicographic) ----
