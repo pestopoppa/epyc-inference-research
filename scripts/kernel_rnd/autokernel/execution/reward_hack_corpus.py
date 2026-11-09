@@ -491,6 +491,114 @@ def _belief_measurements(payload: dict) -> list[dict]:
     return rows
 
 
+class RowflowClaimError(RuntimeError):
+    """The job claims to run under a rowflow GPU grant but the evidence does not hold."""
+
+
+class _ParentHeldClaim:
+    """Receipt-shaped stand-in for a device flock that the rowflow launcher holds.
+
+    filler_run15 takes ``gpu_device.mi210_0.lock`` before it starts a GPU-class
+    job, so a second ``acquire_device_claim`` from the job blocks on its own
+    parent.  This object is produced only by ``_inherit_rowflow_claim`` after the
+    parent's hold is proven; it never touches the lock itself.
+    """
+
+    def __init__(self, receipt: dict) -> None:
+        self._open = dict(receipt)
+        self._released: dict | None = None
+
+    def receipt(self):
+        return self
+
+    def to_dict(self) -> dict:
+        return dict(self._released or self._open)
+
+    def release(self):
+        if self._released is None:
+            self._released = {**self._open, "state": "released-by-parent",
+                              "released_at": _utc()}
+        return self
+
+
+def _ancestor_pids(pid: int, proc: Path) -> list[int]:
+    chain: list[int] = []
+    while pid > 1 and pid not in chain:
+        try:
+            stat = (proc / str(pid) / "stat").read_text()
+            pid = int(stat[stat.rindex(")") + 2:].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+        chain.append(pid)
+    return chain
+
+
+def _inherit_rowflow_claim(environ, lock_path: Path, *, proc: Path = Path("/proc"),
+                           pid: int | None = None):
+    """Return a parent-held claim, or None when not under a rowflow GPU grant.
+
+    Fails closed (RowflowClaimError) once ``FILLER_NEEDGPU`` is set but any of
+    the evidence is missing: FILLER_ID, the lock held right now (non-blocking
+    flock must fail), and exactly one flock holder in /proc/locks that is a
+    strict ancestor of this process whose own FILLER_ID matches ours.
+    """
+    if environ.get("FILLER_NEEDGPU") is None:
+        return None
+    if environ.get("FILLER_NEEDGPU") != "1":
+        return None  # a grant without the GPU token holds no flock for us
+    row_id = environ.get("FILLER_ID")
+    if not row_id:
+        raise RowflowClaimError("FILLER_NEEDGPU=1 without FILLER_ID")
+    pid = os.getpid() if pid is None else pid
+    try:
+        import fcntl
+        st = os.stat(lock_path)
+    except OSError as exc:
+        raise RowflowClaimError(f"cannot stat device lock {lock_path}: {exc}") from exc
+    probe = os.open(lock_path, os.O_RDWR)
+    try:
+        try:
+            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            pass
+        else:
+            fcntl.flock(probe, fcntl.LOCK_UN)
+            raise RowflowClaimError("device lock is free: no parent holds it")
+    finally:
+        os.close(probe)
+    major, minor = os.major(st.st_dev), os.minor(st.st_dev)
+    needle = f"{major:02x}:{minor:02x}:{st.st_ino}"
+    holders: set[int] = set()
+    try:
+        locks = (proc / "locks").read_text().splitlines()
+    except OSError as exc:
+        raise RowflowClaimError(f"cannot read /proc/locks: {exc}") from exc
+    for line in locks:
+        fields = line.split()
+        if "FLOCK" in fields and needle in fields:
+            holders.add(int(fields[fields.index(needle) - 1]))
+    if len(holders) != 1:
+        raise RowflowClaimError(f"expected one flock holder on {lock_path}, saw {sorted(holders)}")
+    holder = next(iter(holders))
+    if holder == pid or holder not in _ancestor_pids(pid, proc):
+        raise RowflowClaimError(f"flock holder {holder} is not an ancestor of {pid}")
+    try:
+        raw = (proc / str(holder) / "environ").read_bytes().split(b"\0")
+    except OSError as exc:
+        raise RowflowClaimError(f"cannot read holder {holder} environment: {exc}") from exc
+    if f"FILLER_ID={row_id}".encode() not in raw:
+        raise RowflowClaimError(f"flock holder {holder} does not belong to row {row_id}")
+    stat = (proc / str(holder) / "stat").read_text()
+    ticks = stat[stat.rindex(")") + 2:].split()[19]
+    return _ParentHeldClaim({
+        "claim_id": f"rowflow-parent:{row_id}:{holder}:{ticks}",
+        "device_id": DEVICE_ID, "lock_path": str(lock_path),
+        "state": "held-by-rowflow-parent", "holder_pid": holder,
+        "campaign_id": CAMPAIGN_ID, "acquired_at": _utc(), "released_at": None,
+        "purpose": "RVP-C6-6 executable corpus and C6-10 ranked hard cases",
+        "holder_label": f"filler_run15:{row_id}", "schema": "rowflow-parent-claim.v1"})
+
+
 def run(output: Path, hipcc: str, compile_jobs: int, claim_timeout_s: float,
         prior_attempts: tuple[Path, ...] = ()) -> dict:
     output.mkdir(parents=True, exist_ok=False)
@@ -508,11 +616,14 @@ def run(output: Path, hipcc: str, compile_jobs: int, claim_timeout_s: float,
     opened = released = sampling = None
     rows = []
     try:
-        claim = device_claim.acquire_device_claim(
-            DEVICE_ID, purpose="RVP-C6-6 executable corpus and C6-10 ranked hard cases",
-            campaign_id=CAMPAIGN_ID, journal=device_claim.ClaimJournal(journal_path),
-            holder_label="reward_hack_corpus.py:measurement-window",
-            timeout_s=claim_timeout_s, max_hold_s=300.0)
+        claim = _inherit_rowflow_claim(
+            os.environ, device_claim.device_lock_path(DEVICE_ID))
+        if claim is None:
+            claim = device_claim.acquire_device_claim(
+                DEVICE_ID, purpose="RVP-C6-6 executable corpus and C6-10 ranked hard cases",
+                campaign_id=CAMPAIGN_ID, journal=device_claim.ClaimJournal(journal_path),
+                holder_label="reward_hack_corpus.py:measurement-window",
+                timeout_s=claim_timeout_s, max_hold_s=300.0)
         opened = claim.receipt().to_dict()
         print(json.dumps({"event": "claim_acquired", "pid": os.getpid(),
                           "claim_id": opened["claim_id"]}), flush=True)

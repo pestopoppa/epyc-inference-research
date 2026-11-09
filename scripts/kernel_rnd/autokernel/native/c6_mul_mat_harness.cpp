@@ -372,10 +372,38 @@ std::vector<float> quantized_dequantized_activations(
     const float * source = typed_input<float>(data, "activations_f32le");
     std::vector<uint8_t> quantized(
         ggml_row_size(activation_type, opts.k)*opts.n);
-    const size_t written = ggml_quantize_chunk(
-        activation_type, source, quantized.data(), 0, opts.n, opts.k, nullptr);
-    if (written != quantized.size()) {
-        fail("float64-oracle activation quantization size mismatch");
+    // ggml_quantize_chunk has no Q8_K case (it aborts), so quantize activations
+    // row by row through the CPU backend's from_float, the converter the CPU
+    // MUL_MAT path itself uses (the generic from_float_ref is null for Q8_K).
+    const ggml_type_traits_cpu * traits = ggml_get_type_traits_cpu(activation_type);
+    if (traits == nullptr || traits->from_float == nullptr) {
+        fail("float64-oracle activation type has no CPU from_float");
+    }
+    const size_t activation_row_size = ggml_row_size(activation_type, opts.k);
+    for (int64_t row = 0; row < opts.n; ++row) {
+        traits->from_float(source + row*opts.k,
+                               quantized.data() + row*activation_row_size, opts.k);
+    }
+    if (activation_type == GGML_TYPE_Q8_K) {
+        // The backends carry no Q8_K to_float (a ggml_cast graph dereferences a
+        // null converter), so dequantize on the host: block_q8_K is
+        // {float d; int8_t qs[256]; int16_t bsums[16]} and value = d*qs.
+        constexpr size_t qk = 256;
+        if (opts.k % static_cast<int64_t>(qk)) fail("Q8_K activation k must be a multiple of 256");
+        std::vector<float> host(static_cast<size_t>(opts.k*opts.n));
+        for (int64_t row = 0; row < opts.n; ++row) {
+            const uint8_t * base = quantized.data() + row*activation_row_size;
+            for (int64_t block = 0; block < opts.k/static_cast<int64_t>(qk); ++block) {
+                const uint8_t * b = base + block*ggml_type_size(GGML_TYPE_Q8_K);
+                float d;
+                std::memcpy(&d, b, sizeof(d));
+                const int8_t * qs = reinterpret_cast<const int8_t *>(b + sizeof(float));
+                for (size_t i = 0; i < qk; ++i) {
+                    host[row*opts.k + block*qk + i] = d*static_cast<float>(qs[i]);
+                }
+            }
+        }
+        return host;
     }
     const ggml_init_params params = {
         ggml_tensor_overhead() * 8 + ggml_graph_overhead(), nullptr, true};
