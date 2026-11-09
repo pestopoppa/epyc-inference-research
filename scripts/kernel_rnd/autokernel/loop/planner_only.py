@@ -18,14 +18,17 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from ..controller import workload_contract
+from ..controller import inbox, workload_contract
 from . import actors, belief_context, loop
 
 REPORT_NAME = "planner-only-report.json"
 SCHEMA = "epyc.autokernel.planner_only_report.v1"
 PROFILE_KEYS = ("kernel_hotspots", "gpu_serving_profile")
+CPU_PROFILE_KEYS = ("node_profile", "cpu_profile")
+NODE_PROFILE_SCHEMA = "epyc.autokernel.loop_node_profile.v1"
 #: Where the GPU route's sources live: the tree the planner is told to target.
 GPU_SOURCE_DIR = "ggml/src/ggml-cuda"
+CPU_SOURCE_DIR = "ggml/src/ggml-cpu"
 
 
 class Refused(RuntimeError):
@@ -48,11 +51,16 @@ def add_arguments(parser) -> None:
                              "needs --out, --model, --worktree and a profile; takes no lock")
     parser.add_argument("--profile", type=Path,
                         help="--planner-only profile JSON (status file with hotspots, context "
-                             "object or rows); default <store>/loop-status.json")
+                             "object or rows, or a CPU store's node-profiles/<digest>.json); "
+                             "default <store>/loop-status.json")
+    parser.add_argument("--planner-surface", default=None,
+                        help="--planner-only with --cpu-serving-launch: the serving surface "
+                             "label, e.g. serving:<recipe>")
 
 
-def load_profile(path: Path) -> dict[str, Any]:
-    """Planner context keys from a status file (`hotspots`), a context object or a bare row list."""
+def load_profile(path: Path, *, cpu: bool = False) -> dict[str, Any]:
+    """Planner context keys from a status file (`hotspots`), a context object or a bare row list;
+    for a CPU target, a retained node-profile record or a context object with an observed one."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -62,6 +70,15 @@ def load_profile(path: Path) -> dict[str, Any]:
     if not isinstance(raw, Mapping):
         raise Refused(f"profile {path} is neither an object nor a list of rows")
     found = dict(raw)
+    if cpu:
+        if found.get("schema") == NODE_PROFILE_SCHEMA:
+            found = {"node_profile": found.get("section")}
+        profile = {key: found[key] for key in CPU_PROFILE_KEYS
+                   if isinstance(found.get(key), Mapping) and found[key].get("status") == "observed"}
+        if not profile:
+            raise Refused(f"profile {path} has no observed CPU profile: pass --profile with a "
+                          "<store>/node-profiles/<digest>.json whose status is `observed`")
+        return profile
     if not found.get("kernel_hotspots") and found.get("hotspots"):
         found["kernel_hotspots"] = found["hotspots"]
     profile = {key: found[key] for key in PROFILE_KEYS if found.get(key)}
@@ -76,10 +93,25 @@ def _git(tree: Path, *argv: str) -> str:
                           text=True).stdout.strip()
 
 
-def require_source(tree: Path) -> str:
-    """The commit of a real GPU source tree, or `Refused`."""
-    if not (tree / GPU_SOURCE_DIR).is_dir() or not any((tree / GPU_SOURCE_DIR).iterdir()):
-        raise Refused(f"source tree {tree} has no {GPU_SOURCE_DIR}/ sources")
+def load_cpu_launch(args) -> dict[str, Any]:
+    """The selected canonical CPU launch, which must be this model's, plus a serving label."""
+    try:
+        launch = json.loads(Path(args.cpu_serving_launch).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise Refused(f"no usable CPU launch at {args.cpu_serving_launch}: {exc}") from exc
+    if not isinstance(launch, Mapping) or launch.get("backend") != "cpu":
+        raise Refused(f"launch {args.cpu_serving_launch} is not a CPU launch")
+    if str((launch.get("model") or {}).get("path")) != str(args.model):
+        raise Refused(f"launch {args.cpu_serving_launch} serves another model than {args.model}")
+    if not str(args.planner_surface or "").startswith("serving:"):
+        raise Refused("a CPU target needs --planner-surface serving:<recipe>")
+    return dict(launch)
+
+
+def require_source(tree: Path, source_dir: str = GPU_SOURCE_DIR) -> str:
+    """The commit of a real source tree for that route, or `Refused`."""
+    if not (tree / source_dir).is_dir() or not any((tree / source_dir).iterdir()):
+        raise Refused(f"source tree {tree} has no {source_dir}/ sources")
     try:
         return _git(tree, "rev-parse", "HEAD")
     except (OSError, subprocess.CalledProcessError) as exc:
@@ -162,9 +194,12 @@ def run(args, *, seat_common: Mapping[str, Any],
             raise Refused(f"--out {out} is not empty")
         if args.model is None or not Path(args.model).is_file():
             raise Refused(f"--model {args.model} does not exist")
-        source_commit = require_source(Path(args.worktree))
+        cpu = args.cpu_serving_launch is not None
+        launch = load_cpu_launch(args) if cpu else None
+        source_commit = require_source(Path(args.worktree),
+                                       CPU_SOURCE_DIR if cpu else GPU_SOURCE_DIR)
         profile_path = Path(args.profile or Path(args.store) / "loop-status.json")
-        profile = load_profile(profile_path)
+        profile = load_profile(profile_path, cpu=cpu)
     except Refused as exc:
         print(f"planner-only REFUSED: {exc}", file=sys.stderr)
         return 2
@@ -176,13 +211,24 @@ def run(args, *, seat_common: Mapping[str, Any],
                    check=True)
     census = workload_contract.read_split_census(args.model)
     backend = actors.backend_for(args.planner_model, args.planner_effort)
+    store = Path(args.store).resolve()
+    cpu_context = {
+        "target": {"scope": "experimental candidate, NOT canonical champion; planner-only, "
+                            "nothing is built or measured", "recipe": launch,
+                   "hotspot_status": "retained node profile; no sampled perf record"},
+        "cpu_profile": {"status": "not_collected",
+                        "reason": "planner-only supplies only a retained node profile"},
+        "inbox": inbox.read_inbox(store / "inbox"),
+    } if cpu else {}
     context = {
+        **cpu_context,
         "program": loop.PROGRAM.read_text(encoding="utf-8"),
         "actor_provenance": {"planner": backend.describe()},
-        "actor_read_roots": [str(out.resolve())],
+        "actor_read_roots": [str(out.resolve()), *([str(store), str(store.parent)] if cpu else [])],
         **profile,
         "current_regime": {"model": {"path": str(args.model)}, "quant": census.quant_label,
-                           "backend": "gpu", "measurement_surface": args.surface},
+                           "backend": "cpu" if cpu else "gpu",
+                           "measurement_surface": args.planner_surface if cpu else args.surface},
     }
     config = belief_context.BeliefConfig(
         root=args.belief_root_repo, ledger=args.belief_ledger,

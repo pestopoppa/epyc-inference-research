@@ -32,7 +32,8 @@ def _args(tmp_path: Path, **kw) -> argparse.Namespace:
                 actor_timeout_s=1, actor_belief_context="required", belief_root_repo=tmp_path,
                 belief_ledger=None, belief_known_good=None, escalate=None,
                 belief_escalate_after_s=1.0, belief_reader_timeout_s=1.0,
-                belief_focus_symbol=None, preseeded_hypotheses=None)
+                belief_focus_symbol=None, preseeded_hypotheses=None,
+                cpu_serving_launch=None, planner_surface=None)
     return argparse.Namespace(**{**base, **kw})
 
 
@@ -128,3 +129,51 @@ def test_claim_texts_keep_what_the_planner_saw():
     section = "## Beliefs\n- clm_a [t] here\n  value 1\n  mechanism: m\n- clm_b [t] b\n\nend"
     assert po.claim_texts(section, ["clm_a", "clm_c"]) == {
         "clm_a": "clm_a [t] here\nvalue 1\nmechanism: m", "clm_c": ""}
+
+
+def _cpu_setup(tmp_path, *, status="observed"):
+    tree = tmp_path / "tree"
+    (tree / po.CPU_SOURCE_DIR).mkdir(parents=True)
+    (tree / po.CPU_SOURCE_DIR / "a.cpp").write_text("x\n")
+    for cmd in (["init", "-q"], ["add", "."],
+                ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"]):
+        subprocess.run(["git", "-C", str(tree), *cmd], check=True)
+    launch = tmp_path / "launch.json"
+    launch.write_text(json.dumps({"backend": "cpu", "model": {"path": str(tmp_path / "m-Q8_0.gguf")}}))
+    prof = tmp_path / "node.json"
+    prof.write_text(json.dumps({"schema": po.NODE_PROFILE_SCHEMA,
+                                "section": {"status": status, "mechanism_shares": []}}))
+    (tmp_path / "store" / "inbox").mkdir(parents=True)
+    (tmp_path / "store" / "inbox" / "73-s.md").write_text("seed 73\n")
+    return {"cpu_serving_launch": launch, "profile": prof, "planner_surface": "serving:r-cpu"}
+
+
+def test_cpu_target_builds_cpu_regime_with_profile_and_inbox(tmp_path):
+    hypo = loop.Hypothesis("m", "s", "f", "ggml/src/ggml-cpu/a.cpp", "sym")
+    code, made = _run(tmp_path, hypo, **_cpu_setup(tmp_path))
+    assert code == 0
+    context = made[0].context
+    assert actors._cpu_target(context) and context["current_regime"]["backend"] == "cpu"
+    assert context["current_regime"]["measurement_surface"] == "serving:r-cpu"
+    assert context["node_profile"]["status"] == "observed"
+    assert any("seed 73" in item for item in context["inbox"])
+
+
+@pytest.mark.parametrize("change", ["unobserved", "gpu_rows", "no_surface", "gpu_launch"])
+def test_cpu_target_refuses_without_real_inputs(tmp_path, change, capsys):
+    kw = _cpu_setup(tmp_path, status="not_collected" if change == "unobserved" else "observed")
+    if change == "gpu_rows":
+        kw["profile"].write_text(json.dumps({"hotspots": [{"signature": "k"}]}))
+    if change == "no_surface":
+        kw["planner_surface"] = None
+    if change == "gpu_launch":
+        kw["cpu_serving_launch"].write_text(json.dumps({"backend": "gpu"}))
+    code, made = _run(tmp_path, None, **kw)
+    assert code == 2 and not made and "REFUSED" in capsys.readouterr().err
+
+
+def test_cpu_target_refuses_gpu_only_tree(tmp_path):
+    kw = _cpu_setup(tmp_path)
+    (tmp_path / "tree" / po.CPU_SOURCE_DIR / "a.cpp").unlink()
+    code, made = _run(tmp_path, None, **kw)
+    assert code == 2 and not made
