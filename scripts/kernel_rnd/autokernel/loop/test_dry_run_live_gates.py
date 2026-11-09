@@ -8,6 +8,8 @@ import sys
 import time
 from types import SimpleNamespace
 
+from pathlib import Path
+
 import pytest
 
 from . import accumulate, actor_wire_gate, champion, claim, kernel_coverage, lane_watchdog, run
@@ -125,6 +127,71 @@ def test_device_probe_inherited_hold_passes(tmp_path, monkeypatch):
         monkeypatch.setenv(claim.INHERITED_DEVICE_LOCK_ENV,
                            f"{holder.fileno()}:{st.st_dev}:{st.st_ino}:{os.getppid()}")
         assert claim.device_claim_refusal(lock) is None
+
+
+KEEPER_HOLDER = (
+    "import fcntl,os,subprocess,sys;f=open(sys.argv[1],'a');fcntl.flock(f,fcntl.LOCK_EX);"
+    "os.set_inheritable(f.fileno(),False);"
+    "sys.exit(subprocess.call([sys.executable,'-c',sys.argv[2],sys.argv[1]],"
+    "env=dict(os.environ,**dict(a.split('=',1) for a in sys.argv[3:]))))")
+KEEPER_CHILD = (
+    "import sys\nfrom pathlib import Path\n"
+    "from scripts.kernel_rnd.autokernel.loop import claim\n"
+    "lock=Path(sys.argv[1])\n"
+    "assert claim.device_claim_refusal(lock) is None\n"
+    "with claim.hold(lock) as r:\n"
+    "    assert r['window_hold_pid']\n"
+    "    assert r.observe()['status']=='held'\n"
+    "    assert claim.device_claim_refusal(lock) is not None\n")
+REFUSED_CHILD = (
+    "import sys\nfrom pathlib import Path\n"
+    "from scripts.kernel_rnd.autokernel.loop import claim\n"
+    "lock=Path(sys.argv[1])\n"
+    "assert 'process tree' in claim.device_claim_refusal(lock)\n"
+    "try:\n    claim.hold(lock).__enter__()\n"
+    "except claim.ClaimRefused:\n    sys.exit(0)\nsys.exit(9)\n")
+
+
+def _keeper(tmp_path, code, *env):
+    lock = tmp_path / "gpu.lock"
+    lock.touch()
+    repo = Path(__file__).resolve().parents[4]
+    scrub = {k: v for k, v in os.environ.items() if not k.startswith("FILLER_")}
+    return subprocess.run([sys.executable, "-c", KEEPER_HOLDER, str(lock), code, *env],
+                          env={**scrub, "PYTHONPATH": str(repo)}, cwd=repo, timeout=120,
+                          capture_output=True, text=True)
+
+
+def test_keeper_ancestor_hold_is_accepted(tmp_path):
+    result = _keeper(tmp_path, KEEPER_CHILD, "FILLER_NEEDGPU=1", "FILLER_ID=row")
+    assert result.returncode == 0, result.stderr
+
+
+def test_ancestor_hold_needs_keeper_env(tmp_path):
+    result = _keeper(tmp_path, REFUSED_CHILD)
+    assert result.returncode == 0, result.stderr
+
+
+def test_keeper_env_does_not_admit_unrelated_holder(tmp_path, monkeypatch):
+    lock = tmp_path / "gpu.lock"
+    lock.touch()
+    flag = tmp_path / "held"
+    code = ("import fcntl,sys,pathlib;f=open(sys.argv[1]);fcntl.flock(f,fcntl.LOCK_EX);"
+            "pathlib.Path(sys.argv[2]).touch();sys.stdin.read()")
+    child = subprocess.Popen([sys.executable, "-c", code, str(lock), str(flag)],
+                             stdin=subprocess.PIPE)
+    try:
+        deadline = time.time() + 20
+        while not flag.exists() and time.time() < deadline:
+            time.sleep(0.02)
+        monkeypatch.setenv("FILLER_NEEDGPU", "1")
+        monkeypatch.setenv("FILLER_ID", "row")
+        assert claim._ancestor_device_holder(lock) is None
+        with pytest.raises(claim.ClaimRefused), claim.hold(lock):
+            pass
+    finally:
+        child.stdin.close()
+        child.wait(timeout=20)
 
 
 def test_watchdog_state_file_refusal_is_read_only(tmp_path, monkeypatch):

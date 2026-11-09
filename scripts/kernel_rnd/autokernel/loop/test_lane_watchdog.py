@@ -213,6 +213,84 @@ def test_detached_descendant_holds_recovery(fixture):
     assert marker.read_text().isdigit()
 
 
+def _state(root, store):
+    import hashlib
+    digest = hashlib.sha256(str(store.resolve()).encode()).hexdigest()
+    return root / f'autokernel-lane-watchdog-{os.getuid()}' / (digest + '.json')
+
+
+def test_dead_adopted_orphan_is_not_a_survivor(fixture):
+    root = fixture[0]
+    pkg = root / 'scripts/kernel_rnd/autokernel/loop'
+    entry = pkg / 'watchdog_test_entry.py'
+    entry.write_text(entry.read_text().replace(
+        ' if mode == "factory":',
+        ' if mode == "deadorphan":\n'
+        '  if os.fork() == 0:\n'
+        '   if os.fork() == 0:\n'
+        '    p.write_text("grandchild")\n'
+        '    os._exit(0)\n'
+        '   os._exit(0)\n'
+        '  os.wait()\n'
+        '  while not p.exists(): time.sleep(.01)\n'
+        '  time.sleep(.5)\n'
+        '  return 0\n'
+        ' if mode == "factory":', 1))
+    process = launch(fixture, 'deadorphan', root / 'marker', root / 'store')
+    stdout, stderr = process.communicate(timeout=30)
+    assert process.returncode == 0, stdout + stderr
+    assert not _state(root, root / 'store').exists()
+
+
+def test_held_state_is_archived_once_recorded_processes_are_gone(fixture):
+    root = fixture[0]
+    held = launch(fixture, 'orphan', root / 'descendant', root / 'store')
+    stdout, _ = held.communicate(timeout=30)
+    assert held.returncode == 75 and 'descendants remain' in stdout
+    state = _state(root, root / 'store')
+    original = state.read_text()
+    assert '"adopted_live"' in original
+    process = launch(fixture, 'normal', root / 'marker', root / 'store')
+    stdout, stderr = process.communicate(timeout=30)
+    assert process.returncode == 0, stdout + stderr
+    assert 'prior state resolved' in stderr and not state.exists()
+    archived = list(state.parent.glob(state.name + '.resolved-*'))
+    assert len(archived) == 1 and archived[0].read_text() == original
+
+
+def test_live_recorded_process_keeps_refusal_and_is_named(monkeypatch, tmp_path):
+    import json
+    from . import lane_watchdog
+    from .worker_lifecycle import process_identity
+    me = process_identity(os.getppid()).to_dict()
+    gone = dict(me, pid=2 ** 22 - 3)
+    state = tmp_path / 'state.json'
+    state.write_text(json.dumps({'uid': os.getuid(), 'pgid': gone['pid'], 'process': gone,
+                                 'supervisor': me, 'resolved_stores': [str(tmp_path / 's')]}))
+    refusal = lane_watchdog._prior_state_refusal([state])
+    assert refusal.startswith(lane_watchdog._UNRESOLVED_STATE)
+    assert f"supervisor pid {me['pid']}" in refusal and state.exists()
+
+
+def test_recycled_pid_is_not_a_survivor(tmp_path):
+    import json
+    from . import lane_watchdog
+    from .worker_lifecycle import process_identity
+    recycled = process_identity(os.getpid()).to_dict()
+    recycled['start_ticks'] -= 1
+    state = tmp_path / 'state.json'
+    state.write_text(json.dumps({'uid': os.getuid(), 'pgid': recycled['pid'], 'process': recycled,
+                                 'supervisor': recycled, 'resolved_stores': [str(tmp_path / 's')]}))
+    assert lane_watchdog._prior_state_refusal([state]) is None
+
+
+def test_malformed_state_keeps_refusing(tmp_path):
+    from . import lane_watchdog
+    state = tmp_path / 'state.json'
+    state.write_text('{}')
+    assert lane_watchdog._prior_state_refusal([state]) == lane_watchdog._UNRESOLVED_STATE
+
+
 def test_restart_storm_is_bounded(fixture):
     root = fixture[0]
     marker = root / 'attempts'

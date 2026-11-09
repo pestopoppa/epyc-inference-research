@@ -348,6 +348,19 @@ def device_claim_refusal(lock_path: Path | None = None, *, device_id: str = DEVI
     lock_path = DEVICE_LOCK if lock_path is None else Path(lock_path)
     if _inherited_device_fd(lock_path) is not None:
         return None
+    if _ancestor_device_holder(lock_path) is not None:
+        try:
+            sidecar = os.open(_ancestor_sidecar(lock_path), os.O_RDONLY | os.O_CLOEXEC)
+        except OSError:
+            return None  # absent: no sibling has entered
+        try:
+            fcntl.flock(sidecar, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            return None
+        except OSError:
+            return (f"{device_id}: another loop already runs under this keeper's hold "
+                    f"on {lock_path}; the live claim would refuse")
+        finally:
+            os.close(sidecar)
     try:
         probe = os.open(lock_path, os.O_RDONLY | os.O_CLOEXEC)
     except OSError:
@@ -389,6 +402,105 @@ def _inherited_device_fd(lock_path: Path) -> tuple[int, int] | None:
     if (held.st_dev, held.st_ino) != (dev, ino) or (on_disk.st_dev, on_disk.st_ino) != (dev, ino):
         return None
     return fd, pid
+
+
+def _fd_holds_exclusive_flock(pid: int, fd: str, st: os.stat_result) -> bool:
+    """Does THIS open file description hold the exclusive flock on `st`'s inode?
+
+    `/proc/<pid>/fdinfo/<fd>` lists only locks owned by that description. /proc/locks
+    cannot answer this for a shell launcher: it names the short-lived `flock` helper
+    that took the lock, not the shell that keeps the descriptor open."""
+    try:
+        text = Path(f"/proc/{pid}/fdinfo/{fd}").read_text()
+    except OSError:
+        return False
+    device = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
+    for line in text.splitlines():
+        fields = line.split()
+        if (fields[:1] == ["lock:"] and len(fields) >= 7
+                and fields[2:5] == ["FLOCK", "ADVISORY", "WRITE"] and fields[6] == device):
+            return True
+    return False
+
+
+def _ancestor_device_holder(lock_path: Path) -> tuple[int, int] | None:
+    """(pid, start ticks) of the keeper ancestor holding `lock_path`, else None.
+
+    A keeper job's launcher takes the flock and closes the fd for the job (`9>&-`), so
+    there is no descriptor to inherit. Accepted only inside a keeper GPU job, and only
+    when a same-uid ancestor's own description holds the exclusive lock; an unrelated
+    holder is never an ancestor, so it still refuses."""
+    if os.environ.get("FILLER_NEEDGPU") != "1" or not os.environ.get("FILLER_ID"):
+        return None
+    try:
+        target = os.stat(lock_path)
+    except OSError:
+        return None
+    for pid in _ancestor_pids(os.getpid()):
+        if pid <= 1:
+            continue
+        try:
+            if os.stat(f"/proc/{pid}").st_uid != os.getuid():
+                continue
+            for entry in os.scandir(f"/proc/{pid}/fd"):
+                held = os.stat(entry.path)
+                if ((held.st_dev, held.st_ino) == (target.st_dev, target.st_ino)
+                        and _fd_holds_exclusive_flock(pid, entry.name, target)):
+                    start = _process_start_ticks(pid)
+                    return None if start is None else (pid, start)
+        except OSError:
+            continue
+    return None
+
+
+def _ancestor_sidecar(lock_path: Path) -> Path:
+    return Path(f"{lock_path}.keeper-child")
+
+
+def _kernel_flock_pid(lock_path: Path) -> int:
+    """The single pid /proc/locks lists as the exclusive flock's taker, or refuse."""
+    st = os.stat(lock_path)
+    device = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
+    rows = [line.split() for line in Path("/proc/locks").read_text().splitlines()]
+    pids = [int(row[4]) for row in rows if len(row) >= 8
+            and row[1:4] == ["FLOCK", "ADVISORY", "WRITE"] and row[5] == device]
+    if len(pids) != 1:
+        raise ClaimRefused(f"{lock_path}: expected one kernel flock row, found {len(pids)}")
+    return pids[0]
+
+
+@contextmanager
+def _hold_ancestor(holder: tuple[int, int], lock_path: Path, device_id: str,
+                   verify, gpu_quiet_path=None) -> Iterator[dict]:
+    """Run under a keeper ancestor's device hold. A sidecar flock keeps two loops of
+    the same job exclusive; the ancestor's hold is re-proved when the claim closes."""
+    sidecar = _ancestor_sidecar(lock_path).open("a")
+    try:
+        try:
+            fcntl.flock(sidecar, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise ClaimRefused(f"{device_id}: another loop already runs under this "
+                               f"keeper's hold on {lock_path}") from exc
+        if verify is not None:
+            verify()
+        receipt = HeldCpuClaim({"device_id": device_id, "lock_path": str(lock_path),
+                                "pid": os.getpid(), "window_hold_pid": holder[0]},
+                               [lock_path], lock_owner_pid=_kernel_flock_pid(lock_path),
+                               gpu_quiet_path=gpu_quiet_path)
+        try:
+            yield receipt
+        finally:
+            if _ancestor_device_holder(lock_path) != holder:
+                raise ClaimRefused(
+                    f"{device_id} claim did not survive the measurement window; "
+                    f"results taken under it cannot be trusted")
+            try:
+                receipt._closing()
+            except Exception as error:
+                receipt._close_observation_failed(error)
+            receipt._released_now()
+    finally:
+        sidecar.close()
 
 
 @contextmanager
@@ -457,6 +569,11 @@ def hold(lock_path: Path | None = None, *, device_id: str = DEVICE_ID,
     if inherited is not None:
         with _hold_inherited(inherited[0], inherited[1], lock_path, device_id,
                              verify, gpu_quiet_path) as receipt:
+            yield receipt
+        return
+    holder = _ancestor_device_holder(lock_path)
+    if holder is not None:
+        with _hold_ancestor(holder, lock_path, device_id, verify, gpu_quiet_path) as receipt:
             yield receipt
         return
     handle = lock_path.open("a")
