@@ -36,3 +36,25 @@ def test_two_degraded_pairs_are_not_a_block(monkeypatch):
     row = serving.calibrate_floor(recipe, BUILD, samples=24, resolved_recipe=launch,
                                   frozen_requests=REQUESTS, **MODE)
     assert row["calibration_pairs"] == 24
+
+
+def test_refusal_persists_partial_evidence_and_no_floor(monkeypatch, tmp_path):
+    """A refused calibration leaves `*.refused-partial.json` and NO floor record."""
+    import json
+    recipe, launch = _inputs()
+    _series(monkeypatch, set(range(17, 41)))
+    with pytest.raises(serving.HostDegradedDuringCalibration, match="AKX-AUTO-4"):
+        serving.calibrate_floor(recipe, BUILD, samples=24, resolved_recipe=launch,
+                                frozen_requests=REQUESTS, partial_store=tmp_path, **MODE)
+    partials = list(tmp_path.glob("*.refused-partial.json"))
+    assert len(partials) == 1
+    record = json.loads(partials[0].read_text())
+    assert record["is_floor"] is False and "floor_pct" not in record
+    assert len(record["anchor_samples"]) == len(record["candidate_samples"]) == 24
+    assert len(record["anchor_residency"]) == 24
+    assert record["reference_pair_indices"] == list(range(24))
+    assert record["wall_clock"]["refused_at"] >= record["wall_clock"]["calibration_started_at"]
+    # never resolvable as a floor
+    floor_file = serving.floor_path(tmp_path, recipe, frozen_requests=REQUESTS, **MODE)
+    assert not floor_file.exists() and partials[0] != floor_file
+    assert list(tmp_path.glob("serving-floor.*.json")) == partials

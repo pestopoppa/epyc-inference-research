@@ -43,11 +43,13 @@ import random
 import re
 import statistics
 import subprocess
+import sys
 import time
 from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
+from . import clock_policy
 from . import (floor_selfcheck, headline_admissibility, hip_launch_proof, kernel_coverage, launch_affinity,
                loadgen_selfcheck, lifecycle_observation, procguard, ram_admit, residency, status)
 from . import native_server_response as server_response
@@ -998,6 +1000,12 @@ def _residency_record(sampler, *, window_start: float, window_end: float,
               "window_s": round(window_end - window_start, 3),
               "request_start": request_start, "request_end": request_end}
     record["covers_request_phase"] = covers_request_phase(record)
+    trace = getattr(sampler, "clock_trace", None)
+    if trace is not None:
+        record["clock_trace"] = trace
+        record["clock_phase_markers"] = {"window_start": window_start,
+                                         "request_start": request_start,
+                                         "request_end": request_end, "window_end": window_end}
     record["status"] = (RESIDENCY_NOT_APPLICABLE if backend == "cpu" else
                         RESIDENCY_PROVEN
                         if sampled and record["covers_request_phase"] and proof.get("resident")
@@ -2577,7 +2585,8 @@ OUTLIER_PERSISTENT_REFUSAL_LIMIT = 2
 #:     CPU affinity/identity contradiction the per-launch serving path already treats
 #:     as a hard invalidity (`residency.cpu_lifecycle_invalidity`).
 #:   * `gpu_clock_unstable` -- `clock_stable is False` (`sclk_min_mhz != sclk_max_mhz`):
-#:     the GPU's own clock governor moved during the launch window.
+#:     the GPU's own clock governor moved during the launch window. Under a ratified
+#:     `clock_policy` band, the same code means the request phase failed that band.
 #: PSI and non-target-activity census fields exist in the residency/cpu_lifecycle
 #: record but carry NO established threshold anywhere in this codebase --
 #: `residency.cpu_lifecycle_invalidity`'s own docstring is explicit that "no pressure,
@@ -2612,7 +2621,8 @@ def _mad_outlier_pairs(effects: Sequence[float], *, k: float = OUTLIER_MAD_K) ->
     return [i for i, e in enumerate(effects) if abs(0.6745 * (e - med) / mad) > k]
 
 
-def _independent_evidence(record: Mapping) -> str | None:
+def _independent_evidence(record: Mapping,
+                          policy: clock_policy.ClockPolicy | None = None) -> str | None:
     """One evidence code (`OUTLIER_EVIDENCE_SOURCES`) for a single launch's residency
     record if it carries independent proof of a compromised launch, else `None`.
     Never derived from the measured throughput value itself."""
@@ -2621,21 +2631,23 @@ def _independent_evidence(record: Mapping) -> str | None:
     validity = record.get("measurement_validity")
     if isinstance(validity, Mapping) and validity.get("status") == "invalid":
         return "cpu_lifecycle_invalid"
-    if record.get("clock_stable") is False:
+    if clock_policy.launch_is_unstable(record, clock_policy.load() if policy is None else policy):
         return "gpu_clock_unstable"
     return None
 
 
-def _evidence_pairs(anchor_windows: Sequence[Mapping],
-                    candidate_windows: Sequence[Mapping]) -> dict[int, str]:
+def _evidence_pairs(anchor_windows: Sequence[Mapping], candidate_windows: Sequence[Mapping],
+                    policy: clock_policy.ClockPolicy | None = None) -> dict[int, str]:
     """`{pair_index: evidence_code}` for every pair whose anchor OR candidate launch
     carries independent evidence of a compromised launch."""
+    # One policy per pass, so every launch is judged by the same rule.
+    policy = clock_policy.load() if policy is None else policy
     flagged: dict[int, str] = {}
     for windows in (anchor_windows, candidate_windows):
         for i, record in enumerate(windows):
             if i in flagged:
                 continue
-            code = _independent_evidence(record)
+            code = _independent_evidence(record, policy)
             if code is not None:
                 flagged[i] = code
     return flagged
@@ -2643,7 +2655,8 @@ def _evidence_pairs(anchor_windows: Sequence[Mapping],
 
 def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: dict,
                          plan: dict, values: dict, windows: dict,
-                         should_stop=None, steps: dict | None = None) -> dict:
+                         should_stop=None, steps: dict | None = None,
+                         on_refuse=None) -> dict:
     """Exclude/bounded-remeasure ONLY the pairs with INDEPENDENT evidence of a
     compromised launch, and (if still contaminated) REFUSE the calibration. A pair
     flagged ONLY by its own |effect| (no evidence) is left completely untouched and
@@ -2661,10 +2674,11 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     """
     anchor, candidate = values["anchor"], values["candidate"]
     n = len(anchor)
+    policy = clock_policy.load()
 
     def evaluate():
         effects = _pair_effects_pct(anchor, candidate)
-        evidence = _evidence_pairs(windows["anchor"], windows["candidate"])
+        evidence = _evidence_pairs(windows["anchor"], windows["candidate"], policy)
         mad = set(_mad_outlier_pairs(effects))
         return effects, evidence, mad
 
@@ -2674,6 +2688,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
                 "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i],
                 "effect_pct": round(effects[i], 3)} for i in initial_evidence]
     if len(initial_evidence) > MAX_OUTLIER_REPLACEMENT_PAIRS:
+        if on_refuse is not None:
+            on_refuse("outlier_guard_budget_exceeded", initial_evidence)
         raise HostDegradedDuringCalibration(
             f"host degraded during floor calibration: {len(initial_evidence)} of {n} A/A "
             f"pairs carry independent evidence of a compromised launch "
@@ -2694,6 +2710,11 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
                                               evidence=fresh_windows[arm],
                                               **({"target_sample_steps": fresh_steps[arm]}
                                                  if steps is not None else {}), **options)
+        # The launch being replaced is the evidence a later refusal must still show.
+        windows.setdefault("superseded", []).append(
+            {"pair_index": i, "reason": evidence[i],
+             "anchor": windows["anchor"][i], "candidate": windows["candidate"][i],
+             "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i]})
         anchor[i], candidate[i] = fresh_values["anchor"], fresh_values["candidate"]
         windows["anchor"][i] = fresh_windows["anchor"][0] if fresh_windows["anchor"] else {}
         windows["candidate"][i] = fresh_windows["candidate"][0] if fresh_windows["candidate"] else {}
@@ -2708,6 +2729,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     final_effects, final_evidence, final_mad = evaluate()
     still_flagged = sorted(final_evidence)
     if replaced and len(still_flagged) > OUTLIER_PERSISTENT_REFUSAL_LIMIT:
+        if on_refuse is not None:
+            on_refuse("outlier_guard_persistent_evidence", still_flagged)
         raise HostDegradedDuringCalibration(
             f"host degraded during floor calibration: {len(still_flagged)} of {n} A/A "
             f"pairs still carry independent evidence of a compromised launch after "
@@ -2721,7 +2744,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     unexplained_outliers = [{"pair_index": i, "effect_pct": round(final_effects[i], 3),
                              "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i]}
                             for i in unexplained]
-    return {"schema": OUTLIER_GUARD_SCHEMA_V2, "applied": True,
+    band = {"clock_policy": policy.describe()} if policy.is_band else {}
+    return {**band, "schema": OUTLIER_GUARD_SCHEMA_V2, "applied": True,
             "semantics": OUTLIER_GUARD_EVIDENCE_BASED,
             "mad_k": OUTLIER_MAD_K, "max_replacement_pairs": MAX_OUTLIER_REPLACEMENT_PAIRS,
             "persistent_refusal_limit": OUTLIER_PERSISTENT_REFUSAL_LIMIT,
@@ -2732,6 +2756,51 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
             "excluded": excluded,
             "unexplained_outliers": unexplained_outliers,
             "suspect": bool(unexplained_outliers)}
+
+
+def _persist_refused_partial(partial_store, recipe: Recipe, *, frozen_requests, instrument,
+                             pairs, samples: int, plan: dict, values: dict, windows: dict,
+                             steps: dict | None, started_at: float, refusal: str,
+                             flagged: Mapping | Sequence = (), selfcheck=None) -> Path | None:
+    """Keep the evidence of a REFUSED matched calibration. Never a floor: the file is named
+    `serving-floor.<key>...refused-partial.json` (not `.json`-terminated as a floor), carries
+    its own schema, and `floor_path`/`load_floor` can never resolve to it. Best-effort: a
+    write failure must not mask the refusal being raised."""
+    if partial_store is None:
+        return None
+    try:
+        base = floor_path(partial_store, recipe, frozen_requests=frozen_requests,
+                          instrument=instrument, pairs=pairs)
+        # Stamped: a retry that is refused again must not erase the earlier evidence.
+        path = base.with_name(f"{base.name[:-len('.json')]}.{time.time_ns()}.refused-partial.json")
+        n = len(values["anchor"])
+        record = {"schema": "epyc.autokernel.serving_floor_refused_partial.v1",
+                  "is_floor": False, "refusal": refusal,
+                  "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
+                  "samples_requested": samples,
+                  "wall_clock": {"calibration_started_at": started_at,
+                                 "refused_at": time.time()},
+                  "reference_pair_indices": list(range(n)),
+                  "flagged_pair_indices": sorted(flagged),
+                  "calibration_plan": plan,
+                  "anchor_samples": list(values["anchor"]),
+                  "candidate_samples": list(values["candidate"]),
+                  "anchor_residency": list(windows["anchor"]),
+                  "candidate_residency": list(windows["candidate"]),
+                  "superseded_residency": list(windows.get("superseded", ())),
+                  "residency": _residency_fold(list(windows["anchor"]) + list(windows["candidate"])),
+                  "target_sample_steps": steps}
+        if selfcheck is not None:
+            record["selfcheck_verdict"] = str(getattr(selfcheck, "verdict", ""))
+            record["selfcheck_reasons"] = list(getattr(selfcheck, "reasons", ()))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(record, indent=1, sort_keys=True, default=str))
+        os.replace(tmp, path)
+        return path
+    except Exception as exc:
+        print(f"refused-partial evidence NOT written: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return None
 
 
 def _with_calibration_stderr_log(fn):
@@ -2747,7 +2816,7 @@ def _with_calibration_stderr_log(fn):
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
                     resolved_recipe=None, frozen_requests=None,
                     instrument=LEGACY_INSTRUMENT, pairs=None, longctx=None,
-                    should_stop=None) -> dict:
+                    should_stop=None, partial_store=None) -> dict:
     """A/A the serving metric `samples` times on ONE build: the run-to-run spread IS the
     noise floor a keep must clear. floor = p95 of |pairwise effect| against the median,
     reported at a few sample counts so a keep at N pairs is judged against the N-pair bar."""
@@ -2767,6 +2836,14 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
         values = {"anchor": [], "candidate": []}
         windows = {"anchor": [], "candidate": []}
         steps = {"anchor": [], "candidate": []}
+        started_at = time.time()
+
+        def on_refuse(reason, flagged, selfcheck=None):
+            _persist_refused_partial(
+                partial_store, recipe, frozen_requests=frozen_requests,
+                instrument=instrument, pairs=pairs, samples=samples, plan=plan,
+                values=values, windows=windows, steps=steps, started_at=started_at,
+                refusal=reason, flagged=flagged, selfcheck=selfcheck)
         for order in plan["orders"]:
             for arm in order:
                 if should_stop():
@@ -2776,12 +2853,15 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                                    **options))
         outlier_guard = _apply_outlier_guard(recipe, build_dir, port, options,
                                              plan, values, windows,
-                                             should_stop=should_stop, steps=steps)
+                                             should_stop=should_stop, steps=steps,
+                                             on_refuse=on_refuse)
         # AKX-AUTO-4: a contiguous degraded block (a level shift both arms share) is
         # invisible to the per-pair evidence guard above; refuse it like any other
         # host-degraded calibration rather than file the inflated floor.
         selfcheck = floor_selfcheck.assess_floor(values["anchor"], values["candidate"])
         if selfcheck.verdict == floor_selfcheck.REJECT_DEGRADED_BLOCK:
+            on_refuse("degraded_block", _evidence_pairs(windows["anchor"], windows["candidate"]),
+                      selfcheck)
             raise HostDegradedDuringCalibration(
                 f"host degraded during floor calibration: {selfcheck.reasons[0]}. "
                 f"Re-measure once the host is quiet; refusing rather than filing a "

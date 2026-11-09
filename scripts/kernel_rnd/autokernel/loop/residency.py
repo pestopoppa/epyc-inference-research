@@ -38,6 +38,8 @@ KFD_PROC = Path("/sys/class/kfd/kfd/proc")
 #: `APCC_DFLL` enabled (the DFLL droops on current spikes) plus DS_SOCCLK / DS_FCLK /
 #: DS_LCLK still dynamic under `high`. hwmon reports what the clock actually did.
 SCLK_HWMON = sorted(Path("/sys/class/drm/card2/device/hwmon").glob("hwmon*/freq1_input"))
+#: Read only, never written here: setting the level needs sudo and operator approval.
+PERF_LEVEL_SYSFS = Path("/sys/class/drm/card2/device/power_dpm_force_performance_level")
 #: A model resident on the device moves VRAM well past this. Below it, "resident" is
 #: not proven -- which is a refusal, not a warning.
 RESIDENT_FLOOR_BYTES = 1 << 30
@@ -61,6 +63,14 @@ def sclk_mhz() -> int:
         except (OSError, ValueError):
             continue
     return 0
+
+
+def performance_level() -> str | None:
+    """The DPM performance level as the kernel reports it; None if unreadable."""
+    try:
+        return PERF_LEVEL_SYSFS.read_text().strip() or None
+    except OSError:
+        return None
 
 
 def kfd_processes() -> int:
@@ -229,6 +239,13 @@ class Sampler:
         self.min_sclk = 0
         self.max_sclk = 0
         self.samples = 0
+        #: Timestamped achieved clock, one point per tick (0 = unreadable), and the
+        #: performance level as transitions. Kept beside `proof`, not in it: phases are
+        #: separated later against the launch's own request markers.
+        self._clock_t0: float | None = None
+        self._clock_ms: list[int] = []
+        self._clock_mhz: list[int] = []
+        self._level_changes: list[list] = []
         #: Every SUCCESSFUL VRAM read, in order. Kept because a peak alone cannot
         #: distinguish "the device held the model throughout" from "one spike"; and
         #: because its LENGTH is the only thing that separates a window that read zero
@@ -314,6 +331,23 @@ class Sampler:
             self.own_pid_peak_rss = max(self.own_pid_peak_rss, rss)
         return own
 
+    def _record_clock(self, clock: int) -> None:
+        now = time.time()
+        if self._clock_t0 is None:
+            self._clock_t0 = now
+        offset = int((now - self._clock_t0) * 1000)
+        self._clock_ms.append(offset)
+        self._clock_mhz.append(clock)
+        level = performance_level()
+        if not self._level_changes or self._level_changes[-1][1] != level:
+            self._level_changes.append([offset, level])
+
+    @property
+    def clock_trace(self) -> dict:
+        """Compact per-tick trace: epoch `t0`, offsets in ms, MHz, level transitions."""
+        return {"t0": self._clock_t0, "interval_s": self.interval, "t_ms": list(self._clock_ms),
+                "mhz": list(self._clock_mhz), "level_changes": [list(c) for c in self._level_changes]}
+
     def _loop(self) -> None:
         while not self._stop.is_set():
             vram = vram_bytes()
@@ -323,6 +357,7 @@ class Sampler:
             self.peak_kfd = max(self.peak_kfd, kfd_processes())
             self._check_ceiling(vram, self._watch_once())
             clock = sclk_mhz()
+            self._record_clock(clock)
             if clock:
                 self.max_sclk = max(self.max_sclk, clock)
                 self.min_sclk = clock if not self.min_sclk else min(self.min_sclk, clock)
@@ -832,5 +867,5 @@ def loader_env(binary: Path) -> dict[str, str]:
 __all__ = ["KFD_PROC", "MeasurementAborted", "OWN_LAUNCHES", "OwnLaunches",
            "RESIDENT_FLOOR_BYTES", "Sampler", "UNREADABLE_SAMPLES_FAIL_CLOSED", "VRAM_SYSFS",
            "VramCeilingExceeded", "terminate_own_process",
-           "kfd_pid_vram", "kfd_processes", "loader_env", "pid_peak_rss", "sclk_mhz",
+           "kfd_pid_vram", "kfd_processes", "loader_env", "performance_level", "pid_peak_rss", "sclk_mhz",
            "vram_bytes"]
