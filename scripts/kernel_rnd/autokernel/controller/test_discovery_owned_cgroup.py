@@ -40,6 +40,8 @@ class Base(unittest.TestCase):
     def controls(path, procs=""):
         (path / "cgroup.procs").write_text(procs)
         (path / "cgroup.events").write_text("populated %d\n" % bool(procs))
+        if procs:  # a live cgroup always exposes cgroup.kill; the wrapper writes it only when populated
+            (path / "cgroup.kill").write_text("")
 
     def cleanup(self):
         return W.cleanup_owned(self.root, self.receipt, kill_wait_s=0.1, rmdir=fake_rmdir)
@@ -95,6 +97,7 @@ class Refusals(Base):
     def test_missing_control_file_counts_as_populated(self):
         owned = self.make()
         (owned / "cgroup.events").unlink()
+        (owned / "cgroup.kill").write_text("")
         rc, _ = self.cleanup()
         self.assertEqual(rc, W.RC_POPULATED)
         self.assertTrue(owned.is_dir())
