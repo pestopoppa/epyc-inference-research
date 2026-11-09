@@ -677,7 +677,7 @@ VGPR/AGPR/SGPR, spill/scratch, LDS, MFMA-to-load gap histogram, MFMAs after `s_b
 | Operator id | Mechanism |
 |---|---|
 | `gfx90a.iglp_opt0` | `__builtin_amdgcn_iglp_opt(0)` — interleave DS/VMEM with MFMA in the loop body |
-| `gfx90a.iglp_opt1` | `__builtin_amdgcn_iglp_opt(1)` — alternate MFMA/DS-read pipeline |
+| `gfx90a.iglp_opt1` | `__builtin_amdgcn_iglp_opt(1)` — alternate MFMA/DS-read pipeline. **Do not repeat on MMQ `vec_dot_*_mma`:** clang-18 device compiles of mmq-instance-iq1_s/iq2_s reached 37 min and 222 GB + 124 GB RSS (row `ak-surface-proof-a-20261106`); re-open only with a per-TU build cap and a narrowed instance set. |
 | `gfx90a.sched_group_barrier` | `__builtin_amdgcn_sched_group_barrier(mask, size, syncid)` sequences, explicit MFMA/VMEM/DS interleave |
 | `gfx90a.sched_barrier` | `__builtin_amdgcn_sched_barrier(mask)` — pin what the scheduler may not move across |
 | `gfx90a.mfma_before_barrier` | reorder so MFMAs issue before `__syncthreads()` (target: MFMAs-after-barrier count) |
