@@ -394,3 +394,61 @@ def test_a_new_file_gets_no_anchor_exemption(opt_in_repo):
     with pytest.raises(integrity.IntegrityRefused) as caught:
         integrity.validate_candidate(opt_in_repo, ("ggml/src/extra.cpp",))
     assert caught.value.refusal_class == "reward_hack_scan"
+
+
+def test_symlink_candidate_is_refused(repo):
+    (repo / "ggml/src/link.cpp").symlink_to("/etc/hostname")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(repo, ("ggml/src/link.cpp",))
+    assert caught.value.refusal_class == "path_escape"
+
+
+def test_tracked_file_replaced_by_symlink_is_refused(repo):
+    path = repo / "ggml/src/kernel.cpp"
+    path.unlink()
+    path.symlink_to("/etc/hostname")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))
+    assert caught.value.refusal_class == "path_escape"
+
+
+def test_write_through_symlinked_directory_is_refused(repo, tmp_path_factory):
+    outside = tmp_path_factory.mktemp("outside")
+    (repo / "ggml/src/sub").symlink_to(outside, target_is_directory=True)
+    (outside / "x.cpp").write_text("int x;\n")
+    with pytest.raises(integrity.IntegrityRefused):
+        integrity.validate_candidate(repo, ("ggml/src/sub",))
+
+
+def test_nested_repository_is_refused(repo):
+    nested = repo / "ggml/src/vendored"
+    nested.mkdir()
+    _git(nested, "init", "-q")
+    (nested / "a.cpp").write_text("int a;\n")
+    _git(nested, "add", ".")
+    _git(nested, "-c", "user.email=t@e.invalid", "-c", "user.name=t", "commit", "-qm", "x")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(repo, integrity.dirty_paths(repo))
+    assert caught.value.refusal_class == "path_escape"
+
+
+def test_traversal_in_declared_path_is_refused(repo):
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(repo, ("ggml/../../etc/passwd",))
+    assert caught.value.refusal_class == "invalid_declared_path"
+
+
+def test_actor_commit_is_refused(repo):
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "ggml/src/kernel.cpp").write_text("int base = 7;\n")
+    _git(repo, "commit", "-qam", "actor commit")
+    (repo / "ggml/src/kernel.cpp").write_text("int base = 8;\n")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",), expected_head=base)
+    assert caught.value.refusal_class == "actor_moved_head"
+
+
+def test_plain_kernel_edit_still_passes_with_expected_head(repo):
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "ggml/src/kernel.cpp").write_text("int base = 2;\n")
+    assert integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",), expected_head=base)

@@ -427,9 +427,32 @@ def _without_preexisting_env_reads(worktree: Path, diff: str,
     return tuple(kept)
 
 
+def _path_escapes(worktree: Path, dirty: Sequence[str]) -> list[str]:
+    """Dirty paths that are symlinks, sit under a symlink, or are submodules/nested repos."""
+    root = Path(worktree)
+    raw = _git(root, "diff", "--no-ext-diff", "--raw", "--no-abbrev", "-z", "HEAD", "--")
+    fields = raw.split(b"\0")
+    special = {fields[i + 1].decode("utf-8", "surrogateescape")
+               for i in range(0, len(fields) - 1, 2)
+               if fields[i].split()[1] in (b"120000", b"160000")}
+    bad = set(special) & set(dirty)
+    for path in dirty:
+        current = root
+        for part in PurePosixPath(path).parts:
+            current = current / part
+            if current.is_symlink():
+                bad.add(path)
+                break
+        else:
+            if (root / path / ".git").exists():
+                bad.add(path)
+    return sorted(bad)
+
+
 def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
                        oracle_shape: dict | None = None,
-                       bench_shape: dict | None = None) -> CandidateIntegrity:
+                       bench_shape: dict | None = None,
+                       expected_head: str | None = None) -> CandidateIntegrity:
     declared = tuple(sorted({_normal_path(str(path)) for path in declared_paths}))
     dirty = dirty_paths(worktree)
     if dirty != declared:
@@ -441,6 +464,13 @@ def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
     outside = [path for path in dirty if not path.startswith(KERNEL_ALLOWLIST)]
     if outside:
         raise IntegrityRefused("outside_kernel_allowlist", repr(outside))
+    escapes = _path_escapes(worktree, dirty)
+    if escapes:
+        raise IntegrityRefused("path_escape", repr(escapes))
+    if expected_head is not None:
+        head = _git(worktree, "rev-parse", "HEAD").decode().strip()
+        if head != expected_head:
+            raise IntegrityRefused("actor_moved_head", f"{head[:12]} is not {expected_head[:12]}")
     diff = _git(worktree, "diff", "--no-ext-diff", "HEAD", "--").decode(
         "utf-8", "replace")
     blank = prebuild_rules.blank_only_hunk_refusal(diff)   # AK-FAILRULE-1 rule 2

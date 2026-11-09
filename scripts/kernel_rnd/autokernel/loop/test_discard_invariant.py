@@ -20,10 +20,10 @@ REVIEWED = {
     "bestof.py": "a42ade5e6075eaff43d5cf065c93015ff2445e80546bed3eb7d2a7f279012959",
     "cross_target.py": "8a4afa59ce62645b23f9f1e02e4bd17e0b7ba1cc997ad25cdcc1aa91e9900409",
     "loop.py": "6c64bd6a835076ab4fad12f4a3bcc37787e89ea13ee7ef85045761654992bc27",  # custody review 2026-11-07 AutoKernel: PlannerSameStateSkip -> typed planner_same_state_skip outcome (no hypothesis, no artifact; recorded by the normal path) + planner_same_state row field
-    "pipeline.py": "d17f3ed2dada812aba24bee16decd0140a21ec53ca8042789cc61f86c6d2b36f",  # custody review 2026-11-07 AutoKernel: tail_timing wrappers re-raise unchanged, tail session entered as before (AK-TAIL-SPLIT phase 1)
+    "pipeline.py": "19c6e37dc2aa7879bc8edceefcad99b6662c657e7fa0188b11415bd8b39832fc",  # custody review 2026-11-09: expected_head at validation, no disposition change
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
-    "run.py": "deb98ef8a6b20e36d7e2c917d817617269080274ea1496aae92b58865f6ce182",  # custody review 2026-11-09: dry-run/startup refusals only
+    "run.py": "63fe40b18159107bcb4e7750aeceaa1baf31c9125e64dfefb1c2ab8cfc504db0",  # custody review 2026-11-09: expected_head at validation, no disposition change
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 

@@ -511,8 +511,9 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     # Per-hypothesis authoring budget across iterations (loop.py).
                     author_attempts=author_attempts,
                     validate_candidate=(
-                        (lambda hypothesis, paths, _w=worker:
-                         validate_candidate(_w, hypothesis, paths))
+                        (lambda hypothesis, paths, _w=worker, _b=base:
+                         (setattr(_w, "reset_base", _b),
+                          validate_candidate(_w, hypothesis, paths))[1])
                         if validate_candidate is not None else None),
                     formation_guard=formation_guard,
                     reserve_candidate=reserve if reserve_candidate is not None else None,

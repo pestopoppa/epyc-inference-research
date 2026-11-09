@@ -6882,7 +6882,7 @@ def _main(argv: list[str] | None = None) -> int:
                            "types": quant_tokens}
             checked = integrity.validate_candidate(
                 worker.worktree, paths, oracle_shape=oracle_shape,
-                bench_shape=bench_shape)
+                bench_shape=bench_shape, expected_head=getattr(worker, "reset_base", None))
             base = _git(worker.worktree, "rev-parse", "HEAD")
             attempt = dispatch_guard.attempt_identity(
                 diff=_git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--"),
