@@ -2040,6 +2040,19 @@ def _check_autokernel_hardening(row: BenchRow, *, reps: int,
                 f"{gap_fraction:.1%} slower in the median than the ordinary twin, above "
                 f"the declared {STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:.0%} stream-escape "
                 "screen; this is an integrity flag, not a corrected speed measurement")
+        # RVP-C6-26: the screen must also be two-sided. The synchronized twin
+        # does strictly more work than the ordinary one, so it being materially
+        # FASTER is not noise; it is what a content-keyed memo populated by the
+        # first execution produces for the replicate. Symmetric in ratio.
+        inverse_gap_fraction = ordinary_median / synchronized_median - 1.0
+        if inverse_gap_fraction > STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:
+            reasons.append(
+                "the full-device-synchronized twin is "
+                f"{inverse_gap_fraction:.1%} faster in the median than the ordinary twin, "
+                f"above the declared {STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:.0%} "
+                "twin-gap screen; a replicate that does more work cannot be faster "
+                "without content or pointer memoization; this is an integrity flag, "
+                "not a corrected speed measurement")
 
     thread_pairs = _comma_values(row.autokernel_thread_set_hashes)
     if len(thread_pairs) != reps:

@@ -878,6 +878,18 @@ class TestOutputIsCheckedAgainstTheRecipe(unittest.TestCase):
         self.assertEqual(check.outcome, schemas.FAIL)
         self.assertIn("integrity flag", " ".join(check.reasons))
 
+    def test_memoized_faster_replicate_twin_is_an_integrity_failure(self):
+        """RVP-C6-26: the twin-gap screen is two-sided, not only 'slower'."""
+        rows = json.loads(read_fixture(CANONICAL))
+        rows[0]["n_gpu_layers"] = 99
+        rows[0]["autokernel_device_sync_mode"] = "hip_full_device"
+        rows[0]["autokernel_unsynchronized_samples_ns"] = ",".join(
+            str(value * 2) for value in rows[0]["samples_ns"])
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        check = replace(self.expect, n_gpu_layers=99).check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("faster in the median", " ".join(check.reasons))
+
     def test_gpu_row_without_full_device_sync_is_refused(self):
         rows = json.loads(read_fixture(CANONICAL))
         rows[0]["n_gpu_layers"] = 99
