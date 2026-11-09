@@ -23,6 +23,24 @@ def load(prefix: str):
     return json.loads(p.read_text()) if p.exists() else None
 
 
+def attach_samples(profile: dict, prefix: str) -> None:
+    """Copy samples_ns from the arm's llama-bench jsonl onto its profile rows; absent samples fail the rule closed."""
+    p = Path(prefix + ".jsonl")
+    if not p.exists():
+        return
+    bench = {}
+    for line in p.read_text().splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        bench[(r.get("n_prompt"), r.get("n_depth"))] = r.get("samples_ns")
+    for row in profile["rows"]:
+        samples = bench.get((row.get("n_prompt"), row.get("n_depth")))
+        if samples:
+            row["samples_ns"] = samples
+
+
 def steps_ok(steps_path: str, labels) -> bool:
     p = Path(steps_path)
     if not p.exists():
@@ -35,6 +53,8 @@ def one(g_prefix: str, m_prefix: str, steps_path: str) -> dict:
     g, m = load(g_prefix), load(m_prefix)
     if g is None or m is None:
         return dict(verdict="INVALID", why=[f"profile missing: {'G' if g is None else 'M'}"])
+    attach_samples(g, g_prefix)
+    attach_samples(m, m_prefix)
     labels = [Path(g_prefix).name, Path(m_prefix).name]
     return rule.decide(g["rows"], m["rows"], {r["idx"]: r for r in m["rows"]},
                        steps_ok=steps_ok(steps_path, labels), eval_truncated=bool(m.get("eval_file_truncated")),

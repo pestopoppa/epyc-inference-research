@@ -10,7 +10,7 @@ summaries; nothing here reads a perf.data or starts anything.
     SPLIT_UNRESOLVED  else; the lane is seeded on SEED_CLASS = argmax_c mean_{N=2..5} dW_c(N) / T_M(N, 64k),
                       dW_c(N) = W_c(N, 64k) - W_c(N, 512), over node classes, the solo-run residual and host phases
     INVALID           a step not OK, a (N, d) cell missing in either arm, an M cell at N=2..5 x 64k with < 8 usable
-                      repetitions, |tM/tG - 1| > 5% or a coverage defect > 10%, or a truncated eval file
+                      repetitions, |median(M samples)/median(G samples) - 1| > 5% (amended 2026-11-09: mean-based overhead is reported, not gated) or a coverage defect > 10%, or a truncated eval file
 """
 from __future__ import annotations
 
@@ -23,6 +23,15 @@ THRESH = 0.10
 MAX_OVERHEAD = 0.05
 MAX_COVERAGE_DEFECT = 0.10
 MIN_REPS = 8
+
+
+def _median_ns(row: dict) -> Optional[float]:
+    """Median per-repetition time; None unless the row carries at least MIN_REPS samples."""
+    xs = sorted(row.get("samples_ns") or [])
+    if len(xs) < MIN_REPS:
+        return None
+    n = len(xs)
+    return float(xs[n // 2]) if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2.0
 
 
 def cells(rows: Sequence[dict]) -> Dict[Tuple[int, int], dict]:
@@ -72,6 +81,8 @@ def decide(g_rows: Sequence[dict], m_rows: Sequence[dict], m_roll: Dict[int, dic
         cell["S_M_depth_share"] = round((tm_hi - tm_lo) / tm_hi, 4)
         cell["overhead_d512"] = round(tm_lo / tg_lo - 1, 4)
         cell["overhead_d64k"] = round(tm_hi / tg_hi - 1, 4)
+        med_g, med_m = _median_ns(ghi), _median_ns(mhi)
+        cell["overhead_median_d64k"] = round(med_m / med_g - 1, 4) if med_g and med_m else None
         cell["t_ms"] = dict(G_d512=round(tg_lo / 1e6, 3), G_d64k=round(tg_hi / 1e6, 3),
                             M_d512=round(tm_lo / 1e6, 3), M_d64k=round(tm_hi / 1e6, 3))
         cell["F_fa_wall_share"] = (rhi.get("share") or {}).get("fa")
@@ -91,8 +102,11 @@ def decide(g_rows: Sequence[dict], m_rows: Sequence[dict], m_roll: Dict[int, dic
         if N in GATE_NS:
             if cell["reps_used_d64k"] < MIN_REPS:
                 invalid.append(f"N={N}: {cell['reps_used_d64k']} usable M repetitions at 64k < {MIN_REPS}")
-            if abs(cell["overhead_d64k"]) > MAX_OVERHEAD:
-                invalid.append(f"N={N}: measurement-build overhead {cell['overhead_d64k']:+.2%} at 64k exceeds "
+            om = cell["overhead_median_d64k"]
+            if om is None:
+                invalid.append(f"N={N}: fewer than {MIN_REPS} per-repetition samples at 64k in G or M")
+            elif abs(om) > MAX_OVERHEAD:
+                invalid.append(f"N={N}: median measurement-build overhead {om:+.2%} at 64k exceeds "
                                f"{MAX_OVERHEAD:.0%}")
             cd = cell["coverage_defect_d64k"]
             if cd is None or cd > MAX_COVERAGE_DEFECT:

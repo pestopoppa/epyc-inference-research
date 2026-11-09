@@ -8,6 +8,7 @@ corroborate: graph work up to 861107.948, restore (libc memcpy, state_read_meta,
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -309,8 +310,8 @@ def _grid(fa_share_hi, s_hi_ms=100.0, s_lo_ms=50.0, overhead=0.01, cov=0.02, rep
         for N in rule.NS:
             i += 1
             tg = (s_lo_ms if d == 512 else s_hi_ms) * 1e6
-            g_rows.append(dict(n_prompt=N, n_depth=d, avg_ns=tg))
-            m_rows.append(dict(n_prompt=N, n_depth=d, avg_ns=tg * (1 + overhead)))
+            g_rows.append(dict(n_prompt=N, n_depth=d, avg_ns=tg, samples_ns=[tg] * 10))
+            m_rows.append(dict(n_prompt=N, n_depth=d, avg_ns=tg * (1 + overhead), samples_ns=[tg * (1 + overhead)] * 10))
             T = tg * (1 + overhead) / 1e3
             fa = (fa_share_hi if d == 65536 else 0.02) * T
             mask = (0.20 if d == 65536 else 0.01) * T
@@ -319,6 +320,37 @@ def _grid(fa_share_hi, s_hi_ms=100.0, s_lo_ms=50.0, overhead=0.01, cov=0.02, rep
                            eval_span_us=0.9 * T, host_us=dict(mctx_apply=10.0, set_inputs=20.0, graph_compute=0.9 * T),
                            unattributed_us=0.0)
     return g_rows, m_rows, roll
+
+
+def test_rule_single_spike_does_not_fail_median_overhead():
+    g, m, roll = _grid(0.06)
+    row = next(r for r in m if r["n_prompt"] == 3 and r["n_depth"] == 65536)
+    row["samples_ns"] = row["samples_ns"][:-1] + [row["samples_ns"][0] * 1.8]
+    row["avg_ns"] = sum(row["samples_ns"]) / 10
+    out = rule.decide(g, m, roll)
+    assert out["verdict"] != "INVALID" and out["cells"][3]["overhead_d64k"] > 0.05
+    assert abs(out["cells"][3]["overhead_median_d64k"]) < 0.05
+
+
+def test_rule_sustained_median_overhead_is_invalid():
+    out = rule.decide(*_grid(0.06, overhead=0.08))
+    assert out["verdict"] == "INVALID" and any("median" in w for w in out["why"])
+
+
+def test_rule_missing_samples_is_invalid():
+    g, m, roll = _grid(0.06)
+    next(r for r in g if r["n_prompt"] == 2 and r["n_depth"] == 65536).pop("samples_ns")
+    out = rule.decide(g, m, roll)
+    assert out["verdict"] == "INVALID" and any("per-repetition" in w for w in out["why"])
+
+
+def test_attach_samples_merges_bench_jsonl(tmp_path):
+    from akx_lb3_attribution import verdict as v
+    prefix = str(tmp_path / "G-t48")
+    (tmp_path / "G-t48.jsonl").write_text(json.dumps(dict(n_prompt=2, n_depth=65536, samples_ns=[1, 2, 3])) + "\n")
+    prof = dict(rows=[dict(n_prompt=2, n_depth=65536), dict(n_prompt=3, n_depth=512)])
+    v.attach_samples(prof, prefix)
+    assert prof["rows"][0]["samples_ns"] == [1, 2, 3] and "samples_ns" not in prof["rows"][1]
 
 
 def test_rule_lane_large():
