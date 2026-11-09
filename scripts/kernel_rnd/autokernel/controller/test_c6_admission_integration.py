@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import statistics
+import math
 import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+
+from scripts.benchmark.run_autokernel_gpu_discovery import screen_effect
 
 from . import discovery_controller as D
 from .test_discovery_controller import FakeCritic, Lease
@@ -53,10 +55,18 @@ class Planner:
 
 
 class GatedScreens:
-    def __init__(self, root: Path, effects=(.01, .22)) -> None:
+    def __init__(self, root: Path, effects=(.01, .22),
+                 pair_max: bool = False) -> None:
         self.root = root
         self.effects = iter(effects)
+        self.pair_max = pair_max
         self.calls = 0
+
+    def mutate_result(self, result: dict) -> None:
+        """Test seam: alter the producer record before it is sealed."""
+
+    def sealed_effect(self, result: dict) -> float:
+        return self.measured_effect
 
     def reconcile(self, _inflight):
         return D.Recovery("safe_to_start")
@@ -65,13 +75,35 @@ class GatedScreens:
         self.calls += 1
         effect = next(self.effects)
         output = self.root / f"screen-{self.calls}"
+        center = 100.0
+        anchor_samples = [center - self.calls * 0.1, center,
+                          center + self.calls * 0.1]
+        anchor_runs = [{"metric": center, "samples": anchor_samples}]
+        # Sample spread makes the effect depend on the estimator used.
+        value = center * (1.0 + effect)
+        samples = [value * .999, value, value * 1.001]
+        if self.pair_max:
+            samples = [item * 1.02 for item in samples]
+            candidate_runs = [{"metric": value, "samples": samples}]
+        else:
+            candidate_runs = [{"metric": value * 3.0, "samples": samples}]
+        scored = screen_effect(
+            anchor_samples=anchor_samples, anchor_runs=anchor_runs,
+            candidate_samples=samples, candidate_runs=candidate_runs,
+            pair_max=self.pair_max)
+        estimator = scored["estimator"]
+        self.measured_effect = scored["effect"]
         candidate_identity = {"source_commit": "c" * 40}
         anchor_identity = {"source_commit": "b" * 40}
         baseline = {
             "schema": "epyc.autokernel.gpu_screening_baseline.v2",
             "candidate_identity": candidate_identity,
             "anchor_identity": anchor_identity,
-            "anchor_samples": [100.0, 100.0, 100.0],
+            # Every real repetition measures its own anchor bank, so its
+            # content hash differs while the centre stays comparable.
+            "anchor_samples": anchor_samples,
+            "anchor_runs": anchor_runs,
+            "estimator": estimator,
         }
         baseline["baseline_sha256"] = D.schemas.content_hash(baseline)
         _write_json(output / "baseline-bank.json", baseline)
@@ -85,27 +117,33 @@ class GatedScreens:
             "reward_admissible": True,
         }
         oracle["receipt_sha256"] = D.schemas.content_hash(oracle)
-        samples = [100.0 * (1.0 + effect)] * 3
-        effects = [(value - 100.0) / 100.0 for value in samples]
-        measured_effect = statistics.median(effects)
         result = {
             "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
             "authority": D.AUTHORITY, "status": "complete",
             "state": "decided", "ok": True, "non_promotable": True,
             "promotion_claim": False, "hip_residency_proved": True,
-            "runtime_graphs": "on", "baseline_center": 100.0,
+            "runtime_graphs": "on", "baseline_center": scored["center"],
             "model_size_bytes": 1_000_000_000,
             "candidate_samples": samples,
-            "median_relative": measured_effect,
+            "median_relative": scored["effect"],
+            "estimator": estimator,
+            "candidate_statistic": scored["candidate_statistic"],
+            "candidate_runs": candidate_runs,
             "baseline_sha256": baseline["baseline_sha256"],
             "candidate_identity": candidate_identity,
             "graphs_on_output_oracle": oracle,
             "frame": {
                 "backend": "llama_gpu", "recipe": "decode_tg128",
                 "metric": "tokens_per_second", "n_prompt": 0, "n_gen": 128,
-                "model": "fixture", "architecture": "gfx90a"},
+                "model": "fixture", "architecture": "gfx90a",
+                "metric_contract": {"schema": (
+                    "epyc.autokernel.serialized_pair_max_metric.v1"
+                    if self.pair_max else
+                    "epyc.autokernel.native_llama_bench_metric.v1")}},
             "sole_factor": {"kind": "source_patch"},
         }
+        self.mutate_result(result)
+        measured_effect = self.sealed_effect(result)
         result["result_sha256"] = D.schemas.content_hash(result)
         result_path = output / "result.json"
         result_file_sha256 = _write_json(result_path, result)
@@ -260,6 +298,72 @@ class TestC6AdmissionIntegration(unittest.TestCase):
             self.assertTrue(resumed["complete"])
             self.assertEqual(len(store.records()), 1)
             self.assertIn("c6_admission", resumed["iterations"][1])
+
+    def test_pair_max_estimator_recomputes_from_the_run_metric(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = _config(root)
+            state = D.run_controller(
+                config, planner=Planner(), critic=FakeCritic(["accept"]),
+                screener=GatedScreens(root / "screens", pair_max=True),
+                lease=Lease())
+            self.assertTrue(state["iterations"][1]["c6_admission"]["admitted"])
+            receipt = D.c6_reward_integrity.AdmissionReceiptStore(
+                config.c6_admission_store_path).records()[0]["receipt"]
+            # The sample median is deliberately 2% away from the run metric.
+            self.assertAlmostEqual(receipt["verification_speedup"], 1.22)
+
+    def test_effect_differing_by_one_ulp_from_producer_formula_is_refused(self):
+        class Forged(GatedScreens):
+            def mutate_result(self, result):
+                result["median_relative"] = math.nextafter(
+                    result["median_relative"], 1.0)
+
+            def sealed_effect(self, result):
+                return result["median_relative"]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # Positive control: the producer's exact value is admitted.
+            D._c6_admission_leg(
+                _config(root), Planner().plan(context=None, workspace=None),
+                GatedScreens(root / "honest").screen(),
+                evaluator_commit="d" * 40)
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError, "throughput reduction changed"):
+                D._c6_admission_leg(
+                    _config(root), Planner().plan(context=None, workspace=None),
+                    Forged(root / "screens").screen(), evaluator_commit="d" * 40)
+
+    def test_median_statistic_not_derived_from_samples_is_refused(self):
+        class Forged(GatedScreens):
+            def mutate_result(self, result):
+                # The effect stays honest, so only the statistic check can fire.
+                result["candidate_statistic"] *= 1.5
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError, "throughput reduction changed"):
+                D._c6_admission_leg(
+                    _config(root), Planner().plan(context=None, workspace=None),
+                    Forged(root / "screens").screen(), evaluator_commit="d" * 40)
+
+    def test_real_frame_change_still_breaks_verification_identity(self):
+        class FrameDrift(GatedScreens):
+            def mutate_result(self, result):
+                if self.calls == 2:
+                    result["frame"]["model"] = "a-different-model"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError,
+                    "changed candidate or frame authority"):
+                D.run_controller(
+                    _config(root), planner=Planner(),
+                    critic=FakeCritic(["accept"]),
+                    screener=FrameDrift(root / "screens"), lease=Lease())
 
     def test_store_tamper_fails_closed_before_completed_reentry(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -883,7 +883,10 @@ def initialize_static_deployment_bundle(root: Path, *,
                             "evidence_root": str(root / "evidence"),
                             "operations_root": str(root / "operations"),
                             "build_root": str(root / "builds"),
-                            "max_iterations": 100, "nomination_threshold": .03,
+                            "max_iterations": (
+                                _c6_bundle_max_iterations(portfolio, templates)
+                                if c6_admission else 100),
+                            "nomination_threshold": .03,
                             # Hybrid discovery: the sealed portfolio becomes a priority
                             # SEED once enabled, and the planner proposes thereafter.
                             "autonomous_discovery": bool(autonomous_discovery),
@@ -1826,8 +1829,7 @@ def _native_c6_portfolio_capacity(
         if template is None:
             raise DeploymentFactoryError(
                 "eligible C6 capacity row escaped the template registry")
-        if (_c6_operator_policy(template.semantics.get("correctness_op")) ==
-                "typed_precompute_refusal"):
+        if not _c6_route_reviewed(template):
             continue
         slots = record.get("decision_policy", {}).get("max_distinct_candidates")
         if isinstance(slots, bool) or not isinstance(slots, int) or slots < 1:
@@ -1838,11 +1840,42 @@ def _native_c6_portfolio_capacity(
 
 
 _C6_MUL_MAT_ROUTE_TYPES = MappingProxyType({
-    "cuda-mmvq-q5-onewave-continuation-v1": ("q5_0", 6),
-    "cuda-vecdotq-q4k-v1": ("q4_K", 12),
-    "cuda-vecdotq-q6k-v1": ("q6_K", 14),
+    # The sealed Q5 question is the only eligible vec-dot route; its portfolio
+    # dispatch anchors are all mul_mat_vec_q<(ggml_type)6, ...>.
+    "cuda-vecdotq-v1": ("q5_0", 6),
     "cuda-quantize-q8-v1": ("q8_0", 8),
 })
+
+
+# KV length per reviewed attention route.  Only the common template can reach
+# flash_attn_combine_results, which needs enough KV for parallel blocks.
+_C6_FLASH_KV_BY_TEMPLATE = MappingProxyType({
+    "cuda-fattn-tile-v1": 128,
+    "cuda-fattn-common-v1": 4096,
+})
+
+
+def _c6_route_reviewed(template: ExperimentTemplate) -> bool:
+    """True only when the native harness has an exact route for this template."""
+    operation = template.semantics.get("correctness_op")
+    if _c6_operator_policy(operation) == "typed_precompute_refusal":
+        return False
+    if operation == "MUL_MAT":
+        return template.template_id in _C6_MUL_MAT_ROUTE_TYPES
+    if operation == "FLASH_ATTN_EXT":
+        return template.template_id in _C6_FLASH_KV_BY_TEMPLATE
+    return operation == "RMS_NORM" and template.template_id == "cuda-norm-v2"
+
+
+def _c6_bundle_max_iterations(
+        portfolio: hypothesis_portfolio.Portfolio,
+        templates: ExperimentTemplateRegistry) -> int:
+    """Size a C6 bundle to its sealed native capacity at initialization."""
+    capacity = _native_c6_portfolio_capacity(portfolio, templates)
+    if capacity < 1:
+        raise DeploymentFactoryError(
+            "sealed portfolio has no native C6 route to deploy")
+    return capacity
 
 
 def _c6_mul_mat_route_type(template_id: str) -> tuple[str, int]:
@@ -1901,24 +1934,25 @@ def _c6_structural_precision(
     accumulator_contracts = {
         "MUL_MAT": (
             "ggml/src/ggml-cuda/mmvq.cu",
-            ("float tmp[ncols_dst][rows_per_cuda_block] = {{0.0f}};",
-             "tmp[j][i] += vec_dot_q_cuda("),
+            (("float tmp[ncols_dst][rows_per_thread][k_part_count] = {{{0.0f}}};", 1),
+             ("tmp[j][i][k_part] +=", 6)),
             "mul_mat_vec_q"),
         "RMS_NORM": (
             "ggml/src/ggml-cuda/norm.cu",
-            ("const float xi = x[col];\n        tmp += xi * xi;",
-             "const float scale = rsqrtf(mean + eps);",
-             "dst[col]          = scale * x[col] * mul[mul_col];"),
+            # Twelve-space indent: the eight-space form is l2_norm_f32.
+            (("const float xi = x[col];\n            tmp += xi * xi;", 1),
+             ("const float scale = rsqrtf(mean + eps);", 1),
+             ("dst[col]          = scale * x[col] * mul[mul_col];", 1)),
             "rms_norm_f32"),
         "FLASH_ATTN_EXT": (
             "ggml/src/ggml-cuda/fattn-common.cuh",
-            ("float VKQ_numerator   = 0.0f;",
-             "float VKQ_denominator = 0.0f;",
-             "dst[tid] = VKQ_numerator / VKQ_denominator;"),
+            (("float VKQ_numerator   = 0.0f;", 1),
+             ("float VKQ_denominator = 0.0f;", 1),
+             ("dst[tid] = VKQ_numerator / VKQ_denominator;", 1)),
             "flash_attn_combine_results"),
     }
     try:
-        accumulator_path, accumulator_fragments, accumulator_symbol = (
+        accumulator_path, accumulator_counts, accumulator_symbol = (
             accumulator_contracts[operation])
     except KeyError as exc:
         raise DeploymentFactoryError(
@@ -1928,24 +1962,20 @@ def _c6_structural_precision(
          f"{config.instrument_commit}:{accumulator_path}"),
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, check=False)
-    accumulator_fragments = (
-        "float tmp[ncols_dst][rows_per_cuda_block] = {{0.0f}};",
-        "tmp[j][i] += vec_dot_q_cuda(",
-    )
+    accumulator_fragments = tuple(row[0] for row in accumulator_counts)
     if (committed.returncode != 0
-            or any(committed.stdout.count(fragment.encode()) != 1
-                   for fragment in accumulator_fragments)
+            or any(committed.stdout.count(fragment.encode()) != expected
+                   for fragment, expected in accumulator_counts)
             or (operation in {"MUL_MAT", "FLASH_ATTN_EXT"}
                 and any(any(fragment in line for fragment in accumulator_fragments)
                         for line in changed_lines))):
         raise DeploymentFactoryError(
             "trusted f32 operator accumulator carrier is absent or changed")
 
-    # Q4_K/Q6_K arithmetic templates may edit their float-returning vec-dot
-    # symbol.  They may optimize unpacking, but cannot touch its accumulator
-    # variables or return path.  Other admitted templates cannot edit vecdotq.
-    if template.template_id in {"cuda-vecdotq-q4k-v1",
-                                "cuda-vecdotq-q6k-v1"}:
+    # The vec-dot arithmetic template may edit its float-returning symbols.
+    # It may optimize unpacking, but cannot touch their accumulator variables
+    # or return path.  Other admitted templates cannot edit vecdotq.
+    if template.template_id == "cuda-vecdotq-v1":
         protected = ("sumf", "return")
         if any(any(token in line for token in protected)
                for line in changed_lines):
@@ -1972,8 +2002,9 @@ def _c6_structural_precision(
         "allowed_files": sorted(template.allowed_files),
         "allowed_symbols": {key: sorted(value) for key, value in
                             sorted(template.allowed_symbols.items())},
-        "base_source_sha256": dict(template.semantics[
-            "production_instrument_target_sha256_by_file"]),
+        "base_source_sha256": {
+            path: template.semantics["production_instrument_target_sha256"]
+            for path in sorted(template.allowed_files)},
         "required_output_dtype": "f32",
         "required_accumulator_dtype": "f32",
         "accumulator_authority": {
@@ -2065,6 +2096,33 @@ def _c6_ghost_replay_calibration() -> tuple[dict[str, Any], tuple[
         evidence.BoundInputFile("c6_ghost_replay_results", results, results_sha))
 
 
+def _reconcile_c6_harness_partial(executable: Path, partial: Path) -> None:
+    """Resolve what a crash left in the sole-owner operation namespace.
+
+    A lone regular partial predates publication and is rebuilt from sealed
+    inputs.  A partial sharing the published inode is the crash window between
+    link and unlink.  Anything else was not written by this publisher.
+    """
+    try:
+        partial_stat = partial.lstat()
+    except FileNotFoundError:
+        return
+    try:
+        published = executable.lstat()
+    except FileNotFoundError:
+        published = None
+    if (not stat.S_ISREG(partial_stat.st_mode)
+            or (published is not None
+                and not os.path.samestat(partial_stat, published))):
+        raise DeploymentFactoryError(
+            "native C6 harness has an ambiguous partial build")
+    try:
+        partial.unlink()
+    except OSError as exc:
+        raise DeploymentFactoryError(
+            "native C6 harness partial could not be cleared") from exc
+
+
 def _c6_native_capability(
         config: deployment.DiscoveryDeployment,
         candidate: controller.PlannedCandidate,
@@ -2072,10 +2130,9 @@ def _c6_native_capability(
         template: ExperimentTemplate,
         repetition: int) -> evidence.C6CorrectnessPlan:
     operation = template.semantics.get("correctness_op")
-    if (build.operation_key is None
-            or _c6_operator_policy(operation) == "typed_precompute_refusal"):
+    if build.operation_key is None or not _c6_route_reviewed(template):
         raise DeploymentFactoryError(
-            "native C6 capability lacks a governed operator template")
+            "native C6 capability lacks a governed operator template route")
     source = (Path(__file__).resolve().parent.parent / "native" /
               "c6_mul_mat_harness.cpp")
     if source.is_symlink() or not source.is_file():
@@ -2109,10 +2166,8 @@ def _c6_native_capability(
         f"-I{header_root / 'ggml/include'}", f"-I{header_root / 'include'}",
         str(source), f"-L{bin_dir}", f"-Wl,-rpath,{bin_dir}",
         "-lggml", "-lggml-cpu", "-lggml-base", "-o", str(partial))
+    _reconcile_c6_harness_partial(executable, partial)
     if not executable.exists():
-        if partial.exists() or partial.is_symlink():
-            raise DeploymentFactoryError(
-                "native C6 harness has an ambiguous partial build")
         completed = subprocess.run(
             command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, check=False,
@@ -2144,8 +2199,7 @@ def _c6_native_capability(
         dimensions = (256, 1, 1)
     else:
         type_a, ggml_type_enum = "f16", 1
-        dimensions = (64, 1, (4096 if template.template_id ==
-                              "cuda-fattn-combine-v1" else 128))
+        dimensions = (64, 1, _C6_FLASH_KV_BY_TEMPLATE[template.template_id])
     capability = {
         "schema": "epyc.autokernel.c6_native_capability.v1",
         "instrument_commit": config.instrument_commit,
@@ -2328,9 +2382,9 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         dispatch = template.bind_dispatch(candidate.experiment_intent)
         c6_correctness = None
         if config.c6_admission is True:
-            if _c6_operator_policy(op) == "typed_precompute_refusal":
+            if not _c6_route_reviewed(template):
                 raise controller.C6OperatorUnsupportedRefusal(
-                    f"native C6 refuses unsupported operator {op!r}")
+                    f"native C6 has no reviewed route for {template.template_id!r}")
             c6_correctness = _c6_native_capability(
                 config, candidate, build_, template, repetition)
         candidate_rows, anchor_rows = _expected_rocprofv3_rows(dispatch)
@@ -3336,11 +3390,10 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         runner_attest()
         template = templates.resolve(candidate.experiment_intent)
         _validate_source_scope(candidate, template)
-        if (config.c6_admission is True and _c6_operator_policy(
-                template.semantics.get("correctness_op")) == "typed_precompute_refusal"):
+        if config.c6_admission is True and not _c6_route_reviewed(template):
             raise controller.C6OperatorUnsupportedRefusal(
-                "native C6 refuses unsupported operator "
-                f"{template.semantics.get('correctness_op')!r} before build")
+                "native C6 has no reviewed route for "
+                f"{template.template_id!r} before build")
         candidate.source_manifest.bind(
             proposal=candidate.proposal, campaign_id=candidate.source_manifest.campaign_id,
             candidate_id=candidate.source_manifest.candidate_id,

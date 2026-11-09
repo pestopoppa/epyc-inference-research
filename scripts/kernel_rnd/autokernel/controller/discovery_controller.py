@@ -2925,9 +2925,11 @@ def _c6_admission_leg(
                    for value in samples)):
         raise DiscoveryControllerError(
             "C6 admission throughput samples are malformed")
-    effects = [(float(value) - float(center)) / float(center)
-               for value in samples]
-    if float(raw_effect) != float(statistics.median(effects)):
+    candidate_statistic = _c6_recomputed_candidate_statistic(
+        raw, baseline, center=float(center), samples=samples)
+    # Exact on purpose: same producer formula over JSON-round-tripped doubles,
+    # so no measurement noise exists here for a tolerance to absorb.
+    if float(raw_effect) != candidate_statistic / float(center) - 1.0:
         raise DiscoveryControllerError(
             "C6 admission throughput reduction changed")
     candidate_identity = raw.get("candidate_identity")
@@ -2941,11 +2943,12 @@ def _c6_admission_leg(
                              evaluator_commit)):
         raise DiscoveryControllerError(
             "C6 admission lacks exact candidate/anchor/evaluator commits")
-    candidate_center = float(statistics.median(float(v) for v in samples))
+    # The per-repetition baseline stays bound through the result receipt; it
+    # cannot identify the frame because each repetition measures its own bank.
     frame_sha256 = _sha({
         "frame": raw.get("frame"),
         "sole_factor": raw.get("sole_factor"),
-        "baseline_sha256": result.baseline_sha256,
+        "estimator": raw.get("estimator"),
     })
     roofline = _c6_roofline_cap(
         config, raw=raw, baseline_center=float(center),
@@ -2961,7 +2964,7 @@ def _c6_admission_leg(
         "evaluator_commit": evaluator_commit,
         "frame_sha256": frame_sha256,
         "anchor_latency_ms": 1000.0 / float(center),
-        "candidate_latency_ms": 1000.0 / candidate_center,
+        "candidate_latency_ms": 1000.0 / candidate_statistic,
         "correctness_receipt_sha256": result.correctness_receipt_sha256,
         "c6_correctness_receipt_sha256":
             result.c6_correctness_receipt_sha256,
@@ -2972,6 +2975,65 @@ def _c6_admission_leg(
     }
     body["leg_sha256"] = _sha(body)
     return body
+
+
+_C6_PAIR_MAX_METRIC_SCHEMA = "epyc.autokernel.serialized_pair_max_metric.v1"
+
+
+def _c6_finite_positive(value: object, label: str) -> float:
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(float(value)) or float(value) <= 0):
+        raise DiscoveryControllerError(f"C6 admission {label} is malformed")
+    return float(value)
+
+
+def _c6_recomputed_candidate_statistic(
+        raw: Mapping[str, Any], baseline: Mapping[str, Any], *,
+        center: float, samples: list[Any]) -> float:
+    """Re-derive screen_effect()'s statistic under the sealed metric contract.
+
+    The estimator is taken from the frame's metric contract, never trusted from
+    the record alone: pair-max compares one run's metric on each arm, while
+    every other contract compares median to median.
+    """
+    frame = raw.get("frame")
+    contract = frame.get("metric_contract") if isinstance(frame, Mapping) else None
+    if not isinstance(contract, Mapping):
+        raise DiscoveryControllerError(
+            "C6 admission result lacks its metric contract")
+    pair_max = contract.get("schema") == _C6_PAIR_MAX_METRIC_SCHEMA
+    estimator = ("pair_max_metric_over_pair_max_metric" if pair_max
+                 else "median_over_median")
+    if raw.get("estimator") != estimator or baseline.get("estimator") != estimator:
+        raise DiscoveryControllerError(
+            "C6 admission estimator differs from its metric contract")
+    if pair_max:
+        candidate_runs, anchor_runs = (
+            raw.get("candidate_runs"), baseline.get("anchor_runs"))
+        if (not isinstance(candidate_runs, list) or not candidate_runs
+                or not isinstance(candidate_runs[0], Mapping)
+                or not isinstance(anchor_runs, list) or not anchor_runs
+                or not isinstance(anchor_runs[0], Mapping)):
+            raise DiscoveryControllerError(
+                "C6 admission pair-max runs are malformed")
+        statistic = _c6_finite_positive(
+            candidate_runs[0].get("metric"), "candidate pair-max metric")
+        expected_center = _c6_finite_positive(
+            anchor_runs[0].get("metric"), "anchor pair-max metric")
+    else:
+        anchor_samples = baseline.get("anchor_samples")
+        if not isinstance(anchor_samples, list) or not anchor_samples:
+            raise DiscoveryControllerError(
+                "C6 admission anchor samples are malformed")
+        statistic = float(statistics.median(float(v) for v in samples))
+        expected_center = _c6_finite_positive(
+            statistics.median(_c6_finite_positive(v, "anchor sample")
+                              for v in anchor_samples), "anchor centre")
+    if (expected_center != center
+            or raw.get("candidate_statistic") != statistic):
+        raise DiscoveryControllerError(
+            "C6 admission throughput reduction changed")
+    return statistic
 
 
 def _emit_c6_admission(
