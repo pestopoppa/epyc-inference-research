@@ -129,7 +129,13 @@ _SYSTEM_DSO = re.compile(r"kernel|kallsyms|vdso|(^|/)(libc|libm|libpthread|libgo
 #: contract; a hypothesis-only schema would contradict the prompt's own
 #: `{"abstain": "<reason>"}` instruction and push a declining report through the
 #: repair ladder, which exists to fill the hypothesis fields.
-ABSTAIN_BRANCH = {"type": "object", "properties": {"abstain": {"type": "string"}},
+ABSTAIN_BRANCH = {"type": "object",
+                  "properties": {"abstain": {"type": "string"},
+                                 **{name: {"type": "string"}
+                                    for name in ("mechanism_id", "mechanism_family",
+                                                 "target_surface", "target_symbol")},
+                                 "relies_on_claims": {"type": "array",
+                                                      "items": {"type": "string"}}},
                   "required": ["abstain"], "additionalProperties": False}
 
 _PENDING: dict[str, Path] = {}

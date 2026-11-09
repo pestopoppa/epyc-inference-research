@@ -3424,11 +3424,12 @@ Propose exactly one hypothesis. Reply with ONE json object and nothing else:
   "falsifier": "<the measurement that would prove this wrong>",
   "target_surface": "<{target_path}>",
   "target_symbol": "<the function you will change>",
-  "relies_on_claims": ["<belief-section claim id your mechanism depends on>"]}}
+  "relies_on_claims": ["<claim id>"]}}
 
-"relies_on_claims" lists the claim ids (clm_...) from the belief-kernel evidence section \
-that your mechanism depends on; [] if none. Only target- and sibling-scoped claims count; \
-host-ceiling lines are background and are not accepted as reliance.
+In either reply, proposal or abstention, "relies_on_claims" lists the claim ids (clm_...) \
+from the belief-kernel evidence section that your answer depends on; [] if none. It is \
+optional and decides nothing about your answer. Only knob-, target- and sibling-scoped \
+claims count; host-ceiling lines are background and are not accepted as reliance.
 
 Rules: {profile_rule}; name a MECHANISM, not a wish; \
 state a falsifier that could actually fail. The loop itself owns source inspection, \
@@ -3437,11 +3438,13 @@ trace or counter a prerequisite that this loop cannot collect. After a rejection
 missing evidence, either use an available diagnostic named in the context or choose \
 the smallest source-consistent change whose payoff the existing matched A/B can test. \
 If no honest, feasible hypothesis satisfies these constraints, abstaining is a correct \
-science result; reply instead with {{"abstain": "<specific reason>"}}. If the reason is \
+science result; reply instead with {{"abstain": "<specific reason>", \
+"relies_on_claims": ["<claim id>"]}}. If the reason is \
 that a mechanism you considered is ALREADY IMPLEMENTED, name what you found so it is not \
 re-proposed: {{"abstain": "<specific reason>", "mechanism_id": "<its id/slug>", \
 "mechanism_family": "<short family, e.g. local quant/dot kernel>", \
-"target_surface": "<path>", "target_symbol": "<function>"}} -- all four identity \
+"target_surface": "<path>", "target_symbol": "<function>", \
+"relies_on_claims": ["<claim id>"]}} -- all four identity \
 fields are optional; include only what you actually found, omit the rest."""
 
 
@@ -3998,9 +4001,13 @@ class AgentPlanner:
                 "kind": "error", "detail": f"{type(exc).__name__}: {exc}"[:300]})
             raise
         if isinstance(result, Abstain):
-            self._belief_receipt(belief, prompt, env,
-                                 {"kind": "abstain", "abstain_reason": result.reason[:500]},
-                                 declared)
+            receipt = self._belief_receipt(belief, prompt, env,
+                                           {"kind": "abstain",
+                                            "abstain_reason": result.reason[:500]},
+                                           declared)
+            if receipt is not None:
+                result = dataclasses.replace(
+                    result, relies_on_claims=tuple(receipt["reliance"]["accepted"]))
             return result
         receipt = self._belief_receipt(belief, prompt, env,
                                        {"kind": "hypothesis", "mechanism_id": result.mechanism_id},

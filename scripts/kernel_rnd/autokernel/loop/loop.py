@@ -296,8 +296,12 @@ class Abstain:
     mechanism_family: str | None = None
     target_surface: str | None = None
     target_symbol: str | None = None
+    #: Claim ids the abstention depends on, as the receipt accepted them. Optional, like
+    #: `Hypothesis.relies_on_claims`; never gates anything.
+    relies_on_claims: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "relies_on_claims", tuple(self.relies_on_claims or ()))
         if not isinstance(self.reason, str) or not self.reason.strip():
             raise ValueError("a planner abstention must carry a reason")
 
@@ -1721,7 +1725,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 identity = {"mechanism_id": hypothesis.mechanism_id,
                            "mechanism_family": hypothesis.mechanism_family,
                            "target_surface": hypothesis.target_surface,
-                           "target_symbol": hypothesis.target_symbol}
+                           "target_symbol": hypothesis.target_symbol,
+                           **({"relies_on_claims": list(hypothesis.relies_on_claims)}
+                              if hypothesis.relies_on_claims else {})}
                 return Outcome("abstained", None, [hypothesis.reason],
                                abstained_identity=identity)
             last_proposed = hypothesis

@@ -44,6 +44,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -159,6 +160,41 @@ def focus_symbol(text: Any) -> str:
     return value
 
 
+#: How many of the profile's hottest symbols become focus symbols.
+PROFILE_FOCUS_TOP = 8
+
+
+def _symbol_name(text: Any) -> str:
+    """`mul_mat_q<(ggml_type)8, 64, false>` -> `mul_mat_q`: a profiler signature's function name,
+    the form ledger claims use. "" when nothing usable remains."""
+    name = re.split(r"[<(]", str(text or ""), maxsplit=1)[0].strip()
+    try:
+        return focus_symbol(name)
+    except ValueError:
+        return ""
+
+
+def profile_focus_symbols(context: Mapping[str, Any], *, top: int = PROFILE_FOCUS_TOP
+                          ) -> tuple[str, ...]:
+    """The top hotspot symbols of the profile in this planning context, hottest first; () when
+    it has none. CPU `perf` symbols, else the GPU serving profile's primary window, else the
+    legacy `kernel_hotspots` table."""
+    names: list[Any] = []
+    cpu = context.get("cpu_profile")
+    gpu = context.get("gpu_serving_profile")
+    if isinstance(cpu, Mapping) and cpu.get("hotspots"):
+        names = [row.get("symbol") for row in cpu["hotspots"] if isinstance(row, Mapping)]
+    elif isinstance(gpu, Mapping) and isinstance(gpu.get("windows"), Mapping):
+        window = gpu["windows"].get(gpu.get("primary_window")) or {}
+        rows = window.get("kernels") or () if isinstance(window, Mapping) else ()
+        names = [row.get("kernel") for row in rows if isinstance(row, Mapping)]
+    if not names:
+        names = [row.get("signature") for row in context.get("kernel_hotspots") or ()
+                 if isinstance(row, Mapping)]
+    unique = dict.fromkeys(name for name in map(_symbol_name, names) if name)
+    return tuple(list(unique)[:top])
+
+
 def target_from_context(context: Mapping[str, Any]) -> dict[str, Any]:
     """The planner's target, from the `current_regime` block `run.py` already builds. An
     incomplete target is not a refusal: ROOT answers `ready` with empty evidence
@@ -169,7 +205,9 @@ def target_from_context(context: Mapping[str, Any]) -> dict[str, Any]:
     return {"model_path": str(model.get("path") or "") if isinstance(model, Mapping) else "",
             "quant": regime.get("quant") or "", "backend": backend,
             "device": DEVICE_BY_BACKEND.get(backend, ""),
-            "surface": regime.get("measurement_surface") or ""}
+            "surface": regime.get("measurement_surface") or "",
+            # This loop edits kernels; serving-knob rows rank last for it (order only).
+            "kernel_only": True}
 
 
 # ------------------------------------------------------------------------------ config
@@ -392,9 +430,10 @@ def prepare(context: Mapping[str, Any], config: BeliefConfig | None = None, *,
     `BeliefContextRefused`. Never returns without a verified ledger state."""
     config = config or BeliefConfig()
     target = target_from_context(context)
-    if config.focus_symbols:
-        # Only when given: a loop without focus symbols sends the target it always sent.
-        target["focus_symbols"] = sorted({focus_symbol(s) for s in config.focus_symbols})
+    focus = {focus_symbol(s) for s in config.focus_symbols} | set(profile_focus_symbols(context))
+    if focus:
+        # Only when known: a loop with no focus symbols and no profile sends no such key.
+        target["focus_symbols"] = sorted(focus)
     args = ["prepare", "--consumer", config.consumer,
             "--target-json", json.dumps(target, sort_keys=True),
             *config._alarm_args(), *config._known_good_args()]
