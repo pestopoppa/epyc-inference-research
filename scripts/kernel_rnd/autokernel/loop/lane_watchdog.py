@@ -332,6 +332,26 @@ def _archive_resolved_state(paths):
               f'archived {target}', file=sys.stderr, flush=True)
 
 
+TERMINATION_SCHEMA = 'epyc.autokernel.lane_termination.v1'
+
+
+def _termination_reason(requested, setup_error, killed, returncode):
+    if setup_error is not None:
+        return 'setup_error'
+    if requested:
+        return 'drain_grace_expired' if killed else 'operator_stop'
+    return 'crash' if returncode < 0 else 'exit'
+
+
+def _record_termination(state_paths, record):
+    """Keep why and when this attempt ended; a recording failure never changes the outcome."""
+    for state_path in state_paths:
+        try:
+            _write(state_path.with_name(state_path.stem + '.termination.json'), record)
+        except OSError as exc:
+            print(f'lane termination record failed: {exc}', file=sys.stderr, flush=True)
+
+
 def startup_refusal(store):
     """Read-only twin of supervise()'s pre-launch refusals for a dry run.
 
@@ -475,9 +495,11 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
                 stop_started = None
                 killed = False
                 warned = False
+                term_sent_at = kill_sent_at = None
                 while process.poll() is None:
                     if (requested[0] or setup_error is not None) and stop_started is None:
                         stop_started = time.monotonic()
+                        term_sent_at = time.time()
                         if pidfd is not None:
                             try:
                                 signal.pidfd_send_signal(pidfd, signal.SIGTERM)
@@ -490,6 +512,7 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
                             except OSError as exc:
                                 print(f'owned child KILL failed; retaining claims: {exc}', file=sys.stderr, flush=True)
                         killed = True
+                        kill_sent_at = time.time()
                     if killed and not warned and time.monotonic() - stop_started >= STOP_STUCK_NOTICE_SECONDS:
                         print('owned child not yet dead; retaining claims and waiting', file=sys.stderr, flush=True)
                         warned = True
@@ -527,13 +550,22 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
                         time.sleep(.25)
                     else:
                         os.waitpid(terminal.si_pid, 0)
+                remaining_group = _group_members(pid)
+                _record_termination(state_paths, {
+                    'schema': TERMINATION_SCHEMA, 'attempt': attempt, 'pid': pid, 'returncode': rc,
+                    'reason': _termination_reason(requested[0], setup_error, killed, rc),
+                    'drain_grace_s': STOP_GRACE_SECONDS, 'term_sent_at': term_sent_at,
+                    'kill_sent_at': kill_sent_at, 'exited_at': time.time(),
+                    'survivors': [row['pid'] for row in survivors],
+                    'group_remaining': remaining_group,
+                    'stop_clean': not survivors and not remaining_group})
                 if survivors:
                     names = ', '.join(str(row['pid']) for row in survivors)
                     raise WatchdogRefused('descendants remained after parent exit; '
                                           f'recovery held (live pids: {names})')
                 if setup_error is not None:
                     raise setup_error
-                if _group_members(pid):
+                if remaining_group:
                     raise WatchdogRefused('child process group remains; recovery held')
                 if rc == 78 and not requested[0]:
                     raise WatchdogRefused('child binding refused; recovery held')

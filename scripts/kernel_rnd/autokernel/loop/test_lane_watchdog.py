@@ -2,6 +2,7 @@
 import ast
 import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -470,7 +471,12 @@ def test_unresponsive_owned_child_is_killed_and_reaped(fixture):
         child_fd = os.pidfd_open(pid, 0)
         try:
             signal_owned(owner, signal.SIGTERM)
-            assert owner.wait(timeout=30) == 128 + signal.SIGTERM
+            assert owner.wait(timeout=60) == 128 + signal.SIGTERM
+            record = next((root / f'autokernel-lane-watchdog-{os.getuid()}').glob('*.termination.json'))
+            body = json.loads(record.read_text())
+            assert body['reason'] == 'drain_grace_expired' and body['stop_clean'] is True
+            assert body['kill_sent_at'] - body['term_sent_at'] >= 29
+            assert body['exited_at'] >= body['kill_sent_at']
             import select
             poller = select.poll()
             poller.register(child_fd, select.POLLIN)
