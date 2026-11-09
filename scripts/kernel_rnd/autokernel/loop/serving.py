@@ -43,11 +43,13 @@ import random
 import re
 import statistics
 import subprocess
+import sys
 import time
 from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
+from . import clock_policy
 from . import (floor_selfcheck, headline_admissibility, hip_launch_proof, kernel_coverage, launch_affinity,
                loadgen_selfcheck, lifecycle_observation, procguard, ram_admit, residency, status)
 from . import native_server_response as server_response
@@ -962,6 +964,12 @@ def _residency_record(sampler, *, window_start: float, window_end: float,
               "window_s": round(window_end - window_start, 3),
               "request_start": request_start, "request_end": request_end}
     record["covers_request_phase"] = covers_request_phase(record)
+    trace = getattr(sampler, "clock_trace", None)
+    if trace is not None:
+        record["clock_trace"] = trace
+        record["clock_phase_markers"] = {"window_start": window_start,
+                                         "request_start": request_start,
+                                         "request_end": request_end, "window_end": window_end}
     record["status"] = (RESIDENCY_NOT_APPLICABLE if backend == "cpu" else
                         RESIDENCY_PROVEN
                         if sampled and record["covers_request_phase"] and proof.get("resident")
@@ -2540,7 +2548,8 @@ OUTLIER_PERSISTENT_REFUSAL_LIMIT = 2
 #:     CPU affinity/identity contradiction the per-launch serving path already treats
 #:     as a hard invalidity (`residency.cpu_lifecycle_invalidity`).
 #:   * `gpu_clock_unstable` -- `clock_stable is False` (`sclk_min_mhz != sclk_max_mhz`):
-#:     the GPU's own clock governor moved during the launch window.
+#:     the GPU's own clock governor moved during the launch window. Under a ratified
+#:     `clock_policy` band, the same code means the request phase failed that band.
 #: PSI and non-target-activity census fields exist in the residency/cpu_lifecycle
 #: record but carry NO established threshold anywhere in this codebase --
 #: `residency.cpu_lifecycle_invalidity`'s own docstring is explicit that "no pressure,
@@ -2575,7 +2584,8 @@ def _mad_outlier_pairs(effects: Sequence[float], *, k: float = OUTLIER_MAD_K) ->
     return [i for i, e in enumerate(effects) if abs(0.6745 * (e - med) / mad) > k]
 
 
-def _independent_evidence(record: Mapping) -> str | None:
+def _independent_evidence(record: Mapping,
+                          policy: clock_policy.ClockPolicy | None = None) -> str | None:
     """One evidence code (`OUTLIER_EVIDENCE_SOURCES`) for a single launch's residency
     record if it carries independent proof of a compromised launch, else `None`.
     Never derived from the measured throughput value itself."""
@@ -2584,21 +2594,23 @@ def _independent_evidence(record: Mapping) -> str | None:
     validity = record.get("measurement_validity")
     if isinstance(validity, Mapping) and validity.get("status") == "invalid":
         return "cpu_lifecycle_invalid"
-    if record.get("clock_stable") is False:
+    if clock_policy.launch_is_unstable(record, clock_policy.load() if policy is None else policy):
         return "gpu_clock_unstable"
     return None
 
 
-def _evidence_pairs(anchor_windows: Sequence[Mapping],
-                    candidate_windows: Sequence[Mapping]) -> dict[int, str]:
+def _evidence_pairs(anchor_windows: Sequence[Mapping], candidate_windows: Sequence[Mapping],
+                    policy: clock_policy.ClockPolicy | None = None) -> dict[int, str]:
     """`{pair_index: evidence_code}` for every pair whose anchor OR candidate launch
     carries independent evidence of a compromised launch."""
+    # One policy per pass, so every launch is judged by the same rule.
+    policy = clock_policy.load() if policy is None else policy
     flagged: dict[int, str] = {}
     for windows in (anchor_windows, candidate_windows):
         for i, record in enumerate(windows):
             if i in flagged:
                 continue
-            code = _independent_evidence(record)
+            code = _independent_evidence(record, policy)
             if code is not None:
                 flagged[i] = code
     return flagged
@@ -2625,10 +2637,11 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     """
     anchor, candidate = values["anchor"], values["candidate"]
     n = len(anchor)
+    policy = clock_policy.load()
 
     def evaluate():
         effects = _pair_effects_pct(anchor, candidate)
-        evidence = _evidence_pairs(windows["anchor"], windows["candidate"])
+        evidence = _evidence_pairs(windows["anchor"], windows["candidate"], policy)
         mad = set(_mad_outlier_pairs(effects))
         return effects, evidence, mad
 
@@ -2660,6 +2673,11 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
                                               evidence=fresh_windows[arm],
                                               **({"target_sample_steps": fresh_steps[arm]}
                                                  if steps is not None else {}), **options)
+        # The launch being replaced is the evidence a later refusal must still show.
+        windows.setdefault("superseded", []).append(
+            {"pair_index": i, "reason": evidence[i],
+             "anchor": windows["anchor"][i], "candidate": windows["candidate"][i],
+             "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i]})
         anchor[i], candidate[i] = fresh_values["anchor"], fresh_values["candidate"]
         windows["anchor"][i] = fresh_windows["anchor"][0] if fresh_windows["anchor"] else {}
         windows["candidate"][i] = fresh_windows["candidate"][0] if fresh_windows["candidate"] else {}
@@ -2689,7 +2707,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     unexplained_outliers = [{"pair_index": i, "effect_pct": round(final_effects[i], 3),
                              "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i]}
                             for i in unexplained]
-    return {"schema": OUTLIER_GUARD_SCHEMA_V2, "applied": True,
+    band = {"clock_policy": policy.describe()} if policy.is_band else {}
+    return {**band, "schema": OUTLIER_GUARD_SCHEMA_V2, "applied": True,
             "semantics": OUTLIER_GUARD_EVIDENCE_BASED,
             "mad_k": OUTLIER_MAD_K, "max_replacement_pairs": MAX_OUTLIER_REPLACEMENT_PAIRS,
             "persistent_refusal_limit": OUTLIER_PERSISTENT_REFUSAL_LIMIT,
@@ -2715,7 +2734,8 @@ def _persist_refused_partial(partial_store, recipe: Recipe, *, frozen_requests, 
     try:
         base = floor_path(partial_store, recipe, frozen_requests=frozen_requests,
                           instrument=instrument, pairs=pairs)
-        path = base.with_name(base.name[:-len(".json")] + ".refused-partial.json")
+        # Stamped: a retry that is refused again must not erase the earlier evidence.
+        path = base.with_name(f"{base.name[:-len('.json')]}.{time.time_ns()}.refused-partial.json")
         n = len(values["anchor"])
         record = {"schema": "epyc.autokernel.serving_floor_refused_partial.v1",
                   "is_floor": False, "refusal": refusal,
@@ -2730,6 +2750,7 @@ def _persist_refused_partial(partial_store, recipe: Recipe, *, frozen_requests, 
                   "candidate_samples": list(values["candidate"]),
                   "anchor_residency": list(windows["anchor"]),
                   "candidate_residency": list(windows["candidate"]),
+                  "superseded_residency": list(windows.get("superseded", ())),
                   "residency": _residency_fold(list(windows["anchor"]) + list(windows["candidate"])),
                   "target_sample_steps": steps}
         if selfcheck is not None:
@@ -2740,7 +2761,8 @@ def _persist_refused_partial(partial_store, recipe: Recipe, *, frozen_requests, 
         tmp.write_text(json.dumps(record, indent=1, sort_keys=True, default=str))
         os.replace(tmp, path)
         return path
-    except Exception:
+    except Exception as exc:
+        print(f"refused-partial evidence NOT written: {type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
