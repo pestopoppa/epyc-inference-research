@@ -677,6 +677,10 @@ def main(argv: list[str] | None = None) -> int:
             out = apply(args.store, args.worktree, owner=args.owner, execute=args.execute,
                         relaunch_cmd=json.loads(args.relaunch_cmd) if args.relaunch_cmd else [], **kw)
         print(json.dumps(out, indent=1, sort_keys=True, default=str))
+        if out.get("executed") and out.get("relaunch_rc"):
+            # A failed relaunch must not read as a successful apply.
+            print(f"REFUSED: relaunch failed rc={out['relaunch_rc']}", file=sys.stderr)
+            return 4
         return 0 if out.get("actionable") or out["detect"]["state"] == "current" else 3
     except (ReanchorRefused, fr.FloorRegistryError) as refusal:
         print(f"REFUSED: {refusal}", file=sys.stderr)
