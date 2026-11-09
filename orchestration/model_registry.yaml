@@ -13732,3 +13732,50 @@ serving_floors:
       request_digest: e50732d9ce365259d5bb95fe31e36995f98bcd0986dc0e48d489f99390e42f58
       schema: epyc.autokernel.serving_floor.v2
       unit: process
+  qwen38_flash_next_ud_iq4xs_local:
+    - annotation: 'OPERATOR ACCEPTED suspect: true (RATIFY-AK-Q38FN-FLOOR-ACCEPT-20261109, signed Daniele; epyc-root receipt indexed by that gate id). The sealed record stays suspect: true; these pairs remain unexplained and in the floor: [{"anchor_tok_s": 43.169388586553275, "candidate_tok_s": 49.717619458233315, "effect_pct": 15.169, "pair_index": 1}, {"anchor_tok_s": 50.10922244579983, "candidate_tok_s": 43.10130743438626, "effect_pct": 13.985, "pair_index": 7}]. Two independent 24-pair runs on C9 agree on the level (this run 4.146%, r4 4.07%). The outlier guard found no independent degraded-host evidence for these pairs and they remain in the floor. Decision: operator 2026-11-09, option ''Accept ~4.1%, add reaper skip'', session 7b25c5ae-26b3-499f-bce1-07c4ba197b8c; the signature on the ratify script is the formal record. Janitor reap skip: epyc-root 9d597d559.'
+      build:
+        build_dir: /mnt/raid0/llm/kernels/builds/cpu-20261109-d210f85c2-c9fold
+        commit: d210f85c2cc8abb1c67cf79ed12582efd9e0026c
+        dso_sha256:
+          libggml-base.so: 8668b620d9d02724736aa782972f05cf84a92c568effc78aaa58231505ad4af4
+          libggml-base.so.0: 8668b620d9d02724736aa782972f05cf84a92c568effc78aaa58231505ad4af4
+          libggml-cpu.so: 3453ab34deb8fe647702a209176e1ed46d5b694fa16bbb1bbffea3966adbea85
+          libggml-cpu.so.0: 3453ab34deb8fe647702a209176e1ed46d5b694fa16bbb1bbffea3966adbea85
+          libggml.so: 0ef1f53e033e8493d5e572cd38c63d9c3e610fa4c29c4da4e5f700615a50c980
+          libggml.so.0: 0ef1f53e033e8493d5e572cd38c63d9c3e610fa4c29c4da4e5f700615a50c980
+          libllama-common.so: f5be6d98f5709b1b6f0e075c957df654cde69e3f09188f58003a969813d835e0
+          libllama-common.so.0: f5be6d98f5709b1b6f0e075c957df654cde69e3f09188f58003a969813d835e0
+          libllama-server-impl.so: 602271b02d1566cd09584140bd054df0611d9381bca09b43dcb5be7627ed1771
+          libllama.so: ab7ea5d4375e4f04704f8c05c30f48a6355d7fe2e3044b866233c540400ea3f9
+          libllama.so.0: ab7ea5d4375e4f04704f8c05c30f48a6355d7fe2e3044b866233c540400ea3f9
+          libmtmd.so: e62976f494f653ac9f8579322f9a9fcb92de5679fdfc0d173c72963b76b51e63
+          libmtmd.so.0: e62976f494f653ac9f8579322f9a9fcb92de5679fdfc0d173c72963b76b51e63
+        executable_sha256: 16aee7b239b60ce954f78279c890ffd2f75d873f4d8d7234b3709750775943fc
+        execution_digest: 20a75532c2272217a1de67602fc0f37447ebc0b530c9295d598e1bfea4eaa6da
+      champion_tree_hash: d0d44f26d44eda754f730fde42836c54d2f6010a433ec251a8ff482c9b6343d2
+      content_sha256: cbe4f8884cd99e53bd6cf76e3557d22add95c1d037cef7e8b7a0676f0661651d
+      equivalence_key: a6cd92e8197b9a53dd89099fda52d8bdc36a0718fdca0f2c51540e88b0234d6e
+      floor_pct: 4.146
+      frame_digest: 3928a5d9a0686e63348afa1ef06c17bdc5b4887eb8936b11b4f93903d05c3bc2
+      grade:
+        claim_class: decision
+        co_tenancy: quiet
+        threads: 48
+      id: cbe4f8884cd99e53
+      interval:
+        high_pct: 13.985
+        level: 0.95
+        low_pct: 1.789375
+      k: 5
+      measured_at: '2026-11-09T17:31:55Z'
+      model_sha: 5ce89370720f8bf90890f439361282104c1aa1482d4013bb9a50923e758e71a4
+      n: 24
+      numerics_epoch: default
+      recipe: q38fn-802bf9ac6-cpu-t48-mtp-d4
+      recipe_hash: cff9ad900700c8057a2783946e5e5dc5ed718818728dd1bdbdfb9e0199b16fb8
+      record: /mnt/raid0/llm/autokernel/reaper-diag-q38fn-20261109/runtime-source-floors/cff9ad900700c8057a2783946e5e5dc5ed718818728dd1bdbdfb9e0199b16fb8/20a75532c2272217a1de67602fc0f37447ebc0b530c9295d598e1bfea4eaa6da/serving-floor.q38fn-802bf9ac6-cpu-t48-mtp-d4.requests-57c9006dfde7443a1bf9b58c08f1ac6834dddcdf3cafcfb770717f141b1d8640.matched_process_v2.pairs-5.json
+      record_sha256: 97224e99fbe63cc2d8b60a1a684059acdc95209320d2fa19b00268705d1ff817
+      request_digest: 57c9006dfde7443a1bf9b58c08f1ac6834dddcdf3cafcfb770717f141b1d8640
+      schema: epyc.autokernel.serving_floor.v2
+      unit: process
