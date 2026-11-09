@@ -2606,7 +2606,8 @@ def _evidence_pairs(anchor_windows: Sequence[Mapping],
 
 def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: dict,
                          plan: dict, values: dict, windows: dict,
-                         should_stop=None, steps: dict | None = None) -> dict:
+                         should_stop=None, steps: dict | None = None,
+                         on_refuse=None) -> dict:
     """Exclude/bounded-remeasure ONLY the pairs with INDEPENDENT evidence of a
     compromised launch, and (if still contaminated) REFUSE the calibration. A pair
     flagged ONLY by its own |effect| (no evidence) is left completely untouched and
@@ -2637,6 +2638,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
                 "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i],
                 "effect_pct": round(effects[i], 3)} for i in initial_evidence]
     if len(initial_evidence) > MAX_OUTLIER_REPLACEMENT_PAIRS:
+        if on_refuse is not None:
+            on_refuse("outlier_guard_budget_exceeded", initial_evidence)
         raise HostDegradedDuringCalibration(
             f"host degraded during floor calibration: {len(initial_evidence)} of {n} A/A "
             f"pairs carry independent evidence of a compromised launch "
@@ -2671,6 +2674,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     final_effects, final_evidence, final_mad = evaluate()
     still_flagged = sorted(final_evidence)
     if replaced and len(still_flagged) > OUTLIER_PERSISTENT_REFUSAL_LIMIT:
+        if on_refuse is not None:
+            on_refuse("outlier_guard_persistent_evidence", still_flagged)
         raise HostDegradedDuringCalibration(
             f"host degraded during floor calibration: {len(still_flagged)} of {n} A/A "
             f"pairs still carry independent evidence of a compromised launch after "
@@ -2697,6 +2702,48 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
             "suspect": bool(unexplained_outliers)}
 
 
+def _persist_refused_partial(partial_store, recipe: Recipe, *, frozen_requests, instrument,
+                             pairs, samples: int, plan: dict, values: dict, windows: dict,
+                             steps: dict | None, started_at: float, refusal: str,
+                             flagged: Mapping | Sequence = (), selfcheck=None) -> Path | None:
+    """Keep the evidence of a REFUSED matched calibration. Never a floor: the file is named
+    `serving-floor.<key>...refused-partial.json` (not `.json`-terminated as a floor), carries
+    its own schema, and `floor_path`/`load_floor` can never resolve to it. Best-effort: a
+    write failure must not mask the refusal being raised."""
+    if partial_store is None:
+        return None
+    try:
+        base = floor_path(partial_store, recipe, frozen_requests=frozen_requests,
+                          instrument=instrument, pairs=pairs)
+        path = base.with_name(base.name[:-len(".json")] + ".refused-partial.json")
+        n = len(values["anchor"])
+        record = {"schema": "epyc.autokernel.serving_floor_refused_partial.v1",
+                  "is_floor": False, "refusal": refusal,
+                  "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
+                  "samples_requested": samples,
+                  "wall_clock": {"calibration_started_at": started_at,
+                                 "refused_at": time.time()},
+                  "reference_pair_indices": list(range(n)),
+                  "flagged_pair_indices": sorted(flagged),
+                  "calibration_plan": plan,
+                  "anchor_samples": list(values["anchor"]),
+                  "candidate_samples": list(values["candidate"]),
+                  "anchor_residency": list(windows["anchor"]),
+                  "candidate_residency": list(windows["candidate"]),
+                  "residency": _residency_fold(list(windows["anchor"]) + list(windows["candidate"])),
+                  "target_sample_steps": steps}
+        if selfcheck is not None:
+            record["selfcheck_verdict"] = str(getattr(selfcheck, "verdict", ""))
+            record["selfcheck_reasons"] = list(getattr(selfcheck, "reasons", ()))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(record, indent=1, sort_keys=True, default=str))
+        os.replace(tmp, path)
+        return path
+    except Exception:
+        return None
+
+
 def _with_calibration_stderr_log(fn):
     """Every calibration launch keeps its stderr tail for a failure record."""
     @functools.wraps(fn)
@@ -2710,7 +2757,7 @@ def _with_calibration_stderr_log(fn):
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
                     resolved_recipe=None, frozen_requests=None,
                     instrument=LEGACY_INSTRUMENT, pairs=None, longctx=None,
-                    should_stop=None) -> dict:
+                    should_stop=None, partial_store=None) -> dict:
     """A/A the serving metric `samples` times on ONE build: the run-to-run spread IS the
     noise floor a keep must clear. floor = p95 of |pairwise effect| against the median,
     reported at a few sample counts so a keep at N pairs is judged against the N-pair bar."""
@@ -2730,6 +2777,14 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
         values = {"anchor": [], "candidate": []}
         windows = {"anchor": [], "candidate": []}
         steps = {"anchor": [], "candidate": []}
+        started_at = time.time()
+
+        def on_refuse(reason, flagged, selfcheck=None):
+            _persist_refused_partial(
+                partial_store, recipe, frozen_requests=frozen_requests,
+                instrument=instrument, pairs=pairs, samples=samples, plan=plan,
+                values=values, windows=windows, steps=steps, started_at=started_at,
+                refusal=reason, flagged=flagged, selfcheck=selfcheck)
         for order in plan["orders"]:
             for arm in order:
                 if should_stop():
@@ -2739,12 +2794,15 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                                    **options))
         outlier_guard = _apply_outlier_guard(recipe, build_dir, port, options,
                                              plan, values, windows,
-                                             should_stop=should_stop, steps=steps)
+                                             should_stop=should_stop, steps=steps,
+                                             on_refuse=on_refuse)
         # AKX-AUTO-4: a contiguous degraded block (a level shift both arms share) is
         # invisible to the per-pair evidence guard above; refuse it like any other
         # host-degraded calibration rather than file the inflated floor.
         selfcheck = floor_selfcheck.assess_floor(values["anchor"], values["candidate"])
         if selfcheck.verdict == floor_selfcheck.REJECT_DEGRADED_BLOCK:
+            on_refuse("degraded_block", _evidence_pairs(windows["anchor"], windows["candidate"]),
+                      selfcheck)
             raise HostDegradedDuringCalibration(
                 f"host degraded during floor calibration: {selfcheck.reasons[0]}. "
                 f"Re-measure once the host is quiet; refusing rather than filing a "

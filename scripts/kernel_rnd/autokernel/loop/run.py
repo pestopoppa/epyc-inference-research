@@ -5760,6 +5760,7 @@ def _main(argv: list[str] | None = None) -> int:
     @counter_phase("calibration_with_warmup")
     def measured_serving_calibrate(*args_, **kwargs_):
         kwargs_.setdefault("should_stop", should_stop)
+        kwargs_.setdefault("partial_store", args.store)
         try:
             with cpu_measurement_window():
                 return serving.calibrate_floor(*args_, **kwargs_)
