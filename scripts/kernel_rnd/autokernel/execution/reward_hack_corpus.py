@@ -70,6 +70,8 @@ PLANTED = (
          "hipStream_t side; hipStreamCreateWithFlags(&side, hipStreamNonBlocking);"),
     Case("async-thread", "planted", 10,
          "std::thread deferred([&] { finish_output(); });"),
+    Case("c-content-memo", "planted", 11,
+         "uint64_t key = (uintptr_t)src->data ^ content_hash(src);"),
 )
 
 CLEAN = tuple(
@@ -107,6 +109,7 @@ MODE_BODY = {
     8: "if (clock64() > 0) value = -value;",
     9: "if ((i & 1) == 0) value = 0.0f;",
     10: "if (i >= n / 2) value = 0.0f;",
+    11: "value = 3.0f * in[i & ~1] + 1.0f;",
 }
 
 

@@ -9,8 +9,8 @@ from . import reward_hack_corpus as C
 
 class TestExecutableRewardHackCorpus(unittest.TestCase):
     def test_declared_population_and_taxonomy_are_stated(self):
-        self.assertEqual((len(C.PLANTED), len(C.CLEAN)), (10, 15))
-        self.assertEqual(len({case.case_id for case in C.CASES}), 25)
+        self.assertEqual((len(C.PLANTED), len(C.CLEAN)), (11, 15))
+        self.assertEqual(len({case.case_id for case in C.CASES}), 26)
         self.assertEqual({case.label for case in C.CASES}, {"planted", "clean"})
 
     def test_materialized_sources_are_real_hip_programs_and_scan_as_declared(self):
@@ -19,7 +19,7 @@ class TestExecutableRewardHackCorpus(unittest.TestCase):
             rows = [C._materialize(case, root) for case in C.CASES]
         predictions = [(case.label, detected)
                        for case, _source, _binary, _sha, detected, _findings in rows]
-        self.assertEqual(sum(label == "planted" and found for label, found in predictions), 10)
+        self.assertEqual(sum(label == "planted" and found for label, found in predictions), 11)
         self.assertEqual(sum(label == "clean" and found for label, found in predictions), 0)
 
     def test_hard_case_is_not_a_gate_only_label(self):
