@@ -310,12 +310,19 @@ class TestRowflowEngineFlockIdiom(unittest.TestCase):
             claim = C._inherit_rowflow_claim(os.environ, Path({str(self.lock)!r}))
             print(claim.receipt().to_dict()["claim_id"])
         """)
+        # inner bash -> taskset/bash -c (exec) -> job.py python -> corpus python: the
+        # holder is the GRANDPARENT of the claiming process, as in the real tree.
         script = ('exec 9>"$LOCK"; flock -w 5 9 || exit 9; export FILLER_ID="$CHILD_ROW" FILLER_NEEDGPU=1; '
-                  'bash -c "\\"$PY\\" -c \\"\\$CHILD\\"" 9>&-')
+                  '"$PY" -c "import os,subprocess,sys; sys.exit(subprocess.run([sys.executable, \'-c\', os.environ[\'CHILD\']]).returncode)" 9>&-')
         env = {k: v for k, v in os.environ.items() if k not in ("FILLER_ID", "FILLER_NEEDGPU")}
         env.update(LOCK=str(self.lock), CHILD_ROW=child_row, PY=sys.executable, CHILD=child)
         return subprocess.run(["bash", "-c", script, "filler_run15.sh", "--inner", "--id", argv_row],
                               capture_output=True, text=True, env=env, timeout=60)
+
+    def test_ancestor_walk_reaches_past_the_parent(self):
+        chain = C._ancestor_pids(os.getpid(), Path("/proc"))
+        self.assertGreaterEqual(len(chain), 2)
+        self.assertEqual(chain[0], os.getppid())
 
     def test_engine_idiom_same_row_is_inherited(self):
         result = self._run("rowA", "rowA")

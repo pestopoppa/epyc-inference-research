@@ -522,13 +522,20 @@ class _ParentHeldClaim:
 
 
 def _ancestor_pids(pid: int, proc: Path) -> list[int]:
+    """Strict ancestors, nearest first. (The old loop tested the pid it had just
+    appended against the chain, so it always stopped after the parent: a holder
+    two or more levels up -- the real rowflow tree -- was never seen.)"""
     chain: list[int] = []
-    while pid > 1 and pid not in chain:
+    seen = {pid}
+    while pid > 1:
         try:
             stat = (proc / str(pid) / "stat").read_text()
             pid = int(stat[stat.rindex(")") + 2:].split()[1])
         except (OSError, ValueError, IndexError):
             break
+        if pid < 1 or pid in seen:
+            break
+        seen.add(pid)
         chain.append(pid)
     return chain
 
