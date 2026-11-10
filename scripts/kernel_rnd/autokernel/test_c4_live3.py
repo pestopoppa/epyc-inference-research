@@ -45,7 +45,9 @@ class RocprofV1Backend(unittest.TestCase):
     def test_argv_and_glob_are_the_whole_port(self):
         argv = V1.argv("/x/rocprof", Path("/o"), Path("/b/llama-bench"),
                        Path("/m.gguf"), pp=512, tg=0)
-        self.assertEqual(argv[:4], ["/x/rocprof", "--stats", "-o", "/o/trace.csv"])
+        self.assertEqual(argv[:5], ["/x/rocprof", "--stats", "-o", "/o/trace.csv",
+                                    "/b/llama-bench"])
+        self.assertNotIn("--", argv)
         self.assertEqual(argv[argv.index("-p") + 1], "512")
         self.assertEqual(V1.STATS_GLOB, "*.stats.csv")
 

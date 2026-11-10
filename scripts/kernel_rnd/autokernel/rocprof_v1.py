@@ -64,8 +64,12 @@ def profiler_env(binary: Path, rocprof: str) -> dict[str, str]:
 
 def argv(rocprof: str, out_dir: Path, binary: Path, model: Path, *,
          pp: int, tg: int) -> list[str]:
-    """The same llama-bench surface `hotspots.profile` measures, under `rocprof --stats`."""
-    return [rocprof, "--stats", "-o", str(out_dir / "trace.csv"), "--",
+    """The same llama-bench surface `hotspots.profile` measures, under `rocprof --stats`.
+
+    No `--` separator: v1's option loop `break`s on the first unknown word and takes
+    the rest verbatim as APP_CMD, so a `--` would become the command to run.
+    """
+    return [rocprof, "--stats", "-o", str(out_dir / "trace.csv"),
             str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
             "-r", "1", "-ngl", "99", "-fa", "1", "-o", "json"]
 
