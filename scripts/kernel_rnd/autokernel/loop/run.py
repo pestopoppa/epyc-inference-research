@@ -3245,6 +3245,11 @@ def _main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.planner_only:
         return planner_only.run(args, seat_common=_actor_seat_common(args))
+    try:
+        # One ROOT for belief reads and AK-HR-3 history capture (see archive.bind_history_root).
+        archive.bind_history_root(args.belief_root_repo, bind=not args.dry_run)
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.dry_run:
         _DRY_RUN_REFUSALS.clear()
     try:

@@ -476,6 +476,28 @@ def _with_trial_counters(store, attempt: Mapping[str, Any], epoch: str) -> Mappi
 _VIDYA_ROOT = None  # Explicit embedding/test override; otherwise resolve the named ROOT lazily.
 
 
+def bind_history_root(belief_root: str | Path | None, *, bind: bool = True) -> None:
+    """Bind AK-HR-3 history capture to the ROOT the run already reads beliefs from.
+
+    `_publish_ak_history` imports `adapters.ak_history` through the shared `adapters`
+    package, which the planner feedback and evidence feed first import from
+    `--belief-root-repo`. Resolving history from `EPYC_ROOT_REPO` instead (r4: /workspace
+    vs the hub view) made every capture fail with "adapter differs from selected ROOT
+    source". One run, one ROOT: a conflicting explicit `AK_HISTORY_ROOT` is refused here,
+    before any compute, rather than after the first durable archive.
+    """
+    global _VIDYA_ROOT
+    if belief_root is None:
+        return
+    chosen = Path(belief_root).expanduser().resolve()
+    override = os.environ.get("AK_HISTORY_ROOT", "").strip()
+    if override and Path(override).expanduser().resolve() != chosen:
+        raise ValueError(f"AK_HISTORY_ROOT={override} differs from --belief-root-repo "
+                         f"{chosen}: AK history and belief reads must share one ROOT")
+    if bind:
+        _VIDYA_ROOT = chosen
+
+
 def _publish_ak_history(store_root: Path, attempt: Mapping[str, Any], *,
                         campaign_id: str, epoch: str, recorded_at: str) -> Path | None:
     """Write the prospective AK-HR-3 receipt for a committed loop trial only."""
