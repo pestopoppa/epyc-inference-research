@@ -30,15 +30,18 @@ class ClaimRefused(RuntimeError):
     """The device is held by someone else, or the claim did not survive the window."""
 
 
-def _ensure_orchestrator_importable() -> None:
-    """Put the configured CPU-lock owner on the import path.
+ORCHESTRATOR_REPO_ENV = "EPYC_ORCHESTRATOR_REPO"
+_LOCK_OWNER = Path("src") / "runtime" / "cpu_region_lock.py"
 
-    Root lane worktrees do not contain the untracked ``repos`` symlinks from the
-    shared checkout.  Their Git common directory still identifies that checkout,
-    so a child launched from the research repository can resolve the same owner
-    without requiring operator-supplied ``PYTHONPATH`` glue.
-    """
-    configured = Path(os.environ.get("EPYC_ROOT_REPO", "/workspace")).resolve()
+
+def _owns_cpu_lock(candidate: Path) -> bool:
+    try:
+        return (candidate / _LOCK_OWNER).is_file()
+    except OSError:
+        return False
+
+
+def _root_repo_candidates(configured: Path) -> list[Path]:
     candidates = [configured, configured / "repos" / "epyc-orchestrator"]
     git_marker = configured / ".git"
     try:
@@ -55,15 +58,54 @@ def _ensure_orchestrator_importable() -> None:
                 candidates.append(common_git.resolve().parent / "repos" / "epyc-orchestrator")
     except OSError:
         pass
+    return candidates
 
-    for candidate in candidates:
-        if (candidate / "src" / "runtime" / "cpu_region_lock.py").is_file():
-            path = str(candidate)
-            if path not in sys.path:
-                sys.path.insert(0, path)
-            return
+
+def resolve_orchestrator_root(environ: Mapping[str, str] | None = None,
+                              search_path: list[str] | None = None) -> Path:
+    """The orchestrator checkout that owns the CPU-region lock, or ClaimRefused.
+
+    Order: an explicit ``EPYC_ORCHESTRATOR_REPO`` (refused if set but not an owner --
+    an explicit name is never silently replaced); then ``EPYC_ROOT_REPO`` and its
+    ``repos/epyc-orchestrator`` / worktree-commondir layout; then any entry already
+    on ``sys.path`` (``PYTHONPATH``) that contains ``src/runtime/cpu_region_lock.py``.
+    The last case covers a ROOT that is a read-only hub view with no ``repos/``
+    symlinks (C10 floor, 2026-11-10: FAIL_WINDOW at claim time).  Nothing resolving
+    still refuses.
+    """
+    env = os.environ if environ is None else environ
+    explicit = env.get(ORCHESTRATOR_REPO_ENV)
+    if explicit:
+        candidate = Path(explicit).resolve()
+        if _owns_cpu_lock(candidate):
+            return candidate
+        raise ClaimRefused(
+            f"{ORCHESTRATOR_REPO_ENV}={candidate} has no {_LOCK_OWNER}; "
+            "it does not name the orchestrator CPU-lock owner")
+    configured = Path(env.get("EPYC_ROOT_REPO", "/workspace")).resolve()
+    for candidate in _root_repo_candidates(configured):
+        if _owns_cpu_lock(candidate):
+            return candidate
+    for entry in (sys.path if search_path is None else search_path):
+        candidate = Path(entry or ".").resolve()
+        if _owns_cpu_lock(candidate):
+            return candidate
     raise ClaimRefused(
-        f"EPYC_ROOT_REPO={configured} does not resolve the orchestrator CPU-lock owner")
+        f"EPYC_ROOT_REPO={configured} does not resolve the orchestrator CPU-lock owner "
+        f"(no {ORCHESTRATOR_REPO_ENV}, and no sys.path/PYTHONPATH entry holds {_LOCK_OWNER})")
+
+
+def _ensure_orchestrator_importable() -> None:
+    """Put the configured CPU-lock owner on the import path (see resolve_orchestrator_root).
+
+    Root lane worktrees do not contain the untracked ``repos`` symlinks from the
+    shared checkout.  Their Git common directory still identifies that checkout,
+    so a child launched from the research repository can resolve the same owner
+    without requiring operator-supplied ``PYTHONPATH`` glue.
+    """
+    path = str(resolve_orchestrator_root())
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 
 def _process_start_ticks(pid: int) -> int | None:
