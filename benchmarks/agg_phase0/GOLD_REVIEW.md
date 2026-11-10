@@ -1,6 +1,6 @@
 # AGG Phase 0 — gold review sheet (operator hand-verification)
 
-Every gold below is `verified: false`. **No Phase-0 run may start until each question used is verified against the filing by a named reviewer; an unverified question is excluded, never assumed** (plan §(c), AGG-0.1).
+Gold `verified` state is read from `verification_record.json`. **No Phase-0 run may start until each question used is verified against the filing by a named reviewer; an unverified question is excluded, never assumed** (plan §(c), AGG-0.1).
 
 ## How to verify
 
@@ -24,26 +24,26 @@ Corpus: 10 FY2022 10-Ks; missing PDFs: none.
 
 | id | question | rule | derived gold | NA-excluded | missing cells | verified | reviewer |
 |---|---|---|---|---|---|---|---|
-| agg01 | Which company in the corpus reported the highest FY2022 total revenue? | `argmax(revenue)` | "Verizon" | 0 | 0 | [ ] | |
-| agg02 | Which company in the corpus reported the lowest FY2022 total revenue? | `argmin(revenue)` | "American Water Works" | 0 | 0 | [ ] | |
-| agg03 | What is the combined FY2022 total revenue of all companies in the corpus, in USD millions? | `sum(revenue)` | 538018.8 | 0 | 0 | [ ] | |
-| agg04 | How many companies in the corpus reported FY2022 total revenue above $50 billion? | `count_gt(revenue, 50000)` | 4 | 0 | 0 | [ ] | |
-| agg05 | List the three companies with the highest FY2022 total revenue, highest first. | `top3(revenue)` | ["Verizon", "JPMorgan", "PepsiCo"] | 0 | 0 | [ ] | |
-| agg06 | Which company reported the highest FY2022 net income attributable to shareholders? | `argmax(net_income)` | "JPMorgan" | 0 | 0 | [ ] | |
-| agg07 | How many companies in the corpus reported a net loss attributable to shareholders for FY2022? | `count_lt(net_income, 0)` | 1 | 0 | 0 | [ ] | |
-| agg08 | What is the combined FY2022 net income attributable to shareholders across the corpus, in USD millions? | `sum(net_income)` | 89832.3 | 0 | 0 | [ ] | |
-| agg09 | Which company had the largest FY2022 capital expenditures? | `argmax(capex)` | "Verizon" | 1 | 0 | [ ] | |
-| agg10 | What were total FY2022 capital expenditures across all companies in the corpus, in USD millions? | `sum(capex)` | 41174.7 | 1 | 0 | [ ] | |
-| agg11 | How many companies spent more than $5 billion on capital expenditures in FY2022? | `count_gt(capex, 5000)` | 2 | 1 | 0 | [ ] | |
-| agg12 | Which company had the largest total assets at FY2022 year end? | `argmax(total_assets)` | "JPMorgan" | 0 | 0 | [ ] | |
-| agg13 | List the three companies with the largest total assets at FY2022 year end, largest first. | `top3(total_assets)` | ["JPMorgan", "Verizon", "Coca-Cola"] | 0 | 0 | [ ] | |
-| agg14 | Which company generated the most cash from operating activities in FY2022? | `argmax(operating_cash_flow)` | "JPMorgan" | 0 | 0 | [ ] | |
-| agg15 | For how many companies did FY2022 operating cash flow exceed net income attributable to shareholders? | `count_gt(operating_cash_flow-net_income, 0)` | 10 | 0 | 0 | [ ] | |
-| agg16 | Among companies with a classified balance sheet, how many had positive working capital (total current assets minus total current liabilities) at FY2022 year end? | `count_gt(total_current_assets-total_current_liabilities, 0)` | 5 | 1 | 0 | [ ] | |
-| agg17 | Among companies with a classified balance sheet, which had the most negative working capital at FY2022 year end? | `argmin(total_current_assets-total_current_liabilities)` | "Verizon" | 1 | 0 | [ ] | |
-| agg18 | What were total FY2022 cash dividends paid to common shareholders by the companies in the corpus other than JPMorgan, in USD millions? | `sum(dividends_paid)` | 30674.5 | 0 | 0 | [ ] | |
-| agg19 | Which company had the highest FY2022 capital expenditures as a share of total revenue? | `argmax(capex/revenue)` | "American Water Works" | 1 | 0 | [ ] | |
-| agg20 | How many companies had an FY2022 net margin (net income attributable / total revenue) above 10%? | `count_gt(net_income/revenue, 0.1)` | 6 | 0 | 0 | [ ] | |
+| agg01 | Which company in the corpus reported the highest FY2022 total revenue? | `argmax(revenue)` | "Verizon" | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg02 | Which company in the corpus reported the lowest FY2022 total revenue? | `argmin(revenue)` | "American Water Works" | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg03 | What is the combined FY2022 total revenue of all companies in the corpus, in USD millions? | `sum(revenue)` | 538018.8 | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg04 | How many companies in the corpus reported FY2022 total revenue above $50 billion? | `count_gt(revenue, 50000)` | 4 | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg05 | List the three companies with the highest FY2022 total revenue, highest first. | `top3(revenue)` | ["Verizon", "JPMorgan", "PepsiCo"] | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg06 | Which company reported the highest FY2022 net income attributable to shareholders? | `argmax(net_income)` | "JPMorgan" | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg07 | How many companies in the corpus reported a net loss attributable to shareholders for FY2022? | `count_lt(net_income, 0)` | 1 | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg08 | What is the combined FY2022 net income attributable to shareholders across the corpus, in USD millions? | `sum(net_income)` | 89832.3 | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg09 | Which company had the largest FY2022 capital expenditures? | `argmax(capex)` | "Verizon" | 1 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg10 | What were total FY2022 capital expenditures across all companies in the corpus, in USD millions? | `sum(capex)` | 41174.7 | 1 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg11 | How many companies spent more than $5 billion on capital expenditures in FY2022? | `count_gt(capex, 5000)` | 2 | 1 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg12 | Which company had the largest total assets at FY2022 year end? | `argmax(total_assets)` | "JPMorgan" | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg13 | List the three companies with the largest total assets at FY2022 year end, largest first. | `top3(total_assets)` | ["JPMorgan", "Verizon", "Coca-Cola"] | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg14 | Which company generated the most cash from operating activities in FY2022? | `argmax(operating_cash_flow)` | "JPMorgan" | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg15 | For how many companies did FY2022 operating cash flow exceed net income attributable to shareholders? | `count_gt(operating_cash_flow-net_income, 0)` | 10 | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg16 | Among companies with a classified balance sheet, how many had positive working capital (total current assets minus total current liabilities) at FY2022 year end? | `count_gt(total_current_assets-total_current_liabilities, 0)` | 5 | 1 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg17 | Among companies with a classified balance sheet, which had the most negative working capital at FY2022 year end? | `argmin(total_current_assets-total_current_liabilities)` | "Verizon" | 1 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg18 | What were total FY2022 cash dividends paid to common shareholders by the companies in the corpus other than JPMorgan, in USD millions? | `sum(dividends_paid)` | 30674.5 | 1 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg19 | Which company had the highest FY2022 capital expenditures as a share of total revenue? | `argmax(capex/revenue)` | "American Water Works" | 1 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
+| agg20 | How many companies had an FY2022 net margin (net income attributable / total revenue) above 10%? | `count_gt(net_income/revenue, 0.1)` | 6 | 0 | 0 | [x] | two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan) |
 
 ## 10 single-fact questions (FinanceBench golds; P-large, P-small, B-today)
 

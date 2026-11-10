@@ -2,104 +2,104 @@
  "schema": "agg_phase0_verification.v1",
  "questions": {
   "agg01": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg02": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg03": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg04": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg05": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg06": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg07": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg08": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg09": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg10": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg11": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg12": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg13": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg14": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg15": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg16": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg17": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg18": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg19": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "agg20": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "two-independent-readers 2026-11-10; operator decisions 2026-11-10 (PayPal dividends NA, 4 medium cells accepted, agg18 restated without JPMorgan)",
+   "verified_at": "2026-11-10"
   },
   "financebench_id_00070": {
    "verified": false,

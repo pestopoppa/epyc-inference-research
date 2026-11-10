@@ -7,7 +7,7 @@ Subcommands:
     build   write corpus.json, single_fact.jsonl, facts_sheet.csv (if absent),
             aggregation_questions.json from the FinanceBench jsonl
     golds   derive golds.jsonl + GOLD_REVIEW.md from facts_sheet.csv
-            (every gold is ``verified: false`` until a named reviewer signs it)
+            (a gold is verified only per verification_record.json)
     score   compute M1-M5 and the predeclared kill gate from a records jsonl
 
 No model, network or PDF parsing happens here.
@@ -230,6 +230,10 @@ def derive_golds(out: Path) -> list[dict[str, Any]]:
                       "excluded_by_rule": q.get("exclude_docs", []),
                       "exclude_reason": q.get("exclude_reason"),
                       "gold_source": "derived:facts_sheet.csv", "verified": False})
+    rec = out / "verification_record.json"
+    ver = json.loads(rec.read_text())["questions"] if rec.exists() else {}
+    for g in golds:  # the record is authoritative; a gold with an incomplete value is never verified
+        g["verified"] = bool(ver.get(g["id"], {}).get("verified")) and g["gold"] is not None
     anchors = []
     for a in FB_ANCHORS:
         v = eval_expr(a["expr"], sheet, a["doc"])
@@ -252,7 +256,7 @@ def write_review_sheet(out: Path, golds, anchors) -> None:
     sf = [json.loads(l) for l in (out / "single_fact.jsonl").read_text().splitlines()]
     corpus = json.loads((out / "corpus.json").read_text())
     L = ["# AGG Phase 0 — gold review sheet (operator hand-verification)", "",
-         "Every gold below is `verified: false`. **No Phase-0 run may start until each question "
+         "Gold `verified` state is read from `verification_record.json`. **No Phase-0 run may start until each question "
          "used is verified against the filing by a named reviewer; an unverified question is "
          "excluded, never assumed** (plan §(c), AGG-0.1).", "",
          "## How to verify", "",
@@ -270,13 +274,17 @@ def write_review_sheet(out: Path, golds, anchors) -> None:
     for a in anchors:
         L.append(f"| {a['doc']} | `{a['expr']}` | {a['check']} {a['expect']} | {a['value']} | "
                  f"{a['agrees']} | {a['source']} |")
+    ver_by = {q: v.get("verified_by") or "" for q, v in json.loads(
+        (out / "verification_record.json").read_text())["questions"].items()
+        if v.get("verified")} if (out / "verification_record.json").exists() else {}
     L += ["", "## 20 cross-document aggregation questions", "",
           "| id | question | rule | derived gold | NA-excluded | missing cells | verified | reviewer |",
           "|---|---|---|---|---|---|---|---|"]
     for g in golds:
         rule = f"{g['op']}({g['expr']}{'' if g['threshold'] is None else ', ' + str(g['threshold'])})"
         L.append(f"| {g['id']} | {g['question']} | `{rule}` | {json.dumps(g['gold'])} | "
-                 f"{len(g['excluded_na'])} | {len(g['missing_cells'])} | [ ] | |")
+                 f"{len(g['excluded_na'])} | {len(g['missing_cells'])} | "
+                 f"{'[x]' if g['verified'] else '[ ]'} | {ver_by.get(g['id'], '')} |")
     L += ["", "## 10 single-fact questions (FinanceBench golds; P-large, P-small, B-today)", "",
           "| id | doc | question | FinanceBench gold | evidence page(s) | verified | reviewer |",
           "|---|---|---|---|---|---|---|"]

@@ -40,10 +40,12 @@ class SetTests(unittest.TestCase):
         self.assertEqual(len(A.SINGLE_FACT_IDS), 10)
         golds = [json.loads(l) for l in (D / "golds.jsonl").read_text().splitlines()]
         single = [json.loads(l) for l in (D / "single_fact.jsonl").read_text().splitlines()]
-        self.assertTrue(all(g["verified"] is False for g in golds + single))
+        self.assertTrue(all(g["verified"] is True for g in golds))
+        self.assertTrue(all(g["verified"] is False for g in single))
         ver = json.loads((D / "verification_record.json").read_text())["questions"]
         self.assertEqual(len(ver), 30)
-        self.assertFalse(any(v["verified"] for v in ver.values()))
+        self.assertEqual(sum(1 for v in ver.values() if v["verified"]), 20)
+        self.assertTrue(all(q.startswith("agg") for q, v in ver.items() if v["verified"]))
 
     def test_predeclared_matches_code(self):
         text = (D / "PREDECLARED.md").read_text()
@@ -79,15 +81,18 @@ class SetTests(unittest.TestCase):
             self.assertIs(anchors["AES_2022_10Knet_income"]["agrees"], True)
             self.assertIn("agg20", (t / "GOLD_REVIEW.md").read_text())
 
-    def test_committed_golds_are_unverified_drafts(self):
+    def test_committed_golds_are_verified_and_complete(self):
         golds = [json.loads(l) for l in (D / "golds.jsonl").read_text().splitlines()]
         self.assertEqual(len(golds), 20)
-        self.assertTrue(all(g["verified"] is False for g in golds))
+        self.assertTrue(all(g["verified"] is True and g["gold"] is not None for g in golds))
+        self.assertEqual([g for g in golds if g["id"] == "agg18"][0]["excluded_by_rule"], ["JPMORGAN_2022_10K"])
 
-    def test_preflight_fails_closed_today(self):
+    def test_preflight_gold_check_and_single_fact_gate(self):
         ok, info = R.preflight(D)
-        self.assertFalse(ok)
-        self.assertIn("no verified aggregation questions", info["problems"])
+        self.assertNotIn("no verified aggregation questions", info["problems"])
+        self.assertEqual(info["n_agg_verified"], 20)
+        self.assertFalse(ok)  # single-fact golds are still unverified
+        self.assertIn("no verified single-fact questions", info["problems"])
         self.assertRegex(info["predeclared_sha256"], r"^[0-9a-f]{64}$")
 
 
