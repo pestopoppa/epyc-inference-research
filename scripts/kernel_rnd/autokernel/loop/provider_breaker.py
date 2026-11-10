@@ -32,7 +32,11 @@ PROVIDER_PARKED = "provider_parked"
 #: stops scheduling on either; only `stopped` refuses a `--resume-run`.
 #: `same_state_stop.SAME_STATE_PARKED`: the planner abstained on an unchanged state.
 SAME_STATE_PARKED = "planner_same_state_parked"
-STOP_TERMINALS = frozenset({"stopped", PROVIDER_PARKED, SAME_STATE_PARKED})
+#: The granted window reached its cleanup reserve (`deadline_reserve`).
+DEADLINE_PARKED = "deadline_parked"
+BUDGET_PARKED = "budget_parked"
+STOP_TERMINALS = frozenset({"stopped", PROVIDER_PARKED, SAME_STATE_PARKED, DEADLINE_PARKED,
+                            BUDGET_PARKED})
 TERMINALS = frozenset({"complete"}) | STOP_TERMINALS
 
 DEFAULT_PARK_AFTER = 8
@@ -94,17 +98,21 @@ class ProviderBreaker:
 
 
 def terminal(*, stop_asked: bool, breaker: ProviderBreaker | None,
-             same_state: Any = None) -> str:
-    """The continuation terminal: an operator stop wins over either park."""
+             same_state: Any = None, deadline: Any = None, budget: Any = None) -> str:
+    """The continuation terminal: an operator stop wins over any park."""
     if stop_asked:
         return "stopped"
     if breaker is not None and breaker.tripped:
         return PROVIDER_PARKED
     if same_state is not None and getattr(same_state, "tripped", False):
         return SAME_STATE_PARKED
+    if deadline is not None and getattr(deadline, "tripped", False):
+        return DEADLINE_PARKED
+    if budget is not None and getattr(budget, "tripped", False):
+        return BUDGET_PARKED
     return "complete"
 
 
-__all__ = ["DEFAULT_PARK_AFTER", "NEUTRAL_STATUSES", "PROVIDER_PARKED", "ProviderBreaker",
+__all__ = ["BUDGET_PARKED", "DEFAULT_PARK_AFTER", "NEUTRAL_STATUSES", "PROVIDER_PARKED", "ProviderBreaker",
            "SAME_STATE_PARKED",
            "STOP_TERMINALS", "TERMINALS", "classify", "terminal", "validate_threshold"]

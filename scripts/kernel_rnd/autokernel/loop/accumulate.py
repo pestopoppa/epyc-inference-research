@@ -907,7 +907,11 @@ def would_refuse_anchor(store: Path, *, anchor_commit: str,
         if ((store / Bundle.FILENAME).exists()
                 or _has_legacy_bundle_snapshot(store)):
             return True, "explicit surface cannot adopt ambiguous legacy accumulator state", REFUSAL_KIND_OTHER
-        _read_shared_cor(store)  # Validate authority if present; absence is an allowed first surface.
+        # Validate authority if present; absence is allowed only for a first surface
+        # with no experiment history (the write-capable branch refuses otherwise).
+        if _read_shared_cor(store) is None and _has_experiment_history(store):
+            return (True, "explicit surface has no shared COR authority in a store with "
+                    "experiment history", REFUSAL_KIND_OTHER)
         return (False, "no explicit surface state; a write-capable run may initialize it",
                 REFUSAL_KIND_OTHER)
     legacy, legacy_error = _read_legacy_projection(p)

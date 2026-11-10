@@ -282,3 +282,90 @@ def test_plain_advance_names_the_exact_store_image_of_the_kept_champion_of_recor
     # ancestry refusal (new epoch) => the COR is re-based, no --cor-build
     monkeypatch.setattr(cr, "_would_refuse", lambda *a, **k: dict(PREFLIGHT))
     assert "--cor-build" not in cr.plan(world["store"], world["repo"], **kw)["run_argv_additions"]
+
+
+def _plan(world, **extra):
+    return cr.plan(world["store"], world["repo"], master=master_in(world["tmp"]), role=ROLE, branch=BRANCH,
+                   builds_root=world["builds"], **extra)
+
+
+def _named_image(world, name):
+    return build(world["builds"].parent, world["repo"], f"builds/{name}",
+                 git(world["repo"], "rev-parse", "HEAD"))
+
+
+def test_image_without_version_txt_is_rejected_by_name_not_reported_absent(world):
+    new = advance(world)
+    image = _named_image(world, f"cpu-20261109-{new[:9]}-c9fold")
+    (image / "VERSION.txt").unlink()
+    out = _plan(world)
+    assert not out["actionable"] and "build and store it first" not in out["blockers"][0]
+    rejected = out["rejected_builds"][0]
+    assert rejected["build"] == str(image) and rejected["commit"] == new
+    assert "missing VERSION.txt" in rejected["reason"] and "directory name only" in rejected["reason"]
+
+
+def test_each_missing_store_file_is_named(world):
+    new = advance(world)
+    for missing in ("SHA256SUMS", "PROVENANCE.md"):
+        image = _named_image(world, f"cpu-20261109-{new[:9]}-{missing[:3].lower()}")
+        (image / missing).unlink()
+    reasons = " ".join(r["reason"] for r in _plan(world)["rejected_builds"])
+    assert "missing SHA256SUMS" in reasons and "missing PROVENANCE.md" in reasons
+
+
+def test_version_without_commit_is_rejected_and_directory_name_never_selects(world):
+    new = advance(world)
+    image = _named_image(world, f"cpu-20261109-{new[:9]}-c9fold")
+    (image / "VERSION.txt").write_text("version: unknown\n")
+    diag = cr.diagnose_store_builds(fr.champion_state(world["repo"], BRANCH), world["repo"], world["builds"])
+    assert diag["match"] is None and "VERSION.txt" in diag["rejected"][0]["reason"]
+
+
+def test_unparseable_name_without_version_stays_uncounted_as_candidate(world):
+    advance(world)
+    image = store_build_for_champion(world)  # cpu-new: no commit in the name
+    (image / "VERSION.txt").unlink()
+    diag = cr.diagnose_store_builds(fr.champion_state(world["repo"], BRANCH), world["repo"], world["builds"])
+    assert diag["rejected"] == [] and diag["other"] == 1
+
+
+def test_gpu_device_selects_only_gpu_images_and_cpu_never_sees_them(world):
+    new = advance(world)
+    gpu = _named_image(world, f"gpu-20261109-{new[:9]}-c9fold")
+    champion = fr.champion_state(world["repo"], BRANCH)
+    assert cr.find_store_build(champion, world["repo"], world["builds"], device="gpu")["build_dir"] == str(gpu)
+    assert cr.find_store_build(champion, world["repo"], world["builds"]) is None
+    assert cr.find_exact_store_build(new, world["repo"], world["builds"], device="gpu") == str(gpu)
+    assert cr.find_exact_store_build(new, world["repo"], world["builds"]) is None
+
+
+def test_gpu_store_refuses_a_cpu_plan_and_names_the_flag(world):
+    advance(world)
+    store_build_for_champion(world)
+    (world["store"] / "gpu-serving-profiles").mkdir()
+    out = _plan(world)
+    assert not out["actionable"] and "--device gpu" in out["blockers"][0]
+
+
+def test_gpu_plan_anchors_on_the_gpu_image(world):
+    new = advance(world)
+    store_build_for_champion(world)  # a CPU image with the same tree must not win
+    gpu = _named_image(world, f"gpu-20261109-{new[:9]}-c9fold")
+    (world["store"] / "gpu-serving-profiles").mkdir()
+    seed_floor(world, None)
+    out = _plan(world, device="gpu", claims_root=world["tmp"] / "claims", numerics_epoch="n1")
+    assert out["actionable"] and out["anchor_build"] == str(gpu)
+    assert out["run_argv_additions"][:2] == ["--anchor-build", str(gpu)]
+
+
+def test_cli_exits_nonzero_when_the_relaunch_failed(world, capsys):
+    advance(world)
+    store_build_for_champion(world)
+    seed_floor(world, None)
+    master = master_in(world["tmp"])
+    rc = cr.main(["apply", "--store", str(world["store"]), "--worktree", str(world["repo"]),
+                  "--master", str(master), "--role", ROLE, "--claims", str(world["tmp"] / "claims"),
+                  "--champion-branch", BRANCH, "--builds-root", str(world["builds"]),
+                  "--numerics-epoch", "n1", "--execute", "--relaunch-cmd", '["false"]'])
+    assert rc == 4 and "relaunch failed" in capsys.readouterr().err

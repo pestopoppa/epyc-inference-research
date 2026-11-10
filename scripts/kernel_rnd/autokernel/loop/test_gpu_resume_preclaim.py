@@ -9,6 +9,14 @@ from . import accumulate, run, scheduling, serial_run
 from . import test_promotion_targets as fixture_module
 
 
+@pytest.fixture(autouse=True)
+def _startup_gates_are_covered_elsewhere(monkeypatch):
+    """These fixtures carry no wire record/bundle; test_dry_run_live_gates owns those refusals."""
+    monkeypatch.setattr(run, "_report_dry_run_refusals",
+                        lambda: run._DRY_RUN_REFUSALS.clear() or False)
+
+
+
 def test_resumed_main_preserves_explicit_unverified_anchor_waiver(monkeypatch):
     fixture = fixture_module.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()

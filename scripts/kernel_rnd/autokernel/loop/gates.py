@@ -28,6 +28,7 @@ import subprocess
 from .. import schemas
 from ..evaluator import correctness
 from . import bench, census, residency, scratch
+from .tool_output import strip_ansi
 
 #: One op suite, on the backend under test. 53 seconds measured, and it is the gate
 #: that decides whether a candidate is CORRECT -- everything downstream assumes it.
@@ -2791,6 +2792,46 @@ def check_noise_relative_tolerance(incumbent_single, incumbent_batched, candidat
                    result.status == nrt.PASS, result.reason, json.dumps(result.detail, sort_keys=True))
 
 
+def _numerics_chain(passed: "Verdict", output: str) -> "Verdict":
+    """AKX-ALL-31: a passing op verdict stands unless the opt-in numerics chain refuses it.
+
+    Off (the default, `AK_NUMERICS_GATES` unset): `passed` is returned unchanged. On: the
+    planted controls must go red first, the run must carry an `AK_NUMERICS_V1` receipt, and
+    any `AK_GUARD_BANDS_V1` receipts it printed must be intact. A control failure or a
+    missing or malformed receipt is the instrument's fault (`oracle_unavailable`), never
+    evidence about the patch; a class or exactness mismatch or a touched band is
+    `correctness`. Imported here, not at module level: both modules import this one."""
+    from . import guard_bands, numerics_gates
+    if not numerics_gates.enabled():
+        return passed
+    try:
+        controls = numerics_gates.controls_gate()
+    except ImportError as exc:
+        return Verdict("oracle_unavailable", False,
+                       f"numerics chain cannot run in this interpreter: {exc}")
+    if not controls.passed:
+        return Verdict("oracle_unavailable", False, controls.reason, controls.detail)
+    receipts = numerics_gates.parse_receipts(output)
+    if not receipts:
+        return Verdict("oracle_unavailable", False,
+                       f"numerics_receipt_missing: no {numerics_gates.SCHEMA} receipt; "
+                       "this is a harness fault, NOT evidence about the patch", output[-2000:])
+    for verdict in numerics_gates.verdict_from_receipt(receipts[-1]):
+        if not verdict.passed:
+            gate = ("oracle_unavailable" if verdict.reason.startswith(
+                ("numerics_receipt_", "accumulator_inputs_lack_power")) else "correctness")
+            return Verdict(gate, False, f"{verdict.gate}: {verdict.reason}", verdict.detail,
+                           case_records=passed.case_records)
+    for receipt in guard_bands.parse_receipts(output):
+        verdict = guard_bands.verdict_from_receipt(receipt)
+        if not verdict.passed:
+            gate = ("oracle_unavailable" if verdict.reason.startswith("guard_band_receipt_")
+                    else "correctness")
+            return Verdict(gate, False, f"{verdict.gate}: {verdict.reason}", verdict.detail,
+                           case_records=passed.case_records)
+    return passed
+
+
 def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                    backend: str = "ROCm0", resolved_recipe=None,
                    require_reference: bool = False,
@@ -2864,7 +2905,7 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
     if require_reference and len(output.encode()) > MAX_REFERENCE_OUTPUT_BYTES:
         return Verdict("oracle_unavailable", False,
                        "seeded reference suite output exceeds inspection bound")
-    plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    plain = strip_ansi(output)
     block = re.search(
         rf"(?ms)^Backend \d+/\d+: {re.escape(backend)}\b(.*?)"
         rf"^  Backend {re.escape(backend)}: (OK|FAIL)\b", plain)
@@ -2932,10 +2973,11 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
             "tolerance": ref.tolerance,
             "raw_output_sha256": hashlib.sha256(output.encode()).hexdigest(),
         }
-        return Verdict("correctness", True, detail=json.dumps(receipt, sort_keys=True),
-                       case_records=gate_case_records(plain, backend, op))
-    return Verdict("correctness", True, detail=done.stdout[-500:],
-                   case_records=gate_case_records(plain, backend, op))
+        return _numerics_chain(
+            Verdict("correctness", True, detail=json.dumps(receipt, sort_keys=True),
+                    case_records=gate_case_records(plain, backend, op)), plain)
+    return _numerics_chain(Verdict("correctness", True, detail=done.stdout[-500:],
+                                   case_records=gate_case_records(plain, backend, op)), plain)
 
 
 def deterministic(build_dir: Path, model: Path, *, runs: int = 3) -> Verdict:

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -607,6 +608,15 @@ class RocprofV3RawClosureAcceptance(unittest.TestCase):
 
 
 class RocprofV3FactoryAcceptance(unittest.TestCase):
+    def setUp(self):
+        python = Path(sys.executable).resolve(strict=True)
+        digest = hashlib.sha256(python.read_bytes()).hexdigest()
+        for patcher in (mock.patch.object(F, "_ROCPROF_V3_PYTHON", python),
+                        mock.patch.object(F, "_ROCPROF_V3_PYTHON_SHA256", digest),
+                        mock.patch.object(E, "ROCPROF_V3_PYTHON", python)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def test_factory_builds_only_the_exact_v3_plan_without_hardware(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -712,6 +722,7 @@ class RocprofV3FactoryAcceptance(unittest.TestCase):
                 candidate_build=candidate_build,
                 anchor_build=anchor_build)
             config = SimpleNamespace(
+                c6_admission=False,
                 operations_root=operations, config_sha256="3" * 64,
                 device_id="mi210_0", model=model, workload=workload,
                 runtime_config=runtime_config)
@@ -733,6 +744,7 @@ class RocprofV3FactoryAcceptance(unittest.TestCase):
                 plan = F._evidence_binding(config).build(
                     candidate, build, template, 1)
 
+            self.assertIsNone(plan.c6_correctness)
             exact_prefix = (
                 str(F._ROCPROF_V3_PYTHON.resolve(strict=True)),
                 str(F._ROCPROF_V3.resolve(strict=True)),

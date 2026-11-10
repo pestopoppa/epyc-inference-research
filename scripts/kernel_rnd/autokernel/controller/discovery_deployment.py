@@ -21,7 +21,7 @@ import subprocess
 from typing import Any, Mapping
 
 from .. import hypothesis_portfolio, schemas
-from . import gpu_load_admission, workload_contract
+from . import admissibility_policy, gpu_load_admission, workload_contract
 
 
 SCHEMA = "epyc.autokernel.discovery_deployment.v4"
@@ -278,7 +278,8 @@ def _planner_context(value: object, *, model: ImmutableInput,
                 "hypothesis_evidence_manifest_sha256", "hypothesis_evidence",
                 "reviewed_source_package_sha256", "template_registry_sha256",
                 "template_surfaces_sha256", "template_surfaces",
-                "portfolio_dispatch_authority"}
+                "portfolio_dispatch_authority", "admissibility_policies",
+                "admissibility_policy_sha256"}
     if not isinstance(body, Mapping) or set(body) != required:
         raise DeploymentConfigError("planner_context has an unknown or incomplete schema")
     if body["schema"] != PLANNER_CONTEXT_SCHEMA:
@@ -317,6 +318,15 @@ def _planner_context(value: object, *, model: ImmutableInput,
     }
     if any(body[key] != expected for key, expected in expected_partitions.items()):
         raise DeploymentConfigError("planner_context portfolio projection is not exact")
+    try:
+        admissibility = admissibility_policy.validate(
+            body["admissibility_policies"],
+            portfolio_evidence={row["evidence_id"]: row["sha256"]
+                                for row in portfolio.value.body["evidence"]})
+    except admissibility_policy.AdmissibilityError as exc:
+        raise DeploymentConfigError(f"planner_context admissibility policy: {exc}") from exc
+    if body["admissibility_policy_sha256"] != admissibility.sha256:
+        raise DeploymentConfigError("planner_context admissibility_policy_sha256 is not bound")
     dispatch_authority = body["portfolio_dispatch_authority"]
     eligible_ids = {row["hypothesis_id"] for row in portfolio.value.eligible_hypotheses()}
     if (not isinstance(dispatch_authority, Mapping)
@@ -411,6 +421,8 @@ class DiscoveryDeployment:
     # planner proposes its own mechanisms. See
     # ControllerConfig.autonomous_discovery for what it does and does not widen.
     autonomous_discovery: bool = False
+    # Off unless a deployment asks: the native C6 oracle/candidate gate and admission.
+    c6_admission: bool = False
 
     def revalidate(self) -> None:
         """Close the parse-to-start TOCTOU gap for every sealed file reference."""
@@ -564,10 +576,13 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         top["controller"],
         {"state_root", "evidence_root", "operations_root", "build_root",
          "max_iterations", "nomination_threshold"},
-        {"autonomous_discovery"}, "controller")
+        {"autonomous_discovery", "c6_admission"}, "controller")
     autonomous_discovery = controller.get("autonomous_discovery", False)
     if not isinstance(autonomous_discovery, bool):
         raise DeploymentConfigError("controller.autonomous_discovery must be a bool")
+    c6_admission = controller.get("c6_admission", False)
+    if not isinstance(c6_admission, bool):
+        raise DeploymentConfigError("controller.c6_admission must be a bool")
     roots = {key: _validate_root(_absolute(controller[key], f"controller.{key}"), f"controller.{key}") for key in
              ("state_root", "evidence_root", "operations_root", "build_root")}
     if any(_overlaps(left, right) for index, left in enumerate(roots.values())
@@ -657,6 +672,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         operations_root=roots["operations_root"], build_root=roots["build_root"],
         max_iterations=max_iterations,
         autonomous_discovery=autonomous_discovery,
+        c6_admission=c6_admission,
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
         critic_wrapper=critic_wrapper,
         environment_profile_id=environment_profile_id, device_id=device_id,

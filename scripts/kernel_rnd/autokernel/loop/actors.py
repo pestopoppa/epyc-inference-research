@@ -69,7 +69,11 @@ BELIEF_ENV = belief_context.ENV_KEY
 CODEX_DAEMON = Path.home() / ".codex/packages/app-server-daemon/current/bin/codex"
 CODEX = (str(CODEX_DAEMON) if os.access(CODEX_DAEMON, os.X_OK)
          else "/usr/local/share/npm-global/bin/codex")
-CLAUDE = "/home/node/.local/bin/claude"
+#: The user-local install when present, else the container's npm global (as CODEX above);
+#: a hardcoded local path crashed every claude-* actor in a container without it.
+_CLAUDE_LOCAL = Path.home() / ".local/bin/claude"
+CLAUDE = (str(_CLAUDE_LOCAL) if os.access(_CLAUDE_LOCAL, os.X_OK)
+          else "/usr/local/share/npm-global/bin/claude")
 #: DS41-C85 (2026-09-30): Linux caps ONE argv string at MAX_ARG_STRLEN = 131072 bytes.
 #: The first Opus critic pass-2 (diff review) prompt exceeded it and the lane died with
 #: "OSError: [Errno 7] Argument list too long". Above this, codex/claude read the
@@ -1371,6 +1375,7 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             repair_ran = orchestrator_stats.get("repair_ran")
         record = {
             "schema": actor_metrics.METRICS_SCHEMA,
+            "lane": Path(workspace).name,
             "role": role,
             # The seat arm as the caller labelled it (`plain+ctx-variable`, ...), or
             # None for a call that set no arm: the same free-text label the v1 record
@@ -1408,7 +1413,8 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             record["ak_check"] = ak_check.usage_summary(env.get(ak_check.ENV_LOG),
                                                         env.get(ak_check.ENV_CALL_ID))
     except Exception as exc:   # noqa: BLE001 -- evidence, never a reason to fail the call
-        record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role, "seat_arm": arm,
+        record = {"schema": actor_metrics.METRICS_SCHEMA, "lane": Path(workspace).name,
+                  "role": role, "seat_arm": arm,
                   "backend_kind": backend.kind, "backend_model": backend.model,
                   "failure_class": failure_class,
                   "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -3420,11 +3426,12 @@ Propose exactly one hypothesis. Reply with ONE json object and nothing else:
   "falsifier": "<the measurement that would prove this wrong>",
   "target_surface": "<{target_path}>",
   "target_symbol": "<the function you will change>",
-  "relies_on_claims": ["<belief-section claim id your mechanism depends on>"]}}
+  "relies_on_claims": ["<claim id>"]}}
 
-"relies_on_claims" lists the claim ids (clm_...) from the belief-kernel evidence section \
-that your mechanism depends on; [] if none. Only target- and sibling-scoped claims count; \
-host-ceiling lines are background and are not accepted as reliance.
+In either reply, proposal or abstention, "relies_on_claims" lists the claim ids (clm_...) \
+from the belief-kernel evidence section that your answer depends on; [] if none. It is \
+optional and decides nothing about your answer. Only knob-, target- and sibling-scoped \
+claims count; host-ceiling lines are background and are not accepted as reliance.
 
 Rules: {profile_rule}; name a MECHANISM, not a wish; \
 state a falsifier that could actually fail. The loop itself owns source inspection, \
@@ -3433,11 +3440,13 @@ trace or counter a prerequisite that this loop cannot collect. After a rejection
 missing evidence, either use an available diagnostic named in the context or choose \
 the smallest source-consistent change whose payoff the existing matched A/B can test. \
 If no honest, feasible hypothesis satisfies these constraints, abstaining is a correct \
-science result; reply instead with {{"abstain": "<specific reason>"}}. If the reason is \
+science result; reply instead with {{"abstain": "<specific reason>", \
+"relies_on_claims": ["<claim id>"]}}. If the reason is \
 that a mechanism you considered is ALREADY IMPLEMENTED, name what you found so it is not \
 re-proposed: {{"abstain": "<specific reason>", "mechanism_id": "<its id/slug>", \
 "mechanism_family": "<short family, e.g. local quant/dot kernel>", \
-"target_surface": "<path>", "target_symbol": "<function>"}} -- all four identity \
+"target_surface": "<path>", "target_symbol": "<function>", \
+"relies_on_claims": ["<claim id>"]}} -- all four identity \
 fields are optional; include only what you actually found, omit the rest."""
 
 
@@ -3994,9 +4003,13 @@ class AgentPlanner:
                 "kind": "error", "detail": f"{type(exc).__name__}: {exc}"[:300]})
             raise
         if isinstance(result, Abstain):
-            self._belief_receipt(belief, prompt, env,
-                                 {"kind": "abstain", "abstain_reason": result.reason[:500]},
-                                 declared)
+            receipt = self._belief_receipt(belief, prompt, env,
+                                           {"kind": "abstain",
+                                            "abstain_reason": result.reason[:500]},
+                                           declared)
+            if receipt is not None:
+                result = dataclasses.replace(
+                    result, relies_on_claims=tuple(receipt["reliance"]["accepted"]))
             return result
         receipt = self._belief_receipt(belief, prompt, env,
                                        {"kind": "hypothesis", "mechanism_id": result.mechanism_id},

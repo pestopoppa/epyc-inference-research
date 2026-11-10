@@ -697,6 +697,11 @@ class TestFixturesAreRealAndUnmodified(unittest.TestCase):
 
 
 class TestLlamaBenchParsing(unittest.TestCase):
+    def test_interleaved_recovery_refuses_a_corrupted_row(self):
+        text = '[\n  {"avg_ts": 1.0, "samples_ns": [1]},\n  {"avg_ts": stderr noise\n]\n'
+        with self.assertRaises(M.BenchOutputError):
+            M.parse_llama_bench_json(text)
+
 
     def test_parses_the_real_canonical_run(self):
         rows = M.parse_llama_bench_json(read_fixture(CANONICAL))
@@ -877,6 +882,21 @@ class TestOutputIsCheckedAgainstTheRecipe(unittest.TestCase):
         check = gpu_expectation.check_row(row)
         self.assertEqual(check.outcome, schemas.FAIL)
         self.assertIn("integrity flag", " ".join(check.reasons))
+
+    def test_faster_replicate_twin_is_a_nonfatal_warning(self):
+        """RVP-C6-26: a faster replicate twin is reported, but is not a FAIL."""
+        rows = json.loads(read_fixture(CANONICAL))
+        rows[0]["n_gpu_layers"] = 99
+        rows[0]["autokernel_device_sync_mode"] = "hip_full_device"
+        rows[0]["autokernel_unsynchronized_samples_ns"] = ",".join(
+            str(value * 2) for value in rows[0]["samples_ns"])
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        check = replace(self.expect, n_gpu_layers=99).check_row(row)
+        # Non-fatal until the false-positive rate is measured: the ordinary twin
+        # runs first on a cold context.
+        self.assertEqual(check.outcome, schemas.PASS)
+        self.assertIn("WARNING (non-fatal", " ".join(check.reasons))
+        self.assertIn("faster in the median", " ".join(check.reasons))
 
     def test_gpu_row_without_full_device_sync_is_refused(self):
         rows = json.loads(read_fixture(CANONICAL))

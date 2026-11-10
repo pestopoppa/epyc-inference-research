@@ -58,9 +58,8 @@ import sys
 import time
 
 from . import bench, census, instruments, residency, serving
+from .tool_output import UNKNOWN, strip_ansi, vacuous_parse
 
-#: The harness colours its verdicts. Strip before ANY counting -- see the module docstring.
-ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 #: `node #  0 (  GET_ROWS): name (size) [  CPU  ] ...` -- op name and assigned backend.
 NODE_LINE = re.compile(r"^node #\s*\d+\s*\(\s*([A-Z_0-9]+)\s*\):.*?\[\s*([A-Za-z0-9]+)\s*\]",
@@ -87,13 +86,14 @@ def run_process(argv: list[str], *, env: dict, timeout: int) -> subprocess.Compl
 
 
 def compare_tg128(anchor_binary: Path, candidate_binary: Path, model: Path, *,
-                  pairs: int, floor_pct: float) -> dict:
+                  pairs: int, floor_pct: float, kv_type: str | None = None) -> dict:
     """THE MEASUREMENT SEAM for G5 -- the loop's own paired A/B, tg128 surface."""
     pp, tg, ubatch = bench.SURFACES["tg128"]
     return bench.compare(bench.Arm("champion", anchor_binary),
                          bench.Arm("fold_candidate", candidate_binary),
                          model, pp=pp, tg=tg, pairs=pairs, noise_floor_pct=floor_pct,
-                         surface="tg128", ubatch=ubatch, calibrated=True).to_dict()
+                         surface="tg128", ubatch=ubatch, calibrated=True,
+                         kv_type=kv_type, recipe_kv_type=kv_type).to_dict()
 
 
 def tally(text: str) -> dict:
@@ -104,7 +104,7 @@ def tally(text: str) -> dict:
     rule reads as a pass. `passed`/`total` come from the harness's OWN tally line so the
     counting here can be cross-checked against the counting there.
     """
-    plain = ANSI.sub("", text)
+    plain = strip_ansi(text)
     match = re.search(r"(\d+)/(\d+) tests passed", plain)
     passed, total = (int(match.group(1)), int(match.group(2))) if match else (0, 0)
     return {"ok": len(re.findall(r": OK\b", plain)),
@@ -118,6 +118,8 @@ def backend_op_verdict(returncode: int, counts: dict) -> str:
     """VACUOUS-PASS GUARD (2026-09-08). A gate PASSES only if at least one case ACTUALLY
     RAN and passed, and the harness's own tally agrees with ours. `rc == 0 and fail == 0`
     alone is what a run that counted nothing looks like."""
+    if vacuous_parse(counts["ok"], counts["fail"], counts["total"]):
+        return UNKNOWN  # nothing parsed: a harness fault, never evidence about the patch
     ran_something = counts["ok"] > 0 and counts["total"] > 0
     agrees = counts["passed"] == counts["total"]
     return ("PASS" if returncode == 0 and counts["fail"] == 0 and ran_something and agrees
@@ -281,6 +283,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-ref", default=None, help="G0: the fold candidate ref")
     parser.add_argument("--declarations", type=Path, default=None,
                         help="G0: file of KERNEL-REPLACES: <old> => <new> lines")
+    parser.add_argument("--kv-type", default=None,
+                        help="G5: -ctk/-ctv of the recipe this fold speaks for "
+                             "(default: no flag, an f16 cell, recorded as f16)")
     parser.add_argument("--only-correctness", action="store_true",
                         help="G1-G4 only; G5 (comparative) after the keep decision")
     instruments.add_posture_args(parser)
@@ -360,7 +365,8 @@ def main(argv: list[str] | None = None) -> int:
           f"floor {args.floor}% (unit {args.floor_unit})")
     comparison = compare_tg128(Path(args.anchor_build) / "bin" / "llama-bench",
                                Path(args.candidate_build) / "bin" / "llama-bench",
-                               args.model, pairs=args.pairs, floor_pct=args.floor)
+                               args.model, pairs=args.pairs, floor_pct=args.floor,
+                               kv_type=args.kv_type)
     g5 = {"effect_pct": comparison["effect_pct"], "decisive": comparison["decisive"],
           "drifting": comparison.get("drifting"), "verdict": ab_verdict(comparison)}
     print(f"  effect {comparison['effect_pct']:+.3f}% decisive={comparison['decisive']} "

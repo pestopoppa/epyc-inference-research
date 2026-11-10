@@ -49,6 +49,7 @@ CONTROLLER_PROFILE = "controller_outbound_client_v1"
 CONTROLLER_BROKER_PROFILE = "controller_broker_only_v1"
 MODEL_PROFILE = "model_outbound_client_v1"
 EVALUATOR_PROFILE = "candidate_evaluator_gpu_v1"
+ORACLE_PROFILE = "trusted_oracle_private_read_v1"
 NETWORK_DENY_ALL = "deny_all"
 NETWORK_OUTBOUND_CLIENT = "outbound_client"
 BROKER_FD_ENV = "EPYC_AUTOKERNEL_BROKER_FD"
@@ -355,7 +356,7 @@ def _jump(code: int, k: int, jt: int, jf: int) -> _SockFilter:
 
 
 def _network_policy(profile: str) -> tuple[Mapping[str, int], bool, str]:
-    if profile in {DEFAULT_PROFILE, EVALUATOR_PROFILE}:
+    if profile in {DEFAULT_PROFILE, EVALUATOR_PROFILE, ORACLE_PROFILE}:
         return _BLOCKED_SYSCALLS, False, NETWORK_DENY_ALL
     if profile in {CONTROLLER_PROFILE, MODEL_PROFILE}:
         return _CONTROLLER_BLOCKED_SYSCALLS, True, NETWORK_OUTBOUND_CLIENT
@@ -616,6 +617,17 @@ class SandboxPolicy:
                     "evaluator profile requires the exact MI210 pair and /dev/null")
             if network_profile != NETWORK_DENY_ALL:
                 raise SandboxError("evaluator profile must deny all networking")
+        elif self.profile == ORACLE_PROFILE:
+            if not normalized_roots and not normalized_files:
+                raise SandboxError(
+                    "oracle profile requires exact private readable roots or files")
+            if normalized_devices:
+                raise SandboxError("oracle profile cannot access GPU or other devices")
+            if broker_path is not None or self.broker_peer_pid is not None \
+                    or self.broker_peer_start_ticks is not None:
+                raise SandboxError("oracle profile cannot inherit a broker")
+            if network_profile != NETWORK_DENY_ALL:
+                raise SandboxError("oracle profile must deny all networking")
         else:
             raise SandboxError(f"unknown sandbox profile: {self.profile!r}")
         token = self.token or secrets.token_hex(8)
@@ -644,7 +656,7 @@ class SandboxPolicy:
     def restrict_reads(self) -> bool:
         return self.profile in {
             CONTROLLER_PROFILE, CONTROLLER_BROKER_PROFILE,
-            MODEL_PROFILE, EVALUATOR_PROFILE}
+            MODEL_PROFILE, EVALUATOR_PROFILE, ORACLE_PROFILE}
 
     def policy_document(self) -> dict[str, Any]:
         blocked, deny_unix, network = _network_policy(self.profile)
@@ -1043,7 +1055,7 @@ __all__ = [
     "BROKER_FD_ENV", "CGROUP_ROOT_ENV", "CONTROLLER_PROFILE",
     "CONTROLLER_BROKER_PROFILE", "MODEL_PROFILE",
     "CONTROLLER_RUNTIME_READ_FILES",
-    "EVALUATOR_PROFILE",
+    "EVALUATOR_PROFILE", "ORACLE_PROFILE",
     "DEFAULT_PROFILE", "HOST_CGROUP_ROOT", "NETWORK_DENY_ALL",
     "NETWORK_OUTBOUND_CLIENT", "RECEIPT_SCHEMA", "ResourceLimits",
     "SANDBOX_ID", "SandboxError", "SandboxPolicy", "cleanup_cgroup",

@@ -58,6 +58,7 @@ import statistics
 import subprocess
 import tempfile
 from typing import Callable, Literal, Mapping, Sequence
+from .tool_output import strip_ansi
 
 MARKER = "AK_CPU_FA_REFERENCE_V1"
 PROBE = Path(__file__).with_name("cpu_fa_reference_probe.cpp")
@@ -567,7 +568,7 @@ _PERF_LINE = re.compile(r"^\s*FLASH_ATTN_EXT\(([^()]*)\):\s+(\d+) runs -\s+([0-9
 
 def parse_perf(output: str) -> dict[str, float]:
     """{vars: us/run} for exactly the case set; ValueError otherwise."""
-    plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    plain = strip_ansi(output)
     found: dict[str, float] = {}
     for line in plain.splitlines():
         match = _PERF_LINE.match(line)

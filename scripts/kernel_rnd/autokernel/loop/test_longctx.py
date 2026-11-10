@@ -7,6 +7,7 @@ protocol with synthetic timings, and every A/B uses a mocked `_measure_once`.
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -67,8 +68,10 @@ def _spec(tmp_path: Path, *, logs=()) -> longctx.Spec:
 class FakeServer:
     """An in-process llama-server for `SurfaceLaunch.post`: slot files and a token cache."""
 
-    def __init__(self, spec, *, a_rate=100.0, b_rate=20.0, identity_drift=False):
+    def __init__(self, spec, *, a_rate=100.0, b_rate=20.0, identity_drift=False,
+                 save_mutates=False):
         self.spec, self.calls, self.cached, self.saved = spec, [], 0, {}
+        self.save_mutates = save_mutates
         self.a_rate, self.b_rate, self.identity_drift = a_rate, b_rate, identity_drift
 
     def __call__(self, port, path, body, timeout):
@@ -77,6 +80,9 @@ class FakeServer:
         if path.startswith("/slots/0?action=save"):
             self.saved[request["filename"]] = self.cached
             return json.dumps({"n_saved": self.cached, "n_written": 10}).encode()
+        if path.startswith("/slots/0?action=erase"):
+            self.cached = 0
+            return b"{}"
         if path.startswith("/slots/0?action=restore"):
             if request["filename"] not in self.saved:
                 raise longctx.LongCtxRefused("POST restore -> HTTP 400: file not found")
@@ -89,6 +95,8 @@ class FakeServer:
         tokens = [7] * request["n_predict"]
         if self.identity_drift and len([c for c in self.calls if "restore" in c[0]]):
             tokens[-1] = 8
+        if self.save_mutates and any("save" in c[0] for c in self.calls):
+            tokens[0] = 9  # DS41-B14: live caches and file both differ from the prefill
         return json.dumps({"stop": True, "tokens": tokens, "timings": {
             "prompt_n": len(prompt) - reused, "prompt_per_second": self.a_rate,
             "predicted_n": request["n_predict"], "predicted_per_second": self.b_rate}}).encode()
@@ -199,6 +207,24 @@ def test_generation_saves_the_slot_and_runs_the_identity_gate_once(tmp_path):
     assert json.loads(receipt.read_text())["passed"] is False
 
 
+def test_identity_gate_catches_a_save_that_mutates_live_state_and_its_file(tmp_path):
+    """AKX-ALL-5: post-save and restored agree; only the pre-save reference exposes B14."""
+    spec = _spec(tmp_path)
+    receipt = tmp_path / "identity.json"
+    server = FakeServer(spec, save_mutates=True)
+    launch = longctx.SurfaceLaunch(spec, "m.bin", mode="generate",
+                                   identity_receipt=str(receipt), post=server)
+    row = launch.serve(1, 0, "warmup", spec.request_b)[3]
+    assert "INF-77" in row["error"]
+    body = json.loads(receipt.read_text())
+    assert body["passed"] is False and body["fresh_tokens"] == body["restored_tokens"]
+    assert body["pristine_tokens"] != body["restored_tokens"]
+    actions = [c[0] for c in server.calls if c[0].startswith("/slots")]
+    assert actions[:2] == ["/slots/0?action=erase", "/slots/0?action=save"]
+    assert sum(json.loads(c[1]).get("prompt") == list(spec.prefix) for c in server.calls
+               if c[0] == "/completion") == 2         # the file comes from a fresh prefill
+
+
 # ------------------------------------------------------------------ verdict and A/B
 
 def _records(rates):
@@ -236,7 +262,8 @@ def test_surface_compare_calibrates_the_target_floor_once_then_gates(tmp_path, m
             Path(longctx.identity_receipt).write_text(json.dumps(
                 {"schema": "epyc.autokernel.longctx_identity.v1", "passed": True,
                  "slot": longctx.slot_filename, "prefix_digest": spec.prefix_digest,
-                 "spec_digest": spec.digest, "identity_tokens": spec.body["identity_tokens"]}))
+                 "spec_digest": spec.digest, "identity_tokens": spec.body["identity_tokens"],
+                 "pristine_tokens": [7]}))
             return 0.0
         n = len(launches)
         rate = 100.0 + (n % 5) * 0.1 if Path(build).name == "anchor" else prefill["candidate"]
@@ -383,6 +410,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if "action=erase" in self.path:
+            state["cached"] = 0
+            return self.reply({{}})
         if "action=save" in self.path:
             (slots / request["filename"]).write_text(str(state["cached"]))
             return self.reply({{"n_saved": state["cached"]}})
@@ -569,9 +599,12 @@ def test_identity_receipt_is_keyed_on_the_slot_and_verified(tmp_path):
     surface.slot_dir.mkdir(parents=True)
     good = {"schema": longctx.IDENTITY_SCHEMA, "passed": True, "slot": surface.slot_name(anchor),
             "prefix_digest": spec.prefix_digest, "spec_digest": spec.digest,
-            "identity_tokens": spec.body["identity_tokens"]}
+            "identity_tokens": spec.body["identity_tokens"], "pristine_tokens": [7]}
     path.write_text(json.dumps(good))
     assert surface._identity(anchor)["passed"] is True
+    path.write_text(json.dumps({k: v for k, v in good.items() if k != "pristine_tokens"}))
+    assert surface._identity(anchor) is None                     # predates the reference
+    path.write_text(json.dumps(good))
     assert surface._identity(other) is None                      # its own receipt is absent
     path.write_text(json.dumps({**good, "spec_digest": "f" * 64}))
     with pytest.raises(longctx.LongCtxRefused, match="another slot/spec"):
@@ -652,7 +685,7 @@ def test_identity_targets_restore_the_anchor_slot_before_every_request(tmp_path,
     surface._identity_path(anchor).write_text(json.dumps(
         {"schema": longctx.IDENTITY_SCHEMA, "passed": True, "slot": surface.slot_name(anchor),
          "prefix_digest": spec.prefix_digest, "spec_digest": spec.digest,
-         "identity_tokens": spec.body["identity_tokens"]}))
+         "identity_tokens": spec.body["identity_tokens"], "pristine_tokens": [7]}))
     targets = surface.identity_targets(anchor, candidate)
     assert len(targets) == 1
     label, a_arm, c_arm, requests, prepare, record_dir = targets[0]
@@ -873,7 +906,7 @@ def test_identity_targets_strips_speculative_decoding_from_both_oracle_arms(tmp_
     surface._identity_path(anchor).write_text(json.dumps(
         {"schema": longctx.IDENTITY_SCHEMA, "passed": True, "slot": surface.slot_name(anchor),
          "prefix_digest": spec.prefix_digest, "spec_digest": spec.digest,
-         "identity_tokens": spec.body["identity_tokens"]}))
+         "identity_tokens": spec.body["identity_tokens"], "pristine_tokens": [7]}))
     targets = surface.identity_targets(anchor, candidate)
     assert len(targets) == 1
     label, a_arm, c_arm, requests, prepare, record_dir = targets[0]
@@ -883,3 +916,60 @@ def test_identity_targets_strips_speculative_decoding_from_both_oracle_arms(tmp_
     assert "-md" not in a_arm.command_argv and "-md" not in c_arm.command_argv
     assert requests == spec.requests(anchor.template) and callable(prepare)
     assert record_dir == surface.root / "identity-divergence"
+
+
+def _belief_rows(surface):
+    path = surface.root / longctx.BELIEF_FILE
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def test_surface_writes_the_vb_ak_longctx_record_per_launch_and_per_refusal(tmp_path, monkeypatch):
+    spec = _spec(tmp_path)
+    surface = longctx.Surface(spec, store=tmp_path / "store")
+    anchor = surface.launch_for(_launch(tmp_path / "anchor"))
+    candidate = surface.launch_for(_launch(tmp_path / "candidate"))
+    launches = []
+
+    def measure(recipe, build, port, *, longctx=None, evidence=None, **kwargs):
+        if longctx.mode == "generate":
+            (surface.slot_dir / longctx.slot_filename).write_bytes(b"slot")
+            Path(longctx.identity_receipt).write_text(json.dumps(
+                {"schema": "epyc.autokernel.longctx_identity.v1", "passed": True,
+                 "slot": longctx.slot_filename, "prefix_digest": spec.prefix_digest,
+                 "spec_digest": spec.digest, "identity_tokens": spec.body["identity_tokens"],
+                 "pristine_tokens": [7]}))
+            return 0.0
+        launches.append(Path(build).name)
+        n = len(launches)
+        evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
+                         "status": "not_applicable", "window_start": float(n),
+                         "window_end": n + 0.5,
+                         "longctx": {"slot": longctx.slot_filename,
+                                     "a": {"prompt_per_second": 100.0 + n % 3,
+                                           "restore": {"n_restored": 1}},
+                                     "b": {"predicted_per_second": 20.0, "prompt_n": 20,
+                                           "restore": {"n_restored": 1}}}})
+        return 20.0 + (n % 3) * 0.01
+
+    monkeypatch.setattr(serving, "_measure_once", measure)
+    surface.compare(anchor, candidate, pairs=5, log=lambda *_: None)
+    rows = _belief_rows(surface)
+    assert [row["phase"] for row in rows].count("floor") == 48
+    assert [row["phase"] for row in rows].count("compare") == 10
+    row = rows[-1]
+    assert row["record"] == "launch" and row["arm"] == "candidate"
+    assert row["request_b_prompt_n"] == 20 and row["request_a_prompt_per_second"] > 0
+    assert row["held_claims"] == "not_recorded" and row["floor_id"] and row["floor_pct"] is not None
+    assert row["slot_sha256"] == hashlib.sha256(b"slot").hexdigest()
+    unsigned = {key: value for key, value in row.items() if key != "measurement_sha256"}
+    assert row["measurement_sha256"] == longctx._sha(unsigned)
+
+    def refused(*args, **kwargs):
+        raise longctx.LongCtxRefused("restore failed")
+
+    monkeypatch.setattr(surface, "ensure_floor", refused)
+    with pytest.raises(longctx.LongCtxRefused):
+        surface.compare(anchor, candidate, pairs=5, log=lambda *_: None)
+    refusals = [row for row in _belief_rows(surface) if row["record"] == "refusal"]
+    assert len(refusals) == 1 and refusals[0]["reason"] == "restore failed"
+    assert refusals[0]["stage"] == "compare"

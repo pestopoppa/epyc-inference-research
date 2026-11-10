@@ -102,7 +102,7 @@ from . import keep_timing
 from . import floor_selfcheck
 from . import tail_timing
 from . import actor_opencode_config
-from . import belief_context
+from . import belief_context, planner_only
 from . import actor_passthrough
 from . import cross_target, kernel_coverage
 from . import longctx
@@ -110,6 +110,8 @@ from . import floor_registry
 from . import epoch_aliases
 from . import scratch
 from . import provider_breaker
+from . import deadline_reserve
+from ..controller import run_budget
 from . import same_state_stop
 from . import procguard
 from . import prebuild_rules
@@ -623,6 +625,132 @@ def _verify_cor_build(path, worktree, commit: str, *, experimental: bool,
                                    allow_unverified=allow_unverified)
 
 
+def _dry_run_check_cor(args, cor_commit: str, *, anchor_commit: str, experimental: bool) -> None:
+    """Read-only copy of the live champion-of-record check, for a known restored COR."""
+    if args.cor_build is None and cor_commit == anchor_commit:
+        print(f"cor       (dry) champion of record {anchor_commit[:12]} = current anchor")
+        return
+    if args.cor_build is None:
+        raise champion.StartupRefused(
+            "REFUSED (dry run): restored champion of record "
+            f"{cor_commit[:12]} differs from current anchor "
+            f"{anchor_commit[:12]}; supply its original --cor-build or "
+            "--resume-run, never relabel the tip build")
+    _verify_cor_build(args.cor_build, args.worktree, cor_commit,
+                      experimental=experimental,
+                      allow_unverified=args.allow_unverified_anchor)
+    print(f"cor       (dry) champion of record {cor_commit[:12]} = "
+          f"{args.cor_build} — exact build identity verified; tip "
+          f"{anchor_commit[:12]} = {args.anchor_build}")
+
+
+def _dry_run_cor_for_restore(args, *, anchor_commit: str, experimental: bool,
+                             surface: str | None, has_bundle: bool) -> None:
+    """The COR check for the startups `_dry_run_accumulator_and_resume` leaves unchecked.
+
+    With no durable bundle the live run starts with COR = anchor, so a --cor-build of any other
+    commit is refused live; this reports that in the dry run. Call only after the restore itself
+    was found acceptable. A restore with no read-only form is reported, not guessed."""
+    cor_commit = anchor_commit
+    if has_bundle:
+        def is_ancestor(a: str, b: str) -> bool:
+            return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
+                                   "--is-ancestor", a, b],
+                                  capture_output=True).returncode == 0
+        try:
+            peek, _note = accumulate.load_bundle(args.store, anchor_commit=anchor_commit,
+                                                 is_ancestor=is_ancestor, read_only=True,
+                                                 surface=surface)
+        except accumulate.BundleRecoveryRequired:
+            print("cor       (dry) restore needs recovery with no read-only form; not evaluated")
+            return
+        cor_commit = peek.champion_of_record
+    _dry_run_check_cor(args, cor_commit, anchor_commit=anchor_commit, experimental=experimental)
+
+
+#: Dry-run refusals gathered across startup; every one is reported, not only the first.
+_DRY_RUN_REFUSALS: list[str] = []
+
+
+def _report_dry_run_refusals() -> bool:
+    found = bool(_DRY_RUN_REFUSALS)
+    for reason in _DRY_RUN_REFUSALS:
+        print(f"DRY RUN REFUSED: {reason}")
+    _DRY_RUN_REFUSALS.clear()
+    return found
+
+
+def _store_holds_only_startup_scaffold(store: Path) -> bool:
+    """True when the store holds nothing but what this startup itself writes first.
+
+    `--new-store` creates inbox/ and the kernel-coverage dir, and wire admission writes
+    its request (even when it refuses), all before the bundle is opened; counted as
+    history they made a new store permanently unable to start without a bundle surface.
+    """
+    store = Path(store)
+    if store.is_symlink():
+        return False
+    try:
+        entries = list(store.iterdir())
+    except FileNotFoundError:
+        return True
+    for entry in entries:
+        if entry.name in ("inbox", kernel_coverage.CAPTURE_DIR):
+            if not entry.is_dir() or entry.is_symlink() or any(entry.iterdir()):
+                return False
+        elif entry.name == "loop-run.json":
+            try:
+                if json.loads(entry.read_text()).get("state") != "actor_admitted":
+                    return False
+            except (OSError, ValueError, AttributeError):
+                return False
+        elif entry.name != "actor-wire-request.json":
+            return False
+    return True
+
+
+def _initializes_first_bundle(args, *, experimental: bool) -> bool:
+    """Does startup create the first durable bundle instead of restoring one?"""
+    if args.bundle_surface is not None:
+        return False
+    filename, journal_dir = accumulate._surface_paths(args.store, None)
+    if (args.store / journal_dir).exists() or (args.store / filename).exists():
+        return False
+    if (args.store / "experiments.db").is_file():
+        with experiments.ExperimentStore(args.store, read_only=True) as memory:
+            if memory.count() > 0:
+                return False
+    return experimental or (args.new_store and _store_holds_only_startup_scaffold(args.store))
+
+
+def _accumulator_startup_refusal(args, *, anchor_commit: str, experimental: bool) -> str | None:
+    """Read-only: the reason the live bundle restore would refuse, or None."""
+    surface = args.bundle_surface
+    def is_ancestor(a: str, b: str) -> bool:
+        return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
+                               "--is-ancestor", a, b], capture_output=True).returncode == 0
+    try:
+        if _initializes_first_bundle(args, experimental=experimental):
+            return None
+        refused, reason, _kind = accumulate.would_refuse_anchor(
+            args.store, anchor_commit=anchor_commit, is_ancestor=is_ancestor, surface=surface)
+    except accumulate.BundleRecoveryRequired as exc:
+        return f"accumulator: {exc}"
+    if not refused:
+        return None
+    if args.rebaseline_stale and surface is not None:
+        print("accum     (dry) --rebaseline-stale recovery has no read-only form; not evaluated")
+        return None
+    if args.new_anchor_epoch:
+        try:
+            new_epoch.start_new_anchor_epoch(args.store, anchor_commit=anchor_commit,
+                                             is_ancestor=is_ancestor, dry_run=True, surface=surface)
+            return None
+        except ValueError as exc:
+            return f"accumulator: {exc}"
+    return f"accumulator: bundle recovery required: {reason}"
+
+
 def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: bool,
                                     epoch: str, measurement_epoch: str,
                                     actor_config, carry=None,
@@ -664,21 +792,8 @@ def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: b
             raise champion.StartupRefused(
                 f"REFUSED (dry run): accumulator cannot be restored: {exc}") from exc
         print(f"accum     (dry) {note}; keeps={list(peek.keeps)}")
-        if args.cor_build is not None or peek.champion_of_record != anchor_commit:
-            if args.cor_build is None:
-                raise champion.StartupRefused(
-                    "REFUSED (dry run): restored champion of record "
-                    f"{peek.champion_of_record[:12]} differs from current anchor "
-                    f"{anchor_commit[:12]}; supply its original --cor-build or "
-                    "--resume-run, never relabel the tip build")
-            _verify_cor_build(args.cor_build, args.worktree, peek.champion_of_record,
-                              experimental=experimental,
-                              allow_unverified=args.allow_unverified_anchor)
-            print(f"cor       (dry) champion of record {peek.champion_of_record[:12]} = "
-                  f"{args.cor_build} — exact build identity verified; tip "
-                  f"{anchor_commit[:12]} = {args.anchor_build}")
-        else:
-            print(f"cor       (dry) champion of record {anchor_commit[:12]} = current anchor")
+        _dry_run_check_cor(args, peek.champion_of_record, anchor_commit=anchor_commit,
+                           experimental=experimental)
     else:
         print("accum     (dry) no durable accumulator in this store yet (the live run "
               "initializes or refuses it before the claim)")
@@ -835,16 +950,19 @@ def measurement_epoch_inputs(epoch_inputs: Mapping[str, Any],
         if resolved_campaign is not None else None)
 
 
+def _actor_seat_common(args) -> dict[str, Any]:
+    return {"bounded": args.actor_seat == "bounded", "fan_out": args.actor_fan_out,
+            "steps": args.actor_steps, "context_mode": args.actor_context_mode,
+            **_actor_knobs(args), **_actor_limits(args), **_actor_budgets(args),
+            **_actor_thinking(args), **_actor_sandbox(args), **_actor_salvage(args),
+            **_actor_reasoning_history(args), **_actor_serving(args)}
+
+
 def _actor_wire_seats(args, planner_backend, critic_backend, lane_backends,
                       author_plan, resolved_campaign=None):
     """Effective factory seats, including lane overrides and every author member."""
     from . import actor_wire_gate
-    common = {"bounded": args.actor_seat == "bounded", "fan_out": args.actor_fan_out,
-              "steps": args.actor_steps, "context_mode": args.actor_context_mode,
-              **_actor_knobs(args), **_actor_limits(args), **_actor_budgets(args),
-              **_actor_thinking(args), **_actor_sandbox(args), **_actor_salvage(args),
-              **_actor_reasoning_history(args), **_actor_serving(args)}
-    seat = actors.ActorSeat(**common)
+    seat = actors.ActorSeat(**_actor_seat_common(args))
     launch = _actor_config(args, resolved_campaign)
     seats = []
     def add(role, backend, config):
@@ -1962,7 +2080,8 @@ def attempt_with_codegen(outcome: loop.Outcome, summaries: dict[str, dict]) -> d
 
 
 def noise_floor_pct(surface: str, pairs: int, model: Path | str,
-                    store: Path | None = None) -> float | None:
+                    store: Path | None = None, *,
+                    kv_type: str | None = None) -> float | None:
     """The bar for THIS run, scaled to the pairs actually being run.
 
     This was a dict of constants computed at 5 pairs, so `--pairs 9` still enforced
@@ -1996,12 +2115,22 @@ def noise_floor_pct(surface: str, pairs: int, model: Path | str,
     properties, and a second rung must never inherit the first rung's floor.
     """
     pairs = max(1, pairs)
-    rows = bench.floor_rows(surface, model, store)
+    rows = bench.floor_rows(surface, model, store, kv_type=kv_type)
     if rows is None:
         return None
     parametric = rows[1] / (pairs ** 0.5)
     measured = rows[max(count for count in rows if count <= pairs)]
     return max(parametric, measured)
+
+
+def _recipe_kv_type(launch) -> str | None:
+    """The single KV type a resolved launch serves, None without a launch."""
+    if launch is None:
+        return None
+    if launch.template.ctk != launch.template.ctv:
+        raise ValueError(f"bench cells pin one KV type; recipe has -ctk {launch.template.ctk} "
+                         f"-ctv {launch.template.ctv}")
+    return launch.template.ctk
 
 
 def refuse_uncalibrated_keep(surface: str, calibrated: bool, comparison) -> None:
@@ -2290,6 +2419,7 @@ def calibrate(args, run=subprocess.run) -> int:
                 "--pairs", str(args.calibrate_surface),
                 "--anchor-build", str(args.anchor_build),
                 "--worktree", str(args.worktree), "--model", str(args.model),
+                *(["--kv-type", args.bench_kv_type] if getattr(args, "bench_kv_type", None) else []),
                 "--out", str(args.store / "calibration"
                              / f"aa-{args.surface}.{args.model.stem}"),
                 "--write-calibration", str(args.store)]).returncode
@@ -2385,6 +2515,8 @@ def _native_stale_rebaseline(store: Path, worktree: Path, bundle, harness: str,
 def _main(argv: list[str] | None = None) -> int:
     live_tail = [None]
     gfx_counter = [None]
+    budget_debit: list = [None]
+
     def counter_phase(label):
         """Observe phase boundaries without changing the wrapped outcome."""
         def decorate(function):
@@ -2398,10 +2530,13 @@ def _main(argv: list[str] | None = None) -> int:
                         print(f"GPU counter observation unavailable: {type(exc).__name__}: {exc}",
                               file=sys.stderr)
                 sample("start")
+                began = time.monotonic()
                 try:
                     return function(*args, **kwargs)
                 finally:
                     sample("end")
+                    if budget_debit[0] is not None:
+                        budget_debit[0](label, time.monotonic() - began)
             return observed
         return decorate
     # Publish can be reached by startup/refusal paths before campaign resolution.
@@ -2411,7 +2546,8 @@ def _main(argv: list[str] | None = None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--worktree", type=Path, required=True,
                         help="candidate source tree the planner edits")
-    parser.add_argument("--anchor-build", type=Path, required=True)
+    parser.add_argument("--anchor-build", type=Path, required="--planner-only" not in original_argv)
+    planner_only.add_arguments(parser)
     parser.add_argument("--cor-build", type=Path,
                         help="original champion-of-record build when it differs from the current anchor")
     parser.add_argument("--resume-run", type=Path,
@@ -2891,6 +3027,18 @@ def _main(argv: list[str] | None = None) -> int:
     # tokens on the thinking-on 27B), batch 8 on the output cap in between. The planner
     # phase holds no CPU measurement (the CPU window is open to peers), so the longer
     # wall costs only GPU time; 4500 s matches the thinking-on author's member budget.
+    for flag, kind, what in (("--max-run-wall-s", float, "elapsed wall seconds"),
+                             ("--max-run-gpu-s", float, "GPU-seconds (measurement stages)"),
+                             ("--max-run-decoded-tokens", int,
+                              "decoded tokens; a seat that meters none fails this closed")):
+        parser.add_argument(flag, type=kind, default=None,
+                            help=f"run-level ceiling on {what}: park at the next boundary "
+                                 "with terminal budget_parked (default: none)")
+    parser.add_argument("--bench-kv-type", default=None,
+                        help="llama-bench -ctk/-ctv for a bench surface with no resolved "
+                             "recipe (a resolved recipe's own KV type always wins). Default: "
+                             "no flag, an f16 cell. Floors are per KV type: a value other "
+                             "than f16 needs its own --calibrate-surface first.")
     parser.add_argument("--actor-planner-budget-s", type=int, default=4500,
                         help="opencode planner (OAB-23): wall budget per proposal call, under "
                              "--actor-timeout-s. Past it the call is ended through the stop "
@@ -3095,13 +3243,26 @@ def _main(argv: list[str] | None = None) -> int:
                              "events as `status` broadcasts; 'off' (or empty) disables the bus "
                              "(the window file and its events.jsonl remain) (default: %(default)s)")
     args = parser.parse_args(argv)
-    if not args.dry_run:
-        try:
-            experiments.require_existing_store(args.store, new_store=args.new_store)
-        except experiments.StoreMissing as exc:
+    if args.planner_only:
+        return planner_only.run(args, seat_common=_actor_seat_common(args))
+    if args.dry_run:
+        _DRY_RUN_REFUSALS.clear()
+    try:
+        experiments.require_existing_store(args.store, new_store=args.new_store)
+    except experiments.StoreMissing as exc:
+        if not args.dry_run:
             parser.error(str(exc))
-        if args.new_store:
-            (args.store / "inbox").mkdir(parents=True, exist_ok=True)
+        _DRY_RUN_REFUSALS.append(str(exc))
+    if not args.dry_run and args.new_store:
+        (args.store / "inbox").mkdir(parents=True, exist_ok=True)
+    if args.dry_run:
+        from . import lane_watchdog
+        # A serial_run child is admitted by its parent's capability, never supervised.
+        if (not lane_watchdog._SUPERVISED and "AUTOKERNEL_SERIAL_CAPABILITY" not in os.environ
+                and lane_watchdog._option(original_argv, "--store")):
+            refusal = lane_watchdog.startup_refusal(args.store)
+            if refusal:
+                _DRY_RUN_REFUSALS.append(f"lane watchdog: {refusal}")
     if args.rebaseline_stale and args.bundle_surface is None:
         parser.error("--rebaseline-stale requires --bundle-surface")
     if args.rebaseline_stale and args.new_anchor_epoch:
@@ -3140,6 +3301,10 @@ def _main(argv: list[str] | None = None) -> int:
     budget_error = _actor_budget_error(args) or _reasoning_history_error(args)
     if budget_error:
         parser.error(budget_error)
+    try:
+        run_budget.Ceilings(args.max_run_wall_s, args.max_run_gpu_s, args.max_run_decoded_tokens)
+    except ValueError as exc:
+        parser.error(str(exc))
     from . import lane_actors
     try:
         lane_actor_models = lane_actors.parse(args.lane_actor_models, workers=args.workers)
@@ -3919,7 +4084,8 @@ def _main(argv: list[str] | None = None) -> int:
         return calibrate(args)
     # Never borrow a GPU bench floor for the selected CPU request.
     bench_floor = (None if experimental else
-             noise_floor_pct(args.surface, args.pairs, args.model, store=args.store))
+             noise_floor_pct(args.surface, args.pairs, args.model, store=args.store,
+                             kv_type=_recipe_kv_type(direct_launch) or args.bench_kv_type))
     floor = None if direct_launch else bench_floor
     calibrated = floor is not None
     # A direct (serving) launch never reads the bench floor: keeps are gated on the
@@ -4109,18 +4275,48 @@ def _main(argv: list[str] | None = None) -> int:
         if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
             parser.error("direct runtime calibration requires the original serving launch")
         if direct_launch is not None:
-            _dry_run_accumulator_and_resume(
-                args, anchor_commit=anchor_commit, experimental=experimental,
-                epoch=epoch, measurement_epoch=measurement_epoch,
-                actor_config=launch_actor_config, carry=resume_carry,
-                surface=args.bundle_surface)
+            try:
+                _dry_run_accumulator_and_resume(
+                    args, anchor_commit=anchor_commit, experimental=experimental,
+                    epoch=epoch, measurement_epoch=measurement_epoch,
+                    actor_config=launch_actor_config, carry=resume_carry,
+                    surface=args.bundle_surface)
+            except champion.StartupRefused as exc:
+                _DRY_RUN_REFUSALS.append(str(exc))
+        bundle_name, bundle_journal = accumulate._surface_paths(args.store, args.bundle_surface)
+        has_bundle = ((args.store / bundle_journal).exists()
+                      or (args.store / bundle_name).exists())
+        if direct_launch is None or not has_bundle:
+            refusal = _accumulator_startup_refusal(args, anchor_commit=anchor_commit,
+                                                   experimental=experimental)
+            if refusal:
+                _DRY_RUN_REFUSALS.append(refusal)
+            else:
+                try:
+                    _dry_run_cor_for_restore(
+                        args, anchor_commit=anchor_commit, experimental=experimental,
+                        surface=args.bundle_surface, has_bundle=has_bundle)
+                except champion.StartupRefused as exc:
+                    _DRY_RUN_REFUSALS.append(str(exc))
         # Export a wire request without claiming admission or running any client.
         from . import actor_wire_gate
-        wire_request = actor_wire_gate.request(_actor_wire_seats(
+        wire_seats = _actor_wire_seats(
             args, planner_backend, critic_backend, lane_backends, author_plan,
-            resolved_campaign if selected_identity is not None else None))
+            resolved_campaign if selected_identity is not None else None)
+        wire_request = actor_wire_gate.request(wire_seats)
         print("actors    UNTESTED: wire request (dry run; stdout only)")
         print(json.dumps(wire_request, sort_keys=True))
+        try:
+            actor_wire_gate.evaluate(wire_seats, record_path=args.actor_wire_test_record,
+                                     override=args.allow_untested_actor_seats)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            _DRY_RUN_REFUSALS.append(f"actor wire gate: {exc}")
+        if not cpu_launch:
+            refusal = claim.device_claim_refusal()
+            if refusal:
+                _DRY_RUN_REFUSALS.append(f"device claim: {refusal}")
+        if _report_dry_run_refusals():
+            return 1
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
@@ -4765,15 +4961,8 @@ def _main(argv: list[str] | None = None) -> int:
         # history is different: initializing it empty would repeat the exact loss this
         # migration repairs, so it fails closed until recovery seeds the retained
         # patches and measurements.
-        experiment_history = False
-        if (args.store / "experiments.db").is_file():
-            with experiments.ExperimentStore(args.store, read_only=True) as memory:
-                experiment_history = memory.count() > 0
         bundle_surface = args.bundle_surface
-        bundle_filename, bundle_journal = accumulate._surface_paths(args.store, bundle_surface)
-        if (experimental and bundle_surface is None and not (args.store / bundle_journal).exists()
-                and not (args.store / bundle_filename).exists()
-                and not experiment_history):
+        if _initializes_first_bundle(args, experimental=experimental):
             restored = accumulate.Bundle(
                 champion_of_record=anchor_commit, tip=anchor_commit,
                 surface=bundle_surface)
@@ -5536,12 +5725,21 @@ def _main(argv: list[str] | None = None) -> int:
         resolved_campaign.resources.planner_same_state_skip_after
         if resolved_campaign is not None else None), lanes=max(1, int(args.workers)))
 
+    deadline_guard = deadline_reserve.DeadlineReserve.from_env(args.store)
+
+    budget = run_budget.RunBudget(run_budget.Ceilings(
+        wall_s=args.max_run_wall_s, gpu_s=args.max_run_gpu_s,
+        decoded_tokens=args.max_run_decoded_tokens), args.worker_root)
+    budget_debit[0] = lambda label, wall_s: budget.debit_stage(label, wall_s, gpu=not cpu_launch)
+
     def should_stop() -> bool:
-        return stop_asked() or breaker.tripped or same_state.tripped
+        return (stop_asked() or breaker.tripped or same_state.tripped or deadline_guard.tripped
+                or budget.tripped)
 
     def run_terminal() -> str:
         return provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker,
-                                         same_state=same_state)
+                                         same_state=same_state, deadline=deadline_guard,
+                                         budget=budget)
 
     #: Per-thread nesting depth of the quiet window: a measurement called from inside
     #: another's window must not re-acquire a flock this process already holds (flock
@@ -5610,6 +5808,7 @@ def _main(argv: list[str] | None = None) -> int:
     @counter_phase("calibration_with_warmup")
     def measured_serving_calibrate(*args_, **kwargs_):
         kwargs_.setdefault("should_stop", should_stop)
+        kwargs_.setdefault("partial_store", args.store)
         try:
             with cpu_measurement_window():
                 return serving.calibrate_floor(*args_, **kwargs_)
@@ -5619,14 +5818,21 @@ def _main(argv: list[str] | None = None) -> int:
             stopping["asked"] = True
             raise
 
+    # AK-BENCH-KV-TYPE-PIN: a bench cell speaks for the recipe under test when there is
+    # one, else for the operator's explicit --bench-kv-type, else it is an f16 cell.
+    bench_kv = _recipe_kv_type(direct_launch) or args.bench_kv_type
+
     @counter_phase("benchmark_with_warmup")
     def measured_bench_compare(*args_, **kwargs_):
         # Legacy GPU bench A/Bs are GPU measurements too: same q3 window.
+        kwargs_.setdefault("kv_type", bench_kv)
+        kwargs_.setdefault("recipe_kv_type", _recipe_kv_type(direct_launch))
         with cpu_measurement_window():
             return bench.compare(*args_, **kwargs_)
 
     @counter_phase("benchmark_with_warmup")
     def measured_bench_measure(*args_, **kwargs_):
+        kwargs_.setdefault("kv_type", bench_kv)
         with cpu_measurement_window():
             return bench.measure(*args_, **kwargs_)
 
@@ -6735,7 +6941,7 @@ def _main(argv: list[str] | None = None) -> int:
                            "types": quant_tokens}
             checked = integrity.validate_candidate(
                 worker.worktree, paths, oracle_shape=oracle_shape,
-                bench_shape=bench_shape)
+                bench_shape=bench_shape, expected_head=getattr(worker, "reset_base", None))
             base = _git(worker.worktree, "rev-parse", "HEAD")
             attempt = dispatch_guard.attempt_identity(
                 diff=_git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--"),
@@ -7690,6 +7896,7 @@ def _main(argv: list[str] | None = None) -> int:
             validate_candidate=validate_pooled,
             formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
                 hypothesis, {**context, "epoch_sha256": epoch,
+                             "retired_mechanisms_path": Path(args.store) / "retired-mechanisms.jsonl",
                              "measurement_epoch_sha256": measurement_epoch}),
             reserve_candidate=reserve_pooled,
             record_abandoned=record_abandoned_pooled,
@@ -8673,6 +8880,7 @@ def _main(argv: list[str] | None = None) -> int:
                 "pool": pooled_body,
                 "provider_breaker": breaker.to_dict(),
                 "planner_same_state": same_state.to_dict(),
+                "run_budget": budget.snapshot(),
                 **({"scratch": scratch_registry[0].stats()}
                    if scratch_registry[0] is not None else {}),
                 "continuation": serial_run.continuation(
@@ -8775,7 +8983,19 @@ def main(argv: list[str] | None = None) -> int:
     from . import lane_watchdog, serial_run
     actual = list(sys.argv[1:] if argv is None else argv)
     stores = lane_watchdog._option(actual, "--store")
-    if lane_watchdog._SUPERVISED or "--dry-run" in actual or not stores:
+    if "--dry-run" in actual:
+        # Refusals found before an early exit must still be named.
+        try:
+            rc = _main(actual)
+        except champion.StartupRefused as exc:
+            _DRY_RUN_REFUSALS.append(str(exc))
+            _report_dry_run_refusals()
+            raise
+        except SystemExit:
+            _report_dry_run_refusals()
+            raise
+        return (rc or 1) if _report_dry_run_refusals() else rc
+    if lane_watchdog._SUPERVISED or not stores or "--planner-only" in actual:
         return _main(actual)
     if len(stores) != 1:
         raise lane_watchdog.WatchdogRefused("exactly one canonical store is required")

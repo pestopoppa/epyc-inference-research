@@ -43,6 +43,7 @@ from . import discovery_static_registry
 from . import discovery_supervisor
 from . import discovery_supervisor_secure
 from . import gpu_source_proofs
+from . import admissibility_policy
 from scripts.benchmark import autokernel_gpu_discovery_beliefs
 
 
@@ -341,6 +342,8 @@ def _execution_module_sources() -> dict[str, tuple[str, Path]]:
         "instrument_integrity": Path(instrument_integrity.__file__),
         "t0_provider": Path(t0_provider.__file__),
         "evaluator_integrity": Path(integrity.__file__),
+        "c6_reward_integrity": Path(controller.c6_reward_integrity.__file__),
+        "hawkeye_measurement": Path(controller.hawkeye_measurement.__file__),
         "gpu_source_evidence": Path(evidence.__file__),
         "gpu_source_proofs": Path(gpu_source_proofs.__file__),
         "gpu_discovery_beliefs": Path(autokernel_gpu_discovery_beliefs.__file__),
@@ -590,7 +593,10 @@ _SAFE_CRITIC_ENVIRONMENT = MappingProxyType({
 #
 # Replacement census, read from the GGUF rather than the name: n_embd=1536
 # (divisible), Q4_K x169, Q6_K x29 -- production's actual dispatch path, at ~1 GB.
-_SITE_MODEL = Path("/mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf")
+# The model-root reorg moved the GGUF under its publisher directory (p7_3a missing_pinned_model).
+_SITE_MODEL = Path(
+    "/mnt/raid0/llm/models/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/"
+    "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf")
 _PROFILE_TRACE_RECEIPT = Path(
     "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/receipt.json")
 _PROFILE_TRACE_RECEIPT_SHA256 = "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f69b9765ef74a933cd8"
@@ -619,7 +625,11 @@ _SITE_ACTOR_WRAPPER = Path(
 # gone), which made `initialize_static_deployment_bundle` — and therefore every
 # new deployment — fail with FileNotFoundError.  Resolving the launcher tracks
 # whatever version is installed at bundle-initialization time.
-_SITE_CRITIC_WRAPPER = Path("/home/node/.local/bin/claude").resolve()
+# The user-local install when present, else the container npm global (as loop/actors.py CLAUDE):
+# a hardcoded local path made the factory refuse in a container without it.
+_SITE_CRITIC_LOCAL = Path("/home/node/.local/bin/claude")
+_SITE_CRITIC_WRAPPER = (_SITE_CRITIC_LOCAL if os.access(_SITE_CRITIC_LOCAL, os.X_OK)
+                        else Path("/usr/local/share/npm-global/bin/claude")).resolve()
 _SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
 
 
@@ -692,7 +702,8 @@ def _json_artifact(path: Path, value: Mapping[str, Any]) -> tuple[Path, str]:
 
 
 def initialize_static_deployment_bundle(root: Path, *,
-                                        autonomous_discovery: bool = False) -> Path:
+                                        autonomous_discovery: bool = False,
+                                        c6_admission: bool = False) -> Path:
     """Emit the one reviewed site bundle; no caller supplies code or argv authority."""
     if not root.is_absolute() or root.is_symlink() or ".." in root.parts:
         raise DeploymentFactoryError("bundle root must be an absolute non-symlink path")
@@ -863,7 +874,10 @@ def initialize_static_deployment_bundle(root: Path, *,
                "template_registry_sha256": templates.registry_sha256,
                "template_surfaces_sha256": schemas.content_hash(template_surfaces),
                "template_surfaces": template_surfaces,
-               "portfolio_dispatch_authority": portfolio_dispatch_authority}
+               "portfolio_dispatch_authority": portfolio_dispatch_authority,
+               # AK-ADM-1: the typed admissibility_policies manifest is bound
+               # by admissibility_policy_sha256 into the planner and critic context.
+               **_admissibility_projection(portfolio)}
     context["context_sha256"] = schemas.content_hash(context)
     context_path, context_sha = _json_artifact(config_dir / "planner-context.json", context)
     for directory in (root / "state", root / "evidence", root / "operations", root / "builds"):
@@ -880,10 +894,14 @@ def initialize_static_deployment_bundle(root: Path, *,
                             "evidence_root": str(root / "evidence"),
                             "operations_root": str(root / "operations"),
                             "build_root": str(root / "builds"),
-                            "max_iterations": 100, "nomination_threshold": .03,
+                            "max_iterations": (
+                                _c6_bundle_max_iterations(portfolio, templates)
+                                if c6_admission else 100),
+                            "nomination_threshold": .03,
                             # Hybrid discovery: the sealed portfolio becomes a priority
                             # SEED once enabled, and the planner proposes thereafter.
-                            "autonomous_discovery": bool(autonomous_discovery)},
+                            "autonomous_discovery": bool(autonomous_discovery),
+                            **({"c6_admission": True} if c6_admission else {})},
              "actors": {"wrapper_path": str(wrapper.path), "wrapper_sha256": wrapper.sha256,
                         "critic_path": str(critic.path), "critic_sha256": critic.sha256,
                         "environment_profile_id": _STATIC_IDS["environment_profile"]},
@@ -1588,6 +1606,15 @@ def _instrument_review_receipt(config: deployment.DiscoveryDeployment) -> tuple[
     return path.resolve(), hashlib.sha256(raw).hexdigest()
 
 
+def _admissibility_projection(portfolio: hypothesis_portfolio.Portfolio) -> dict[str, Any]:
+    evidence = {row["evidence_id"]: row["sha256"] for row in portfolio.body["evidence"]}
+    try:
+        manifest = admissibility_policy.load(portfolio_evidence=evidence)
+    except admissibility_policy.AdmissibilityError as exc:
+        raise DeploymentFactoryError("checked-in admissibility policy is not deployable") from exc
+    return manifest.context_projection()
+
+
 def static_template_registry_sha256() -> str:
     """Public value for authoring a sealed config; it grants no constructor authority."""
     return _template_registry().registry_sha256
@@ -1711,7 +1738,8 @@ def _read_operation_carrier(descriptor: int, label: str) -> tuple[bytes, os.stat
 def _write_operation_carrier(config: deployment.DiscoveryDeployment,
                              operation_key: str, name: str, raw: bytes,
                              label: str) -> Path:
-    if name not in {"source-manifest.json", "evidence-policy.json"}:
+    if name not in {"source-manifest.json", "evidence-policy.json",
+                    "c6-native-capability.json"}:
         raise DeploymentFactoryError("operation carrier name is not allowlisted")
     with _pinned_operation_directory(config, operation_key) as pinned:
         operations_root, root_fd, root_identity, operation_fd, operation_identity = pinned
@@ -1790,6 +1818,542 @@ def _manifest_file(config: deployment.DiscoveryDeployment,
     if build.operation_key is None:
         raise DeploymentFactoryError("source build lacks an operation key")
     return _manifest_file_for_operation(config, candidate, build.operation_key)
+
+
+_C6_OPERATOR_POLICY = MappingProxyType({
+    "MUL_MAT": "native_c6_mul_mat_v1",
+    "RMS_NORM": "native_c6_rms_norm_v1",
+    "ROPE": "typed_precompute_refusal",
+    "FLASH_ATTN_EXT": "native_c6_flash_attn_ext_v1",
+})
+
+
+def _c6_operator_policy(operation: object) -> str:
+    if not isinstance(operation, str) or operation not in _C6_OPERATOR_POLICY:
+        return "typed_precompute_refusal"
+    return _C6_OPERATOR_POLICY[operation]
+
+
+def _native_c6_portfolio_capacity(
+        portfolio: hypothesis_portfolio.Portfolio,
+        templates: ExperimentTemplateRegistry) -> int:
+    """Count independently eligible S1 slots with a sealed native C6 path."""
+    capacity = 0
+    for record in portfolio.eligible_hypotheses():
+        template_ids = record["current_bundle_eligibility"]["template_ids"]
+        if (not isinstance(template_ids, (list, tuple))
+                or len(template_ids) != 1):
+            raise DeploymentFactoryError(
+                "eligible C6 capacity row lacks one exact template")
+        template = templates.templates.get(template_ids[0])
+        if template is None:
+            raise DeploymentFactoryError(
+                "eligible C6 capacity row escaped the template registry")
+        if not _c6_route_reviewed(template):
+            continue
+        slots = record.get("decision_policy", {}).get("max_distinct_candidates")
+        if isinstance(slots, bool) or not isinstance(slots, int) or slots < 1:
+            raise DeploymentFactoryError(
+                "eligible C6 capacity row has an invalid candidate budget")
+        capacity += slots
+    return capacity
+
+
+_C6_MUL_MAT_ROUTE_TYPES = MappingProxyType({
+    # The sealed Q5 question is the only eligible vec-dot route; its portfolio
+    # dispatch anchors are all mul_mat_vec_q<(ggml_type)6, ...>.
+    "cuda-vecdotq-v1": ("q5_0", 6),
+    "cuda-quantize-q8-v1": ("q8_0", 8),
+})
+
+
+# KV length per reviewed attention route.  Only the common template can reach
+# flash_attn_combine_results, which needs enough KV for parallel blocks.
+_C6_FLASH_KV_BY_TEMPLATE = MappingProxyType({
+    "cuda-fattn-tile-v1": 128,
+    "cuda-fattn-common-v1": 4096,
+})
+
+
+def _c6_route_reviewed(template: ExperimentTemplate) -> bool:
+    """True only when the native harness has an exact route for this template."""
+    operation = template.semantics.get("correctness_op")
+    if _c6_operator_policy(operation) == "typed_precompute_refusal":
+        return False
+    if operation == "MUL_MAT":
+        return template.template_id in _C6_MUL_MAT_ROUTE_TYPES
+    if operation == "FLASH_ATTN_EXT":
+        return template.template_id in _C6_FLASH_KV_BY_TEMPLATE
+    return operation == "RMS_NORM" and template.template_id == "cuda-norm-v2"
+
+
+def _c6_bundle_max_iterations(
+        portfolio: hypothesis_portfolio.Portfolio,
+        templates: ExperimentTemplateRegistry) -> int:
+    """Size a C6 bundle to its sealed native capacity at initialization.
+
+    The controller charges both the S1 screen and its S2 replication, and
+    admission needs the pair, so every sealed slot is budgeted twice.
+    """
+    capacity = _native_c6_portfolio_capacity(portfolio, templates)
+    if capacity < 1:
+        raise DeploymentFactoryError(
+            "sealed portfolio has no native C6 route to deploy")
+    return 2 * capacity
+
+
+def _require_c6_iteration_budget(
+        portfolio: hypothesis_portfolio.Portfolio,
+        templates: ExperimentTemplateRegistry, max_iterations: int) -> None:
+    budget = _c6_bundle_max_iterations(portfolio, templates)
+    if budget < max_iterations:
+        raise DeploymentFactoryError(
+            "sealed native C6 S1+S2 capacity is below max_iterations: "
+            f"{budget} < {max_iterations}")
+
+
+# Symbols each route's native harness actually exercises.  A template may allow
+# more (other quant types, MMQ quantizers, other norms); a C6 PASS on this route
+# would say nothing about those, so they are refused rather than admitted.
+_C6_ROUTE_SYMBOLS = MappingProxyType({
+    "cuda-vecdotq-v1": frozenset({"vec_dot_q5_0_q8_1", "vec_dot_q5_0_q8_1_impl"}),
+    "cuda-quantize-q8-v1": frozenset({"quantize_q8_1", "quantize_row_q8_1_cuda"}),
+    "cuda-norm-v2": frozenset({"rms_norm_f32", "rms_norm_mul_f32_cuda"}),
+    "cuda-fattn-tile-v1": frozenset({
+        "ggml_cuda_fattn_tile_get_config_amd", "ggml_cuda_fattn_tile_get_config",
+        "ggml_cuda_fattn_tile_get_nthreads", "ggml_cuda_fattn_tile_get_occupancy",
+        "ggml_cuda_fattn_tile_get_nbatch_fa", "ggml_cuda_fattn_tile_get_nbatch_K",
+        "flash_attn_tile_load_tile", "flash_attn_tile_iter_KQ",
+        "flash_attn_tile_iter", "flash_attn_tile",
+        "launch_fattn_tile_switch_ncols1", "launch_fattn_tile_switch_ncols2",
+        "ggml_cuda_flash_attn_ext_tile_case", "ggml_cuda_flash_attn_ext_tile"}),
+    "cuda-fattn-common-v1": frozenset({
+        "launch_fattn", "flash_attn_combine_results"}),
+})
+
+
+def _require_c6_reachable_symbols(
+        candidate: controller.PlannedCandidate,
+        template: ExperimentTemplate) -> None:
+    """Refuse a patch its route's harness could not exercise, before any build."""
+    reachable = _C6_ROUTE_SYMBOLS.get(template.template_id, frozenset())
+    manifests = [candidate.source_manifest]
+    composition = getattr(candidate, "composition_plan", None)
+    if composition is not None:
+        manifests.extend(row.manifest for row in composition.candidate.accepted)
+    for manifest in manifests:
+        for symbols in manifest.declared_symbols.values():
+            if not set(symbols) <= reachable:
+                raise controller.C6OperatorUnsupportedRefusal(
+                    "native C6 route cannot exercise symbols declared for "
+                    f"{template.template_id!r}")
+
+
+def _c6_mul_mat_route_type(template_id: str) -> tuple[str, int]:
+    try:
+        return _C6_MUL_MAT_ROUTE_TYPES[template_id]
+    except KeyError as exc:
+        raise DeploymentFactoryError(
+            "native C6 MUL_MAT harness lacks a reviewed quant route for template") from exc
+
+
+def _c6_mul_mat_type(template_id: str) -> str:
+    return _c6_mul_mat_route_type(template_id)[0]
+
+
+def _c6_structural_precision(
+        config: deployment.DiscoveryDeployment,
+        candidate: controller.PlannedCandidate,
+        template: ExperimentTemplate) -> tuple[dict[str, str], dict[str, Any]]:
+    """Prove the patch did not introduce an accumulator-width downgrade.
+
+    The reviewed base blobs and declared-symbol limiter already establish the
+    native route.  This extra structural reducer rejects any added precision
+    type/cast token not present on the corresponding removed patch lines.  It
+    is a source-diff proof, not a candidate-authored AST or wrapper assertion.
+    """
+    manifests = [candidate.source_manifest]
+    composition = getattr(candidate, "composition_plan", None)
+    if composition is not None:
+        manifests = [row.manifest for row in composition.candidate.accepted]
+    forbidden = re.compile(
+        r"(?i)(?:__half|\bhalf\b|fp16|float16|f16|bf16|bfloat16|half2)")
+    patch_hashes: list[str] = []
+    changed_lines: list[str] = []
+    for manifest in manifests:
+        patch_hashes.append(manifest.patch_sha256)
+        text = manifest.patch_bytes.decode("utf-8", "strict")
+        added = [line[1:] for line in text.splitlines()
+                 if line.startswith("+") and not line.startswith("+++")]
+        removed = [line[1:] for line in text.splitlines()
+                   if line.startswith("-") and not line.startswith("---")]
+        changed_lines.extend([*added, *removed])
+        added_tokens = sorted(token.lower() for line in added
+                              for token in forbidden.findall(line))
+        removed_tokens = sorted(token.lower() for line in removed
+                                for token in forbidden.findall(line))
+        if added_tokens != removed_tokens:
+            raise DeploymentFactoryError(
+                "candidate precision patch changes a reviewed narrow-type token")
+        if (template.semantics.get("correctness_op") == "MUL_MAT"
+                and any("mul_mat_vec_q" == symbol for symbols in
+                        manifest.declared_symbols.values() for symbol in symbols)):
+            raise DeploymentFactoryError(
+                "candidate scope includes the trusted operator accumulator kernel")
+
+    operation = template.semantics.get("correctness_op")
+    accumulator_contracts = {
+        "MUL_MAT": (
+            "ggml/src/ggml-cuda/mmvq.cu",
+            (("float tmp[ncols_dst][rows_per_thread][k_part_count] = {{{0.0f}}};", 1),
+             ("tmp[j][i][k_part] +=", 6)),
+            "mul_mat_vec_q"),
+        "RMS_NORM": (
+            "ggml/src/ggml-cuda/norm.cu",
+            # Twelve-space indent: the eight-space form is l2_norm_f32.
+            (("const float xi = x[col];\n            tmp += xi * xi;", 1),
+             ("const float scale = rsqrtf(mean + eps);", 1),
+             ("dst[col]          = scale * x[col] * mul[mul_col];", 1)),
+            "rms_norm_f32"),
+        "FLASH_ATTN_EXT": (
+            "ggml/src/ggml-cuda/fattn-common.cuh",
+            (("float VKQ_numerator   = 0.0f;", 1),
+             ("float VKQ_denominator = 0.0f;", 1),
+             ("dst[tid] = VKQ_numerator / VKQ_denominator;", 1)),
+            "flash_attn_combine_results"),
+    }
+    try:
+        accumulator_path, accumulator_counts, accumulator_symbol = (
+            accumulator_contracts[operation])
+    except KeyError as exc:
+        raise DeploymentFactoryError(
+            "native C6 structural precision lacks an operator contract") from exc
+    committed = subprocess.run(
+        ("git", "-C", str(config.instrument_path), "show",
+         f"{config.instrument_commit}:{accumulator_path}"),
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, check=False)
+    accumulator_fragments = tuple(row[0] for row in accumulator_counts)
+    if (committed.returncode != 0
+            or any(committed.stdout.count(fragment.encode()) != expected
+                   for fragment, expected in accumulator_counts)
+            or (operation in {"MUL_MAT", "FLASH_ATTN_EXT"}
+                and any(any(fragment in line for fragment in accumulator_fragments)
+                        for line in changed_lines))):
+        raise DeploymentFactoryError(
+            "trusted f32 operator accumulator carrier is absent or changed")
+
+    # The vec-dot arithmetic template may edit its float-returning symbols.
+    # It may optimize unpacking, but cannot touch their accumulator variables
+    # or return path.  Other admitted templates cannot edit vecdotq.
+    if template.template_id == "cuda-vecdotq-v1":
+        protected = ("sumf", "return")
+        if any(any(token in line for token in protected)
+               for line in changed_lines):
+            raise DeploymentFactoryError(
+                "candidate changes the reviewed vec-dot accumulator or return path")
+    reviewed_route = None
+    if operation == "MUL_MAT":
+        type_a, type_enum = _c6_mul_mat_route_type(template.template_id)
+        reviewed_route = {"type_a": type_a, "ggml_type_enum": type_enum}
+    elif operation == "RMS_NORM":
+        reviewed_route = {"type_a": "f32", "ncols": 256}
+    else:
+        reviewed_route = {
+            "type_a": "f16", "head_dimension": 64,
+            "kv_heads": 2, "query_heads": 14,
+            "requires_exact_dispatch_attribution": True,
+        }
+    proof = {
+        "schema": "epyc.autokernel.c6_structural_precision_source_diff.v1",
+        "template_id": template.template_id,
+        "reviewed_operator_route": reviewed_route,
+        "candidate_id": candidate.source_manifest.candidate_id,
+        "patch_sha256": patch_hashes,
+        "allowed_files": sorted(template.allowed_files),
+        "allowed_symbols": {key: sorted(value) for key, value in
+                            sorted(template.allowed_symbols.items())},
+        "base_source_sha256": {
+            path: template.semantics["production_instrument_target_sha256"]
+            for path in sorted(template.allowed_files)},
+        "required_output_dtype": "f32",
+        "required_accumulator_dtype": "f32",
+        "accumulator_authority": {
+            "instrument_commit": config.instrument_commit,
+            "path": accumulator_path,
+            "source_sha256": hashlib.sha256(committed.stdout).hexdigest(),
+            "required_fragments": list(accumulator_fragments),
+            "protected_symbol": accumulator_symbol,
+        },
+        "rule": "sealed-f32-operator-accumulator-plus-no-narrowing/v2",
+        "result": "PASS",
+    }
+    structural = {
+        "output_dtype": "f32", "accumulator_dtype": "f32",
+        "evidence_sha256": schemas.content_hash(proof),
+    }
+    return structural, proof
+
+
+def _c6_run_seed(
+        candidate: controller.PlannedCandidate,
+        build: controller.GpuSourceBuild,
+        template: ExperimentTemplate,
+        repetition: int) -> tuple[int, dict[str, Any]]:
+    if isinstance(repetition, bool) or not isinstance(repetition, int) \
+            or repetition not in {1, 2}:
+        raise DeploymentFactoryError(
+            "native C6 repetition must be the governed S1/S2 index")
+    if not isinstance(build.operation_key, str) or not build.operation_key:
+        raise DeploymentFactoryError("native C6 run seed lacks operation identity")
+    authority = {
+        "schema": "epyc.autokernel.c6_run_seed_derivation.v1",
+        "campaign_id": candidate.source_manifest.campaign_id,
+        "candidate_id": candidate.source_manifest.candidate_id,
+        "source_manifest_sha256": candidate.source_manifest_sha256,
+        "operation_key": build.operation_key,
+        "template_id": template.template_id,
+        "repetition": repetition,
+        "base_suite_seed": int(template.semantics["suite_seed"]),
+    }
+    digest = schemas.content_hash(authority)
+    seed = int(digest[:16], 16) or 1
+    return seed, {**authority, "seed_sha256": digest, "derived_seed": seed}
+
+
+def _c6_ghost_replay_calibration() -> tuple[dict[str, Any], tuple[
+        evidence.BoundInputFile, evidence.BoundInputFile]]:
+    """Bind the reviewed Ghost Replay falsification without reimplementing it.
+
+    The native ggml harness is not Triton and must not pretend that another
+    no-op mechanism is equivalent.  This receipt therefore identifies the
+    standing evaluator calibration only; exact route attribution remains the
+    per-candidate native load-bearing proof.
+    """
+    root = Path(__file__).resolve().parent.parent.parent / "c6_mutants"
+    driver = root / "run_falsification.py"
+    results = root / "results_20260821.jsonl"
+    driver_sha = _digest_regular(driver, "C6 Ghost Replay driver")
+    results_sha = _digest_regular(results, "C6 Ghost Replay results")
+    rows: list[dict[str, Any]] = []
+    try:
+        for line in results.read_text(encoding="utf-8").splitlines():
+            value = json.loads(line)
+            if (value.get("tier") == "L2_ghost_replay"
+                    and value.get("arm") == "standard"):
+                rows.append(value)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DeploymentFactoryError(
+            "C6 Ghost Replay calibration is unreadable") from exc
+    expected = {(task, candidate) for task in (
+        "layernorm_no_affine", "softmax_no_maxsub", "matmul_transpose_no_t")
+        for candidate in ("honest", "mutant")}
+    observed = {(row.get("task"), row.get("candidate")) for row in rows}
+    if (len(rows) != 6 or observed != expected
+            or any(row.get("verdict") != "PASS" for row in rows)):
+        raise DeploymentFactoryError(
+            "C6 Ghost Replay standing calibration is incomplete or failed")
+    receipt = {
+        "schema": "epyc.autokernel.c6_ghost_replay_calibration.v1",
+        "mechanism": "triton.runtime.jit.JITFunction.run-no-op",
+        "scope": "evaluator_calibration_not_native_candidate_execution",
+        "driver_sha256": driver_sha,
+        "results_sha256": results_sha,
+        "expected_rows": 6,
+        "result": "PASS",
+    }
+    return receipt, (
+        evidence.BoundInputFile("c6_ghost_replay_driver", driver, driver_sha),
+        evidence.BoundInputFile("c6_ghost_replay_results", results, results_sha))
+
+
+def _reconcile_c6_harness_partial(executable: Path, partial: Path) -> None:
+    """Resolve what a crash left in the sole-owner operation namespace.
+
+    A lone regular partial predates publication and is rebuilt from sealed
+    inputs.  A partial sharing the published inode is the crash window between
+    link and unlink.  Anything else was not written by this publisher.
+    """
+    try:
+        partial_stat = partial.lstat()
+    except FileNotFoundError:
+        return
+    try:
+        published = executable.lstat()
+    except FileNotFoundError:
+        published = None
+    if (not stat.S_ISREG(partial_stat.st_mode)
+            or (published is not None
+                and not os.path.samestat(partial_stat, published))):
+        raise DeploymentFactoryError(
+            "native C6 harness has an ambiguous partial build")
+    try:
+        partial.unlink()
+    except OSError as exc:
+        raise DeploymentFactoryError(
+            "native C6 harness partial could not be cleared") from exc
+
+
+def _c6_native_capability(
+        config: deployment.DiscoveryDeployment,
+        candidate: controller.PlannedCandidate,
+        build: controller.GpuSourceBuild,
+        template: ExperimentTemplate,
+        repetition: int) -> evidence.C6CorrectnessPlan:
+    operation = template.semantics.get("correctness_op")
+    if build.operation_key is None or not _c6_route_reviewed(template):
+        raise DeploymentFactoryError(
+            "native C6 capability lacks a governed operator template route")
+    source = (Path(__file__).resolve().parent.parent / "native" /
+              "c6_mul_mat_harness.cpp")
+    if source.is_symlink() or not source.is_file():
+        raise DeploymentFactoryError("native C6 harness source is unavailable")
+    source_sha = _digest_regular(source, "native C6 harness source")
+    compiler = Path("/usr/bin/c++").resolve(strict=True)
+    compiler_sha = _digest_regular(compiler, "native C6 compiler")
+    root = _operation_carrier_root(config, build.operation_key)
+    executable = root / "c6-native-operator-harness"
+    partial = root / ".c6-native-operator-harness.partial"
+    bin_dir = build.candidate_build.resolve(strict=True) / "bin"
+    header_root = config.instrument_path.resolve(strict=True)
+    header_paths = (
+        "ggml/include/ggml.h", "ggml/include/ggml-backend.h",
+        "ggml/include/ggml-cpp.h", "ggml/include/ggml-cpu.h")
+    header_bindings: list[tuple[str, Path, str]] = []
+    for relative in header_paths:
+        path = header_root / relative
+        raw = path.read_bytes()
+        committed = subprocess.run(
+            ("git", "-C", str(header_root), "show",
+             f"{config.instrument_commit}:{relative}"),
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, check=False)
+        if committed.returncode != 0 or committed.stdout != raw:
+            raise DeploymentFactoryError(
+                "native C6 public header differs from exact instrument commit")
+        header_bindings.append((relative, path, hashlib.sha256(raw).hexdigest()))
+    command = (
+        str(compiler), "-std=c++17", "-O2", "-fno-fast-math",
+        f"-I{header_root / 'ggml/include'}", f"-I{header_root / 'include'}",
+        str(source), f"-L{bin_dir}", f"-Wl,-rpath,{bin_dir}",
+        "-lggml", "-lggml-cpu", "-lggml-base", "-o", str(partial))
+    _reconcile_c6_harness_partial(executable, partial)
+    if not executable.exists():
+        completed = subprocess.run(
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, check=False,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"})
+        if completed.returncode != 0:
+            raise DeploymentFactoryError(
+                "native C6 harness did not compile against candidate build: " +
+                completed.stderr.decode("utf-8", "replace")[-1000:])
+        partial.chmod(0o500)
+        try:
+            os.link(partial, executable, follow_symlinks=False)
+            partial.unlink()
+        except OSError as exc:
+            raise DeploymentFactoryError(
+                "native C6 harness could not be atomically published") from exc
+    if (executable.is_symlink() or not executable.is_file()
+            or executable.stat().st_nlink != 1
+            or not os.access(executable, os.X_OK)):
+        raise DeploymentFactoryError("native C6 harness executable is not sealed")
+    executable_sha = _digest_regular(executable, "native C6 harness")
+    structural, structural_proof = _c6_structural_precision(
+        config, candidate, template)
+    ghost_replay, ghost_inputs = _c6_ghost_replay_calibration()
+    if operation == "MUL_MAT":
+        type_a, ggml_type_enum = _c6_mul_mat_route_type(template.template_id)
+        dimensions = (32, 1, 256)
+    elif operation == "RMS_NORM":
+        type_a, ggml_type_enum = "f32", 0
+        dimensions = (256, 1, 1)
+    else:
+        type_a, ggml_type_enum = "f16", 1
+        dimensions = (64, 1, _C6_FLASH_KV_BY_TEMPLATE[template.template_id])
+    capability = {
+        "schema": "epyc.autokernel.c6_native_capability.v1",
+        "instrument_commit": config.instrument_commit,
+        "candidate_commit": build.candidate_identity.source_commit,
+        "candidate_source_sha256": build.candidate_identity.source_sha256,
+        "template_id": template.template_id,
+        "source": {"path": str(source), "sha256": source_sha},
+        "public_headers": {relative: {"path": str(path), "sha256": digest}
+                           for relative, path, digest in header_bindings},
+        "compiler": {"path": str(compiler), "sha256": compiler_sha},
+        "compile_argv": list(command),
+        "executable": {"path": str(executable), "sha256": executable_sha},
+        "candidate_libraries": {
+            name: {"path": str((bin_dir / name).resolve(strict=True)),
+                   "sha256": _digest_regular(
+                       (bin_dir / name).resolve(strict=True), name)}
+            for name in ("libggml.so", "libggml-base.so", "libggml-cpu.so",
+                         "libggml-hip.so")},
+        "operation": operation, "type_a": type_a,
+        "ggml_type_enum": ggml_type_enum,
+        "precision_contract": {
+            "required_output_dtype": "f32",
+            "required_accumulator_dtype": "f32",
+            "atol": 0.01 if operation == "MUL_MAT" else 0.001,
+            "rtol": 0.01 if operation == "MUL_MAT" else 0.001,
+            "required_matched_ratio": (0.95 if operation == "MUL_MAT" else 1.0),
+            "lowbit": operation == "MUL_MAT",
+        },
+        "precision_equivalence_policy": {
+            "operator_id": operation,
+            "template_id": template.template_id,
+            "input_dtype": (
+                "float16" if operation == "FLASH_ATTN_EXT" else "float32"),
+            "required_output_dtype": "f32",
+            "required_accumulator_dtype": "f32",
+            "reduce_dimension": (
+                dimensions[2] if operation in {"MUL_MAT", "FLASH_ATTN_EXT"}
+                else dimensions[0]),
+            "structural_evidence_sha256": structural["evidence_sha256"],
+            "bound_multiplier": 1.0,
+        },
+        "structural_precision_proof": structural_proof,
+        "structural_precision_evidence": structural,
+        "semantic_judge_verdicts": {},
+        "ghost_replay_calibration": ghost_replay,
+        "native_execution": True, "wrapper_used": False,
+        "promotion_claim": False,
+    }
+    seed, seed_authority = _c6_run_seed(
+        candidate, build, template, repetition)
+    capability["run_seed_derivation"] = seed_authority
+    capability_path = _write_operation_carrier(
+        config, build.operation_key, "c6-native-capability.json",
+        json.dumps(capability, sort_keys=True, separators=(",", ":")).encode(),
+        "native C6 capability")
+    capability_sha = _digest_regular(capability_path, "native C6 capability")
+    argv = (str(executable), "--mode", "oracle", "--operation", str(operation),
+            "--backend", "ROCm0", "--type-a", capability["type_a"],
+            "--m", str(dimensions[0]), "--n", str(dimensions[1]),
+            "--k", str(dimensions[2]),
+            "--seed", str(seed), "--sidecar", evidence.C6_SIDECAR_OUTPUT)
+    inputs = (
+        evidence.BoundInputFile("executable", executable, executable_sha),
+        evidence.BoundInputFile("c6_source", source, source_sha),
+        evidence.BoundInputFile("c6_compiler", compiler, compiler_sha),
+        evidence.BoundInputFile("c6_capability", capability_path, capability_sha),
+        *(evidence.BoundInputFile(
+            "c6_header_" + relative.rsplit("/", 1)[-1].replace(".", "_"),
+            path, digest) for relative, path, digest in header_bindings),
+        *ghost_inputs,
+        *(evidence.BoundInputFile(
+            "c6_candidate_" + name.removeprefix("lib").removesuffix(".so")
+            .replace("-", "_"),
+            Path(record["path"]), str(record["sha256"]))
+          for name, record in sorted(capability["candidate_libraries"].items())),
+    )
+    return evidence.C6CorrectnessPlan(
+        argv=argv, inputs=inputs,
+        precision_contract=capability["precision_contract"],
+        precision_equivalence_policy=capability[
+            "precision_equivalence_policy"],
+        structural_precision_evidence=structural,
+        semantic_judge_verdicts={})
 
 
 def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBinding:
@@ -1887,6 +2451,14 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         placeholder = evidence.BoundInputFile(
             "execution_policy", carrier_root / "evidence-policy.json", "0" * 64)
         dispatch = template.bind_dispatch(candidate.experiment_intent)
+        c6_correctness = None
+        if config.c6_admission is True:
+            if not _c6_route_reviewed(template):
+                raise controller.C6OperatorUnsupportedRefusal(
+                    f"native C6 has no reviewed route for {template.template_id!r}")
+            _require_c6_reachable_symbols(candidate, template)
+            c6_correctness = _c6_native_capability(
+                config, candidate, build_, template, repetition)
         candidate_rows, anchor_rows = _expected_rocprofv3_rows(dispatch)
         provisional = evidence.GpuSourceEvidencePlan(
             campaign_id=candidate.source_manifest.campaign_id,
@@ -1925,6 +2497,7 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             candidate_rocprof_environment=profile_environment(shared.candidate_hip_library),
             anchor_rocprof_environment=profile_environment(shared.anchor_hip_library),
             shared_runtime=shared,
+            c6_correctness=c6_correctness,
             correctness_invocations=correctness_invocations,
             attribution_arm_order_seed_sha256=order_seed,
             attribution_arm_order=attribution_arm_order,
@@ -2889,6 +3462,12 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         runner_attest()
         template = templates.resolve(candidate.experiment_intent)
         _validate_source_scope(candidate, template)
+        if config.c6_admission is True and not _c6_route_reviewed(template):
+            raise controller.C6OperatorUnsupportedRefusal(
+                "native C6 has no reviewed route for "
+                f"{template.template_id!r} before build")
+        if config.c6_admission is True:
+            _require_c6_reachable_symbols(candidate, template)
         candidate.source_manifest.bind(
             proposal=candidate.proposal, campaign_id=candidate.source_manifest.campaign_id,
             candidate_id=candidate.source_manifest.candidate_id,
@@ -2986,7 +3565,32 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
 def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool = False) -> controller.ControllerConfig:
     """The deployment receipt is the sole source of controller configuration."""
     config.revalidate()
+    c6_kwargs: dict[str, Any] = {}
+    if config.c6_admission is True:
+        _require_c6_iteration_budget(
+            config.hypothesis_portfolio.value, _template_registry(),
+            config.max_iterations)
+        c6_kwargs = dict(
+            c6_admission_store_path=config.evidence_root / "c6-admission.jsonl",
+            c6_admission_alpha=1.2,
+            c6_admission_beta=1.2,
+            c6_roofline_authority=(lambda facts_path: {
+                "schema": "epyc.autokernel.c6_roofline_authority.v1",
+                "gpu_part": "gfx90a",
+                "facts_path": str(facts_path),
+                "facts_sha256": _digest_regular(
+                    facts_path, "AutoKernel substrate facts"),
+                "workload": "decode_tg128",
+                "batch_size": 1,
+                "dense_model_bytes_per_token": True,
+            })((Path(__file__).resolve().parent.parent / "substrate_facts.json").resolve()),
+            c6_reopen_when=(
+                "candidate_commit, anchor_commit, evaluator_commit, or exact "
+                "measurement frame changes"),
+            c6_evaluator_commit=config.instrument_commit,
+        )
     return controller.ControllerConfig(
+        **c6_kwargs,
         output_root=config.state_root, evidence_root=config.evidence_root,
         max_iterations=config.max_iterations,
         # Hybrid discovery: sealed deployment decides, not a caller argument.
@@ -3028,6 +3632,8 @@ def deployment_main(argv: list[str] | None = None) -> int:
     authority.add_argument("--deployment")
     authority.add_argument("--initialize-bundle",
                            help="emit the fixed-site sealed deployment bundle")
+    parser.add_argument("--c6-admission", action="store_true",
+                        help="enable the native C6 oracle/candidate gate and admission")
     parser.add_argument("--autonomous", action="store_true",
                         help="hybrid discovery: treat the sealed portfolio as a priority "
                              "seed and let the planner propose its own mechanisms once it "
@@ -3051,7 +3657,8 @@ def deployment_main(argv: list[str] | None = None) -> int:
         if args.validate_only or args.dry_run:
             parser.error("bundle initialization does not accept execution flags")
         result = initialize_static_deployment_bundle(
-            Path(args.initialize_bundle), autonomous_discovery=bool(args.autonomous))
+            Path(args.initialize_bundle), autonomous_discovery=bool(args.autonomous),
+            c6_admission=bool(args.c6_admission))
         print(json.dumps({"status": "initialized", "inference_executed": False,
                           "deployment": str(result)}, sort_keys=True))
         return 0

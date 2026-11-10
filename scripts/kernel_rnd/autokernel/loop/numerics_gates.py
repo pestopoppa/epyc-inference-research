@@ -30,8 +30,6 @@ import struct
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
-import numpy as np
-
 from . import gates
 
 SCHEMA = "epyc.autokernel.numerics_gates.v1"
@@ -121,6 +119,7 @@ def _ieee_max(row: Sequence[float]) -> float:
 
 
 def _fp32_dot(a, b):
+    import numpy as np
     acc = np.float32(0)
     for x, y in zip(a, b):
         acc = np.float32(acc + np.float32(np.float32(x) * np.float32(y)))
@@ -170,6 +169,7 @@ def non_finite_inputs(n_cols: int = 64) -> list[list[float]]:
 
 
 def non_finite_reference(rows) -> list[str]:
+    import numpy as np
     return [value_class(float(np.max(np.asarray(r, dtype=np.float64))) if not any(math.isnan(v) for v in r)
                         else NAN) for r in rows]
 
@@ -195,6 +195,7 @@ def non_finite_gate(op: Op, rows=None) -> gates.Verdict:
 
 def accum_inputs(n_rows: int = 8, n: int = 4096, seed: int = 31):
     """Integer vectors in [-3,3]; running |partial sums| stay far below 2^24 (asserted)."""
+    import numpy as np
     rng = np.random.default_rng(seed)
     A = rng.integers(-3, 4, size=(n_rows, n)).astype(np.float64)
     B = rng.integers(1, 4, size=(n_rows, n)).astype(np.float64)

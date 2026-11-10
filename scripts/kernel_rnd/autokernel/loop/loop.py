@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from . import belief_context, bench, gates, history_fields, integrity, runtime_identity
+from . import belief_context, bench, gates, history_fields, integrity, reflexion, runtime_identity
 from . import same_state_stop
 
 HYPOTHESIS_ROUNDS = 3
@@ -296,8 +296,12 @@ class Abstain:
     mechanism_family: str | None = None
     target_surface: str | None = None
     target_symbol: str | None = None
+    #: Claim ids the abstention depends on, as the receipt accepted them. Optional, like
+    #: `Hypothesis.relies_on_claims`; never gates anything.
+    relies_on_claims: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "relies_on_claims", tuple(self.relies_on_claims or ()))
         if not isinstance(self.reason, str) or not self.reason.strip():
             raise ValueError("a planner abstention must carry a reason")
 
@@ -623,6 +627,9 @@ class Outcome:
     belief_refusal: dict | None = None
     # `planner_same_state_skip` only: the lane, state key and prior abstention id.
     planner_same_state: dict | None = None
+    # AK-PM-17: optional declaration (expected_outcome, lessons, avoid_patterns,
+    # try_patterns) for `reflexion.build`; None means nothing was declared.
+    reflexion_declared: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -689,6 +696,9 @@ class Outcome:
         if self.belief_mode is not None:
             row["belief_mode"] = self.belief_mode
             row["belief_refusal"] = dict(self.belief_refusal or {})
+        if self.comparison is not None or self.reflexion_declared is not None:
+            row["reflexion"] = reflexion.build(self.comparison, self.status,
+                                               self.reflexion_declared)
         if self.history_fields is not None:
             # Additive and nullable: a value that is unknown is null, never invented.
             row.update(self.history_fields)
@@ -1721,7 +1731,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 identity = {"mechanism_id": hypothesis.mechanism_id,
                            "mechanism_family": hypothesis.mechanism_family,
                            "target_surface": hypothesis.target_surface,
-                           "target_symbol": hypothesis.target_symbol}
+                           "target_symbol": hypothesis.target_symbol,
+                           **({"relies_on_claims": list(hypothesis.relies_on_claims)}
+                              if hypothesis.relies_on_claims else {})}
                 return Outcome("abstained", None, [hypothesis.reason],
                                abstained_identity=identity)
             last_proposed = hypothesis

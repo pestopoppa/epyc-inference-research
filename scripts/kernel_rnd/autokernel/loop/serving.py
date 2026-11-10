@@ -31,6 +31,9 @@ from dataclasses import dataclass, field, replace
 from functools import lru_cache
 import concurrent.futures as cf
 import base64
+import contextlib
+import functools
+import tempfile
 import hashlib
 import json
 import math
@@ -40,11 +43,13 @@ import random
 import re
 import statistics
 import subprocess
+import sys
 import time
 from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
+from . import clock_policy
 from . import (floor_selfcheck, headline_admissibility, hip_launch_proof, kernel_coverage, launch_affinity,
                loadgen_selfcheck, lifecycle_observation, procguard, ram_admit, residency, status)
 from . import native_server_response as server_response
@@ -156,6 +161,38 @@ def _legacy_order_plan(pairs, *, seed=None):
     return {"schema": LEGACY_ORDER_PLAN_SCHEMA, "instrument": LEGACY_INSTRUMENT,
             "pairs": pairs, "order_algorithm": MATCHED_ORDER, "seed": seed,
             "orders": orders}
+
+
+#: Largest `timings.prompt_n` a measured slot may report on a warm-KV (decode-only) round.
+#: Structural, not calibrated: C8-1-LCATTN r3 saw 4 per slot; anything near the tens of
+#: thousands means the "cached" prompt was re-evaluated inside the measured window.
+MEASURED_PROMPT_N_MAX = 16
+
+
+def warm_kv_bound(frozen_requests, longctx) -> int | None:
+    """`MEASURED_PROMPT_N_MAX` when these requests claim a warm-KV measured round.
+
+    The claim is the request itself: a prefill-heavy frozen body with `cache_prompt`
+    true relies on the discarded warmup round having filled the KV. Derived, not passed,
+    so the floor and the compare paths cannot disagree. A `longctx` surface has its own
+    restored-slot `prompt_n` bounds and never reaches the plain HTTP round."""
+    if longctx is not None or not prefill_heavy(frozen_requests):
+        return None
+    try:
+        warm = any(json.loads(body).get("cache_prompt") is True for _id, body in frozen_requests)
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return MEASURED_PROMPT_N_MAX if warm else None
+
+
+def require_decode_only(rows, bound: int | None) -> None:
+    """Refuse a warm-KV round whose measured slots did not all report a small `prompt_n`."""
+    if bound is None:
+        return
+    seen = [row.get("prompt_n") for row in rows if row.get("phase") == "measurement"]
+    if not seen or any(type(n) is not int or not 0 <= n <= bound for n in seen):
+        raise PrefillContaminated(
+            f"measured round is not decode-only: prompt_n per slot {seen}, bound {bound}")
 
 
 def prefill_heavy(frozen_requests) -> bool:
@@ -669,6 +706,46 @@ class ServerDied(MeasurementFailed):
     """The server exited during load or measurement -- a build/config fault, not noise."""
 
 
+class PrefillContaminated(ServerDied):
+    """A decode-only round re-evaluated its prompt, so its rate would time prefill."""
+
+
+def _stderr_tail(path, offset: int, limit: int = 4000) -> str:
+    """Last `limit` chars of what this launch appended to the stderr log; "" if none."""
+    if not path:
+        return ""
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(offset)
+            data = handle.read()
+    except OSError:
+        return ""
+    return data.decode("utf-8", "replace")[-limit:].strip()
+
+
+@contextlib.contextmanager
+def _calibration_stderr_log():
+    """Enable AK_SERVING_STDERR_LOG for a calibration unless the caller already set it.
+
+    The tail of a failing launch rides in the ServerDied record, so the scratch file is
+    removed afterwards; a caller-provided log is left alone and kept.
+    """
+    if os.environ.get("AK_SERVING_STDERR_LOG"):
+        yield
+        return
+    fd, scratch = tempfile.mkstemp(prefix="ak-serving-stderr-", suffix=".log")
+    os.close(fd)
+    os.environ["AK_SERVING_STDERR_LOG"] = scratch
+    try:
+        yield
+    finally:
+        os.environ.pop("AK_SERVING_STDERR_LOG", None)
+        try:
+            os.unlink(scratch)
+        except OSError:
+            pass
+
+
 class ServingNotResident(RuntimeError):
     """The launch was SAMPLED, over a window covering the request phase, and the device
     never held the model. The measurement did not happen on the GPU.
@@ -923,6 +1000,12 @@ def _residency_record(sampler, *, window_start: float, window_end: float,
               "window_s": round(window_end - window_start, 3),
               "request_start": request_start, "request_end": request_end}
     record["covers_request_phase"] = covers_request_phase(record)
+    trace = getattr(sampler, "clock_trace", None)
+    if trace is not None:
+        record["clock_trace"] = trace
+        record["clock_phase_markers"] = {"window_start": window_start,
+                                         "request_start": request_start,
+                                         "request_end": request_end, "window_end": window_end}
     record["status"] = (RESIDENCY_NOT_APPLICABLE if backend == "cpu" else
                         RESIDENCY_PROVEN
                         if sampled and record["covers_request_phase"] and proof.get("resident")
@@ -1145,6 +1228,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     hip_maps = None
     affinity_pin = None
     srv = None
+    stderr_log = None
+    stderr_offset = 0
     try:
         if cpu_profile_capture is None:
             sampler = residency.Sampler()
@@ -1158,10 +1243,23 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             # DS41-W8d: DS41-class launches need RAM admission BEFORE Popen. Pre-launch
             # check only: argv/env and every recipe identity are untouched.
             ram_admit.guard_launch(argv)
-            srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
-                                   stderr=(subprocess.DEVNULL if coverage_sink is None
-                                           else coverage_sink.handle),
-                                   env=launch_env)
+            # Diagnostic only: AK_SERVING_STDERR_LOG keeps the server's stderr for a row
+            # chasing a server-side failure. Unset, this launch is unchanged.
+            stderr_log = os.environ.get("AK_SERVING_STDERR_LOG")
+            stderr_file = open(stderr_log, "ab") if stderr_log and coverage_sink is None else None
+            if stderr_file is not None:
+                stderr_offset = os.path.getsize(stderr_log)
+            else:
+                stderr_log = None
+            try:
+                srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+                                       stderr=(stderr_file if stderr_file is not None
+                                               else subprocess.DEVNULL if coverage_sink is None
+                                               else coverage_sink.handle),
+                                       env=launch_env)
+            finally:
+                if stderr_file is not None:
+                    stderr_file.close()
             process_pid = srv.pid
             # G1 round-2 F6: the expiry watcher stops exactly this launch at expected_end.
             residency.OWN_LAUNCHES.register(srv)
@@ -1257,7 +1355,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     record = {"phase": phase, "slot_index": i, "prompt_id": prompt_id,
                               "request_sha256": hashlib.sha256(body).hexdigest(),
                               "predicted_n": None, "predicted_per_second": None,
-                              "terminal": False, "error": None}
+                              "prompt_n": None, "terminal": False, "error": None}
                     response_bytes = None
                     started_monotonic = time.monotonic()
                     if sched_log is not None:   # AKR-SG-1; off by default, no effect then
@@ -1274,6 +1372,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                             opened = urllib.request.urlopen(req, timeout=600)
                         except urllib.error.HTTPError as exc:
                             if response_capture is None and cpu_profile_capture is None:
+                                try:  # the server's stderr is discarded; its error body is the only reason left
+                                    detail = exc.read(240).decode("utf-8", "replace")
+                                except Exception:
+                                    detail = ""
+                                if detail:
+                                    exc.msg = f"{exc.msg}: {detail}"
                                 exc.close()
                                 raise
                             opened, http_error = exc, exc
@@ -1314,7 +1418,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                             rate = float(timings.get("predicted_per_second", 0.0))
                         terminal = response.get("stop") is True
                         record.update(predicted_n=tokens, predicted_per_second=rate,
-                                      terminal=terminal)
+                                      prompt_n=timings.get("prompt_n"), terminal=terminal)
                         result = (tokens, rate, terminal)
                         target_steps = _target_steps_slot(timings)
                     except Exception as exc:
@@ -1372,11 +1476,18 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     sched_log.require_valid(requested_n=recipe.np)
                 toks = [row[0] for row in rows]
                 if any(row[3]["error"] for row in warmup_rows + rows):
-                    raise ServerDied("one or more serving slots failed; see collected observation")
+                    slot_errors = []
+                    for row in warmup_rows + rows:
+                        text = str(row[3]["error"] or "")[:300]
+                        if text and text not in slot_errors:
+                            slot_errors.append(text)
+                    raise ServerDied("one or more serving slots failed; see collected observation"
+                                     + (": " + " | ".join(slot_errors[:3]) if slot_errors else ""))
                 if frozen_requests is None and min(toks) < recipe.n_predict // 2:
                     raise ServerDied(f"degenerate measurement: tokens={toks}")
                 if frozen_requests is not None and not all(row[2] for row in warmup_rows + rows):
                     raise ServerDied("frozen request lacks explicit terminal completion")
+                require_decode_only(request_rows, warm_kv_bound(frozen_requests, longctx))
                 value = sum(row[1] for row in rows)
             finally:
                 observe("phase", "teardown")
@@ -1478,6 +1589,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     if response_reference is not None:
                         exported["server_responses"] = response_reference
                     if isinstance(serving_exception, ServerDied):
+                        # Name the cause: the failing launch's own stderr, so a floor
+                        # that died with an HTTP 500 is not a cause-unknown failure.
+                        tail = _stderr_tail(stderr_log, stderr_offset)
+                        if tail:
+                            exported["server_stderr_tail"] = tail
+                            serving_exception.args = (
+                                f"{serving_exception} | server stderr tail: {tail[-1500:]}",)
                         serving_exception.record = exported
                     if observation is not None:
                         observation.append(exported)
@@ -2467,7 +2585,8 @@ OUTLIER_PERSISTENT_REFUSAL_LIMIT = 2
 #:     CPU affinity/identity contradiction the per-launch serving path already treats
 #:     as a hard invalidity (`residency.cpu_lifecycle_invalidity`).
 #:   * `gpu_clock_unstable` -- `clock_stable is False` (`sclk_min_mhz != sclk_max_mhz`):
-#:     the GPU's own clock governor moved during the launch window.
+#:     the GPU's own clock governor moved during the launch window. Under a ratified
+#:     `clock_policy` band, the same code means the request phase failed that band.
 #: PSI and non-target-activity census fields exist in the residency/cpu_lifecycle
 #: record but carry NO established threshold anywhere in this codebase --
 #: `residency.cpu_lifecycle_invalidity`'s own docstring is explicit that "no pressure,
@@ -2502,7 +2621,8 @@ def _mad_outlier_pairs(effects: Sequence[float], *, k: float = OUTLIER_MAD_K) ->
     return [i for i, e in enumerate(effects) if abs(0.6745 * (e - med) / mad) > k]
 
 
-def _independent_evidence(record: Mapping) -> str | None:
+def _independent_evidence(record: Mapping,
+                          policy: clock_policy.ClockPolicy | None = None) -> str | None:
     """One evidence code (`OUTLIER_EVIDENCE_SOURCES`) for a single launch's residency
     record if it carries independent proof of a compromised launch, else `None`.
     Never derived from the measured throughput value itself."""
@@ -2511,21 +2631,23 @@ def _independent_evidence(record: Mapping) -> str | None:
     validity = record.get("measurement_validity")
     if isinstance(validity, Mapping) and validity.get("status") == "invalid":
         return "cpu_lifecycle_invalid"
-    if record.get("clock_stable") is False:
+    if clock_policy.launch_is_unstable(record, clock_policy.load() if policy is None else policy):
         return "gpu_clock_unstable"
     return None
 
 
-def _evidence_pairs(anchor_windows: Sequence[Mapping],
-                    candidate_windows: Sequence[Mapping]) -> dict[int, str]:
+def _evidence_pairs(anchor_windows: Sequence[Mapping], candidate_windows: Sequence[Mapping],
+                    policy: clock_policy.ClockPolicy | None = None) -> dict[int, str]:
     """`{pair_index: evidence_code}` for every pair whose anchor OR candidate launch
     carries independent evidence of a compromised launch."""
+    # One policy per pass, so every launch is judged by the same rule.
+    policy = clock_policy.load() if policy is None else policy
     flagged: dict[int, str] = {}
     for windows in (anchor_windows, candidate_windows):
         for i, record in enumerate(windows):
             if i in flagged:
                 continue
-            code = _independent_evidence(record)
+            code = _independent_evidence(record, policy)
             if code is not None:
                 flagged[i] = code
     return flagged
@@ -2533,7 +2655,8 @@ def _evidence_pairs(anchor_windows: Sequence[Mapping],
 
 def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: dict,
                          plan: dict, values: dict, windows: dict,
-                         should_stop=None, steps: dict | None = None) -> dict:
+                         should_stop=None, steps: dict | None = None,
+                         on_refuse=None) -> dict:
     """Exclude/bounded-remeasure ONLY the pairs with INDEPENDENT evidence of a
     compromised launch, and (if still contaminated) REFUSE the calibration. A pair
     flagged ONLY by its own |effect| (no evidence) is left completely untouched and
@@ -2551,10 +2674,11 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     """
     anchor, candidate = values["anchor"], values["candidate"]
     n = len(anchor)
+    policy = clock_policy.load()
 
     def evaluate():
         effects = _pair_effects_pct(anchor, candidate)
-        evidence = _evidence_pairs(windows["anchor"], windows["candidate"])
+        evidence = _evidence_pairs(windows["anchor"], windows["candidate"], policy)
         mad = set(_mad_outlier_pairs(effects))
         return effects, evidence, mad
 
@@ -2564,6 +2688,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
                 "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i],
                 "effect_pct": round(effects[i], 3)} for i in initial_evidence]
     if len(initial_evidence) > MAX_OUTLIER_REPLACEMENT_PAIRS:
+        if on_refuse is not None:
+            on_refuse("outlier_guard_budget_exceeded", initial_evidence)
         raise HostDegradedDuringCalibration(
             f"host degraded during floor calibration: {len(initial_evidence)} of {n} A/A "
             f"pairs carry independent evidence of a compromised launch "
@@ -2584,6 +2710,11 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
                                               evidence=fresh_windows[arm],
                                               **({"target_sample_steps": fresh_steps[arm]}
                                                  if steps is not None else {}), **options)
+        # The launch being replaced is the evidence a later refusal must still show.
+        windows.setdefault("superseded", []).append(
+            {"pair_index": i, "reason": evidence[i],
+             "anchor": windows["anchor"][i], "candidate": windows["candidate"][i],
+             "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i]})
         anchor[i], candidate[i] = fresh_values["anchor"], fresh_values["candidate"]
         windows["anchor"][i] = fresh_windows["anchor"][0] if fresh_windows["anchor"] else {}
         windows["candidate"][i] = fresh_windows["candidate"][0] if fresh_windows["candidate"] else {}
@@ -2598,6 +2729,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     final_effects, final_evidence, final_mad = evaluate()
     still_flagged = sorted(final_evidence)
     if replaced and len(still_flagged) > OUTLIER_PERSISTENT_REFUSAL_LIMIT:
+        if on_refuse is not None:
+            on_refuse("outlier_guard_persistent_evidence", still_flagged)
         raise HostDegradedDuringCalibration(
             f"host degraded during floor calibration: {len(still_flagged)} of {n} A/A "
             f"pairs still carry independent evidence of a compromised launch after "
@@ -2611,7 +2744,8 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
     unexplained_outliers = [{"pair_index": i, "effect_pct": round(final_effects[i], 3),
                              "anchor_tok_s": anchor[i], "candidate_tok_s": candidate[i]}
                             for i in unexplained]
-    return {"schema": OUTLIER_GUARD_SCHEMA_V2, "applied": True,
+    band = {"clock_policy": policy.describe()} if policy.is_band else {}
+    return {**band, "schema": OUTLIER_GUARD_SCHEMA_V2, "applied": True,
             "semantics": OUTLIER_GUARD_EVIDENCE_BASED,
             "mad_k": OUTLIER_MAD_K, "max_replacement_pairs": MAX_OUTLIER_REPLACEMENT_PAIRS,
             "persistent_refusal_limit": OUTLIER_PERSISTENT_REFUSAL_LIMIT,
@@ -2624,10 +2758,65 @@ def _apply_outlier_guard(recipe: Recipe, build_dir: Path, port: int, options: di
             "suspect": bool(unexplained_outliers)}
 
 
+def _persist_refused_partial(partial_store, recipe: Recipe, *, frozen_requests, instrument,
+                             pairs, samples: int, plan: dict, values: dict, windows: dict,
+                             steps: dict | None, started_at: float, refusal: str,
+                             flagged: Mapping | Sequence = (), selfcheck=None) -> Path | None:
+    """Keep the evidence of a REFUSED matched calibration. Never a floor: the file is named
+    `serving-floor.<key>...refused-partial.json` (not `.json`-terminated as a floor), carries
+    its own schema, and `floor_path`/`load_floor` can never resolve to it. Best-effort: a
+    write failure must not mask the refusal being raised."""
+    if partial_store is None:
+        return None
+    try:
+        base = floor_path(partial_store, recipe, frozen_requests=frozen_requests,
+                          instrument=instrument, pairs=pairs)
+        # Stamped: a retry that is refused again must not erase the earlier evidence.
+        path = base.with_name(f"{base.name[:-len('.json')]}.{time.time_ns()}.refused-partial.json")
+        n = len(values["anchor"])
+        record = {"schema": "epyc.autokernel.serving_floor_refused_partial.v1",
+                  "is_floor": False, "refusal": refusal,
+                  "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
+                  "samples_requested": samples,
+                  "wall_clock": {"calibration_started_at": started_at,
+                                 "refused_at": time.time()},
+                  "reference_pair_indices": list(range(n)),
+                  "flagged_pair_indices": sorted(flagged),
+                  "calibration_plan": plan,
+                  "anchor_samples": list(values["anchor"]),
+                  "candidate_samples": list(values["candidate"]),
+                  "anchor_residency": list(windows["anchor"]),
+                  "candidate_residency": list(windows["candidate"]),
+                  "superseded_residency": list(windows.get("superseded", ())),
+                  "residency": _residency_fold(list(windows["anchor"]) + list(windows["candidate"])),
+                  "target_sample_steps": steps}
+        if selfcheck is not None:
+            record["selfcheck_verdict"] = str(getattr(selfcheck, "verdict", ""))
+            record["selfcheck_reasons"] = list(getattr(selfcheck, "reasons", ()))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(record, indent=1, sort_keys=True, default=str))
+        os.replace(tmp, path)
+        return path
+    except Exception as exc:
+        print(f"refused-partial evidence NOT written: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return None
+
+
+def _with_calibration_stderr_log(fn):
+    """Every calibration launch keeps its stderr tail for a failure record."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _calibration_stderr_log():
+            return fn(*args, **kwargs)
+    return wrapper
+
+
+@_with_calibration_stderr_log
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
                     resolved_recipe=None, frozen_requests=None,
                     instrument=LEGACY_INSTRUMENT, pairs=None, longctx=None,
-                    should_stop=None) -> dict:
+                    should_stop=None, partial_store=None) -> dict:
     """A/A the serving metric `samples` times on ONE build: the run-to-run spread IS the
     noise floor a keep must clear. floor = p95 of |pairwise effect| against the median,
     reported at a few sample counts so a keep at N pairs is judged against the N-pair bar."""
@@ -2647,6 +2836,14 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
         values = {"anchor": [], "candidate": []}
         windows = {"anchor": [], "candidate": []}
         steps = {"anchor": [], "candidate": []}
+        started_at = time.time()
+
+        def on_refuse(reason, flagged, selfcheck=None):
+            _persist_refused_partial(
+                partial_store, recipe, frozen_requests=frozen_requests,
+                instrument=instrument, pairs=pairs, samples=samples, plan=plan,
+                values=values, windows=windows, steps=steps, started_at=started_at,
+                refusal=reason, flagged=flagged, selfcheck=selfcheck)
         for order in plan["orders"]:
             for arm in order:
                 if should_stop():
@@ -2656,12 +2853,15 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                                    **options))
         outlier_guard = _apply_outlier_guard(recipe, build_dir, port, options,
                                              plan, values, windows,
-                                             should_stop=should_stop, steps=steps)
+                                             should_stop=should_stop, steps=steps,
+                                             on_refuse=on_refuse)
         # AKX-AUTO-4: a contiguous degraded block (a level shift both arms share) is
         # invisible to the per-pair evidence guard above; refuse it like any other
         # host-degraded calibration rather than file the inflated floor.
         selfcheck = floor_selfcheck.assess_floor(values["anchor"], values["candidate"])
         if selfcheck.verdict == floor_selfcheck.REJECT_DEGRADED_BLOCK:
+            on_refuse("degraded_block", _evidence_pairs(windows["anchor"], windows["candidate"]),
+                      selfcheck)
             raise HostDegradedDuringCalibration(
                 f"host degraded during floor calibration: {selfcheck.reasons[0]}. "
                 f"Re-measure once the host is quiet; refusing rather than filing a "

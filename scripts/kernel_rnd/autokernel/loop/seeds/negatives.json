@@ -1,99 +1,179 @@
 {
-  "_comment": [
-    "Measured negatives from before this loop existed, seeded so the critic can refuse a",
-    "re-derivation with a receipt instead of the planner spending a call rediscovering them.",
-    "",
-    "These are recorded under a SYNTHETIC HISTORICAL EPOCH on purpose. recall() marks any",
-    "cross-epoch record stale and render_context prints 'STALE EPOCH ... the NUMBER is not",
-    "comparable' -- which is exactly right: these were measured on a different anchor and a",
-    "different build recipe, so the MECHANISM knowledge transfers and the magnitude does not.",
-    "A seeded negative is a reason to say what is different, never a reason not to look."
-  ],
-  "epoch_anchor_commit": "v7-candidate-20260711",
-  "epoch_build_recipe": {
-    "name": "historical-pre-loop",
-    "era": "v7-candidate"
+ "_comment": [
+  "Measured negatives from before this loop existed, seeded so the critic can refuse a",
+  "re-derivation with a receipt instead of the planner spending a call rediscovering them.",
+  "",
+  "These are recorded under a SYNTHETIC HISTORICAL EPOCH on purpose. recall() marks any",
+  "cross-epoch record stale and render_context prints 'STALE EPOCH ... the NUMBER is not",
+  "comparable' -- which is exactly right: these were measured on a different anchor and a",
+  "different build recipe, so the MECHANISM knowledge transfers and the magnitude does not.",
+  "A seeded negative is a reason to say what is different, never a reason not to look."
+ ],
+ "epoch_anchor_commit": "v7-candidate-20260711",
+ "epoch_build_recipe": {
+  "name": "historical-pre-loop",
+  "era": "v7-candidate"
+ },
+ "records": [
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-hist-q8-prefetch",
+   "statement": "Async weight prefetch / LDS double-buffering in the dense Q8_0 GEMV hides HBM DMA latency and raises achieved bandwidth (GGML_CUDA_Q8_PREFETCH, compiled-in, runtime 0=off / 1=cached-DMA / 2=SLC-streaming).",
+   "falsifier": "Decode throughput fails to rise on dense Q8 models with prefetch enabled.",
+   "target_surface": "ggml/src/ggml-cuda/mmvq.cu",
+   "target_symbol": "mul_mat_vec_q",
+   "effect_fraction": -0.12,
+   "reason": "REJECTED 2026-07-11 on MI210, llama-bench base decode, r5, graphs ON, all 4 Q8 models. Net-negative and it hurts the DENSE models most despite targeting dense GEMV: Qwen3.6-27B dense -12%/-18%, gemma4-31B dense -6%/-7.5%. MoE marginal and sign-inconsistent (gemma4-A4B -3.5%/-0.3%, Qwen3.6-35B-A3B +4.2%/+3.1%), i.e. near noise. The prefetch/LDS-double-buffer overhead outweighs DMA-latency hiding on gfx90a at these shapes. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
   },
-  "records": [
-    {
-      "status": "measured_null",
-      "mechanism_id": "akm-hist-q8-prefetch",
-      "statement": "Async weight prefetch / LDS double-buffering in the dense Q8_0 GEMV hides HBM DMA latency and raises achieved bandwidth (GGML_CUDA_Q8_PREFETCH, compiled-in, runtime 0=off / 1=cached-DMA / 2=SLC-streaming).",
-      "falsifier": "Decode throughput fails to rise on dense Q8 models with prefetch enabled.",
-      "target_surface": "ggml/src/ggml-cuda/mmvq.cu",
-      "target_symbol": "mul_mat_vec_q",
-      "effect_fraction": -0.12,
-      "reason": "REJECTED 2026-07-11 on MI210, llama-bench base decode, r5, graphs ON, all 4 Q8 models. Net-negative and it hurts the DENSE models most despite targeting dense GEMV: Qwen3.6-27B dense -12%/-18%, gemma4-31B dense -6%/-7.5%. MoE marginal and sign-inconsistent (gemma4-A4B -3.5%/-0.3%, Qwen3.6-35B-A3B +4.2%/+3.1%), i.e. near noise. The prefetch/LDS-double-buffer overhead outweighs DMA-latency hiding on gfx90a at these shapes. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
-    },
-    {
-      "status": "measured_null",
-      "mechanism_id": "akm-hist-graph-opt",
-      "statement": "A fan-out / stream-reorder pass over the captured CUDA graph raises decode throughput (GGML_CUDA_GRAPH_OPT=1).",
-      "falsifier": "Decode throughput fails to rise with the reorder pass enabled.",
-      "target_surface": "ggml/src/ggml-cuda/ggml-cuda.cu",
-      "target_symbol": "ggml_backend_cuda_graph_compute",
-      "effect_fraction": -0.16,
-      "reason": "REJECTED on MI210, measured net-negative: gemma4-A4B Q8 base decode -16% (68.8 vs 82.5 t/s), Q8 spec-dec ~-11% (~96 vs 108); Q4 spec-dec noisy/neutral. Left OFF (the default). Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
-    },
-    {
-      "status": "measured_null",
-      "mechanism_id": "akm-hist-graph-shape-key",
-      "statement": "The CUDA graph cache is keyed by nodes[0] POINTER only, so the draft forward and each verify forward collide on one slot and pay a per-switch warmup reset; mixing an FNV-1a shape signature (per-node op + ne[], excluding data pointers) into the key gives each batch shape its own warm slot.",
-      "falsifier": "With the shape key enabled, decode throughput does not rise on the Q8 focus quant.",
-      "target_surface": "ggml/src/ggml-cuda/ggml-cuda.cu",
-      "target_symbol": "ggml_cuda_graph_get_key",
-      "effect_fraction": -0.02,
-      "reason": "IMPLEMENTED env-gated and measured NEUTRAL, not landed. Clean re-eval (quiet card, strictly sequential, fresh server per run, single request; 3/3 reps byte-identical): Q8 spec-dec 107.2 vs 109.5 t/s (-2%) with output BYTE-IDENTICAL to default, so the change is numerically transparent but gives no speedup. Q4 spec-dec +6% but Q4 stayed noisy (2 output variants), not conclusive. Note the collision itself is UNCONFIRMED: the [SHAPE_KEY] keylog never fired because backend GGML_LOG_INFO is filtered during decode. Patch preserved at /mnt/raid0/llm/llama.cpp-experimental/lever-a-shape-key.patch. Revisit only if a profile shows verify re-capture is a MEASURED bottleneck, and fix the keylog to fprintf(stderr) first. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
-    },
-    {
-      "status": "measured_null",
-      "mechanism_id": "akm-hist-kv-quant-long-ctx",
-      "statement": "At batch-1 long context the KV read adds materially to bytes/token, so q8_0 KV-quant (-ctk/-ctv q8_0, -fa 1) raises single-stream decode throughput.",
-      "falsifier": "q8-KV decode at 64k single-stream does not beat f16-KV outside the noise band.",
-      "target_surface": "runtime flag (-ctk/-ctv), not a kernel patch",
-      "target_symbol": "kv cache dequant path",
-      "effect_fraction": -0.167,
-      "reason": "FALSIFIED 2026-08-14 on frozen v9 (0db32c06e / 10125), observation-grade, 64k single-stream: 35B-A3B GDN hybrid 75.8 -> 63.1 t/s (-16.7%), dense 27B 21.7 -> 20.2 t/s (-6.9%). The dequant cast cost exceeds the KV bandwidth saving even on the dense 27B (all-full-global KV, where the KV read most rivals weight bytes). Matches the CPU precedent that the dequant cast COSTS throughput. Note mi210-q8-dequant-gemv-roofline.md still lists this as an ALIVE Tier-3 lever (L8); it is not. Source: handoffs/active/fable5-window2-findings-05c-mi210-lever-category-matrix.md gap-list row L14."
-    },
-    {
-      "status": "measured_null",
-      "mechanism_id": "akm-hist-mmq-row-grouping",
-      "statement": "Grouping MMQ tile rows (workgroup-mapping / swizzle, the G17 +9.823% proxy result) raises L2 hit rate and MMQ throughput on the real decode surface.",
-      "falsifier": "On the real batched decode tile grid, row-grouping does not raise L2 hit rate at flat read volume.",
-      "target_surface": "ggml/src/ggml-cuda/mmq.cu",
-      "target_symbol": "tile scheduling / workgroup mapping",
-      "effect_fraction": -0.07455,
-      "reason": "MEASURED NEGATIVE and mechanistically explained. The +9.823% proxy used a SYMMETRIC 64x64 tile grid where row-grouping has real headroom; the real MMQ surface is a batched pp=32 / tg=8 / pl=128 / n_kv=5120 decode whose tile grid is strongly M-heavy. With few N tiles the DEFAULT linear order already captures full activation reuse in a short window, so grouping M by 8-32 can only ENLARGE the concurrently-resident weight footprint -- predicting hit rate DOWN at flat read volume, which is exactly the measured -7.455 pts at +0.201% reads. Reinforcing: the CDNA MMQ path is PERSISTENT STREAM-K and already owns tile assignment (the r1 pilot was a literal no-op because the remap sat outside that path), and Q4_K decode weights stream with WGM0 hit rate already at 67.304%. Source: handoffs/active/autokernel-research-loop.md section 23.1 finding F3."
-    },
-    {
-      "status": "measured_null",
-      "mechanism_id": "akm-c6-rocm-10-1-llamacpp-build",
-      "statement": "Building the llama.cpp HIP candidate against ROCm 10.1 (instead of 6.2) improves decode or prefill on MI210.",
-      "falsifier": "Spec-off decode B/C < 1.05 on 2 valid ABBA pairs, or pp512@d16384 B/C < 1.00.",
-      "target_surface": "ggml/src/ggml-cuda (flash_attn_ext_f16, rocBLAS/Tensile GEMM selection)",
-      "target_symbol": "flash_attn_ext_f16",
-      "effect_fraction": -0.0254,
-      "reason": "MEASURED NO-GO on C6 729599d69, MI210. Spec-off decode B/C mean 0.9746 over 2 ABBA pairs (0.986, 0.963); pp512@d16384 B/C 0.789 (P), 0.769 (K2), 0.753 (K3), D256-cap and CDNA-tune knobs do not recover it. Top regressing family is a Tensile Cijk_Alik_Bljk_HSS MT128x96x64 GEMM present only on the 10.1 side. The earlier Stage-1 decode +8.7% (r2 median 1.087) was DRAFT ACCEPTANCE, not kernel speed. Ratio higher=better. A static audit looked good (spills 145->96, FA-MMA 53->2) and did not predict the runtime loss. Caveats: F0 cells invalid (-fa 0 with q8_0 KV cannot create a context), decision unaffected; only 2 valid pairs. Source: /mnt/raid0/llm/tmp/q38p3a-verdict.json, q38p3-r2-verdict.json, docs/reference/mi210-serving-program-findings-20261105.md. Evidence /mnt/raid0/llm/tmp/q38p3a-verdict.json (+ q38p3-r2-verdict.json). Measured on C6 729599d69 (2026-11-05), NOT this file's historical epoch: mechanism transfers, magnitude is cross-epoch."
-    },
-    {
-      "status": "measured_null",
-      "mechanism_id": "akm-lsa-h12-pca-indexer-gpu",
-      "statement": "A GPU flat-PCA per-key top-k indexer feeding the H12 fused sparse FA beats dense FA on the 27B global layers at kv=32768.",
-      "falsifier": "geomean dense_us/lsa_us at kv=32768 < 1.10 (flag ratio 1.1, 5 reps).",
-      "target_surface": "ggml/src/ggml-cuda (QSA indexer + fused sparse FA, LSA-H12-INDEXER)",
-      "target_symbol": "lsa_indexer_pca_topk",
-      "effect_fraction": -0.632,
-      "reason": "MEASURED FUTILE on build 289207e31 (store gpu-20261106-289207e31-lsah12) vs C7 c420b9d1a, MI210. geomean dense/lsa at kv=32768 = 0.368 (lsa SLOWER). Cells dense_us/lsa_us -> ratio: kv32768 nb1 342.7/722.9=0.474, nb8 400.4/1269.2=0.315, nb16 519.7/1564.6=0.332, nb512 5482/14820=0.370; kv16384 nb512 0.202; kv65536 nb1 0.574. Ratio higher=better. Packet caveat: selection is a flat per-key PCA top-k (+ window 512, sinks 4), NOT the author Ward bucket selector (only the map and scorer math ported), so this refutes the flat-PCA-indexer variant, not Ward/bucketed LSA. Source: /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json (perf.json, correct.json). Evidence /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json. Measured on C7 (2026-11-06), not this file's historical epoch."
-    },
-    {
-      "status": "measured_null",
-      "mechanism_id": "akm-c8-h16-mfma-skinny-q8-m36",
-      "statement": "An MFMA-based skinny Q8_0 GEMM (H16 family, kill-switched knob) speeds up the 27B verify-step matmuls at M=36 (np4 x 9) over C7r MMQ.",
-      "falsifier": "Op-level verify-step matmul ratio base/new < 1.0 outside the keep-tail (futility stop before e2e).",
-      "target_surface": "ggml/src/ggml-cuda (mmq / skinny Q8_0 matmul dispatch, gfx90a)",
-      "target_symbol": "H16 skinny MFMA Q8_0 GEMM (C8-2-H16-M36)",
-      "effect_fraction": -0.1458,
-      "reason": "MEASURED NO_KEEP_OP_FUTILE on candidate a60768af3 (store gpu-20261107-a60768af3-c8h16) vs C7r 62cb6a6af, MI210 gfx90a, row c8-h16-gate-20261107. Correctness passed on 5 suites; kill-switch parity 1.0018. Op-level M=36 verify-step matmul over the real 27B shape census (7 shapes, 407 matmuls): base/new = 0.8542 (effect -14.58%, keep_tail P 2.23% / F 3.15%, effect_inside_tail False, enforced), so a resolved loss; e2e never ran. Per-M geomean base/new: M12 0.802, M16 0.776, M18 0.839, M24 0.848, M27 0.810, M32 0.742, M36 0.890 (M9 reads 0.558 under the key geomean_base_over_h16, a differently named key). The slow cells are the large GEMMs (5120x17408@32 0.708, 5120x6144@32 0.612); only 6144x5120@36 won (1.109). Ratio higher=better (base/new). Do not re-propose an MFMA f16 skinny Q8_0 kernel for M 12..36 without a mechanism that explains the M=12..32 loss. Source: /mnt/raid0/llm/tmp/c8-h16-gate-20261107/out/RESULT.json keys /b/op_ratio_M36, /b/keep_tail, /b/per_M, /b/cases, /b/killsw_over_base_geomean, /verdict; root commit d3f97494f handoffs/active/kernel-champion-and-promotion.md (C8-2-H16-M36). Measured on C7r (2026-11-07), not this file's historical epoch."
-    }
-  ]
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-hist-graph-opt",
+   "statement": "A fan-out / stream-reorder pass over the captured CUDA graph raises decode throughput (GGML_CUDA_GRAPH_OPT=1).",
+   "falsifier": "Decode throughput fails to rise with the reorder pass enabled.",
+   "target_surface": "ggml/src/ggml-cuda/ggml-cuda.cu",
+   "target_symbol": "ggml_backend_cuda_graph_compute",
+   "effect_fraction": -0.16,
+   "reason": "REJECTED on MI210, measured net-negative: gemma4-A4B Q8 base decode -16% (68.8 vs 82.5 t/s), Q8 spec-dec ~-11% (~96 vs 108); Q4 spec-dec noisy/neutral. Left OFF (the default). Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-hist-graph-shape-key",
+   "statement": "The CUDA graph cache is keyed by nodes[0] POINTER only, so the draft forward and each verify forward collide on one slot and pay a per-switch warmup reset; mixing an FNV-1a shape signature (per-node op + ne[], excluding data pointers) into the key gives each batch shape its own warm slot.",
+   "falsifier": "With the shape key enabled, decode throughput does not rise on the Q8 focus quant.",
+   "target_surface": "ggml/src/ggml-cuda/ggml-cuda.cu",
+   "target_symbol": "ggml_cuda_graph_get_key",
+   "effect_fraction": -0.02,
+   "reason": "IMPLEMENTED env-gated and measured NEUTRAL, not landed. Clean re-eval (quiet card, strictly sequential, fresh server per run, single request; 3/3 reps byte-identical): Q8 spec-dec 107.2 vs 109.5 t/s (-2%) with output BYTE-IDENTICAL to default, so the change is numerically transparent but gives no speedup. Q4 spec-dec +6% but Q4 stayed noisy (2 output variants), not conclusive. Note the collision itself is UNCONFIRMED: the [SHAPE_KEY] keylog never fired because backend GGML_LOG_INFO is filtered during decode. Patch preserved at /mnt/raid0/llm/llama.cpp-experimental/lever-a-shape-key.patch. Revisit only if a profile shows verify re-capture is a MEASURED bottleneck, and fix the keylog to fprintf(stderr) first. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-hist-kv-quant-long-ctx",
+   "statement": "At batch-1 long context the KV read adds materially to bytes/token, so q8_0 KV-quant (-ctk/-ctv q8_0, -fa 1) raises single-stream decode throughput.",
+   "falsifier": "q8-KV decode at 64k single-stream does not beat f16-KV outside the noise band.",
+   "target_surface": "runtime flag (-ctk/-ctv), not a kernel patch",
+   "target_symbol": "kv cache dequant path",
+   "effect_fraction": -0.167,
+   "reason": "FALSIFIED 2026-08-14 on frozen v9 (0db32c06e / 10125), observation-grade, 64k single-stream: 35B-A3B GDN hybrid 75.8 -> 63.1 t/s (-16.7%), dense 27B 21.7 -> 20.2 t/s (-6.9%). The dequant cast cost exceeds the KV bandwidth saving even on the dense 27B (all-full-global KV, where the KV read most rivals weight bytes). Matches the CPU precedent that the dequant cast COSTS throughput. Note mi210-q8-dequant-gemv-roofline.md still lists this as an ALIVE Tier-3 lever (L8); it is not. Source: handoffs/active/fable5-window2-findings-05c-mi210-lever-category-matrix.md gap-list row L14."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-hist-mmq-row-grouping",
+   "statement": "Grouping MMQ tile rows (workgroup-mapping / swizzle, the G17 +9.823% proxy result) raises L2 hit rate and MMQ throughput on the real decode surface.",
+   "falsifier": "On the real batched decode tile grid, row-grouping does not raise L2 hit rate at flat read volume.",
+   "target_surface": "ggml/src/ggml-cuda/mmq.cu",
+   "target_symbol": "tile scheduling / workgroup mapping",
+   "effect_fraction": -0.07455,
+   "reason": "MEASURED NEGATIVE and mechanistically explained. The +9.823% proxy used a SYMMETRIC 64x64 tile grid where row-grouping has real headroom; the real MMQ surface is a batched pp=32 / tg=8 / pl=128 / n_kv=5120 decode whose tile grid is strongly M-heavy. With few N tiles the DEFAULT linear order already captures full activation reuse in a short window, so grouping M by 8-32 can only ENLARGE the concurrently-resident weight footprint -- predicting hit rate DOWN at flat read volume, which is exactly the measured -7.455 pts at +0.201% reads. Reinforcing: the CDNA MMQ path is PERSISTENT STREAM-K and already owns tile assignment (the r1 pilot was a literal no-op because the remap sat outside that path), and Q4_K decode weights stream with WGM0 hit rate already at 67.304%. Source: handoffs/active/autokernel-research-loop.md section 23.1 finding F3."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c6-rocm-10-1-llamacpp-build",
+   "statement": "Building the llama.cpp HIP candidate against ROCm 10.1 (instead of 6.2) improves decode or prefill on MI210.",
+   "falsifier": "Spec-off decode B/C < 1.05 on 2 valid ABBA pairs, or pp512@d16384 B/C < 1.00.",
+   "target_surface": "ggml/src/ggml-cuda (flash_attn_ext_f16, rocBLAS/Tensile GEMM selection)",
+   "target_symbol": "flash_attn_ext_f16",
+   "effect_fraction": -0.0254,
+   "reason": "MEASURED NO-GO on C6 729599d69, MI210. Spec-off decode B/C mean 0.9746 over 2 ABBA pairs (0.986, 0.963); pp512@d16384 B/C 0.789 (P), 0.769 (K2), 0.753 (K3), D256-cap and CDNA-tune knobs do not recover it. Top regressing family is a Tensile Cijk_Alik_Bljk_HSS MT128x96x64 GEMM present only on the 10.1 side. The earlier Stage-1 decode +8.7% (r2 median 1.087) was DRAFT ACCEPTANCE, not kernel speed. Ratio higher=better. A static audit looked good (spills 145->96, FA-MMA 53->2) and did not predict the runtime loss. Caveats: F0 cells invalid (-fa 0 with q8_0 KV cannot create a context), decision unaffected; only 2 valid pairs. Source: /mnt/raid0/llm/tmp/q38p3a-verdict.json, q38p3-r2-verdict.json, docs/reference/mi210-serving-program-findings-20261105.md. Evidence /mnt/raid0/llm/tmp/q38p3a-verdict.json (+ q38p3-r2-verdict.json). Measured on C6 729599d69 (2026-11-05), NOT this file's historical epoch: mechanism transfers, magnitude is cross-epoch."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-lsa-h12-pca-indexer-gpu",
+   "statement": "A GPU flat-PCA per-key top-k indexer feeding the H12 fused sparse FA beats dense FA on the 27B global layers at kv=32768.",
+   "falsifier": "geomean dense_us/lsa_us at kv=32768 < 1.10 (flag ratio 1.1, 5 reps).",
+   "target_surface": "ggml/src/ggml-cuda (QSA indexer + fused sparse FA, LSA-H12-INDEXER)",
+   "target_symbol": "lsa_indexer_pca_topk",
+   "effect_fraction": -0.632,
+   "reason": "MEASURED FUTILE on build 289207e31 (store gpu-20261106-289207e31-lsah12) vs C7 c420b9d1a, MI210. geomean dense/lsa at kv=32768 = 0.368 (lsa SLOWER). Cells dense_us/lsa_us -> ratio: kv32768 nb1 342.7/722.9=0.474, nb8 400.4/1269.2=0.315, nb16 519.7/1564.6=0.332, nb512 5482/14820=0.370; kv16384 nb512 0.202; kv65536 nb1 0.574. Ratio higher=better. Packet caveat: selection is a flat per-key PCA top-k (+ window 512, sinks 4), NOT the author Ward bucket selector (only the map and scorer math ported), so this refutes the flat-PCA-indexer variant, not Ward/bucketed LSA. Source: /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json (perf.json, correct.json). Evidence /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json. Measured on C7 (2026-11-06), not this file's historical epoch."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c8-h16-mfma-skinny-q8-m36",
+   "statement": "An MFMA-based skinny Q8_0 GEMM (H16 family, kill-switched knob) speeds up the 27B verify-step matmuls at M=36 (np4 x 9) over C7r MMQ.",
+   "falsifier": "Op-level verify-step matmul ratio base/new < 1.0 outside the keep-tail (futility stop before e2e).",
+   "target_surface": "ggml/src/ggml-cuda (mmq / skinny Q8_0 matmul dispatch, gfx90a)",
+   "target_symbol": "H16 skinny MFMA Q8_0 GEMM (C8-2-H16-M36)",
+   "effect_fraction": -0.1458,
+   "reason": "MEASURED NO_KEEP_OP_FUTILE on candidate a60768af3 (store gpu-20261107-a60768af3-c8h16) vs C7r 62cb6a6af, MI210 gfx90a, row c8-h16-gate-20261107. Correctness passed on 5 suites; kill-switch parity 1.0018. Op-level M=36 verify-step matmul over the real 27B shape census (7 shapes, 407 matmuls): base/new = 0.8542 (effect -14.58%, keep_tail P 2.23% / F 3.15%, effect_inside_tail False, enforced), so a resolved loss; e2e never ran. Per-M geomean base/new: M12 0.802, M16 0.776, M18 0.839, M24 0.848, M27 0.810, M32 0.742, M36 0.890 (M9 reads 0.558 under the key geomean_base_over_h16, a differently named key). The slow cells are the large GEMMs (5120x17408@32 0.708, 5120x6144@32 0.612); only 6144x5120@36 won (1.109). Ratio higher=better (base/new). Do not re-propose an MFMA f16 skinny Q8_0 kernel for M 12..36 without a mechanism that explains the M=12..32 loss. Source: /mnt/raid0/llm/tmp/c8-h16-gate-20261107/out/RESULT.json keys /b/op_ratio_M36, /b/keep_tail, /b/per_M, /b/cases, /b/killsw_over_base_geomean, /verdict; root commit d3f97494f handoffs/active/kernel-champion-and-promotion.md (C8-2-H16-M36). Measured on C7r (2026-11-07), not this file's historical epoch."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c10-q8wv-next-step-touch-prefetch",
+   "statement": "Touching the next q8wv step (one dword per lane into a discard register) overlaps the next load with the current step's math and speeds up the 27B v9 verify matmul.",
+   "falsifier": "First three paired AB/BA ratios on/off < 1.01 at v9 d8192.",
+   "target_surface": "ggml/src/ggml-cuda/mmq-q8-wvsk.cu (q8wv_mul_mat)",
+   "target_symbol": "GGML_HIP_Q8_WVSK_PREFETCH (commit c1160517e, unpushed)",
+   "effect_fraction": -0.047,
+   "reason": "MEASURED NO_KEEP_FUTILITY on c1160517e (store gpu-20261109-c1160517e-c10q8wvpf), base C9, MI210, 27B Q8_0, q8_0 KV, llama-bench -p 9 -n 0 -d 8192 -r 8. On/off pairs 0.956, 0.920, 0.953 (higher=better; median -4.7%); witness present on every on arm; secondaries and np4 not run. Mechanism of the loss NOT diagnosed (candidates: L2 eviction, extra touch traffic). It does not test the no-overlap diagnosis directly because the touch adds traffic. Evidence /mnt/raid0/llm/tmp/c10-q8wvpf-ab-20261109/out/RESULT.json. Epoch C9 d210f85c2 family, not this file's historical epoch."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c10-q8wv-second-load-set-overlap",
+   "statement": "A full second live load set in q8wv_mul_mat overlaps step loads with math at no register cost.",
+   "falsifier": "Any verify shape exceeding the 128 VGPR budget or using scratch.",
+   "target_surface": "ggml/src/ggml-cuda/mmq-q8-wvsk.cu (q8wv_mul_mat)",
+   "target_symbol": "q8wv two-load-set variant (prefetch-attempt.patch, no store)",
+   "effect_fraction": null,
+   "reason": "ISA-GATE STOP, no runtime measurement, so no effect size exists. Measured from compiled ISA: a second live set reaches 128 VGPRs with scratch on every shape (M=8 87->128, 180 B scratch; M=10 95->128, 236 B); single-set control 89/97 VGPRs, 0 scratch; five variants also spilled. Inferred, not measured: the speed estimate 1.05-1.10x of kernel time at d8192 (timing model T = 14.1 us + B/1033 GB/s, fits C8 traces within 6-12%). Untried: partial prefetch (YT=2), fewer waves. Evidence /mnt/raid0/llm/tmp/c10-q8wv-diag-20261109/, patch /mnt/raid0/llm/tmp/c10-q8wvpf-20261109/prefetch-attempt.patch."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c9-q8wv-wide-m36-route",
+   "statement": "Routing M=36 (np4 x 9) verify matmuls through one-pass q8wv beats mul_mat_q, extending q8wv's v9 HBM rate to wide batches.",
+   "falsifier": "First three pairs at v36 d8192 < 1.03x.",
+   "target_surface": "ggml/src/ggml-cuda/mmq-q8-wvsk.cu",
+   "target_symbol": "GGML_HIP_Q8_WVSK_WIDE (commit b9931dc0c, unpushed)",
+   "effect_fraction": -0.257,
+   "reason": "MEASURED NO_KEEP_FUTILITY on b9931dc0c (store gpu-20261109-b9931dc0c-c9v36mmq), MI210, 27B Q8_0, llama-bench v36 d8192. On/off 0.743, 0.749, 0.739 (median -25.7%). Why q8wv loses at M=36 was NOT diagnosed. Do not assume wider batches help q8wv. Evidence /mnt/raid0/llm/tmp/c9-v36mmq-ab-20261109/out/RESULT.json."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c9-q38fn-iq4nl-moe-iqk",
+   "statement": "A dedicated iqk IQ4_NL MoE kernel speeds up the Q38FN ffn_moe_down expert tensors at pp512.",
+   "falsifier": "First pp512 on/off pair gains under 3%.",
+   "target_surface": "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp (MoE path)",
+   "target_symbol": "GGML_IQK_IQ4NL_MOE (commit be7595f80, unpushed)",
+   "effect_fraction": -0.0651,
+   "reason": "MEASURED FUTILE, n=1 by stop rule, on be7595f80 (Q38FN UD-IQ4_XS, CPU q0): pp512 155.4 -> 145.3 t/s, ratio 0.935; pp2048 and tg64 not run. Premise error: these tensors already run AVX2 iq4_nl_8x8_q8_0 CPU_REPACK (the profiler labels both paths iq4_nl), so a new kernel must beat repack, not the native dot (it is 1.84x vs native per dot). Inferred, not measured: DS41-1017 MXFP4 experts have the same repack shape, so a port must beat repack first. Evidence /mnt/raid0/llm/tmp/c9-iq4nl-ab-20261108/out/RESULT.json."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c9-dspine-b16-drafter",
+   "statement": "tencent DSpine-b16 (serial refinement, block 16) outperforms DFlash2 as the 27B drafter at native settings.",
+   "falsifier": "Both DSpine caps < 0.95x DFlash2 on the first pass.",
+   "target_surface": "src/models/dflash.cpp + common/speculative.cpp (draft-dspine spec type)",
+   "target_symbol": "draft-dspine (branch llama.cpp-experimental-c9-dspine-20261108, tuned 01ca8760d)",
+   "effect_fraction": -0.093,
+   "reason": "MEASURED NOT_OUTPERFORMS (stopped on futility), 27B Q8_0, q8_0 KV, np1, Q8_0 drafter. n7 0.907x M1 / 0.970x LongHealth; n15 0.815x / 1.045x, 0 garbage. The n15 LongHealth +4.5% is one first-pass number with no noise estimate. Tune row: best arm Q8_0 n7 0.915x DFlash2 n7. Q8_0 beat BF16 1.33/1.25/1.21x at n7/n11/n15, so no BF16 rerun. Dynamic verification and ReplaySSM were not ported. Evidence /mnt/raid0/llm/tmp/dspine-b16-vs-dflash2-20261108/out/RESULT.json."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c10-dflash2-hybrid-tree-verify-port",
+   "statement": "Tree-masked DFlash2 verify is profitable on the 27B hybrid target because each extra verify row is cheap.",
+   "falsifier": "Verify cost per row s > 0.5 ms (pass value), measured on the MI210.",
+   "target_surface": "common/speculative.cpp + ggml-cuda verify path (DF2 tree port)",
+   "target_symbol": "llama.cpp-experimental-c10-dftree-20261109 @ 84934b297 (unpushed)",
+   "effect_fraction": null,
+   "reason": "PREMISE MEASURED, TREE NOT MEASURED, no effect size. C9 d210f85c2 store, 27B Q8_0, q8_0 KV, MI210, flat chain batches rows 8..16 (not a true tree-masked verify): s = 2.39 ms/row (95% CI 2.26-2.51) at d512, 2 repeats, pass value 0.5; d32768 2.29 ms/row but CI -0.78..5.36, unresolved. Row verdict FUTILE_CLOSE_HYBRID_TREE_PORT. Inferred: net at B=8 needs tau_ratio about 1.17 for the 1.05 bar against an estimated +2-8%. Tree port code ran only 12/12 synthetic replay tests. Reopen if s falls below 0.5 ms or a top-512 trained head (T2) fires. Evidence /mnt/raid0/llm/tmp/c10-verify-slope-20261109/out/RESULT.json."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c9-q38fn-48t-smt-threads",
+   "statement": "Using 48 SMT threads per quarter instead of 24 raises Q38FN UD-IQ4_XS throughput.",
+   "falsifier": "48T wall per graph not lower than 24T on pp2048 and tg64.",
+   "target_surface": "runtime (thread count, one CPU quarter)",
+   "target_symbol": "n_threads 48 vs 24",
+   "effect_fraction": -0.0075,
+   "reason": "MEASURED no gain, 2 valid reps per cell, C8 profiling store (source 1bda248e3), Q38FN UD-IQ4_XS, one quarter, llama-bench. 48T vs 24T wall ms: pp2048 13487 vs 13386; tg64 75.7 vs 76.6; pp512 4240 vs 3239 but its 48T reps differ by 52%, so that cell shows only no gain, not a size. Barrier-and-wait 19.4/9.0/9.9% at 48T vs 7.3/6.5/10.6% at 24T. 96 threads not measured. Not the same claim as the earlier load-thread keep (runtime-arm-load-threads-48), which concerns the loader team. Evidence /mnt/raid0/llm/tmp/c9-headroom-cpu-48t-20261109/out/RESULT.json."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c9-gv-fattn-more-splits",
+   "statement": "Raising the KV split count (occupancy) in gv_fattn_kernel lifts long-context decode.",
+   "falsifier": "gv ratio does not reach the needed 1.32 (27B) / 1.35 (A3B) at higher split multiples.",
+   "target_surface": "ggml/src/ggml-cuda/fattn-gqa-verify.cu (gv_fattn_kernel split heuristic)",
+   "target_symbol": "gv_fattn split multiple 1x/4x/8x (diag store 422a07b77)",
+   "effect_fraction": -0.058,
+   "reason": "MEASURED, row verdict INCONCLUSIVE only because the 4x/8x debug witnesses are missing (their times did change). d131072 gv ratio 1x/4x/8x = 1.014/0.942/0.899 on 27B, 1.055/0.953/0.854 on A3B: more splits are slower. Counters: SQ_WAIT_ANY 74%/72% of wave cycles (includes barriers), MFMA busy about 1%, LDS-full 0. Evidence /mnt/raid0/llm/tmp/c9-fa-diag-20261109/out/RESULT.json."
+  }
+ ]
 }

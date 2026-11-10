@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://epyc.local/autokernel/hawkeye_timing_result.schema.json",
+  "title": "AutoKernel adopted Hawkeye timing result",
+  "description": "Derived from Zanatticus/Hawkeye workloads/_driver.cpp at a226e955d56c04be044d46f6fd876191cfce5bf4, Apache-2.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "rate_samples_per_s", "rate_samples_per_s_wall", "ms_per_iter_gpu",
+    "ms_per_iter_wall", "gpu_ms_min", "gpu_ms_max", "gpu_ms_std", "cv_gpu",
+    "wall_ms_min", "wall_ms_max", "wall_ms_std", "cv_wall", "timing_redos",
+    "cv_gate_pass", "cv_gate_max"
+  ],
+  "properties": {
+    "rate_samples_per_s": {"type": "number", "exclusiveMinimum": 0},
+    "rate_samples_per_s_wall": {"type": "number", "exclusiveMinimum": 0},
+    "ms_per_iter_gpu": {"type": "number", "exclusiveMinimum": 0},
+    "ms_per_iter_wall": {"type": "number", "exclusiveMinimum": 0},
+    "gpu_ms_min": {"type": "number", "exclusiveMinimum": 0},
+    "gpu_ms_max": {"type": "number", "exclusiveMinimum": 0},
+    "gpu_ms_std": {"type": "number", "minimum": 0},
+    "cv_gpu": {"type": "number", "minimum": 0},
+    "wall_ms_min": {"type": "number", "exclusiveMinimum": 0},
+    "wall_ms_max": {"type": "number", "exclusiveMinimum": 0},
+    "wall_ms_std": {"type": "number", "minimum": 0},
+    "cv_wall": {"type": "number", "minimum": 0},
+    "timing_redos": {"type": "integer", "minimum": 0},
+    "cv_gate_pass": {"type": "boolean"},
+    "cv_gate_max": {"type": "number", "exclusiveMinimum": 0}
+  }
+}

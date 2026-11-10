@@ -78,6 +78,9 @@ GRAPH_EXECUTION_MODULES = {
         "scripts/kernel_rnd/autokernel/execution/instrument_integrity.py",
     "t0_provider": "scripts/kernel_rnd/autokernel/execution/t0_provider.py",
     "evaluator_integrity": "scripts/kernel_rnd/autokernel/evaluator/integrity.py",
+    "c6_reward_integrity": "scripts/kernel_rnd/c6_reward_integrity.py",
+    "hawkeye_measurement":
+        "scripts/kernel_rnd/autokernel/evaluator/hawkeye_measurement.py",
     "gpu_source_evidence":
         "scripts/kernel_rnd/autokernel/controller/gpu_source_evidence.py",
     "gpu_source_proofs":
@@ -354,6 +357,9 @@ def _copy_execution_closure(root: secure.RuntimeRoot) -> dict[str, Any]:
     for relative in (
         Path("__init__.py"),
         Path("kernel_rnd/__init__.py"),
+        Path("kernel_rnd/c6_reward_integrity.py"),
+        Path("kernel_rnd/c6_mutants/run_falsification.py"),
+        Path("kernel_rnd/c6_mutants/results_20260821.jsonl"),
         Path("benchmark/__init__.py"),
         Path("benchmark/autokernel_gpu_discovery_beliefs.py"),
         Path("benchmark/autokernel_progression.py"),

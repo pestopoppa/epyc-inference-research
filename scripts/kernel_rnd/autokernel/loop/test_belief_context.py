@@ -1007,3 +1007,34 @@ def test_runtime_consumers_use_named_root_and_refuse_invalid_explicit(tmp_path, 
     monkeypatch.setenv("EPYC_ROOT", str(view))
     with pytest.raises(CaptureUnavailable):
         actors._seat_capture()
+
+
+def test_profile_focus_symbols_from_each_profile_shape():
+    assert bc.profile_focus_symbols({}) == ()
+    cpu = {"cpu_profile": {"hotspots": [{"symbol": "b_fn"}, {"symbol": "a_fn"}, {"symbol": "b_fn"}]},
+           "kernel_hotspots": [{"signature": "ignored"}]}
+    assert bc.profile_focus_symbols(cpu) == ("b_fn", "a_fn")
+    gpu = {"gpu_serving_profile": {"primary_window": "prefill", "windows": {"prefill": {"kernels": [
+        {"kernel": "mul_mat_q<(ggml_type)8, 64, false>"},
+        {"kernel": "gated_delta_net_cuda<128, false, true, float>"}]}}}}
+    assert bc.profile_focus_symbols(gpu) == ("mul_mat_q", "gated_delta_net_cuda")
+    legacy = {"kernel_hotspots": [{"signature": f"k{i}<int>"} for i in range(12)]}
+    assert bc.profile_focus_symbols(legacy) == tuple(f"k{i}" for i in range(bc.PROFILE_FOCUS_TOP))
+
+
+def test_prepare_sends_profile_focus_and_kernel_only(tmp_path):
+    context = {"current_regime": {"backend": "cpu"}, "cpu_profile": {"hotspots": [{"symbol": "z_fn"}]}}
+    target = bc.target_from_context(context)
+    assert target["kernel_only"] is True and "focus_symbols" not in target
+    child = Child(belief_ready_answer())
+    ready = bc.prepare(context, _config(tmp_path, focus_symbols=("a_fn",)), runner=child)
+    assert ready.target["focus_symbols"] == ["a_fn", "z_fn"]
+
+
+def test_abstention_carries_reliance_shape():
+    body = {"abstain": "nothing feasible", "relies_on_claims": ["clm_a"]}
+    assert isinstance(actors._abstention(body), Abstain)
+    assert Abstain("r", relies_on_claims=["clm_a"]).relies_on_claims == ("clm_a",)
+    assert "relies_on_claims" in actors._HYPOTHESIS_TASK.split('"abstain"')[1]
+    from autokernel.loop import actor_orchestrator as ao
+    assert "relies_on_claims" in ao.ABSTAIN_BRANCH["properties"]

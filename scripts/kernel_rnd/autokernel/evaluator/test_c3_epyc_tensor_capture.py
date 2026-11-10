@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 import subprocess
@@ -89,7 +90,7 @@ print(json.dumps({"schema": "epyc.autokernel.c3_epyc_tensor_capture_completion.v
             model_id=str(self.model_root.resolve()), model_manifest=self.model_manifest,
             model_manifest_sha256=sha(self.model_manifest), model_sha256=self.model_sha)
 
-        self.python = Path("/usr/bin/python3.13")
+        self.python = Path(sys.executable).resolve()
         self.toolchain_manifest = self.root / "toolchain.json"
         self.toolchain_manifest.write_text(json.dumps({
             "schema": "epyc.autokernel.c3_epyc_capture_toolchain.v1",

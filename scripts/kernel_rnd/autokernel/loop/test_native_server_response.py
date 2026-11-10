@@ -161,7 +161,7 @@ def test_failed_http_retains_explicit_invalid_evidence_and_closes(original, monk
     monkeypatch.setattr(serving, "verify_env_readback", lambda *a, **k: None)
     monkeypatch.setattr(serving.residency, "Sampler", _sampler_class(_proof(peak=0, kfd=0)))
     observed = []
-    with pytest.raises(serving.ServerDied, match="slots failed"):
+    with pytest.raises(serving.ServerDied, match="slots failed.*: .+"):
         serving._measure_once(ctx.template, ctx.recipe.build_dir, ctx.recipe.port,
             resolved_recipe=ctx.recipe, frozen_requests=original["requests"],
             observation=observed, response_capture=capture)

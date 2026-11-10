@@ -204,6 +204,166 @@ def accept_serial_capability(store):
     return True
 
 
+_UNRESOLVED_STATE = 'prior supervisor state unresolved; recovery held'
+
+
+def _state_root():
+    return Path(tempfile.gettempdir()) / f'autokernel-lane-watchdog-{os.getuid()}'
+
+
+def _proc_stat(pid):
+    """(state, ppid, pgrp, start_ticks) of a visible process, else None."""
+    try:
+        stat = Path(f'/proc/{pid}/stat').read_text()
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    fields = stat[stat.rfind(')') + 2:].split()
+    return fields[0], int(fields[1]), int(fields[2]), int(fields[19])
+
+
+def _live_children():
+    """Direct non-zombie children: after the owned child exits, every live descendant
+    is rooted at one of these, because orphans reparent to this subreaper."""
+    children = []
+    for entry in Path('/proc').iterdir():
+        if entry.name.isdigit():
+            row = _proc_stat(int(entry.name))
+            if row is not None and row[1] == os.getpid() and row[0] != 'Z':
+                children.append(int(entry.name))
+    return children
+
+
+def _scoped_survivors(stores, not_before):
+    """Live processes of ours carrying a procguard cookie of these stores."""
+    from .procguard import ENV_SCOPE, campaign_key, parse_scope
+    keys = {campaign_key(store) for store in stores}
+    prefix = ENV_SCOPE.encode() + b'='
+    found = []
+    for entry in Path('/proc').iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            row = _proc_stat(int(entry.name))
+            if entry.stat().st_uid != os.getuid() or row is None or row[0] == 'Z':
+                continue
+            raw = (entry / 'environ').read_bytes()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        except PermissionError:
+            # Non-dumpable: its cookie cannot be read. One older than the recorded
+            # supervisor cannot be its descendant; a younger one is unproven.
+            if row[3] >= not_before:
+                found.append(f'unreadable pid {entry.name}')
+            continue
+        for item in raw.split(b'\0'):
+            if item.startswith(prefix):
+                scope = parse_scope(item[len(prefix):].decode('ascii', 'replace'))
+                if scope is not None and scope[0] in keys:
+                    found.append(f'scoped pid {entry.name}')
+    return found
+
+
+def _state_survivors(path):
+    """Named survivors of one state file; an empty list is proof of absence.
+
+    Raises on anything unreadable or malformed: those are not evidence. Identity is
+    (boot id, start ticks), so a recycled PID never counts as the recorded process.
+    """
+    state = json.loads(path.read_text())
+    if state['uid'] != os.getuid():
+        raise ValueError('state owner differs')
+    pgid = state['pgid']
+    identities = [('child', state['process']), ('supervisor', state['supervisor']),
+                  *(('adopted', row) for row in state.get('adopted_live', ()))]
+    for _, identity in identities:
+        if type(identity['pid']) is not int or type(identity['start_ticks']) is not int:
+            raise ValueError('malformed identity')
+    boot_id = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    if any(identity['boot_id'] != boot_id for _, identity in identities):
+        if all(identity['boot_id'] != boot_id for _, identity in identities):
+            return []  # no process survives a reboot
+        raise ValueError('mixed boot ids')
+    survivors = []
+    for role, identity in identities:
+        row = _proc_stat(identity['pid'])
+        if row is not None and row[3] == identity['start_ticks'] and row[0] != 'Z':
+            survivors.append(f"{role} pid {identity['pid']}")
+    # The kernel does not reuse a number still in use as a PGID, so a live leader
+    # with another start time proves the recorded group is empty.
+    leader = _proc_stat(pgid)
+    recorded = state['process']
+    recycled = (leader is not None and recorded['pid'] == pgid
+                and leader[3] != recorded['start_ticks'])
+    if not recycled:
+        survivors.extend(f'group {pgid} pid {pid}' for pid in _group_members(pgid)
+                         if f'child pid {pid}' not in survivors)
+    survivors.extend(_scoped_survivors(state['resolved_stores'], state['supervisor']['start_ticks']))
+    return survivors
+
+
+def _prior_state_refusal(paths):
+    """None when no state exists or every recorded process is provably gone."""
+    survivors = []
+    for path in paths:
+        try:
+            if path.exists():
+                survivors.extend(_state_survivors(path))
+        except (OSError, ValueError, KeyError, TypeError, IndexError, WatchdogRefused):
+            return _UNRESOLVED_STATE
+    return f"{_UNRESOLVED_STATE}; survivors: {', '.join(survivors)}" if survivors else None
+
+
+def _archive_resolved_state(paths):
+    """Keep proven-dead state, contents intact, under a name startup does not read."""
+    for path in paths:
+        if not path.exists():
+            continue
+        stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
+        target = path.with_name(f'{path.name}.resolved-{stamp}-{os.getpid()}')
+        if target.exists():
+            raise WatchdogRefused(f'archive target exists: {target}')
+        os.rename(path, target)
+        fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        print(f'lane watchdog: prior state resolved, every recorded process gone; '
+              f'archived {target}', file=sys.stderr, flush=True)
+
+
+TERMINATION_SCHEMA = 'epyc.autokernel.lane_termination.v1'
+
+
+def _termination_reason(requested, setup_error, killed, returncode):
+    if setup_error is not None:
+        return 'setup_error'
+    if requested:
+        return 'drain_grace_expired' if killed else 'operator_stop'
+    return 'crash' if returncode < 0 else 'exit'
+
+
+def _record_termination(state_paths, record):
+    """Keep why and when this attempt ended; a recording failure never changes the outcome."""
+    for state_path in state_paths:
+        try:
+            _write(state_path.with_name(state_path.stem + '.termination.json'), record)
+        except OSError as exc:
+            print(f'lane termination record failed: {exc}', file=sys.stderr, flush=True)
+
+
+def startup_refusal(store):
+    """Read-only twin of supervise()'s pre-launch refusals for a dry run.
+
+    The lane flock is deliberately not probed: even a momentary hold could make a
+    supervisor starting at that instant refuse, and a live supervisor has a state file.
+    """
+    if any(name.startswith('AUTOKERNEL_WATCHDOG_') for name in os.environ):
+        return 'reserved supervisor environment already set'
+    digest = hashlib.sha256(str(Path(store).absolute().resolve()).encode()).hexdigest()
+    return _prior_state_refusal([_state_root() / (digest + '.json')])
+
+
 def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files=(), recovery_checkpoint=None, max_restarts=2):
     """Run main in a child; normal exit and requested signals are terminal."""
     if any(name.startswith('AUTOKERNEL_WATCHDOG_') for name in os.environ):
@@ -216,7 +376,7 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
     if not identities or any(p == str(Path('None').resolve()) for p in identities):
         raise WatchdogRefused('canonical target stores are required')
     digests = [hashlib.sha256(p.encode()).hexdigest() for p in identities]
-    root = Path(tempfile.gettempdir()) / f'autokernel-lane-watchdog-{os.getuid()}'
+    root = _state_root()
     root.mkdir(mode=0o700, exist_ok=True)
     if root.is_symlink() or root.stat().st_uid != os.getuid() or root.stat().st_mode & 0o077:
         raise WatchdogRefused('unsafe watchdog directory')
@@ -234,9 +394,11 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
         from .worker_lifecycle import process_identity
         binding = _binding(argv, Path(__file__).parent, file_options, extra_files)
         # A previous supervisor may have died while descendants escaped its process
-        # group. Its state is never cleared by guessing from a recycled PID.
-        if any(path.exists() for path in state_paths):
-            raise WatchdogRefused('prior supervisor state unresolved; recovery held')
+        # group. Its state is resolved only on identity evidence, never a bare PID.
+        refusal = _prior_state_refusal(state_paths)
+        if refusal is not None:
+            raise WatchdogRefused(refusal)
+        _archive_resolved_state(state_paths)
         if threading.active_count() != 1:
             raise WatchdogRefused('supervision requires a dedicated single-threaded owner')
         try:
@@ -289,6 +451,7 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
                 pid = process.pid
                 pidfd = None
                 setup_error = None
+                published = None
                 try:
                     # A child is never reaped before pidfd acquisition, so its PID
                     # cannot be reused during this capture.
@@ -296,14 +459,15 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
                     identity = process_identity(pid).to_dict()
                     if _process_uid(pid) != os.getuid():
                         raise WatchdogRefused('owned child UID differs')
+                    published = {'manifest': binding, 'process': identity,
+                                 'pgid': pid, 'uid': os.getuid(), 'stores': identities,
+                                 'named_stores': list(map(str, named_stores)),
+                                 'resolved_stores': list(named_binding),
+                                 'supervisor': process_identity(os.getpid()).to_dict(),
+                                 'lock_fds': lock_fds,
+                                 'state_path': str(state_paths[0])}
                     for state_path in state_paths:
-                        _write(state_path, {'manifest': binding, 'process': identity,
-                                            'pgid': pid, 'uid': os.getuid(), 'stores': identities,
-                                            'named_stores': list(map(str, named_stores)),
-                                            'resolved_stores': list(named_binding),
-                                            'supervisor': process_identity(os.getpid()).to_dict(),
-                                            'lock_fds': lock_fds,
-                                            'state_path': str(state_paths[0])})
+                        _write(state_path, published)
                     if resolved_stores() != named_binding:
                         raise WatchdogRefused('target store alias changed before child release')
                     if _binding(argv, Path(__file__).parent, file_options, extra_files, bound_files=binding['files']) != binding:
@@ -331,9 +495,11 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
                 stop_started = None
                 killed = False
                 warned = False
+                term_sent_at = kill_sent_at = None
                 while process.poll() is None:
                     if (requested[0] or setup_error is not None) and stop_started is None:
                         stop_started = time.monotonic()
+                        term_sent_at = time.time()
                         if pidfd is not None:
                             try:
                                 signal.pidfd_send_signal(pidfd, signal.SIGTERM)
@@ -346,6 +512,7 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
                             except OSError as exc:
                                 print(f'owned child KILL failed; retaining claims: {exc}', file=sys.stderr, flush=True)
                         killed = True
+                        kill_sent_at = time.time()
                     if killed and not warned and time.monotonic() - stop_started >= STOP_STUCK_NOTICE_SECONDS:
                         print('owned child not yet dead; retaining claims and waiting', file=sys.stderr, flush=True)
                         warned = True
@@ -359,22 +526,46 @@ def supervise(module, argv, *, key=None, keys=None, file_options=(), extra_files
                 # Retain every lock until adopted descendants are actually dead.
                 # The dedicated owner had no prior children, so only this lane's
                 # terminal adopted children are reaped. Never signal descendants.
-                had_descendants = False
+                # Every orphan of the whole run was adopted here and, if it already
+                # exited, sits as a zombie until now. Those are dead, not survivors;
+                # only a process still live at this instant is a leak.
+                survivors = []
+                for child in _live_children():
+                    try:
+                        survivors.append(process_identity(child).to_dict())
+                    except Exception:  # exited since the scan: dead, not a survivor
+                        continue
+                if survivors and published is not None:
+                    # Recorded before waiting: if this supervisor dies, the next
+                    # start can still compare these identities.
+                    published = {**published, 'adopted_live': survivors}
+                    for state_path in state_paths:
+                        _write(state_path, published)
                 while True:
                     try:
                         terminal = os.waitid(os.P_ALL, 0, os.WEXITED | os.WNOHANG | os.WNOWAIT)
                     except ChildProcessError:
                         break
-                    had_descendants = True
                     if terminal is None:
                         time.sleep(.25)
                     else:
                         os.waitpid(terminal.si_pid, 0)
-                if had_descendants:
-                    raise WatchdogRefused('descendants remained after parent exit; recovery held')
+                remaining_group = _group_members(pid)
+                _record_termination(state_paths, {
+                    'schema': TERMINATION_SCHEMA, 'attempt': attempt, 'pid': pid, 'returncode': rc,
+                    'reason': _termination_reason(requested[0], setup_error, killed, rc),
+                    'drain_grace_s': STOP_GRACE_SECONDS, 'term_sent_at': term_sent_at,
+                    'kill_sent_at': kill_sent_at, 'exited_at': time.time(),
+                    'survivors': [row['pid'] for row in survivors],
+                    'group_remaining': remaining_group,
+                    'stop_clean': not survivors and not remaining_group})
+                if survivors:
+                    names = ', '.join(str(row['pid']) for row in survivors)
+                    raise WatchdogRefused('descendants remained after parent exit; '
+                                          f'recovery held (live pids: {names})')
                 if setup_error is not None:
                     raise setup_error
-                if _group_members(pid):
+                if remaining_group:
                     raise WatchdogRefused('child process group remains; recovery held')
                 if rc == 78 and not requested[0]:
                     raise WatchdogRefused('child binding refused; recovery held')

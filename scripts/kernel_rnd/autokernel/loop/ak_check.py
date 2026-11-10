@@ -91,6 +91,7 @@ import sys
 import threading
 import time
 from typing import Iterable, Iterator, Mapping, Sequence
+from .tool_output import strip_ansi
 
 SCHEMA = "epyc.autokernel.ak_check_call.v1"
 COMMAND = "ak-check"
@@ -820,7 +821,7 @@ def diagnostics(text: str, lane: Path) -> str:
     """Compiler output, lane-relative, with each distinct diagnostic shown once (a
     template error repeats once per instantiation: `nrc_y` 1..8 x every dequantizer),
     truncated to MAX_DIAG_LINES / MAX_DIAG_CHARS."""
-    text = re.sub(r"\x1b\[[0-9;]*m", "", text).replace(str(lane).rstrip("/") + "/", "")
+    text = strip_ansi(text).replace(str(lane).rstrip("/") + "/", "")
     groups: list[list[str]] = [[]]
     keys: list[str | None] = [None]
     for line in text.splitlines():
@@ -1007,7 +1008,7 @@ _COUNT = re.compile(r"^\s*(\d+)/(\d+) tests passed", re.M)
 
 
 def parse_backend_ops(text: str) -> dict:
-    plain = re.sub(r"\x1b\[[0-9;]*m", "", text)
+    plain = strip_ansi(text)
     status = re.search(r"^\s*Backend CPU: (OK|FAIL)\b", plain, re.M)
     counts = [(int(a), int(b)) for a, b in _COUNT.findall(plain)]
     failing = [l.strip() for l in plain.splitlines()

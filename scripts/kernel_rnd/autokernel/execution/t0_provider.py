@@ -110,6 +110,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from .. import schemas
+from ..loop.tool_output import strip_ansi
 from ..evaluator import api, correctness, recipes
 from . import reward_hack_scan
 from . import worktree as owned_worktree
@@ -332,7 +333,6 @@ SEAMS = (
 # Small validators
 # =============================================================================
 
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 #: Names, not bodies. This module wrote the strict `_req_sha256` — the one that
 #: rejects a placeholder digest — and two other modules wrote it without that
@@ -344,10 +344,6 @@ _req_sha256 = schemas.require.sha256
 _req_commit = schemas.require.commit
 _req_int = schemas.require.int
 _req_bool = schemas.require.bool
-
-
-def _strip_ansi(text: str) -> str:
-    return _ANSI_RE.sub("", text)
 
 
 def _lexically_normal(path: str) -> str:
@@ -1149,7 +1145,7 @@ def parse_backend_ops_help(text: str) -> BackendOpsCapabilities:
     """
     if not isinstance(text, str):
         raise TypeError("test-backend-ops --help output must be a str")
-    normalized = _strip_ansi(text)
+    normalized = strip_ansi(text)
     usage_match = _BACKEND_OPS_USAGE_RE.search(normalized)
     if usage_match is None:
         raise InstrumentCapabilityError(
@@ -1996,7 +1992,7 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
     """
     if not isinstance(text, str):
         raise TypeError("text must be a str")
-    clean = _strip_ansi(text)
+    clean = strip_ansi(text)
     backends: list = []
     name: Optional[str] = None
     skipped = False
@@ -2134,7 +2130,7 @@ def parse_backend_ops_csv(text: str) -> BackendOpsRun:
     format at all, so a zero-row CSV cannot be distinguished from a skipped run
     — which is why `parse_backend_ops_console` is what the provider uses.
     """
-    rows = [line for line in _strip_ansi(text).splitlines() if line.startswith('"')]
+    rows = [line for line in strip_ansi(text).splitlines() if line.startswith('"')]
     if not rows:
         raise OutputParseError("no CSV rows found in test-backend-ops output")
     header = [cell.replace('""', '"') for cell in _CSV_ROW_RE.findall(rows[0])]
@@ -2218,7 +2214,7 @@ def parse_linkage_report(text: str) -> LinkageReport:
     tree. The FAIL fixture is not hypothetical; it is what the experimental
     binary does today if a launcher forgets.
     """
-    clean = _strip_ansi(text)
+    clean = strip_ansi(text)
     binary = expected = None
     rows: list = []
     loader: list = []
@@ -2276,7 +2272,7 @@ def parse_sanitizer_findings(text: str) -> tuple:
     """
     asan: list = []
     ubsan: list = []
-    for line in _strip_ansi(text).splitlines():
+    for line in strip_ansi(text).splitlines():
         match = _ASAN_RE.match(line)
         if match:
             asan.append(f"AddressSanitizer: {match.group(1).strip()}")
@@ -2303,7 +2299,7 @@ def parse_compiler_diagnostics(text: str) -> tuple:
     """
     errors: list = []
     warnings: list = []
-    for line in _strip_ansi(text).splitlines():
+    for line in strip_ansi(text).splitlines():
         match = _DIAG_RE.match(line.strip())
         if not match:
             continue
@@ -2349,7 +2345,7 @@ def parse_sched_trace(text: str) -> tuple:
     field that decides whether the no-fallback gate PASSes or reads
     COULD_NOT_CHECK. The `## SPLIT` marker is the proof the scheduler printed.
     """
-    clean = _strip_ansi(text)
+    clean = strip_ansi(text)
     splits: list = []
     nodes: list = []
     emitted = False
@@ -2408,7 +2404,7 @@ def parse_delivered_tokens(text: str) -> Optional[int]:
     COULD_NOT_CHECK downstream; it is never coerced to 0, because 0 delivered
     units is a control-3 finding and 'we did not read it' is not one.
     """
-    matches = _EVAL_TOKENS_RE.findall(_strip_ansi(text))
+    matches = _EVAL_TOKENS_RE.findall(strip_ansi(text))
     if not matches:
         return None
     return int(matches[-1])

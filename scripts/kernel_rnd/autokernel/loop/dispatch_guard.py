@@ -10,6 +10,7 @@ import sqlite3
 from typing import Any, Mapping, Sequence
 
 from ..controller import do_not_repeat
+from . import retired_mechanisms
 
 ANSWER_STATUSES = frozenset({"kept", "keep_candidate", "confirm_vetoed", "measured_null",
                              "regression"})
@@ -155,6 +156,8 @@ def characterised_reason(hypothesis, context: Mapping[str, Any]) -> str | None:
     compares on its measurement epoch only when it carries one (`recall` resolves it
     through a verified alias); a row without one compares on the full epoch (fail
     closed: comparability never widens to an unknown measurement identity)."""
+    if retired := retired_mechanisms.refusal(hypothesis, context.get("retired_mechanisms_path")):
+        return retired
     epoch = context.get("epoch_sha256")
     measurement_epoch = context.get("measurement_epoch_sha256")
     regime = context.get("current_regime")

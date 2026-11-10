@@ -601,9 +601,9 @@ invented here**. Each must be fixed — and pre-registered — before a conformi
 
 | # | Value | Where used | Notes / candidate sources |
 |---|---|---|---|
-| 1 | `LOCALITY_THRESHOLD` — minimum `local_fraction` for a single-node instance | F3-CHK step 4; §6 | `affinity_preflight.py --memory-locality-threshold` defaults to `0.85`; the 2026-07-30 salvage audit used `≥ 0.99`. Needs one binding value. |
-| 2 | `INTERLEAVE_TOLERANCE` — allowed deviation from `1/n_nodes` per node on an interleaved arm | F3-CHK step 5 | 2026-07-30 interleaved control measured 25.00% per node across 4 nodes. |
-| 3 | `ACHIEVED_CONCURRENCY_FLOOR` — minimum achieved/nominal for a rung to be reportable | F5-CHK step 2; §6 | The operator's requirement names a threshold; the value is unset. |
+| 1 | ~~`LOCALITY_THRESHOLD`~~ **RATIFIED = 0.95** | F3-CHK step 4; §6 | Minimum `local_fraction` for a single-node instance. Ratified RATIFY-INF45-P23-20261109 (root commit `ea41b82fd`). (Prior: tool default `0.85`; salvage audit `≥ 0.99`.) |
+| 2 | ~~`INTERLEAVE_TOLERANCE`~~ **RATIFIED = ±25% relative** | F3-CHK step 5 | Allowed deviation from `1/n_nodes` per node on an interleaved arm. Ratified RATIFY-INF45-P23-20261109 (root commit `ea41b82fd`). 2026-07-30 control measured 25.00% per node across 4 nodes. |
+| 3 | `ACHIEVED_CONCURRENCY_FLOOR` — minimum achieved/nominal for a rung to be reportable | F5-CHK step 2; §6 | The operator's requirement names a threshold; the value is unset. **Still TBD — awaits primary measurements.** |
 | 4 | Prompt-set size / closed-loop arrival design that holds occupancy at `T` | F5-CHK step 3 | 43 pinned prompts demonstrably cannot hold 32 slots. |
 | 5 | Anchor value + band + `n` for **`ingest_long_context`** (Qwen3-Next-80B-A3B), per prompt-length regime | §2.2 | Only the frontdoor anchor (35.7, n=154, band 35–40) exists. |
 | 6 | Anchor value + band + `n` for **`worker_general`** (gemma4-26B-A4B Q4_K_M MTP) | §2.2 | — |
@@ -612,6 +612,8 @@ invented here**. Each must be fixed — and pre-registered — before a conformi
 | 9 | Attestation reference for each 2026-07-30 figure | §5.2, §5.3 | The 2026-07-30 artifacts are **scratch** (`/mnt/raid0/llm/tmp/`), not promoted into `data/`. No figure currently carries an attestation ref. |
 | 10 | Independent replicate of the full-machine `A2` figure | §3, §5.3 | The full-machine number rests on one invocation; the script arm labelled as its repeat actually repeats the straddle+interleave arm. |
 | 11 | Ratification date + receipt for the `MEASUREMENT.md` amendment (Appendix A) | Status block | Human-only write; blocks decision-grade use of this id. |
+
+Ratified 2026-11-09 (RATIFY-INF45-P23-20261109, root commit `ea41b82fd`): rows 1 and 2 above, plus the runbook's band-width policy (median ±10%, n ≥ 50; `model-registration-runbook.md` §5 #6) and sign-off authority (operator only, separate executor; runbook §5 #12). Runbook #11 (co-residency attestation) closed at `7ace20a7`. Rows 3, 7 and 8 await primary measurements; 4, 5, 6, 9, 10 and 11 remain TBD.
 
 ---
 

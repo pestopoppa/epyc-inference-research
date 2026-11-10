@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import stat
+import sys
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -58,6 +59,17 @@ def _skip_without_site_model(case) -> None:
         case.skipTest(f"site model absent on this host: {_factory._SITE_MODEL}")
 
 class DeploymentFactoryTests(unittest.TestCase):
+    def setUp(self):
+        # The sealed rocprofv3 interpreter is a production pin for the host that
+        # runs the deployment; the fixture binds whichever interpreter runs the test.
+        python = Path(sys.executable).resolve(strict=True)
+        digest = hashlib.sha256(python.read_bytes()).hexdigest()
+        for patcher in (mock.patch.object(F, "_ROCPROF_V3_PYTHON", python),
+                        mock.patch.object(F, "_ROCPROF_V3_PYTHON_SHA256", digest),
+                        mock.patch.object(F.evidence, "ROCPROF_V3_PYTHON", python)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def test_live_shape_manifest_and_policy_share_real_operation_namespace(self):
         candidate = planned_source_candidate()
         with tempfile.TemporaryDirectory() as directory:
@@ -1274,6 +1286,265 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertNotEqual(config.build_root, config.operations_root)
             self.assertFalse(config.build_root.is_relative_to(config.operations_root))
             self.assertFalse(config.operations_root.is_relative_to(config.build_root))
+
+
+INSTRUMENT_TREE = Path("/mnt/raid0/llm/llama.cpp")
+C6_ELIGIBLE_TEMPLATES = ("cuda-vecdotq-v1", "cuda-quantize-q8-v1",
+                         "cuda-fattn-tile-v1", "cuda-norm-v2")
+
+
+class C6RealSourceTests(unittest.TestCase):
+    """Run the C6 plan against the real instrument commit, compiler stubbed."""
+
+    def setUp(self):
+        if not INSTRUMENT_TREE.is_dir():
+            self.skipTest("frozen instrument tree absent on this host")
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.operation_key = "a" * 64
+        self.operation_root = self.root / "operations" / self.operation_key
+        self.operation_root.mkdir(mode=0o700, parents=True)
+        self.templates = F._template_registry()
+        self.config = SimpleNamespace(
+            instrument_path=INSTRUMENT_TREE,
+            instrument_commit=F._INSTRUMENT_COMMIT,
+            operations_root=self.root / "operations")
+        bin_dir = self.root / "build" / "bin"
+        bin_dir.mkdir(parents=True)
+        for name in ("libggml.so", "libggml-base.so", "libggml-cpu.so",
+                     "libggml-hip.so"):
+            (bin_dir / name).write_bytes(name.encode())
+        self.build = SimpleNamespace(
+            operation_key=self.operation_key,
+            candidate_build=self.root / "build",
+            candidate_identity=SimpleNamespace(
+                source_commit="c" * 40, source_sha256="e" * 64))
+        self.compiles = 0
+        real_run = F.subprocess.run
+
+        def run(argv, **kwargs):
+            if argv[0] == "git":
+                return real_run(argv, **kwargs)
+            self.compiles += 1
+            output = Path(argv[argv.index("-o") + 1])
+            output.write_bytes(b"\x7fELF-fixture")
+            return F.subprocess.CompletedProcess(argv, 0, b"", b"")
+
+        patcher = mock.patch.object(F.subprocess, "run", side_effect=run)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.executable = self.operation_root / "c6-native-operator-harness"
+        self.partial = (self.operation_root /
+                        ".c6-native-operator-harness.partial")
+
+    def capability(self, template_id="cuda-vecdotq-v1"):
+        return F._c6_native_capability(
+            self.config, planned_source_candidate(), self.build,
+            self.templates.templates[template_id], 1)
+
+    def manifest(self, removed: bytes, added: bytes):
+        patch_bytes = (b"--- a/x\n+++ b/x\n@@ -1 +1 @@\n-" + removed +
+                       b"\n+" + added + b"\n")
+        return SimpleNamespace(source_manifest=mock.Mock(
+            patch_bytes=patch_bytes, patch_sha256="f" * 64,
+            declared_symbols={}, candidate_id="akc"))
+
+    def test_structural_precision_binds_every_eligible_operator_to_source(self):
+        for template_id in C6_ELIGIBLE_TEMPLATES:
+            with self.subTest(template_id=template_id):
+                _, proof = F._c6_structural_precision(
+                    self.config, planned_source_candidate(),
+                    self.templates.templates[template_id])
+                authority = proof["accumulator_authority"]
+                self.assertTrue(authority["required_fragments"])
+                self.assertEqual(authority["instrument_commit"],
+                                 F._INSTRUMENT_COMMIT)
+
+    def test_rms_contract_binds_rms_norm_not_l2_norm(self):
+        _, proof = F._c6_structural_precision(
+            self.config, planned_source_candidate(),
+            self.templates.templates["cuda-norm-v2"])
+        self.assertIn("            tmp += xi * xi;", "\n".join(
+            proof["accumulator_authority"]["required_fragments"]))
+
+    def test_structural_precision_refuses_patch_touching_mul_mat_accumulator(self):
+        # Positive control: the same template admits an unrelated edit.
+        F._c6_structural_precision(
+            self.config, self.manifest(b"int a;", b"int b;"),
+            self.templates.templates["cuda-quantize-q8-v1"])
+        with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                    "accumulator carrier is absent or changed"):
+            F._c6_structural_precision(
+                self.config,
+                self.manifest(b"tmp[j][i][k_part] += a;",
+                              b"tmp[j][i][k_part] += b;"),
+                self.templates.templates["cuda-quantize-q8-v1"])
+
+    def test_vecdot_guard_applies_to_the_registered_template(self):
+        with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                    "vec-dot accumulator or return path"):
+            F._c6_structural_precision(
+                self.config, self.manifest(b"    return a;", b"    return b;"),
+                self.templates.templates["cuda-vecdotq-v1"])
+
+    def test_native_capability_runs_for_every_eligible_template(self):
+        for index, template_id in enumerate(C6_ELIGIBLE_TEMPLATES):
+            with self.subTest(template_id=template_id):
+                key = str(index + 1) * 64
+                (self.config.operations_root / key).mkdir(mode=0o700)
+                build = SimpleNamespace(**{**vars(self.build),
+                                           "operation_key": key})
+                plan = F._c6_native_capability(
+                    self.config, planned_source_candidate(), build,
+                    self.templates.templates[template_id], 1)
+                self.assertIn("--operation", plan.argv)
+
+    def test_combine_route_uses_a_registered_template(self):
+        plan = self.capability("cuda-fattn-common-v1")
+        self.assertEqual(plan.argv[plan.argv.index("--k") + 1], "4096")
+
+    def test_unrouted_template_refuses_before_compiling(self):
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "route"):
+            self.capability("cuda-mmvq-v2")
+        self.assertEqual(self.compiles, 0)
+
+    def test_leftover_partial_is_discarded_and_rebuilt(self):
+        target = self.root / "elsewhere"
+        target.write_bytes(b"x")
+        self.partial.symlink_to(target)
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "ambiguous partial"):
+            self.capability()
+        self.assertEqual(target.read_bytes(), b"x")
+        self.partial.unlink()
+        self.partial.write_bytes(b"truncated")
+        self.capability()
+        self.assertEqual(self.compiles, 1)
+        self.assertFalse(self.partial.exists())
+        self.assertEqual(self.executable.stat().st_nlink, 1)
+
+    def test_crash_between_link_and_unlink_resumes_without_rebuild(self):
+        self.partial.write_bytes(b"\x7fELF-fixture")
+        self.partial.chmod(0o500)
+        os.link(self.partial, self.executable)
+        self.capability()
+        self.assertEqual(self.compiles, 0)
+        self.assertFalse(self.partial.exists())
+        self.assertEqual(self.executable.stat().st_nlink, 1)
+
+    def test_partial_diverging_from_published_harness_is_refused(self):
+        self.executable.write_bytes(b"published")
+        self.executable.chmod(0o500)
+        self.partial.write_bytes(b"other")
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "ambiguous partial"):
+            self.capability()
+        self.assertTrue(self.partial.exists())
+
+
+class C6PortfolioRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.templates = F._template_registry()
+        self.portfolio = hypothesis_portfolio.load(
+            hypothesis_portfolio.DEFAULT_PORTFOLIO)
+
+    def test_every_reviewed_route_names_a_registered_template(self):
+        for table in (F._C6_MUL_MAT_ROUTE_TYPES, F._C6_FLASH_KV_BY_TEMPLATE):
+            self.assertLessEqual(set(table), set(self.templates.templates))
+
+    def test_real_portfolio_capacity_counts_all_routable_rows(self):
+        self.assertEqual(F._c6_bundle_max_iterations(
+            self.portfolio, self.templates), 20)
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "no native C6 route"):
+            F._c6_bundle_max_iterations(
+                SimpleNamespace(eligible_hypotheses=lambda: []), self.templates)
+
+    def test_budget_gate_admits_s1_plus_s2_and_refuses_beyond(self):
+        F._require_c6_iteration_budget(self.portfolio, self.templates, 20)
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "below max_iterations"):
+            F._require_c6_iteration_budget(self.portfolio, self.templates, 21)
+
+    def test_last_s1_can_schedule_its_s2_and_s2_is_charged(self):
+        budget = F._c6_bundle_max_iterations(self.portfolio, self.templates)
+        self.assertEqual(budget, 2 * F._native_c6_portfolio_capacity(
+            self.portfolio, self.templates))
+        spent = {"scientific_budget_spent": True}
+        item = mock.Mock()
+        authorization = mock.Mock()
+        authorization.to_dict.return_value = {}
+        result = SimpleNamespace(classification="candidate", result_sha256="r",
+                                 series_key="s", component_series_keys=())
+        with mock.patch.object(C, "_pending_item", return_value={}):
+            # Every slot's S1 and every earlier S2 spent: the last S2 remains.
+            state = {"iterations": [spent] * (budget - 1), "pending": None,
+                     "next": budget}
+            C._schedule_replication(
+                state, item=item, authorization=authorization, row={},
+                result=result, max_iterations=budget)
+            self.assertTrue(state["pending"]["confirmation"])
+            exhausted = {"iterations": [spent] * budget, "pending": None,
+                         "next": budget + 1}
+            C._schedule_replication(
+                exhausted, item=item, authorization=authorization, row={},
+                result=result, max_iterations=budget)
+            self.assertIsNone(exhausted["pending"])
+
+    def _candidate(self, symbol: str):
+        return SimpleNamespace(source_manifest=SimpleNamespace(
+            declared_symbols={"x": (symbol,)}))
+
+    def test_route_symbols_stay_inside_their_template_and_cover_the_portfolio(self):
+        self.assertEqual(set(F._C6_ROUTE_SYMBOLS), {
+            *F._C6_MUL_MAT_ROUTE_TYPES, *F._C6_FLASH_KV_BY_TEMPLATE,
+            "cuda-norm-v2"})
+        for template_id, symbols in F._C6_ROUTE_SYMBOLS.items():
+            allowed = set().union(
+                *self.templates.templates[template_id].allowed_symbols.values())
+            self.assertTrue(symbols)
+            self.assertLessEqual(set(symbols), allowed)
+        for record in self.portfolio.eligible_hypotheses():
+            template_id = record["current_bundle_eligibility"]["template_ids"][0]
+            self.assertLessEqual(set(record["target"]["source_symbols"]),
+                                 set(F._C6_ROUTE_SYMBOLS[template_id]))
+
+    def test_symbols_the_route_harness_cannot_reach_are_refused(self):
+        cases = (("cuda-vecdotq-v1", "vec_dot_q4_K_q8_1", "vec_dot_q5_0_q8_1"),
+                 ("cuda-fattn-common-v1", "dequantize_V_q8_0",
+                  "flash_attn_combine_results"),
+                 ("cuda-quantize-q8-v1", "quantize_mmq_nvfp4", "quantize_q8_1"),
+                 ("cuda-norm-v2", "l2_norm_f32", "rms_norm_f32"))
+        for template_id, unreachable, reachable in cases:
+            template = self.templates.templates[template_id]
+            with self.subTest(template_id=template_id):
+                F._require_c6_reachable_symbols(
+                    self._candidate(reachable), template)
+                with self.assertRaises(C.C6OperatorUnsupportedRefusal):
+                    F._require_c6_reachable_symbols(
+                        self._candidate(unreachable), template)
+
+    def test_reachability_gate_precedes_the_build_entry(self):
+        source = inspect.getsource(F.materialize)
+        gate = source.index("_require_c6_reachable_symbols(candidate, template)")
+        self.assertLess(gate, source.index("return source.build(candidate"))
+
+    def test_capacity_ignores_a_row_without_a_reviewed_route(self):
+        record = {"current_bundle_eligibility": {"template_ids": ["cuda-mmvq-v2"]},
+                  "decision_policy": {"max_distinct_candidates": 3}}
+        portfolio = SimpleNamespace(eligible_hypotheses=lambda: [record])
+        self.assertEqual(
+            F._native_c6_portfolio_capacity(portfolio, self.templates), 0)
+
+    def test_c6_bundle_passes_controller_config_with_c6_off_unchanged(self):
+        _skip_without_site_model(self)
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            on = F.deployment.load_deployment_config(
+                F.initialize_static_deployment_bundle(
+                    base / "on", c6_admission=True))
+            self.assertEqual(on.max_iterations, 20)
+            self.assertEqual(F.controller_config(on, dry_run=True).max_iterations, 20)
+            off = F.deployment.load_deployment_config(
+                F.initialize_static_deployment_bundle(base / "off"))
+            self.assertEqual(off.max_iterations, 100)
 
 
 if __name__ == "__main__":

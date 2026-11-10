@@ -136,6 +136,7 @@ class DeploymentConfigTests(unittest.TestCase):
                     "kernel_name": "kernel()", "calls": 1,
                                         "grid": 64, "workgroup": 64, "lds_bytes": 0}]
                 for row in portfolio.eligible_hypotheses()},
+            **D.admissibility_policy.load().context_projection(),
         }
         planner_context["context_sha256"] = D.schemas.content_hash(
             {key: item for key, item in planner_context.items() if key != "context_sha256"})

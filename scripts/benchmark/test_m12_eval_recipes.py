@@ -64,6 +64,22 @@ def test_judge_is_gemma_orig_q8_without_thinking_or_spec_decode():
     assert spec["ctx_per_slot"] >= 8192
 
 
+def test_qwen_judge_keeps_dflash2_and_differs_from_canonical_only_in_ctx_flags_and_budget():
+    """2026-11-03 re-scope: the M-12 judge is Qwen3.8-27B-Q8_0 on the GPU. The operator's standing rule is that the 27B always
+    runs with DFlash2, so spec-decode stays ON (unlike the retired gemma judge, which had no spec path)."""
+    import json
+
+    spec = _spec("qwen3.8-27b-q8-gpu-judge-np4.json")
+    argv = spec["argv"]
+    assert _flag(argv, "-m").endswith("Qwen3.8-27B-Q8_0.gguf")
+    assert _flag(argv, "--spec-type") == "draft-dflash" and _flag(argv, "-md").endswith("Qwen3.8-27B-DFlash2-Q8_0.gguf")
+    assert _flag(argv, "--reasoning") == "off"
+    assert spec["np"] == 4 and spec["ctx_per_slot"] >= 8192
+    a = json.loads((EVAL / "qwen3.8-27b-q8-gpu-judge-np4.json").read_text())
+    b = json.loads((SHIPPED / "qwen3.8-27b-q8-gpu-dflash2-np4.json").read_text())
+    assert {k for k in set(a) | set(b) if a.get(k) != b.get(k)} <= {"name", "ctx", "extra_flags", "n_predict"}
+
+
 def test_the_recipe_hash_is_stable_across_ports():
     a = m12.launch_spec(EVAL / "qwen3.6-35b-a3b-q8-gpu-mtp-longctx196k-np4.json", port=1)
     b = m12.launch_spec(EVAL / "qwen3.6-35b-a3b-q8-gpu-mtp-longctx196k-np4.json", port=2)

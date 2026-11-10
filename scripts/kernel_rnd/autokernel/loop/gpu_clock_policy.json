@@ -1,0 +1,1 @@
+{"schema": "epyc.autokernel.gpu_clock_policy.v1", "mode": "request_phase_band", "pinned_level": "high", "nominal_sclk_mhz": 1700, "droop_band_mhz": 120, "min_request_samples": 8, "max_sample_gap_s": 1.0, "ratification": "artifacts/operator/ratify_ak_c9_2_20261109.json"}

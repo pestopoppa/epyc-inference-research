@@ -2,6 +2,7 @@
 import ast
 import hashlib
 import inspect
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -2089,6 +2090,8 @@ class ThePplWikitext2GateComparesAnchorAndCandidate(unittest.TestCase):
             (build / "bin" / "libggml-cpu.so").write_bytes(b"kernel v1")
             first = gates._build_identity(build, "llama-perplexity")
             (build / "bin" / "libggml-cpu.so").write_bytes(b"kernel v2")
+            # The digest memo keys on stat; a same-size rewrite inside one clock tick hides.
+            os.utime(build / "bin" / "libggml-cpu.so", ns=(1, 1))
             self.assertNotEqual(first, gates._build_identity(build, "llama-perplexity"))
             with self.assertRaises(OSError):
                 gates._build_identity(build, "llama-completion")

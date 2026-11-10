@@ -26,6 +26,7 @@ import signal
 import subprocess
 
 from .iqk_witness import Result
+from .tool_output import strip_ansi
 
 TIMEOUT_S = 180
 SCRIPT = Path(__file__).with_name("cpu_route_gdb_probe.py")
@@ -226,7 +227,7 @@ def assess_case(witness: RouteWitness, records: list[dict], output: str,
     if not re.search(witness.symbol_pattern or "$^", records[1].get("symbol", "")):
         return Result("unavailable", "route hit symbol does not match the admitted entry",
                       str(records)[:1000])
-    plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    plain = strip_ansi(output)
     case_line = f"{witness.op}({witness.case}): OK"
     if (returncode != 0 or plain.count(case_line) != 1 or
             "  1/1 tests passed" not in plain or "  Backend CPU: OK" not in plain or

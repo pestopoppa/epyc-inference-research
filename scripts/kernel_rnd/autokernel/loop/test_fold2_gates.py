@@ -144,14 +144,14 @@ class BackendOpVacuousPassGuard(unittest.TestCase):
         self.assertGreater(counts["not_supported"], 0)
         self.assertEqual(fold2_gates.backend_op_verdict(0, counts), "PASS")
 
-    def test_zero_cases_run_is_not_a_pass(self):
+    def test_zero_cases_run_is_unknown_not_a_reject(self):
         self.assertEqual(
-            fold2_gates.backend_op_verdict(0, fold2_gates.tally(COUNTED_NOTHING)), "FAIL")
+            fold2_gates.backend_op_verdict(0, fold2_gates.tally(COUNTED_NOTHING)), "UNKNOWN")
 
     def test_a_pass_requires_at_least_one_case_to_have_passed(self):
         counts = {"ok": 0, "fail": 0, "not_supported": 9, "passed": 0, "total": 0,
                   "tail": ""}
-        self.assertEqual(fold2_gates.backend_op_verdict(0, counts), "FAIL")
+        self.assertEqual(fold2_gates.backend_op_verdict(0, counts), "UNKNOWN")
 
     def test_a_tally_the_harness_disagrees_with_is_not_a_pass(self):
         counts = {"ok": 5, "fail": 0, "not_supported": 0, "passed": 5, "total": 7,

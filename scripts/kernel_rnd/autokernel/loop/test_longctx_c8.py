@@ -1,4 +1,5 @@
 import copy
+import json
 from dataclasses import replace
 import hashlib
 
@@ -28,7 +29,7 @@ def test_roundtrip_binds_frozen_bytes_and_source():
     manifest, proof = cell.build_manifest(recipe, texts, _encode, "a" * 64, "test")
     loaded = cell.validate_manifest(recipe, manifest, proof, texts, _encode, "a" * 64)
     assert len(loaded.prompts) == 8
-    assert all(len(p.prompt) == 32768 and not p.cache_prompt for p in loaded.prompts)
+    assert all(len(p.prompt) == 32768 and p.cache_prompt for p in loaded.prompts)
     tampered = copy.deepcopy(manifest)
     request = tampered["prompts"][0]["request"]
     request["prompt"][0] = 100
@@ -64,3 +65,28 @@ def test_refuses_wrong_shape_and_capacity():
         cell.build_manifest(recipe, texts, lambda _: [0]*30000, "a"*64, "test")
     with pytest.raises(cell.WorkloadRefused, match="tokenizer failed"):
         cell.build_manifest(recipe, texts, lambda _: None, "a"*64, "test")
+
+
+def test_corpus_must_cover_depth_plus_n_predict():
+    recipe = replace(_recipe(), n_predict=2048)
+    with pytest.raises(cell.WorkloadRefused, match="depth"):
+        cell.build_manifest(recipe, _texts(), _encode, "a" * 64, "test")
+
+
+def _warm_requests():
+    body = {"prompt": [1] * serving.PREFILL_HEAVY_TOKENS, "cache_prompt": True}
+    return (("p0", json.dumps(body).encode()),)
+
+
+def test_stub_server_prompt_n_decides_decode_only():
+    bound = serving.warm_kv_bound(_warm_requests(), None)
+    assert bound == serving.MEASURED_PROMPT_N_MAX
+    assert serving.warm_kv_bound(_warm_requests(), object()) is None
+    cold = (("p0", json.dumps({"prompt": [1] * 9000, "cache_prompt": False}).encode()),)
+    assert serving.warm_kv_bound(cold, None) is None
+    fill = {"phase": "warmup", "prompt_n": 32768}
+    serving.require_decode_only([fill, {"phase": "measurement", "prompt_n": 4}], bound)
+    with pytest.raises(serving.PrefillContaminated, match="32768"):
+        serving.require_decode_only([fill, {"phase": "measurement", "prompt_n": 32768}], bound)
+    with pytest.raises(serving.PrefillContaminated):
+        serving.require_decode_only([fill, {"phase": "measurement", "prompt_n": None}], bound)

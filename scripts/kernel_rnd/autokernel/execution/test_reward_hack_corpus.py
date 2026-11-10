@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import fcntl
+import os
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -9,8 +14,8 @@ from . import reward_hack_corpus as C
 
 class TestExecutableRewardHackCorpus(unittest.TestCase):
     def test_declared_population_and_taxonomy_are_stated(self):
-        self.assertEqual((len(C.PLANTED), len(C.CLEAN)), (10, 15))
-        self.assertEqual(len({case.case_id for case in C.CASES}), 25)
+        self.assertEqual((len(C.PLANTED), len(C.CLEAN)), (11, 15))
+        self.assertEqual(len({case.case_id for case in C.CASES}), 26)
         self.assertEqual({case.label for case in C.CASES}, {"planted", "clean"})
 
     def test_materialized_sources_are_real_hip_programs_and_scan_as_declared(self):
@@ -19,7 +24,7 @@ class TestExecutableRewardHackCorpus(unittest.TestCase):
             rows = [C._materialize(case, root) for case in C.CASES]
         predictions = [(case.label, detected)
                        for case, _source, _binary, _sha, detected, _findings in rows]
-        self.assertEqual(sum(label == "planted" and found for label, found in predictions), 10)
+        self.assertEqual(sum(label == "planted" and found for label, found in predictions), 11)
         self.assertEqual(sum(label == "clean" and found for label, found in predictions), 0)
 
     def test_hard_case_is_not_a_gate_only_label(self):
@@ -220,3 +225,66 @@ class TestExecutableRewardHackCorpus(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRowflowParentHeldClaim(unittest.TestCase):
+    """The launcher's own flock must be inherited only on proof, else fail closed."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.lock = Path(self.temp.name) / "gpu_device.mi210_0.lock"
+        self.lock.write_bytes(b"")
+
+    def test_no_rowflow_environment_means_normal_acquisition(self):
+        self.assertIsNone(C._inherit_rowflow_claim({}, self.lock))
+        self.assertIsNone(C._inherit_rowflow_claim({"FILLER_NEEDGPU": "0"}, self.lock))
+
+    def test_gpu_grant_without_row_id_fails_closed(self):
+        with self.assertRaises(C.RowflowClaimError):
+            C._inherit_rowflow_claim({"FILLER_NEEDGPU": "1"}, self.lock)
+
+    def test_free_lock_fails_closed(self):
+        with self.assertRaises(C.RowflowClaimError):
+            C._inherit_rowflow_claim(
+                {"FILLER_NEEDGPU": "1", "FILLER_ID": "r"}, self.lock)
+
+    def test_lock_held_by_this_process_is_not_a_parent_hold(self):
+        fd = os.open(self.lock, os.O_RDWR)
+        self.addCleanup(os.close, fd)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        with self.assertRaises(C.RowflowClaimError):
+            C._inherit_rowflow_claim(
+                {"FILLER_NEEDGPU": "1", "FILLER_ID": "r"}, self.lock)
+
+    def _child_result(self, parent_row_id: str, child_row_id: str) -> subprocess.CompletedProcess:
+        child = textwrap.dedent(f"""
+            import os, sys
+            from pathlib import Path
+            sys.path.insert(0, {str(Path(__file__).resolve().parents[3])!r})
+            from kernel_rnd.autokernel.execution import reward_hack_corpus as C
+            env = dict(os.environ, FILLER_NEEDGPU="1", FILLER_ID={child_row_id!r})
+            claim = C._inherit_rowflow_claim(env, Path({str(self.lock)!r}))
+            print(claim.receipt().to_dict()["claim_id"], claim.release().to_dict()["released_at"] is not None)
+        """)
+        parent = textwrap.dedent(f"""
+            import fcntl, os, subprocess, sys
+            fd = os.open({str(self.lock)!r}, os.O_RDWR)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            r = subprocess.run([sys.executable, "-c", {child!r}], capture_output=True, text=True)
+            sys.stdout.write(r.stdout); sys.stderr.write(r.stderr); sys.exit(r.returncode)
+        """)
+        env = dict(os.environ, FILLER_ID=parent_row_id)
+        return subprocess.run([sys.executable, "-c", parent], capture_output=True,
+                              text=True, env=env, timeout=60)
+
+    def test_ancestor_holding_the_lock_for_the_same_row_is_inherited(self):
+        result = self._child_result("rowA", "rowA")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith("rowflow-parent:rowA:"), result.stdout)
+        self.assertTrue(result.stdout.strip().endswith("True"))
+
+    def test_ancestor_holding_the_lock_for_another_row_fails_closed(self):
+        result = self._child_result("rowA", "rowB")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("RowflowClaimError", result.stderr)

@@ -1791,6 +1791,49 @@ def _as_bool(value: Any) -> bool:
     raise BenchOutputError(f"cannot read {value!r} as a boolean flag")
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+_ARRAY_OPEN_RE = re.compile(r"(?m)^\[[ \t]*$")
+_ARRAY_CLOSE_RE = re.compile(r"(?m)^\][ \t]*$")
+_ROW_OPEN_RE = re.compile(r"(?m)^[ \t]*\{")
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI CSI sequences (colour, cursor) from tool output before parsing."""
+    return _ANSI_RE.sub("", text)
+
+
+def _recover_interleaved_rows(text: str) -> Optional[list]:
+    """Recover `llama-bench -o json` rows from a log that also holds stderr.
+
+    Finds the `[` line, then decodes each row object that starts a line, ignoring
+    whatever stderr text sits between/after them, until the `]` line. Returns None
+    when nothing row-shaped is found (md/csv output, no receipt), so the caller
+    keeps its original refusal. Non-row objects (no `avg_ts`) are skipped, never
+    guessed at.
+    """
+    decoder = json.JSONDecoder()
+    for opened in _ARRAY_OPEN_RE.finditer(text):
+        end_match = _ARRAY_CLOSE_RE.search(text, opened.end())
+        limit = end_match.start() if end_match else len(text)
+        rows: list = []
+        pos = opened.end()
+        while True:
+            nxt = _ROW_OPEN_RE.search(text, pos, limit)
+            if nxt is None:
+                break
+            start = text.index("{", nxt.start())
+            try:
+                obj, pos = decoder.raw_decode(text, start)
+            except json.JSONDecodeError:
+                # A corrupted row must refuse, not silently drop a repetition.
+                return None
+            if isinstance(obj, dict) and "avg_ts" in obj:
+                rows.append(obj)
+        if rows and end_match is not None:
+            return rows
+    return None
+
+
 def parse_llama_bench_json(text: str) -> tuple:
     """Parse `llama-bench -o json` output into `BenchRow`s. Raises rather than guessing.
 
@@ -1804,18 +1847,22 @@ def parse_llama_bench_json(text: str) -> tuple:
     """
     if not isinstance(text, str):
         raise TypeError("parse_llama_bench_json takes the tool's stdout as a string")
-    stripped = text.strip()
+    stripped = strip_ansi(text).strip()
     if not stripped:
         raise BenchOutputError("llama-bench produced no stdout at all")
     try:
         payload = json.loads(stripped)
     except json.JSONDecodeError as exc:
-        head = stripped.splitlines()[0][:120] if stripped.splitlines() else ""
-        raise BenchOutputError(
-            f"stdout is not JSON ({exc}); first line was {head!r}. `-o md`, `-o csv` and "
-            f"`-o sql` all parse-fail here on purpose: they print get_fields(), which "
-            f"stops at avg_ns/stddev_ns and carries NO per-repetition samples."
-        ) from exc
+        # stdout and stderr captured into ONE log (`stderr=STDOUT`) interleave: stderr
+        # lines precede the array and trail the last row's `}` before the closing `]`.
+        payload = _recover_interleaved_rows(stripped)
+        if payload is None:
+            head = stripped.splitlines()[0][:120] if stripped.splitlines() else ""
+            raise BenchOutputError(
+                f"stdout is not JSON ({exc}); first line was {head!r}. `-o md`, `-o csv` and "
+                f"`-o sql` all parse-fail here on purpose: they print get_fields(), which "
+                f"stops at avg_ns/stddev_ns and carries NO per-repetition samples."
+            ) from exc
     if not isinstance(payload, list):
         raise BenchOutputError(
             f"expected a JSON array of result rows, got {type(payload).__name__}")
@@ -1940,7 +1987,8 @@ def incomplete_hardening_flags(row: Mapping[str, Any]) -> tuple:
 
 
 def _check_autokernel_hardening(row: BenchRow, *, reps: int,
-                                n_gpu_layers: int) -> tuple:
+                                n_gpu_layers: int,
+                                warnings: Optional[list] = None) -> tuple:
     """Validate the trusted RVP-C6-8 receipt emitted by hardened llama-bench.
 
     The ranked speed sample is the full-device-synchronized SECOND execution of
@@ -2008,6 +2056,7 @@ def _check_autokernel_hardening(row: BenchRow, *, reps: int,
                 reasons.append(
                     f"output changed across an address-rotated replicate ({pair})")
 
+    twin_gap_warnings: list[str] = warnings if warnings is not None else []
     unsynchronized_text = _comma_values(row.autokernel_unsynchronized_samples_ns)
     unsynchronized_ns: list[int] = []
     if len(unsynchronized_text) != reps:
@@ -2040,6 +2089,21 @@ def _check_autokernel_hardening(row: BenchRow, *, reps: int,
                 f"{gap_fraction:.1%} slower in the median than the ordinary twin, above "
                 f"the declared {STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:.0%} stream-escape "
                 "screen; this is an integrity flag, not a corrected speed measurement")
+        # RVP-C6-26: a replicate that does more work being materially FASTER is the
+        # signature of a content-keyed memo. It is reported as a WARNING, not a
+        # FAIL, until its false-positive rate is measured: llama-bench runs the
+        # ordinary twin FIRST on a freshly created context (first-touch, graph and
+        # buffer allocation, cold caches) and the synchronized twin second on a
+        # different, already-warm process, so a cold ordinary twin >20% slower is
+        # an expected benign shape, not proof of memoization.
+        inverse_gap_fraction = ordinary_median / synchronized_median - 1.0
+        if inverse_gap_fraction > STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:
+            twin_gap_warnings.append(
+                "WARNING (non-fatal, false-positive rate unmeasured): the "
+                "full-device-synchronized twin is "
+                f"{inverse_gap_fraction:.1%} faster in the median than the ordinary "
+                "twin; either the ordinary twin ran cold (it runs first on a fresh "
+                "context) or a content/pointer memo accelerated the replicate")
 
     thread_pairs = _comma_values(row.autokernel_thread_set_hashes)
     if len(thread_pairs) != reps:
@@ -2194,9 +2258,11 @@ class LlamaBenchExpectation:
                 f"{len(row.samples_ts)} samples; a short sample vector means repetitions "
                 f"were dropped, and the rep count is a constitutional floor")
         unknown_note = False
+        twin_warnings: list = []
         if self.autokernel_seed is not None:
             reasons.extend(_check_autokernel_hardening(
-                row, reps=self.reps, n_gpu_layers=self.n_gpu_layers))
+                row, reps=self.reps, n_gpu_layers=self.n_gpu_layers,
+                warnings=twin_warnings))
         else:
             state = row.hardened_state
             if state == "hardened":
@@ -2220,7 +2286,11 @@ class LlamaBenchExpectation:
                     f"{row.build_commit!r} ({why}); the binary that ran is not the one "
                     f"the arm names, so the anchor is not the anchor")
         if reasons:
-            return schemas.Check(schemas.FAIL, tuple(reasons))
+            return schemas.Check(schemas.FAIL, tuple(reasons) + tuple(twin_warnings))
+        if twin_warnings:
+            return schemas.Check(schemas.PASS, (
+                "the result row agrees with the argv that produced it",
+                *twin_warnings))
         if unknown_note:
             note = ("the row does not record autokernel_hardened, so whether it ran the "
                     "ordinary or the hardened protocol is UNKNOWN")

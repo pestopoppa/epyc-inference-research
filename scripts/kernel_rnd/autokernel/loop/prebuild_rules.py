@@ -21,13 +21,13 @@ import re
 import subprocess
 from pathlib import Path
 from typing import Callable, Mapping
+from .tool_output import strip_ansi
 
 #: Typed refusal values. `gate` is the Verdict/refusal_gate string; both are rule gates
 #: (a refusal is a scope verdict of the rule, never an authoring defect or evidence).
 SUITE_EMPTY_GATE = "oracle_suite_empty"
 BLANK_HUNK_CLASS = "blank_only_hunk"
 
-_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@")
 LIST_TIMEOUT_S = 120
 
@@ -79,7 +79,7 @@ def list_suite_cases(binary: Path, ops: str, backend: str, env: Mapping | None =
                           capture_output=True, text=True, timeout=LIST_TIMEOUT_S,
                           env=dict(env) if env is not None else None)
     count = 0
-    for line in _ANSI.sub("", done.stdout + done.stderr).splitlines():
+    for line in strip_ansi(done.stdout + done.stderr).splitlines():
         line = line.rstrip()
         if re.match(r"^\s+\w+\(.*\): SUPPORTED$", line):
             count += 1

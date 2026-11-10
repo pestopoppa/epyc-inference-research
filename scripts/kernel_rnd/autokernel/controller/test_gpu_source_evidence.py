@@ -3,6 +3,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 import re
+import struct
 import tempfile
 import unittest
 from unittest import mock
@@ -120,18 +121,42 @@ def plan(root: Path, *, shared_reward: bool = False) -> E.GpuSourceEvidencePlan:
         shared = E.SharedRewardRuntimeFiles(
             measurement_binary=reward, runtime_receipt=runtime_receipt,
             anchor_hip_library=anchor_hip, candidate_hip_library=candidate_hip)
+    c6_tool = write_bound(root, "c6-harness", b"c6 tool", "executable")
+    c6_tool.path.chmod(0o700)
+    c6_source = write_bound(root, "c6-harness.cpp", b"source", "c6_source")
+    c6_capability = write_bound(root, "c6-capability.json", b"capability", "c6_capability")
+    c6 = E.C6CorrectnessPlan(
+        argv=(str(c6_tool.path), "--mode", "oracle", "--operation", "MUL_MAT",
+              "--backend", "ROCm0", "--type-a", "q4_K",
+              "--m", "32", "--n", "1", "--k", "256", "--seed", "42",
+              "--sidecar", E.C6_SIDECAR_OUTPUT),
+        inputs=(c6_tool, c6_source, c6_capability),
+        precision_contract={
+            "required_output_dtype": "f32", "required_accumulator_dtype": "f32",
+            "atol": .01, "rtol": .01, "required_matched_ratio": .95,
+            "lowbit": True},
+        precision_equivalence_policy={
+            "operator_id": "MUL_MAT", "template_id": "fixture-q4k",
+            "input_dtype": "float32", "required_output_dtype": "f32",
+            "required_accumulator_dtype": "f32", "reduce_dimension": 256,
+            "structural_evidence_sha256": digest("c6-structural"),
+            "bound_multiplier": 1.0},
+        structural_precision_evidence={
+            "output_dtype": "f32", "accumulator_dtype": "f32",
+            "evidence_sha256": digest("c6-structural")},
+        semantic_judge_verdicts={})
     result = E.GpuSourceEvidencePlan(
         campaign_id="ak-gpu-source-evidence-test",
         device_id="mi210_0",
         manifest_sha256=manifest.sha256, model_sha256=model.sha256,
         workload_sha256=workload.sha256, runtime_config_sha256=runtime.sha256,
         candidate=candidate, anchor=anchor,
-        correctness_argv=(str(correctness_tool.path), "--op", "MUL_MAT_ID",
+        correctness_argv=(str(correctness_tool.path), "--op", "MUL_MAT",
                           "--binary", str(candidate_files.binary.path),
                           "--model", str(model.path), "--workload", str(workload.path),
                           "--config", str(runtime.path)),
         correctness_backend="ROCm0",
-        correctness_op="MUL_MAT_ID",
+        correctness_op="MUL_MAT",
         expected_correctness_cases=3,
         candidate_rocprof_argv=(str(profiler.path), "-i", str(timestamp_input.path),
                                 "--candidate", str(shared.measurement_binary.path if shared else candidate_files.binary.path),
@@ -174,7 +199,7 @@ def plan(root: Path, *, shared_reward: bool = False) -> E.GpuSourceEvidencePlan:
                                        ("LD_LIBRARY_PATH", (str(shared.candidate_hip_library.path.parent) + ":" + str(shared.measurement_binary.path.parent)) if shared else str(candidate_files.hip_library.path.parent))),
         anchor_rocprof_environment=(("HIP_VISIBLE_DEVICES", "0"),
                                     ("LD_LIBRARY_PATH", (str(shared.anchor_hip_library.path.parent) + ":" + str(shared.measurement_binary.path.parent)) if shared else str(anchor_files.hip_library.path.parent))),
-        shared_runtime=shared)
+        shared_runtime=shared, c6_correctness=c6)
     policy_path = placeholder_policy.path
     policy_path.write_text(json.dumps(E._policy_payload(result), sort_keys=True))
     policy = E.BoundInputFile(
@@ -244,7 +269,7 @@ def csv_text(arm: str, *, inverse_bad=False, invariant_changed=False,
 
 def correctness_console(summary: str = "3/3 tests passed", *,
                         backend: str = "ROCm0",
-                        op: str = "MUL_MAT_ID") -> str:
+                        op: str = "MUL_MAT") -> str:
     match = re.fullmatch(r"(\d+)/(\d+) tests passed", summary)
     if match is None:
         return summary + "\n"
@@ -266,7 +291,10 @@ def correctness_console(summary: str = "3/3 tests passed", *,
 class FakeExecutors:
     def __init__(self, *, correctness_exit=0, correctness_summary="3/3 tests passed",
                  non_overlap=False, inverse_bad=False, invariant_changed=False,
-                 forbidden=False, rocprof_exit=0, runtime_maps=None):
+                 forbidden=False, rocprof_exit=0, runtime_maps=None,
+                 c6_nondeterministic=False, c6_partial=False,
+                 c6_wrong_seed=False, c6_stall_ready=False,
+                 c6_candidate_exit=0):
         self.calls = []
         self.correctness_exit = correctness_exit
         self.correctness_summary = correctness_summary
@@ -276,13 +304,126 @@ class FakeExecutors:
         self.forbidden = forbidden
         self.rocprof_exit = rocprof_exit
         self.runtime_maps = runtime_maps or {}
+        self.c6_nondeterministic = c6_nondeterministic
+        self.c6_partial = c6_partial
+        self.c6_wrong_seed = c6_wrong_seed
+        self.c6_stall_ready = c6_stall_ready
+        self.c6_candidate_exit = c6_candidate_exit
+        self.c6_receipt_seen_before_target = False
+        self.c6_operation = "MUL_MAT"
+        self.c6_leg_calls = 0
+
+    def _c6_witness(self, option, m, n, k):
+        output_elements = (m*n*14 if self.c6_operation == "FLASH_ATTN_EXT"
+                           else m*n)
+        output = struct.pack(
+            f"<{output_elements}f",
+            *[float(index) / max(1, output_elements)
+              for index in range(output_elements)])
+        output_f64 = struct.pack(
+            f"<{output_elements}d",
+            *[float(index) / max(1, output_elements)
+              for index in range(output_elements)])
+        if self.c6_operation == "MUL_MAT":
+            witness = {"weights_hex": "00" * 128,
+                       "activations_f32le_hex": "00" * (k*n*4)}
+        elif self.c6_operation == "RMS_NORM":
+            witness = {"activations_f32le_hex": "00" * (m*n*4),
+                       "scale_f32le_hex": "00" * (m*4)}
+        else:
+            witness = {"query_f32le_hex": "00" * (m*n*14*4),
+                       "key_f16le_hex": "00" * (m*k*2*2),
+                       "value_f16le_hex": "00" * (m*k*2*2)}
+        return output_elements, output, output_f64, witness
 
     def correctness(self, invocation):
         self.calls.append((invocation.kind, invocation.arm, invocation.argv,
                            invocation.environment))
-        invocation.stdout_path.write_text(correctness_console(self.correctness_summary))
+        if "--mode" in invocation.argv:
+            option = {invocation.argv[index]: invocation.argv[index + 1]
+                      for index in range(1, len(invocation.argv), 2)}
+            mode = option["--mode"]
+            self.c6_operation = option["--operation"]
+            m, n, k = (int(option[name]) for name in ("--m", "--n", "--k"))
+            output_elements, output, output_f64, witness = self._c6_witness(
+                option, m, n, k)
+            if mode == "oracle":
+                sidecar = Path(option["--sidecar"])
+                sidecar.write_text(json.dumps({
+                    "schema": E.C6_ORACLE_SIDECAR_SCHEMA,
+                    "backend": option["--backend"],
+                    "operation": self.c6_operation,
+                    "type_a": option["--type-a"], "m": m, "n": n, "k": k,
+                    "seed": (int(option["--seed"]) - 1 if self.c6_wrong_seed
+                             else int(option["--seed"])),
+                    "output_elements": output_elements,
+                    "input_witness": witness,
+                    "reference_output_f32le_hex": output.hex(),
+                    "reference_output_f64le_hex": output_f64.hex(),
+                }, sort_keys=True))
+                invocation.stdout_path.write_text("native C6 oracle complete\n")
+            else:
+                self.c6_leg_calls += 1
+                leg = self.c6_leg_calls
+                if not self.c6_stall_ready:
+                    Path(option["--ready-file"]).write_bytes(b"R")
+                chosen = output
+                if self.c6_nondeterministic and leg == 3:
+                    chosen = output[:-1] + bytes([output[-1] ^ 1])
+                Path(option["--output"]).write_bytes(chosen)
+                invocation.stdout_path.write_text(
+                    f"native C6 candidate leg {leg} complete\n")
+                exit_code = self.c6_candidate_exit
+                if self.c6_partial and leg == 3:
+                    exit_code = 1
+                invocation.stderr_path.write_text("")
+                return self._capture(invocation, exit_code)
+            invocation.stderr_path.write_text("")
+            return self._capture(invocation, 0)
+        if "--sidecar" in invocation.argv:
+            sidecar = Path(invocation.argv[invocation.argv.index("--sidecar") + 1])
+            option = {invocation.argv[index]: invocation.argv[index + 1]
+                      for index in range(1, len(invocation.argv), 2)}
+            self.c6_operation = option["--operation"]
+            m, n, k = (int(option[name]) for name in ("--m", "--n", "--k"))
+            output_elements, output, output_f64, witness = self._c6_witness(
+                option, m, n, k)
+            sidecar.write_text(json.dumps({
+                "schema": E.C6_SIDECAR_SCHEMA,
+                "sequence": ["reference", "candidate-1", "candidate-2", "candidate-3"],
+                "backend": option["--backend"], "operation": self.c6_operation,
+                "type_a": option["--type-a"], "type_b": "f32",
+                "output_dtype": "f32", "m": m, "n": n, "k": k,
+                "seed": (int(option["--seed"]) - 1 if self.c6_wrong_seed
+                         else int(option["--seed"])),
+                "output_elements": output_elements,
+                "input_witness": witness,
+                "reference_output_f32le_hex": output.hex(),
+                "reference_output_f64le_hex": output_f64.hex(),
+                "candidate_outputs_f32le_hex": (
+                    [output.hex()] * 2 if self.c6_partial else
+                    [output.hex(), output.hex(),
+                     (output[:-1] + bytes([output[-1] ^ 1])).hex()]
+                    if self.c6_nondeterministic else [output.hex()] * 3),
+                "candidate_clone_ids": (
+                    ["candidate-1", "candidate-2"] if self.c6_partial else
+                    ["candidate-1", "candidate-2", "candidate-3"]),
+            }, sort_keys=True))
+            invocation.stdout_path.write_text("native C6 complete\n")
+        else:
+            c6_receipt = invocation.stdout_path.parent / "c6-receipt.json"
+            if not c6_receipt.is_file():
+                c6_receipt = invocation.stdout_path.parent.parent / "c6-receipt.json"
+            self.c6_receipt_seen_before_target = c6_receipt.is_file()
+            if self.c6_receipt_seen_before_target:
+                E.proofs.load_receipt(
+                    c6_receipt, schema=E.C6_CORRECTNESS_SCHEMA)
+            invocation.stdout_path.write_text(correctness_console(
+                self.correctness_summary, op=self.c6_operation))
         invocation.stderr_path.write_text("")
-        return self._capture(invocation, self.correctness_exit)
+        return self._capture(
+            invocation, 0 if "--sidecar" in invocation.argv
+            else self.correctness_exit)
 
     def rocprof(self, invocation):
         self.calls.append((invocation.kind, invocation.arm, invocation.argv,
@@ -365,7 +506,7 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             E._reduce_arm(rows, exact=exact, forbidden=(), invariants=())
 
     def produce(self, directory, *, executors=None, claims=None, plan_=None,
-                verifier=lambda _receipt: True):
+                verifier=lambda _receipt: True, c6_ready_timeout_s=120.0):
         executors = executors or FakeExecutors()
         claims = claims or ClaimFactory()
         bundle = E.produce_gpu_source_evidence(
@@ -374,7 +515,8 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             correctness_executor=executors.correctness,
             rocprof_executor=executors.rocprof,
             claim_journal=object(), claim_acquirer=claims,
-            claim_verifier=verifier, claim_timeout_s=0)
+            claim_verifier=verifier, claim_timeout_s=0,
+            c6_ready_timeout_s=c6_ready_timeout_s)
         return bundle, executors, claims
 
     def test_happy_path_binds_exact_commands_claims_files_and_inverse(self):
@@ -382,16 +524,18 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             bundle, executors, claims = self.produce(directory)
             self.assertEqual(
                 [row[:2] for row in executors.calls],
-                [("correctness", "candidate"), ("rocprof", "candidate"),
+                [("correctness", "candidate")] * 5 +
+                [("rocprof", "candidate"),
                  ("rocprof", "anchor")])
             self.assertTrue(all(claim.released for claim in claims.claims))
             self.assertEqual(len(claims.claims), 3)
-            self.assertNotEqual(executors.calls[1][3], executors.calls[2][3])
+            self.assertTrue(executors.c6_receipt_seen_before_target)
+            self.assertNotEqual(executors.calls[5][3], executors.calls[6][3])
             self.assertEqual(
-                Path(dict(executors.calls[1][3])["LD_LIBRARY_PATH"]).name,
+                Path(dict(executors.calls[5][3])["LD_LIBRARY_PATH"]).name,
                 "candidate")
             self.assertEqual(
-                Path(dict(executors.calls[2][3])["LD_LIBRARY_PATH"]).name,
+                Path(dict(executors.calls[6][3])["LD_LIBRARY_PATH"]).name,
                 "anchor")
             root = Path(directory) / "evidence"
             loaded = E.load_gpu_source_evidence_bundle(root / "proof-bundle.json")
@@ -415,6 +559,415 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                 "attribution-anchor/timestamps.csv"):
                 self.assertTrue((root / relative).is_file())
 
+    def test_rms_and_flash_native_sidecars_run_before_targeted_correctness(self):
+        for operation, type_a, dimensions in (
+                ("RMS_NORM", "f32", (256, 1, 1)),
+                ("FLASH_ATTN_EXT", "f16", (64, 1, 128))):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as directory:
+                current = plan(Path(directory) / "inputs")
+                c6 = replace(
+                    current.c6_correctness,
+                    argv=(current.c6_correctness.argv[0], "--mode", "oracle",
+                          "--operation", operation,
+                          "--backend", "ROCm0", "--type-a", type_a,
+                          "--m", str(dimensions[0]), "--n", str(dimensions[1]),
+                          "--k", str(dimensions[2]), "--seed", "42",
+                          "--sidecar", E.C6_SIDECAR_OUTPUT),
+                    precision_contract={
+                        "required_output_dtype": "f32",
+                        "required_accumulator_dtype": "f32",
+                        "atol": .001, "rtol": .001,
+                        "required_matched_ratio": 1.0, "lowbit": False})
+                current = replace(
+                    current, correctness_op=operation, c6_correctness=c6)
+                current.policy.path.write_text(json.dumps(
+                    E._policy_payload(current), sort_keys=True))
+                current = replace(current, policy=E.BoundInputFile(
+                    "execution_policy", current.policy.path,
+                    hashlib.sha256(current.policy.path.read_bytes()).hexdigest()))
+                bundle, executors, _ = self.produce(
+                    directory, plan_=current)
+                self.assertTrue(executors.c6_receipt_seen_before_target)
+                self.assertEqual(
+                    bundle.correctness["body"]["c6_correctness"]["body"]
+                    ["seeded_case_identity"]["operation"], operation)
+
+    def test_aggregate_correctness_seals_c6_before_first_invocation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            contracts = tuple({
+                "invocation_id": f"case-{index}",
+                "argv": list(current.correctness_argv),
+                "backend": current.correctness_backend,
+                "op": current.correctness_op,
+                "case_set": f"set-{index}",
+                "expected_cases": current.expected_correctness_cases,
+                "required_cases": [],
+            } for index in (1, 2))
+            current = replace(current, correctness_invocations=contracts)
+            current.policy.path.write_text(json.dumps(
+                E._policy_payload(current), sort_keys=True))
+            current = replace(current, policy=E.BoundInputFile(
+                "execution_policy", current.policy.path,
+                hashlib.sha256(current.policy.path.read_bytes()).hexdigest()))
+            bundle, executors, claims = self.produce(
+                directory, plan_=current)
+            self.assertEqual(
+                [row[:2] for row in executors.calls[:6]],
+                [("correctness", "candidate")] * 6)
+            self.assertTrue(executors.c6_receipt_seen_before_target)
+            self.assertEqual(len(claims.claims), 4)
+            self.assertEqual(
+                bundle.correctness["body"]["invocations"][0]["body"]
+                ["c6_claim_join"], "same_held_claim")
+            self.assertEqual(
+                bundle.correctness["body"]["invocations"][1]["body"]
+                ["c6_claim_join"], "sealed_c6_restart")
+
+    def test_native_c6_refuses_partial_or_nondeterministic_three_run_witness(self):
+        for label, executor, calls in (
+                ("partial", FakeExecutors(c6_partial=True), 4),
+                ("nondeterministic", FakeExecutors(c6_nondeterministic=True), 4),
+                ("wrong-seed", FakeExecutors(c6_wrong_seed=True), 1)):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                with self.assertRaises(E.EvidenceProducerError):
+                    self.produce(directory, executors=executor)
+                self.assertEqual(len(executor.calls), calls)
+                self.assertFalse((Path(directory) / "evidence" /
+                                  "correctness" / "receipt.json").exists())
+
+    def test_sealed_c6_crash_boundary_reuses_exact_receipt_without_rerun(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            first = FakeExecutors()
+            original = E._validate_c6_correctness_receipt
+            crashed = False
+
+            def crash_after_reopen(loaded, plan_):
+                nonlocal crashed
+                original(loaded, plan_)
+                if not crashed:
+                    crashed = True
+                    raise RuntimeError("crash after sealed C6 reopen")
+
+            with mock.patch.object(
+                    E, "_validate_c6_correctness_receipt",
+                    side_effect=crash_after_reopen), self.assertRaisesRegex(
+                        E.EvidenceProducerError, "crash after sealed C6"):
+                self.produce(directory, executors=first, plan_=current)
+            self.assertEqual(len(first.calls), 4)
+            c6_receipt = (Path(directory) / "evidence" / "correctness" /
+                          "c6-receipt.json")
+            self.assertTrue(c6_receipt.is_file())
+
+            resumed = FakeExecutors()
+            bundle, resumed, claims = self.produce(
+                directory, executors=resumed, plan_=current)
+            self.assertIsInstance(bundle, E.proofs.GpuSourceProofBundle)
+            self.assertEqual([row[:2] for row in resumed.calls], [
+                ("correctness", "candidate"),
+                ("rocprof", "candidate"), ("rocprof", "anchor")])
+            self.assertTrue(resumed.c6_receipt_seen_before_target)
+            correctness = json.loads((Path(directory) / "evidence" /
+                                      "correctness" / "receipt.json").read_text())
+            self.assertEqual(correctness["c6_claim_join"], "sealed_c6_restart")
+            self.assertEqual(len(claims.claims), 3)
+
+    def test_tampered_sealed_c6_restart_fails_before_any_invocation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            original = E._validate_c6_correctness_receipt
+
+            def crash_after_reopen(loaded, plan_):
+                original(loaded, plan_)
+                raise RuntimeError("crash after sealed C6 reopen")
+
+            with mock.patch.object(
+                    E, "_validate_c6_correctness_receipt",
+                    side_effect=crash_after_reopen), self.assertRaises(
+                        E.EvidenceProducerError):
+                self.produce(directory, executors=FakeExecutors(), plan_=current)
+            sidecar = (Path(directory) / "evidence" / "correctness" /
+                       "c6-oracle-sidecar.json")
+            sidecar.write_text(sidecar.read_text() + " ")
+            resumed = FakeExecutors()
+            with self.assertRaisesRegex(E.EvidenceProducerError, "sidecar changed"):
+                self.produce(directory, executors=resumed, plan_=current)
+            self.assertEqual(resumed.calls, [])
+
+    def test_native_c6_sidecar_tamper_refuses_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.produce(directory)
+            sidecar = (Path(directory) / "evidence" / "correctness" /
+                       "c6-oracle-sidecar.json")
+            sidecar.write_text(sidecar.read_text() + " ")
+            with self.assertRaisesRegex(E.EvidenceProducerError, "sidecar changed"):
+                E.load_gpu_source_evidence_bundle(
+                    Path(directory) / "evidence" / "proof-bundle.json")
+
+    def test_c6_off_plan_keeps_legacy_correctness_and_refuses_c6_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = replace(plan(Path(directory) / "inputs"),
+                              c6_correctness=None)
+            policy_path = current.policy.path
+            policy_path.write_text(json.dumps(E._policy_payload(current), sort_keys=True))
+            current = replace(current, policy=E.BoundInputFile(
+                "execution_policy", policy_path,
+                hashlib.sha256(policy_path.read_bytes()).hexdigest()))
+            bundle, executors, _ = self.produce(directory, plan_=current)
+            self.assertEqual(
+                [row[0] for row in executors.calls].count("correctness"), 1)
+            self.assertNotIn("c6_correctness", bundle.correctness["body"])
+            self.assertNotIn("c6_claim_join", bundle.correctness["body"])
+            with self.assertRaisesRegex(E.EvidenceProducerError, "C6-off plan"):
+                E._validate_c6_stage_join(
+                    {"c6_correctness": {}}, current, "fixture")
+
+    def test_split_c6_binds_oracle_candidate_legs_and_handshake(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bundle, executors, claims = self.produce(directory)
+            self.assertEqual(
+                [row[:2] for row in executors.calls],
+                [("correctness", "candidate")] * 5 +
+                [("rocprof", "candidate"), ("rocprof", "anchor")])
+            self.assertTrue(all(claim.released for claim in claims.claims))
+            self.assertTrue(executors.c6_receipt_seen_before_target)
+            correctness = Path(directory) / "evidence" / "correctness"
+            c6_receipt = json.loads(
+                (correctness / "c6-receipt.json").read_text())
+            body = c6_receipt
+            self.assertEqual(body["c6_process_mode"], "oracle_candidate_split")
+            self.assertTrue((correctness / "c6-oracle-sidecar.json").is_file())
+            self.assertTrue((correctness / "c6-input-binding.json").is_file())
+            inputs = sorted(path.name for path in
+                            (correctness / "c6-inputs").iterdir())
+            self.assertEqual(inputs, ["activations_f32le.bin", "weights.bin"])
+            for path in (correctness / "c6-inputs").iterdir():
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            legs = body["per_leg_bindings"]
+            self.assertEqual(len(legs), 3)
+            for index, leg in enumerate(legs, 1):
+                self.assertEqual(leg["leg_index"], index)
+                self.assertEqual(leg["exit_code"], 0)
+                self.assertGreaterEqual(
+                    leg["event_stream"]["ready_observed_monotonic_ns"],
+                    leg["event_stream"]["launched_monotonic_ns"])
+                self.assertGreaterEqual(
+                    leg["event_stream"]["continue_written_monotonic_ns"],
+                    leg["event_stream"]["ready_observed_monotonic_ns"])
+                self.assertGreaterEqual(
+                    leg["event_stream"]["completed_monotonic_ns"],
+                    leg["event_stream"]["continue_written_monotonic_ns"])
+                for suffix in ("ready", "continue"):
+                    path = Path(leg[f"{suffix}_path"])
+                    self.assertTrue(path.is_file())
+                    self.assertEqual(path.stat().st_nlink, 1)
+            self.assertEqual(
+                body["input_identity_sha256"],
+                body["input_binding"]["input_identity_sha256"])
+            reopened = E.load_gpu_source_evidence_bundle(
+                Path(directory) / "evidence" / "proof-bundle.json")
+            self.assertEqual(reopened, bundle)
+
+    def test_combined_c6_mode_still_seals_without_oracle_split(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            c6 = replace(current.c6_correctness, argv=(
+                current.c6_correctness.argv[0],
+                "--operation", "MUL_MAT", "--backend", "ROCm0",
+                "--type-a", "q4_K", "--m", "32", "--n", "1", "--k", "256",
+                "--seed", "42", "--sidecar", E.C6_SIDECAR_OUTPUT))
+            current = replace(current, c6_correctness=c6)
+            current.policy.path.write_text(json.dumps(
+                E._policy_payload(current), sort_keys=True))
+            current = replace(current, policy=E.BoundInputFile(
+                "execution_policy", current.policy.path,
+                hashlib.sha256(current.policy.path.read_bytes()).hexdigest()))
+            bundle, executors, _ = self.produce(directory, plan_=current)
+            self.assertEqual(
+                [row[:2] for row in executors.calls],
+                [("correctness", "candidate")] * 2 +
+                [("rocprof", "candidate"), ("rocprof", "anchor")])
+            body = json.loads((Path(directory) / "evidence" / "correctness" /
+                               "c6-receipt.json").read_text())
+            self.assertNotIn("c6_process_mode", body)
+            self.assertNotIn("per_leg_bindings", body)
+
+    def test_split_c6_refuses_missing_ready_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError,
+                    "ready token was not observed"):
+                self.produce(directory, executors=FakeExecutors(
+                    c6_stall_ready=True), c6_ready_timeout_s=0.3)
+            self.assertFalse((Path(directory) / "evidence" /
+                              "correctness" / "receipt.json").exists())
+
+    def test_split_c6_refuses_prearmed_continue_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            ready = Path(directory) / "leg-ready"
+            continue_path = Path(directory) / "leg-continue"
+            continue_path.write_bytes(b"C")
+            invocation = E.CommandInvocation(
+                kind="correctness", arm="candidate",
+                argv=E._c6_candidate_argv_from_argv(
+                    current.c6_correctness.argv,
+                    input_dir=Path(directory) / "inputs",
+                    output=Path(directory) / "leg-out.bin",
+                    ready_file=ready, continue_file=continue_path),
+                stdout_path=(Path(directory) / "leg-stdout.txt").resolve(),
+                stderr_path=(Path(directory) / "leg-stderr.txt").resolve(),
+                working_directory=current.execution_cwd,
+                environment=current.correctness_environment)
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "handshake paths are not fresh"):
+                E._paced_candidate(
+                    FakeExecutors().correctness, invocation, ready,
+                    continue_path)
+
+    def test_split_c6_refuses_candidate_leg_exit_nonzero(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executors = FakeExecutors(c6_candidate_exit=1)
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "exited nonzero"):
+                self.produce(directory, executors=executors)
+            self.assertEqual(len(executors.calls), 2)
+            self.assertFalse((Path(directory) / "evidence" /
+                              "correctness" / "receipt.json").exists())
+
+    def test_split_c6_tampered_candidate_output_refuses_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.produce(directory)
+            output = (Path(directory) / "evidence" / "correctness" /
+                      "c6-candidate-2-output.bin")
+            output.write_bytes(output.read_bytes()[:-1] + b"\x00")
+            with self.assertRaisesRegex(E.EvidenceProducerError, "changed"):
+                E.load_gpu_source_evidence_bundle(
+                    Path(directory) / "evidence" / "proof-bundle.json")
+
+    def test_split_c6_tampered_input_binding_refuses_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.produce(directory)
+            weights = (Path(directory) / "evidence" / "correctness" /
+                       "c6-inputs" / "weights.bin")
+            weights.write_bytes(weights.read_bytes() + b"\x00")
+            with self.assertRaisesRegex(E.EvidenceProducerError, "changed"):
+                E.load_gpu_source_evidence_bundle(
+                    Path(directory) / "evidence" / "proof-bundle.json")
+
+    def test_split_c6_tampered_leg_argv_refuses_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            bundle, _, _ = self.produce(directory, plan_=current)
+            receipt = Path(directory) / "evidence" / "correctness" / \
+                "c6-receipt.json"
+            loaded = json.loads(receipt.read_text())
+            loaded["per_leg_bindings"][0]["argv"][0] = "/tmp/other"
+            loaded["receipt_sha256"] = E.schemas.content_hash({
+                key: value for key, value in loaded.items()
+                if key != "receipt_sha256"})
+            receipt.write_text(json.dumps(loaded, sort_keys=True) + "\n")
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "derivation"):
+                E._validate_c6_correctness_receipt(
+                    E.proofs.load_receipt(receipt, schema=E.C6_CORRECTNESS_SCHEMA),
+                    current)
+
+    def test_split_c6_tampered_leg_event_stream_refuses_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            self.produce(directory, plan_=current)
+            receipt = Path(directory) / "evidence" / "correctness" / \
+                "c6-receipt.json"
+            loaded = json.loads(receipt.read_text())
+            loaded["per_leg_bindings"][0]["event_stream"][
+                "continue_written_monotonic_ns"] = 1
+            loaded["receipt_sha256"] = E.schemas.content_hash({
+                key: value for key, value in loaded.items()
+                if key != "receipt_sha256"})
+            receipt.write_text(json.dumps(loaded, sort_keys=True) + "\n")
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "not monotonic"):
+                E._validate_c6_correctness_receipt(
+                    E.proofs.load_receipt(receipt, schema=E.C6_CORRECTNESS_SCHEMA),
+                    current)
+
+    def test_split_c6_malformed_input_manifest_refuses_typed(self):
+        """Audit D1: non-mapping manifest structures raise EvidenceProducerError,
+        never AttributeError, even under a coherent reseal."""
+        for label, payload in (
+                ("array", b"[]\n"),
+                ("scalar", b"42\n"),
+                ("bad-files", b'{"schema":"epyc.autokernel.c6_input_binding.v1",'
+                             b'"operation":"MUL_MAT","input_dir":"/tmp/x",'
+                             b'"input_identity_sha256":"' + b"0" * 64 +
+                             b'","files":[{"name":"weights"}]}\n')):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                current = plan(Path(directory) / "inputs")
+                self.produce(directory, plan_=current)
+                receipt = Path(directory) / "evidence" / "correctness" / \
+                    "c6-receipt.json"
+                loaded = json.loads(receipt.read_text())
+                manifest_path = Path(loaded["input_binding"]["path"])
+                manifest_path.write_bytes(payload)
+                loaded["input_binding"]["sha256"] = hashlib.sha256(
+                    payload).hexdigest()
+                loaded["receipt_sha256"] = E.schemas.content_hash({
+                    key: value for key, value in loaded.items()
+                    if key != "receipt_sha256"})
+                receipt.write_text(
+                    json.dumps(loaded, sort_keys=True) + "\n")
+                with self.assertRaises(E.EvidenceProducerError):
+                    E._validate_c6_correctness_receipt(
+                        E.proofs.load_receipt(
+                            receipt, schema=E.C6_CORRECTNESS_SCHEMA), current)
+
+    def test_split_c6_leg_argv_paths_bind_to_verified_files(self):
+        """Audit D2: the sealed leg argv is re-derived from the VERIFIED binding
+        fields (input_dir/output/ready/continue), so a path substitution in the
+        argv is refused even though the argv is internally consistent."""
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            self.produce(directory, plan_=current)
+            receipt = Path(directory) / "evidence" / "correctness" / \
+                "c6-receipt.json"
+            loaded = json.loads(receipt.read_text())
+            leg = loaded["per_leg_bindings"][0]
+            argv = leg["argv"]
+            argv[argv.index("--input-dir") + 1] = str(
+                Path(leg["input_dir"]).parent / "other-inputs")
+            loaded["receipt_sha256"] = E.schemas.content_hash({
+                key: value for key, value in loaded.items()
+                if key != "receipt_sha256"})
+            receipt.write_text(json.dumps(loaded, sort_keys=True) + "\n")
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "deterministic derivation"):
+                E._validate_c6_correctness_receipt(
+                    E.proofs.load_receipt(
+                        receipt, schema=E.C6_CORRECTNESS_SCHEMA), current)
+
+    def test_split_c6_leg_residency_must_include_child_pid(self):
+        """Audit D3: a coherently resealed leg residency whose kfd_pids omit the
+        leg's child_pid is refused."""
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            self.produce(directory, plan_=current)
+            receipt = Path(directory) / "evidence" / "correctness" / \
+                "c6-receipt.json"
+            loaded = json.loads(receipt.read_text())
+            leg = loaded["per_leg_bindings"][0]
+            leg["residency"]["kfd_pids"] = [9999]
+            loaded["receipt_sha256"] = E.schemas.content_hash({
+                key: value for key, value in loaded.items()
+                if key != "receipt_sha256"})
+            receipt.write_text(json.dumps(loaded, sort_keys=True) + "\n")
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "residency summary"):
+                E._validate_c6_correctness_receipt(
+                    E.proofs.load_receipt(
+                        receipt, schema=E.C6_CORRECTNESS_SCHEMA), current)
+
     def test_shared_reward_rocprof_uses_one_binary_with_separate_hashed_hip_arms(self):
         with tempfile.TemporaryDirectory() as directory:
             current = plan(Path(directory) / "inputs", shared_reward=True)
@@ -432,10 +985,10 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                     executors=FakeExecutors(runtime_maps={
                         "candidate": runtime_maps_for(current, "candidate"),
                         "anchor": runtime_maps_for(current, "anchor")}))
-            self.assertEqual(executors.calls[1][2], executors.calls[2][2])
-            self.assertIn(str(current.shared_runtime.measurement_binary.path), executors.calls[1][2])
-            self.assertNotEqual(dict(executors.calls[1][3])["LD_LIBRARY_PATH"],
-                                dict(executors.calls[2][3])["LD_LIBRARY_PATH"])
+            self.assertEqual(executors.calls[5][2], executors.calls[6][2])
+            self.assertIn(str(current.shared_runtime.measurement_binary.path), executors.calls[5][2])
+            self.assertNotEqual(dict(executors.calls[5][3])["LD_LIBRARY_PATH"],
+                                dict(executors.calls[6][3])["LD_LIBRARY_PATH"])
             pair = json.loads((Path(directory) / "evidence" / "attribution-pair.json").read_text())
             self.assertEqual(pair["shared_runtime"], E._shared_runtime_reference(current.shared_runtime))
             self.assertEqual(bundle.candidate.hip_library_sha256,
@@ -465,7 +1018,7 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                     executors=FakeExecutors(runtime_maps={
                         "candidate": runtime_maps_for(current, "candidate"),
                         "anchor": runtime_maps_for(current, "anchor")}))
-            candidate_argv, anchor_argv = executors.calls[1][2], executors.calls[2][2]
+            candidate_argv, anchor_argv = executors.calls[5][2], executors.calls[6][2]
             self.assertNotEqual(candidate_argv, anchor_argv)
             self.assertEqual(
                 E._receipt_rocprof_template({"command_argv": candidate_argv,
