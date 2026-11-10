@@ -593,7 +593,10 @@ _SAFE_CRITIC_ENVIRONMENT = MappingProxyType({
 #
 # Replacement census, read from the GGUF rather than the name: n_embd=1536
 # (divisible), Q4_K x169, Q6_K x29 -- production's actual dispatch path, at ~1 GB.
-_SITE_MODEL = Path("/mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf")
+# The model-root reorg moved the GGUF under its publisher directory (p7_3a missing_pinned_model).
+_SITE_MODEL = Path(
+    "/mnt/raid0/llm/models/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/"
+    "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf")
 _PROFILE_TRACE_RECEIPT = Path(
     "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/receipt.json")
 _PROFILE_TRACE_RECEIPT_SHA256 = "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f69b9765ef74a933cd8"
@@ -622,7 +625,11 @@ _SITE_ACTOR_WRAPPER = Path(
 # gone), which made `initialize_static_deployment_bundle` — and therefore every
 # new deployment — fail with FileNotFoundError.  Resolving the launcher tracks
 # whatever version is installed at bundle-initialization time.
-_SITE_CRITIC_WRAPPER = Path("/home/node/.local/bin/claude").resolve()
+# The user-local install when present, else the container npm global (as loop/actors.py CLAUDE):
+# a hardcoded local path made the factory refuse in a container without it.
+_SITE_CRITIC_LOCAL = Path("/home/node/.local/bin/claude")
+_SITE_CRITIC_WRAPPER = (_SITE_CRITIC_LOCAL if os.access(_SITE_CRITIC_LOCAL, os.X_OK)
+                        else Path("/usr/local/share/npm-global/bin/claude")).resolve()
 _SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
 
 
