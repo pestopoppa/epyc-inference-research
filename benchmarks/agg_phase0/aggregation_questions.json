@@ -1,0 +1,179 @@
+{
+ "schema": "agg_phase0_questions.v1",
+ "fiscal_year": 2022,
+ "questions": [
+  {
+   "id": "agg01",
+   "expr": "revenue",
+   "op": "argmax",
+   "q": "Which company in the corpus reported the highest FY2022 total revenue?"
+  },
+  {
+   "id": "agg02",
+   "expr": "revenue",
+   "op": "argmin",
+   "q": "Which company in the corpus reported the lowest FY2022 total revenue?"
+  },
+  {
+   "id": "agg03",
+   "expr": "revenue",
+   "op": "sum",
+   "q": "What is the combined FY2022 total revenue of all companies in the corpus, in USD millions?"
+  },
+  {
+   "id": "agg04",
+   "expr": "revenue",
+   "op": "count_gt",
+   "t": 50000,
+   "q": "How many companies in the corpus reported FY2022 total revenue above $50 billion?"
+  },
+  {
+   "id": "agg05",
+   "expr": "revenue",
+   "op": "top3",
+   "q": "List the three companies with the highest FY2022 total revenue, highest first."
+  },
+  {
+   "id": "agg06",
+   "expr": "net_income",
+   "op": "argmax",
+   "q": "Which company reported the highest FY2022 net income attributable to shareholders?"
+  },
+  {
+   "id": "agg07",
+   "expr": "net_income",
+   "op": "count_lt",
+   "t": 0,
+   "q": "How many companies in the corpus reported a net loss attributable to shareholders for FY2022?"
+  },
+  {
+   "id": "agg08",
+   "expr": "net_income",
+   "op": "sum",
+   "q": "What is the combined FY2022 net income attributable to shareholders across the corpus, in USD millions?"
+  },
+  {
+   "id": "agg09",
+   "expr": "capex",
+   "op": "argmax",
+   "q": "Which company had the largest FY2022 capital expenditures?"
+  },
+  {
+   "id": "agg10",
+   "expr": "capex",
+   "op": "sum",
+   "q": "What were total FY2022 capital expenditures across all companies in the corpus, in USD millions?"
+  },
+  {
+   "id": "agg11",
+   "expr": "capex",
+   "op": "count_gt",
+   "t": 5000,
+   "q": "How many companies spent more than $5 billion on capital expenditures in FY2022?"
+  },
+  {
+   "id": "agg12",
+   "expr": "total_assets",
+   "op": "argmax",
+   "q": "Which company had the largest total assets at FY2022 year end?"
+  },
+  {
+   "id": "agg13",
+   "expr": "total_assets",
+   "op": "top3",
+   "q": "List the three companies with the largest total assets at FY2022 year end, largest first."
+  },
+  {
+   "id": "agg14",
+   "expr": "operating_cash_flow",
+   "op": "argmax",
+   "q": "Which company generated the most cash from operating activities in FY2022?"
+  },
+  {
+   "id": "agg15",
+   "expr": "operating_cash_flow-net_income",
+   "op": "count_gt",
+   "t": 0,
+   "q": "For how many companies did FY2022 operating cash flow exceed net income attributable to shareholders?"
+  },
+  {
+   "id": "agg16",
+   "expr": "total_current_assets-total_current_liabilities",
+   "op": "count_gt",
+   "t": 0,
+   "q": "Among companies with a classified balance sheet, how many had positive working capital (total current assets minus total current liabilities) at FY2022 year end?"
+  },
+  {
+   "id": "agg17",
+   "expr": "total_current_assets-total_current_liabilities",
+   "op": "argmin",
+   "q": "Among companies with a classified balance sheet, which had the most negative working capital at FY2022 year end?"
+  },
+  {
+   "id": "agg18",
+   "expr": "dividends_paid",
+   "op": "sum",
+   "q": "What were total FY2022 cash dividends paid to common shareholders across the corpus, in USD millions?"
+  },
+  {
+   "id": "agg19",
+   "expr": "capex/revenue",
+   "op": "argmax",
+   "q": "Which company had the highest FY2022 capital expenditures as a share of total revenue?"
+  },
+  {
+   "id": "agg20",
+   "expr": "net_income/revenue",
+   "op": "count_gt",
+   "t": 0.1,
+   "q": "How many companies had an FY2022 net margin (net income attributable / total revenue) above 10%?"
+  }
+ ],
+ "metrics": {
+  "revenue": "Total revenues / net sales / operating revenues, FY2022 (USD millions)",
+  "net_income": "Net income attributable to the company's shareholders, FY2022 (USD millions)",
+  "capex": "Capital expenditures (purchases of PP&E), FY2022 cash flow statement (USD millions, positive)",
+  "total_assets": "Total assets at FY2022 year end (USD millions)",
+  "operating_cash_flow": "Net cash provided by operating activities, FY2022 (USD millions)",
+  "total_current_assets": "Total current assets at FY2022 year end (USD millions); NA if unclassified balance sheet",
+  "total_current_liabilities": "Total current liabilities at FY2022 year end (USD millions); NA if unclassified",
+  "dividends_paid": "Cash dividends paid to common shareholders, FY2022 (USD millions, positive)"
+ },
+ "anchors": [
+  {
+   "doc": "CORNING_2022_10K",
+   "expr": "total_current_assets-total_current_liabilities",
+   "check": "sign",
+   "expect": 1,
+   "source": "financebench_id_00005 (+$831M, operating items only)"
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2022_10K",
+   "expr": "total_current_assets-total_current_liabilities",
+   "check": "approx",
+   "expect": -1561,
+   "source": "financebench_id_00070 (-$1561M)"
+  },
+  {
+   "doc": "PAYPAL_2022_10K",
+   "expr": "total_current_assets-total_current_liabilities",
+   "check": "sign",
+   "expect": 1,
+   "source": "financebench_id_00080 (+$1.6Bn)"
+  },
+  {
+   "doc": "COCACOLA_2022_10K",
+   "expr": "dividends_paid/net_income",
+   "check": "approx",
+   "expect": 0.8,
+   "source": "financebench_id_06272 (0.80)"
+  },
+  {
+   "doc": "AES_2022_10K",
+   "expr": "net_income",
+   "check": "sign",
+   "expect": -1,
+   "source": "financebench_id_10420 (ROA -0.02)"
+  }
+ ]
+}

@@ -1,0 +1,133 @@
+{
+ "schema": "agg_phase0_corpus.v1",
+ "fb_jsonl_sha256": "a5a2aa673e573e55675fc3c0f9aa38c1cf59d2abc91edb077534f71f10a71877",
+ "docs": [
+  {
+   "doc_name": "AMERICANWATERWORKS_2022_10K",
+   "company": "American Water Works",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/AMERICANWATERWORKS_2022_10K.pdf",
+   "sha256": "aea336531f1f8b10ecee1dd61066aab29794504f1f4a1407c857bd1e20d7da40",
+   "bytes": 2729077,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/AMERICANWATERWORKS_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_00070"
+   ]
+  },
+  {
+   "doc_name": "CORNING_2022_10K",
+   "company": "Corning",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/CORNING_2022_10K.pdf",
+   "sha256": "a63f102f045826b38ad21a606c33710f62932646fd7c0f1852ce411a4397a3ee",
+   "bytes": 1399926,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/CORNING_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_01346",
+    "financebench_id_00005"
+   ]
+  },
+  {
+   "doc_name": "JPMORGAN_2022_10K",
+   "company": "JPMorgan",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/JPMORGAN_2022_10K.pdf",
+   "sha256": "c269899950f36edfa496e3c8447a51d86d0a206442a96dc24dcd9317d55b957c",
+   "bytes": 6947859,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/JPMORGAN_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_00206"
+   ]
+  },
+  {
+   "doc_name": "PAYPAL_2022_10K",
+   "company": "Paypal",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/PAYPAL_2022_10K.pdf",
+   "sha256": "0c1dd6cd170261c6bd778de382a211a56a3bb1e009a429246370c97fa0defab3",
+   "bytes": 4371232,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/PAYPAL_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_00080"
+   ]
+  },
+  {
+   "doc_name": "VERIZON_2022_10K",
+   "company": "Verizon",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/VERIZON_2022_10K.pdf",
+   "sha256": "403d7346e8a059472863d1789527f16e5127a61c2f6c4429012e6227f27576d7",
+   "bytes": 2315268,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/VERIZON_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_00216",
+    "financebench_id_00215",
+    "financebench_id_00566"
+   ]
+  },
+  {
+   "doc_name": "AES_2022_10K",
+   "company": "AES Corporation",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/AES_2022_10K.pdf",
+   "sha256": null,
+   "bytes": null,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/AES_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_01319",
+    "financebench_id_00540",
+    "financebench_id_10420"
+   ]
+  },
+  {
+   "doc_name": "COCACOLA_2022_10K",
+   "company": "Coca-Cola",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/COCACOLA_2022_10K.pdf",
+   "sha256": null,
+   "bytes": null,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/COCACOLA_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_06272"
+   ]
+  },
+  {
+   "doc_name": "GENERALMILLS_2022_10K",
+   "company": "General Mills",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/GENERALMILLS_2022_10K.pdf",
+   "sha256": null,
+   "bytes": null,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/GENERALMILLS_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_10136"
+   ]
+  },
+  {
+   "doc_name": "LOCKHEEDMARTIN_2022_10K",
+   "company": "Lockheed Martin",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/LOCKHEEDMARTIN_2022_10K.pdf",
+   "sha256": null,
+   "bytes": null,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/LOCKHEEDMARTIN_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_03718"
+   ]
+  },
+  {
+   "doc_name": "PEPSICO_2022_10K",
+   "company": "PepsiCo",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/PEPSICO_2022_10K.pdf",
+   "sha256": null,
+   "bytes": null,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/PEPSICO_2022_10K.pdf",
+   "fb_questions": [
+    "financebench_id_01009",
+    "financebench_id_00735",
+    "financebench_id_01328",
+    "financebench_id_03620",
+    "financebench_id_04481"
+   ]
+  }
+ ],
+ "missing_pdfs": [
+  "AES_2022_10K",
+  "COCACOLA_2022_10K",
+  "GENERALMILLS_2022_10K",
+  "LOCKHEEDMARTIN_2022_10K",
+  "PEPSICO_2022_10K"
+ ],
+ "selection": "FB5 pins + the five FY2022 10-Ks carrying metrics-generated questions"
+}

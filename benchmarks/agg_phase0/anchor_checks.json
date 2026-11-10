@@ -1,0 +1,47 @@
+[
+ {
+  "doc": "CORNING_2022_10K",
+  "expr": "total_current_assets-total_current_liabilities",
+  "check": "sign",
+  "expect": 1,
+  "source": "financebench_id_00005 (+$831M, operating items only)",
+  "value": null,
+  "agrees": null
+ },
+ {
+  "doc": "AMERICANWATERWORKS_2022_10K",
+  "expr": "total_current_assets-total_current_liabilities",
+  "check": "approx",
+  "expect": -1561,
+  "source": "financebench_id_00070 (-$1561M)",
+  "value": null,
+  "agrees": null
+ },
+ {
+  "doc": "PAYPAL_2022_10K",
+  "expr": "total_current_assets-total_current_liabilities",
+  "check": "sign",
+  "expect": 1,
+  "source": "financebench_id_00080 (+$1.6Bn)",
+  "value": null,
+  "agrees": null
+ },
+ {
+  "doc": "COCACOLA_2022_10K",
+  "expr": "dividends_paid/net_income",
+  "check": "approx",
+  "expect": 0.8,
+  "source": "financebench_id_06272 (0.80)",
+  "value": null,
+  "agrees": null
+ },
+ {
+  "doc": "AES_2022_10K",
+  "expr": "net_income",
+  "check": "sign",
+  "expect": -1,
+  "source": "financebench_id_10420 (ROA -0.02)",
+  "value": null,
+  "agrees": null
+ }
+]

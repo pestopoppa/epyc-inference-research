@@ -1,0 +1,155 @@
+{
+ "schema": "agg_phase0_verification.v1",
+ "questions": {
+  "agg01": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg02": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg03": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg04": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg05": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg06": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg07": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg08": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg09": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg10": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg11": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg12": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg13": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg14": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg15": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg16": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg17": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg18": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg19": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "agg20": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_00070": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_00005": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_01346": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_00080": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_00216": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_00566": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_10420": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_06272": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_03718": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  },
+  "financebench_id_04481": {
+   "verified": false,
+   "verified_by": null,
+   "verified_at": null
+  }
+ }
+}
