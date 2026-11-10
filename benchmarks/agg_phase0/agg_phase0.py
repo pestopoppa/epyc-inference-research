@@ -87,7 +87,9 @@ AGG_QUESTIONS: list[dict[str, Any]] = [
     {"id": "agg15", "expr": "operating_cash_flow-net_income", "op": "count_gt", "t": 0, "q": "For how many companies did FY2022 operating cash flow exceed net income attributable to shareholders?"},
     {"id": "agg16", "expr": "total_current_assets-total_current_liabilities", "op": "count_gt", "t": 0, "q": "Among companies with a classified balance sheet, how many had positive working capital (total current assets minus total current liabilities) at FY2022 year end?"},
     {"id": "agg17", "expr": "total_current_assets-total_current_liabilities", "op": "argmin", "q": "Among companies with a classified balance sheet, which had the most negative working capital at FY2022 year end?"},
-    {"id": "agg18", "expr": "dividends_paid", "op": "sum", "q": "What were total FY2022 cash dividends paid to common shareholders across the corpus, in USD millions?"},
+    {"id": "agg18", "expr": "dividends_paid", "op": "sum", "q": "What were total FY2022 cash dividends paid to common shareholders by the companies in the corpus other than JPMorgan, in USD millions?",
+     "exclude_docs": ["JPMORGAN_2022_10K"],
+     "exclude_reason": "JPMorgan's cash-flow line 'Dividends paid' combines preferred and common; common-only is not on a statement face (operator decision 2026-11-10 #3)"},
     {"id": "agg19", "expr": "capex/revenue", "op": "argmax", "q": "Which company had the highest FY2022 capital expenditures as a share of total revenue?"},
     {"id": "agg20", "expr": "net_income/revenue", "op": "count_gt", "t": 0.10, "q": "How many companies had an FY2022 net margin (net income attributable / total revenue) above 10%?"},
 ]
@@ -212,6 +214,8 @@ def derive_golds(out: Path) -> list[dict[str, Any]]:
     for q in AGG_QUESTIONS:
         values, missing, na = {}, [], []
         for d in DOCS:
+            if d in q.get("exclude_docs", []):
+                continue
             v = eval_expr(q["expr"], sheet, d)
             if v == "missing":
                 missing.append(d)
@@ -223,6 +227,8 @@ def derive_golds(out: Path) -> list[dict[str, Any]]:
         golds.append({"id": q["id"], "question": q["q"], "expr": q["expr"], "op": q["op"],
                       "threshold": q.get("t"), "gold": gold, "per_company": values,
                       "excluded_na": na, "missing_cells": missing,
+                      "excluded_by_rule": q.get("exclude_docs", []),
+                      "exclude_reason": q.get("exclude_reason"),
                       "gold_source": "derived:facts_sheet.csv", "verified": False})
     anchors = []
     for a in FB_ANCHORS:

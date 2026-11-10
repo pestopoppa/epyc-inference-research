@@ -41,7 +41,7 @@ Corpus: 10 FY2022 10-Ks; missing PDFs: none.
 | agg15 | For how many companies did FY2022 operating cash flow exceed net income attributable to shareholders? | `count_gt(operating_cash_flow-net_income, 0)` | 10 | 0 | 0 | [ ] | |
 | agg16 | Among companies with a classified balance sheet, how many had positive working capital (total current assets minus total current liabilities) at FY2022 year end? | `count_gt(total_current_assets-total_current_liabilities, 0)` | 5 | 1 | 0 | [ ] | |
 | agg17 | Among companies with a classified balance sheet, which had the most negative working capital at FY2022 year end? | `argmin(total_current_assets-total_current_liabilities)` | "Verizon" | 1 | 0 | [ ] | |
-| agg18 | What were total FY2022 cash dividends paid to common shareholders across the corpus, in USD millions? | `sum(dividends_paid)` | null | 0 | 1 | [ ] | |
+| agg18 | What were total FY2022 cash dividends paid to common shareholders by the companies in the corpus other than JPMorgan, in USD millions? | `sum(dividends_paid)` | 30674.5 | 0 | 0 | [ ] | |
 | agg19 | Which company had the highest FY2022 capital expenditures as a share of total revenue? | `argmax(capex/revenue)` | "American Water Works" | 1 | 0 | [ ] | |
 | agg20 | How many companies had an FY2022 net margin (net income attributable / total revenue) above 10%? | `count_gt(net_income/revenue, 0.1)` | 6 | 0 | 0 | [ ] | |
 
