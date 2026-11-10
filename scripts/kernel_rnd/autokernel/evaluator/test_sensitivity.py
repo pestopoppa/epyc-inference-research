@@ -223,3 +223,64 @@ class TestSensitivityReducer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConv2dPaddingOnlyGeometry(unittest.TestCase):
+    P = ("ne_input=[%s],ne_kernel=[%s],type_kernel=f32,stride0=%d,stride1=%d,"
+         "padding0=%d,padding1=%d,dilation0=%d,dilation1=%d,cwhn=0")
+
+    def case(self, ne_in, ne_k, s0, s1, p0, p1, d0, d1):
+        return self.P % (ne_in, ne_k, s0, s1, p0, p1, d0, d1)
+
+    def test_one_by_one_input_with_large_padding_and_dilation_is_padding_only(self):
+        # 1x1 input, y: pad 2 / stride 5 -> the only output row reads index -2.
+        self.assertTrue(S.conv2d_output_is_padding_only(
+            self.case("1,1,1,2", "1,1,1,1", 1, 5, 5, 2, 2, 4)))
+        # x: pad 5, dilation 4 on a 1-wide input still has a real tap (o=5);
+        # padding-only needs a dimension with none, so this one is NOT flagged.
+        self.assertFalse(S.conv2d_output_is_padding_only(
+            self.case("1,1,1,2", "1,1,1,1", 1, 1, 5, 5, 4, 4)))
+
+    def test_geometry_with_a_real_tap_is_not_padding_only(self):
+        self.assertFalse(S.conv2d_output_is_padding_only(
+            self.case("8,8,1,2", "3,3,1,1", 1, 1, 1, 1, 1, 1)))
+        self.assertFalse(S.conv2d_output_is_padding_only(
+            self.case("1,1,1,2", "1,1,1,1", 1, 1, 0, 0, 1, 1)))
+
+    def test_unparseable_params_fail_closed(self):
+        self.assertFalse(S.conv2d_output_is_padding_only("m=16,n=16,k=256"))
+
+    def _conv_population(self, case_id, output_varies):
+        rows = []
+        for transform in sorted(S.REQUIRED_TRANSFORMS):
+            for index, seed in enumerate((11, 22, 33)):
+                key = (transform, seed)
+                rows.append(S.SensitivityObservation(
+                    suite_version="v", operation="CONV_2D", shape=(1, 1, 1, 2),
+                    case_id=case_id, seed=seed, transform=transform,
+                    input_digest=f"in-{key}",
+                    output_digest=f"out-{key}" if output_varies else "out-const",
+                    input_distance_from_seed_anchor=0.0 if index == 0 else 1.0,
+                    output_distance_from_seed_anchor=(
+                        0.0 if index == 0 or not output_varies else 1.0),
+                    reference_only=True, produced_by=S.TRUSTED_PRODUCER,
+                    evidence_ref=f"r#{transform}-{seed}"))
+        return tuple(rows)
+
+    def test_padding_only_conv_is_insensitive_by_construction_not_unscoreable(self):
+        case_id = self.case("1,1,1,2", "1,1,1,1", 1, 5, 5, 2, 2, 4)
+        report = S.reduce_input_sensitivity(self._conv_population(case_id, False))
+        self.assertEqual(report.check.outcome, schemas.PASS)
+        self.assertEqual(report.unscoreable_units, ())
+        self.assertEqual(len(report.structurally_insensitive_units), len(report.units))
+
+    def test_non_padding_only_conv_with_invariant_output_stays_unscoreable(self):
+        case_id = self.case("8,8,1,2", "3,3,1,1", 1, 1, 1, 1, 1, 1)
+        report = S.reduce_input_sensitivity(self._conv_population(case_id, False))
+        self.assertEqual(report.check.outcome, schemas.FAIL)
+        self.assertEqual(report.structurally_insensitive_units, ())
+
+    def test_padding_only_geometry_whose_output_moves_is_not_flagged(self):
+        case_id = self.case("1,1,1,2", "1,1,1,1", 1, 5, 5, 2, 2, 4)
+        report = S.reduce_input_sensitivity(self._conv_population(case_id, True))
+        self.assertEqual(report.structurally_insensitive_units, ())

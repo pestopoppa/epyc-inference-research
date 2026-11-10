@@ -98,6 +98,11 @@ class SensitivityUnit:
     output_changed: bool
     scoreable: bool
     reasons: tuple[str, ...]
+    # True when the case geometry PROVES the output cannot depend on the input
+    # (CONV_2D whose every output tap lands in padding) and the measured output
+    # was indeed invariant. Such a unit is a C5-2 insensitive case by
+    # construction: scored, not an unscoreable defect, and not a gate failure.
+    structurally_insensitive: bool = False
 
 
 @dataclass(frozen=True)
@@ -109,6 +114,10 @@ class SensitivityReport:
     @property
     def unscoreable_units(self) -> tuple[SensitivityUnit, ...]:
         return tuple(unit for unit in self.units if not unit.scoreable)
+
+    @property
+    def structurally_insensitive_units(self) -> tuple[SensitivityUnit, ...]:
+        return tuple(unit for unit in self.units if unit.structurally_insensitive)
 
     def to_dict(self) -> dict:
         return {
@@ -125,11 +134,59 @@ class SensitivityReport:
                     "input_changed": unit.input_changed,
                     "output_changed": unit.output_changed,
                     "scoreable": unit.scoreable,
+                    "structurally_insensitive": unit.structurally_insensitive,
                     "reasons": list(unit.reasons),
                 }
                 for unit in self.units
             ],
         }
+
+
+def _conv2d_dim_has_real_tap(size: int, kernel: int, stride: int, pad: int,
+                             dilation: int) -> bool:
+    """True when some (output position, kernel tap) reads input index in [0, size)."""
+    out = (size + 2 * pad - dilation * (kernel - 1) - 1) // stride + 1
+    for o in range(max(out, 0)):
+        for k in range(kernel):
+            if 0 <= o * stride - pad + k * dilation < size:
+                return True
+    return False
+
+
+def conv2d_output_is_padding_only(case_id: str) -> bool:
+    """Geometry test: does a CONV_2D case read no real input element at all?
+
+    Every output tap is (x-tap valid) AND (y-tap valid), so if either spatial
+    dimension has no in-range tap, every output is computed from padding alone
+    and is input-invariant by construction (e.g. a 1x1 input with padding 5 and
+    dilation 4). Returns False for params it cannot parse (fail closed: the unit
+    then stays subject to the ordinary invariance finding).
+    """
+    def ints(key: str):
+        m = re.search(rf"(?:^|,){key}=\[([0-9, ]+)\]", case_id)
+        return [int(v) for v in m.group(1).split(",")] if m else None
+
+    def num(key: str):
+        m = re.search(rf"(?:^|,){key}=(-?[0-9]+)(?=,|$|#)", case_id)
+        return int(m.group(1)) if m else None
+
+    ne_in, ne_k = ints("ne_input"), ints("ne_kernel")
+    vals = [num(k) for k in ("stride0", "stride1", "padding0", "padding1",
+                             "dilation0", "dilation1")]
+    if (ne_in is None or ne_k is None or len(ne_in) < 2 or len(ne_k) < 2
+            or any(v is None for v in vals)):
+        return False
+    s0, s1, p0, p1, d0, d1 = vals
+    if min(ne_in[:2] + ne_k[:2]) <= 0 or min(s0, s1, d0, d1) <= 0 or min(p0, p1) < 0:
+        return False
+    return not (_conv2d_dim_has_real_tap(ne_in[0], ne_k[0], s0, p0, d0)
+                and _conv2d_dim_has_real_tap(ne_in[1], ne_k[1], s1, p1, d1))
+
+
+def _structural_insensitivity(operation: str, case_id: str, input_changed: bool,
+                              output_changed: bool) -> bool:
+    return (operation == "CONV_2D" and input_changed and not output_changed
+            and conv2d_output_is_padding_only(case_id))
 
 
 def reduce_input_sensitivity(
@@ -212,9 +269,12 @@ def reduce_input_sensitivity(
             for item in non_anchor) if len(anchor_rows) == 1 else False
         if not input_changed:
             reasons.append("seed population did not measurably change every non-anchor input")
-        if input_changed and not output_changed:
+        structural = _structural_insensitivity(
+            operation, case_id, input_changed, output_changed)
+        if input_changed and not output_changed and not structural:
             reasons.append("output is invariant across input seeds or input-insensitive")
         units.append(SensitivityUnit(
+            structurally_insensitive=structural,
             axis=SEED_VARIATION,
             operation=operation, case_id=case_id, shape=shape,
             slice_id=f"transform={transform}", sample_count=len(seeds),
@@ -244,9 +304,12 @@ def reduce_input_sensitivity(
             item.output_digest != anchor.output_digest for item in non_anchor)
         if not input_changed:
             reasons.append("value transforms did not change every materialized input")
-        if input_changed and not output_changed:
+        structural = _structural_insensitivity(
+            operation, case_id, input_changed, output_changed)
+        if input_changed and not output_changed and not structural:
             reasons.append("output is invariant across value transforms or input-insensitive")
         units.append(SensitivityUnit(
+            structurally_insensitive=structural,
             axis=TRANSFORM_VARIATION,
             operation=operation, case_id=case_id, shape=shape,
             slice_id=f"seed={seed}", sample_count=len(by_transform),

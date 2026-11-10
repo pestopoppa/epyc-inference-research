@@ -1688,14 +1688,25 @@ class BackendOpsCase:
     layout: Optional[BackendOpsLayout] = None
     value_transforms: Optional[BackendOpsValueTransforms] = None
     stateful: Optional[BackendOpsStateful] = None
+    # False only when the CSV row said supported=0. A probe pass (layouts,
+    # stateful) records such a row with status "fail" (the producer marks it
+    # hard_failure=1 so a probe that could not run is never a pass); this flag
+    # lets a consumer count "the backend declined the op" apart from "the op ran
+    # and failed" without changing that fail-closed status.
+    supported: bool = True
 
     @property
     def passed(self) -> bool:
         return self.status == "ok"
 
+    @property
+    def unsupported_hard_failure(self) -> bool:
+        return self.status == "fail" and not self.supported
+
 
 def _case_with_reference(*, op: str, params: str, status: str,
-                         interleaved: str = "") -> BackendOpsCase:
+                         interleaved: str = "",
+                         supported: bool = True) -> BackendOpsCase:
     diagnostics: list = []
     reference: Optional[BackendOpsReference] = None
     properties: list = []
@@ -1780,7 +1791,8 @@ def _case_with_reference(*, op: str, params: str, status: str,
     return BackendOpsCase(op=op, params=params, status=status,
                           interleaved=" | ".join(diagnostics), reference=reference,
                           properties=tuple(properties), layout=layout,
-                          value_transforms=value_transforms, stateful=stateful)
+                          value_transforms=value_transforms, stateful=stateful,
+                          supported=supported)
 
 
 @dataclass(frozen=True)
@@ -1905,6 +1917,23 @@ class BackendOpsRun:
         """
         return tuple(b.name for b in self.backends
                      if not b.skipped and b.reported_total is None)
+
+    def unsupported_hard_failures_by_op(self) -> tuple:
+        """`((op, n), ...)` of probe rows the backend DECLINED (supported=0) that the
+        producer marked hard_failure=1. Counted apart from `hard_failures_by_op`."""
+        counts: dict = {}
+        for case in self.cases:
+            if case.unsupported_hard_failure:
+                counts[case.op] = counts.get(case.op, 0) + 1
+        return tuple(sorted(counts.items()))
+
+    def hard_failures_by_op(self) -> tuple:
+        """`((op, n), ...)` of failing rows the backend SUPPORTED (ran and failed)."""
+        counts: dict = {}
+        for case in self.cases:
+            if case.status == "fail" and case.supported:
+                counts[case.op] = counts.get(case.op, 0) + 1
+        return tuple(sorted(counts.items()))
 
     def not_supported_count(self) -> int:
         return sum(1 for c in self.cases if c.status == "not_supported")
@@ -2171,7 +2200,7 @@ def parse_backend_ops_csv(text: str) -> BackendOpsRun:
                 error) if value)
         by_backend.setdefault(backend, []).append(_case_with_reference(
             op=cells[index["op_name"]], params=cells[index["op_params"]], status=state,
-            interleaved=interleaved))
+            interleaved=interleaved, supported=supported))
     backends = tuple(
         BackendOpsBackend(name=name, skipped=False, skip_reason=None, cases=tuple(cases),
                           reported_passed=None, reported_total=None, status=None)
