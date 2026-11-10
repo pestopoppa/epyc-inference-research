@@ -21,7 +21,6 @@ REPO = HERE.parents[2]
 PORTFOLIO_PATH = HERE / "discovery_hypothesis_portfolio_v2.json"
 
 EXPECTED_ELIGIBLE_IDS = {
-    "akh-v2-fa-gqa7-pair-tail",
     "akh-v2-q5-type-specific-dequant",
     "akh-v2-q8-quantizer-new-mechanism",
     "akh-v2-rms-direct-load-reduction",

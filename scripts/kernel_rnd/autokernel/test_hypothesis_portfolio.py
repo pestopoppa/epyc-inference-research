@@ -226,7 +226,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
         self.assertEqual(
             {row["hypothesis_id"] for row in portfolio.eligible_projection()},
             {"akh-v2-q5-type-specific-dequant", "akh-v2-q8-quantizer-new-mechanism",
-             "akh-v2-fa-gqa7-pair-tail", "akh-v2-rms-direct-load-reduction"},
+             "akh-v2-rms-direct-load-reduction"},
         )
         projection = portfolio.eligible_projection()[0]
         with self.assertRaises(TypeError):
@@ -275,7 +275,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
         self.assertEqual(
             {(row["calls"], row["grid"], row["workgroup"], row["lds_bytes"])
              for row in q8["signatures"]},
-            {(15609, 1024, 256, 0), (3096, 5120, 256, 0)},
+            {(15609, 1024, 64, 0), (1548, 5120, 64, 0)},
         )
 
     def test_deployment_template_authorability_cross_check(self):
@@ -301,7 +301,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
                 "source_symbols": ["quantize_q8_1"],
                 "change_classes": ["arithmetic"],
                 "dispatch_signatures": geometry("cuda-quantize-q8-v1", 0,
-                    (15609, 1024, 256, 0), (3096, 5120, 256, 0)),
+                    (15609, 1024, 64, 0), (1548, 5120, 64, 0), (1548, 5120, 64, 0)),
                 "excluded_signatures": [],
             },
             "cuda-fattn-tile-v1": {
@@ -554,13 +554,13 @@ class HypothesisPortfolioTest(unittest.TestCase):
         result = json.loads(stdout.getvalue())
         self.assertEqual(result["hypotheses"], 21)
         self.assertEqual(result["do_not_repeat"], 23)
-        self.assertEqual(result["eligible"], 4)
+        self.assertEqual(result["eligible"], 3)
         stdout = StringIO()
         with redirect_stdout(stdout):
             self.assertEqual(P.main(["summarize", str(P.DEFAULT_PORTFOLIO)]), 0)
         summary = json.loads(stdout.getvalue())
         self.assertEqual(summary["sha256"], result["sha256"])
-        self.assertEqual(len(summary["eligible_records"]), 4)
+        self.assertEqual(len(summary["eligible_records"]), 3)
         self.assertEqual(len(summary["do_not_repeat"]), 23)
 
     def test_duplicate_json_key_is_refused(self):

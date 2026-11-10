@@ -631,17 +631,26 @@ _PROFILE_TRACE_RECEIPT_SHA256 = "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f6
 _PROFILE_TRACE_CSV = Path(
     "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/timestamps.csv")
 _PROFILE_TRACE_CSV_SHA256 = "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+# REPINNED 2026-11-10 to the C10 champion decode trace (C6-C10-REPIN): row
+# c10-c6-dispatch-reprofile-20261110-r2, same v13 anchor recipe (rocprofv3
+# --kernel-trace, Qwen2.5-Coder-0.5B Q4_K_M tg128, -fa on, graphs off), store
+# gpu-20261109-7f1bd044b-c10fold. The v13 2026-08-19 trace had drifted from v10
+# itself: v10 already dispatches flash_attn_ext_vec (not flash_attn_tile) at decode,
+# the 8-argument mul_mat_vec_q<> signature, Q8_0 at grid 16384/19447808 wg 512,
+# rope_neox wg 256, rms_norm_f32<256, true, false, false> and quantize_q8_1_1d wg 64.
+# C10 additionally splits quantize_q8_1_1d into <false>/<true> instantiations.
 _PROFILE_V3_TRACE_CSV = Path(
     "/mnt/raid0/llm/autokernel/diagnostics/"
-    "v13-rocprofv3-anchor-tg128-20260819/raw/v13_sdk_kernel_trace.csv")
-_PROFILE_V3_TRACE_CSV_SHA256 = "fb818d7b135becc5bfd773c1075cbdea91809d1f5c22ed8d8817560678b03c69"
-_PROFILE_V3_AGENT_CSV = _PROFILE_V3_TRACE_CSV.with_name("v13_sdk_agent_info.csv")
-_PROFILE_V3_AGENT_CSV_SHA256 = "50189a58f15ffb0008e840a8a6d18db1a88f73e3492b686b167d773de6b9323e"
+    "c10-rocprofv3-anchor-tg128-20261110/raw/c10_kernel_trace.csv")
+_PROFILE_V3_TRACE_CSV_SHA256 = "2d950e3c682ac996543d531ecd3f8719458947994a42b66e46365da32eeeac7f"
+_PROFILE_V3_TRACE_ROWS = 60_054
+_PROFILE_V3_AGENT_CSV = _PROFILE_V3_TRACE_CSV.with_name("c10_agent_info.csv")
+_PROFILE_V3_AGENT_CSV_SHA256 = "c0ab0a4b292919218f8d748024af16fc8edebf3879b51c52f4740913c50a786b"
 # Re-sealed 2026-11-07 after review of f8167767a (MI210-port DNR + H4/H9 evidence) and
 # a4e2201bf (isa_schedule validation only; existing fingerprints recomputed identical).
 # Review: scripts/kernel_rnd/autokernel/evidence/portfolio-reseal-20261107-REVIEW.md
-_PORTFOLIO_SEMANTIC_SHA256 = "3344de10fa51558966c7ee8ae1dcb4f7bf4026351cf074c2d797af2802b91d33"
-_PORTFOLIO_FILE_SHA256 = "9fe26e7d5bbd6a1d985b3e664cd67250d9a1b691d5e6fbf7df9a56d681a9488f"
+_PORTFOLIO_SEMANTIC_SHA256 = "936ae176e3a43597046a472bced3c8efec9943472bd064f00ec456bb080f36f2"
+_PORTFOLIO_FILE_SHA256 = "13c560267ae1b67519e06657cc64770221a19cfd4f87aeebf2b76913d2c64556"
 _PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948aaec086b3facd4"
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(
@@ -1079,36 +1088,41 @@ def _template_registry() -> ExperimentTemplateRegistry:
             or _digest_regular(_PROFILE_V3_AGENT_CSV, "reviewed v3 agent trace")
             != _PROFILE_V3_AGENT_CSV_SHA256):
         raise DeploymentFactoryError("reviewed real-trace template authority changed")
+    # C10 decode trace (C6-C10-REPIN 2026-11-10); rows are
+    # (pattern, calls, grid threads, workgroup threads, LDS rounded up to 512 B).
     mmvq_pattern = lambda type_id, flags: (
         rf"^void mul_mat_vec_q<\(ggml_type\){type_id}, 1, {flags}>\(.*\)$")
     mmvq_anchor = (
-        (mmvq_pattern(6, "true, true"), 6063, 57344, 128, 1024),
-        (mmvq_pattern(6, "true, true"), 4644, 8192, 128, 1024),
-        (mmvq_pattern(6, "true, true"), 3096, 311296, 128, 1024),
-        (mmvq_pattern(6, "false, true"), 129, 57344, 128, 512),
-        (mmvq_pattern(12, "true, false"), 1548, 114688, 128, 512),
-        (mmvq_pattern(14, "true, false"), 1548, 114688, 128, 512),
-        (mmvq_pattern(8, "true, true"), 1548, 8192, 256, 6144),
-        (mmvq_pattern(8, "false, true"), 129, 9723904, 256, 3072),
+        (mmvq_pattern(6, "true, true, 0, false, false, false"), 6063, 57344, 128, 1024),
+        (mmvq_pattern(6, "true, true, 0, false, false, false"), 4644, 8192, 128, 1024),
+        (mmvq_pattern(6, "true, true, 0, false, false, false"), 3096, 311296, 128, 1024),
+        (mmvq_pattern(6, "false, true, 0, false, false, false"), 129, 57344, 128, 512),
+        (mmvq_pattern(12, "true, false, 0, false, true, false"), 1548, 114688, 128, 512),
+        (mmvq_pattern(14, "true, false, 0, false, false, false"), 1548, 114688, 128, 512),
+        (mmvq_pattern(8, "true, true, 0, false, false, true"), 1548, 16384, 512, 14336),
+        (mmvq_pattern(8, "false, true, 0, false, false, true"), 129, 19447808, 512, 7168),
     )
+    # Decode FA on v10 and C10 runs the VEC kernel; flash_attn_tile is not
+    # dispatched by the tg128 workload at all (see _PROFILE_V3_TRACE_CSV note).
     fattn_tile_anchor = ((
-        r"^void flash_attn_tile<64, 64, 2, 1, false>\(.*\)$",
-        3096, 7168, 64, 5120),)
+        r"^void flash_attn_ext_vec<64, 1, \(ggml_type\)1, \(ggml_type\)1, false, false>\(.*\)$",
+        3096, 7168, 128, 2560),)
     fattn_common_anchor = (*fattn_tile_anchor, (
         r"^void flash_attn_combine_results<64>\(.*\)$",
         3096, 896, 64, 512))
     quantize_anchor = (
-        (r"^quantize_q8_1\(.*\)$", 15609, 1024, 256, 0),
-        (r"^quantize_q8_1\(.*\)$", 3096, 5120, 256, 0),
+        (r"^void quantize_q8_1_1d<false>\(.*\)$", 15609, 1024, 64, 0),
+        (r"^void quantize_q8_1_1d<false>\(.*\)$", 1548, 5120, 64, 0),
+        (r"^void quantize_q8_1_1d<true>\(.*\)$", 1548, 5120, 64, 0),
     )
     rope_anchor = (
         (r"^void rope_neox<true, false, float, __half>\(.*\)$",
-         3096, 512, 256, 0),
+         3096, 256, 256, 0),
         (r"^void rope_neox<true, false, float, float>\(.*\)$",
-         3096, 3584, 256, 0),
+         3096, 1024, 256, 0),
     )
     norm_anchor = ((
-        r"^void rms_norm_f32<256, true, false>\(.*\)$",
+        r"^void rms_norm_f32<256, true, false, false>\(.*\)$",
         6321, 256, 256, 512),)
     set_rows_anchor = ((
         r"^void k_set_rows<float, long, __half>\(.*\)$",
@@ -1186,8 +1200,9 @@ def _template_registry() -> ExperimentTemplateRegistry:
          "symbols": ("ggml_cuda_get_best_fattn_kernel", "ggml_cuda_flash_attn_ext",
             "ggml_cuda_flash_attn_ext_vec", "ggml_cuda_flash_attn_ext_mma_f16",
             "ggml_cuda_flash_attn_ext_supported", "ggml_cuda_flash_attn_ext_get_alloc_size"),
-         "markers": ("flash_attn_tile<", "flash_attn_vec<", "flash_attn_combine_results<"),
-         "op": "FLASH_ATTN_EXT", "cases": 2868, "anchor": fattn_tile_anchor,
+         "markers": ("flash_attn_tile<", "flash_attn_vec<", "flash_attn_ext_vec<",
+                     "flash_attn_combine_results<"),
+         "op": "FLASH_ATTN_EXT", "cases": 3094, "anchor": fattn_tile_anchor,
          "replays": ({"trace": "VEC selector", "symbol": "ggml_cuda_get_best_fattn_kernel"},)},
         {"id": "cuda-fattn-tile-v1", "path": "ggml/src/ggml-cuda/fattn-tile.cuh",
          "primary": "ggml_cuda_fattn_tile_get_config_amd",
@@ -1198,12 +1213,12 @@ def _template_registry() -> ExperimentTemplateRegistry:
             "flash_attn_tile_iter_KQ", "flash_attn_tile_iter", "flash_attn_tile",
             "launch_fattn_tile_switch_ncols1", "launch_fattn_tile_switch_ncols2",
             "ggml_cuda_flash_attn_ext_tile_case", "ggml_cuda_flash_attn_ext_tile"),
-         "markers": ("flash_attn_tile<",), "op": "FLASH_ATTN_EXT", "cases": 2868,
+         "markers": ("flash_attn_tile<", "flash_attn_ext_vec<"), "op": "FLASH_ATTN_EXT", "cases": 3094,
          "anchor": fattn_tile_anchor,
          "replays": ({"trace": "D64 Q1 TILE geometry", "symbol": "ggml_cuda_fattn_tile_get_config_amd"},)},
         {"id": "cuda-fattn-tile-entry-v1", "path": "ggml/src/ggml-cuda/fattn-tile.cu",
          "primary": "ggml_cuda_flash_attn_ext_tile", "symbols": ("ggml_cuda_flash_attn_ext_tile",),
-         "markers": ("flash_attn_tile<",), "op": "FLASH_ATTN_EXT", "cases": 2868,
+         "markers": ("flash_attn_tile<", "flash_attn_ext_vec<"), "op": "FLASH_ATTN_EXT", "cases": 3094,
          "anchor": fattn_tile_anchor, "replays": ()},
         {"id": "cuda-fattn-common-v1", "path": "ggml/src/ggml-cuda/fattn-common.cuh",
          "primary": "launch_fattn",
@@ -1214,15 +1229,15 @@ def _template_registry() -> ExperimentTemplateRegistry:
             "dequantize_V_q4_1", "dequantize_V_q5_0", "dequantize_V_q5_1", "dequantize_V_q8_0",
             "flash_attn_mask_to_KV_max", "flash_attn_stream_k_fixup_uniform",
             "flash_attn_stream_k_fixup_general", "flash_attn_combine_results", "launch_fattn"),
-         "markers": ("flash_attn_tile<", "flash_attn_combine_results<"),
-         "op": "FLASH_ATTN_EXT", "cases": 2868, "anchor": fattn_common_anchor, "replays": ()},
+         "markers": ("flash_attn_tile<", "flash_attn_ext_vec<", "flash_attn_combine_results<"),
+         "op": "FLASH_ATTN_EXT", "cases": 3094, "anchor": fattn_common_anchor, "replays": ()},
         {"id": "cuda-mmvq-v2", "path": "ggml/src/ggml-cuda/mmvq.cu",
          "primary": "ggml_cuda_op_mul_mat_vec_q",
          "symbols": ("ggml_cuda_op_mul_mat_vec_q", "ggml_cuda_mul_mat_vec_q",
             "mul_mat_vec_q_switch_type", "mul_mat_vec_q_switch_ncols_dst",
             "mul_mat_vec_q_moe_launch", "mul_mat_vec_q_switch_fusion",
             "mul_mat_vec_q8_0_prefetch_launch"),
-         "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1139,
+         "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1202,
          "anchor": mmvq_anchor,
          "replays": tuple({"trace": f"{q} exact dispatch", "symbol": "mul_mat_vec_q_switch_type"}
                           for q in ("Q4_K", "Q5_0", "Q6_K"))},
@@ -1244,7 +1259,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
             "vec_dot_iq2_xs_q8_1", "vec_dot_iq2_s_q8_1", "vec_dot_iq3_xxs_q8_1",
             "vec_dot_iq3_s_q8_1", "vec_dot_iq1_s_q8_1", "vec_dot_iq1_m_q8_1",
             "vec_dot_iq4_nl_q8_1", "vec_dot_iq4_xs_q8_1"),
-         "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1139,
+         "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1202,
          "anchor": mmvq_anchor, "replays": (),
          "planner_target_exclusions": ({
              "kernel_pattern": mmvq_anchor[3][0], "calls": 129,
@@ -1252,11 +1267,11 @@ def _template_registry() -> ExperimentTemplateRegistry:
              "reason": "Q5 false/true tail is not the reviewed true/true dequant route"},)},
         {"id": "cuda-quantize-q8-v1", "path": "ggml/src/ggml-cuda/quantize.cu",
          "primary": "quantize_q8_1",
-         "symbols": ("quantize_q8_1", "quantize_mmq_nvfp4", "quantize_mmq_mxfp4",
+         "symbols": ("quantize_q8_1", "quantize_q8_1_1d", "quantize_mmq_nvfp4", "quantize_mmq_mxfp4",
             "quantize_mmq_q8_1", "quantize_row_q8_1_cuda", "quantize_mmq_q8_1_cuda",
             "quantize_scatter_mmq_q8_1_cuda", "quantize_scatter_mmq_fp4_cuda",
             "quantize_mmq_fp4_cuda"),
-         "markers": ("quantize_q8_1",), "op": "MUL_MAT", "cases": 1139,
+         "markers": ("quantize_q8_1",), "op": "MUL_MAT", "cases": 1202,
          "anchor": quantize_anchor,
          "replays": ({"trace": "Q8_1 block128 nonreplication", "symbol": "quantize_q8_1"},)},
         {"id": "cuda-rope-v2", "path": "ggml/src/ggml-cuda/rope.cu",
@@ -1280,7 +1295,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
          "primary": "ggml_cuda_op_set_rows",
          "symbols": ("k_set_rows_quant", "set_rows_cuda_quant", "k_set_rows", "set_rows_cuda",
                      "ggml_cuda_op_set_rows"),
-         "markers": ("k_set_rows<",), "op": "SET_ROWS", "cases": 655,
+         "markers": ("k_set_rows<",), "op": "SET_ROWS", "cases": 159,
          "anchor": set_rows_anchor, "replays": ()},
     )
     templates = {}
@@ -1483,7 +1498,7 @@ def _portfolio_dispatch_authority(
     dispatches = evidence._load_dispatches(
         _PROFILE_V3_TRACE_CSV,
         profiler_trace_schema_id=evidence.ROCPROF_V3_TRACE_ID,
-        expected_rows=59925)
+        expected_rows=_PROFILE_V3_TRACE_ROWS)
     evidence._load_rocprofv3_agent_info(
         _PROFILE_V3_AGENT_CSV,
         trace_agent_ids={int(row["agent_id"]) for row in dispatches})
@@ -2561,7 +2576,7 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
 def _expected_rocprofv3_rows(
         dispatch: evidence.DispatchContract) -> tuple[int, int]:
     """Derive each arm's exact cardinality from the sealed anchor trace."""
-    anchor_rows = 59_925
+    anchor_rows = _PROFILE_V3_TRACE_ROWS
     candidate_rows = (anchor_rows
                       + sum(row.calls for row in dispatch.candidate_exact)
                       - sum(row.calls for row in dispatch.anchor_exact))

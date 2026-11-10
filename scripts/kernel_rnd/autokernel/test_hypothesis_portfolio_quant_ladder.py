@@ -296,7 +296,6 @@ class QuantLadderPortfolioAcceptanceTest(unittest.TestCase):
             {row["hypothesis_id"] for row in self.portfolio.eligible_projection()},
             {"akh-v2-q5-type-specific-dequant",
              "akh-v2-q8-quantizer-new-mechanism",
-             "akh-v2-fa-gqa7-pair-tail",
              "akh-v2-rms-direct-load-reduction"},
         )
         for hypothesis_id in (IQ2, BATCHED, IQ1, BLANKET):

@@ -758,7 +758,7 @@ class RocprofV3FactoryAcceptance(unittest.TestCase):
             self.assertEqual(plan.profiler_trace_schema_id, E.ROCPROF_V3_TRACE_ID)
             self.assertEqual(
                 (plan.expected_candidate_profiler_dispatch_rows,
-                 plan.expected_anchor_profiler_dispatch_rows), (63_021, 59_925))
+                 plan.expected_anchor_profiler_dispatch_rows), (63_150, 60_054))
             self.assertEqual(plan.profiler_transport_policy,
                              E.ROCPROF_V3_TRANSPORT_POLICY)
             for inputs in (plan.candidate_rocprof_inputs,
@@ -787,7 +787,7 @@ class RocprofV3FactoryAcceptance(unittest.TestCase):
                 F._PROFILE_V3_TRACE_CSV,
                 profiler_trace_schema_id=E.ROCPROF_V3_TRACE_ID,
                 expected_rows=plan.expected_anchor_profiler_dispatch_rows)
-            self.assertEqual(len(anchor_rows), 59_925)
+            self.assertEqual(len(anchor_rows), 60_054)
             with self.assertRaisesRegex(E.EvidenceProducerError,
                                         "exact expected row count"):
                 E._load_dispatches(
@@ -800,12 +800,12 @@ class RocprofV3FactoryAcceptance(unittest.TestCase):
                 v3_row(correlation=index, kernel="kernel_bulk",
                        group_segment=5120, workgroup=(64, 1, 1),
                        grid=(3072, 1, 1))
-                for index in range(1, 63_022)))
+                for index in range(1, 63_151)))
             candidate_rows = E._load_dispatches(
                 synthetic_candidate,
                 profiler_trace_schema_id=E.ROCPROF_V3_TRACE_ID,
                 expected_rows=plan.expected_candidate_profiler_dispatch_rows)
-            self.assertEqual(len(candidate_rows), 63_021)
+            self.assertEqual(len(candidate_rows), 63_150)
             with self.assertRaisesRegex(E.EvidenceProducerError,
                                         "exact expected row count"):
                 E._load_dispatches(

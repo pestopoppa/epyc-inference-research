@@ -40,9 +40,10 @@ def plan(*args, **kwargs):
 
 
 ELIGIBLE = (
-    ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1", "MUL_MAT", 1139),
-    ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1", "MUL_MAT", 1139),
-    ("akh-v2-fa-gqa7-pair-tail", "cuda-fattn-tile-v1", "FLASH_ATTN_EXT", 2868),
+    # C6-C10-REPIN 2026-11-10: GQA7 pair+tail left the eligible set (C10 decode
+    # dispatches flash_attn_ext_vec, not flash_attn_tile).
+    ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1", "MUL_MAT", 1202),
+    ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1", "MUL_MAT", 1202),
     ("akh-v2-rms-direct-load-reduction", "cuda-norm-v2", "RMS_NORM", 21),
 )
 

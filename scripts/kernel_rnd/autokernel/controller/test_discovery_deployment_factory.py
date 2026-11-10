@@ -234,8 +234,8 @@ class DeploymentFactoryTests(unittest.TestCase):
         rows = F.evidence._load_dispatches(
             F._PROFILE_V3_TRACE_CSV,
             profiler_trace_schema_id=F.evidence.ROCPROF_V3_TRACE_ID,
-            expected_rows=59_925)
-        self.assertEqual(len(rows), 59_925)
+            expected_rows=60_054)
+        self.assertEqual(len(rows), 60_054)
         registry = F._template_registry()
         self.assertEqual(registry.version, "gpu-source-templates-v2")
         self.assertEqual(len(registry.templates), 10)
@@ -255,12 +255,18 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertEqual(quantize.allowed_files,
                          frozenset({"ggml/src/ggml-cuda/quantize.cu"}))
         self.assertEqual(quantize.semantics["correctness_op"], "MUL_MAT")
-        self.assertEqual(quantize.semantics["expected_correctness_cases"], 1139)
-        self.assertEqual(len(quantize.dispatch.anchor_exact), 2)
+        self.assertEqual(quantize.semantics["expected_correctness_cases"], 1202)
+        self.assertEqual(len(quantize.dispatch.anchor_exact), 3)
+        self.assertEqual(
+            [(row.kernel_pattern, row.calls, row.grid, row.workgroup)
+             for row in quantize.dispatch.anchor_exact],
+            [(r"^void quantize_q8_1_1d<false>\(.*\)$", 15609, 1024, 64),
+             (r"^void quantize_q8_1_1d<false>\(.*\)$", 1548, 5120, 64),
+             (r"^void quantize_q8_1_1d<true>\(.*\)$", 1548, 5120, 64)])
         self.assertEqual(vecdot.allowed_files,
                          frozenset({"ggml/src/ggml-cuda/vecdotq.cuh"}))
         self.assertEqual(vecdot.semantics["correctness_op"], "MUL_MAT")
-        self.assertEqual(vecdot.semantics["expected_correctness_cases"], 1139)
+        self.assertEqual(vecdot.semantics["expected_correctness_cases"], 1202)
         self.assertTrue(any("vec_dot_q5_0_q8_1" in symbol
                             for symbol in vecdot.allowed_symbols[next(iter(vecdot.allowed_files))]))
         self.assertEqual(vecdot.semantics["planner_target_exclusions"], [{
@@ -281,7 +287,11 @@ class DeploymentFactoryTests(unittest.TestCase):
                          [(6063, 57344), (4644, 8192), (3096, 311296)])
         self.assertEqual([(row["calls"], row["grid"]) for row in
                           authority["akh-v2-q8-quantizer-new-mechanism"]],
-                         [(15609, 1024), (3096, 5120)])
+                         [(15609, 1024), (1548, 5120), (1548, 5120)])
+        self.assertEqual([row["kernel_name"].split("(", 1)[0] for row in
+                          authority["akh-v2-q8-quantizer-new-mechanism"]],
+                         ["void quantize_q8_1_1d<false>", "void quantize_q8_1_1d<false>",
+                          "void quantize_q8_1_1d<true>"])
         self.assertEqual(surfaces["cuda-vecdotq-v1"]["excluded_signatures"],
                          [{"route_id": "cuda-vecdotq-v1.anchor.3",
                            "calls": 129, "grid": 57344,
@@ -289,7 +299,7 @@ class DeploymentFactoryTests(unittest.TestCase):
         rows = F.evidence._load_dispatches(
             F._PROFILE_V3_TRACE_CSV,
             profiler_trace_schema_id=F.evidence.ROCPROF_V3_TRACE_ID,
-            expected_rows=59_925)
+            expected_rows=60_054)
         for hypothesis_id, template_id in (
                 ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1"),
                 ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1")):
@@ -334,10 +344,9 @@ class DeploymentFactoryTests(unittest.TestCase):
             observed[template_id] = F._expected_rocprofv3_rows(
                 reviewed.bind_dispatch(intent))
         self.assertEqual(observed, {
-            "cuda-vecdotq-v1": (59_925, 59_925),
-            "cuda-quantize-q8-v1": (59_925, 59_925),
-            "cuda-fattn-tile-v1": (63_021, 59_925),
-            "cuda-norm-v2": (59_925, 59_925),
+            "cuda-vecdotq-v1": (60_054, 60_054),
+            "cuda-quantize-q8-v1": (60_054, 60_054),
+            "cuda-norm-v2": (60_054, 60_054),
         })
 
     def test_balanced_arm_schedule_is_seeded_and_s2_exactly_reverses_s1(self):
@@ -431,9 +440,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                     "device_id": "mi210_0"}}
             binding = F._runner_binding(config)
             for index, (hypothesis_id, _template, _op, _cases) in enumerate((
-                    ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1", "MUL_MAT", 1139),
-                    ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1", "MUL_MAT", 1139),
-                    ("akh-v2-fa-gqa7-pair-tail", "cuda-fattn-tile-v1", "FLASH_ATTN_EXT", 2868),
+                    ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1", "MUL_MAT", 1202),
+                    ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1", "MUL_MAT", 1202),
                     ("akh-v2-rms-direct-load-reduction", "cuda-norm-v2", "RMS_NORM", 21),
             ), start=1):
                 candidate = SimpleNamespace(
@@ -647,13 +655,12 @@ class DeploymentFactoryTests(unittest.TestCase):
             json.dumps(controller_config.planner_context)
             portfolio = loaded.hypothesis_portfolio.value
             self.assertEqual(portfolio.sha256,
-                             "3344de10fa51558966c7ee8ae1dcb4f7bf4026351cf074c2d797af2802b91d33")  # resealed 2026-11-07
+                             "936ae176e3a43597046a472bced3c8efec9943472bd064f00ec456bb080f36f2")  # resealed 2026-11-10 C6-C10-REPIN
             context = loaded.planner_context.value
             self.assertEqual(
                 {row["hypothesis_id"] for row in context["eligible_hypotheses"]},
                 {"akh-v2-q5-type-specific-dequant",
                  "akh-v2-q8-quantizer-new-mechanism",
-                 "akh-v2-fa-gqa7-pair-tail",
                  "akh-v2-rms-direct-load-reduction"},
             )
             ineligible = {
@@ -663,7 +670,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                     "akh-v2-lowbit-type-specialized-mmvq",
                     "akh-v2-quant-ladder-batched-wave-slot-residual",
                     "akh-v2-iq1s-occupancy-discriminator",
-                    "akh-v2-batching-closes-all-lowbit-gaps"):
+                    "akh-v2-batching-closes-all-lowbit-gaps",
+                    "akh-v2-fa-gqa7-pair-tail"):
                 self.assertIn(hypothesis_id, ineligible)
             self.assertEqual(
                 ineligible["akh-v2-batching-closes-all-lowbit-gaps"]["status"],
@@ -1464,15 +1472,15 @@ class C6PortfolioRouteTests(unittest.TestCase):
 
     def test_real_portfolio_capacity_counts_all_routable_rows(self):
         self.assertEqual(F._c6_bundle_max_iterations(
-            self.portfolio, self.templates), 20)
+            self.portfolio, self.templates), 16)
         with self.assertRaisesRegex(F.DeploymentFactoryError, "no native C6 route"):
             F._c6_bundle_max_iterations(
                 SimpleNamespace(eligible_hypotheses=lambda: []), self.templates)
 
     def test_budget_gate_admits_s1_plus_s2_and_refuses_beyond(self):
-        F._require_c6_iteration_budget(self.portfolio, self.templates, 20)
+        F._require_c6_iteration_budget(self.portfolio, self.templates, 16)
         with self.assertRaisesRegex(F.DeploymentFactoryError, "below max_iterations"):
-            F._require_c6_iteration_budget(self.portfolio, self.templates, 21)
+            F._require_c6_iteration_budget(self.portfolio, self.templates, 17)
 
     def test_last_s1_can_schedule_its_s2_and_s2_is_charged(self):
         budget = F._c6_bundle_max_iterations(self.portfolio, self.templates)
@@ -1551,8 +1559,8 @@ class C6PortfolioRouteTests(unittest.TestCase):
             on = F.deployment.load_deployment_config(
                 F.initialize_static_deployment_bundle(
                     base / "on", c6_admission=True))
-            self.assertEqual(on.max_iterations, 20)
-            self.assertEqual(F.controller_config(on, dry_run=True).max_iterations, 20)
+            self.assertEqual(on.max_iterations, 16)
+            self.assertEqual(F.controller_config(on, dry_run=True).max_iterations, 16)
             off = F.deployment.load_deployment_config(
                 F.initialize_static_deployment_bundle(base / "off"))
             self.assertEqual(off.max_iterations, 100)

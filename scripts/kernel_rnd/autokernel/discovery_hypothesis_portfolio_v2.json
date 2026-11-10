@@ -1554,20 +1554,28 @@
           "frame_id": "frame-current-qwen05b-q4km-tg128",
           "signatures": [
             {
-              "kernel_literal": "quantize_q8_1;grid=1024",
+              "kernel_literal": "quantize_q8_1_1d<false>;grid=1024",
               "calls": 15609,
               "grid": 1024,
-              "workgroup": 256,
+              "workgroup": 64,
               "lds_bytes": 0,
               "route_id": "cuda-quantize-q8-v1.anchor.0"
             },
             {
-              "kernel_literal": "quantize_q8_1;grid=5120",
-              "calls": 3096,
+              "kernel_literal": "quantize_q8_1_1d<false>;grid=5120",
+              "calls": 1548,
               "grid": 5120,
-              "workgroup": 256,
+              "workgroup": 64,
               "lds_bytes": 0,
               "route_id": "cuda-quantize-q8-v1.anchor.1"
+            },
+            {
+              "kernel_literal": "quantize_q8_1_1d<true>;grid=5120",
+              "calls": 1548,
+              "grid": 5120,
+              "workgroup": 64,
+              "lds_bytes": 0,
+              "route_id": "cuda-quantize-q8-v1.anchor.2"
             }
           ],
           "total_calls": 18705,
@@ -2554,7 +2562,7 @@
           ],
           "total_calls": 3096,
           "aggregation": "exact_signatures",
-          "selection": "Single exact sealed current-catalog signature.",
+          "selection": "Historical v13 (2026-08-19) signature; not dispatched on v10/C10 decode (C6-C10-REPIN 2026-11-10), kept for provenance only.",
           "evidence_ref": "ev-current-qwen05-profile",
           "excluded_signatures": []
         }
@@ -2649,12 +2657,14 @@
         "Retire if candidate does not reduce attention device time and whole decode"
       ],
       "current_bundle_eligibility": {
-        "eligible": true,
+        "eligible": false,
         "template_ids": [
           "cuda-fattn-tile-v1"
         ],
-        "blocking_conditions": [],
-        "reason": "Exact D64/GQA7 current route and sealed fattn-tile source bounds are available; correctness remains a mandatory falsifier."
+        "blocking_conditions": [
+          "C10 (and v10) decode tg128 dispatches flash_attn_ext_vec<64, 1, f16, f16>, not flash_attn_tile<64,64,2,1>: c10-c6-dispatch-reprofile-20261110-r2 rocprofv3 trace has zero flash_attn_tile dispatches"
+        ],
+        "reason": "Re-pinned to C10 2026-11-10 (C6-C10-REPIN): the targeted fattn-tile route is not dispatched by the current frame, so no exact dispatch anchor exists."
       },
       "record_version": 1,
       "provenance": {
