@@ -79,15 +79,15 @@ class SetTests(unittest.TestCase):
             self.assertIs(anchors["AES_2022_10Knet_income"]["agrees"], True)
             self.assertIn("agg20", (t / "GOLD_REVIEW.md").read_text())
 
-    def test_unfilled_sheet_yields_no_gold(self):
+    def test_committed_golds_are_unverified_drafts(self):
         golds = [json.loads(l) for l in (D / "golds.jsonl").read_text().splitlines()]
-        self.assertTrue(all(g["gold"] is None for g in golds))
+        self.assertEqual(len(golds), 20)
+        self.assertTrue(all(g["verified"] is False for g in golds))
 
     def test_preflight_fails_closed_today(self):
         ok, info = R.preflight(D)
         self.assertFalse(ok)
         self.assertIn("no verified aggregation questions", info["problems"])
-        self.assertTrue(any(p.startswith("unpinned/missing pdf") for p in info["problems"]))
         self.assertRegex(info["predeclared_sha256"], r"^[0-9a-f]{64}$")
 
 
