@@ -623,3 +623,25 @@ def test_supervised_native_provider_factory_reaches_runtime_owner(monkeypatch, t
                                    "--provider-factory", "fixture", "--listen", "127.0.0.1:8500"])
     assert result == 31 and seen[0][1] is runtime
     assert seen[0][0][-2:] == ["--listen", "127.0.0.1:8500"]
+
+
+
+def test_foreign_session_after_excludes_only_a_younger_foreign_led_session(monkeypatch):
+    """2026-11-10: a non-dumpable operator sshd child (our uid, root-led session started after
+    the recorded supervisor) is not a survivor; anything else unreadable still is."""
+    import types
+    from pathlib import Path as _P
+    from autokernel.loop import lane_watchdog as lw
+    stats = {"/proc/50/stat": "50 (sshd) S 40 40 40 0", "/proc/60/stat": "60 (x) S 1 60 60 0",
+             "/proc/70/stat": "70 (y) S 41 41 41 0"}
+    uids = {"/proc/40": 0, "/proc/41": 0}
+    ticks = {40: 500, 41: 50}
+    monkeypatch.setattr(lw, "_proc_stat", lambda pid: ("S", 1, pid, ticks[pid]) if pid in ticks else None)
+    real_read, real_stat = _P.read_text, _P.stat
+    monkeypatch.setattr(_P, "read_text", lambda self, *a, **k: stats[str(self)] if str(self) in stats else real_read(self, *a, **k))
+    monkeypatch.setattr(_P, "stat", lambda self, *a, **k: types.SimpleNamespace(st_uid=uids[str(self)]) if str(self) in uids else real_stat(self, *a, **k))
+    assert lw._foreign_session_after(50, 100) is True     # root leader younger than the supervisor
+    assert lw._foreign_session_after(60, 100) is False    # its own session leader: unproven
+    assert lw._foreign_session_after(70, 100) is False    # foreign leader OLDER: supervisor may share it
+    uids["/proc/40"] = __import__("os").getuid()
+    assert lw._foreign_session_after(50, 100) is False    # our-uid leader: could be a descendant

@@ -233,6 +233,29 @@ def _live_children():
     return children
 
 
+def _foreign_session_after(pid, not_before):
+    """True when `pid` sits in a session led by ANOTHER uid's process that started after
+    `not_before` -- proof it is not a descendant of a supervisor started at `not_before`.
+
+    A process joins a session only by inheriting it at fork or by calling setsid() (it then
+    leads it itself). A supervisor descendant is therefore in a session whose leader is
+    either older than the supervisor (inherited) or itself a descendant (our uid). A
+    foreign-uid leader younger than the supervisor fits neither. Origin 2026-11-10: an
+    operator's `sshd: <user>@pts/0` privilege-separated child runs as our uid but is
+    non-dumpable, and held every Q38FN store recovery as an "unreadable" survivor.
+    """
+    try:
+        stat = Path(f'/proc/{pid}/stat').read_text()
+        session = int(stat[stat.rfind(')') + 2:].split()[3])
+        if session <= 1 or session == pid:
+            return False
+        leader = _proc_stat(session)
+        return (leader is not None and Path(f'/proc/{session}').stat().st_uid != os.getuid()
+                and leader[3] >= not_before)
+    except (OSError, ValueError, IndexError):
+        return False
+
+
 def _scoped_survivors(stores, not_before):
     """Live processes of ours carrying a procguard cookie of these stores."""
     from .procguard import ENV_SCOPE, campaign_key, parse_scope
@@ -252,7 +275,7 @@ def _scoped_survivors(stores, not_before):
         except PermissionError:
             # Non-dumpable: its cookie cannot be read. One older than the recorded
             # supervisor cannot be its descendant; a younger one is unproven.
-            if row[3] >= not_before:
+            if row[3] >= not_before and not _foreign_session_after(int(entry.name), not_before):
                 found.append(f'unreadable pid {entry.name}')
             continue
         for item in raw.split(b'\0'):
