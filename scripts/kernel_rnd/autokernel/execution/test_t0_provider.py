@@ -578,6 +578,22 @@ class BackendOpsCapabilityParsing(unittest.TestCase):
         case = t0.parse_backend_ops_csv(text).cases[0]
         self.assertEqual(case.status, "fail")
         self.assertEqual(case.layout.families, ("stride_gap",))
+        self.assertFalse(case.supported)
+
+    def test_csv_counts_declined_layout_rows_apart_from_ran_and_failed(self):
+        head = ('"backend_name","op_name","op_params","test_mode","supported",'
+                '"hard_failure","error_message","layout_receipt"\n')
+        rec = '"AK_LAYOUT_V1 families=stride_gap suite_seed=4711"'
+        text = (head
+                + '"CPU","CPY","a","test","0","1","non-contiguous layout is not supported",' + rec + '\n'
+                + '"CPU","CPY","b","test","0","1","non-contiguous layout is not supported",' + rec + '\n'
+                + '"CPU","MUL_MAT","c","test","1","1","mismatch",' + rec + '\n'
+                + '"CPU","MUL_MAT","d","test","1","0","",' + rec + '\n')
+        run = t0.parse_backend_ops_csv(text)
+        self.assertEqual(run.unsupported_hard_failures_by_op(), (("CPY", 2),))
+        self.assertEqual(run.hard_failures_by_op(), (("MUL_MAT", 1),))
+        # fail-closed status is unchanged: a declined probe is still not a pass
+        self.assertEqual([c.status for c in run.backends[0].cases][:2], ["fail", "fail"])
 
     def test_csv_preserves_value_transform_receipt(self):
         text = (

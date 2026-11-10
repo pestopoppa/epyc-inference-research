@@ -154,8 +154,11 @@ class TestSensitivityReducer(unittest.TestCase):
                 f"inputs={'a' * 16},{'b' * 16},{'c' * 16},{'d' * 16} "
                 f"outputs={'1' * 16},{'2' * 16},{'3' * 16},{'4' * 16}"),
         }
-        with self.assertRaisesRegex(ValueError, "has seeds"):
-            S.observations_from_csv_rows((base,), expected_seeds=(11, 22, 33))
+        lone = S.observations_from_csv_rows((base,), expected_seeds=(11, 22, 33))
+        self.assertTrue(all("#unpaired-seed11" in o.case_id for o in lone))
+        report = S.reduce_input_sensitivity(lone)
+        self.assertNotEqual(report.check.outcome, schemas.PASS)
+        self.assertTrue(report.unscoreable_units)
         drift = dict(base)
         drift["sensitivity_receipt"] = base["sensitivity_receipt"].replace(
             "suite_version=0db32c06e", "suite_version=abcdef1").replace(
@@ -165,5 +168,119 @@ class TestSensitivityReducer(unittest.TestCase):
                 (base, drift), expected_seeds=(11, 22, 33))
 
 
+    @staticmethod
+    def _row(op, params, seed, tag):
+        base = "0123456789abcdef"
+        def h(i):
+            return (base[(tag + i) % 16] * 8 + base[(tag * 3 + i + seed) % 16] * 8)
+        return {"op_name": op, "op_params": params, "sensitivity_receipt": (
+            f"AK_SENS_V1 suite_version=0db32c06e suite_seed={seed} "
+            "transforms=identity,x3,x0p01,negate "
+            f"inputs={','.join(h(i) for i in range(4))} "
+            f"outputs={','.join(h(i + 5) for i in range(4))}")}
+
+    def test_colliding_params_with_distinct_receipts_pair_by_ordinal(self):
+        params = "type=f32,m=16,n=8,k=256"
+        rows = [self._row("MUL_MAT", params, seed, tag)
+                for seed in (11, 22, 33) for tag in (1, 2)]
+        observations = S.observations_from_csv_rows(rows, expected_seeds=(11, 22, 33))
+        self.assertEqual(len(observations), 24)
+        self.assertEqual({o.case_id for o in observations},
+                         {params + "#occ0", params + "#occ1"})
+        self.assertEqual(S.reduce_input_sensitivity(observations).check.outcome,
+                         schemas.PASS)
+
+    def test_colliding_params_with_mismatched_counts_are_unscoreable_not_merged(self):
+        params = "type=f32,m=16,n=8,k=256"
+        rows = [self._row("MUL_MAT", params, seed, tag)
+                for seed in (11, 22) for tag in (1, 2)]
+        rows.append(self._row("MUL_MAT", params, 33, 1))
+        observations = S.observations_from_csv_rows(rows, expected_seeds=(11, 22, 33))
+        self.assertEqual(len(observations), 5 * 4)
+        self.assertTrue(all("#unpaired-" in o.case_id for o in observations))
+        report = S.reduce_input_sensitivity(observations)
+        self.assertTrue(report.units)
+        seed_units = [u for u in report.units if u.axis == S.SEED_VARIATION]
+        self.assertEqual(len(seed_units), 5 * 4)
+        self.assertTrue(all(not u.scoreable and u.sample_count == 1 for u in seed_units))
+
+    def test_genuinely_identical_duplicate_rows_still_raise(self):
+        params = "type=f32,m=16,n=8,k=256"
+        row = self._row("MUL_MAT", params, 11, 1)
+        with self.assertRaisesRegex(ValueError, "duplicate sensitivity row"):
+            S.observations_from_csv_rows(
+                (row, dict(row)), expected_seeds=(11, 22, 33))
+
+
+    def test_shape_label_falls_back_for_non_ne_param_styles(self):
+        self.assertEqual(S._shape_from_params("type=f16,ne_a=[128,2,2,2],v=0"), (128, 2, 2, 2))
+        self.assertEqual(S._shape_from_params("n_embd=31,n_tokens=17"), (31, 17))
+        self.assertEqual(S._shape_from_params("type=f32,K=16,OC=32,T_in=197,s0=8,p0=0"),
+                         (16, 32, 197, 8))
+        with self.assertRaises(ValueError):
+            S._shape_from_params("type=f32,flag=0")
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConv2dPaddingOnlyGeometry(unittest.TestCase):
+    P = ("ne_input=[%s],ne_kernel=[%s],type_kernel=f32,stride0=%d,stride1=%d,"
+         "padding0=%d,padding1=%d,dilation0=%d,dilation1=%d,cwhn=0")
+
+    def case(self, ne_in, ne_k, s0, s1, p0, p1, d0, d1):
+        return self.P % (ne_in, ne_k, s0, s1, p0, p1, d0, d1)
+
+    def test_one_by_one_input_with_large_padding_and_dilation_is_padding_only(self):
+        # 1x1 input, y: pad 2 / stride 5 -> the only output row reads index -2.
+        self.assertTrue(S.conv2d_output_is_padding_only(
+            self.case("1,1,1,2", "1,1,1,1", 1, 5, 5, 2, 2, 4)))
+        # x: pad 5, dilation 4 on a 1-wide input still has a real tap (o=5);
+        # padding-only needs a dimension with none, so this one is NOT flagged.
+        self.assertFalse(S.conv2d_output_is_padding_only(
+            self.case("1,1,1,2", "1,1,1,1", 1, 1, 5, 5, 4, 4)))
+
+    def test_geometry_with_a_real_tap_is_not_padding_only(self):
+        self.assertFalse(S.conv2d_output_is_padding_only(
+            self.case("8,8,1,2", "3,3,1,1", 1, 1, 1, 1, 1, 1)))
+        self.assertFalse(S.conv2d_output_is_padding_only(
+            self.case("1,1,1,2", "1,1,1,1", 1, 1, 0, 0, 1, 1)))
+
+    def test_unparseable_params_fail_closed(self):
+        self.assertFalse(S.conv2d_output_is_padding_only("m=16,n=16,k=256"))
+
+    def _conv_population(self, case_id, output_varies):
+        rows = []
+        for transform in sorted(S.REQUIRED_TRANSFORMS):
+            for index, seed in enumerate((11, 22, 33)):
+                key = (transform, seed)
+                rows.append(S.SensitivityObservation(
+                    suite_version="v", operation="CONV_2D", shape=(1, 1, 1, 2),
+                    case_id=case_id, seed=seed, transform=transform,
+                    input_digest=f"in-{key}",
+                    output_digest=f"out-{key}" if output_varies else "out-const",
+                    input_distance_from_seed_anchor=0.0 if index == 0 else 1.0,
+                    output_distance_from_seed_anchor=(
+                        0.0 if index == 0 or not output_varies else 1.0),
+                    reference_only=True, produced_by=S.TRUSTED_PRODUCER,
+                    evidence_ref=f"r#{transform}-{seed}"))
+        return tuple(rows)
+
+    def test_padding_only_conv_is_insensitive_by_construction_not_unscoreable(self):
+        case_id = self.case("1,1,1,2", "1,1,1,1", 1, 5, 5, 2, 2, 4)
+        report = S.reduce_input_sensitivity(self._conv_population(case_id, False))
+        self.assertEqual(report.check.outcome, schemas.PASS)
+        self.assertEqual(report.unscoreable_units, ())
+        self.assertEqual(len(report.structurally_insensitive_units), len(report.units))
+
+    def test_non_padding_only_conv_with_invariant_output_stays_unscoreable(self):
+        case_id = self.case("8,8,1,2", "3,3,1,1", 1, 1, 1, 1, 1, 1)
+        report = S.reduce_input_sensitivity(self._conv_population(case_id, False))
+        self.assertEqual(report.check.outcome, schemas.FAIL)
+        self.assertEqual(report.structurally_insensitive_units, ())
+
+    def test_padding_only_geometry_whose_output_moves_is_not_flagged(self):
+        case_id = self.case("1,1,1,2", "1,1,1,1", 1, 5, 5, 2, 2, 4)
+        report = S.reduce_input_sensitivity(self._conv_population(case_id, True))
+        self.assertEqual(report.structurally_insensitive_units, ())

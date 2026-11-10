@@ -98,6 +98,11 @@ class SensitivityUnit:
     output_changed: bool
     scoreable: bool
     reasons: tuple[str, ...]
+    # True when the case geometry PROVES the output cannot depend on the input
+    # (CONV_2D whose every output tap lands in padding) and the measured output
+    # was indeed invariant. Such a unit is a C5-2 insensitive case by
+    # construction: scored, not an unscoreable defect, and not a gate failure.
+    structurally_insensitive: bool = False
 
 
 @dataclass(frozen=True)
@@ -109,6 +114,10 @@ class SensitivityReport:
     @property
     def unscoreable_units(self) -> tuple[SensitivityUnit, ...]:
         return tuple(unit for unit in self.units if not unit.scoreable)
+
+    @property
+    def structurally_insensitive_units(self) -> tuple[SensitivityUnit, ...]:
+        return tuple(unit for unit in self.units if unit.structurally_insensitive)
 
     def to_dict(self) -> dict:
         return {
@@ -125,11 +134,59 @@ class SensitivityReport:
                     "input_changed": unit.input_changed,
                     "output_changed": unit.output_changed,
                     "scoreable": unit.scoreable,
+                    "structurally_insensitive": unit.structurally_insensitive,
                     "reasons": list(unit.reasons),
                 }
                 for unit in self.units
             ],
         }
+
+
+def _conv2d_dim_has_real_tap(size: int, kernel: int, stride: int, pad: int,
+                             dilation: int) -> bool:
+    """True when some (output position, kernel tap) reads input index in [0, size)."""
+    out = (size + 2 * pad - dilation * (kernel - 1) - 1) // stride + 1
+    for o in range(max(out, 0)):
+        for k in range(kernel):
+            if 0 <= o * stride - pad + k * dilation < size:
+                return True
+    return False
+
+
+def conv2d_output_is_padding_only(case_id: str) -> bool:
+    """Geometry test: does a CONV_2D case read no real input element at all?
+
+    Every output tap is (x-tap valid) AND (y-tap valid), so if either spatial
+    dimension has no in-range tap, every output is computed from padding alone
+    and is input-invariant by construction (e.g. a 1x1 input with padding 5 and
+    dilation 4). Returns False for params it cannot parse (fail closed: the unit
+    then stays subject to the ordinary invariance finding).
+    """
+    def ints(key: str):
+        m = re.search(rf"(?:^|,){key}=\[([0-9, ]+)\]", case_id)
+        return [int(v) for v in m.group(1).split(",")] if m else None
+
+    def num(key: str):
+        m = re.search(rf"(?:^|,){key}=(-?[0-9]+)(?=,|$|#)", case_id)
+        return int(m.group(1)) if m else None
+
+    ne_in, ne_k = ints("ne_input"), ints("ne_kernel")
+    vals = [num(k) for k in ("stride0", "stride1", "padding0", "padding1",
+                             "dilation0", "dilation1")]
+    if (ne_in is None or ne_k is None or len(ne_in) < 2 or len(ne_k) < 2
+            or any(v is None for v in vals)):
+        return False
+    s0, s1, p0, p1, d0, d1 = vals
+    if min(ne_in[:2] + ne_k[:2]) <= 0 or min(s0, s1, d0, d1) <= 0 or min(p0, p1) < 0:
+        return False
+    return not (_conv2d_dim_has_real_tap(ne_in[0], ne_k[0], s0, p0, d0)
+                and _conv2d_dim_has_real_tap(ne_in[1], ne_k[1], s1, p1, d1))
+
+
+def _structural_insensitivity(operation: str, case_id: str, input_changed: bool,
+                              output_changed: bool) -> bool:
+    return (operation == "CONV_2D" and input_changed and not output_changed
+            and conv2d_output_is_padding_only(case_id))
 
 
 def reduce_input_sensitivity(
@@ -212,9 +269,12 @@ def reduce_input_sensitivity(
             for item in non_anchor) if len(anchor_rows) == 1 else False
         if not input_changed:
             reasons.append("seed population did not measurably change every non-anchor input")
-        if input_changed and not output_changed:
+        structural = _structural_insensitivity(
+            operation, case_id, input_changed, output_changed)
+        if input_changed and not output_changed and not structural:
             reasons.append("output is invariant across input seeds or input-insensitive")
         units.append(SensitivityUnit(
+            structurally_insensitive=structural,
             axis=SEED_VARIATION,
             operation=operation, case_id=case_id, shape=shape,
             slice_id=f"transform={transform}", sample_count=len(seeds),
@@ -244,9 +304,12 @@ def reduce_input_sensitivity(
             item.output_digest != anchor.output_digest for item in non_anchor)
         if not input_changed:
             reasons.append("value transforms did not change every materialized input")
-        if input_changed and not output_changed:
+        structural = _structural_insensitivity(
+            operation, case_id, input_changed, output_changed)
+        if input_changed and not output_changed and not structural:
             reasons.append("output is invariant across value transforms or input-insensitive")
         units.append(SensitivityUnit(
+            structurally_insensitive=structural,
             axis=TRANSFORM_VARIATION,
             operation=operation, case_id=case_id, shape=shape,
             slice_id=f"seed={seed}", sample_count=len(by_transform),
@@ -268,12 +331,26 @@ def reduce_input_sensitivity(
 
 
 def _shape_from_params(params: str) -> tuple[int, ...]:
+    """Derive a deterministic shape LABEL from op params text.
+
+    The shape only groups/labels units (case identity lives in ``case_id`` and
+    the receipts), so any deterministic function of the params string is
+    sound.  Preference order: ne/shape-style bracket list, m/n/k, then the
+    first bracket list under any key (ne_a, ne_input, ...), then every
+    positive integer ``key=value`` in order.
+    """
     bracketed = re.search(r"(?:ne|shape)=\[([0-9, ]+)\]", params)
+    if bracketed is None:
+        bracketed = re.search(r"(?:^|,)[A-Za-z_0-9]*(?:ne|shape)[A-Za-z_0-9]*=\[([0-9, ]+)\]", params)
     if bracketed is not None:
         shape = tuple(int(value.strip()) for value in bracketed.group(1).split(","))
     else:
         values = re.findall(r"(?:^|,)(?:m|n|k)=([0-9]+)", params)
         shape = tuple(int(value) for value in values)
+        if not shape or any(value <= 0 for value in shape):
+            shape = tuple(value for value in
+                          (int(v) for v in re.findall(r"(?:^|,)[A-Za-z_0-9]+=([0-9]+)(?=,|$)", params))
+                          if value > 0)
     if not shape or any(value <= 0 for value in shape):
         raise ValueError(f"cannot derive a positive shape from op params: {params!r}")
     return shape
@@ -299,23 +376,47 @@ def observations_from_csv_rows(
     if len(versions) != 1:
         raise ValueError("sensitivity CSV rows mix producer suite versions")
 
-    by_case: dict[tuple[str, str], dict[int, SensitivityReceipt]] = {}
+    # op_params is not unique per test case (distinct cases can print identical
+    # params), and the receipt hashes differ per seed so they cannot prove case
+    # identity across seeds.  Disambiguate by occurrence ordinal in CSV order,
+    # pairing across seeds only when every seed has the same occurrence count;
+    # otherwise (including a seed that lacks the case entirely) each occurrence
+    # becomes its own single-seed case_id, which the
+    # reducer reports as unscoreable (never dropped, never merged).
+    raw: dict[tuple[str, str], dict[int, list[tuple[str, SensitivityReceipt]]]] = {}
     for row, receipt in parsed:
         key = (row["op_name"], row["op_params"])
-        if receipt.suite_seed in by_case.setdefault(key, {}):
-            raise ValueError(f"duplicate sensitivity row for {key} seed {receipt.suite_seed}")
-        by_case[key][receipt.suite_seed] = receipt
+        bucket = raw.setdefault(key, {}).setdefault(receipt.suite_seed, [])
+        if any(text == row["sensitivity_receipt"] for text, _r in bucket):
+            raise ValueError(
+                f"duplicate sensitivity row for {key} seed {receipt.suite_seed}")
+        bucket.append((row["sensitivity_receipt"], receipt))
+
+    # (operation, params, case_id) -> {seed: receipt}
+    by_case: dict[tuple[str, str, str], dict[int, SensitivityReceipt]] = {}
+    for (operation, params), per_seed in raw.items():
+        collided = any(len(items) > 1 for items in per_seed.values())
+        counts = {len(per_seed.get(seed, ())) for seed in seeds}
+        if not collided and len(counts) == 1:
+            by_case[(operation, params, params)] = {
+                seed: items[0][1] for seed, items in per_seed.items()}
+        elif len(counts) == 1:
+            for index in range(counts.pop()):
+                by_case[(operation, params, f"{params}#occ{index}")] = {
+                    seed: per_seed[seed][index][1] for seed in seeds}
+        else:
+            for seed, items in per_seed.items():
+                for index, (_text, receipt) in enumerate(items):
+                    by_case[(operation, params,
+                             f"{params}#unpaired-seed{seed}-occ{index}")] = {seed: receipt}
 
     observations = []
     anchor_seed = seeds[0]
-    for (operation, params), receipts in sorted(by_case.items()):
-        if set(receipts) != set(seeds):
-            raise ValueError(
-                f"{operation}({params}) has seeds {sorted(receipts)}, expected {sorted(seeds)}")
-        anchor = receipts[anchor_seed]
+    for (operation, params, case_id), receipts in sorted(by_case.items()):
+        unpaired = "#unpaired-" in case_id
         shape = _shape_from_params(params)
-        for seed in seeds:
-            receipt = receipts[seed]
+        for seed, receipt in sorted(receipts.items()):
+            anchor = receipts[anchor_seed] if not unpaired else receipt
             if receipt.transforms != anchor.transforms:
                 raise ValueError(f"{operation}({params}) transform order drifted across seeds")
             for index, transform in enumerate(receipt.transforms):
@@ -323,11 +424,11 @@ def observations_from_csv_rows(
                 output_changed = receipt.output_hashes[index] != anchor.output_hashes[index]
                 observations.append(SensitivityObservation(
                     suite_version=receipt.suite_version, operation=operation,
-                    case_id=params, shape=shape, seed=seed, transform=transform,
+                    case_id=case_id, shape=shape, seed=seed, transform=transform,
                     input_digest=receipt.input_hashes[index],
                     output_digest=receipt.output_hashes[index],
                     input_distance_from_seed_anchor=1.0 if input_changed else 0.0,
                     output_distance_from_seed_anchor=1.0 if output_changed else 0.0,
                     reference_only=True, produced_by=TRUSTED_PRODUCER,
-                    evidence_ref=f"csv://{operation}/{receipt.suite_seed}/{transform}"))
+                    evidence_ref=f"csv://{operation}/{case_id}/{receipt.suite_seed}/{transform}"))
     return tuple(observations)

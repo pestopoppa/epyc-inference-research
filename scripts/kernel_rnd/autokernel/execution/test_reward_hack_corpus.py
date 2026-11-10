@@ -288,3 +288,41 @@ class TestRowflowParentHeldClaim(unittest.TestCase):
         result = self._child_result("rowA", "rowB")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("RowflowClaimError", result.stderr)
+
+
+class TestRowflowEngineFlockIdiom(unittest.TestCase):
+    """filler_run15.sh idiom: `exec 9>LOCK; flock 9` in an inner bash whose argv
+    names the row; /proc/locks then records the dead flock(1) pid, the lock lives
+    on bash's fd 9, and the job runs with fd 9 closed (c6-26-corpus-repin r2)."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.lock = Path(self.temp.name) / "gpu_device.mi210_0.lock"
+        self.lock.write_bytes(b"")
+
+    def _run(self, argv_row: str, child_row: str) -> subprocess.CompletedProcess:
+        child = textwrap.dedent(f"""
+            import os, sys
+            from pathlib import Path
+            sys.path.insert(0, {str(Path(__file__).resolve().parents[3])!r})
+            from kernel_rnd.autokernel.execution import reward_hack_corpus as C
+            claim = C._inherit_rowflow_claim(os.environ, Path({str(self.lock)!r}))
+            print(claim.receipt().to_dict()["claim_id"])
+        """)
+        script = ('exec 9>"$LOCK"; flock -w 5 9 || exit 9; export FILLER_ID="$CHILD_ROW" FILLER_NEEDGPU=1; '
+                  'bash -c "\\"$PY\\" -c \\"\\$CHILD\\"" 9>&-')
+        env = {k: v for k, v in os.environ.items() if k not in ("FILLER_ID", "FILLER_NEEDGPU")}
+        env.update(LOCK=str(self.lock), CHILD_ROW=child_row, PY=sys.executable, CHILD=child)
+        return subprocess.run(["bash", "-c", script, "filler_run15.sh", "--inner", "--id", argv_row],
+                              capture_output=True, text=True, env=env, timeout=60)
+
+    def test_engine_idiom_same_row_is_inherited(self):
+        result = self._run("rowA", "rowA")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith("rowflow-parent:rowA:"), result.stdout)
+
+    def test_engine_idiom_other_row_fails_closed(self):
+        result = self._run("rowA", "rowB")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not belong to row rowB", result.stderr)
