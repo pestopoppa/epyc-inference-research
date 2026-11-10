@@ -1,0 +1,16 @@
+{
+ "schema": "agg_phase0_single_fact_keys.v1",
+ "source": "verified golds in single_fact.jsonl under the operator line-item rule (SINGLE_FACT_READ.md, 2026-11-10); encoded pre-data 2026-11-10 for the deterministic scorer. Money in USD millions; percent values in percent units.",
+ "keys": {
+  "financebench_id_00070": {"yesno": "no", "numbers": [{"value": -1561, "decimals": 0}]},
+  "financebench_id_00005": {"yesno": "yes", "numbers": [{"value": 2278, "decimals": 0}]},
+  "financebench_id_01346": {"numbers": [{"value": 20, "decimals": 0}, {"value": 23, "decimals": 0}]},
+  "financebench_id_00080": {"yesno": "yes", "numbers": [{"value": 12416, "decimals": 0}]},
+  "financebench_id_00216": {"yesno": "no", "numbers": [{"value": 0.54, "decimals": 2}]},
+  "financebench_id_00566": {"yesno": "no", "numbers": [{"value": 229, "decimals": 0}]},
+  "financebench_id_10420": {"numbers": [{"value": -1.42, "decimals": 2, "signed": true}]},
+  "financebench_id_06272": {"numbers": [{"value": 0.8, "decimals": 2}]},
+  "financebench_id_03718": {"numbers": [{"value": 0.4, "decimals": 1}]},
+  "financebench_id_04481": {"numbers": [{"value": 16.5, "decimals": 1}]}
+ }
+}
