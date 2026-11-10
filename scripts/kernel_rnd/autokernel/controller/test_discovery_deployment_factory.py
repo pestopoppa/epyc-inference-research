@@ -1382,6 +1382,16 @@ class C6RealSourceTests(unittest.TestCase):
                               b"tmp[j][i][k_part] += b;"),
                 self.templates.templates["cuda-quantize-q8-v1"])
 
+    def test_structural_precision_refuses_patch_touching_fused_gate_accumulator(self):
+        # C9+ mmvq.cu carries a second f32 accumulator for the fused gate/up path.
+        with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                    "accumulator carrier is absent or changed"):
+            F._c6_structural_precision(
+                self.config,
+                self.manifest(b"tmp_gate[j][i][k_part] += a;",
+                              b"tmp_gate[j][i][k_part] += b;"),
+                self.templates.templates["cuda-quantize-q8-v1"])
+
     def test_vecdot_guard_applies_to_the_registered_template(self):
         with self.assertRaisesRegex(F.DeploymentFactoryError,
                                     "vec-dot accumulator or return path"):

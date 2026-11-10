@@ -2042,7 +2042,12 @@ def _c6_structural_precision(
         "MUL_MAT": (
             "ggml/src/ggml-cuda/mmvq.cu",
             (("float tmp[ncols_dst][rows_per_thread][k_part_count] = {{{0.0f}}};", 1),
-             ("tmp[j][i][k_part] +=", 6)),
+             ("tmp[j][i][k_part] +=", 6),
+             # The fused q4_K gate/up dual path's second f32 accumulator (present from C9
+             # on, 1 declaration + 7 accumulations at C10 7f1bd044b). Pinned so a candidate
+             # cannot edit it as an unprotected line (from reseal d664dc178).
+             ("float tmp_gate[ncols_dst][rows_per_thread][k_part_count] = {{{0.0f}}};", 1),
+             ("tmp_gate[j][i][k_part] +=", 7)),
             "mul_mat_vec_q"),
         "RMS_NORM": (
             "ggml/src/ggml-cuda/norm.cu",
