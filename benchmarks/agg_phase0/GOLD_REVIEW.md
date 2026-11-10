@@ -8,42 +8,42 @@ Every gold below is `verified: false`. **No Phase-0 run may start until each que
 2. Run `python3 agg_phase0.py golds` — it recomputes every gold and the FinanceBench anchor checks below. Any `agrees: false` anchor means a sheet error; fix before signing.
 3. For each question, tick the `verified` cell here AND set `verified: true`, `verified_by`, `verified_at` in `verification_record.json` (the runner reads that file, not this one).
 
-Corpus: 10 FY2022 10-Ks; missing PDFs: AES_2022_10K, COCACOLA_2022_10K, GENERALMILLS_2022_10K, LOCKHEEDMARTIN_2022_10K, PEPSICO_2022_10K.
+Corpus: 10 FY2022 10-Ks; missing PDFs: none.
 
 ## FinanceBench anchor checks
 
 | doc | expr | expect | sheet value | agrees | source |
 |---|---|---|---|---|---|
-| CORNING_2022_10K | `total_current_assets-total_current_liabilities` | sign 1 | None | None | financebench_id_00005 (+$831M, operating items only) |
-| AMERICANWATERWORKS_2022_10K | `total_current_assets-total_current_liabilities` | approx -1561 | None | None | financebench_id_00070 (-$1561M) |
-| PAYPAL_2022_10K | `total_current_assets-total_current_liabilities` | sign 1 | None | None | financebench_id_00080 (+$1.6Bn) |
-| COCACOLA_2022_10K | `dividends_paid/net_income` | approx 0.8 | None | None | financebench_id_06272 (0.80) |
-| AES_2022_10K | `net_income` | sign -1 | None | None | financebench_id_10420 (ROA -0.02) |
+| CORNING_2022_10K | `total_current_assets-total_current_liabilities` | sign 1 | 2278.0 | True | financebench_id_00005 (+$831M, operating items only) |
+| AMERICANWATERWORKS_2022_10K | `total_current_assets-total_current_liabilities` | approx -1561 | -1561.0 | True | financebench_id_00070 (-$1561M) |
+| PAYPAL_2022_10K | `total_current_assets-total_current_liabilities` | sign 1 | 12416.0 | True | financebench_id_00080 (+$1.6Bn) |
+| COCACOLA_2022_10K | `dividends_paid/net_income` | approx 0.8 | 0.7981555229511633 | True | financebench_id_06272 (0.80) |
+| AES_2022_10K | `net_income` | sign -1 | -546.0 | True | financebench_id_10420 (ROA -0.02) |
 
 ## 20 cross-document aggregation questions
 
 | id | question | rule | derived gold | NA-excluded | missing cells | verified | reviewer |
 |---|---|---|---|---|---|---|---|
-| agg01 | Which company in the corpus reported the highest FY2022 total revenue? | `argmax(revenue)` | null | 0 | 10 | [ ] | |
-| agg02 | Which company in the corpus reported the lowest FY2022 total revenue? | `argmin(revenue)` | null | 0 | 10 | [ ] | |
-| agg03 | What is the combined FY2022 total revenue of all companies in the corpus, in USD millions? | `sum(revenue)` | null | 0 | 10 | [ ] | |
-| agg04 | How many companies in the corpus reported FY2022 total revenue above $50 billion? | `count_gt(revenue, 50000)` | null | 0 | 10 | [ ] | |
-| agg05 | List the three companies with the highest FY2022 total revenue, highest first. | `top3(revenue)` | null | 0 | 10 | [ ] | |
-| agg06 | Which company reported the highest FY2022 net income attributable to shareholders? | `argmax(net_income)` | null | 0 | 10 | [ ] | |
-| agg07 | How many companies in the corpus reported a net loss attributable to shareholders for FY2022? | `count_lt(net_income, 0)` | null | 0 | 10 | [ ] | |
-| agg08 | What is the combined FY2022 net income attributable to shareholders across the corpus, in USD millions? | `sum(net_income)` | null | 0 | 10 | [ ] | |
-| agg09 | Which company had the largest FY2022 capital expenditures? | `argmax(capex)` | null | 0 | 10 | [ ] | |
-| agg10 | What were total FY2022 capital expenditures across all companies in the corpus, in USD millions? | `sum(capex)` | null | 0 | 10 | [ ] | |
-| agg11 | How many companies spent more than $5 billion on capital expenditures in FY2022? | `count_gt(capex, 5000)` | null | 0 | 10 | [ ] | |
-| agg12 | Which company had the largest total assets at FY2022 year end? | `argmax(total_assets)` | null | 0 | 10 | [ ] | |
-| agg13 | List the three companies with the largest total assets at FY2022 year end, largest first. | `top3(total_assets)` | null | 0 | 10 | [ ] | |
-| agg14 | Which company generated the most cash from operating activities in FY2022? | `argmax(operating_cash_flow)` | null | 0 | 10 | [ ] | |
-| agg15 | For how many companies did FY2022 operating cash flow exceed net income attributable to shareholders? | `count_gt(operating_cash_flow-net_income, 0)` | null | 0 | 10 | [ ] | |
-| agg16 | Among companies with a classified balance sheet, how many had positive working capital (total current assets minus total current liabilities) at FY2022 year end? | `count_gt(total_current_assets-total_current_liabilities, 0)` | null | 0 | 10 | [ ] | |
-| agg17 | Among companies with a classified balance sheet, which had the most negative working capital at FY2022 year end? | `argmin(total_current_assets-total_current_liabilities)` | null | 0 | 10 | [ ] | |
-| agg18 | What were total FY2022 cash dividends paid to common shareholders across the corpus, in USD millions? | `sum(dividends_paid)` | null | 0 | 10 | [ ] | |
-| agg19 | Which company had the highest FY2022 capital expenditures as a share of total revenue? | `argmax(capex/revenue)` | null | 0 | 10 | [ ] | |
-| agg20 | How many companies had an FY2022 net margin (net income attributable / total revenue) above 10%? | `count_gt(net_income/revenue, 0.1)` | null | 0 | 10 | [ ] | |
+| agg01 | Which company in the corpus reported the highest FY2022 total revenue? | `argmax(revenue)` | "Verizon" | 0 | 0 | [ ] | |
+| agg02 | Which company in the corpus reported the lowest FY2022 total revenue? | `argmin(revenue)` | "American Water Works" | 0 | 0 | [ ] | |
+| agg03 | What is the combined FY2022 total revenue of all companies in the corpus, in USD millions? | `sum(revenue)` | 538018.8 | 0 | 0 | [ ] | |
+| agg04 | How many companies in the corpus reported FY2022 total revenue above $50 billion? | `count_gt(revenue, 50000)` | 4 | 0 | 0 | [ ] | |
+| agg05 | List the three companies with the highest FY2022 total revenue, highest first. | `top3(revenue)` | ["Verizon", "JPMorgan", "PepsiCo"] | 0 | 0 | [ ] | |
+| agg06 | Which company reported the highest FY2022 net income attributable to shareholders? | `argmax(net_income)` | "JPMorgan" | 0 | 0 | [ ] | |
+| agg07 | How many companies in the corpus reported a net loss attributable to shareholders for FY2022? | `count_lt(net_income, 0)` | 1 | 0 | 0 | [ ] | |
+| agg08 | What is the combined FY2022 net income attributable to shareholders across the corpus, in USD millions? | `sum(net_income)` | 89832.3 | 0 | 0 | [ ] | |
+| agg09 | Which company had the largest FY2022 capital expenditures? | `argmax(capex)` | "Verizon" | 1 | 0 | [ ] | |
+| agg10 | What were total FY2022 capital expenditures across all companies in the corpus, in USD millions? | `sum(capex)` | 41174.7 | 1 | 0 | [ ] | |
+| agg11 | How many companies spent more than $5 billion on capital expenditures in FY2022? | `count_gt(capex, 5000)` | 2 | 1 | 0 | [ ] | |
+| agg12 | Which company had the largest total assets at FY2022 year end? | `argmax(total_assets)` | "JPMorgan" | 0 | 0 | [ ] | |
+| agg13 | List the three companies with the largest total assets at FY2022 year end, largest first. | `top3(total_assets)` | ["JPMorgan", "Verizon", "Coca-Cola"] | 0 | 0 | [ ] | |
+| agg14 | Which company generated the most cash from operating activities in FY2022? | `argmax(operating_cash_flow)` | "JPMorgan" | 0 | 0 | [ ] | |
+| agg15 | For how many companies did FY2022 operating cash flow exceed net income attributable to shareholders? | `count_gt(operating_cash_flow-net_income, 0)` | 10 | 0 | 0 | [ ] | |
+| agg16 | Among companies with a classified balance sheet, how many had positive working capital (total current assets minus total current liabilities) at FY2022 year end? | `count_gt(total_current_assets-total_current_liabilities, 0)` | 5 | 1 | 0 | [ ] | |
+| agg17 | Among companies with a classified balance sheet, which had the most negative working capital at FY2022 year end? | `argmin(total_current_assets-total_current_liabilities)` | "Verizon" | 1 | 0 | [ ] | |
+| agg18 | What were total FY2022 cash dividends paid to common shareholders across the corpus, in USD millions? | `sum(dividends_paid)` | null | 0 | 1 | [ ] | |
+| agg19 | Which company had the highest FY2022 capital expenditures as a share of total revenue? | `argmax(capex/revenue)` | "American Water Works" | 1 | 0 | [ ] | |
+| agg20 | How many companies had an FY2022 net margin (net income attributable / total revenue) above 10%? | `count_gt(net_income/revenue, 0.1)` | 6 | 0 | 0 | [ ] | |
 
 ## 10 single-fact questions (FinanceBench golds; P-large, P-small, B-today)
 

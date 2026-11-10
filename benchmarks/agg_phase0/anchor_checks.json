@@ -5,8 +5,8 @@
   "check": "sign",
   "expect": 1,
   "source": "financebench_id_00005 (+$831M, operating items only)",
-  "value": null,
-  "agrees": null
+  "value": 2278.0,
+  "agrees": true
  },
  {
   "doc": "AMERICANWATERWORKS_2022_10K",
@@ -14,8 +14,8 @@
   "check": "approx",
   "expect": -1561,
   "source": "financebench_id_00070 (-$1561M)",
-  "value": null,
-  "agrees": null
+  "value": -1561.0,
+  "agrees": true
  },
  {
   "doc": "PAYPAL_2022_10K",
@@ -23,8 +23,8 @@
   "check": "sign",
   "expect": 1,
   "source": "financebench_id_00080 (+$1.6Bn)",
-  "value": null,
-  "agrees": null
+  "value": 12416.0,
+  "agrees": true
  },
  {
   "doc": "COCACOLA_2022_10K",
@@ -32,8 +32,8 @@
   "check": "approx",
   "expect": 0.8,
   "source": "financebench_id_06272 (0.80)",
-  "value": null,
-  "agrees": null
+  "value": 0.7981555229511633,
+  "agrees": true
  },
  {
   "doc": "AES_2022_10K",
@@ -41,7 +41,7 @@
   "check": "sign",
   "expect": -1,
   "source": "financebench_id_10420 (ROA -0.02)",
-  "value": null,
-  "agrees": null
+  "value": -546.0,
+  "agrees": true
  }
 ]

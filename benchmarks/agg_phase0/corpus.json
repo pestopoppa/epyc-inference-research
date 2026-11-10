@@ -64,8 +64,8 @@
    "doc_name": "AES_2022_10K",
    "company": "AES Corporation",
    "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/AES_2022_10K.pdf",
-   "sha256": null,
-   "bytes": null,
+   "sha256": "9c5de2227534c4d6bf3d805f635bad5d82eddf8e4183a85a3d1311b48b50291d",
+   "bytes": 4479324,
    "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/AES_2022_10K.pdf",
    "fb_questions": [
     "financebench_id_01319",
@@ -77,8 +77,8 @@
    "doc_name": "COCACOLA_2022_10K",
    "company": "Coca-Cola",
    "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/COCACOLA_2022_10K.pdf",
-   "sha256": null,
-   "bytes": null,
+   "sha256": "9f91bb914d94d014cfca96e1021c932d5476d8b8ac2a933767bac4c438fd7a71",
+   "bytes": 9485744,
    "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/COCACOLA_2022_10K.pdf",
    "fb_questions": [
     "financebench_id_06272"
@@ -88,8 +88,8 @@
    "doc_name": "GENERALMILLS_2022_10K",
    "company": "General Mills",
    "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/GENERALMILLS_2022_10K.pdf",
-   "sha256": null,
-   "bytes": null,
+   "sha256": "27f2cc507ffc056de3b679d124d51b80bd043ce7b8e867c59e2cdfe1d2ea5de3",
+   "bytes": 1083414,
    "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/GENERALMILLS_2022_10K.pdf",
    "fb_questions": [
     "financebench_id_10136"
@@ -99,8 +99,8 @@
    "doc_name": "LOCKHEEDMARTIN_2022_10K",
    "company": "Lockheed Martin",
    "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/LOCKHEEDMARTIN_2022_10K.pdf",
-   "sha256": null,
-   "bytes": null,
+   "sha256": "9a2317300d0f1e2623ba291fe9ec38fc779c1d1ad989dcfe6f862b77435c6923",
+   "bytes": 1398312,
    "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/LOCKHEEDMARTIN_2022_10K.pdf",
    "fb_questions": [
     "financebench_id_03718"
@@ -110,8 +110,8 @@
    "doc_name": "PEPSICO_2022_10K",
    "company": "PepsiCo",
    "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/PEPSICO_2022_10K.pdf",
-   "sha256": null,
-   "bytes": null,
+   "sha256": "7d8a9f3374e429c58f101319e2da8a0e601a89859e1e4f6854163dd5f8ce6b47",
+   "bytes": 2993516,
    "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/PEPSICO_2022_10K.pdf",
    "fb_questions": [
     "financebench_id_01009",
@@ -122,12 +122,6 @@
    ]
   }
  ],
- "missing_pdfs": [
-  "AES_2022_10K",
-  "COCACOLA_2022_10K",
-  "GENERALMILLS_2022_10K",
-  "LOCKHEEDMARTIN_2022_10K",
-  "PEPSICO_2022_10K"
- ],
+ "missing_pdfs": [],
  "selection": "FB5 pins + the five FY2022 10-Ks carrying metrics-generated questions"
 }
