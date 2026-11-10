@@ -62,3 +62,46 @@ No trip -> `go_phase_1`.
   stops the run (M1 gate tripped, GPU never requested).
 - Formal-gate cells stay futility-only at interim looks (no early GO).
 - Every record is appended to `results.jsonl` as produced (numeric per-stage record early).
+
+## Amended pre-data 2026-11-10 (before any Phase-0 model call; no results exist)
+
+Operator/coordinator decisions of 2026-11-10, recorded before any data. Kill-gate thresholds and the
+`KILL` mirror in `agg_phase0.py` are unchanged.
+
+1. **Scoring: deterministic scorer replaces CJ-8.** Reason: every gold is numeric or a closed-set company
+   name, so a deterministic scorer removes judge variance. Implementation: `phase0_arms.score_agg` /
+   `score_single`, applied to the answer's `FINAL:` line (else its last line; no line = `correct: null`,
+   counted as not correct).
+   - Numeric answers match when |answer - gold| <= max(0.5% x |gold|, half a unit of the gold's last stated
+     decimal). Unit and scale words (thousand / million / billion, $, M, bn) normalise to USD millions
+     before comparing; `%` values compare in percent units. Why 0.5%: it is the M1 cell tolerance. It absorbs
+     rounding to the nearest $1M on 10-company sums (~5e5) and $0.1B restatements of a ~$10B line, and it
+     still rejects a wrong line item. Those typically differ by >= 1%. The half-unit term honours
+     FinanceBench's stated rounding (e.g. 0.4% with one decimal).
+   - Counts must be the exact integer. Company names (argmax/argmin/top3) use an exact normalised match: lowercase,
+     punctuation and legal suffixes (inc, corp, corporation, company, co, plc, ltd, llc, the) removed. top3 needs
+     all three in order. Prompts list the corpus company names verbatim.
+   - Single-fact golds are encoded as `single_fact_keys.json` (yes/no where the gold states it, plus the
+     gold's numbers; money compared by absolute value when the yes/no carries the sign, signed for AES ROA).
+2. **Planner typed call stays a stub for Phase 0.** P-small and P-large take the deterministic size rules;
+   inside the ambiguous band the receipt records `decided_by: deterministic_default_stub` (`stub: true`). No
+   planner LLM call is made or counted.
+3. **Hardware and servers.** L4a/L4b/L4d run on worker_general (Qwen3.6-35B-A3B-MTP-Q8_0, private CPU-quarter
+   server, `-np 2`). The 27B (Qwen3.8-27B-Q8_0 + DFlash2) runs in a private `--gpu-quiet exclusive` MI210 window.
+   It runs as two sequential servers, one at a time. The **np4** server
+   (`qwen3.8-27b-q8-gpu-dflash2-np4.json`, 4096 tokens per slot) serves only the L4c audit sample. **All answer arms**
+   (P-large answers incl. the SQL step, P-small, B1, B2, B-today) run on the **np1 196k** server
+   (`eval/qwen3.8-27b-q8-gpu-dflash2-longctx196k-np1.json`). Any request that does not fit the window is recorded
+   `status: out_of_window` (`correct: null`), never truncated.
+4. **Arm details fixed before data.**
+   - L4 schema seed = the 8 metric fields above, with their descriptions. Candidates are BM25 top-6 windows
+     (<= 10,000 chars) per (field, doc). sim = score / best score in that doc. Admit at >= 0.6, reject at <= 0.2, and
+     between them a logprob yes/no gate (p(yes) >= 0.5).
+   - M1 counts a gold cell found when a fact for the same doc and field, with a period containing 2022, matches
+     |value| within 0.5%.
+   - L4d residual conflicts stay `disputed` (no native-catalogue call in Phase 0).
+   - B1 retrieval is **lexical BM25 only** (no L2 dense index exists in Phase 0), SEARCH/READ/FINAL, <= 30 calls.
+   - B-today is the whole-document read that routing_decision's long-context rule selects for a 10-K-size request
+     (ingest_long_context), served on the np1 27B.
+   - P-large SQL returning no rows is recorded `backfill_needed` (lazy L4 for a new field is a CPU step, not run
+     inside the GPU window).
