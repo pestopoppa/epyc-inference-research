@@ -552,6 +552,29 @@ def _fd_holds_flock(proc: Path, pid: int, inode: int, needle: str) -> bool:
     return False
 
 
+def _describe_ancestor(proc: Path, pid: int, inode: int) -> str:
+    """One diagnostic token per ancestor for a refused inheritance (never raises)."""
+    try:
+        comm = (proc / str(pid) / "comm").read_text().strip()
+    except OSError as exc:
+        return f"{pid}:comm-unreadable({exc.errno})"
+    try:
+        fds = sorted((proc / str(pid) / "fdinfo").iterdir(), key=lambda p: p.name)
+    except OSError as exc:
+        return f"{pid}/{comm}:fdinfo-unreadable({exc.errno})"
+    hits = []
+    for info in fds:
+        try:
+            text = info.read_text()
+        except OSError as exc:
+            hits.append(f"fd{info.name}:err{exc.errno}")
+            continue
+        if any(line.split() == ["ino:", str(inode)] for line in text.splitlines()):
+            locks = [line.split()[2:5] for line in text.splitlines() if line.startswith("lock:")]
+            hits.append(f"fd{info.name}:locks={locks}")
+    return f"{pid}/{comm}:" + (",".join(hits) or "no-fd-on-inode")
+
+
 def _belongs_to_row(proc: Path, pid: int, row_id: str) -> bool:
     try:
         env = (proc / str(pid) / "environ").read_bytes().split(b"\0")
@@ -629,7 +652,8 @@ def _inherit_rowflow_claim(environ, lock_path: Path, *, proc: Path = Path("/proc
     if not holders:
         raise RowflowClaimError(
             f"no ancestor of {pid} holds the flock on {lock_path} "
-            f"(locker pid {next(iter(lockers))})")
+            f"(locker pid {next(iter(lockers))}); chain: "
+            + "; ".join(_describe_ancestor(proc, a, st.st_ino) for a in _ancestor_pids(pid, proc)))
     holder = holders[0]  # nearest ancestor holding the lock's file description
     if not _belongs_to_row(proc, holder, row_id):
         raise RowflowClaimError(f"flock holder {holder} does not belong to row {row_id}")
