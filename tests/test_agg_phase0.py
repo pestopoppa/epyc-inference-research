@@ -44,8 +44,8 @@ class SetTests(unittest.TestCase):
         self.assertTrue(all(g["verified"] is False for g in single))
         ver = json.loads((D / "verification_record.json").read_text())["questions"]
         self.assertEqual(len(ver), 30)
-        self.assertEqual(sum(1 for v in ver.values() if v["verified"]), 20)
-        self.assertTrue(all(q.startswith("agg") for q, v in ver.items() if v["verified"]))
+        self.assertEqual(sum(1 for v in ver.values() if v["verified"]), 27)
+        self.assertEqual(sum(1 for q, v in ver.items() if v["verified"] and not q.startswith("agg")), 7)
 
     def test_predeclared_matches_code(self):
         text = (D / "PREDECLARED.md").read_text()
@@ -91,8 +91,8 @@ class SetTests(unittest.TestCase):
         ok, info = R.preflight(D)
         self.assertNotIn("no verified aggregation questions", info["problems"])
         self.assertEqual(info["n_agg_verified"], 20)
-        self.assertFalse(ok)  # single-fact golds are still unverified
-        self.assertIn("no verified single-fact questions", info["problems"])
+        self.assertEqual(info["n_single_verified"], 7)  # 3 mismatches stay unverified
+        self.assertNotIn("no verified single-fact questions", info["problems"])
         self.assertRegex(info["predeclared_sha256"], r"^[0-9a-f]{64}$")
 
 
