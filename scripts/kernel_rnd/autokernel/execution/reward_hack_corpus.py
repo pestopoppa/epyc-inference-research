@@ -533,14 +533,59 @@ def _ancestor_pids(pid: int, proc: Path) -> list[int]:
     return chain
 
 
+def _fd_holds_flock(proc: Path, pid: int, inode: int, needle: str) -> bool:
+    """True when one of pid's open fds is the lock inode AND its fdinfo shows the
+    exclusive FLOCK (same evidence as loop/claim.py:_ancestor_device_holder)."""
+    try:
+        fds = list((proc / str(pid) / "fdinfo").iterdir())
+    except OSError:
+        return False
+    for info in fds:
+        try:
+            text = info.read_text()
+        except OSError:
+            continue
+        ino_ok = any(line.split() == ["ino:", str(inode)] for line in text.splitlines())
+        if ino_ok and any(line.startswith("lock:") and {"FLOCK", "WRITE", needle} <= set(line.split())
+                          for line in text.splitlines()):
+            return True
+    return False
+
+
+def _belongs_to_row(proc: Path, pid: int, row_id: str) -> bool:
+    try:
+        env = (proc / str(pid) / "environ").read_bytes().split(b"\0")
+    except OSError:
+        env = []
+    if f"FILLER_ID={row_id}".encode() in env:
+        return True
+    try:
+        argv = [a.decode(errors="replace") for a in
+                (proc / str(pid) / "cmdline").read_bytes().split(b"\0")]
+    except OSError:
+        return False
+    return any(argv[i] == "--id" and argv[i + 1] == row_id for i in range(len(argv) - 1))
+
+
 def _inherit_rowflow_claim(environ, lock_path: Path, *, proc: Path = Path("/proc"),
                            pid: int | None = None):
     """Return a parent-held claim, or None when not under a rowflow GPU grant.
 
     Fails closed (RowflowClaimError) once ``FILLER_NEEDGPU`` is set but any of
     the evidence is missing: FILLER_ID, the lock held right now (non-blocking
-    flock must fail), and exactly one flock holder in /proc/locks that is a
-    strict ancestor of this process whose own FILLER_ID matches ours.
+    flock must fail), exactly one FLOCK on the lock inode in /proc/locks, and a
+    strict ancestor of this process whose open file description carries that
+    FLOCK (its /proc/<pid>/fdinfo shows the lock) and that belongs to our row
+    (FILLER_ID=<row> in its environment, or ``--id <row>`` in its argv).
+
+    The /proc/locks pid is NOT the holder: it records the process that called
+    flock(2). filler_run15.sh takes the lock with ``exec 9>LOCK; flock -w N 9``,
+    so the recorded pid is the short-lived flock(1) child, already dead, while
+    the lock lives on the inner bash's fd 9. Matching that pid against our
+    ancestors failed every real grant (c6-26-corpus-repin-20261109-r2:
+    "flock holder 166480 is not an ancestor of 166586"). The inner bash also
+    exports FILLER_ID after exec, so its /proc environ lacks it; its argv
+    (``--inner --id <row>``) carries the row identity instead.
     """
     if environ.get("FILLER_NEEDGPU") is None:
         return None
@@ -568,7 +613,7 @@ def _inherit_rowflow_claim(environ, lock_path: Path, *, proc: Path = Path("/proc
         os.close(probe)
     major, minor = os.major(st.st_dev), os.minor(st.st_dev)
     needle = f"{major:02x}:{minor:02x}:{st.st_ino}"
-    holders: set[int] = set()
+    lockers: set[int] = set()
     try:
         locks = (proc / "locks").read_text().splitlines()
     except OSError as exc:
@@ -576,17 +621,17 @@ def _inherit_rowflow_claim(environ, lock_path: Path, *, proc: Path = Path("/proc
     for line in locks:
         fields = line.split()
         if "FLOCK" in fields and needle in fields:
-            holders.add(int(fields[fields.index(needle) - 1]))
-    if len(holders) != 1:
-        raise RowflowClaimError(f"expected one flock holder on {lock_path}, saw {sorted(holders)}")
-    holder = next(iter(holders))
-    if holder == pid or holder not in _ancestor_pids(pid, proc):
-        raise RowflowClaimError(f"flock holder {holder} is not an ancestor of {pid}")
-    try:
-        raw = (proc / str(holder) / "environ").read_bytes().split(b"\0")
-    except OSError as exc:
-        raise RowflowClaimError(f"cannot read holder {holder} environment: {exc}") from exc
-    if f"FILLER_ID={row_id}".encode() not in raw:
+            lockers.add(int(fields[fields.index(needle) - 1]))
+    if len(lockers) != 1:
+        raise RowflowClaimError(f"expected one flock on {lock_path}, saw lockers {sorted(lockers)}")
+    holders = [a for a in _ancestor_pids(pid, proc)
+               if a != pid and _fd_holds_flock(proc, a, st.st_ino, needle)]
+    if not holders:
+        raise RowflowClaimError(
+            f"no ancestor of {pid} holds the flock on {lock_path} "
+            f"(locker pid {next(iter(lockers))})")
+    holder = holders[0]  # nearest ancestor holding the lock's file description
+    if not _belongs_to_row(proc, holder, row_id):
         raise RowflowClaimError(f"flock holder {holder} does not belong to row {row_id}")
     stat = (proc / str(holder) / "stat").read_text()
     ticks = stat[stat.rindex(")") + 2:].split()[19]
