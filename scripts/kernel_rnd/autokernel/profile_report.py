@@ -140,9 +140,17 @@ class SourcePattern:
     source_symbols: tuple[str, ...]
     source_paths: tuple[str, ...]
     reader_should_conclude: str
+    #: RVP-C4-11: predicted speedup (x) if the prescription is applied. Optional at
+    #: parse so existing manifests load unchanged; `require_estimates` enforces it.
+    estimated_speedup: float | None = None
 
     def __post_init__(self) -> None:
         _text(self.pattern_id, "pattern_id")
+        if self.estimated_speedup is not None and (
+                isinstance(self.estimated_speedup, bool)
+                or not isinstance(self.estimated_speedup, (int, float))
+                or not self.estimated_speedup > 0):
+            raise ProfileReportError("estimated_speedup must be a positive number")
         if self.table not in PATTERN_TABLES:
             raise ProfileReportError(f"pattern table must be one of {PATTERN_TABLES}")
         _string_tuple(self.kernel_keywords, "kernel_keywords")
@@ -165,6 +173,7 @@ class SourcePattern:
             source_paths=_string_tuple(payload.get("source_paths"), "pattern.source_paths"),
             reader_should_conclude=_text(
                 payload.get("reader_should_conclude"), "pattern.reader_should_conclude"),
+            estimated_speedup=payload.get("estimated_speedup"),
         )
 
     def matches(self, dispatches: Sequence[prior_art.ProfileDispatch]) -> bool:
@@ -353,6 +362,8 @@ class ReportManifest:
                 "source_symbols": list(row.source_symbols),
                 "source_paths": list(row.source_paths),
                 "reader_should_conclude": row.reader_should_conclude,
+                **({} if row.estimated_speedup is None
+                   else {"estimated_speedup": float(row.estimated_speedup)}),
             } for row in self.patterns],
             "architecture_blocks": [{
                 "block_id": row.block_id,
@@ -467,6 +478,8 @@ def _pattern_rows(patterns: Iterable[SourcePattern],
             "reader_should_conclude": pattern.reader_should_conclude,
             "attribution_status": "mapped" if mapping_match else "formal_only_mapping_gap",
         })
+        if pattern.estimated_speedup is not None:   # absent (not null) keeps legacy digests stable
+            rows[-1]["estimated_speedup"] = float(pattern.estimated_speedup)
     return tuple(sorted(rows, key=lambda row: row["pattern_id"]))
 
 
@@ -523,6 +536,18 @@ def run_profile_report(mapping_path: str | Path, formal_path: str | Path,
         architecture_rows=architecture_rows,
         coverage_gaps=tuple(gaps),
     )
+
+
+def require_estimates(report: ProfileReport) -> None:
+    """RVP-C4-11: every emitted prescription must carry an ESTIMATED speedup.
+
+    A diagnosis with no predicted benefit cannot be scored against what it achieved.
+    """
+    missing = sorted(row["pattern_id"] for row in (*report.overlap_rows, *report.fuse_rows)
+                     if "estimated_speedup" not in row)
+    if missing:
+        raise ProfileReportError(
+            f"prescriptions without estimated_speedup: {missing}")
 
 
 def validate_bounded_judgments(report: ProfileReport,
