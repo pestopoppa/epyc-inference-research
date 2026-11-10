@@ -1,0 +1,50 @@
+{
+  "admissibility_policies": [
+    {
+      "evidence_id": "ev-iq2-exact-instantiation-confound-v9",
+      "evidence_sha256": "7ec3e4340b243c6f7afdb0f9c5cea6b95227351c88cab2a03ecefbcc8183cd46",
+      "kind": "admit",
+      "policy_id": "ak-admit-exact-kernel-instantiation-v1",
+      "rule": "Static, profile or correctness evidence cited for an occupancy/VGPR claim must come from the exact production template instantiation; synthetic or mismatched instantiations are refused."
+    },
+    {
+      "evidence_id": "ev-iq2-decode-phase-confound-v9",
+      "evidence_sha256": "2cc47f5fce673f461f9766ed59cd0c448e96bb75f576578beeccfef2b99df44d",
+      "kind": "admit",
+      "policy_id": "ak-admit-command-phase-consistency-v1",
+      "rule": "A decode claim requires an exact phase command with generated tokens > 0 (never -n 0) and a capture window overlapping decode."
+    },
+    {
+      "evidence_id": "ev-static-tool-silence-confound-v9",
+      "evidence_sha256": "7ec3e4340b243c6f7afdb0f9c5cea6b95227351c88cab2a03ecefbcc8183cd46",
+      "kind": "admit",
+      "policy_id": "ak-admit-static-tool-execution-v1",
+      "rule": "A negative static scan is admissible only with a resolved tool, exact argv, exit status 0 and unsuppressed stderr; missing- or failed-tool silence is refused."
+    },
+    {
+      "evidence_id": "ev-q4k-mmq-stock-correctness-v9",
+      "evidence_sha256": "6e7870558c6317a7ef12f7fca8a267466cc0734295d0c33562103a0c022a3502",
+      "kind": "admit",
+      "policy_id": "ak-admit-q4k-mmq-baseline-correctness-v1",
+      "rule": "Q4_K MMQ work cannot carry performance ranking until forced-MMQ baseline correctness is clean; the frozen stock baseline (18/43) is refused as a ranking anchor."
+    },
+    {
+      "evidence_id": "ev-q8-mmvq-int8-native-source-v9",
+      "evidence_sha256": "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91",
+      "kind": "admit",
+      "policy_id": "ak-admit-q8-native-source-premise-v1",
+      "rule": "Q8_0 MMVQ is already integer-native (dp4a); proposals premised on hiding or fusing per-element FP dequantization are refused. Distinct Q8_1 reuse/caching/fusion mechanisms remain admissible."
+    },
+    {
+      "evidence_id": "ev-iq-live-residency-tripwire-20260815",
+      "evidence_sha256": "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91",
+      "kind": "trigger",
+      "policy_id": "ak-trigger-iq-serving-residency-v1",
+      "rule": "No IQ-format role is ROCm0 serving-resident: IQ work may claim only latent/diagnostic value; a live-payoff claim is refused until a registry transition makes an IQ GGUF serving-resident (then reopen and reprice)."
+    }
+  ],
+  "iq_serving_resident": false,
+  "manifest_sha256": "0f3a35c848c4f58fb5cb039678dd413dc493a7a454960ea3eb7ae8e2ca3c0446",
+  "schema": "epyc.autokernel.admissibility_policy.v1",
+  "version": 1
+}

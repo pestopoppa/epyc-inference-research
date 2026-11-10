@@ -4,9 +4,8 @@
 This test is intentionally independent of the portfolio loader.  It reads the
 sealed JSON product directly so a loader/schema regression cannot hide a
 conditioning regression.  The required tests cover portfolio content only.
-The final class records cross-cutting controller enforcement as expected
-missing; if that product scope lands, its unexpected successes force the
-expectation to be promoted into the required gate.
+The final class gates cross-cutting controller enforcement (AK-ADM-1):
+the typed admissibility manifest, its context binding, and pre-model refusal.
 """
 
 from __future__ import annotations
@@ -332,8 +331,8 @@ class PlannerConditioningAcceptance(unittest.TestCase):
         )
 
 
-class CrossCuttingMachineEnforcementExpectedMissing(unittest.TestCase):
-    """Aspirational machine gates intentionally outside the required preload."""
+class CrossCuttingMachineEnforcement(unittest.TestCase):
+    """Typed pre-model admissibility enforcement (AK-ADM-1, promoted from expected-missing)."""
 
     POLICY_PATH = HERE / "discovery_admissibility_policy_v1.json"
     REQUIRED_POLICY_IDS = {
@@ -345,7 +344,6 @@ class CrossCuttingMachineEnforcementExpectedMissing(unittest.TestCase):
         "ak-trigger-iq-serving-residency-v1",
     }
 
-    @unittest.expectedFailure
     def test_typed_policy_manifest_is_present_and_complete(self) -> None:
         body = json.loads(self.POLICY_PATH.read_text(encoding="utf-8"))
         self.assertEqual("epyc.autokernel.admissibility_policy.v1", body["schema"])
@@ -354,7 +352,6 @@ class CrossCuttingMachineEnforcementExpectedMissing(unittest.TestCase):
             {row["policy_id"] for row in body["admissibility_policies"]},
         )
 
-    @unittest.expectedFailure
     def test_policy_manifest_is_bound_into_planner_and_critic_context(self) -> None:
         factory = (HERE / "controller" / "discovery_deployment_factory.py").read_text(
             encoding="utf-8")
@@ -365,7 +362,6 @@ class CrossCuttingMachineEnforcementExpectedMissing(unittest.TestCase):
         self.assertIn("admissibility_policy_sha256", factory)
         self.assertIn("admissibility_policy_sha256", deployment)
 
-    @unittest.expectedFailure
     def test_controller_and_proofs_enforce_policy_before_model_judgment(self) -> None:
         controller = (HERE / "controller" / "discovery_controller.py").read_text(
             encoding="utf-8")

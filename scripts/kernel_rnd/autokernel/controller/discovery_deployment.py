@@ -21,7 +21,7 @@ import subprocess
 from typing import Any, Mapping
 
 from .. import hypothesis_portfolio, schemas
-from . import gpu_load_admission, workload_contract
+from . import admissibility_policy, gpu_load_admission, workload_contract
 
 
 SCHEMA = "epyc.autokernel.discovery_deployment.v4"
@@ -278,7 +278,8 @@ def _planner_context(value: object, *, model: ImmutableInput,
                 "hypothesis_evidence_manifest_sha256", "hypothesis_evidence",
                 "reviewed_source_package_sha256", "template_registry_sha256",
                 "template_surfaces_sha256", "template_surfaces",
-                "portfolio_dispatch_authority"}
+                "portfolio_dispatch_authority", "admissibility_policies",
+                "admissibility_policy_sha256"}
     if not isinstance(body, Mapping) or set(body) != required:
         raise DeploymentConfigError("planner_context has an unknown or incomplete schema")
     if body["schema"] != PLANNER_CONTEXT_SCHEMA:
@@ -317,6 +318,15 @@ def _planner_context(value: object, *, model: ImmutableInput,
     }
     if any(body[key] != expected for key, expected in expected_partitions.items()):
         raise DeploymentConfigError("planner_context portfolio projection is not exact")
+    try:
+        admissibility = admissibility_policy.validate(
+            body["admissibility_policies"],
+            portfolio_evidence={row["evidence_id"]: row["sha256"]
+                                for row in portfolio.value.body["evidence"]})
+    except admissibility_policy.AdmissibilityError as exc:
+        raise DeploymentConfigError(f"planner_context admissibility policy: {exc}") from exc
+    if body["admissibility_policy_sha256"] != admissibility.sha256:
+        raise DeploymentConfigError("planner_context admissibility_policy_sha256 is not bound")
     dispatch_authority = body["portfolio_dispatch_authority"]
     eligible_ids = {row["hypothesis_id"] for row in portfolio.value.eligible_hypotheses()}
     if (not isinstance(dispatch_authority, Mapping)

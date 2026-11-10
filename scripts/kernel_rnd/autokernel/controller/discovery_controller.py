@@ -36,6 +36,7 @@ from ..execution import physical_bounds
 from . import (claude_fable5_critic_actor, codex_container_actor,
                discovery_telemetry, do_not_repeat, hypotheses)
 from . import experiments, gate_parameters, gpu_source_evidence, gpu_source_proofs
+from . import admissibility_policy
 # CH-2 champion seeding. `discovery_deployment` is imported under an alias because the
 # controller must not shadow the local name `deployment` used for iteration payloads.
 from . import champion, champion_seed
@@ -90,6 +91,57 @@ FABLE5_CRITIC = {"provider": "claude", "model": "claude-fable-5", "effort": "hig
 
 
 class DiscoveryControllerError(RuntimeError): pass
+
+
+# AK-ADM-1: the six planner-memory limitations enforced as typed policy before
+# any model judgment.  A violation is refused here; the critic never sees it.
+PRE_MODEL_ADMISSIBILITY_POLICIES = frozenset({
+    "ak-admit-exact-kernel-instantiation-v1",
+    "ak-admit-command-phase-consistency-v1",
+    "ak-admit-static-tool-execution-v1",
+    "ak-admit-q4k-mmq-baseline-correctness-v1",
+    "ak-admit-q8-native-source-premise-v1",
+    "ak-trigger-iq-serving-residency-v1",
+})
+assert PRE_MODEL_ADMISSIBILITY_POLICIES == admissibility_policy.POLICY_IDS
+
+
+class AdmissibilityRefused(DiscoveryControllerError):
+    """Typed pre-model refusal; carries the policy rows that refused."""
+
+    def __init__(self, refusals: Sequence[admissibility_policy.Refusal]) -> None:
+        self.refusals = tuple(refusals)
+        super().__init__("admissibility policy refused candidate before model judgment: "
+                         + "; ".join(f"{r.policy_id}: {r.reason}" for r in self.refusals))
+
+
+def enforce_admissibility_before_model_judgment(
+        candidate: "PlannedCandidate", *, context: Mapping[str, Any],
+        require_manifest: bool) -> admissibility_policy.PolicyManifest | None:
+    """Refuse a candidate that violates the bound admissibility manifest."""
+    planner_context = context.get("planner_context")
+    body = planner_context.get("admissibility_policies") if isinstance(planner_context, Mapping) else None
+    if body is None:
+        if require_manifest:
+            raise DiscoveryControllerError(
+                "planner context lacks the bound admissibility policy manifest")
+        return None
+    try:
+        manifest = admissibility_policy.validate(body)
+    except admissibility_policy.AdmissibilityError as exc:
+        raise DiscoveryControllerError(str(exc)) from exc
+    if planner_context.get("admissibility_policy_sha256") != manifest.sha256:
+        raise DiscoveryControllerError("admissibility_policy_sha256 does not bind the manifest")
+    intent = candidate.experiment_intent
+    manifest_row = candidate.source_manifest
+    refusals = admissibility_policy.enforce(
+        manifest, hypothesis_id=candidate.hypothesis_id, statement=candidate.statement,
+        proposal=candidate.proposal,
+        target_symbol=None if intent is None else intent.target_symbol,
+        declared_files=manifest_row.declared_files, patch_text=manifest_row.patch_text)
+    if refusals:
+        raise AdmissibilityRefused(refusals)
+    return manifest
 
 
 class PlannerOutputRefusal(DiscoveryControllerError):
@@ -1010,6 +1062,11 @@ class CodexPlanner:
             "experiment_intent_keys": ["template_id", "target_surface", "target_symbol",
                                        "correctness_id", "dispatch_id", "expected_dispatch",
                                        "load_mode_recommendation"],
+            "admissibility_facts_schema": admissibility_policy.FACTS_SCHEMA,
+            "admissibility_rule": (
+                "The controller refuses, before any model judgment, a candidate that violates "
+                "planner_context.admissibility_policies; put typed facts in "
+                "proposal.admissibility_facts."),
             "load_mode_recommendation_keys": ["mode", "rationale", "example_ids"],
             "load_mode_recommendation_semantics": (
                 "optional advisory only; it may request safer serialization but cannot author "
@@ -1356,6 +1413,8 @@ class ClaudeCritic:
         manifest = candidate.source_manifest
         if len(manifest.patch_text.encode("utf-8")) > 65536:
             raise DiscoveryControllerError("candidate patch exceeds bounded critic visibility")
+        enforce_admissibility_before_model_judgment(
+            candidate, context=context, require_manifest=self.reviewed_sources is not None)
         source_context = None
         if self.reviewed_sources is not None:
             if len(manifest.declared_files) != 1:
