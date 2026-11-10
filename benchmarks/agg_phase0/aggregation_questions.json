@@ -113,7 +113,11 @@
    "id": "agg18",
    "expr": "dividends_paid",
    "op": "sum",
-   "q": "What were total FY2022 cash dividends paid to common shareholders across the corpus, in USD millions?"
+   "q": "What were total FY2022 cash dividends paid to common shareholders by the companies in the corpus other than JPMorgan, in USD millions?",
+   "exclude_docs": [
+    "JPMORGAN_2022_10K"
+   ],
+   "exclude_reason": "JPMorgan's cash-flow line 'Dividends paid' combines preferred and common; common-only is not on a statement face (operator decision 2026-11-10 #3)"
   },
   {
    "id": "agg19",
