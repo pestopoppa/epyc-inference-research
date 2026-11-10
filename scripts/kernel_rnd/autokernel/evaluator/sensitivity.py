@@ -299,23 +299,49 @@ def observations_from_csv_rows(
     if len(versions) != 1:
         raise ValueError("sensitivity CSV rows mix producer suite versions")
 
-    by_case: dict[tuple[str, str], dict[int, SensitivityReceipt]] = {}
+    # op_params is not unique per test case (distinct cases can print identical
+    # params), and the receipt hashes differ per seed so they cannot prove case
+    # identity across seeds.  Disambiguate by occurrence ordinal in CSV order,
+    # pairing across seeds only when every seed has the same occurrence count;
+    # otherwise each occurrence becomes its own single-seed case_id, which the
+    # reducer reports as unscoreable (never dropped, never merged).
+    raw: dict[tuple[str, str], dict[int, list[tuple[str, SensitivityReceipt]]]] = {}
     for row, receipt in parsed:
         key = (row["op_name"], row["op_params"])
-        if receipt.suite_seed in by_case.setdefault(key, {}):
-            raise ValueError(f"duplicate sensitivity row for {key} seed {receipt.suite_seed}")
-        by_case[key][receipt.suite_seed] = receipt
+        bucket = raw.setdefault(key, {}).setdefault(receipt.suite_seed, [])
+        if any(text == row["sensitivity_receipt"] for text, _r in bucket):
+            raise ValueError(
+                f"duplicate sensitivity row for {key} seed {receipt.suite_seed}")
+        bucket.append((row["sensitivity_receipt"], receipt))
+
+    # (operation, params, case_id) -> {seed: receipt}
+    by_case: dict[tuple[str, str, str], dict[int, SensitivityReceipt]] = {}
+    for (operation, params), per_seed in raw.items():
+        collided = any(len(items) > 1 for items in per_seed.values())
+        counts = {len(per_seed.get(seed, ())) for seed in seeds}
+        if not collided:
+            by_case[(operation, params, params)] = {
+                seed: items[0][1] for seed, items in per_seed.items()}
+        elif len(counts) == 1:
+            for index in range(counts.pop()):
+                by_case[(operation, params, f"{params}#occ{index}")] = {
+                    seed: per_seed[seed][index][1] for seed in seeds}
+        else:
+            for seed, items in per_seed.items():
+                for index, (_text, receipt) in enumerate(items):
+                    by_case[(operation, params,
+                             f"{params}#unpaired-seed{seed}-occ{index}")] = {seed: receipt}
 
     observations = []
     anchor_seed = seeds[0]
-    for (operation, params), receipts in sorted(by_case.items()):
-        if set(receipts) != set(seeds):
+    for (operation, params, case_id), receipts in sorted(by_case.items()):
+        unpaired = "#unpaired-" in case_id
+        if not unpaired and set(receipts) != set(seeds):
             raise ValueError(
                 f"{operation}({params}) has seeds {sorted(receipts)}, expected {sorted(seeds)}")
-        anchor = receipts[anchor_seed]
         shape = _shape_from_params(params)
-        for seed in seeds:
-            receipt = receipts[seed]
+        for seed, receipt in sorted(receipts.items()):
+            anchor = receipts[anchor_seed] if not unpaired else receipt
             if receipt.transforms != anchor.transforms:
                 raise ValueError(f"{operation}({params}) transform order drifted across seeds")
             for index, transform in enumerate(receipt.transforms):
@@ -323,11 +349,11 @@ def observations_from_csv_rows(
                 output_changed = receipt.output_hashes[index] != anchor.output_hashes[index]
                 observations.append(SensitivityObservation(
                     suite_version=receipt.suite_version, operation=operation,
-                    case_id=params, shape=shape, seed=seed, transform=transform,
+                    case_id=case_id, shape=shape, seed=seed, transform=transform,
                     input_digest=receipt.input_hashes[index],
                     output_digest=receipt.output_hashes[index],
                     input_distance_from_seed_anchor=1.0 if input_changed else 0.0,
                     output_distance_from_seed_anchor=1.0 if output_changed else 0.0,
                     reference_only=True, produced_by=TRUSTED_PRODUCER,
-                    evidence_ref=f"csv://{operation}/{receipt.suite_seed}/{transform}"))
+                    evidence_ref=f"csv://{operation}/{case_id}/{receipt.suite_seed}/{transform}"))
     return tuple(observations)

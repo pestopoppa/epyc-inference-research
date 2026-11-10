@@ -165,5 +165,49 @@ class TestSensitivityReducer(unittest.TestCase):
                 (base, drift), expected_seeds=(11, 22, 33))
 
 
+    @staticmethod
+    def _row(op, params, seed, tag):
+        base = "0123456789abcdef"
+        def h(i):
+            return (base[(tag + i) % 16] * 8 + base[(tag * 3 + i + seed) % 16] * 8)
+        return {"op_name": op, "op_params": params, "sensitivity_receipt": (
+            f"AK_SENS_V1 suite_version=0db32c06e suite_seed={seed} "
+            "transforms=identity,x3,x0p01,negate "
+            f"inputs={','.join(h(i) for i in range(4))} "
+            f"outputs={','.join(h(i + 5) for i in range(4))}")}
+
+    def test_colliding_params_with_distinct_receipts_pair_by_ordinal(self):
+        params = "type=f32,m=16,n=8,k=256"
+        rows = [self._row("MUL_MAT", params, seed, tag)
+                for seed in (11, 22, 33) for tag in (1, 2)]
+        observations = S.observations_from_csv_rows(rows, expected_seeds=(11, 22, 33))
+        self.assertEqual(len(observations), 24)
+        self.assertEqual({o.case_id for o in observations},
+                         {params + "#occ0", params + "#occ1"})
+        self.assertEqual(S.reduce_input_sensitivity(observations).check.outcome,
+                         schemas.PASS)
+
+    def test_colliding_params_with_mismatched_counts_are_unscoreable_not_merged(self):
+        params = "type=f32,m=16,n=8,k=256"
+        rows = [self._row("MUL_MAT", params, seed, tag)
+                for seed in (11, 22) for tag in (1, 2)]
+        rows.append(self._row("MUL_MAT", params, 33, 1))
+        observations = S.observations_from_csv_rows(rows, expected_seeds=(11, 22, 33))
+        self.assertEqual(len(observations), 5 * 4)
+        self.assertTrue(all("#unpaired-" in o.case_id for o in observations))
+        report = S.reduce_input_sensitivity(observations)
+        self.assertTrue(report.units)
+        seed_units = [u for u in report.units if u.axis == S.SEED_VARIATION]
+        self.assertEqual(len(seed_units), 5 * 4)
+        self.assertTrue(all(not u.scoreable and u.sample_count == 1 for u in seed_units))
+
+    def test_genuinely_identical_duplicate_rows_still_raise(self):
+        params = "type=f32,m=16,n=8,k=256"
+        row = self._row("MUL_MAT", params, 11, 1)
+        with self.assertRaisesRegex(ValueError, "duplicate sensitivity row"):
+            S.observations_from_csv_rows(
+                (row, dict(row)), expected_seeds=(11, 22, 33))
+
+
 if __name__ == "__main__":
     unittest.main()
