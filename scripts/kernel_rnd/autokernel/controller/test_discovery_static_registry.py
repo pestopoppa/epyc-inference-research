@@ -167,7 +167,7 @@ class SharedRewardRuntimeTests(unittest.TestCase):
                 _instrument_authority(instrument_path=repo, production_commit=production,
                                       instrument_branch="measurement-instrument", instrument_commit=instrument)
 
-    def test_selected_gpu_source_must_match_frozen_production_blob(self):
+    def test_selected_gpu_source_binds_the_champion_instrument_blob(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); production_repo = root / "production"; instrument_repo = root / "instrument"
             subprocess.run(("git", "init", "-q", str(production_repo)), check=True)
@@ -190,10 +190,15 @@ class SharedRewardRuntimeTests(unittest.TestCase):
             (instrument_repo / "ggml/src/ggml-cuda/fattn.cu").write_text("drift\n")
             subprocess.run(("git", "-C", str(instrument_repo), "commit", "-am", "drift", "-q"), check=True)
             drift = subprocess.run(("git", "-C", str(instrument_repo), "rev-parse", "HEAD"), capture_output=True, text=True, check=True).stdout.strip()
+            # A champion keep moves the blob past production: the instrument blob is the base.
+            drifted = _verify_selected_gpu_blobs(production_path=production_repo, production_commit=base,
+                                                 instrument_path=instrument_repo, instrument_commit=drift,
+                                                 paths=("ggml/src/ggml-cuda/fattn.cu",))
+            self.assertEqual(drifted["ggml/src/ggml-cuda/fattn.cu"], sha(b"drift\n"))
             with self.assertRaises(StaticRegistryError):
                 _verify_selected_gpu_blobs(production_path=production_repo, production_commit=base,
                                            instrument_path=instrument_repo, instrument_commit=drift,
-                                           paths=("ggml/src/ggml-cuda/fattn.cu",))
+                                           paths=("ggml/src/ggml-cuda/absent.cu",))
 
     def test_complete_common_reward_and_arm_only_hip_topology(self):
         with tempfile.TemporaryDirectory() as directory:
