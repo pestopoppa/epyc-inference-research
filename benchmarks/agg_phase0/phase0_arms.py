@@ -458,7 +458,10 @@ def whole_doc_answer(backend, store, doc_id: str, question: str, names, cfg: Cfg
         return "", "out_of_window"  # clearly over: no call; the server is authoritative otherwise
     ctx = f"Filing ({doc_id}):\n{doc_text(store, CORPUS_ID, doc_id)}"
     try:
-        r = backend.chat(_ans_prompt(question, ctx, names), n_predict=cfg.answer_n_predict, id_slot=0)
+        # cache_prompt=False: P-small and B-today each pay a full prefill, so M5's prefill parity
+        # never depends on which arm happened to warm the slot (PREDECLARED amendment 4).
+        r = backend.chat(_ans_prompt(question, ctx, names), n_predict=cfg.answer_n_predict,
+                         cache_prompt=False, id_slot=0)
     except OutOfWindow:
         return "", "out_of_window"
     return r["text"], "ok"
@@ -537,39 +540,48 @@ def sql_answer(backend, store, question: str, names, cfg: Cfg) -> tuple[str, str
     return ans["text"], "ok", info
 
 
-def b2_answer(rec, backend, store, q, names, cfg: Cfg, guard) -> tuple[str, str]:
-    """Whole-document read per doc (one note each, resumable), then one aggregate call."""
+def b2_notes_prepass(rec, backend, store, qs, cfg: Cfg, guard) -> None:
+    """Whole-document read per (doc, question), DOC-OUTER so one filing's prefix is reused from the
+    slot cache across the 5 questions (filing first, question last). One record per note."""
     from src.aggregation.llm_backend import OutOfWindow  # noqa: PLC0415
-    notes = []
     for d in sorted({x["doc_id"] for x in store.corpus_docs(CORPUS_ID)}):
-        unit = f"b2note:{q['id']}:{d}"
-        prev = next((r for r in rec.records if r.get("unit") == unit), None)
-        if prev is None:
+        over = doc_tokens(store, CORPUS_ID, d) + cfg.note_n_predict > cfg.np1_window * 1.25
+        for q in qs:
+            unit = f"b2note:{q['id']}:{d}"
+            if unit in rec.done:
+                continue
             guard()
-            if doc_tokens(store, CORPUS_ID, d) + cfg.note_n_predict > cfg.np1_window * 1.25:
-                prev = rec.emit("b2_note", unit=unit, qid=q["id"], doc=d, status="out_of_window",
-                                calls=0, prefill_tokens=0, note="")
-            else:
-                t = Tally(backend)
-                try:
-                    r = backend.chat(f"Filing ({d}):\n{doc_text(store, CORPUS_ID, d)}\n\nA question about a "
-                                     f"corpus of filings: {q['question']}\nFrom THIS filing only, state the "
-                                     "company's values needed to answer it (USD millions), briefly.",
-                                     n_predict=cfg.note_n_predict, id_slot=0)
-                    st, note = "ok", r["text"]
-                except OutOfWindow:
-                    st, note = "out_of_window", ""
-                prev = rec.emit("b2_note", unit=unit, qid=q["id"], doc=d, status=st, calls=t.calls,
-                                prefill_tokens=t.prefill, note=note)
-        if prev["status"] == "out_of_window":
-            return "", "out_of_window"
-        notes.append(f"{d}: {prev['note']}")
+            if over:
+                rec.emit("b2_note", unit=unit, qid=q["id"], doc=d, status="out_of_window",
+                         calls=0, prefill_tokens=0, note="")
+                continue
+            t = Tally(backend)
+            try:
+                r = backend.chat(f"Filing ({d}):\n{doc_text(store, CORPUS_ID, d)}\n\nA question about a "
+                                 f"corpus of filings: {q['question']}\nFrom THIS filing only, state the "
+                                 "company's values needed to answer it (USD millions), briefly.",
+                                 n_predict=cfg.note_n_predict, id_slot=0)
+                st, note = "ok", r["text"]
+            except OutOfWindow:
+                st, note = "out_of_window", ""
+            rec.emit("b2_note", unit=unit, qid=q["id"], doc=d, status=st, calls=t.calls,
+                     prefill_tokens=t.prefill, note=note)
+
+
+def b2_answer(rec, backend, q, names, cfg: Cfg) -> tuple[str, str, int, int]:
+    """Aggregate call over the question's per-doc notes; (text, status, calls, prefill) incl. notes."""
+    from src.aggregation.llm_backend import OutOfWindow  # noqa: PLC0415
+    notes = [r for r in rec.records if r.get("kind") == "b2_note" and r.get("qid") == q["id"]]
+    calls, pre = sum(r["calls"] for r in notes), sum(r["prefill_tokens"] for r in notes)
+    if any(r["status"] == "out_of_window" for r in notes):
+        return "", "out_of_window", calls, pre
+    t = Tally(backend)
     try:
-        r = backend.chat(_ans_prompt(q["question"], "Per-filing notes:\n" + "\n".join(notes), names),
-                         n_predict=cfg.answer_n_predict, id_slot=0)
+        r = backend.chat(_ans_prompt(q["question"], "Per-filing notes:\n" + "\n".join(
+            f"{n['doc']}: {n['note']}" for n in notes), names), n_predict=cfg.answer_n_predict, id_slot=0)
     except OutOfWindow:
-        return "", "out_of_window"
-    return r["text"], "ok"
+        return "", "out_of_window", calls + t.calls, pre + t.prefill
+    return r["text"], "ok", calls + t.calls, pre + t.prefill
 
 
 def run_answers(rec: Recorder, store, backend, *, agg, single, keys, names, guard, smoke=False,
@@ -585,9 +597,6 @@ def run_answers(rec: Recorder, store, backend, *, agg, single, keys, names, guar
 
     def correct(qclass, q, text):
         return score_agg(q, text) if qclass == "agg" else score_single(keys[q["id"]], text)
-
-    def b2_notes_of(arm, qid):
-        return [r for r in rec.records if r.get("kind") == "b2_note" and r.get("qid") == qid] if arm == "B2" else []
 
     plan_items = ([("P-small", "single", q) for q in single] + [("B-today", "single", q) for q in single]
                   + [("P-large", "agg", q) for q in agg] + [("P-large", "single", q) for q in single]
@@ -628,14 +637,10 @@ def run_answers(rec: Recorder, store, backend, *, agg, single, keys, names, guar
                 text, st = agent_answer(backend, corpus_chunks, q["question"], names, cfg, bm25=corpus_bm25)
         elif arm == "B1":
             text, st = agent_answer(backend, corpus_chunks, q["question"], names, cfg, bm25=corpus_bm25)
-        else:  # B2
-            text, st = b2_answer(rec, backend, store, q, names, cfg, guard)
-        calls, pre = t.calls, t.prefill
-        if arm == "B2":  # count the per-doc note calls from earlier grants too
-            notes = b2_notes_of(arm, q["id"])
-            calls = sum(r["calls"] for r in notes) + (1 if st == "ok" else 0)
-            pre = sum(r["prefill_tokens"] for r in notes) + (t.prefill - sum(
-                r["prefill_tokens"] for r in notes if r["ts"] >= t0))
+        else:  # B2: notes for all 5 questions first (doc-outer), then this question's aggregate
+            b2_notes_prepass(rec, backend, store, agg[:5], cfg, guard)
+            text, st, b2_calls, b2_pre = b2_answer(rec, backend, q, names, cfg)
+        calls, pre = (b2_calls, b2_pre) if arm == "B2" else (t.calls, t.prefill)
         ok = correct(qclass, q, text) if st == "ok" else None
         rec.emit("answer", unit=unit, arm=arm, qid=q["id"], qclass=qclass, status=st, correct=ok,
                  calls=calls, prefill_tokens=pre, answer=text[-600:], final=st in ("ok", "out_of_window",

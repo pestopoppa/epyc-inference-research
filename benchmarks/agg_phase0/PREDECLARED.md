@@ -105,3 +105,10 @@ Operator/coordinator decisions of 2026-11-10, recorded before any data. Kill-gat
      (ingest_long_context), served on the np1 27B.
    - P-large SQL returning no rows is recorded `backfill_needed` (lazy L4 for a new field is a CPU step, not run
      inside the GPU window).
+   - P-small and B-today whole-document reads are sent with `cache_prompt: false`, so each pays a full prefill
+     and M5's prefill parity cannot depend on which arm warmed the slot. Two questions share a filing (Corning,
+     Verizon). B2 reads per (doc, question) **doc-outer**, with the filing first and the question last, so the
+     filing prefix is reused across its 5 questions. B2's cost counts every per-doc note call plus the
+     aggregate call.
+   - `prefill_tokens` everywhere = tokens actually prefilled by the server (`timings.prompt_n`); slot-cache
+     reuse is recorded separately as `cache_n`.
