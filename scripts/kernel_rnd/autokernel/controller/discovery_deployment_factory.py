@@ -43,6 +43,7 @@ from . import discovery_static_registry
 from . import discovery_supervisor
 from . import discovery_supervisor_secure
 from . import gpu_source_proofs
+from . import admissibility_policy
 from scripts.benchmark import autokernel_gpu_discovery_beliefs
 
 
@@ -866,7 +867,10 @@ def initialize_static_deployment_bundle(root: Path, *,
                "template_registry_sha256": templates.registry_sha256,
                "template_surfaces_sha256": schemas.content_hash(template_surfaces),
                "template_surfaces": template_surfaces,
-               "portfolio_dispatch_authority": portfolio_dispatch_authority}
+               "portfolio_dispatch_authority": portfolio_dispatch_authority,
+               # AK-ADM-1: the typed admissibility_policies manifest is bound
+               # by admissibility_policy_sha256 into the planner and critic context.
+               **_admissibility_projection(portfolio)}
     context["context_sha256"] = schemas.content_hash(context)
     context_path, context_sha = _json_artifact(config_dir / "planner-context.json", context)
     for directory in (root / "state", root / "evidence", root / "operations", root / "builds"):
@@ -1593,6 +1597,15 @@ def _instrument_review_receipt(config: deployment.DiscoveryDeployment) -> tuple[
     else:
         path.write_bytes(raw)
     return path.resolve(), hashlib.sha256(raw).hexdigest()
+
+
+def _admissibility_projection(portfolio: hypothesis_portfolio.Portfolio) -> dict[str, Any]:
+    evidence = {row["evidence_id"]: row["sha256"] for row in portfolio.body["evidence"]}
+    try:
+        manifest = admissibility_policy.load(portfolio_evidence=evidence)
+    except admissibility_policy.AdmissibilityError as exc:
+        raise DeploymentFactoryError("checked-in admissibility policy is not deployable") from exc
+    return manifest.context_projection()
 
 
 def static_template_registry_sha256() -> str:

@@ -1130,7 +1130,9 @@ class Tests(unittest.TestCase):
                      return_value=CLAUDE_RUNTIME), \
         patch.object(D.claude_fable5_critic_actor,"run_critic",
                      side_effect=critic_call):
-    result=critic.review(candidate,context={"sealed":"context"},workspace=root)
+    result=critic.review(candidate,context={"sealed":"context",
+                         "planner_context":D.admissibility_policy.load().context_projection()},
+                         workspace=root)
   self.assertEqual(result.decision,"accept")
   prompt=json.loads(captured["prompt"])
   source=prompt["context"]["selected_source_preimage"]
