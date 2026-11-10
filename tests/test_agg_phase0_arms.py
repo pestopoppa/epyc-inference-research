@@ -38,7 +38,8 @@ DOCS = {"CORNING_2022_10K": ("Corning", "14,189"), "PAYPAL_2022_10K": ("Paypal",
 class FakeBackend:
     """Rows only for text that states revenue; answers name Corning... unless told otherwise."""
 
-    def __init__(self, final="FINAL: Paypal", overflow_on=None):
+    def __init__(self, final="FINAL: Paypal", overflow_on=None, never_final=False, truncate=False):
+        self.never_final, self.truncate = never_final, truncate
         self.calls = self.prefill_tokens = 0
         self.prompts: list[str] = []
         self.final, self.overflow_on = final, overflow_on
@@ -65,12 +66,16 @@ class FakeBackend:
                 "unit": "USD_millions", "quote": m.group(0), "confidence": "medium"}]
             text = json.dumps(rows)
         elif grammar and grammar.startswith('root ::= "SELECT '):
-            text = "SELECT entity, value FROM facts WHERE field = 'revenue' ORDER BY value DESC"
+            text = "SELECT entity, value FROM facts_canonical WHERE field = 'revenue' ORDER BY value DESC"
         elif grammar and "SEARCH" in grammar:
-            text = "SEARCH: revenues" if "> SEARCH" not in prompt else self.final
+            if self.never_final:  # a runaway loop: alternates SEARCH / READ, never FINAL
+                text = "SEARCH: revenues" if prompt.count("\n> ") % 2 == 0 else "READ: nope"
+            else:
+                text = "SEARCH: revenues" if "> SEARCH" not in prompt else self.final
         else:
             text = f"Revenue rows considered.\n{self.final}"
-        return {"text": text, "prompt_tokens": len(prompt) // 4, "cache_n": 0}
+        return {"text": text, "prompt_tokens": len(prompt) // 4, "cache_n": 0,
+                "finish_reason": "length" if self.truncate and not grammar else "stop"}
 
 
 class ScorerTests(unittest.TestCase):
@@ -108,6 +113,22 @@ class ScorerTests(unittest.TestCase):
         self.assertFalse(P.score_single(keys["financebench_id_10420"], "FINAL: 1.42%"))  # signed
         self.assertFalse(P.score_single(keys["financebench_id_04481"], "FINAL: 16.7%"))
         self.assertEqual(set(keys), {json.loads(l)["id"] for l in (D / "single_fact.jsonl").read_text().splitlines()})
+
+
+@unittest.skipUnless(HAVE_ORCH, "orchestrator tree not importable")
+class ScopeOnRealQuestionsTests(unittest.TestCase):
+    def test_all_30_predeclared_questions_resolve_as_designed(self):
+        from src.aggregation import planner  # noqa: PLC0415
+        os.environ["ORCHESTRATOR_FEATURE_AGG_LAYER"] = "1"
+        corpus = json.loads((D / "corpus.json").read_text())["docs"]
+        docs = [{"doc_id": d["doc_name"], "entity": d["company"], "n_tokens_est": 150_000} for d in corpus]
+        for line in (D / "single_fact.jsonl").read_text().splitlines():
+            q = json.loads(line)
+            doc, why = planner.resolve_scope(q["question"], docs)
+            self.assertEqual((doc or {}).get("doc_id"), q["doc_name"], q["id"])
+        for q in json.loads((D / "aggregation_questions.json").read_text())["questions"]:
+            doc, why = planner.resolve_scope(q["q"] if "q" in q else q["question"], docs)
+            self.assertIsNone(doc, q["id"])
 
 
 @unittest.skipUnless(HAVE_ORCH, "orchestrator tree not importable")
@@ -211,17 +232,107 @@ class ArmTests(unittest.TestCase):
         self.assertIn(v["verdict"], ("go_phase_1", "superseded_v2_not_viable"))
         self.assertIn("M2", v["kill_gate_tripped"])  # P-large == B1 here: no 25 pp margin
 
-    def test_out_of_window_recorded_not_truncated(self):
+    def _gpu_answers(self, backend, name, single=None, agg=None, keys=None):
         cpu = P.Recorder(self.tmp / "cpu" / "results.jsonl")
-        P.run_cpu(cpu, self.store, self.set_dir, FakeBackend(), agg=self.agg, single=self.single, guard=self.guard)
-        gpu = P.Recorder(self.tmp / "g2" / "results.jsonl")
-        P.run_answers(gpu, self.store, FakeBackend(overflow_on="Filing (PAYPAL"), agg=self.agg,
-                      single=self.single, keys={"financebench_id_00080": {"yesno": "yes"}},
+        if not cpu.records:
+            P.run_cpu(cpu, self.store, self.set_dir, FakeBackend(), agg=self.agg, single=self.single,
+                      guard=self.guard)
+        gpu = P.Recorder(self.tmp / name / "results.jsonl")
+        P.run_answers(gpu, self.store, backend, agg=agg or self.agg, single=single or self.single,
+                      keys=keys or {"financebench_id_00080": {"yesno": "yes"}},
                       names=["Corning", "Paypal"], guard=self.guard)
-        ans = {(r["arm"], r["qid"]): r for r in gpu.records if r["kind"] == "answer"}
-        self.assertEqual(ans[("B-today", "financebench_id_00080")]["status"], "out_of_window")
-        self.assertIsNone(ans[("B-today", "financebench_id_00080")]["correct"])
-        self.assertEqual(ans[("B2", "agg01")]["status"], "out_of_window")
+        return gpu, {(r["arm"], r["qid"]): r for r in gpu.records if r["kind"] == "answer"}
+
+    def test_out_of_window_whole_doc_falls_back_to_loop_not_empty(self):
+        """Defect 3: B-today recorded an empty answer with 0 calls when the filing exceeded the window."""
+        gpu, ans = self._gpu_answers(FakeBackend(overflow_on="Filing (PAYPAL"), "g2")
+        bt = ans[("B-today", "financebench_id_00080")]
+        self.assertEqual(bt["status"], "ok")           # answered by the REPL search/read loop
+        self.assertTrue(bt["whole_doc_refused"])
+        self.assertGreaterEqual(bt["calls"], 1)
+        self.assertTrue(bt["answer"])
+        self.assertEqual(bt["call_cap"], P.CFG.single_doc_max_calls)
+        self.assertEqual(ans[("B2", "agg01")]["status"], "out_of_window")  # B2 has no loop: recorded, not truncated
+
+    def test_out_of_window_with_no_fallback_is_recorded_not_truncated(self):
+        class Refuse(FakeBackend):
+            def chat(self, prompt, **k):
+                if "Filing (PAYPAL" in prompt or "Question:" in prompt and "SEARCH" in (k.get("grammar") or ""):
+                    raise OutOfWindow("exceed_context_size_error")
+                return super().chat(prompt, **k)
+        gpu, ans = self._gpu_answers(Refuse(), "g3")
+        bt = ans[("B-today", "financebench_id_00080")]
+        self.assertEqual((bt["status"], bt["calls"], bt["correct"]), ("out_of_window", 0, None))
+
+    def test_runaway_loop_is_capped_and_traced(self):
+        """Defect 3: P-small ran 30 calls. The single-document loop stops at the harness cap, with its trace."""
+        big = CorpusStore(self.tmp / "big.sqlite")  # a filing above the 200k whole-doc rule -> retrieval
+        secs = [Section(id="s1", title="Income", level=1, content="Total revenues 1\n" * 20, page_start=1, page_end=1)]
+        big.ingest(DocumentPreprocessResult(original_path="/x.pdf", sections=secs, figures=[], total_pages=9, tables=[]),
+                   corpus_id=P.CORPUS_ID, doc_id="PAYPAL_2022_10K", entity="Paypal")
+        big.conn.execute("UPDATE documents SET n_tokens_est = 400000")
+        big.conn.commit()
+        for arm_doc in ("small", "today"):
+            b = FakeBackend(never_final=True)
+            extra: dict = {}
+            text, st = P.single_doc_answer(b, big, "PAYPAL_2022_10K", "q?", ["Paypal"], P.CFG,
+                                           "retrieval" if arm_doc == "small" else "whole_doc",
+                                           big.chunks(P.CORPUS_ID), extra)
+            self.assertEqual((st, b.calls), ("budget_exhausted", P.CFG.single_doc_max_calls))
+            self.assertEqual(len(extra["loop_actions"]), P.CFG.single_doc_max_calls)
+        self.assertLess(P.CFG.single_doc_max_calls, P.CFG.b1_max_calls)
+        self.assertEqual(P.CFG.b1_max_calls, 30)  # PREDECLARED: B1 <= 30, untouched
+
+    def test_whole_doc_answer_records_truncation(self):
+        gpu, ans = self._gpu_answers(FakeBackend(truncate=True), "g4")
+        self.assertTrue(ans[("B-today", "financebench_id_00080")]["truncated"])
+        self.assertGreaterEqual(P.CFG.answer_n_predict, 1024)  # 384 cut whole-doc answers before FINAL
+
+    def test_sql_path_reads_canonical_one_row_per_entity(self):
+        """Defect 1: duplicate L4 rows per (entity, field, period) no longer reach SUM / top-k."""
+        dup = []
+        for name, (co, rev) in DOCS.items():
+            v = float(rev.replace(",", ""))
+            for k, (period, val, ext) in enumerate([("FY2022", v, "l4_llm.v1"), ("FY2022", v, "l4_llm.v1"),
+                                                    ("FY2022", v * 0.4, "l4_llm.v1"), ("2022", v, "l3_textrow.v1")]):
+                dup.append({"fact_id": f"{name}{k}", "doc_hash": self.store.corpus_docs(P.CORPUS_ID)[0]["doc_hash"],
+                            "doc_id": name, "entity": co, "period": period, "field": "revenue", "value": val,
+                            "unit": "USD_millions", "quote": "q", "page": 60 + k, "confidence": "high",
+                            "extractor": ext, "audit_status": "unaudited"})
+        self.store.write_facts(dup)
+        stats = self.store.refresh_canonical(P.CORPUS_ID)
+        self.assertEqual(stats["n_canonical"], len(DOCS))
+        self.assertGreater(stats["n_conflicts"], 0)
+        text, st, info = P.sql_answer(FakeBackend(), self.store, "highest revenue?", ["Corning", "Paypal"], P.CFG)
+        self.assertEqual((st, info["sql_valid"], info["n_rows"], info["sql_table"]), ("ok", True, 2, "facts_canonical"))
+        total = self.store.conn.execute("SELECT SUM(value) FROM facts_canonical WHERE field='revenue' "
+                                        "AND period='2022'").fetchone()[0]
+        self.assertAlmostEqual(total, sum(float(r.replace(",", "")) for _, r in DOCS.values()))
+
+    def test_p_large_single_fact_follows_size_rules_over_a_large_corpus(self):
+        """Defect 2: over a >= 1M-token corpus every question took sql (0 rows). Now a question that names
+        one filing is sized by that filing."""
+        self.store.conn.execute("UPDATE documents SET n_tokens_est = 150000 WHERE doc_id = 'CORNING_2022_10K'")
+        self.store.conn.execute("UPDATE documents SET n_tokens_est = 900000 WHERE doc_id = 'PAYPAL_2022_10K'")
+        self.store.conn.commit()
+        single = [{"id": "s_corn", "doc_name": "CORNING_2022_10K", "question": "Does Corning have positive working capital?"},
+                  {"id": "s_corn2", "doc_name": "CORNING_2022_10K", "question": "What is the effective tax rate of Corning?"},
+                  {"id": "s_pp", "doc_name": "PAYPAL_2022_10K", "question": "Does Paypal have positive working capital?"}]
+        keys = {q["id"]: {"yesno": "yes"} for q in single}
+        gpu, ans = self._gpu_answers(FakeBackend(), "g5", single=single, keys=keys)
+        c1, c2, pp = (ans[("P-large", x)] for x in ("s_corn", "s_corn2", "s_pp"))
+        self.assertEqual((c1["path"], c1["decided_by"], c1["scope_doc"], c1["calls"]),
+                         ("whole_doc", "deterministic_default_stub", "CORNING_2022_10K", 1))  # <= 200k at Q = 1
+        self.assertEqual((c2["path"], c2["planner_questions_so_far"]), ("repl_nav", 2))  # <= 200k, Q = 2
+        self.assertEqual((pp["path"], pp["scope_doc"]), ("retrieval", "PAYPAL_2022_10K"))  # > 200k
+        for r in (c1, c2, pp):
+            self.assertNotEqual(r["path"], "sql")
+            self.assertNotIn("sql", r)
+        # an aggregation question over the same >= 1M corpus still goes to sql
+        self.assertEqual(ans[("P-large", "agg01")]["path"], "sql")
+        self.assertEqual(ans[("P-large", "agg01")]["sql_table"], "facts_canonical")
+        can = [r for r in gpu.records if r["kind"] == "canonical"]
+        self.assertEqual(len(can), 1)
 
     def test_cli_gpu_phase_fails_closed_without_cpu_results(self):
         import contextlib, io  # noqa: E401,PLC0415

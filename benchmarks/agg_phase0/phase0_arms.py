@@ -46,9 +46,10 @@ class Cfg:
     lo: float = 0.2                 # <= lo reject; between -> logprob gate
     l4_n_predict: int = 256
     sql_n_predict: int = 160
-    answer_n_predict: int = 384
+    answer_n_predict: int = 1536    # rerun 2026-11-10: 384 cut whole-doc answers off before their FINAL line
     note_n_predict: int = 256
-    b1_max_calls: int = 30
+    b1_max_calls: int = 30          # PREDECLARED: B1 <= 30 calls (also P-large's corpus-wide loop)
+    single_doc_max_calls: int = 12  # rerun 2026-11-10 harness safety cap: P-small / B-today / scoped P-large loops
     b1_search_k: int = 8
     b1_read_chars: int = 12_000
     np1_window: int = 196_608
@@ -452,7 +453,8 @@ class Tally:
         return self.b.prefill_tokens - self.p0
 
 
-def whole_doc_answer(backend, store, doc_id: str, question: str, names, cfg: Cfg) -> tuple[str, str]:
+def whole_doc_answer(backend, store, doc_id: str, question: str, names, cfg: Cfg,
+                     meta: dict[str, Any] | None = None) -> tuple[str, str]:
     from src.aggregation.llm_backend import OutOfWindow  # noqa: PLC0415
     if doc_tokens(store, CORPUS_ID, doc_id) + cfg.answer_n_predict > cfg.np1_window * 1.25:
         return "", "out_of_window"  # clearly over: no call; the server is authoritative otherwise
@@ -464,12 +466,37 @@ def whole_doc_answer(backend, store, doc_id: str, question: str, names, cfg: Cfg
                          cache_prompt=False, id_slot=0)
     except OutOfWindow:
         return "", "out_of_window"
+    if meta is not None:
+        meta["finish_reason"] = r.get("finish_reason")
+        meta["truncated"] = r.get("finish_reason") == "length"
     return r["text"], "ok"
 
 
+def single_doc_answer(backend, store, doc_id: str, question: str, names, cfg: Cfg, path: str,
+                      chunks: list[dict[str, Any]], extra: dict[str, Any]) -> tuple[str, str]:
+    """One document, one question. ``path`` is the planner's (or, for B-today, the routing rule's)
+    choice: ``whole_doc`` reads the filing in one call; anything else, or a whole-doc read the 196k
+    window cannot hold, runs the SEARCH/READ/FINAL loop over THAT document's chunks, capped at
+    ``single_doc_max_calls`` (harness safety limit; B1 keeps its predeclared 30)."""
+    meta: dict[str, Any] = {}
+    if path == "whole_doc":
+        text, st = whole_doc_answer(backend, store, doc_id, question, names, cfg, meta)
+        extra.update({k: v for k, v in meta.items() if v is not None})
+        if st != "out_of_window":
+            return text, st
+        extra["whole_doc_refused"] = True  # recorded: the loop below answers instead
+    trace: list[str] = []
+    text, st = agent_answer(backend, chunks, question, names, cfg, max_calls=cfg.single_doc_max_calls,
+                            trace=trace)
+    extra.update(loop_actions=trace, call_cap=cfg.single_doc_max_calls)
+    return text, st
+
+
 def agent_answer(backend, chunks: list[dict[str, Any]], question: str, names, cfg: Cfg,
-                 bm25=None) -> tuple[str, str]:
-    """B1 (and P-small repl_nav/retrieval): SEARCH / READ / FINAL loop, <= b1_max_calls calls."""
+                 bm25=None, max_calls: int | None = None,
+                 trace: list[str] | None = None) -> tuple[str, str]:
+    """SEARCH / READ / FINAL loop, <= ``max_calls`` (default b1_max_calls) calls; ``trace`` collects
+    each action line (diagnosis: a runaway loop is visible in the record, not only its call count)."""
     from src.aggregation.llm_backend import OutOfWindow  # noqa: PLC0415
     from src.repl_environment.context_search import BM25Index  # noqa: PLC0415
     idx = bm25 or BM25Index([c["text"] or "" for c in chunks])
@@ -480,12 +507,14 @@ def agent_answer(backend, chunks: list[dict[str, Any]], question: str, names, cf
             "(returns the chunk text) or 'FINAL: <answer>'.\n" + ANSWER_RULE.format(names="; ".join(names))
             + f"\nQuestion: {question}\n")
     hist = ""
-    for _ in range(cfg.b1_max_calls):
+    for _ in range(max_calls or cfg.b1_max_calls):
         try:
             r = backend.chat(head + hist + "Next action:", n_predict=120, grammar=grammar, id_slot=0)
         except OutOfWindow:
             return "", "out_of_window"
         act = r["text"].strip()
+        if trace is not None:
+            trace.append(act[:120])
         hist += f"\n> {act}\n"
         if act.startswith("FINAL:"):
             return act, "ok"
@@ -504,15 +533,20 @@ def agent_answer(backend, chunks: list[dict[str, Any]], question: str, names, cf
 def sql_answer(backend, store, question: str, names, cfg: Cfg) -> tuple[str, str, dict[str, Any]]:
     from src.aggregation import sql_grammar  # noqa: PLC0415
     from src.aggregation.llm_backend import OutOfWindow  # noqa: PLC0415
-    facts = store.facts(CORPUS_ID)
-    cat = sql_grammar.catalog_from_facts(facts)
+    # The SQL path reads the CANONICAL table (one fact per doc, field and fiscal year), never the raw
+    # evidence table: rerun fix 2026-11-10 (19 FY2022 revenue rows for 10 entities broke SUM/COUNT/top-k).
+    if not store.canonical_facts(CORPUS_ID):
+        store.refresh_canonical(CORPUS_ID)
+    canon = store.canonical_facts(CORPUS_ID)
+    cat = sql_grammar.catalog_from_canonical(canon)
     gbnf = sql_grammar.build_sql_gbnf(cat)
     fdesc = "\n".join(f"- {f}: {A.METRICS.get(f, '(deterministic L3 field)')}" for f in cat.fields
                       if f in A.METRICS) or "(none)"
-    prompt = ("Write ONE SQLite SELECT over table facts(entity, doc_id, period, field, value, unit, quote, "
-              "page). value is in USD millions for money fields; period text contains the fiscal year. "
+    prompt = ("Write ONE SQLite SELECT over table facts_canonical(entity, doc_id, period, field, value, "
+              "unit, quote, page). It holds exactly one row per company, field and fiscal year. value is "
+              "in USD millions for money fields; period is the 4-digit fiscal year as text, e.g. '2022'. "
               f"Fields:\n{fdesc}\nCompany names (entity): {'; '.join(names)}\nQuestion: {question}\nSQL:")
-    info: dict[str, Any] = {}
+    info: dict[str, Any] = {"sql_table": cat.table, "n_canonical": len(canon)}
     try:
         sql = backend.chat(prompt, n_predict=cfg.sql_n_predict, grammar=gbnf, id_slot=0)["text"].strip()
     except OutOfWindow:
@@ -537,6 +571,7 @@ def sql_answer(backend, store, question: str, names, cfg: Cfg) -> tuple[str, str
         ans = backend.chat(_ans_prompt(question, ctx, names), n_predict=cfg.answer_n_predict, id_slot=0)
     except OutOfWindow:
         return "", "out_of_window", info
+    info["finish_reason"] = ans.get("finish_reason")
     return ans["text"], "ok", info
 
 
@@ -584,6 +619,25 @@ def b2_answer(rec, backend, q, names, cfg: Cfg) -> tuple[str, str, int, int]:
     return r["text"], "ok", calls + t.calls, pre + t.prefill
 
 
+def _scope_plan(planner, docs_meta, plan_items) -> dict[str, tuple[str | None, str, int]]:
+    """unit -> (scope_doc, reason, questions_so_far) for every P-large item, from the question TEXT
+    only. Q counts the P-large questions on the SAME document so far (size rule: whole-doc at Q = 1,
+    REPL navigation after); corpus-wide questions keep the plan index. Deterministic, resume-safe."""
+    seen: dict[str, int] = {}
+    out: dict[str, tuple[str | None, str, int]] = {}
+    for i, (arm, _qclass, q) in enumerate(plan_items):
+        if arm != "P-large":
+            continue
+        doc, why = planner.resolve_scope(q["question"], docs_meta)
+        if doc is None:
+            out[f"answer:{arm}:{q['id']}"] = (None, why, i + 1)
+        else:
+            d = str(doc["doc_id"])
+            seen[d] = seen.get(d, 0) + 1
+            out[f"answer:{arm}:{q['id']}"] = (d, why, seen[d])
+    return out
+
+
 def run_answers(rec: Recorder, store, backend, *, agg, single, keys, names, guard, smoke=False,
                 cfg: Cfg = CFG) -> dict[str, Any]:
     from src.aggregation import planner  # noqa: PLC0415
@@ -591,9 +645,14 @@ def run_answers(rec: Recorder, store, backend, *, agg, single, keys, names, guar
     from src.repl_environment.context_search import BM25Index  # noqa: PLC0415
     corpus_chunks = store.chunks(CORPUS_ID)
     corpus_bm25 = BM25Index([c["text"] or "" for c in corpus_chunks])
-    C = store.corpus_tokens(CORPUS_ID)
+    docs_meta = store.corpus_docs(CORPUS_ID)
     sql_present = bool(store.facts(CORPUS_ID))
     built = sorted(store.built_layers(CORPUS_ID))
+    # Canonical facts (one per doc, field, fiscal year; conflicts logged): built once, from the final
+    # store state (the L4c audit already ran), before any answer.
+    canon_stats = store.refresh_canonical(CORPUS_ID)
+    if "canonical" not in rec.done:
+        rec.emit("canonical", unit="canonical", **canon_stats)
 
     def correct(qclass, q, text):
         return score_agg(q, text) if qclass == "agg" else score_single(keys[q["id"]], text)
@@ -602,6 +661,11 @@ def run_answers(rec: Recorder, store, backend, *, agg, single, keys, names, guar
                   + [("P-large", "agg", q) for q in agg] + [("P-large", "single", q) for q in single]
                   + [("B1", "agg", q) for q in agg] + [("B1", "single", q) for q in single]
                   + [("B2", "agg", q) for q in agg[:5]])
+    scopes = _scope_plan(planner, docs_meta, plan_items)
+
+    def doc_chunks(doc_id: str) -> list[dict[str, Any]]:
+        return [c for c in corpus_chunks if c["doc_id"] == doc_id]
+
     n = 0
     for i, (arm, qclass, q) in enumerate(plan_items):
         unit = f"answer:{arm}:{q['id']}"
@@ -615,24 +679,33 @@ def run_answers(rec: Recorder, store, backend, *, agg, single, keys, names, guar
             small, cid = single_doc_store(store, q["doc_name"])
             dec = planner.plan(q["question"], planner.PlannerFacts(corpus_tokens=small.corpus_tokens(cid), n_docs=1))
             extra.update(path=dec.path, decided_by=dec.decided_by, receipt_stub=dec.receipt.get("stub", False))
-            if dec.path == "whole_doc":
-                text, st = whole_doc_answer(backend, store, q["doc_name"], q["question"], names, cfg)
-            else:
+            if dec.path != "whole_doc":
                 IndexRegistry(small).get_or_build(cid, "l1_bm25")
-                text, st = agent_answer(backend, small.chunks(cid), q["question"], names, cfg)
+            text, st = single_doc_answer(backend, store, q["doc_name"], q["question"], names, cfg, dec.path,
+                                         small.chunks(cid), extra)
             rec.emit("manifest", unit=f"manifest_run:P-small:{q['id']}", arm="P-small", qid=q["id"],
                      built_layers=sorted(small.built_layers(cid)))
         elif arm == "B-today":
+            # routing_decision's token rule: a request that fits the long-context window is one whole-doc
+            # read; one that does not (the server refuses it) falls to the REPL search/read path, as the
+            # current flow does. Before the 2026-11-10 fix the overflow was recorded empty with 0 calls.
             extra["route"] = "ingest_long_context (27B whole-doc; served on the np1 27B regardless)"
-            text, st = whole_doc_answer(backend, store, q["doc_name"], q["question"], names, cfg)
+            text, st = single_doc_answer(backend, store, q["doc_name"], q["question"], names, cfg,
+                                         "whole_doc", doc_chunks(q["doc_name"]), extra)
         elif arm == "P-large":
-            dec = planner.plan(q["question"], planner.PlannerFacts(
-                corpus_tokens=C, n_docs=len(A.DOCS), questions_so_far=i + 1,
-                available_layers=tuple(built), sql_fields_present=sql_present))
-            extra.update(path=dec.path, decided_by=dec.decided_by, receipt_stub=dec.receipt.get("stub", False))
+            scope_doc, scope_why, qsf = scopes[unit]
+            pf, _ = planner.scoped_facts(q["question"], docs_meta, questions_so_far=qsf,
+                                         available_layers=tuple(built), sql_fields_present=sql_present)
+            dec = planner.plan(q["question"], pf)
+            extra.update(path=dec.path, decided_by=dec.decided_by, receipt_stub=dec.receipt.get("stub", False),
+                         scope_doc=scope_doc, scope_reason=scope_why, planner_questions_so_far=qsf,
+                         planner_corpus_tokens=pf.corpus_tokens)
             if dec.path == "sql":
                 text, st, info = sql_answer(backend, store, q["question"], names, cfg)
                 extra.update(info)
+            elif scope_doc:
+                text, st = single_doc_answer(backend, store, scope_doc, q["question"], names, cfg, dec.path,
+                                             doc_chunks(scope_doc), extra)
             else:
                 text, st = agent_answer(backend, corpus_chunks, q["question"], names, cfg, bm25=corpus_bm25)
         elif arm == "B1":

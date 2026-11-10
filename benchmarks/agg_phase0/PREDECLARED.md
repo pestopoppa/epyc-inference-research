@@ -112,3 +112,59 @@ Operator/coordinator decisions of 2026-11-10, recorded before any data. Kill-gat
      aggregate call.
    - `prefill_tokens` everywhere = tokens actually prefilled by the server (`timings.prompt_n`); slot-cache
      reuse is recorded separately as `cache_n`.
+
+## Rerun amendment 2026-11-10 (POST-DATA: written after the first run's results were read)
+
+Operator decision 2026-11-10: "Fix bugs, rerun Phase 0". Questions, golds, metrics, the `KILL` thresholds and
+every scoring rule above are **unchanged**; this section changes none of them. A rerun uses the identical 30
+verified questions (20 aggregation + 10 single-fact) and the identical gates, scored by the same
+`agg_phase0.score`.
+
+**First run, on record, not erased.** Jobs `agg0-arms-cpu-20261110` and `agg0-arms-gpu-20261110` ran under
+PREDECLARED.md sha256 `0cb303a4d81598329a0f02466f4b18ecc973fe1609992d2e9e7950a63c7a1230`. The mechanical verdict
+was `superseded_v2_not_viable`, gates **M2** (P-large agg 0.25 vs B1 0.20, +5 pp < 25 pp) and **M5** (P-small max +30
+calls, +81,883 prefill vs B-today) tripped; M1 0.92, M3 (prefill ratio 0.31, 19.4 calls/100 chunks) and M4 (median
+2 calls) passed. The first run was filed **fail**. Its results stay on record; the rerun is a separate pair of jobs
+(`agg0-arms-cpu-20261110-r2`, `agg0-arms-gpu-20261110-r2`, `supersedes` the first) and both verdicts are reported.
+
+Three implementation defects confounded M2 and M5. They were found after the data existed, and the fixes were
+written after the data existed (post-data), so the rerun is not a blind replication; it tests whether the
+technique survives with the implementation defects removed.
+
+1. **Duplicate facts.** The first run's store (`agg0-arms-gpu-20261110/out/store.sqlite`) held 19 FY2022 revenue
+   rows for 10 entities (General Mills x5, American Water Works x4, Verizon x3), all `l4_llm.v1`. Cause: the CPU
+   job's L4, not the L3 load (the r3 L3 store has zero `FY2022` rows; L3 writes period `2022`, L4 writes `FY2022`).
+   `facts_llm.reconcile` keeps every row of a conflicting group, and nothing deduplicated across windows or period
+   spellings, so the generated SQL (`period = 'FY2022'`) summed, counted and ranked over duplicates and only ever saw
+   L4 rows. Fix (orchestrator `9a0ab00d88ff`): `facts_canonical`, one fact per (corpus, doc, field, fiscal year),
+   built by `CorpusStore.refresh_canonical`; the SQL grammar and the `sql` answer path query that table, never the raw
+   `facts` evidence table (which is untouched, so M1 and M3 inputs are identical). Selection is a total order:
+   source tier `l3_table` > `l3_textrow` > `l4_llm` > `l3_regex`, then confidence, then audit status
+   (audited_ok > unaudited > disputed), then larger |value| in USD millions (a consolidated total is never smaller
+   than a segment line), then earliest page, then `fact_id`. USD scales normalise to millions; capex and
+   dividends_paid (positive by the schema seed, printed as outflows) are stored as |value|; period is the 4-digit
+   year. Every non-chosen candidate is written to `fact_conflicts` as `conflict` or `duplicate`, never dropped.
+2. **Planner routing.** All 10 P-large single-fact questions were routed to `sql` (0 rows; P-large single 0/10).
+   Cause: `planner.plan` sized each question by the corpus alone (C = 1.97M tokens >= 1M, fact table present =>
+   `sql`) and had no notion of which document a question is about. Fix (same commit): `planner.scoped_facts`
+   sizes a question that names exactly one corpus company and carries no corpus-wide cue ("companies", "corpus",
+   "combined", "across", "all", "each", "every", "how many", ...) by that document, never routes it to `sql`, and
+   counts questions-so-far per document, so the size rules apply as predeclared: whole-doc at <= 200k and Q = 1,
+   REPL navigation after, retrieval above 200k, `sql` for aggregation. Deterministic, no model call; the typed call
+   stays a stub (amendment 2 above). Aggregation questions are unaffected.
+3. **Empty answers and a runaway call count.** B-today answers 00070, 10420 and 04481 were empty with 0 calls: the
+   three filings (est. 258k, 232k, 302k tokens; real ~0.89x) exceed the 196,608-token window, and `whole_doc_answer`
+   recorded `out_of_window` instead of taking the REPL path that the arm table names ("whole-doc / REPL"). P-small
+   planned `retrieval` for the same filings (> 200k), ran 6, 8 and 30 calls (04481 to the 30-call cap, 81,883
+   prefill), so M5 compared a loop against an empty record. Separately, 6 of 14 single-call whole-doc answers (3
+   questions x 2 arms) hit `n_predict` 384 before their `FINAL:` line. Fixes (research repo): B-today falls back to
+   the same search/read loop over that filing when its whole-doc read cannot fit; the P-small / B-today / scoped
+   P-large loops get a **harness safety cap of 12 calls per question** (`Cfg.single_doc_max_calls`); the loop's
+   action trace, `finish_reason`, truncation flag and the cap are recorded per answer; `answer_n_predict` rises
+   384 -> 1536. PREDECLARED set no cap for these arms, so the cap is new. It does not change a gate: B1 keeps its
+   predeclared 30 calls and P-large's corpus-wide loop keeps 30; M5's thresholds compare two arms that now run the
+   same capped loop on an oversize filing; decode tokens are not an M3/M4/M5 quantity.
+
+Evidence: the first run's `out/results.jsonl`, `out/store.sqlite`, `server-np1.log`, `server-np4.log`. The rerun
+PREDECLARED.md sha256 is recorded in the AGG-0.4 handoff note and in the r2 job specs (a file cannot carry its own
+hash).
