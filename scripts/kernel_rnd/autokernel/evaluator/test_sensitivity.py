@@ -154,8 +154,11 @@ class TestSensitivityReducer(unittest.TestCase):
                 f"inputs={'a' * 16},{'b' * 16},{'c' * 16},{'d' * 16} "
                 f"outputs={'1' * 16},{'2' * 16},{'3' * 16},{'4' * 16}"),
         }
-        with self.assertRaisesRegex(ValueError, "has seeds"):
-            S.observations_from_csv_rows((base,), expected_seeds=(11, 22, 33))
+        lone = S.observations_from_csv_rows((base,), expected_seeds=(11, 22, 33))
+        self.assertTrue(all("#unpaired-seed11" in o.case_id for o in lone))
+        report = S.reduce_input_sensitivity(lone)
+        self.assertNotEqual(report.check.outcome, schemas.PASS)
+        self.assertTrue(report.unscoreable_units)
         drift = dict(base)
         drift["sensitivity_receipt"] = base["sensitivity_receipt"].replace(
             "suite_version=0db32c06e", "suite_version=abcdef1").replace(
@@ -207,6 +210,15 @@ class TestSensitivityReducer(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate sensitivity row"):
             S.observations_from_csv_rows(
                 (row, dict(row)), expected_seeds=(11, 22, 33))
+
+
+    def test_shape_label_falls_back_for_non_ne_param_styles(self):
+        self.assertEqual(S._shape_from_params("type=f16,ne_a=[128,2,2,2],v=0"), (128, 2, 2, 2))
+        self.assertEqual(S._shape_from_params("n_embd=31,n_tokens=17"), (31, 17))
+        self.assertEqual(S._shape_from_params("type=f32,K=16,OC=32,T_in=197,s0=8,p0=0"),
+                         (16, 32, 197, 8))
+        with self.assertRaises(ValueError):
+            S._shape_from_params("type=f32,flag=0")
 
 
 if __name__ == "__main__":

@@ -268,12 +268,26 @@ def reduce_input_sensitivity(
 
 
 def _shape_from_params(params: str) -> tuple[int, ...]:
+    """Derive a deterministic shape LABEL from op params text.
+
+    The shape only groups/labels units (case identity lives in ``case_id`` and
+    the receipts), so any deterministic function of the params string is
+    sound.  Preference order: ne/shape-style bracket list, m/n/k, then the
+    first bracket list under any key (ne_a, ne_input, ...), then every
+    positive integer ``key=value`` in order.
+    """
     bracketed = re.search(r"(?:ne|shape)=\[([0-9, ]+)\]", params)
+    if bracketed is None:
+        bracketed = re.search(r"(?:^|,)[A-Za-z_0-9]*(?:ne|shape)[A-Za-z_0-9]*=\[([0-9, ]+)\]", params)
     if bracketed is not None:
         shape = tuple(int(value.strip()) for value in bracketed.group(1).split(","))
     else:
         values = re.findall(r"(?:^|,)(?:m|n|k)=([0-9]+)", params)
         shape = tuple(int(value) for value in values)
+        if not shape or any(value <= 0 for value in shape):
+            shape = tuple(value for value in
+                          (int(v) for v in re.findall(r"(?:^|,)[A-Za-z_0-9]+=([0-9]+)(?=,|$)", params))
+                          if value > 0)
     if not shape or any(value <= 0 for value in shape):
         raise ValueError(f"cannot derive a positive shape from op params: {params!r}")
     return shape
@@ -303,7 +317,8 @@ def observations_from_csv_rows(
     # params), and the receipt hashes differ per seed so they cannot prove case
     # identity across seeds.  Disambiguate by occurrence ordinal in CSV order,
     # pairing across seeds only when every seed has the same occurrence count;
-    # otherwise each occurrence becomes its own single-seed case_id, which the
+    # otherwise (including a seed that lacks the case entirely) each occurrence
+    # becomes its own single-seed case_id, which the
     # reducer reports as unscoreable (never dropped, never merged).
     raw: dict[tuple[str, str], dict[int, list[tuple[str, SensitivityReceipt]]]] = {}
     for row, receipt in parsed:
@@ -319,7 +334,7 @@ def observations_from_csv_rows(
     for (operation, params), per_seed in raw.items():
         collided = any(len(items) > 1 for items in per_seed.values())
         counts = {len(per_seed.get(seed, ())) for seed in seeds}
-        if not collided:
+        if not collided and len(counts) == 1:
             by_case[(operation, params, params)] = {
                 seed: items[0][1] for seed, items in per_seed.items()}
         elif len(counts) == 1:
@@ -336,9 +351,6 @@ def observations_from_csv_rows(
     anchor_seed = seeds[0]
     for (operation, params, case_id), receipts in sorted(by_case.items()):
         unpaired = "#unpaired-" in case_id
-        if not unpaired and set(receipts) != set(seeds):
-            raise ValueError(
-                f"{operation}({params}) has seeds {sorted(receipts)}, expected {sorted(seeds)}")
         shape = _shape_from_params(params)
         for seed, receipt in sorted(receipts.items()):
             anchor = receipts[anchor_seed] if not unpaired else receipt
