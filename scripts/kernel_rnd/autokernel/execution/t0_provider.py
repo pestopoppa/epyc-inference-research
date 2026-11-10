@@ -1964,6 +1964,9 @@ class BackendOpsRun:
                     "reading the run that happened; refusing to pick a winner.")
 
 
+_STDERR_DIAG_RE = re.compile(r"^(?:ggml_[A-Za-z0-9_]+: |\[[A-Z_]+\] )")
+
+
 def _classify_verdict(verdict: str, line: str) -> tuple:
     """`(status, interleaved_text)` for one case line.
 
@@ -2003,6 +2006,14 @@ def _classify_verdict(verdict: str, line: str) -> tuple:
     if verdict.endswith("FAIL"):
         return "fail", verdict[:-4].strip()
     if ": runtime error:" in verdict or "Sanitizer:" in verdict:
+        return "pending", verdict
+    if _STDERR_DIAG_RE.match(verdict):
+        # A champion/backend stderr diagnostic (`ggml_cuda_q8_skinny: ... path
+        # ran`, `[MUL_MAT] FP64 RATIO FAIL: ...`) landed between the halves of a
+        # case line (c10-c6-dispatch-reprofile-20261110-r2). The verdict comes on
+        # a later line. Its text is NOT attributable to this case -- the property
+        # harness's stderr is unsynchronised with stdout -- so case identity and
+        # status are taken ONLY from the terminal verdict line.
         return "pending", verdict
     raise OutputParseError(
         f"unrecognised test-backend-ops case verdict {verdict!r} on line {line!r}. A parser "
@@ -2053,6 +2064,16 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
             # else until it does, so everything until the bare OK/FAIL belongs
             # to this case's diagnostic block.
             stripped = line.strip()
+            if (stripped.startswith("AK_")
+                    and (stripped.endswith(" OK") or stripped.endswith(" FAIL"))):
+                # Verdict carried by the case's own receipt line after a stderr
+                # diagnostic: classify exactly as an inline verdict would be.
+                state, tail = _classify_verdict(stripped, line)
+                cases.append(_case_with_reference(
+                    op=pending[0], params=pending[1], status=state,
+                    interleaved=tail))
+                pending = None
+                continue
             if stripped in ("OK", "FAIL"):
                 cases.append(_case_with_reference(
                     op=pending[0], params=pending[1],
@@ -2063,7 +2084,8 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
                 pending[2].append(stripped)
             continue
         if in_failing:
-            if line.startswith("  ") and line.strip():
+            if (line.startswith("  ") and line.strip()
+                    and not _BACKEND_STATUS_RE.match(line)):
                 failing.append(line.strip())
                 continue
             in_failing = False

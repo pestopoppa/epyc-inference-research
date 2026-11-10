@@ -120,6 +120,15 @@ FLASHINFER_DEFAULT_RTOL = 1e-2
 FLASHINFER_LOWBITS_MATCHED_RATIO = 0.95
 FLASHINFER_RELATIVE_EPSILON = 1e-8
 
+# test-backend-ops' own MUL_MAT acceptance bound (test_mul_mat::max_nmse_err).
+# Quantized MUL_MAT is compared against a CPU reference that quantizes the
+# activations differently (Q8_K vs the GPU's Q8_1), so an elementwise
+# atol/rtol matched-ratio predicate refuses honest kernels (c6-native-residency
+# r2/r3: matched 0.625-0.69 at NMSE 1.2e-4 / 5e-5). Quantized MUL_MAT gates on
+# NMSE instead; f32/f16 keep the matched-ratio predicate.
+TEST_BACKEND_OPS_MUL_MAT_NMSE_MAX = 5e-4
+NUMERIC_PREDICATES = ("matched_ratio", "nmse")
+
 # L3 is intentionally absent.  The semantic judge is retained but cannot gate
 # until the fixed omission-mutant calibration corpus is rejected in full.
 C6_GATE_TIERS = ("L1_static", "L2_ghost_replay", "semantic_judge")
@@ -177,10 +186,24 @@ class PrecisionContract:
     rtol: float = FLASHINFER_DEFAULT_RTOL
     required_matched_ratio: float = 1.0
     lowbit: bool = False
+    # "matched_ratio" (default) or "nmse" (quantized MUL_MAT only). Under
+    # "nmse" the matched ratio is still computed and recorded, never gating.
+    numeric_predicate: str = "matched_ratio"
+    nmse_max: float | None = None
 
     def __post_init__(self):
         if type(self.lowbit) is not bool:
             raise EvaluatorPolicyError("lowbit must be an exact bool")
+        if self.numeric_predicate not in NUMERIC_PREDICATES:
+            raise EvaluatorPolicyError("numeric_predicate is not reviewed")
+        if self.numeric_predicate == "nmse":
+            bound = _finite_number(self.nmse_max, "nmse_max", positive=True)
+            if bound > TEST_BACKEND_OPS_MUL_MAT_NMSE_MAX:
+                raise EvaluatorPolicyError(
+                    "nmse_max may equal or tighten test-backend-ops' 5e-4, never loosen it")
+            object.__setattr__(self, "nmse_max", bound)
+        elif self.nmse_max is not None:
+            raise EvaluatorPolicyError("nmse_max applies only to the nmse predicate")
         object.__setattr__(self, "required_output_dtype",
                            _normal_dtype(self.required_output_dtype))
         object.__setattr__(self, "required_accumulator_dtype",
@@ -247,6 +270,8 @@ class NumericalVerdict:
     max_absolute_error: float | str | None = None
     max_relative_error: float | str | None = None
     nonfinite_count: int = 0
+    predicate: str = "matched_ratio"
+    nmse: float | str | None = None
 
 
 def _flat_values(value: object) -> list[object]:
@@ -332,17 +357,30 @@ def evaluate_numerics(reference: object, candidate: object, *,
     matched = total - outliers
     ratio = matched / total
     budget = policy.allowed_outliers(total)
-    correct = ratio >= policy.required_matched_ratio
+    # NMSE exactly as test-backend-ops computes it: sum((ref-out)^2)/sum(ref^2).
+    err_sq = sum(error * error for error in abs_errors)
+    ref_sq = sum(ref * ref for ref in refs_f)
+    if ref_sq > 0.0:
+        nmse: float = err_sq / ref_sq
+    else:
+        nmse = 0.0 if err_sq == 0.0 else math.inf
+    if policy.numeric_predicate == "nmse":
+        correct = math.isfinite(nmse) and nmse <= policy.nmse_max
+        reason = "nmse_within_bound" if correct else "nmse_bound_exceeded"
+    else:
+        correct = ratio >= policy.required_matched_ratio
+        reason = "matched" if correct else "outlier_budget_exceeded"
     max_abs = max(abs_errors)
     max_rel = max(rel_errors)
     return NumericalVerdict(
-        correct, "numeric", "matched" if correct else "outlier_budget_exceeded",
+        correct, "numeric", reason,
         **precision, total_elements=total, matched_elements=matched,
         outlier_elements=outliers, allowed_outliers=budget,
         matched_ratio=ratio,
         max_absolute_error=max_abs if math.isfinite(max_abs) else "inf",
         max_relative_error=max_rel if math.isfinite(max_rel) else "inf",
-        nonfinite_count=0)
+        nonfinite_count=0, predicate=policy.numeric_predicate,
+        nmse=nmse if math.isfinite(nmse) else "inf")
 
 
 def _bitwise_bytes(value: object) -> bytes:

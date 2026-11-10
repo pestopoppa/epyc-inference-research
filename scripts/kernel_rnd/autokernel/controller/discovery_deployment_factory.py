@@ -2354,6 +2354,14 @@ def _c6_native_capability(
             "rtol": 0.01 if operation == "MUL_MAT" else 0.001,
             "required_matched_ratio": (0.95 if operation == "MUL_MAT" else 1.0),
             "lowbit": operation == "MUL_MAT",
+            # Quantized MUL_MAT gates on test-backend-ops' NMSE bound against
+            # the CPU reference; the elementwise matched ratio stays recorded
+            # (diagnostic) but cannot gate a cross-quantization comparison.
+            # f32/f16/bf16 keep the matched-ratio predicate.
+            **({"numeric_predicate": "nmse",
+                "nmse_max": controller.c6_reward_integrity.TEST_BACKEND_OPS_MUL_MAT_NMSE_MAX}
+               if operation == "MUL_MAT"
+               and str(type_a).lower() not in {"f32", "f16", "bf16"} else {}),
         },
         "precision_equivalence_policy": {
             "operator_id": operation,
@@ -2460,6 +2468,14 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         correctness_argv = (
             str(correctness_tool.path), "test", "-o", op, "-b", "ROCm0", "-j", "1",
             "--suite-seed", str(seed))
+        correctness_baseline = None
+        if op == "MUL_MAT" and template.template_id != "cuda-fattn-tile-v1":
+            # INF-48 rule "new-fail vs baseline" (operator 2026-11-10): MUL_MAT
+            # runs with the host property checks the champion baseline was
+            # measured with, and a candidate fails only on cases the C10
+            # champion passes.
+            correctness_argv = (*correctness_argv, "--autokernel-properties")
+            correctness_baseline = evidence.C10_MUL_MAT_CORRECTNESS_BASELINE
         correctness_invocations: tuple[Mapping[str, Any], ...] = ()
         if template.template_id == "cuda-fattn-tile-v1":
             required_cases = [dict(row) for row in semantics["required_correctness_cases"]]
@@ -2528,6 +2544,7 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             correctness_backend="ROCm0",
             correctness_op=op,
             expected_correctness_cases=cases,
+            correctness_baseline=correctness_baseline,
             candidate_rocprof_argv=profile_argv, anchor_rocprof_argv=profile_argv,
             dispatch=dispatch,
             identity_files=identities, policy=placeholder,

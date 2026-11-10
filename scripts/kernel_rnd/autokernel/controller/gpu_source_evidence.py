@@ -9,6 +9,7 @@ identities, and deterministic reductions of the timestamp CSVs.
 """
 from __future__ import annotations
 
+import collections
 import csv
 from dataclasses import asdict, dataclass
 import hashlib
@@ -23,6 +24,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .. import schemas
@@ -704,6 +706,10 @@ class GpuSourceEvidencePlan:
     expected_candidate_profiler_dispatch_rows: int | None = None
     expected_anchor_profiler_dispatch_rows: int | None = None
     profiler_transport_policy: str = "require-zero-exit"
+    # Champion correctness baseline (operator rule "new-fail vs baseline",
+    # 2026-11-10). None keeps the strict all-pass contract. Applies to the
+    # legacy single correctness command only.
+    correctness_baseline: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if (not isinstance(self.campaign_id, str) or not self.campaign_id
@@ -748,6 +754,14 @@ class GpuSourceEvidencePlan:
         if len({row["invocation_id"] for row in self.correctness_invocations}) \
                 != len(self.correctness_invocations):
             raise EvidenceProducerError("correctness invocation IDs must be unique")
+        if self.correctness_baseline is not None:
+            if self.correctness_invocations:
+                raise EvidenceProducerError(
+                    "a correctness baseline applies only to the single correctness command")
+            _validate_correctness_baseline(
+                self.correctness_baseline, argv=self.correctness_argv,
+                backend=self.correctness_backend, op=self.correctness_op,
+                expected_cases=self.expected_correctness_cases)
         if not isinstance(self.candidate, proofs.BuildIdentity) or not isinstance(self.anchor, proofs.BuildIdentity):
             raise EvidenceProducerError("both build identities must be typed")
         if self.candidate == self.anchor:
@@ -1181,6 +1195,8 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
         "correctness_op": plan.correctness_op,
         "expected_correctness_cases": plan.expected_correctness_cases,
         "correctness_invocations": [dict(row) for row in plan.correctness_invocations],
+        **({} if plan.correctness_baseline is None else {
+            "correctness_baseline": _baseline_json(plan.correctness_baseline)}),
         **({} if plan.c6_correctness is None else {"c6_correctness": {
             "argv": list(plan.c6_correctness.argv),
             "inputs": [_bound_reference(x) for x in plan.c6_correctness.inputs],
@@ -2594,10 +2610,87 @@ class _CorrectnessResult:
     backends_passed: int
     backends_total: int
     overall: str
+    # Params of failed cases tolerated because the champion baseline fails
+    # them too (multiset, sorted). Empty under the strict contract.
+    baseline_fails: tuple[str, ...] = ()
+    baseline_id: str | None = None
 
     @property
     def summary(self) -> str:
         return f"{self.passed_cases}/{self.total_cases} tests passed"
+
+
+# Pinned champion C10 MUL_MAT baseline. Source: c10-c6-dispatch-reprofile-
+# 20261110-r2, C10 store gpu-20261109-7f1bd044b-c10fold, console reparsed with
+# the T0 parser (1201/1202 reconciled). The single failure is the host FP64
+# ratio property on q4_K m=16 n=2 k=256; production v10 fails the same case.
+# Identity is the case whose TERMINAL verdict says FAIL (the stderr
+# "FP64 RATIO FAIL" diagnostic lands one case earlier in the console).
+C10_MUL_MAT_CORRECTNESS_BASELINE: Mapping[str, Any] = MappingProxyType({
+    "baseline_id": "c10-c6-dispatch-reprofile-20261110-r2/c10/MUL_MAT",
+    "champion_store": "gpu-20261109-7f1bd044b-c10fold",
+    "source_log": ("/mnt/raid0/llm/tmp/c10-c6-dispatch-reprofile-20261110-r2/"
+                   "out/logs/run-c10-backend-ops-MUL_MAT.txt"),
+    "source_log_sha256":
+        "73d3193e3ea8d1eebdbcc9787b9610e8aa7957c07fb76bb8c440c93d76a9bc3a",
+    "backend": "ROCm0", "op": "MUL_MAT", "expected_cases": 1202,
+    # argv after the executable with any "-j N" removed.
+    "argv_tail": ("test", "-o", "MUL_MAT", "-b", "ROCm0", "--suite-seed",
+                  "2026081301", "--autokernel-properties"),
+    "fail_multiset": MappingProxyType({
+        "type_a=q4_K,type_b=f32,m=16,n=2,k=256,bs=[1,1],nr=[1,1],"
+        "per=[0,1,2,3],k_v=0,o=1": 1}),
+})
+
+
+def _normalized_argv_tail(argv: Sequence[str]) -> tuple[str, ...]:
+    """Drop the executable and "-j N" (worker count changes neither cases nor verdicts)."""
+    tail = list(argv[1:])
+    out: list[str] = []
+    index = 0
+    while index < len(tail):
+        if tail[index] == "-j" and index + 1 < len(tail):
+            index += 2
+            continue
+        out.append(tail[index])
+        index += 1
+    return tuple(out)
+
+
+def _baseline_json(baseline: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "baseline_id": baseline["baseline_id"],
+        "champion_store": baseline.get("champion_store"),
+        "source_log": baseline.get("source_log"),
+        "source_log_sha256": baseline.get("source_log_sha256"),
+        "backend": baseline["backend"], "op": baseline["op"],
+        "expected_cases": baseline["expected_cases"],
+        "argv_tail": list(baseline["argv_tail"]),
+        "fail_multiset": dict(sorted(dict(baseline["fail_multiset"]).items())),
+    }
+
+
+def _validate_correctness_baseline(
+        baseline: Mapping[str, Any], *, argv: Sequence[str], backend: str,
+        op: str, expected_cases: int) -> None:
+    if not isinstance(baseline, Mapping):
+        raise EvidenceProducerError("correctness baseline must be a mapping")
+    if not isinstance(baseline.get("baseline_id"), str) or not baseline["baseline_id"]:
+        raise EvidenceProducerError("correctness baseline lacks an identity")
+    if (baseline.get("backend") != backend or baseline.get("op") != op
+            or baseline.get("expected_cases") != expected_cases):
+        raise EvidenceProducerError(
+            "correctness baseline was measured on a different backend/op/case count")
+    if tuple(baseline.get("argv_tail", ())) != _normalized_argv_tail(argv):
+        raise EvidenceProducerError(
+            "correctness baseline was measured with a different correctness argv")
+    fails = baseline.get("fail_multiset")
+    if (not isinstance(fails, Mapping)
+            or any(not isinstance(key, str) or not key
+                   or isinstance(value, bool) or not isinstance(value, int)
+                   or value < 1 for key, value in fails.items())
+            or sum(fails.values()) >= expected_cases):
+        raise EvidenceProducerError("correctness baseline fail multiset is malformed")
 
 
 def _parse_correctness(
@@ -2632,7 +2725,9 @@ def _parse_correctness(
     target = targets[0]
     if target.skipped:
         raise CorrectnessParseRefusal("target correctness backend was skipped")
-    if target.status != "OK":
+    baseline = (getattr(plan, "correctness_baseline", None)
+                if invocation_contract is None else None)
+    if baseline is None and target.status != "OK":
         raise CorrectnessParseRefusal("target correctness backend did not report OK")
 
     compared = tuple(case for case in target.cases
@@ -2643,11 +2738,25 @@ def _parse_correctness(
     if any(case.op != operation for case in compared):
         raise CorrectnessParseRefusal(
             "target correctness backend exercised an unexpected operation")
-    if any(not case.passed for case in compared):
+    # New-fail vs baseline: a failed case is tolerated only up to the
+    # champion's own fail count for the same params. Everything else
+    # (crash, missing case, unparsed/unreconciled log) still refuses above or
+    # below; a baseline never converts an absent verdict into a pass.
+    allowed = collections.Counter(
+        {} if baseline is None else dict(baseline["fail_multiset"]))
+    failed = collections.Counter(case.params for case in compared if not case.passed)
+    new_fails = failed - allowed
+    if new_fails:
+        listed = ", ".join(f"{operation}({params})" + (f" x{count}" if count > 1 else "")
+                           for params, count in sorted(new_fails.items())[:5])
         raise CorrectnessParseRefusal(
-            "target correctness backend contains a failed case")
+            "target correctness backend contains a failed case"
+            + ("" if baseline is None
+               else f" not failed by baseline {baseline['baseline_id']}: {listed}"))
+    tolerated = tuple(sorted(failed.elements()))
+    passed_cases = expected - len(tolerated)
     if (len(compared) != expected
-            or target.reported_passed != expected
+            or target.reported_passed != passed_cases
             or target.reported_total != expected):
         raise CorrectnessParseRefusal(
             "correctness did not pass the exact expected case count")
@@ -2677,21 +2786,54 @@ def _parse_correctness(
     if any(not row.skipped or row.cases for row in others):
         raise CorrectnessParseRefusal(
             "a non-target backend was exercised by targeted correctness")
-    if (run.backends_total != len(run.backends)
-            or run.backends_passed != run.backends_total
-            or run.overall != "OK"
-            or run.failing_tests):
-        raise CorrectnessParseRefusal(
-            "correctness backend/overall summaries do not prove a clean run")
+    if not tolerated:
+        if target.status != "OK":
+            raise CorrectnessParseRefusal(
+                "target correctness backend did not report OK")
+        if (run.backends_total != len(run.backends)
+                or run.backends_passed != run.backends_total
+                or run.overall != "OK"
+                or run.failing_tests):
+            raise CorrectnessParseRefusal(
+                "correctness backend/overall summaries do not prove a clean run")
+    else:
+        # The tool must report exactly the tolerated failures and nothing else.
+        listed = collections.Counter(run.failing_tests)
+        expected_listed = collections.Counter(
+            f"{operation}({params})" for params in tolerated)
+        if (target.status != "FAIL"
+                or run.backends_total != len(run.backends)
+                or run.backends_passed != run.backends_total - 1
+                or run.overall != "FAIL"
+                or listed != expected_listed):
+            raise CorrectnessParseRefusal(
+                "correctness summaries do not match the tolerated baseline failures")
     return _CorrectnessResult(
         backend=backend,
         operation=operation,
-        passed_cases=expected,
+        passed_cases=passed_cases,
         total_cases=expected,
+        baseline_fails=tolerated,
+        baseline_id=None if baseline is None else baseline["baseline_id"],
         skipped_backends=tuple(row.name for row in others),
         backends_passed=run.backends_passed,
         backends_total=run.backends_total,
         overall=run.overall)
+
+
+def _expected_correctness_exit(parsed: _CorrectnessResult) -> int:
+    """test-backend-ops exits 1 on any failed case; only tolerated fails may do so.
+
+    Any other status (signal, abort, crash) is never a pass."""
+    return 1 if parsed.baseline_fails else 0
+
+
+def _baseline_receipt_fields(parsed: _CorrectnessResult) -> dict[str, Any]:
+    if parsed.baseline_id is None:
+        return {}
+    return {"correctness_baseline_id": parsed.baseline_id,
+            "baseline_tolerated_fails": list(parsed.baseline_fails),
+            "new_fails": []}
 
 
 def _c6_plan_reference(c6: C6CorrectnessPlan) -> dict[str, Any]:
@@ -2882,8 +3024,10 @@ def _produce_correctness(
         raise CorrectnessParseRefusal(
             str(exc), receipt_path=str(refusal["path"]),
             receipt_sha256=str(refusal["file_sha256"])) from exc
-    if capture.exit_code != 0:
-        raise EvidenceProducerError("targeted correctness command exited nonzero")
+    if capture.exit_code != _expected_correctness_exit(parsed):
+        raise EvidenceProducerError(
+            "targeted correctness command exited nonzero"
+            + ("" if not parsed.baseline_fails else " other than the tolerated-baseline status 1"))
     body = {
         "schema": CORRECTNESS_SCHEMA,
         "authority": AUTHORITY,
@@ -2917,7 +3061,8 @@ def _produce_correctness(
         "backends_total": parsed.backends_total,
         "overall": parsed.overall,
         "expected_cases": plan.expected_correctness_cases,
-        "passed_cases": plan.expected_correctness_cases,
+        "passed_cases": parsed.passed_cases,
+        **_baseline_receipt_fields(parsed),
         "exact_case_ok": True,
         **_c6_stage_fields(c6_receipt, c6_claim_join),
         **_claim_boundary_fields(opened, released, residency),
@@ -4861,6 +5006,17 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
             loaded = _reload_reference(reference, schema=CORRECTNESS_SCHEMA)
             _validate_correctness_invocation_receipt(loaded, plan, contract)
         return
+    claimed_tolerated = body.get("baseline_tolerated_fails", [])
+    if plan.correctness_baseline is None:
+        if any(key in body for key in (
+                "baseline_tolerated_fails", "correctness_baseline_id", "new_fails")):
+            raise EvidenceProducerError(
+                "strict correctness receipt carries baseline fields")
+    elif (not isinstance(claimed_tolerated, list)
+          or body.get("new_fails") != []
+          or body.get("correctness_baseline_id")
+          != plan.correctness_baseline["baseline_id"]):
+        raise EvidenceProducerError("correctness baseline receipt fields mismatch")
     expected = {
         "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
         "non_promotable": True, "promotion_claim": False,
@@ -4868,7 +5024,8 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         "device_id": plan.device_id, "manifest_sha256": plan.manifest_sha256,
         "candidate_build_identity": asdict(plan.candidate),
         "workload_sha256": plan.workload_sha256,
-        "command_argv": list(plan.correctness_argv), "exit_code": 0,
+        "command_argv": list(plan.correctness_argv),
+        "exit_code": 1 if claimed_tolerated else 0,
         "command_cwd": str(plan.execution_cwd),
         "command_environment_sha256": schemas.content_hash(
             [list(item) for item in plan.correctness_environment]),
@@ -4880,7 +5037,8 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         "correctness_backend": plan.correctness_backend,
         "correctness_op": plan.correctness_op,
         "expected_cases": plan.expected_correctness_cases,
-        "passed_cases": plan.expected_correctness_cases, "exact_case_ok": True,
+        "passed_cases": plan.expected_correctness_cases - len(claimed_tolerated),
+        "exact_case_ok": True,
     }
     if any(body.get(key) != value for key, value in expected.items()):
         raise EvidenceProducerError("correctness receipt identity/config/result mismatch")
@@ -4896,7 +5054,8 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
             or list(parsed.skipped_backends) != body.get("skipped_backends")
             or parsed.backends_passed != body.get("backends_passed")
             or parsed.backends_total != body.get("backends_total")
-            or parsed.overall != body.get("overall")):
+            or parsed.overall != body.get("overall")
+            or list(parsed.baseline_fails) != list(claimed_tolerated)):
         raise EvidenceProducerError("correctness summary changed")
     _validate_residency_witness(
         body.get("residency_witness"), device_id=plan.device_id,
