@@ -93,7 +93,7 @@ AGG_QUESTIONS: list[dict[str, Any]] = [
 ]
 
 SHEET_COLUMNS = ["doc_name", "company", "metric", "fiscal_year", "value_usd_m", "status",
-                 "page", "quote", "reviewer", "note"]
+                 "page", "quote", "reviewer", "note", "unit", "confidence", "verified"]
 
 
 def sha256_file(p: Path) -> str:
