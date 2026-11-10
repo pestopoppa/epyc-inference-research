@@ -104,22 +104,24 @@
   "financebench_id_00070": {
    "verified": true,
    "verified_by": "two-independent-readers 2026-11-10",
-   "verified_at": "2026-11-10"
+   "verified_at": "2026-11-10",
+   "blind": "partial"
   },
   "financebench_id_00005": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "operator 2026-11-10 (line-item rule)",
+   "verified_at": "2026-11-10"
   },
   "financebench_id_01346": {
    "verified": true,
    "verified_by": "two-independent-readers 2026-11-10",
-   "verified_at": "2026-11-10"
+   "verified_at": "2026-11-10",
+   "blind": "partial"
   },
   "financebench_id_00080": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "operator 2026-11-10 (line-item rule)",
+   "verified_at": "2026-11-10"
   },
   "financebench_id_00216": {
    "verified": true,
@@ -132,9 +134,9 @@
    "verified_at": "2026-11-10"
   },
   "financebench_id_10420": {
-   "verified": false,
-   "verified_by": null,
-   "verified_at": null
+   "verified": true,
+   "verified_by": "operator 2026-11-10 (line-item rule)",
+   "verified_at": "2026-11-10"
   },
   "financebench_id_06272": {
    "verified": true,

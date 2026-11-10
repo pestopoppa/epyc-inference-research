@@ -14,3 +14,6 @@ Reader 2 read each filing (pypdfium2, face statements, USD millions) before open
 | 06272 KO | Dividends (7,616); NI attributable 9,542 (p66-67) -> 0.80 | 0.8 | match, verified |
 | 03718 LMT | Total net sales 65,984 vs 65,398 (p63) -> CAGR 0.45% | 0.4% | match, verified |
 | 04481 PEP | Operating Profit 11,512 + D&A 2,763 over Net Revenue 86,392 (p62,64) -> 16.52% | 16.5% | match, verified |
+
+## Operator ruling 2026-11-10 (line-item rule)
+The 3 mismatches are resolved to the face line items: Corning WC +2,278; PayPal WC +12,416; AES ROA -1.42% (net income (505)). All 10 verified; FinanceBench values kept as `fb_gold_alt` (alternative definition). 00070 and 01346 are `blind: partial` (golds glimpsed before reading); 00005 was glimpsed too but the value was overruled by the filing.
