@@ -647,7 +647,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             json.dumps(controller_config.planner_context)
             portfolio = loaded.hypothesis_portfolio.value
             self.assertEqual(portfolio.sha256,
-                             "9dcb51a8e3d2c037eaa6ffbf10248b31e625e67cf3f498ff71ae5c8d70c2cb43")
+                             "3344de10fa51558966c7ee8ae1dcb4f7bf4026351cf074c2d797af2802b91d33")  # resealed 2026-11-07
             context = loaded.planner_context.value
             self.assertEqual(
                 {row["hypothesis_id"] for row in context["eligible_hypotheses"]},
@@ -1288,7 +1288,8 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertFalse(config.operations_root.is_relative_to(config.build_root))
 
 
-INSTRUMENT_TREE = Path("/mnt/raid0/llm/llama.cpp")
+# The champion (C10) checkout the factory binds; was the production tree pre-C10.
+INSTRUMENT_TREE = F._INSTRUMENT_PATH
 C6_ELIGIBLE_TEMPLATES = ("cuda-vecdotq-v1", "cuda-quantize-q8-v1",
                          "cuda-fattn-tile-v1", "cuda-norm-v2")
 
@@ -1545,6 +1546,62 @@ class C6PortfolioRouteTests(unittest.TestCase):
             off = F.deployment.load_deployment_config(
                 F.initialize_static_deployment_bundle(base / "off"))
             self.assertEqual(off.max_iterations, 100)
+
+
+
+class ChampionC10InstrumentTests(unittest.TestCase):
+    """Operator decision 2026-11-10: GPU discovery binds to champion C10, not production v10."""
+
+    C10 = "7f1bd044b1e49a88b33460977bd96feae3db8e5c"
+
+    def _config(self, root: Path):
+        return SimpleNamespace(
+            production_path=F._INSTRUMENT_PATH, production_head=F.deployment.FROZEN_PRODUCTION_HEAD,
+            instrument_path=F._INSTRUMENT_PATH, instrument_commit=F._INSTRUMENT_COMMIT,
+            instrument_branch=F._INSTRUMENT_BRANCH, state_root=root)
+
+    def _require_instrument(self):
+        if not (F._INSTRUMENT_PATH / ".git").exists():
+            self.skipTest(f"instrument checkout absent: {F._INSTRUMENT_PATH}")
+
+    def test_instrument_is_pinned_to_champion_c10_not_production(self):
+        self.assertEqual(F._INSTRUMENT_COMMIT, self.C10)
+        self.assertNotEqual(F._INSTRUMENT_COMMIT, F.deployment.FROZEN_PRODUCTION_HEAD)
+
+    def test_target_identity_compares_against_champion_pin_and_tolerates_production_drift(self):
+        self._require_instrument()
+        with tempfile.TemporaryDirectory() as tmp:
+            path, _ = F._target_source_equality_receipt(self._config(Path(tmp)))
+            body = json.loads(path.read_text())
+        self.assertEqual(body["authority"], "champion")
+        self.assertEqual(body["instrument_commit"], self.C10)
+        moved = {k for k, v in body["targets"].items() if not v["equal_to_production"]}
+        self.assertIn("ggml/src/ggml-cuda/mmvq.cu", moved)
+        for relative, row in body["targets"].items():
+            self.assertEqual(row["instrument_blob_sha256"], F._TARGET_SOURCE_SHA256[relative])
+
+    def test_target_identity_refuses_instrument_bytes_off_the_champion_pin(self):
+        self._require_instrument()
+        bad = dict(F._TARGET_SOURCE_SHA256)
+        bad["ggml/src/ggml-cuda/mmvq.cu"] = "0" * 64
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(F, "_TARGET_SOURCE_SHA256", bad):
+            with self.assertRaisesRegex(F.DeploymentFactoryError, "champion pin"):
+                F._target_source_equality_receipt(self._config(Path(tmp)))
+
+    def test_instrument_review_binds_the_exact_v10_to_c10_delta(self):
+        self._require_instrument()
+        with tempfile.TemporaryDirectory() as tmp:
+            path, _ = F._instrument_review_receipt(self._config(Path(tmp)))
+            body = json.loads(path.read_text())
+        self.assertEqual(body["instrument_commit"], self.C10)
+        self.assertEqual(len(body["reviewed_diff_paths"]), F._INSTRUMENT_DIFF_PATH_COUNT)
+        self.assertEqual(F._diff_paths_digest(body["reviewed_diff_paths"]),
+                         F._INSTRUMENT_DIFF_PATHS_SHA256)
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(F, "_INSTRUMENT_DIFF_PATHS_SHA256", "0" * 64):
+            with self.assertRaisesRegex(F.DeploymentFactoryError, "reviewed delta"):
+                F._instrument_review_receipt(self._config(Path(tmp)))
 
 
 if __name__ == "__main__":

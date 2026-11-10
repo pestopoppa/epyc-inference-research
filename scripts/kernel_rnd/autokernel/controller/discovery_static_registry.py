@@ -1354,12 +1354,14 @@ def _verify_selected_gpu_blobs(*, production_path: Path, production_commit: str,
             if call.returncode:
                 raise StaticRegistryError(f"selected GPU path lacks sealed base blob: {path}")
             return call.stdout
-        production = blob(production_path.resolve(strict=True), production_commit)
+        # Operator decision 2026-11-10: GPU discovery binds to the CHAMPION. The planner
+        # is briefed from the instrument (champion) commit -- the reviewed-source package
+        # is materialised from it -- so the instrument blob is the base authority. The
+        # production blob must still exist (the instrument descends from production) but
+        # may legitimately differ once the champion has taken keeps.
+        blob(production_path.resolve(strict=True), production_commit)
         instrument = blob(instrument_path.resolve(strict=True), instrument_commit)
-        if production != instrument:
-            raise StaticRegistryError(
-                f"instrument GPU source diverges from frozen production for {path}; explicit review required")
-        result[path] = hashlib.sha256(production).hexdigest()
+        result[path] = hashlib.sha256(instrument).hexdigest()
     return result
 
 

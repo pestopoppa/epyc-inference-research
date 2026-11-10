@@ -467,7 +467,14 @@ _ROCPROF_V3_HSA_LIB_SHA256 = "013887a0ee59a2a088c2b95875cae3f48d2d661b4a6badcaa0
 _ROCPROF_V3_REGISTER_LIB = Path("/opt/rocm/lib/librocprofiler-register.so.0.4.0")
 _ROCPROF_V3_REGISTER_LIB_SHA256 = "4f095b333e6f4cb123f4ba2f59850304f51387a254acba89d457a6ff6a76dfc4"
 _CORRECTNESS_SUITE_SEED = 2026081301
-_INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
+# C10 (2026-11-10): the instrument checkout must have the champion's tree CHECKED
+# OUT, because the C6 harness compiles against its working-tree public headers and
+# refuses when they differ from the instrument commit. The shared
+# `llama.cpp-experimental` checkout sits on a v9 branch with local edits, so the
+# instrument reads the clean detached C10 worktree (same repository, so
+# `refs/heads/<_INSTRUMENT_BRANCH>` still resolves). It is a protected root: builds
+# never write into it.
+_INSTRUMENT_PATH = Path("/mnt/raid0/llm/worktrees/llama-c10-fold-20261109")
 # CH-3 (2026-08-27): the measurement instrument IS the champion.
 #
 # AutoKernel screens a candidate against this tree, so pointing it at the
@@ -496,7 +503,14 @@ _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
 # versus production is zero by construction until the first keep of the new
 # cycle. See `_INSTRUMENT_DIFF_SHA256`.
 _INSTRUMENT_BRANCH = "ak/champion/llama-cpp-ffc1bac82eec"
-_INSTRUMENT_COMMIT = "ffc1bac82eeca6f9099e1ccd9ba49703c460a115"
+# REPINNED 2026-11-10 to champion C10 (operator decision: GPU discovery binds to
+# the CHAMPION, not production). C10 = `7f1bd044b`, the C9 tip folded with its
+# admitted keeps; it descends from production v10 `ffc1bac82`. Every constant
+# below that was "EMPTY because instrument == production" is re-derived from the
+# real v10..C10 delta, and the reviewed-target identity check now compares the
+# instrument's bytes with THESE champion pins (production is recorded, not required
+# to match).
+_INSTRUMENT_COMMIT = "7f1bd044b1e49a88b33460977bd96feae3db8e5c"
 
 #: CH-2 champion seeding: the ratified production `llama-server` digests, per backend,
 #: copied from the single source of truth `scripts/session/verify_llama_cpp.sh`
@@ -515,22 +529,23 @@ _RATIFIED_PRODUCTION_SERVER_SHA256 = MappingProxyType({
 # differing again the moment the champion takes its first keep, at which point
 # this constant and `_INSTRUMENT_DIFF_PATHS` are re-derived from the new tip.
 # (Was `d17c66f6e...`, the v9-champion delta.)
+# C10 (2026-11-10): `git diff --binary ffc1bac82..7f1bd044b`, 279 paths.
 _INSTRUMENT_DIFF_SHA256 = (
-    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+    "d1554ba713648f3e4709efb0b8dedf9cf966c57e538ffe231654296bcc254ec7")
 # REPINNED to v10's blob. This is the ONE reviewed blob whose bytes actually
 # moved across the promotion (llama-bench.cpp, its README and the ready-continue
 # contract are byte-identical at v10, so their constants below are unchanged):
 # v10 carries upstream's new `test-backend-ops` cases for GGML_OP_MEAN_D1 and
 # GGML_OP_MOE_TOPK_NORM. Was `7571a536b...` at the v9-era champion.
 _INSTRUMENT_TEST_SOURCE_SHA256 = (
-    "7ecd877080bbd8bc08d10861d815cdfc3d92676066b2289327c6cb59f31b6c5d")
+    "1dc504a96734368f361f0679ca67a42261fa4ad6d44d462d9fb821f041d28b6b")  # C10
 _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
 # CHANGED by the champion: MoE-Spec adds an 8-line env-var fallback so
 # llama-bench (which has its own arg parser) can read --moe-spec-budget.
 # The flag DEFAULTS TO 0 and is inert unless a role selects it. The
 # correctness oracle test-backend-ops.cpp is UNCHANGED, which is the blob
 # that matters for verdicts.
-_INSTRUMENT_BENCH_SOURCE_SHA256 = "8d2bd4f6114e82553eef345183bf81f9c4969bf6a743579db2f45554cc70eefa"
+_INSTRUMENT_BENCH_SOURCE_SHA256 = "0c037dcc14d4ad44c4aa7c8a77173df441a9a269245c092824f1e39cd7483779"  # C10
 _INSTRUMENT_BENCH_README_SHA256 = "6429015fe5025d35b65e6271520ea668267910f82922e618b27b80c909cec33f"
 # EMPTY, 2026-09-22, for the same reason as `_INSTRUMENT_DIFF_SHA256`: the
 # instrument commit IS the production commit, so `git diff --name-only` between
@@ -540,7 +555,17 @@ _INSTRUMENT_BENCH_README_SHA256 = "6429015fe5025d35b65e6271520ea668267910f82922e
 # sources, test-backend-ops, llama-bench, plus admitted members MoE-Spec
 # c7c37a0d9 and DFlash2 2046c64e9 -- is in git history at the commit that
 # retired it; it is all inside v10 now.
-_INSTRUMENT_DIFF_PATHS: frozenset[str] = frozenset()
+# C10 (2026-11-10): the v10..C10 path set is 279 names, so it is pinned as a
+# digest -- sha256 of the sorted UTF-8 names joined by NUL -- plus its count;
+# the receipt still records the full observed list.
+_INSTRUMENT_DIFF_PATH_COUNT = 279
+_INSTRUMENT_DIFF_PATHS_SHA256 = (
+    "3633cc0c5c0d61ba73bf55d19bd7c76a8da84492d471fb2c123434ad1d8bb7c1")
+
+
+def _diff_paths_digest(paths) -> str:
+    return hashlib.sha256(b"\0".join(
+        sorted(path.encode("utf-8") for path in paths))).hexdigest()
 # REPINNED to v10, 2026-09-22, read-only from `ffc1bac82`. Six of the ten blobs
 # moved with the promotion (fattn.cu, mmvq.cu, rope.cu, norm.cu, quantize.cu,
 # vecdotq.cuh); fattn-common.cuh, fattn-tile.cu, fattn-tile.cuh and set-rows.cu
@@ -559,17 +584,20 @@ _INSTRUMENT_DIFF_PATHS: frozenset[str] = frozenset()
 # advanced with the promotion. If the reviewed-source package is meant to carry a
 # human reading of these bytes, that reading is outstanding and is tracked
 # separately — it is not something a digest can record.
+# REPINNED to C10 `7f1bd044b`, 2026-11-10: fattn.cu, fattn-common.cuh,
+# fattn-tile.cuh, mmvq.cu, quantize.cu and vecdotq.cuh moved v10 -> C10; the other
+# four are byte-identical to v10. Same caveat as above: a consistency pin, not a reading.
 _TARGET_SOURCE_SHA256 = MappingProxyType({
-    "ggml/src/ggml-cuda/fattn.cu": "2029cf6741771619544d31df024bef74634373b033b42399ba77612e279a3d54",
-    "ggml/src/ggml-cuda/fattn-common.cuh": "47537d7980d81f7dc9daa18698f5fdbb990ef6b916fa75fed4bc0bbfd1aa08cb",
+    "ggml/src/ggml-cuda/fattn.cu": "85365929b725b3d8ca27714aadfcb93fa8bc147cea4466821e308cba32ba563f",
+    "ggml/src/ggml-cuda/fattn-common.cuh": "0092d2d9d43334bee4890f5a03fe6020581071013c8a511a532821adad5a8ef1",
     "ggml/src/ggml-cuda/fattn-tile.cu": "f57657daf3c5209a32d182bb888ead02b1e806a26273cfa4df8b0a6345ae8247",
-    "ggml/src/ggml-cuda/fattn-tile.cuh": "eaa043031cb9574ec4a0018fc0bea25d3cd7d43230bb23b37e63241e3101d9f0",
-    "ggml/src/ggml-cuda/mmvq.cu": "7ca6eba8866839fdb65efaf9d86dea7854577bf44860f2e83a76a8b45bb4f468",
+    "ggml/src/ggml-cuda/fattn-tile.cuh": "6fe0c4a971edffd5ea36bfcfe93a0d3fdef9b2ca8bcc34e15d144a70007b15b7",
+    "ggml/src/ggml-cuda/mmvq.cu": "5d8a26a1929d8fd38b088c236d114d343d3acba7c470bac8186b9aebcf9b3be2",
     "ggml/src/ggml-cuda/rope.cu": "94f7aed2ff08b84302a23a3c8b792b9a77dd297acb1d772ddf35d46a75d55abc",
     "ggml/src/ggml-cuda/norm.cu": "3c133eec8aab2cf54996d98c4150e2640b5a47af559c9eb5d16f520c03e237a5",
-    "ggml/src/ggml-cuda/quantize.cu": "375a233bdb803243dde1e39b1f02045ed991c2a20e11a26d8ccbc40e3b84eaf9",
+    "ggml/src/ggml-cuda/quantize.cu": "7feac421e858f37d78ac3814cbc7f63f0f143f09592db146b7421077568c3ea7",
     "ggml/src/ggml-cuda/set-rows.cu": "24654fe55234c12b0d4d1e9c78871509fc5348f7e3ff123e146838c861a8c8a9",
-    "ggml/src/ggml-cuda/vecdotq.cuh": "68395a6e448a00afad2a1fb9ebff6aed8b7b18d67c0d54ffecde4be121311e08",
+    "ggml/src/ggml-cuda/vecdotq.cuh": "4076f883d762c6c5ba87c272cfd8e3cb9a64447999b7dd06ddd259249f2a6bec",
 })
 _SAFE_ACTOR_ENVIRONMENT = MappingProxyType({
     "PATH": "/usr/local/bin:/usr/bin:/bin",
@@ -1512,13 +1540,19 @@ def _target_source_equality_receipt(config: deployment.DiscoveryDeployment) -> t
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         production_sha = hashlib.sha256(production_bytes.stdout).hexdigest()
         instrument_sha = hashlib.sha256(instrument_bytes.stdout).hexdigest()
+        # The identity authority is the CHAMPION pin (C10), not production: the
+        # champion legitimately moves reviewed targets past v10. Production's blob
+        # must still exist (the instrument descends from it) and is recorded.
         if (production_bytes.returncode or instrument_bytes.returncode
-                or production_sha != expected or instrument_sha != expected):
+                or instrument_sha != expected):
             raise DeploymentFactoryError(
-                f"production/instrument reviewed target differs: {relative}")
+                f"instrument reviewed target differs from champion pin: {relative}")
         rows[relative] = {"production_blob_sha256": production_sha,
-                          "instrument_blob_sha256": instrument_sha, "equal": True}
-    body = {"schema": "epyc.autokernel.instrument_target_equality.v1",
+                          "instrument_blob_sha256": instrument_sha,
+                          "champion_pin_sha256": expected,
+                          "equal_to_production": production_sha == instrument_sha}
+    body = {"schema": "epyc.autokernel.instrument_target_identity.v2",
+            "authority": "champion",
             "production_commit": config.production_head,
             "instrument_commit": config.instrument_commit, "targets": rows}
     body["receipt_sha256"] = schemas.content_hash(body)
@@ -1550,7 +1584,8 @@ def _instrument_review_receipt(config: deployment.DiscoveryDeployment) -> tuple[
         item.decode("utf-8", "strict") for item in names.stdout.split(b"\0") if item)
     if (diff.returncode or names.returncode
             or hashlib.sha256(diff.stdout).hexdigest() != _INSTRUMENT_DIFF_SHA256
-            or observed_paths != _INSTRUMENT_DIFF_PATHS):
+            or len(observed_paths) != _INSTRUMENT_DIFF_PATH_COUNT
+            or _diff_paths_digest(observed_paths) != _INSTRUMENT_DIFF_PATHS_SHA256):
         raise DeploymentFactoryError("measurement instrument differs from its reviewed delta")
     expected_blobs = {
         "tests/test-backend-ops.cpp": _INSTRUMENT_TEST_SOURCE_SHA256,
@@ -1573,7 +1608,8 @@ def _instrument_review_receipt(config: deployment.DiscoveryDeployment) -> tuple[
         "instrument_branch": config.instrument_branch,
         "instrument_commit": config.instrument_commit,
         "instrument_diff_sha256": _INSTRUMENT_DIFF_SHA256,
-        "reviewed_diff_paths": sorted(_INSTRUMENT_DIFF_PATHS),
+        "reviewed_diff_paths": sorted(observed_paths),
+        "reviewed_diff_paths_sha256": _INSTRUMENT_DIFF_PATHS_SHA256,
         "reviewed_blobs": blobs,
         "ready_continue_capability": {
             "schema": "epyc.autokernel.ready_continue.v1",
