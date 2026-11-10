@@ -348,9 +348,16 @@ def measuring_processes(pid: int | None = None,
 def _orchestrator_root() -> Path | None:
     """The orchestrator checkout that owns the CPU-region lock files, or None.
 
-    Same resolution `claim._ensure_orchestrator_importable` uses, duplicated here (not
+    Same resolution `claim.resolve_orchestrator_root` uses, duplicated here (not
     imported: ak-check's shim runs this file by PATH as a standalone script, with no
-    parent package, so a package-relative `from . import claim` is not available)."""
+    parent package, so a package-relative `from . import claim` is not available):
+    EPYC_ORCHESTRATOR_REPO (exclusive when set), then EPYC_ROOT_REPO's layout, then any
+    sys.path / PYTHONPATH entry holding the lock owner (a hub-view ROOT has no repos/)."""
+    owner = Path("src") / "runtime" / "cpu_region_lock.py"
+    explicit = os.environ.get("EPYC_ORCHESTRATOR_REPO")
+    if explicit:
+        candidate = Path(explicit).resolve()
+        return candidate if (candidate / owner).is_file() else None
     configured = Path(os.environ.get("EPYC_ROOT_REPO", "/workspace")).resolve()
     candidates = [configured, configured / "repos" / "epyc-orchestrator"]
     git_marker = configured / ".git"
@@ -367,9 +374,13 @@ def _orchestrator_root() -> Path | None:
                 candidates.append(common.resolve().parent / "repos" / "epyc-orchestrator")
     except OSError:
         pass
+    candidates.extend(Path(entry or ".").resolve() for entry in sys.path)
     for candidate in candidates:
-        if (candidate / "src" / "runtime" / "cpu_region_lock.py").is_file():
-            return candidate
+        try:
+            if (candidate / owner).is_file():
+                return candidate
+        except OSError:
+            continue
     return None
 
 
