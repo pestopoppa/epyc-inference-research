@@ -12716,6 +12716,11 @@ runtime_quirks:
 # Models deleted 2026-01-18 during MiniMax M2.1 download cleanup
 # Based on BLIND_RESCORE_2026-01-16.md analysis
 deprecated_models:
+  - model: DeepSeek-V4.1-Flash-DSpark (Sept DSpark drafter)
+    path_was: /mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf
+    size_gb: 10.0
+    reason: 'DELETED (file found gone 2026-11-09; deletion approved by operator 2026-11-02, decisions-batch2-4-20261102, DS41-W7.2; queue item OP-DSPARK-RM re-approved 2026-11-11). The Sept 3-block DSpark drafter (10,004,008,256 B) for DeepSeek-V4.1-Flash; no longer needed since DS41-W6.2 was cancelled 2026-10-22. Unmapped, no live references (checked 2026-10-22). Catalogue-only: no roles.*/server_mode.* row, no serving-stack change. The -1017-DSpark.gguf sibling is untouched.'
+    deleted: 2026-11-09
   - model: Qwen_Qwen3.6-35B-A3B-Q8_0.gguf (plain non-MTP)
     path_was: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
     size_gb: 37
