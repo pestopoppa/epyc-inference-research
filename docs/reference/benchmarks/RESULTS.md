@@ -48,6 +48,36 @@ Earlier versions of this table used inflated algorithmic scores — those have b
 
 ---
 
+## CPU Decode Throughput - Serving Lineup Models (production kernel v10) [Protocol: P-BENCH-1, n=10, 2026-11-11, attest hh-92c4b2f171e7]
+
+*Caveat: these are `llama-bench` tg128 at depth 0, single stream, 96 threads, no MTP. They are best-case bench figures, not serving throughput.*
+
+| Model | Quant | Size | Decode t/s (median +/- MAD) | Config | Kernel | Reps / date |
+|---|---|---|---|---|---|---|
+| Qwen3.6-35B-A3B (MTP build) | Q8_0 | 37.8 GB | 57.01 +/- 0.64 | 96t, all NUMA nodes | llama.cpp build 10303 | n=10, 2026-11-11 |
+
+---
+
+## CPU Decode Throughput - Serving Lineup Models (production kernel v10) [Protocol: P-BENCH-1, n=10, 2026-11-11, attest hh-b758c7787cc5]
+
+*Caveat: these are `llama-bench` tg128 at depth 0, single stream, 96 threads, no MTP. They are best-case bench figures, not serving throughput.*
+
+| Model | Quant | Size | Decode t/s (median +/- MAD) | Config | Kernel | Reps / date |
+|---|---|---|---|---|---|---|
+| Qwen3.8-Flash-Next | UD-IQ4_XS | 94.6 GB | 25.59 +/- 0.16 | 96t, all NUMA nodes | llama.cpp build 10303 | n=10, 2026-11-11 |
+
+---
+
+## CPU Decode Throughput - Serving Lineup Models (production kernel v10) [Protocol: P-BENCH-1, n=10, 2026-11-11, attest hh-94c211362192]
+
+*Caveat: these are `llama-bench` tg128 at depth 0, single stream, 96 threads, no MTP. They are best-case bench figures, not serving throughput.*
+
+| Model | Quant | Size | Decode t/s (median +/- MAD) | Config | Kernel | Reps / date |
+|---|---|---|---|---|---|---|
+| Qwen3-VL-30B-A3B-Instruct (text decode) | Q4_K_M | 18.6 GB | 84.42 +/- 1.30 | 96t, all NUMA nodes | llama.cpp build 10303 | n=10, 2026-11-11 |
+
+---
+
 ## Production Throughput - NUMA Deployment (verified 2026-03-21) [Protocol: P-BENCH-2, n=5, 2026-03-21]
 
 Single-model (192t, all cores) vs NUMA-pinned deployment throughput. All values verified by comprehensive spec param sweep (`bench_all_spec_sweeps.sh`, 1,290 measurements).
