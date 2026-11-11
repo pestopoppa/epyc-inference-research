@@ -241,14 +241,29 @@ def assess_case(witness: RouteWitness, records: list[dict], output: str,
                   "use_ref=true reference", str(records))
 
 
+def missing_oracle_parts(build_dir: Path, gdb: str | None = None) -> list[str]:
+    """Name each absent oracle prerequisite (empty when all are present). r5 (2026-11-11)
+    reported only "binary, DSO, GDB or trusted script missing"; the real cause was `gdb`
+    absent from the container image, which this makes visible and checkable in a preflight."""
+    build_dir = Path(build_dir)
+    gdb = gdb if gdb is not None else shutil.which("gdb")
+    parts = {"gdb (not on PATH; install the `gdb` package in the devcontainer image)": gdb,
+             str(build_dir / "bin/test-backend-ops"): (build_dir / "bin/test-backend-ops").is_file(),
+             str(build_dir / "bin/libggml-cpu.so.0"): (build_dir / "bin/libggml-cpu.so.0").is_file(),
+             str(SCRIPT): SCRIPT.is_file()}
+    return [name for name, ok in parts.items() if not ok]
+
+
 def _engagement(build_dir: Path, witness: RouteWitness, *, resolved_recipe) -> Result:
     binary = build_dir / "bin/test-backend-ops"
     dso = build_dir / "bin/libggml-cpu.so.0"
     gdb = shutil.which("gdb")
     if platform.machine().lower() not in {"x86_64", "amd64"}:
         return Result("unavailable", "use_ref register witness requires SysV AMD64")
-    if not gdb or not binary.is_file() or not dso.is_file() or not SCRIPT.is_file():
-        return Result("unavailable", "route witness binary, DSO, GDB or trusted script missing")
+    missing = missing_oracle_parts(build_dir, gdb)
+    if missing:
+        return Result("unavailable", "route witness binary, DSO, GDB or trusted script "
+                      "missing: " + "; ".join(missing))
     kind, location = witness.breakpoint
     read_fd, write_fd = os.pipe()
     env = dict(resolved_recipe.launch_env)

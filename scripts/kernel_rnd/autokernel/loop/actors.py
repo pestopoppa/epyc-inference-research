@@ -3431,7 +3431,10 @@ Propose exactly one hypothesis. Reply with ONE json object and nothing else:
 In either reply, proposal or abstention, "relies_on_claims" lists the claim ids (clm_...) \
 from the belief-kernel evidence section that your answer depends on; [] if none. It is \
 optional and decides nothing about your answer. Only knob-, target- and sibling-scoped \
-claims count; host-ceiling lines are background and are not accepted as reliance.
+claims count; host-ceiling lines are background and are not accepted as reliance. Before \
+answering, read the target-tier and "Tried" lines for your mechanism's family and list every \
+claim id whose result your answer builds on, differs from, or avoids repeating; answer [] \
+only if no shown claim bears on it.
 
 Rules: {profile_rule}; name a MECHANISM, not a wish; \
 state a falsifier that could actually fail. The loop itself owns source inspection, \
