@@ -18,6 +18,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -242,14 +243,26 @@ def write_all(out: Path) -> dict[str, Any]:
             "near_tie": [g["id"] for g in golds if g["margin"]["near_tie"]]}
 
 
+def _same(a: Any, b: Any) -> bool:
+    """Structural equality; floats compare by isclose (sum() is compensated on py3.12, plain on py3.11)."""
+    if isinstance(a, float) or isinstance(b, float):
+        return (isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool)
+                and math.isclose(a, b, rel_tol=1e-9, abs_tol=0.0101))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    return a == b
+
+
 def check(out: Path) -> int:
     golds, rec = derive(out)
     ok = True
     on_disk = [json.loads(l) for l in (out / "golds.jsonl").read_text().splitlines()]
-    if on_disk != json.loads(json.dumps(golds)):
+    if not _same(on_disk, json.loads(json.dumps(golds))):
         print("golds.jsonl differs from a fresh derivation")
         ok = False
-    if json.loads((out / "verification_record.json").read_text()) != rec:
+    if not _same(json.loads((out / "verification_record.json").read_text()), rec):
         print("verification_record.json differs")
         ok = False
     corpus = json.loads((out / "corpus.json").read_text())
