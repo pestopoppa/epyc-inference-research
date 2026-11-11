@@ -13876,3 +13876,49 @@ serving_floors:
       request_digest: 57c9006dfde7443a1bf9b58c08f1ac6834dddcdf3cafcfb770717f141b1d8640
       schema: epyc.autokernel.serving_floor.v2
       unit: process
+    - annotation: ''
+      build:
+        build_dir: /mnt/raid0/llm/kernels/builds/cpu-20261109-7f1bd044b-c10fold
+        commit: 7f1bd044b1e49a88b33460977bd96feae3db8e5c
+        dso_sha256:
+          libggml-base.so: c089c586778a32f51bc0f99a8d8c27e8a85f0cfbeed9cd1e128ad92d88fe62d5
+          libggml-base.so.0: c089c586778a32f51bc0f99a8d8c27e8a85f0cfbeed9cd1e128ad92d88fe62d5
+          libggml-cpu.so: b942138dcc00ea1d48b6b7815d8f1c4cbafdfee3f5ff8d4945d1a2307a63678d
+          libggml-cpu.so.0: b942138dcc00ea1d48b6b7815d8f1c4cbafdfee3f5ff8d4945d1a2307a63678d
+          libggml.so: 0ef1f53e033e8493d5e572cd38c63d9c3e610fa4c29c4da4e5f700615a50c980
+          libggml.so.0: 0ef1f53e033e8493d5e572cd38c63d9c3e610fa4c29c4da4e5f700615a50c980
+          libllama-common.so: 7befaa6f97e119d92b3b22e1188a6e4fe3adca599fd2c403ae21ec250f755bb7
+          libllama-common.so.0: 7befaa6f97e119d92b3b22e1188a6e4fe3adca599fd2c403ae21ec250f755bb7
+          libllama-server-impl.so: e9fb951a2a9084726f99b9fb2ac9ca58b2e643995f0911664612f454150fc284
+          libllama.so: 94697aa1909e987faa6b394bd9db982521b6fd8af16f9300ab55d388afce7338
+          libllama.so.0: 94697aa1909e987faa6b394bd9db982521b6fd8af16f9300ab55d388afce7338
+          libmtmd.so: e62976f494f653ac9f8579322f9a9fcb92de5679fdfc0d173c72963b76b51e63
+          libmtmd.so.0: e62976f494f653ac9f8579322f9a9fcb92de5679fdfc0d173c72963b76b51e63
+        executable_sha256: bf0faf0dd5ebf748b715c97445a5a51b894c8408cde90291aaf914b7a5894718
+        execution_digest: 809b852030ccc7711161c211993374abbb0ee2010894ebef57cc9d39ba2b9c76
+      champion_tree_hash: c66f28f9a39f1c335af2d79ee50367c2b69b56bb48b531cd4dc1f2a6bb243638
+      content_sha256: 0fa26952b5f14af57e4eec8117481ba70606d69e865e110031607d7c0a4b901e
+      equivalence_key: bbd8c15aea620e496b9539c7dd50fc7d8f2f78babe5edf648a51cf0e246ef746
+      floor_pct: 0.703
+      frame_digest: 9d1927958be555768ffb11526a7e92aadbb58d55553176cd2e34acf1c5386a8b
+      grade:
+        claim_class: decision
+        co_tenancy: quiet
+        threads: 48
+      id: 0fa26952b5f14af5
+      interval:
+        high_pct: 1.0182499999999999
+        level: 0.95
+        low_pct: 0.539
+      k: 5
+      measured_at: '2026-11-10T14:01:39Z'
+      model_sha: 5ce89370720f8bf90890f439361282104c1aa1482d4013bb9a50923e758e71a4
+      n: 24
+      numerics_epoch: default
+      recipe: q38fn-802bf9ac6-cpu-t48-mtp-d4-lc64k-23eea2fa
+      recipe_hash: 748ea78d3b20d29e11f451efde48eaedbf336300e04aac23707a756519428ef2
+      record: /mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store-b0ba1d427/longctx/q38fn-802bf9ac6-cpu-t48-mtp-d4/floors/anchors/809b852030ccc771/serving-floor.q38fn-802bf9ac6-cpu-t48-mtp-d4-lc64k-23eea2fa.requests-0445fd119ede8328365a9ecf94daee939b320025886ae5a50131ef9382c97324.matched_process_v2.pairs-5.json
+      record_sha256: 7c411fc54acaca85828bda6691576e57a49f76f0da055ab424dbf1379a3d06b7
+      request_digest: 0445fd119ede8328365a9ecf94daee939b320025886ae5a50131ef9382c97324
+      schema: epyc.autokernel.serving_floor.v2
+      unit: process
