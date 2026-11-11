@@ -147,5 +147,11 @@
     "n_predict": 32,
     "prompts": 1
   },
-  "window": "W0"
+  "window": "W0",
+  "superseded_by_run": {
+    "run_dir": "data/batched_decode/e5-w0-gemma-20260723T203422Z",
+    "run_of_record_manifest": "data/batched_decode/e5_manifests_w0/gemma4_26b_a4b_q4km_mtp/gemma4_26b_a4b_q4km_mtp-C3-np4-scout.json",
+    "stamped_by": "scripts/benchmark/e5_v2_qualify_banked.py --stamp (INF-45 E5 v2, 2026-11-11)",
+    "meaning": "this file is a post-5d6a17f2 regeneration of a CLOSED W0 cell; it does not describe what W0 executed \u2014 read the run of record instead"
+  }
 }

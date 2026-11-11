@@ -801,6 +801,43 @@ def _is_int(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+# E5 v2 depth probe (INF-45 capacity curves, 2026-11-11). An OPT-IN block: a
+# manifest without ``depth_probe`` is validated exactly as before. With it, the
+# prompt batch is a pinned long-context pool (e5_v2_stageb_grid.py build-pools,
+# content-addressed by ``pool_sha256``) and the KV budget is np x the probe's
+# per-stream ctx. The harness is unchanged: it already replays pinned qids from
+# ``prompt_batch.source`` under ``prompt_caps.max_prompt_chars``.
+DEPTH_MAX_PROMPT_CHARS = 200_000
+DEPTH_MIN_TARGET_TOKENS = 1024
+
+
+def _depth_probe_check(manifest: dict) -> tuple[list[str], dict | None]:
+    block = manifest.get("depth_probe")
+    if block is None:
+        return [], None
+    errs: list[str] = []
+    if not isinstance(block, dict):
+        return ["depth_probe must be an object when present"], None
+    tgt = block.get("target_depth_tokens")
+    psc = block.get("per_stream_ctx")
+    mpc = block.get("max_prompt_chars")
+    qids = block.get("qids")
+    if not _is_int(tgt) or tgt < DEPTH_MIN_TARGET_TOKENS:
+        errs.append(f"depth_probe.target_depth_tokens {tgt!r} must be an int >= {DEPTH_MIN_TARGET_TOKENS}")
+    if not _is_int(psc) or (_is_int(tgt) and psc <= tgt):
+        errs.append(f"depth_probe.per_stream_ctx {psc!r} must be an int > target_depth_tokens")
+    if not _is_int(mpc) or not (0 < mpc <= DEPTH_MAX_PROMPT_CHARS):
+        errs.append(f"depth_probe.max_prompt_chars {mpc!r} must be in (0,{DEPTH_MAX_PROMPT_CHARS}]")
+    if not isinstance(qids, list) or not qids or any(not isinstance(q, str) for q in qids):
+        errs.append("depth_probe.qids must be a non-empty list of strings")
+    sha = block.get("pool_sha256")
+    if not isinstance(sha, str) or len(sha) != 64:
+        errs.append("depth_probe.pool_sha256 must be a 64-hex content pin of the pool file")
+    if errs:
+        return errs, None
+    return [], block
+
+
 def validate_cell_manifest(manifest: dict) -> list[str]:
     """Validate one cell manifest; return human-readable violations ([] = valid).
 
@@ -1030,14 +1067,25 @@ def validate_cell_manifest(manifest: dict) -> list[str]:
             )
 
     # -- ctx sizing rule -----------------------------------------------------
+    depth_errors, depth = _depth_probe_check(manifest)
+    errors.extend(depth_errors)
     per_stream_ctx = manifest.get("per_stream_ctx")
-    if per_stream_ctx != PER_STREAM_CTX:
+    if depth is not None:
+        # E5 v2 depth probe (INF-45 capacity curves): KV budget = np x the
+        # probe's own per-stream ctx (prompt depth + n_predict + margin).
+        if per_stream_ctx != depth["per_stream_ctx"]:
+            err(f"per_stream_ctx {per_stream_ctx!r} != depth_probe.per_stream_ctx "
+                f"{depth['per_stream_ctx']!r}")
+        if _is_int(np) and manifest.get("ctx") != depth["per_stream_ctx"] * np:
+            err(f"ctx {manifest.get('ctx')!r} != depth_probe.per_stream_ctx*np = "
+                f"{depth['per_stream_ctx'] * np}")
+    elif per_stream_ctx != PER_STREAM_CTX:
         err(
             f"per_stream_ctx {per_stream_ctx!r} != {PER_STREAM_CTX} (the "
             f"verified sizing constant, protocol decision 1)"
         )
     ctx = manifest.get("ctx")
-    if _is_int(np):
+    if _is_int(np) and depth is None:
         expected_ctx = compute_ctx(np)
         if ctx != expected_ctx:
             err(
@@ -1057,7 +1105,8 @@ def validate_cell_manifest(manifest: dict) -> list[str]:
             f"(Stage-B work parity) or {N_PREDICT_SCOUT} (W0 scout)"
         )
     max_prompt_chars = prompt_caps.get("max_prompt_chars")
-    if not _is_int(max_prompt_chars) or not (0 < max_prompt_chars <= MAX_PROMPT_CHARS):
+    prompt_char_cap = depth["max_prompt_chars"] if depth is not None else MAX_PROMPT_CHARS
+    if not _is_int(max_prompt_chars) or not (0 < max_prompt_chars <= prompt_char_cap):
         err(
             f"prompt_caps.max_prompt_chars {max_prompt_chars!r} must be in "
             f"(0,{MAX_PROMPT_CHARS}] — fail-closed guard against qid-pinning "
@@ -1075,7 +1124,10 @@ def validate_cell_manifest(manifest: dict) -> list[str]:
             f"rebuilt 2026-07-21; would select a ~25k-token prompt)"
         )
     qids = batch.get("qids")
-    if qids != E1_PINNED_QIDS:
+    if depth is not None:
+        if qids != depth["qids"]:
+            err("prompt_batch.qids is not exactly depth_probe.qids (depth pool pin)")
+    elif qids != E1_PINNED_QIDS:
         err(
             "prompt_batch.qids is not exactly the 43-qid E1 pinned batch "
             f"(e1-pbench3-clean-20260703T1912Z selection; got "
@@ -1085,7 +1137,8 @@ def validate_cell_manifest(manifest: dict) -> list[str]:
         err("prompt_batch.source missing or empty")
     if not isinstance(batch.get("pinned_from"), str) or not batch.get("pinned_from"):
         err("prompt_batch.pinned_from missing or empty")
-    for field, expected in (("tier", 1), ("seed", 42), ("limit", 43)):
+    expected_limit = len(depth["qids"]) if depth is not None else 43
+    for field, expected in (("tier", 1), ("seed", 42), ("limit", expected_limit)):
         if batch.get(field) != expected:
             err(f"prompt_batch.{field} {batch.get(field)!r} != {expected} (provenance record)")
 

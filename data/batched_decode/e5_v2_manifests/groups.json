@@ -1,0 +1,108 @@
+[
+  {
+    "group": "qwen36_q8_0",
+    "model_key": "qwen36_q8_0",
+    "n_cells": 13,
+    "estimate_s": 4680,
+    "cells": [
+      "qwen36_q8_0-C1-np1",
+      "qwen36_q8_0-C1-np2",
+      "qwen36_q8_0-C1-np4",
+      "qwen36_q8_0-C1-np8",
+      "qwen36_q8_0-C1-np16",
+      "qwen36_q8_0-C1-np32",
+      "qwen36_q8_0-C1b-np1",
+      "qwen36_q8_0-C1b-np2",
+      "qwen36_q8_0-C1b-np4",
+      "qwen36_q8_0-C1b-np8",
+      "qwen36_q8_0-C1b-np16",
+      "qwen36_q8_0-C1b-np4-defectctl",
+      "qwen36_q8_0-C1b-np8-defectctl"
+    ]
+  },
+  {
+    "group": "qwen36_q8_0-d16k",
+    "model_key": "qwen36_q8_0",
+    "n_cells": 4,
+    "estimate_s": 1800,
+    "cells": [
+      "qwen36_q8_0-C1-np1-d16k",
+      "qwen36_q8_0-C1-np2-d16k",
+      "qwen36_q8_0-C1-np4-d16k",
+      "qwen36_q8_0-C1-np8-d16k"
+    ]
+  },
+  {
+    "group": "qwen36_q8_0-d32k",
+    "model_key": "qwen36_q8_0",
+    "n_cells": 4,
+    "estimate_s": 3600,
+    "cells": [
+      "qwen36_q8_0-C1-np1-d32k",
+      "qwen36_q8_0-C1-np2-d32k",
+      "qwen36_q8_0-C1-np4-d32k",
+      "qwen36_q8_0-C1-np8-d32k"
+    ]
+  },
+  {
+    "group": "qwen38_flash_next_ud_iq4xs-p1",
+    "model_key": "qwen38_flash_next_ud_iq4xs",
+    "n_cells": 7,
+    "estimate_s": 3780,
+    "cells": [
+      "qwen38_flash_next_ud_iq4xs-C1-np1",
+      "qwen38_flash_next_ud_iq4xs-C1-np2",
+      "qwen38_flash_next_ud_iq4xs-C1-np4",
+      "qwen38_flash_next_ud_iq4xs-C1-np8",
+      "qwen38_flash_next_ud_iq4xs-C1-np16",
+      "qwen38_flash_next_ud_iq4xs-C1-np32",
+      "qwen38_flash_next_ud_iq4xs-C1b-np1"
+    ]
+  },
+  {
+    "group": "qwen38_flash_next_ud_iq4xs-p2",
+    "model_key": "qwen38_flash_next_ud_iq4xs",
+    "n_cells": 6,
+    "estimate_s": 3240,
+    "cells": [
+      "qwen38_flash_next_ud_iq4xs-C1b-np2",
+      "qwen38_flash_next_ud_iq4xs-C1b-np4",
+      "qwen38_flash_next_ud_iq4xs-C1b-np8",
+      "qwen38_flash_next_ud_iq4xs-C1b-np16",
+      "qwen38_flash_next_ud_iq4xs-C1b-np4-defectctl",
+      "qwen38_flash_next_ud_iq4xs-C1b-np8-defectctl"
+    ]
+  },
+  {
+    "group": "qwen38_flash_next_ud_iq4xs-d16k",
+    "model_key": "qwen38_flash_next_ud_iq4xs",
+    "n_cells": 4,
+    "estimate_s": 2700,
+    "cells": [
+      "qwen38_flash_next_ud_iq4xs-C1-np1-d16k",
+      "qwen38_flash_next_ud_iq4xs-C1-np2-d16k",
+      "qwen38_flash_next_ud_iq4xs-C1-np4-d16k",
+      "qwen38_flash_next_ud_iq4xs-C1-np8-d16k"
+    ]
+  },
+  {
+    "group": "qwen38_flash_next_ud_iq4xs-d32k-p1",
+    "model_key": "qwen38_flash_next_ud_iq4xs",
+    "n_cells": 2,
+    "estimate_s": 2700,
+    "cells": [
+      "qwen38_flash_next_ud_iq4xs-C1-np1-d32k",
+      "qwen38_flash_next_ud_iq4xs-C1-np2-d32k"
+    ]
+  },
+  {
+    "group": "qwen38_flash_next_ud_iq4xs-d32k-p2",
+    "model_key": "qwen38_flash_next_ud_iq4xs",
+    "n_cells": 2,
+    "estimate_s": 2700,
+    "cells": [
+      "qwen38_flash_next_ud_iq4xs-C1-np4-d32k",
+      "qwen38_flash_next_ud_iq4xs-C1-np8-d32k"
+    ]
+  }
+]

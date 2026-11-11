@@ -127,5 +127,11 @@
   "decision_grade_intent": false,
   "notes": "ingest arm (operator-added 2026-07-23); kv_unified forced false (SSM/hybrid, tree-spec Phase-8 scar); C1b half-pair ratio is same-shape evidence for WP-9",
   "stage_b_families": [],
-  "model_path_present": true
+  "model_path_present": true,
+  "superseded_by_run": {
+    "run_dir": "data/batched_decode/e5-w0-80b-20260723T221055Z",
+    "run_of_record_manifest": "data/batched_decode/e5_manifests_w0/qwen3_next_80b/qwen3_next_80b-C1-np8-scout.json",
+    "stamped_by": "scripts/benchmark/e5_v2_qualify_banked.py --stamp (INF-45 E5 v2, 2026-11-11)",
+    "meaning": "this file is a post-5d6a17f2 regeneration of a CLOSED W0 cell; it does not describe what W0 executed \u2014 read the run of record instead"
+  }
 }
