@@ -2,6 +2,7 @@
 import json
 import os
 import tempfile
+import math
 import unittest
 
 from autokernel.loop import numerics_gates as ng
@@ -65,6 +66,25 @@ class NativeJudge(unittest.TestCase):
                          ["finite", "finite", "finite", "nan", "+inf", "finite", "+inf", "+inf", "finite"])
         self.assertEqual([d["row"] for d in nn.ieee_deviations()], [1, 2, 7, 8])
         self.assertEqual(nn.judge("")["ieee_deviations"][0]["row"], 1)
+
+    def test_gpu_reference_drops_every_nan(self):
+        self.assertEqual(nn.ggml_pool_max_reference(backend="HIP"),
+                         ["finite", "finite", "finite", "finite", "+inf", "finite", "+inf", "+inf", "finite"])
+        nan, ninf = float("nan"), float("-inf")
+        self.assertEqual(nn.gpu_pool_max_row([nan, nan]), -nn.FLT_MAX)
+        self.assertEqual(nn.gpu_pool_max_row([ninf, ninf]), -nn.FLT_MAX)
+        self.assertEqual(nn.gpu_pool_max_row([1.0, nan]), 1.0)
+        self.assertTrue(math.isnan(nn.pool_max_row_for("CPU", [1.0, nan])))
+        self.assertEqual(nn.pool_max_row_for("ROCm0", [1.0, nan]), 1.0)
+
+    def test_gpu_receipt_judged_with_gpu_reference(self):
+        mx = [nn.gpu_pool_max_row(r) for r in ng.non_finite_inputs()]
+        r = {"schema": ng.SCHEMA, "variant": "incumbent", "backend": "HIP", "max_rows": mx,
+             "dot_rows": ng.CLEAN.dot_rows(*ng.accum_inputs())}
+        vs = ng.verdict_from_receipt(r, want_max=nn.ggml_pool_max_reference(backend="HIP"))
+        self.assertTrue(all(v.passed for v in vs), [v.reason for v in vs])
+        r["backend"] = "CPU"  # same numbers are wrong under the CPU reference
+        self.assertFalse(ng.verdict_from_receipt(r, want_max=nn.ggml_pool_max_reference(backend="CPU"))[0].passed)
 
     def test_nan_dropping_beyond_ggml_semantics_still_fails(self):
         # a kernel that ALSO drops the tail NaN (row 3) deviates from the ggml reference

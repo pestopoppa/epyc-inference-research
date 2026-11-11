@@ -32,14 +32,31 @@ def ggml_pool_max_row(row: Sequence[float]) -> float:
     return res
 
 
+def gpu_pool_max_row(row: Sequence[float]) -> float:
+    """ggml CUDA/HIP GGML_OP_POOL_2D(MAX) (ggml-cuda/pool2d.cu:32,45 at C10 7f1bd044b): `res = -FLT_MAX;
+    res = max(res, (float)cur)` where device max(float,float) is fmaxf. fmaxf returns the non-NaN
+    operand, and `res` is never NaN, so a NaN element is ALWAYS dropped (even in the last position; an
+    all-NaN row yields -FLT_MAX); an all--Inf row yields -FLT_MAX."""
+    res = -FLT_MAX
+    for x in row:
+        if not math.isnan(x):
+            res = max(res, x)
+    return res
+
+
+def pool_max_row_for(backend: str, row: Sequence[float]) -> float:
+    """CPU backend -> std::max chain; any other (HIP/ROCm/CUDA) -> fmaxf chain."""
+    return ggml_pool_max_row(row) if str(backend).upper() == "CPU" else gpu_pool_max_row(row)
+
+
 #: the native incumbent's documented max semantics (the row max is POOL_2D, not an IEEE reduction)
 GGML_POOL_MAX_OP = ng.Op("ggml_pool2d_max", lambda rows: [ggml_pool_max_row(r) for r in rows],
                          ng.CLEAN.dot_rows)
 
 
-def ggml_pool_max_reference(rows=None) -> list[str]:
+def ggml_pool_max_reference(rows=None, backend: str = "CPU") -> list[str]:
     rows = ng.non_finite_inputs() if rows is None else rows
-    return [ng.value_class(ggml_pool_max_row(r)) for r in rows]
+    return [ng.value_class(pool_max_row_for(backend, r)) for r in rows]
 
 
 def ieee_deviations(rows=None) -> list[dict]:
@@ -92,7 +109,7 @@ def judge(text: str) -> dict[str, Any]:
         if r is None:
             problems.append(f"receipt_missing: {name}")
             continue
-        vs = ng.verdict_from_receipt(r, want_max=ggml_pool_max_reference())
+        vs = ng.verdict_from_receipt(r, want_max=ggml_pool_max_reference(backend=r.get("backend", "CPU")))
         verdicts[name] = [{"gate": v.gate, "passed": v.passed, "reason": v.reason} for v in vs]
         passed = {v.gate: v.passed for v in vs}
         if name == "incumbent":
