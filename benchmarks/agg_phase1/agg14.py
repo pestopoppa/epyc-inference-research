@@ -223,7 +223,7 @@ def seed_units(rec: P.Recorder, agg11_results: Path) -> dict[str, Any]:
     for unit, r in sorted(ok.items()):
         if unit in rec.done:
             continue
-        rec.emit("l4_unit", **{k: v for k, v in r.items() if k not in ("kind", "ts")}, reused=True,
+        rec.emit("l4_unit", **{k: v for k, v in r.items() if k not in ("kind", "ts", "reused", "reused_from")}, reused=True,
                  reused_from=str(agg11_results))
         n += 1
     seeded = [r for r in rec.records if r["kind"] == "l4_unit" and r.get("reused")]

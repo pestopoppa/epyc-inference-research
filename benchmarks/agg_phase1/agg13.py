@@ -422,7 +422,7 @@ def seed_units(rec: P.Recorder, agg11_results: Path, corpus: dict[str, Any]) -> 
     for unit, r in sorted(ok.items()):
         if r.get("doc") not in keep or unit in rec.done:
             continue
-        rec.emit("l4_unit", **{k: v for k, v in r.items() if k not in ("kind", "ts")}, reused=True,
+        rec.emit("l4_unit", **{k: v for k, v in r.items() if k not in ("kind", "ts", "reused", "reused_from")}, reused=True,
                  reused_from=str(agg11_results))
         n += 1
     ing = next((r for r in recs if r.get("kind") == "ingest"), None)

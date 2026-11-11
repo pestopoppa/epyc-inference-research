@@ -318,5 +318,27 @@ class CliDryRunTests(unittest.TestCase):
         self.assertEqual(before, (st.stat().st_mtime_ns, st.stat().st_size, sha(st)))
 
 
+class SeedFromAgg11ReusedRecordTests(unittest.TestCase):
+    """Regression: AGG-1.1 results already carry ``reused``/``reused_from`` on their L4 units; seed_units passes both
+    explicitly, so copying them through raised ``TypeError: emit() got multiple values for keyword argument 'reused'``."""
+
+    REAL_AGG11_RECORD = json.loads(
+        '{"kind": "l4_unit", "ts": 1794409385.2753885, "unit": "l4:capex:AES_2022_10K", "field": "capex", "doc": "AES_2022_10K", "status": "ok", "ok": true, "n_candidates": 6, "n_facts": 1, "n_conflicts": 0, "receipts": [{"stage": "L4a_admit", "calls": 0, "prompt_tokens": 0, "cache_n": 0, "rejected": 0, "notes": []}, {"stage": "L4b_extract", "calls": 6, "prompt_tokens": 7332, "cache_n": 0, "rejected": 0, "notes": []}], "llm_calls": 6, "prefill_tokens": 7332, "wall_s": 34.122517108917236, "final": true, "reused": true, "reused_from": "/mnt/raid0/llm/tmp/agg0-arms-cpu-20261110-r2/out/results.jsonl"}'
+    )
+
+    def test_seed_from_record_that_already_has_reused(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            src = td / "agg11.jsonl"
+            src.write_text(json.dumps(self.REAL_AGG11_RECORD) + "\n")
+            rec = P.Recorder(td / "out" / "results.jsonl")
+            G.seed_units(rec, src)
+            got = [r for r in rec.records if r["kind"] == "l4_unit"]
+            self.assertEqual(len(got), 1)
+            self.assertIs(got[0]["reused"], True)
+            self.assertEqual(got[0]["reused_from"], str(src))
+            self.assertEqual(got[0]["unit"], self.REAL_AGG11_RECORD["unit"])
+
+
 if __name__ == "__main__":
     unittest.main()
