@@ -1,0 +1,29 @@
+doc_name,company,metric,fiscal_year,value_usd_m,status,page,quote,reviewer,note,unit,confidence,verified
+AMERICANWATERWORKS_2022_10K,American Water Works,long_term_debt,2022,10926,filled,82,"Long-term debt 10,926 10,341",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+CORNING_2022_10K,Corning,long_term_debt,2022,6687,filled,60,"Long-term debt (Note 11) 6,687",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JPMORGAN_2022_10K,JPMorgan,long_term_debt,2022,295865,filled,163,"Long-term debt (included $72,281 and $74,934 at fair value) 295,865",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+PAYPAL_2022_10K,Paypal,long_term_debt,2022,10417,filled,61,"Long-term debt 10,417",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+VERIZON_2022_10K,Verizon,long_term_debt,2022,140676,filled,56,"Long-term debt 140,676",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AES_2022_10K,AES Corporation,long_term_debt,2022,,NA,130,"Recourse debt 3,894 3,729",agg14-reader1 + pypdf cross-extractor 2026-11-11,"NA: balance sheet prints 'Non-recourse debt' and 'Recourse debt' lines, none labeled long-term debt",USD millions,high,true
+COCACOLA_2022_10K,Coca-Cola,long_term_debt,2022,36377,filled,65,"Long-term debt 36,377",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+GENERALMILLS_2022_10K,General Mills,long_term_debt,2022,9134.8,filled,47,"Long-term debt 9,134.8",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+LOCKHEEDMARTIN_2022_10K,Lockheed Martin,long_term_debt,2022,15429,filled,65,"Long-term debt, net 15,429",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+PEPSICO_2022_10K,PepsiCo,long_term_debt,2022,35657,filled,66,"Long-Term Debt Obligations 35,657",agg14-reader1 + pypdf cross-extractor 2026-11-11,label 'Long-Term Debt Obligations',USD millions,medium,true
+3M_2022_10K,3M,long_term_debt,2022,14001,filled,50,"Long-term debt 14,001",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ACTIVISIONBLIZZARD_2022_10K,Activision Blizzard,long_term_debt,2022,3611,filled,67,"Long-term debt, net 3,611",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ADOBE_2022_10K,Adobe,long_term_debt,2022,,NA,53,"Debt 3,629 4,123",agg14-reader1 + pypdf cross-extractor 2026-11-11,"NA: balance sheet prints 'Debt' (non-current 3,629), not labeled long-term debt",USD millions,high,true
+AMAZON_2022_10K,Amazon,long_term_debt,2022,67150,filled,39,"Long-term debt 48,744 67,150",agg14-reader1 + pypdf cross-extractor 2026-11-11,"columns are 2021 then 2022 (reversed): FY2022 = 67,150",USD millions,medium,true
+AMD_2022_10K,AMD,long_term_debt,2022,2467,filled,56,"Long-term debt, net of current portion 2,467",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMERICANEXPRESS_2022_10K,American Express,long_term_debt,2022,42573,filled,98,"Long-term debt (includes debt issued by consolidated variable interest entities: 2022, $12,662; 2021, $13,803) 42,573",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,medium,true
+APPLE_2022_10K,Apple,long_term_debt,2022,,NA,34,"Term debt 98,959 109,106",agg14-reader1 + pypdf cross-extractor 2026-11-11,"NA: balance sheet prints 'Term debt' (non-current 98,959), not labeled long-term debt",USD millions,high,true
+BOEING_2022_10K,Boeing,long_term_debt,2022,51811,filled,57,"Long-term debt 51,811",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+COSTCO_2022_10K,Costco,long_term_debt,2022,6484,filled,38,"Long-term debt, excluding current portion 6,484",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+CVSHEALTH_2022_10K,CVS Health,long_term_debt,2022,50476,filled,110,"Long-term debt 50,476",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+EBAY_2022_10K,eBay,long_term_debt,2022,7721,filled,58,"Long-term debt 7,721",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,long_term_debt,2022,26888,filled,46,"Long-term debt (Note 7) 26,888",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+KRAFTHEINZ_2022_10K,Kraft Heinz,long_term_debt,2022,19233,filled,54,"Long-term debt 19,233",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MCDONALDS_2022_10K,McDonald's,long_term_debt,2022,35903.5,filled,38,"Long-term debt 35,903.5",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MGMRESORTS_2022_10K,MGM Resorts,long_term_debt,2022,7432.817,filled,59,"Long-term debt, net 7,432,817",agg14-reader1 + pypdf cross-extractor 2026-11-11,"filing in USD thousands: 7,432,817 thousand",USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,long_term_debt,2022,47032,filled,59,"Long-term debt 47,032",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+NETFLIX_2022_10K,Netflix,long_term_debt,2022,14353.076,filled,43,"Long-term debt 14,353,076",agg14-reader1 + pypdf cross-extractor 2026-11-11,"filing in USD thousands: 14,353,076 thousand",USD millions,high,true
+PFIZER_2022_10K,Pfizer,long_term_debt,2022,32884,filled,56,"Long-term debt 32,884",agg14-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true

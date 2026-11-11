@@ -1,0 +1,291 @@
+{
+ "schema": "agg_phase1_xcheck.v1",
+ "summary": {
+  "cells": 28,
+  "checked": 28,
+  "fails": 0,
+  "single_page_cells": 4
+ },
+ "cells": [
+  {
+   "doc": "AMERICANWATERWORKS_2022_10K",
+   "metric": "long_term_debt",
+   "page": 82,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "CORNING_2022_10K",
+   "metric": "long_term_debt",
+   "page": 60,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "JPMORGAN_2022_10K",
+   "metric": "long_term_debt",
+   "page": 163,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 4,
+   "ok": true
+  },
+  {
+   "doc": "PAYPAL_2022_10K",
+   "metric": "long_term_debt",
+   "page": 61,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "VERIZON_2022_10K",
+   "metric": "long_term_debt",
+   "page": 56,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "AES_2022_10K",
+   "metric": "long_term_debt",
+   "page": 130,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": null,
+   "pages_with_value": null,
+   "ok": true
+  },
+  {
+   "doc": "COCACOLA_2022_10K",
+   "metric": "long_term_debt",
+   "page": 65,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "GENERALMILLS_2022_10K",
+   "metric": "long_term_debt",
+   "page": 47,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "LOCKHEEDMARTIN_2022_10K",
+   "metric": "long_term_debt",
+   "page": 65,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "PEPSICO_2022_10K",
+   "metric": "long_term_debt",
+   "page": 66,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "3M_2022_10K",
+   "metric": "long_term_debt",
+   "page": 50,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "ACTIVISIONBLIZZARD_2022_10K",
+   "metric": "long_term_debt",
+   "page": 67,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "ADOBE_2022_10K",
+   "metric": "long_term_debt",
+   "page": 53,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": null,
+   "pages_with_value": null,
+   "ok": true
+  },
+  {
+   "doc": "AMAZON_2022_10K",
+   "metric": "long_term_debt",
+   "page": 39,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "AMD_2022_10K",
+   "metric": "long_term_debt",
+   "page": 56,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "AMERICANEXPRESS_2022_10K",
+   "metric": "long_term_debt",
+   "page": 98,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 4,
+   "ok": true
+  },
+  {
+   "doc": "APPLE_2022_10K",
+   "metric": "long_term_debt",
+   "page": 34,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": null,
+   "pages_with_value": null,
+   "ok": true
+  },
+  {
+   "doc": "BOEING_2022_10K",
+   "metric": "long_term_debt",
+   "page": 57,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "COSTCO_2022_10K",
+   "metric": "long_term_debt",
+   "page": 38,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "CVSHEALTH_2022_10K",
+   "metric": "long_term_debt",
+   "page": 110,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "EBAY_2022_10K",
+   "metric": "long_term_debt",
+   "page": 58,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "metric": "long_term_debt",
+   "page": 46,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "KRAFTHEINZ_2022_10K",
+   "metric": "long_term_debt",
+   "page": 54,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "MCDONALDS_2022_10K",
+   "metric": "long_term_debt",
+   "page": 38,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "MGMRESORTS_2022_10K",
+   "metric": "long_term_debt",
+   "page": 59,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "metric": "long_term_debt",
+   "page": 59,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "NETFLIX_2022_10K",
+   "metric": "long_term_debt",
+   "page": 43,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "PFIZER_2022_10K",
+   "metric": "long_term_debt",
+   "page": 56,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  }
+ ]
+}

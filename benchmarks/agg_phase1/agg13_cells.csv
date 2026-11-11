@@ -1,0 +1,25 @@
+doc_name,company,metric,fiscal_year,value_usd_m,status,page,quote,reviewer,note,unit,confidence,verified
+MICROSOFT_2022_10K,Microsoft,revenue,2021,168088,filled,57,"Total revenue 168,088",agg13-reader1 + pypdf cross-extractor 2026-11-11,"replacement filing MICROSOFT_2021_10K.pdf, fiscal 2021 ended Jun 30, 2021",USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,net_income,2021,61271,filled,57,"Net income $ 61,271",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,capex,2021,20622,filled,60,"Additions to property and equipment (20,622",agg13-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,total_assets,2021,333779,filled,59,"Total assets $ 333,779",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,operating_cash_flow,2021,76740,filled,60,"Net cash from operations 76,740",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,total_current_assets,2021,184406,filled,59,"Total current assets 184,406",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,total_current_liabilities,2021,88657,filled,59,"Total current liabilities 88,657",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,dividends_paid,2021,16521,filled,60,"Common stock cash dividends paid (16,521",agg13-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,revenue,2021,93775,filled,48,"Sales to customers $ 93,775",agg13-reader1 + pypdf cross-extractor 2026-11-11,"replacement filing JOHNSON_JOHNSON_2021_10K.pdf, fiscal 2021 ended Jan 2, 2022",USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,net_income,2021,20878,filled,48,"Net earnings $ 20,878",agg13-reader1 + pypdf cross-extractor 2026-11-11,no noncontrolling interest line,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,capex,2021,3652,filled,51,"Additions to property, plant and equipment (3,652",agg13-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,total_assets,2021,182018,filled,47,"Total assets $ 182,018",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,operating_cash_flow,2021,23410,filled,51,"Net cash flows from operating activities 23,410",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,total_current_assets,2021,60979,filled,47,"Total current assets 60,979",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,total_current_liabilities,2021,45226,filled,47,"Total current liabilities 45,226",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,dividends_paid,2021,11032,filled,51,"Dividends to shareholders (11,032",agg13-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+3M_2022_10K,3M,revenue,2021,35355,filled,45,"Net sales $ 35,355",agg13-reader1 + pypdf cross-extractor 2026-11-11,"replacement filing 3M_2021_10K.pdf, fiscal 2021 ended Dec 31, 2021",USD millions,high,true
+3M_2022_10K,3M,net_income,2021,5921,filled,45,"Net income attributable to 3M $ 5,921",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,capex,2021,1603,filled,49,"Purchases of property, plant and equipment (PP&E) (1,603",agg13-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+3M_2022_10K,3M,total_assets,2021,47072,filled,47,"Total assets $ 47,072",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,operating_cash_flow,2021,7454,filled,49,"Net cash provided by (used in) operating activities 7,454",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,total_current_assets,2021,15403,filled,47,"Total current assets 15,403",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,total_current_liabilities,2021,9035,filled,47,"Total current liabilities 9,035",agg13-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,dividends_paid,2021,3420,filled,49,"Dividends paid to shareholders (3,420",agg13-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
