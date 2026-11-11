@@ -26,11 +26,12 @@ Box: epyc-root handoffs/active/numa-placement-and-contention.md ->
   (e) the harness (server_numa_np_sweep.py) is UNCHANGED. Depth probes ride the
       schema owner's opt-in ``depth_probe`` block (e5_cell_manifests.py).
 
-Halves and shared mmap. The harness serves weights by mmap (no --no-mmap knob), so
-the two C1b instances share ONE page cache of the GGUF: own-node interleave
-(0,1 | 2,3) is not realisable — whichever instance faults first places every page.
-C1b therefore declares interleave over all four nodes on both halves (consistent,
-attestable), and the C1b defect controls (policy none) replicate the old defect.
+Halves and private copies (pipeline-mgmt 2026-11-11). With a shared mmap the two C1b
+instances share ONE page cache of the GGUF, so each half's weights interleave over all
+four nodes. C1b cells therefore set ``no_mmap: true`` (harness emits --no-mmap) and each
+half runs under ``numactl --membind`` of ITS OWN nodes (half0 membind=0,1, half1
+membind=2,3): each process allocates a private weight copy local to its half. The C1b
+defect controls (policy none, shared mmap) still replicate the old defect.
 
 Depth probes (INF-45 capacity curves; >16k points the old grid lacked): C1 only
 (production full-machine shape), np 1/2/4/8 at target depths 16k and 32k tokens,
@@ -139,7 +140,7 @@ def nodes_of(cpu_list: str) -> list[int]:
 def policy_nodes(policy: str) -> list[int] | None:
     if policy == "interleave=all":
         return sorted(NODE_CPUS)
-    if policy.startswith("interleave="):
+    if policy.startswith(("interleave=", "membind=")):
         return sorted(int(x) for x in policy.split("=", 1)[1].split(","))
     return None
 
@@ -163,6 +164,9 @@ def placement_violations(cell: dict) -> list[str]:
             if not set(cpu_nodes) <= set(pn):
                 errs.append(f"instances[{i}] policy {pol} does not cover its cpuset nodes {cpu_nodes} "
                             "(policy/cpuset mismatch)")
+            if pol.startswith("membind=") and (set(pn) != set(cpu_nodes) or not cell.get("no_mmap")):
+                errs.append(f"instances[{i}] {pol} must equal its cpuset nodes {cpu_nodes} and needs "
+                            "no_mmap (a shared mmap cannot be bound per instance)")
             if defect is True:
                 errs.append(f"instances[{i}] carries {pol} but the cell is tagged a defect control")
     return errs
@@ -176,9 +180,13 @@ def _instances(model_key: str, shape: str) -> list[dict]:
     base = e5.MODELS[model_key]["port_base"] if model_key in e5.MODELS else W4_MODEL["port_base"]
     if shape == "C1":
         return [{"cpu_list": e5.CPUSET_FULL, "threads": 96, "numactl_policy": "interleave=all", "port": base}]
-    pol = "none" if shape == "C1b-defect" else "interleave=0,1,2,3"
-    return [{"cpu_list": e5.CPUSET_HALF0, "threads": 96, "numactl_policy": pol, "port": base},
-            {"cpu_list": e5.CPUSET_HALF1, "threads": 96, "numactl_policy": pol, "port": base + 1}]
+    if shape == "C1b-defect":
+        pol0 = pol1 = "none"
+    else:  # C1b: private --no-mmap copy per half, bound to the half's own nodes
+        pol0 = "membind=" + ",".join(map(str, nodes_of(e5.CPUSET_HALF0)))
+        pol1 = "membind=" + ",".join(map(str, nodes_of(e5.CPUSET_HALF1)))
+    return [{"cpu_list": e5.CPUSET_HALF0, "threads": 96, "numactl_policy": pol0, "port": base},
+            {"cpu_list": e5.CPUSET_HALF1, "threads": 96, "numactl_policy": pol1, "port": base + 1}]
 
 
 def _families(shape: str, np_: int) -> list[str]:
@@ -207,6 +215,10 @@ def make_v2_cell(model_key: str, shape: str, np_: int, depth: dict | None = None
         cell["chat_template_kwargs"] = {"enable_thinking": False}
     cell["model_key"] = model_key
     cell["instances"] = _instances(model_key, shape)
+    if shape == "C1b":  # key absent elsewhere: C1 / defect-control manifests stay byte-identical
+        cell["no_mmap"] = True
+        cell["notes"] = ((cell.get("notes") or "") + " C1b (2026-11-11): --no-mmap private weight "
+                         "copy per half + numactl --membind of the half's own nodes.").strip()
     cell["ubatch_size"] = e5.UBATCH_96T
     suffix = {"C1": "", "C1b": "", "C1b-defect": "-defectctl"}[shape]
     cell["defect_replication_control"] = shape == "C1b-defect"
@@ -224,7 +236,7 @@ def make_v2_cell(model_key: str, shape: str, np_: int, depth: dict | None = None
         "tool": "scripts/benchmark/e5_v2_stageb_grid.py attest",
         "expected_nodes_per_instance": [policy_nodes(i["numactl_policy"]) or nodes_of(i["cpu_list"])
                                         for i in cell["instances"]],
-        "shared_mmap": len(cell["instances"]) > 1,
+        "shared_mmap": len(cell["instances"]) > 1 and not cell.get("no_mmap"),
     }
     if depth is not None:
         tgt = depth["target_depth_tokens"]
@@ -481,6 +493,8 @@ def attest_instance(declared_policy: str, cpu_list: str, pages_by_node: dict | N
     share = sum(pages.get(n, 0) for n in pn) / total
     if share < LOCAL_SHARE_MIN:
         return "FAIL", f"{declared_policy}: only {share:.3f} of pages inside nodes {pn}"
+    if declared_policy.startswith("membind="):  # bind: locality only, no balance requirement
+        return "PASS", f"{declared_policy}: private copy, share {share:.3f} inside nodes {pn}"
     even = total / len(pn)
     thin = [n for n in pn if pages.get(n, 0) < BALANCE_MIN * even]
     if thin:

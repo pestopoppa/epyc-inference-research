@@ -1,7 +1,7 @@
 {
   "schema_version": "e5-cell-manifest/1",
   "protocol_id": "P-BENCH-3",
-  "generated_at": "2026-11-11T14:35:51.354081+00:00",
+  "generated_at": "2026-11-11T14:53:11.916745+00:00",
   "era": {
     "cpu_kernel": "E9-cpu-kernel",
     "eval_instrument": "E20-eval-corpus-ev19-quality",
@@ -19,13 +19,13 @@
     {
       "cpu_list": "0-47,96-143",
       "threads": 96,
-      "numactl_policy": "interleave=0,1,2,3",
+      "numactl_policy": "membind=0,1",
       "port": 19080
     },
     {
       "cpu_list": "48-95,144-191",
       "threads": 96,
-      "numactl_policy": "interleave=0,1,2,3",
+      "numactl_policy": "membind=2,3",
       "port": 19081
     }
   ],
@@ -136,10 +136,11 @@
   },
   "decision_grade_intent": true,
   "cache_reset": "per_cell",
-  "notes": "",
+  "notes": "C1b (2026-11-11): --no-mmap private weight copy per half + numactl --membind of the half's own nodes.",
   "stage_b_families": [
     "isoT_T16"
   ],
+  "no_mmap": true,
   "defect_replication_control": false,
   "grid_version": "e5-stageb-v2",
   "placement_protocol": "P-BENCH-PLACEMENT-1",
@@ -150,17 +151,13 @@
     "expected_nodes_per_instance": [
       [
         0,
-        1,
-        2,
-        3
+        1
       ],
       [
-        0,
-        1,
         2,
         3
       ]
     ],
-    "shared_mmap": true
+    "shared_mmap": false
   }
 }

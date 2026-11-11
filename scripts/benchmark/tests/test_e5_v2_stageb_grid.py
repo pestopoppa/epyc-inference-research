@@ -138,3 +138,42 @@ def test_qualify_tags(tmp_path):
     assert q.main(["--root", str(root), "--output", str(out), "--stamp"]) == 0
     assert "superseded_by_run" in json.loads((live / "a.json").read_text())
     assert "superseded_by_run" not in json.loads((live / "c.json").read_text())
+
+
+def test_c1b_instances_get_no_mmap_and_per_half_membind():
+    """pipeline-mgmt 2026-11-11: each C1b half loads a private --no-mmap copy bound to its own nodes."""
+    import server_numa_np_sweep as h
+
+    published = sorted(OUT.glob("*/*-C1b-np*.json"))
+    published = [p for p in published if "defectctl" not in p.name]
+    assert published, "no published C1b manifests"
+    for mk in g.MODEL_GROUPS:
+        for np_ in g.C1B_NP:
+            cell = g.make_v2_cell(mk, "C1b", np_)
+            assert cell["no_mmap"] is True
+            assert [i["numactl_policy"] for i in cell["instances"]] == ["membind=0,1", "membind=2,3"]
+            assert cell["policy_attestation"]["shared_mmap"] is False
+            assert g.placement_violations(cell) == []
+    for p in published:
+        cell = h.load_cell_manifest(p)
+        m = json.loads(p.read_text())
+        assert m["no_mmap"] is True, p
+        assert [i["numactl_policy"] for i in m["instances"]] == ["membind=0,1", "membind=2,3"], p
+        for inst, nodes in zip(cell.instances, ("0,1", "2,3")):
+            cmd = h.build_instance_command(binary=Path("/bin/llama-server"), cell=cell, inst=inst)
+            assert "--no-mmap" in cmd
+            assert cmd[cmd.index("numactl") + 1] == f"--membind={nodes}"
+    # controls and C1 keep the shared mmap (launch byte-identical to before)
+    for shape in ("C1", "C1b-defect"):
+        assert "no_mmap" not in g.make_v2_cell("qwen36_q8_0", shape, 4)
+    # membind on a shared mmap, or on foreign nodes, is refused
+    bad = g.make_v2_cell("qwen36_q8_0", "C1b", 4)
+    bad["no_mmap"] = False
+    assert any("needs no_mmap" in v for v in g.placement_violations(bad))
+    bad = g.make_v2_cell("qwen36_q8_0", "C1b", 4)
+    bad["instances"][0]["numactl_policy"] = "membind=0,1,2,3"
+    assert any("must equal" in v for v in g.placement_violations(bad))
+    # attestation: membind passes on locality, fails when pages leak off the half
+    assert g.attest_instance("membind=0,1", "0-47,96-143", {"N0": 400, "N1": 2}, False)[0] == "PASS"
+    assert g.attest_instance("membind=2,3", "48-95,144-191", {"N0": 100, "N1": 100, "N2": 100, "N3": 100},
+                             False)[0] == "FAIL"

@@ -1,7 +1,7 @@
 {
   "schema_version": "e5-cell-manifest/1",
   "protocol_id": "P-BENCH-3",
-  "generated_at": "2026-11-11T14:35:51.823881+00:00",
+  "generated_at": "2026-11-11T14:53:12.917526+00:00",
   "era": {
     "cpu_kernel": "E9-cpu-kernel",
     "eval_instrument": "E20-eval-corpus-ev19-quality",
@@ -19,13 +19,13 @@
     {
       "cpu_list": "0-47,96-143",
       "threads": 96,
-      "numactl_policy": "interleave=0,1,2,3",
+      "numactl_policy": "membind=0,1",
       "port": 19480
     },
     {
       "cpu_list": "48-95,144-191",
       "threads": 96,
-      "numactl_policy": "interleave=0,1,2,3",
+      "numactl_policy": "membind=2,3",
       "port": 19481
     }
   ],
@@ -136,10 +136,11 @@
   },
   "decision_grade_intent": true,
   "cache_reset": "per_cell",
-  "notes": "W4 re-seated 2026-11-11 on the current CPU role (registry qwen38_flash_next_ud_iq4xs_local). Recipe deviations held for E5 comparability, stated: KV q8_0 (recipe f16; protocol decision 1), mmap+mlock (recipe --no-mmap; harness has no knob), -t = cpuset size (recipe 48).",
+  "notes": "W4 re-seated 2026-11-11 on the current CPU role (registry qwen38_flash_next_ud_iq4xs_local). Recipe deviations held for E5 comparability, stated: KV q8_0 (recipe f16; protocol decision 1), mmap+mlock (recipe --no-mmap; harness has no knob), -t = cpuset size (recipe 48). C1b (2026-11-11): --no-mmap private weight copy per half + numactl --membind of the half's own nodes.",
   "stage_b_families": [
     "isoT_T2"
   ],
+  "no_mmap": true,
   "defect_replication_control": false,
   "grid_version": "e5-stageb-v2",
   "placement_protocol": "P-BENCH-PLACEMENT-1",
@@ -150,17 +151,13 @@
     "expected_nodes_per_instance": [
       [
         0,
-        1,
-        2,
-        3
+        1
       ],
       [
-        0,
-        1,
         2,
         3
       ]
     ],
-    "shared_mmap": true
+    "shared_mmap": false
   }
 }

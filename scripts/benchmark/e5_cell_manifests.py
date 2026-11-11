@@ -1020,14 +1020,18 @@ def validate_cell_manifest(manifest: dict) -> list[str]:
                 seen_ports[port] = idx
         policy = inst.get("numactl_policy")
         if policy not in VALID_NUMACTL_POLICIES and not (
-            isinstance(policy, str) and re.match(r"^interleave=\d+(,\d+)*$", policy)
+            isinstance(policy, str) and re.match(r"^(interleave|membind)=\d+(,\d+)*$", policy)
         ):
             err(
                 f"instances[{idx}].numactl_policy {policy!r} is not one of "
                 f"{VALID_NUMACTL_POLICIES}"
             )
         elif policy not in VALID_NUMACTL_POLICIES:
-            pass  # interleave=<node list>: legal on any cpuset (own-node interleave)
+            # interleave=<node list>: legal on any cpuset (own-node interleave);
+            # membind=<node list>: only with a private --no-mmap copy (a shared
+            # mmap's page cache cannot be bound per instance).
+            if policy.startswith("membind=") and manifest.get("no_mmap") is not True:
+                err(f"instances[{idx}].numactl_policy {policy!r} requires no_mmap: true")
         elif policy == "interleave=all" and cpu_list != CPUSET_FULL:
             err(
                 f"instances[{idx}]: numactl_policy 'interleave=all' is ONLY "

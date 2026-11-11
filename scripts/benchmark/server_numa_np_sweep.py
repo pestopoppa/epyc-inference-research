@@ -446,10 +446,12 @@ def effective_reasoning(cell: "Cell") -> str:
 
 
 _INTERLEAVE_NODES_RE = re.compile(r"^interleave=\d+(,\d+)*$")
+_MEMBIND_NODES_RE = re.compile(r"^membind=\d+(,\d+)*$")
 
 
 def _valid_numactl_policy(policy: str) -> bool:
-    return policy in ("none", "interleave=all") or bool(_INTERLEAVE_NODES_RE.match(policy))
+    return (policy in ("none", "interleave=all") or bool(_INTERLEAVE_NODES_RE.match(policy))
+            or bool(_MEMBIND_NODES_RE.match(policy)))
 
 
 def build_instance_command(*, binary: Path, cell: Cell, inst: Instance) -> list[str]:
@@ -465,7 +467,8 @@ def build_instance_command(*, binary: Path, cell: Cell, inst: Instance) -> list[
         if not _valid_numactl_policy(inst.numactl_policy):
             raise RuntimeError(f"unknown numactl_policy {inst.numactl_policy!r}")
         # "interleave=all" or "interleave=<node list>" (e.g. a half machine
-        # interleaves over ITS OWN two NPS4 nodes: "interleave=0,1").
+        # interleaves over ITS OWN two NPS4 nodes: "interleave=0,1"), or
+        # "membind=<node list>" (E5 v2 C1b halves with --no-mmap private copies).
         cmd += ["numactl", f"--{inst.numactl_policy}"]
     kv = cell.kv
     cmd += [
@@ -514,6 +517,12 @@ def build_instance_command(*, binary: Path, cell: Cell, inst: Instance) -> list[
         cmd += ["--reasoning", reasoning]
     if cell.manifest.get("mlock", True):
         cmd.append("--mlock")
+    # Opt-in private weight copy per instance (default off: banked cells launch
+    # byte-identically). With a shared mmap, sibling instances share ONE page
+    # cache and whichever faults first places every page; --no-mmap makes each
+    # process allocate its own weights under its own numactl policy.
+    if cell.manifest.get("no_mmap", False):
+        cmd.append("--no-mmap")
     # GPU contamination guard: the v7 binary is HIP-capable and would otherwise
     # auto-select ROCm0 (orchestrator_stack._append_cpu_only_device_args).
     cmd += ["--device", "none"]

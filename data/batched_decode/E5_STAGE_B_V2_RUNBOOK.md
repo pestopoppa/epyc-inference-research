@@ -10,10 +10,10 @@ every banked cell stay as historical records.
 | Binding requirement | How v2 meets it |
 |---|---|
 | (a) `0-95` + `numactl --interleave=all` swept for both models | `C1` = 1 × `0-95` interleave=all at np 1/2/4/8/16/32 for W1 and W4 |
-| (b) straddling cpusets interleave or are declared controls | `C1b` halves (`0-47,96-143` / `48-95,144-191`, each spans 2 NPS4 nodes) carry `interleave=0,1,2,3`. `C1b-defectctl` np 4/8 run policy `none` and are tagged `defect_replication_control: true`. The generator refuses a cell that is neither, and also refuses a cell that leaves the field implicit |
+| (b) straddling cpusets interleave or are declared controls | `C1b` halves (`0-47,96-143` / `48-95,144-191`, each spans 2 NPS4 nodes) load a private `--no-mmap` copy under `membind=0,1` / `membind=2,3` (was `interleave=0,1,2,3` on a shared mmap until 2026-11-11; see below). `C1b-defectctl` np 4/8 run policy `none` and are tagged `defect_replication_control: true`. The generator refuses a cell that is neither, and also refuses a cell that leaves the field implicit |
 | (c) cache drop before every cell + `pages_by_node` | `cache_reset: per_cell` on every cell. The unchanged harness runs `scripts/lib/cell_cache_reset.py`: `drop_caches` when this process tree holds q0..q3 + gpu-quiet exclusive (the quiet-host grant), else the INF-70/C7 `numa_evict.py` substitute. The row records `cache_reset_method` and before/after `pages_by_node`. Cells declare `placement_protocol: P-BENCH-PLACEMENT-1`, so a numa_evict-only cell cannot grade decision-grade |
 | (d) numactl policy attested per instance, fail closed | Generation: a policy must cover its cpuset's nodes, or the cell is refused. After each group, `e5_v2_stageb_grid.py attest --run-dir RUN` compares each instance's observed mmap `pages_by_node` with its declared policy. Interleave needs ≥0.85 of pages inside the declared nodes and every node ≥0.5× its even share. A cell FAILs on disagreement, on a missing witness, or on a missing cache-reset method |
-| (e) harness unchanged | `server_numa_np_sweep.py` is untouched. Depth probes use the schema owner's opt-in `depth_probe` block and the harness's existing `--question-pool` override |
+| (e) harness unchanged | `server_numa_np_sweep.py` is untouched except the opt-in `no_mmap` / `membind=` support added 2026-11-11 for C1b (default off). Depth probes use the schema owner's opt-in `depth_probe` block and the harness's existing `--question-pool` override |
 
 **Model set.** W1 is `qwen36_q8_0` (Qwen3.6-35B-A3B-MTP-Q8_0, NEXTN self-draft). W4 is re-seated on
 the current CPU role Qwen3.8-Flash-Next UD-IQ4_XS (3 shards, `qwen4exp`). It runs the separate
@@ -26,11 +26,22 @@ For E5 comparability, W4 keeps these stated deviations from its serving recipe:
 - Weights are mmap+mlock (recipe: `--no-mmap`).
 - `-t` equals the cpuset size (recipe: 48).
 
-**Shared mmap and halves.** The harness has no `--no-mmap` knob, so the two C1b instances share
-one page cache of the GGUF. Own-node interleave (`0,1` | `2,3`) cannot be realised, because the
-instance that faults first places every page. For that reason C1b declares interleave over all
-four nodes on both halves. Measuring true half-local weights needs `--no-mmap` or a per-instance
-file copy, which is outside harness scope (e).
+**C1b halves: private `--no-mmap` copies, per-half membind (2026-11-11, pipeline-mgmt).**
+Superseded design: with a shared mmap the two C1b instances share one page cache of the GGUF, so
+each half's weights interleaved over all four nodes and requirement (b) half-locality was not met.
+Now every C1b cell carries `no_mmap: true` and each half runs `numactl --membind` of its own nodes
+(`0-47,96-143` → `membind=0,1`, `48-95,144-191` → `membind=2,3`). Each process allocates its own
+weight copy under its own bind. Harness change (amends "(e) unchanged"): `server_numa_np_sweep.py`
+accepts `membind=<nodes>` and emits `--no-mmap` when a manifest sets `no_mmap: true` (default off,
+so C1 and the `C1b-defectctl` controls launch byte-identically and keep the shared mmap). The
+schema (`e5_cell_manifests.py`) accepts `membind=<nodes>` only with `no_mmap: true`; the generator
+refuses a membind that is not exactly the cpuset's nodes. `attest` reads the preflight's anon-page
+witness (it switches to anon pages when the cmdline has `--no-mmap`) and passes a membind instance on
+≥0.85 locality alone (no balance requirement: bind fills nearest-first).
+RAM check (2026-11-11): two copies of W4 = 2 × (87.3 GiB weights + 2.6 GiB MTP head) ≈ 180 GiB,
+W1 = 2 × 35.2 GiB ≈ 70 GiB; grant budget = MemAvailable 1006.6 GiB − 100 GiB margin ≈ 906 GiB, and
+each half's 2 nodes total ≈ 566 GiB. Fits. Rows that ran from the pre-change snapshot (r1) used the
+old shared-mmap C1b and are not comparable on C1b.
 
 **Depth points (>16k).** These feed INF-45 capacity curves. They use `C1` only, at np 1/2/4/8 and
 target depths 16k and 32k tokens. Each depth has 8 pinned long-context prompts built by

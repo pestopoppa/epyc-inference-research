@@ -2348,5 +2348,6 @@ def test_c1b_half_manifests_bind_memory_to_own_nodes():
 def test_node_list_interleave_policy_accepted_and_garbage_refused():
     assert sns._valid_numactl_policy("interleave=0,1")
     assert sns._valid_numactl_policy("interleave=all") and sns._valid_numactl_policy("none")
-    for bad in ("membind=0", "interleave=", "interleave=0,", "--interleave=0", "interleave=a"):
+    assert sns._valid_numactl_policy("membind=0,1")  # E5 v2 C1b --no-mmap halves (2026-11-11)
+    for bad in ("membind=", "membind=all", "interleave=","interleave=0,", "--interleave=0", "interleave=a"):
         assert not sns._valid_numactl_policy(bad), bad
