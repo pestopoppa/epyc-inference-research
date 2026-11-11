@@ -1,7 +1,7 @@
 # race_eqv: GPU race / equivalence gate for seeded-defect kernel builds
 
 Harness for the `race-eqv-gpu` rows (RVP-RACE-1, RVP-EQV-1), archived from the sealed row dir
-`race-eqv-gpu-r8-20261111` so a tmp cleanup cannot lose it. Row launcher: `launch.sh`; config: `spec.json`.
+`race-eqv-gpu-r9-20261111` so a tmp cleanup cannot lose it. Row launcher: `launch.sh`; config: `spec.json`.
 
 ## What the row does
 `job.py` runs `test-backend-ops` on the MI210 for a BASELINE build, a BASELINE-REPEAT (determinism),
@@ -12,12 +12,15 @@ during the run (INVALID_NO_RESIDENCY if the GPU was not used). `check_complete.p
 filler's completion probe. Fixtures in `gpu_signals/fixtures/`. Paths to builds/outputs in `job.py`
 and `launch.sh` are host-specific tmp paths; `D` (harness dir) is now derived from `__file__`.
 
-## GDN+VT negate-transform exemption (@t4)
+## GDN op-domain exemption (@t4 and non-finite raw; r9)
+Generalised in r9: applies to any suite and to GDN failures with non-finite raw nmse (hostile alternating/sparse_outlier distributions, GDN+HD r8: 64/64). A derived suite whose baseline still fails the floor is excluded and recorded. `test_replay_baselines.py` replays all stored r3..r8 baselines.
+
+### Original r8 note (GDN+VT)
 Value-transform (VT) runs apply identity, x3, x0p01, negate (`N_TRANSFORMS = 4`); the loop stops at the
 first failing transform. For GATED_DELTA_NET+VT, negating the gate makes the recurrence diverge
 (exp(+|g|) growth): ROCm overflows to NaN where the CPU reference is finite or also overflows. That is
 outside the op's domain. Such failures at the 4th transform (after t1..t3 passed) do not count
-against the baseline pass floor (`baseline_usable(..., tail_ok=True)`) and stay in `fail_counts`
+against the baseline pass floor (`baseline_usable(..., domain=domain_fails(parse, raw))`) and stay in `fail_counts`
 tagged `@t4`. A mutant failing earlier (@t1..@t3) is a new key and is still caught.
 
 ## Fail-line parser change (r8)

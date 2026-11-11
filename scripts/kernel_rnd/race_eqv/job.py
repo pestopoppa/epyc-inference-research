@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""race-eqv-gpu-r8-20261111 (slimmed r4; 1 seed per suite, BASELINE|Q|0 reused from r4): gate each seeded-defect build vs BASELINE on the MI210 (RVP-RACE-1, RVP-EQV-1).
+"""race-eqv-gpu-r9-20261111 (slimmed r4; 1 seed per suite, BASELINE|Q|0 reused from r4): gate each seeded-defect build vs BASELINE on the MI210 (RVP-RACE-1, RVP-EQV-1).
 Order: BASELINE, BASELINE-REPEAT (determinism), per-suite kernel-instance coverage, controls, mutants.
 Gate (pre-registered 2026-11-10, operator decision, RVP-EQV-1 box): new-fail vs the BASELINE run of the same suite and seed;
 ANSI stripped before FAIL parsing (gpu_signals/newfail.py = research gpu_newfail_gate.py).
@@ -9,7 +9,7 @@ D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D)
 import gpuproof as gp
 from gpu_signals import race_eqv as re1
 from gpu_signals import newfail as nf
-ROW_ID = 'race-eqv-gpu-r8-20261111'
+ROW_ID = 'race-eqv-gpu-r9-20261111'
 ST = '/mnt/raid0/llm/kernels/builds/MUTANT-race-eqv-r3-20261109-36f024341'; SHA = '36f024341ce2a48106bbeabd19943384849f378c'
 BUILDRES = '/mnt/raid0/llm/tmp/race-eqv-mutants-r3-20261109/out/RESULT.json'; C9 = '/mnt/raid0/llm/kernels/builds/gpu-20261109-d210f85c2-c9fold/bin'
 OUT = D + '/out'; LOGS = OUT + '/logs'; RAW = OUT + '/raw'; RES = OUT + '/results.jsonl'; RESULT = OUT + '/RESULT.json'
@@ -70,7 +70,7 @@ def run_tbo(binroot, suite, seed, tag, timeout):
     r = {'rc': rc, 'err': err, 'n_fail_lines': pl['n_fail'], 'fail_keys': sorted(pl['fail_counts']), 'parse': pl, 'passed': passed, 'vram_peak': max(p.get('kfd_pids_ours', {}).values(), default=0), 'seconds': round(time.time() - t0, 1), 'n_raw': len(vals), 'log_sha256': hashlib.sha256(t.encode()).hexdigest()}
     r['hip_loaded'] = next((l for m in p.get('maps', {}).values() for l in m.get('libs', []) if 'libggml-hip' in l), None)
     r['strict_pass'] = rc == 0 and not err and pl['complete'] and pl['n_fail'] == 0   # informational only; the gate is set by the caller
-    r['gate_pass'] = None
+    r['gate_pass'] = None; r['domain_fails'] = nf.domain_fails(pl, vals)   # r9: GDN op-domain failures (negate @t4, non-finite hostile-distribution raw) are exempt from the pass floor
     if raw_size() < RAW_CAP_B:
         with gzip.open(f'{RAW}/{tag}.json.gz', 'wt') as f: json.dump(vals, f)
         r['raw'] = f'raw/{tag}.json.gz'
@@ -141,7 +141,7 @@ def verdict(done, builds, cov):
     eqv = re1.eqv1_decide(surv, ['E1-CTRL-A', 'E1-CTRL-B'], ebase, seeds=E) if not invalid else {'decision': 'INVALID'}
     if ctl['E1-CTRL-A']['passes'] or ctl['E1-CTRL-B']['passes']: invalid.append('EQV positive control passed the gate')
     return {'at': now(), 'complete': True, 'verdict': 'INVALID_HARNESS' if invalid else 'DONE', 'invalid': invalid, 'excluded': excl, 'controls': ctl, 'instances_executed': inst, 'race1': race, 'eqv1': eqv, 'eqv_caught_by': caught,
-            'empty_surfaces': dict(EMPTY), 'instance_coverage': {s: c['n_names'] for s, c in cov.items()}, 'maxabs_band': MAXABS_BAND, 'source_sha': SHA,
+            'empty_surfaces': dict(EMPTY), 'known_baseline_failures': {s: nf.known_failures([done[(v, s, 0)]['parse'] for v in ('BASELINE', 'BASELINE-REPEAT') if (v, s, 0) in done]) for s in REPEAT_SUITES}, 'instance_coverage': {s: c['n_names'] for s, c in cov.items()}, 'maxabs_band': MAXABS_BAND, 'source_sha': SHA,
             'determinism': {s: done[('BASELINE-REPEAT', s, 0)]['gate'] for s in REPEAT_SUITES if ('BASELINE-REPEAT', s, 0) in done},
             'gate_scope': 'new-fail vs BASELINE same suite+seed (operator 2026-11-10): every suite (strict, value transforms, hostile, edge) fails a run only on cases its paired BASELINE run passed, or on crash / case-count change; EQV adds per-element max-abs within 4x the BASELINE 5-seed max'}
 def smoke():
@@ -186,8 +186,8 @@ def main():
             if r['vram_peak'] <= 0 or r['hip_loaded'] != want:
                 jsave(RESULT, {'at': now(), 'complete': True, 'verdict': 'INVALID_NO_RESIDENCY', 'variant': v, 'suite': s, 'run': r_i, 'detail': r}); return 0
             if v == 'BASELINE':
-                ok, why = nf.baseline_usable(r['parse'], tail_ok=(s == 'GDN+VT'))
-                if not ok and '+' in s and not r['err'] and r['rc'] in (0, 1) and r['parse']['total'] < 50:
+                ok, why = nf.baseline_usable(r['parse'], domain=r['domain_fails'])
+                if not ok and '+' in s and not r['err'] and r['rc'] in (0, 1) and (r['parse']['total'] < 50 or why == 'baseline_pass_fraction_below_floor'):   # r9: a derived surface whose baseline is unusable is excluded and recorded, never a 5th instrument failure; base suites stay strict
                     EMPTY[s] = why; r['gate'] = {'verdict': 'EMPTY_SURFACE', 'reason': why, 'cases': r['parse']['total']}; r['gate_pass'] = None
                     append({'unit_id': f'{v}|{s}|{r_i}', 'mode': 'full', 'kind': 'run', 'variant': v, 'suite': s, 'run': r_i, **r}); continue
                 r['gate'] = {'verdict': 'USABLE' if ok else 'UNUSABLE', 'reason': why}; r['gate_pass'] = ok

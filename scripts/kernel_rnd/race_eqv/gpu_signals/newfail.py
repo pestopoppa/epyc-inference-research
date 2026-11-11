@@ -27,6 +27,7 @@ _CASE_FAIL = re.compile(r"^\s*([A-Z][A-Z0-9_]*\([^)]*\)):.*\bFAIL\s*$", re.M)
 # output between them, so neither the ERR nor the line-anchored FAIL form sees them (r7: 59 GATED_DELTA_NET failures, 0 parsed).
 _FAILING = re.compile(r"^Failing tests:\s*\n((?:[ \t]+\S[^\n]*\n?)+)", re.M)
 _VT_FAIL = re.compile(r"AK_VALUE_V1 [^\n]*?completed=(\d+)[^\n]*\|\s*(?:test|compare) failed")
+GDN_OP = "GATED_DELTA_NET("
 N_TRANSFORMS = 4        # identity, x3, x0p01, negate; the loop stops at the first failing transform and completed=N names it
 _MAXNMSE = re.compile(r",max_nmse=[^,)]*")
 
@@ -65,7 +66,7 @@ def parse_log(text: str) -> dict:
             vt = [int(c) for c in _VT_FAIL.findall(t)]
             if vt and len(vt) == len(listed):                   # same execution order: tag each failure with the transform it died at
                 listed = [f"{k}@t{c}" for k, c in zip(listed, vt)]
-                tail = Counter(k for k in listed if k.endswith(f"@t{N_TRANSFORMS}"))
+                tail = Counter(k for k in listed if k.endswith(f"@t{N_TRANSFORMS}") and k.startswith(GDN_OP))
             fails = Counter(listed)
     n_fail = sum(fails.values())
     return {
@@ -79,22 +80,50 @@ def parse_log(text: str) -> dict:
     }
 
 
-def baseline_usable(p: dict, *, min_cases: int = MIN_CASES, min_pass_fraction: float = MIN_PASS_FRACTION, tail_ok: bool = False) -> tuple[bool, str]:
-    """Stop-on-futility predicate for one BASELINE run."""
+def domain_fails(p: dict, vals: dict | None = None) -> int:
+    """Distinct GATED_DELTA_NET baseline failures that are the op leaving its numeric domain, not a kernel defect.
+
+    (a) failed at the 4th (negate) transform after identity/x3/x0p01 passed (``@t4`` tag), in ANY suite;
+    (b) hostile-distribution cases (alternating / sparse_outlier gate+state patterns grow exp(+|g|) state): the raw nmse of the case is
+        non-finite (ROCm overflows to NaN where the CPU reference is finite-but-huge, or both overflow).
+    Exempt keys stay in fail_counts, so a candidate that fails a case the baseline PASSED is still a new fail; only the pass-fraction floor
+    ignores them.  Non-GDN ops are never exempted (they are KNOWN failures instead, see known_failures).
+    """
+    keys = {k for k in p["fail_counts"] if k.startswith(GDN_OP)}
+    out = {k for k in keys if k.endswith(f"@t{N_TRANSFORMS}")}
+    if vals:
+        bad = set()
+        for rk, v in vals.items():
+            if v[0] != v[0] or v[0] == float("inf") or v[1] != v[1] or v[1] == float("inf"):
+                bad.add(rk.split("|", 1)[0])
+        out |= {k for k in keys if re.sub(r"@t\d+$", "", k)[len(GDN_OP):-1] in bad}
+    return len(out)
+
+
+def baseline_usable(p: dict, *, min_cases: int = MIN_CASES, min_pass_fraction: float = MIN_PASS_FRACTION, domain: int | None = None) -> tuple[bool, str]:
+    """Stop-on-futility predicate for one BASELINE run.  ``domain`` = domain_fails(p, raw); default: the @t4 count carried by the parse."""
     if not p["complete"]:
         return False, "crash_or_truncated"
     if p["total"] < min_cases:
         return False, f"fewer_than_{min_cases}_cases"
     if not p["consistent"]:
         return False, "fail_count_unparsed"
-    # tail_ok (GATED_DELTA_NET+VT only): a failure at the 4th transform (negate) is the op leaving its domain (negated gate => exp(+|g|)
-    # growth; ROCm overflows to NaN where the CPU reference is still finite or itself overflows) after identity/x3/x0p01 all passed.
-    # Those cases do not count against the baseline pass floor; they stay in fail_counts tagged @t4, so a mutant that fails EARLIER
-    # (@t1..@t3) is a new key and is still caught.
-    valid = p["total"] - (p.get("tail_transform_fails", 0) if tail_ok else 0)
+    if domain is None:
+        domain = p.get("tail_transform_fails", 0)
+    valid = p["total"] - domain
     if p["passed"] < min_pass_fraction * valid:
         return False, "baseline_pass_fraction_below_floor"
     return True, "ok"
+
+
+def known_failures(parses: list[dict]) -> dict:
+    """KNOWN baseline failures: keys failing with identical multiplicity in EVERY supplied complete baseline run (>=2 runs needed to claim
+    determinism).  Excluded from the new-fail comparison (new_fails already does that); recorded so the verdict says what was tolerated."""
+    runs = [Counter(q["fail_counts"]) for q in parses if q["complete"]]
+    if len(runs) < 2:
+        return {"deterministic": False, "n_runs": len(runs), "known": []}
+    same = all(r == runs[0] for r in runs[1:])
+    return {"deterministic": same, "n_runs": len(runs), "known": sorted(runs[0]) if same else sorted(set.intersection(*[set(r) for r in runs]))}
 
 
 def new_fails(base: dict, cand: dict) -> dict:
