@@ -1488,19 +1488,19 @@ def summarize_cell(
     throttle_warnings = list((throttle_check or {}).get("warnings") or [])
     gate_warnings = list(host_warnings) + list(cell_host_warnings or []) + throttle_warnings
     hard_gates_passed = bool(affinity.get("live_affinity_verified")) and not gate_warnings
-    # NOTE (2026-07-30 metric ruling): this remains a STEADY-STATE-WINDOW
-    # precondition, deliberately left as-is. It is expressed through the now
-    # secondary tasks/hour trim, so it is stricter than the primary tok/s metric
-    # requires (a decode rate needs no ramp/drain trim). Loosening a
-    # decision-grade gate is a measurement-trust-boundary change and needs an
-    # operator ruling of its own — it is NOT a side effect of the metric switch.
+    # Operator-signed decouple (INF-45): decision_grade no longer depends on the
+    # trimmed (steady-state) window. The primary metric is aggregate decode tok/s,
+    # which needs no ramp/drain trim. The condition is still recorded, as
+    # `trimmed_window_ready` and a non-gating `decision_grade_warnings` entry.
     trimmed_window_ready = bool(
         trimmed["steady_count"] > 0 and trimmed["tasks_per_hour_trimmed"] > 0
     )
     decision_grade_blockers: list[str] = []
+    decision_grade_warnings: list[str] = []
     if cell.decision_grade_intent and not trimmed_window_ready:
-        decision_grade_blockers.append(
-            "empty_trimmed_window: raw ramp+drain fallback is observation-only"
+        decision_grade_warnings.append(
+            "empty_trimmed_window: secondary tasks/hour_trimmed fell back to raw "
+            "ramp+drain (non-gating)"
         )
     capture_failures = [
         record
@@ -1608,6 +1608,7 @@ def summarize_cell(
         "cache_reset_method": (cache_reset or {}).get("method"),
         "cache_reset": cache_reset,
         "decision_grade_blockers": decision_grade_blockers,
+        "decision_grade_warnings": decision_grade_warnings,
         "decision_grade_intent": cell.decision_grade_intent,
         "decision_grade": decision_grade,
         "cell_error": None,

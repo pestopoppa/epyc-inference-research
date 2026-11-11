@@ -1021,7 +1021,7 @@ def test_trimmed_aggregate_math():
     assert sns.trimmed_aggregate([])["tasks_per_hour_trimmed"] == 0.0
 
 
-def test_empty_trimmed_window_demotes_decision_grade_cell(tmp_path):
+def test_empty_trimmed_window_does_not_gate_decision_grade_cell(tmp_path):
     cell = load_cell(tmp_path)
     records = [
         sns.StreamRequestRecord(
@@ -1040,10 +1040,11 @@ def test_empty_trimmed_window_demotes_decision_grade_cell(tmp_path):
     )
     assert row["tasks_per_hour_trimmed"] == 0.0
     assert row["trimmed_window_ready"] is False
-    assert row["decision_grade"] is False
-    assert row["decision_grade_blockers"] == [
-        "empty_trimmed_window: raw ramp+drain fallback is observation-only"
-    ]
+    # INF-45 signed decouple: trimmed window no longer gates; still recorded.
+    assert row["decision_grade"] is True
+    assert row["decision_grade_blockers"] == []
+    assert len(row["decision_grade_warnings"]) == 1
+    assert row["decision_grade_warnings"][0].startswith("empty_trimmed_window")
 
 
 def test_aggregate_decode_tps_sums_per_stream_rates():
@@ -1237,7 +1238,6 @@ def test_gemma_reasoning_only_chat_stream_fails_closed_without_answer_text(tmp_p
     assert row["response_capture_failure_count"] == 1
     assert row["decision_grade"] is False
     assert row["decision_grade_blockers"] == [
-        "empty_trimmed_window: raw ramp+drain fallback is observation-only",
         "response_capture_failure: 1 generated response(s) lacked answer-text SSE deltas",
     ]
 
