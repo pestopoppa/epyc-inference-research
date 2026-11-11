@@ -1,0 +1,151 @@
+{
+  "schema": "interference-pairs/1",
+  "generated_at": "2026-11-11T14:45:22.704176+00:00",
+  "cpuset_source": "epyc-orchestrator scripts/server/stack_numa.py @ 08d1f0af (NUMA_HALF_A/B, _NPS4_NODES)",
+  "rounds": 5,
+  "floor": 0.02,
+  "spread_futility": 0.1,
+  "measured": [
+    {
+      "id": "P1-halfA-vs-halfB-np1",
+      "resource": "cross-node memory bandwidth",
+      "victim": {
+        "role": "victim",
+        "model": {
+          "model_key": "qwen36_q8_0",
+          "model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+          "spec": [
+            "--spec-type",
+            "draft-mtp",
+            "--spec-draft-n-max",
+            "4"
+          ],
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        },
+        "cpu_list": "0-47,96-143",
+        "threads": 48,
+        "numactl": "--interleave=0,1",
+        "port": 19600,
+        "np": 1
+      },
+      "aggressor": {
+        "role": "aggressor",
+        "model": {
+          "model_key": "qwen38_flash_next_ud_iq4xs",
+          "model_path": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+          "spec": [],
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        },
+        "cpu_list": "48-95,144-191",
+        "threads": 48,
+        "numactl": "--interleave=2,3",
+        "port": 19601,
+        "np": 4
+      }
+    },
+    {
+      "id": "P1-halfA-vs-halfB-np4",
+      "resource": "cross-node memory bandwidth",
+      "victim": {
+        "role": "victim",
+        "model": {
+          "model_key": "qwen36_q8_0",
+          "model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+          "spec": [
+            "--spec-type",
+            "draft-mtp",
+            "--spec-draft-n-max",
+            "4"
+          ],
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        },
+        "cpu_list": "0-47,96-143",
+        "threads": 48,
+        "numactl": "--interleave=0,1",
+        "port": 19600,
+        "np": 4
+      },
+      "aggressor": {
+        "role": "aggressor",
+        "model": {
+          "model_key": "qwen38_flash_next_ud_iq4xs",
+          "model_path": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+          "spec": [],
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        },
+        "cpu_list": "48-95,144-191",
+        "threads": 48,
+        "numactl": "--interleave=2,3",
+        "port": 19601,
+        "np": 4
+      }
+    },
+    {
+      "id": "P2-q0-vs-q1-np1",
+      "resource": "same-socket quarter vs quarter",
+      "victim": {
+        "role": "victim",
+        "model": {
+          "model_key": "qwen36_q8_0",
+          "model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+          "spec": [
+            "--spec-type",
+            "draft-mtp",
+            "--spec-draft-n-max",
+            "4"
+          ],
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        },
+        "cpu_list": "0-23,96-119",
+        "threads": 24,
+        "numactl": "--membind=0",
+        "port": 19602,
+        "np": 1
+      },
+      "aggressor": {
+        "role": "aggressor",
+        "model": {
+          "model_key": "qwen38_flash_next_ud_iq4xs",
+          "model_path": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+          "spec": [],
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        },
+        "cpu_list": "24-47,120-143",
+        "threads": 24,
+        "numactl": "--membind=1",
+        "port": 19603,
+        "np": 4
+      }
+    }
+  ],
+  "reused": [
+    {
+      "id": "P3-gpu-lane-vs-cpu",
+      "status": "measured-reuse",
+      "source": "U4-NOISE-1 2026-10-22, research b65284539 scripts/benchmark/gpu_cpu_noise/, run dir /mnt/raid0/llm/tmp/gpu-cpu-noise-20261021/",
+      "coefficients": {
+        "cpu_decode_pct": [
+          -0.7,
+          -1.05
+        ],
+        "cpu_prefill_pct": [
+          -4.3,
+          -4.8
+        ],
+        "smt_channel_prefill_pct": -9.6
+      }
+    }
+  ]
+}
