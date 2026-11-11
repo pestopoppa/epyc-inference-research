@@ -1,0 +1,528 @@
+{
+ "schema": "agg_phase1_verification.v1",
+ "standard": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+ "questions": {
+  "agg01": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.2328
+  },
+  "agg02": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.4963
+  },
+  "agg03": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "agg04": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.0541
+  },
+  "agg05": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.1822
+  },
+  "agg06": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.2712
+  },
+  "agg07": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 1.0
+  },
+  "agg08": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "agg09": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 27,
+   "near_tie": false,
+   "min_rel_gap": 0.6247
+  },
+  "agg10": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 27,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "agg11": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 27,
+   "near_tie": false,
+   "min_rel_gap": 0.0398
+  },
+  "agg12": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.8738
+  },
+  "agg13": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.0391
+  },
+  "agg14": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.1231
+  },
+  "agg15": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 56,
+   "near_tie": false,
+   "min_rel_gap": 1.0
+  },
+  "agg16": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 52,
+   "near_tie": false,
+   "min_rel_gap": 1.0
+  },
+  "agg17": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 52,
+   "near_tie": false,
+   "min_rel_gap": 0.3371
+  },
+  "agg18": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "agg19": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 54,
+   "near_tie": false,
+   "min_rel_gap": 0.4045
+  },
+  "agg20": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 56,
+   "near_tie": false,
+   "min_rel_gap": 0.0304
+  },
+  "p1_01": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 56,
+   "near_tie": false,
+   "min_rel_gap": 0.1477
+  },
+  "p1_02": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 56,
+   "near_tie": false,
+   "min_rel_gap": 0.4281
+  },
+  "p1_03": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 56,
+   "near_tie": false,
+   "min_rel_gap": 0.0638
+  },
+  "p1_04": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 56,
+   "near_tie": false,
+   "min_rel_gap": 0.106
+  },
+  "p1_05": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.0458
+  },
+  "p1_06": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.1673
+  },
+  "p1_07": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 18,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "p1_08": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.1536
+  },
+  "p1_09": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.0401
+  },
+  "p1_10": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 8,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "p1_11": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.0541
+  },
+  "p1_12": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.1231
+  },
+  "p1_13": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.3692
+  },
+  "p1_14": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 8,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "p1_15": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 54,
+   "near_tie": false,
+   "min_rel_gap": 0.4154
+  },
+  "p1_16": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 54,
+   "near_tie": false,
+   "min_rel_gap": 0.2615
+  },
+  "p1_17": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 54,
+   "near_tie": false,
+   "min_rel_gap": 1.0
+  },
+  "p1_18": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 54,
+   "near_tie": false,
+   "min_rel_gap": 0.8913
+  },
+  "p1_19": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 27,
+   "near_tie": false,
+   "min_rel_gap": 0.0729
+  },
+  "p1_20": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 27,
+   "near_tie": false,
+   "min_rel_gap": 0.0335
+  },
+  "p1_21": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 54,
+   "near_tie": false,
+   "min_rel_gap": 0.3004
+  },
+  "p1_22": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 16,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "p1_23": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 54,
+   "near_tie": false,
+   "min_rel_gap": 0.0215
+  },
+  "p1_24": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.0724
+  },
+  "p1_25": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 28,
+   "near_tie": false,
+   "min_rel_gap": 0.2325
+  },
+  "p1_26": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 8,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "p1_27": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 26,
+   "near_tie": false,
+   "min_rel_gap": 0.1349
+  },
+  "p1_28": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 52,
+   "near_tie": false,
+   "min_rel_gap": 0.0198
+  },
+  "p1_29": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 52,
+   "near_tie": false,
+   "min_rel_gap": 0.4206
+  },
+  "p1_30": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 52,
+   "near_tie": false,
+   "min_rel_gap": 0.2993
+  },
+  "p1_31": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 52,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "p1_32": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 52,
+   "near_tie": false,
+   "min_rel_gap": 0.121
+  },
+  "p1_33": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.1816
+  },
+  "p1_34": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.1664
+  },
+  "p1_35": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.0751
+  },
+  "p1_36": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 18,
+   "near_tie": false,
+   "min_rel_gap": null
+  },
+  "p1_37": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 54,
+   "near_tie": false,
+   "min_rel_gap": 0.0377
+  },
+  "p1_38": {
+   "verified": true,
+   "verified_by": "Phase 0 cells (80): two independent readers (blind second sheet), per agg_phase0/verification_record.json. Phase 1 new cells (144): one reader (the AGG-1.1 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (verify_phase1_cells.py). No LLM call produced or scored any value.",
+   "verified_at": "2026-11-11",
+   "unverified_cells": [],
+   "n_cells": 54,
+   "near_tie": false,
+   "min_rel_gap": 0.028
+  }
+ }
+}

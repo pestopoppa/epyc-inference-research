@@ -1,0 +1,225 @@
+doc_name,company,metric,fiscal_year,value_usd_m,status,page,quote,reviewer,note,unit,confidence,verified
+AMERICANWATERWORKS_2022_10K,American Water Works,revenue,2022,3792,filled,58,"Operating revenues $ 3,792",verified_by: two-independent-readers 2026-11-10,reader2 cites p83 (same value),USD millions,high,true
+AMERICANWATERWORKS_2022_10K,American Water Works,net_income,2022,820,filled,58,Net income attributable to common shareholders $ 820,verified_by: two-independent-readers 2026-11-10,reader2 cites p83 (same value),USD millions,high,true
+AMERICANWATERWORKS_2022_10K,American Water Works,capex,2022,2297,filled,85,"Capital expenditures (2,297)",verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+AMERICANWATERWORKS_2022_10K,American Water Works,total_assets,2022,27787,filled,81,"Total assets $ 27,787",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+AMERICANWATERWORKS_2022_10K,American Water Works,operating_cash_flow,2022,1108,filled,85,"Net cash provided by operating activities 1,108",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+AMERICANWATERWORKS_2022_10K,American Water Works,total_current_assets,2022,1250,filled,81,"Total current assets 1,250",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+AMERICANWATERWORKS_2022_10K,American Water Works,total_current_liabilities,2022,2811,filled,82,"Total current liabilities 2,811",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+AMERICANWATERWORKS_2022_10K,American Water Works,dividends_paid,2022,467,filled,85,Dividends paid (467),verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+CORNING_2022_10K,Corning,revenue,2022,14189,filled,58,"Net sales $ 14,189",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+CORNING_2022_10K,Corning,net_income,2022,1316,filled,58,"Net income attributable to Corning Incorporated $ 1,316",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+CORNING_2022_10K,Corning,capex,2022,1604,filled,61,"Capital expenditures (1,604)",verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+CORNING_2022_10K,Corning,total_assets,2022,29499,filled,60,"Total Assets $ 29,499",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+CORNING_2022_10K,Corning,operating_cash_flow,2022,2615,filled,61,"Net cash provided by operating activities 2,615",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+CORNING_2022_10K,Corning,total_current_assets,2022,7453,filled,60,"Total current assets 7,453",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+CORNING_2022_10K,Corning,total_current_liabilities,2022,5175,filled,60,"Total current liabilities 5,175",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+CORNING_2022_10K,Corning,dividends_paid,2022,932,filled,61,Dividends paid (932),verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+JPMORGAN_2022_10K,JPMorgan,revenue,2022,128695,filled,161,"Total net revenue 128,695",verified_by: two-independent-readers 2026-11-10,"reported basis (managed basis 132,277)",USD millions,high,true
+JPMORGAN_2022_10K,JPMorgan,net_income,2022,37676,filled,161,"Net income $ 37,676",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+JPMORGAN_2022_10K,JPMorgan,capex,2022,,na,,,verified_by: two-independent-readers 2026-11-10,"bank: cash-flow statement has no purchases-of-PP&E line (only 'All other investing activities, net'); premises and equipment is a balance-sheet item. Reviewer may overrule to blank; reader2 cites p165 (same value)",,medium,true
+JPMORGAN_2022_10K,JPMorgan,total_assets,2022,3665743,filled,163,"Total assets(a) $ 3,665,743",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+JPMORGAN_2022_10K,JPMorgan,operating_cash_flow,2022,107119,filled,165,"Net cash provided by/(used in) operating activities 107,119",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+JPMORGAN_2022_10K,JPMorgan,total_current_assets,2022,,na,,,verified_by: two-independent-readers 2026-11-10,bank: unclassified balance sheet; reader2 cites p163 (same value),,medium,true
+JPMORGAN_2022_10K,JPMorgan,total_current_liabilities,2022,,na,,,verified_by: two-independent-readers 2026-11-10,bank: unclassified balance sheet; reader2 cites p163 (same value),,medium,true
+JPMORGAN_2022_10K,JPMorgan,dividends_paid,2022,,na,,,,"EXCLUDED from agg18 (operator decision 2026-11-10 #3): face line 'Dividends paid' (13,562, p165) combines preferred+common; common-only not on a statement face",,none,false
+PAYPAL_2022_10K,Paypal,revenue,2022,27518,filled,62,"Net revenues $ 27,518",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PAYPAL_2022_10K,Paypal,net_income,2022,2419,filled,62,"Net income (loss) $ 2,419",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PAYPAL_2022_10K,Paypal,capex,2022,706,filled,65,Purchases of property and equipment (706),verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+PAYPAL_2022_10K,Paypal,total_assets,2022,78717,filled,61,"Total assets $ 78,717",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PAYPAL_2022_10K,Paypal,operating_cash_flow,2022,5813,filled,65,"Net cash provided by operating activities 5,813",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PAYPAL_2022_10K,Paypal,total_current_assets,2022,57517,filled,61,"Total current assets 57,517",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PAYPAL_2022_10K,Paypal,total_current_liabilities,2022,45101,filled,61,"Total current liabilities 45,101",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PAYPAL_2022_10K,Paypal,dividends_paid,2022,,na,32,We have never paid any cash dividends and we currently do not anticipate paying any cash dividends in the foreseeable future.,verified_by: operator 2026-11-10,NA: no dividend line item; company has never paid cash dividends (operator decision 2026-11-10),,high,true
+VERIZON_2022_10K,Verizon,revenue,2022,136835,filled,54,"Total Operating Revenues 136,835",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+VERIZON_2022_10K,Verizon,net_income,2022,21256,filled,54,"Net income attributable to Verizon 21,256",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+VERIZON_2022_10K,Verizon,capex,2022,23087,filled,57,"Capital expenditures (including capitalized software) (23,087)",verified_by: operator 2026-11-10,includes capitalized software; magnitude of outflow; medium-confidence cell accepted by operator 2026-11-10,USD millions,high,true
+VERIZON_2022_10K,Verizon,total_assets,2022,379680,filled,56,"Total assets $ 379,680",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+VERIZON_2022_10K,Verizon,operating_cash_flow,2022,37141,filled,57,"Net cash provided by operating activities 37,141",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+VERIZON_2022_10K,Verizon,total_current_assets,2022,37857,filled,56,"Total current assets 37,857",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+VERIZON_2022_10K,Verizon,total_current_liabilities,2022,50171,filled,56,"Total current liabilities 50,171",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+VERIZON_2022_10K,Verizon,dividends_paid,2022,10805,filled,57,"Dividends paid (10,805)",verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+AES_2022_10K,AES Corporation,revenue,2022,12617,filled,132,"Total revenue 12,617",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+AES_2022_10K,AES Corporation,net_income,2022,-546,filled,132,NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION $ (546),verified_by: two-independent-readers 2026-11-10,net loss attributable to AES Corporation,USD millions,high,true
+AES_2022_10K,AES Corporation,capex,2022,4551,filled,135,"Capital expenditures (4,551)",verified_by: two-independent-readers 2026-11-10,"cash-flow investing outflow, magnitude",USD millions,high,true
+AES_2022_10K,AES Corporation,total_assets,2022,38363,filled,130,"TOTAL ASSETS $ 38,363",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+AES_2022_10K,AES Corporation,operating_cash_flow,2022,2715,filled,135,"Net cash provided by operating activities 2,715",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+AES_2022_10K,AES Corporation,total_current_assets,2022,7643,filled,130,"Total current assets 7,643",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+AES_2022_10K,AES Corporation,total_current_liabilities,2022,6491,filled,130,"Total current liabilities 6,491",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+AES_2022_10K,AES Corporation,dividends_paid,2022,422,filled,135,Dividends paid on AES common stock (422),verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+COCACOLA_2022_10K,Coca-Cola,revenue,2022,43004,filled,63,"Net Operating Revenues $ 43,004",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+COCACOLA_2022_10K,Coca-Cola,net_income,2022,9542,filled,63,"Net Income Attributable to Shareowners of The Coca-Cola Company $ 9,542",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+COCACOLA_2022_10K,Coca-Cola,capex,2022,1484,filled,66,"Purchases of property, plant and equipment (1,484)",verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+COCACOLA_2022_10K,Coca-Cola,total_assets,2022,92763,filled,65,"Total Assets $ 92,763",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+COCACOLA_2022_10K,Coca-Cola,operating_cash_flow,2022,11018,filled,66,"Net Cash Provided by Operating Activities 11,018",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+COCACOLA_2022_10K,Coca-Cola,total_current_assets,2022,22591,filled,65,"Total Current Assets 22,591",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+COCACOLA_2022_10K,Coca-Cola,total_current_liabilities,2022,19724,filled,65,"Total Current Liabilities 19,724",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+COCACOLA_2022_10K,Coca-Cola,dividends_paid,2022,7616,filled,66,"Dividends (7,616)",verified_by: operator 2026-11-10,"cash-flow line 'Dividends' (7,616); the equity statement shows 7,617 declared; magnitude of outflow; medium-confidence cell accepted by operator 2026-11-10",USD millions,high,true
+GENERALMILLS_2022_10K,General Mills,revenue,2022,18992.8,filled,45,"Net sales $ 18,992.8",verified_by: two-independent-readers 2026-11-10,"fiscal 2022 = year ended May 29, 2022; ",USD millions,high,true
+GENERALMILLS_2022_10K,General Mills,net_income,2022,2707.3,filled,45,"Net earnings attributable to General Mills $ 2,707.3",verified_by: two-independent-readers 2026-11-10,"fiscal 2022 = year ended May 29, 2022; ",USD millions,high,true
+GENERALMILLS_2022_10K,General Mills,capex,2022,568.7,filled,49,"Purchases of land, buildings, and equipment (568.7)",verified_by: two-independent-readers 2026-11-10,"fiscal 2022 = year ended May 29, 2022; magnitude of outflow",USD millions,high,true
+GENERALMILLS_2022_10K,General Mills,total_assets,2022,31090.1,filled,47,"Total assets $ 31,090.1",verified_by: two-independent-readers 2026-11-10,"fiscal 2022 = year ended May 29, 2022; ",USD millions,high,true
+GENERALMILLS_2022_10K,General Mills,operating_cash_flow,2022,3316.1,filled,49,"Net cash provided by operating activities 3,316.1",verified_by: two-independent-readers 2026-11-10,"fiscal 2022 = year ended May 29, 2022; ",USD millions,high,true
+GENERALMILLS_2022_10K,General Mills,total_current_assets,2022,5089.8,filled,47,"Total current assets 5,089.8",verified_by: two-independent-readers 2026-11-10,"fiscal 2022 = year ended May 29, 2022; ",USD millions,high,true
+GENERALMILLS_2022_10K,General Mills,total_current_liabilities,2022,8019.9,filled,47,"Total current liabilities 8,019.9",verified_by: two-independent-readers 2026-11-10,"fiscal 2022 = year ended May 29, 2022; ",USD millions,high,true
+GENERALMILLS_2022_10K,General Mills,dividends_paid,2022,1244.5,filled,49,"Dividends paid (1,244.5)",verified_by: two-independent-readers 2026-11-10,"fiscal 2022 = year ended May 29, 2022; magnitude of outflow",USD millions,high,true
+LOCKHEEDMARTIN_2022_10K,Lockheed Martin,revenue,2022,65984,filled,63,"Total net sales 65,984",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+LOCKHEEDMARTIN_2022_10K,Lockheed Martin,net_income,2022,5732,filled,63,"Net earnings $ 5,732",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+LOCKHEEDMARTIN_2022_10K,Lockheed Martin,capex,2022,1670,filled,66,"Capital expenditures (1,670)",verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+LOCKHEEDMARTIN_2022_10K,Lockheed Martin,total_assets,2022,52880,filled,65,"Total assets $ 52,880",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+LOCKHEEDMARTIN_2022_10K,Lockheed Martin,operating_cash_flow,2022,7802,filled,66,"Net cash provided by operating activities 7,802",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+LOCKHEEDMARTIN_2022_10K,Lockheed Martin,total_current_assets,2022,20991,filled,65,"Total current assets 20,991",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+LOCKHEEDMARTIN_2022_10K,Lockheed Martin,total_current_liabilities,2022,15887,filled,65,"Total current liabilities 15,887",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+LOCKHEEDMARTIN_2022_10K,Lockheed Martin,dividends_paid,2022,3016,filled,66,"Dividends paid (3,016)",verified_by: two-independent-readers 2026-11-10,magnitude of outflow,USD millions,high,true
+PEPSICO_2022_10K,PepsiCo,revenue,2022,86392,filled,62,"Net Revenue $ 86,392",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PEPSICO_2022_10K,PepsiCo,net_income,2022,8910,filled,62,"Net Income Attributable to PepsiCo $ 8,910",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PEPSICO_2022_10K,PepsiCo,capex,2022,5207,filled,64,"Capital spending (5,207)",verified_by: operator 2026-11-10,gross capital spending line; MD&A cites net capital spending $5.0bn (after sales of PP&E); gross used; magnitude of outflow; medium-confidence cell accepted by operator 2026-11-10,USD millions,medium,true
+PEPSICO_2022_10K,PepsiCo,total_assets,2022,92187,filled,66,"Total Assets $ 92,187",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PEPSICO_2022_10K,PepsiCo,operating_cash_flow,2022,10811,filled,64,"Net Cash Provided by Operating Activities 10,811",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PEPSICO_2022_10K,PepsiCo,total_current_assets,2022,21539,filled,66,"Total Current Assets 21,539",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PEPSICO_2022_10K,PepsiCo,total_current_liabilities,2022,26785,filled,66,"Total Current Liabilities 26,785",verified_by: two-independent-readers 2026-11-10,,USD millions,high,true
+PEPSICO_2022_10K,PepsiCo,dividends_paid,2022,6172,filled,65,"Cash dividends paid (6,172)",verified_by: operator 2026-11-10,line is total cash dividends paid (may include small preferred dividends); magnitude of outflow; medium-confidence cell accepted by operator 2026-11-10,USD millions,medium,true
+3M_2022_10K,3M,revenue,2022,34229,filled,48,"Net sales $ 34,229",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,net_income,2022,5777,filled,48,"Net income attributable to 3M $ 5,777",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,capex,2022,1749,filled,52,"Purchases of property, plant and equipment (PP&E) (1,749",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+3M_2022_10K,3M,total_assets,2022,46455,filled,50,"Total assets $ 46,455",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,operating_cash_flow,2022,5591,filled,52,"Net cash provided by (used in) operating activities 5,591",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,total_current_assets,2022,14688,filled,50,"Total current assets 14,688",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,total_current_liabilities,2022,9523,filled,50,"Total current liabilities 9,523",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+3M_2022_10K,3M,dividends_paid,2022,3369,filled,52,"Dividends paid to shareholders (3,369",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+ACTIVISIONBLIZZARD_2022_10K,Activision Blizzard,revenue,2022,7528,filled,68,"Total net revenues 7,528",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ACTIVISIONBLIZZARD_2022_10K,Activision Blizzard,net_income,2022,1513,filled,68,"Net income $ 1,513",agg11a-reader1 + pypdf cross-extractor 2026-11-11,no noncontrolling interest line,USD millions,high,true
+ACTIVISIONBLIZZARD_2022_10K,Activision Blizzard,capex,2022,91,filled,70,Capital expenditures (91,agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+ACTIVISIONBLIZZARD_2022_10K,Activision Blizzard,total_assets,2022,27383,filled,67,"Total assets $ 27,383",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ACTIVISIONBLIZZARD_2022_10K,Activision Blizzard,operating_cash_flow,2022,2220,filled,70,"Net cash provided by operating activities 2,220",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ACTIVISIONBLIZZARD_2022_10K,Activision Blizzard,total_current_assets,2022,14469,filled,67,"Total current assets 14,469",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ACTIVISIONBLIZZARD_2022_10K,Activision Blizzard,total_current_liabilities,2022,3555,filled,67,"Total current liabilities 3,555",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ACTIVISIONBLIZZARD_2022_10K,Activision Blizzard,dividends_paid,2022,367,filled,70,Dividends paid (367,agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+ADOBE_2022_10K,Adobe,revenue,2022,17606,filled,54,"Total revenue 17,606",agg11a-reader1 + pypdf cross-extractor 2026-11-11,"fiscal 2022 ended Dec 2, 2022",USD millions,high,true
+ADOBE_2022_10K,Adobe,net_income,2022,4756,filled,54,"Net income $ 4,756",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ADOBE_2022_10K,Adobe,capex,2022,442,filled,57,Purchases of property and equipment (442,agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+ADOBE_2022_10K,Adobe,total_assets,2022,27165,filled,53,"Total assets $ 27,165",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ADOBE_2022_10K,Adobe,operating_cash_flow,2022,7838,filled,57,"Net cash provided by operating activities 7,838",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ADOBE_2022_10K,Adobe,total_current_assets,2022,8996,filled,53,"Total current assets 8,996",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ADOBE_2022_10K,Adobe,total_current_liabilities,2022,8128,filled,53,"Total current liabilities 8,128",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+ADOBE_2022_10K,Adobe,dividends_paid,2022,,na,35,We do not anticipate paying any cash dividends in the foreseeable future.,agg11a-reader1 + pypdf cross-extractor 2026-11-11,no dividend line on the cash flow statement (p57 financing section); company pays no cash dividends,USD millions,medium,true
+AMAZON_2022_10K,Amazon,revenue,2022,513983,filled,37,"Total net sales 386,064 469,822 513,983",agg11a-reader1 + pypdf cross-extractor 2026-11-11,columns are 2020 2021 2022 (2022 is last),USD millions,high,true
+AMAZON_2022_10K,Amazon,net_income,2022,-2722,filled,37,"Net income (loss) $ 21,331 $ 33,364 $ (2,722)",agg11a-reader1 + pypdf cross-extractor 2026-11-11,net loss; columns 2020 2021 2022,USD millions,high,true
+AMAZON_2022_10K,Amazon,capex,2022,63645,filled,36,"Purchases of property and equipment (40,140) (61,053) (63,645",agg11a-reader1 + pypdf cross-extractor 2026-11-11,gross purchases; columns 2020 2021 2022,USD millions,high,true
+AMAZON_2022_10K,Amazon,total_assets,2022,462675,filled,39,"Total assets $ 420,549 $ 462,675",agg11a-reader1 + pypdf cross-extractor 2026-11-11,balance sheet columns 2021 2022 (2022 last),USD millions,high,true
+AMAZON_2022_10K,Amazon,operating_cash_flow,2022,46752,filled,36,"Net cash provided by (used in) operating activities 66,064 46,327 46,752",agg11a-reader1 + pypdf cross-extractor 2026-11-11,columns 2020 2021 2022,USD millions,high,true
+AMAZON_2022_10K,Amazon,total_current_assets,2022,146791,filled,39,"Total current assets 161,580 146,791",agg11a-reader1 + pypdf cross-extractor 2026-11-11,columns 2021 2022,USD millions,high,true
+AMAZON_2022_10K,Amazon,total_current_liabilities,2022,155393,filled,39,"Total current liabilities 142,266 155,393",agg11a-reader1 + pypdf cross-extractor 2026-11-11,columns 2021 2022,USD millions,high,true
+AMAZON_2022_10K,Amazon,dividends_paid,2022,,na,36,Principal repayments of financing obligations (53) (162) (248) Net cash provided by (used in) financing activities,agg11a-reader1 + pypdf cross-extractor 2026-11-11,no dividend line in the p36 financing section; Amazon pays no cash dividends,USD millions,medium,true
+AMD_2022_10K,AMD,revenue,2022,23601,filled,54,"Net revenue $ 23,601",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMD_2022_10K,AMD,net_income,2022,1320,filled,54,"Net income $ 1,320",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMD_2022_10K,AMD,capex,2022,450,filled,58,Purchases of property and equipment (450,agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+AMD_2022_10K,AMD,total_assets,2022,67580,filled,56,"Total assets $ 67,580",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMD_2022_10K,AMD,operating_cash_flow,2022,3565,filled,58,"Net cash provided by operating activities 3,565",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMD_2022_10K,AMD,total_current_assets,2022,15019,filled,56,"Total current assets 15,019",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMD_2022_10K,AMD,total_current_liabilities,2022,6369,filled,56,"Total current liabilities 6,369",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMD_2022_10K,AMD,dividends_paid,2022,,na,82,The expected dividend yield is zero as the Company does not expect to pay dividends in the near future.,agg11a-reader1 + pypdf cross-extractor 2026-11-11,no dividend line on the cash flow statement (p58); company pays no dividends,USD millions,medium,true
+AMERICANEXPRESS_2022_10K,American Express,revenue,2022,52862,filled,96,"Total revenues net of interest expense 52,862",agg11a-reader1 + pypdf cross-extractor 2026-11-11,AmEx reports revenues net of interest expense,USD millions,high,true
+AMERICANEXPRESS_2022_10K,American Express,net_income,2022,7514,filled,96,"Net income $ 7,514",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMERICANEXPRESS_2022_10K,American Express,capex,2022,1855,filled,99,"Purchase of premises and equipment, net of sales: 2022, $1; 2021, $88; 2020, $1 (1,855",agg11a-reader1 + pypdf cross-extractor 2026-11-11,net of $1M of sales; magnitude of outflow,USD millions,medium,true
+AMERICANEXPRESS_2022_10K,American Express,total_assets,2022,228354,filled,98,"Total assets $ 228,354",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMERICANEXPRESS_2022_10K,American Express,operating_cash_flow,2022,21079,filled,99,"Net cash provided by operating activities 21,079",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+AMERICANEXPRESS_2022_10K,American Express,total_current_assets,2022,,na,98,"Other assets, less reserves for credit losses: 2022, $22; 2021, $25 17,689 17,244 Total assets $ 228,354 $ 188,548",agg11a-reader1 + pypdf cross-extractor 2026-11-11,unclassified balance sheet (no current-asset subtotal),USD millions,high,true
+AMERICANEXPRESS_2022_10K,American Express,total_current_liabilities,2022,,na,98,"Other liabilities 37,350 30,497 Total liabilities $ 203,643 $ 166,371",agg11a-reader1 + pypdf cross-extractor 2026-11-11,unclassified balance sheet (no current-liability subtotal),USD millions,high,true
+AMERICANEXPRESS_2022_10K,American Express,dividends_paid,2022,,na,99,"Dividends paid (1,565)",agg11a-reader1 + pypdf cross-extractor 2026-11-11,cash-flow line combines common and preferred dividends (preferred declared p100: Series B/C/D); common-only paid not stated; set NA by the JPMorgan precedent (operator decision 2026-11-10 #3),USD millions,medium,true
+APPLE_2022_10K,Apple,revenue,2022,394328,filled,32,"Total net sales 394,328",agg11a-reader1 + pypdf cross-extractor 2026-11-11,"fiscal 2022 ended Sep 24, 2022",USD millions,high,true
+APPLE_2022_10K,Apple,net_income,2022,99803,filled,32,"Net income $ 99,803",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+APPLE_2022_10K,Apple,capex,2022,10708,filled,36,"Payments for acquisition of property, plant and equipment (10,708",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+APPLE_2022_10K,Apple,total_assets,2022,352755,filled,34,"Total assets $ 352,755",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+APPLE_2022_10K,Apple,operating_cash_flow,2022,122151,filled,36,"Cash generated by operating activities 122,151",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+APPLE_2022_10K,Apple,total_current_assets,2022,135405,filled,34,"Total current assets 135,405",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+APPLE_2022_10K,Apple,total_current_liabilities,2022,153982,filled,34,"Total current liabilities 153,982",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+APPLE_2022_10K,Apple,dividends_paid,2022,14841,filled,36,"Payments for dividends and dividend equivalents (14,841",agg11a-reader1 + pypdf cross-extractor 2026-11-11,includes dividend equivalents on RSUs; magnitude of outflow,USD millions,medium,true
+BOEING_2022_10K,Boeing,revenue,2022,66608,filled,55,"Total revenues 66,608",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+BOEING_2022_10K,Boeing,net_income,2022,-4935,filled,55,"Net loss attributable to Boeing Shareholders ($4,935)",agg11a-reader1 + pypdf cross-extractor 2026-11-11,net loss,USD millions,high,true
+BOEING_2022_10K,Boeing,capex,2022,1222,filled,59,"Payments to acquire property, plant and equipment (1,222",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+BOEING_2022_10K,Boeing,total_assets,2022,137100,filled,57,"Total assets $137,100",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+BOEING_2022_10K,Boeing,operating_cash_flow,2022,3512,filled,59,"Net cash provided/(used) by operating activities 3,512",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+BOEING_2022_10K,Boeing,total_current_assets,2022,109523,filled,57,"Total current assets 109,523",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+BOEING_2022_10K,Boeing,total_current_liabilities,2022,90052,filled,57,"Total current liabilities 90,052",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+BOEING_2022_10K,Boeing,dividends_paid,2022,,na,44,we did not pay any dividends in 2022 and 2021,agg11a-reader1 + pypdf cross-extractor 2026-11-11,"dividend suspended; the p59 ""Dividends paid (1,158)"" is the 2020 column",USD millions,high,true
+COSTCO_2022_10K,Costco,revenue,2022,226954,filled,36,"Total revenue 226,954",agg11a-reader1 + pypdf cross-extractor 2026-11-11,"net sales 222,730 + membership fees; fiscal 2022 ended Aug 28, 2022",USD millions,high,true
+COSTCO_2022_10K,Costco,net_income,2022,5844,filled,36,"NET INCOME ATTRIBUTABLE TO COSTCO $ 5,844",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+COSTCO_2022_10K,Costco,capex,2022,3891,filled,40,"Additions to property and equipment (3,891",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+COSTCO_2022_10K,Costco,total_assets,2022,64166,filled,38,"TOTAL ASSETS $ 64,166",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+COSTCO_2022_10K,Costco,operating_cash_flow,2022,7392,filled,40,"Net cash provided by operating activities 7,392",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+COSTCO_2022_10K,Costco,total_current_assets,2022,32696,filled,38,"Total current assets 32,696",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+COSTCO_2022_10K,Costco,total_current_liabilities,2022,31998,filled,38,"Total current liabilities 31,998",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+COSTCO_2022_10K,Costco,dividends_paid,2022,1498,filled,40,"Cash dividend payments (1,498",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow; excludes the $208M dividend to noncontrolling interest,USD millions,high,true
+CVSHEALTH_2022_10K,CVS Health,revenue,2022,322467,filled,108,"Total revenues 322,467",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+CVSHEALTH_2022_10K,CVS Health,net_income,2022,4149,filled,108,"Net income attributable to CVS Health $ 4,149",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+CVSHEALTH_2022_10K,CVS Health,capex,2022,2727,filled,111,"Purchases of property and equipment (2,727",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+CVSHEALTH_2022_10K,CVS Health,total_assets,2022,228275,filled,110,"Total assets $ 228,275",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+CVSHEALTH_2022_10K,CVS Health,operating_cash_flow,2022,16177,filled,111,"Net cash provided by operating activities 16,177",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+CVSHEALTH_2022_10K,CVS Health,total_current_assets,2022,65682,filled,110,"Total current assets 65,682",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+CVSHEALTH_2022_10K,CVS Health,total_current_liabilities,2022,69736,filled,110,"Total current liabilities 69,736",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+CVSHEALTH_2022_10K,CVS Health,dividends_paid,2022,2907,filled,111,"Dividends paid (2,907",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+EBAY_2022_10K,eBay,revenue,2022,9795,filled,59,"Net revenues $ 9,795",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+EBAY_2022_10K,eBay,net_income,2022,-1269,filled,59,"Net income (loss) $ (1,269)",agg11a-reader1 + pypdf cross-extractor 2026-11-11,net loss,USD millions,high,true
+EBAY_2022_10K,eBay,capex,2022,449,filled,62,Purchases of property and equipment (449,agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+EBAY_2022_10K,eBay,total_assets,2022,20850,filled,58,"Total assets $ 20,850",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+EBAY_2022_10K,eBay,operating_cash_flow,2022,2254,filled,62,"Net cash provided by operating activities 2,254",agg11a-reader1 + pypdf cross-extractor 2026-11-11,"total incl. discontinued operations (continuing 2,627)",USD millions,medium,true
+EBAY_2022_10K,eBay,total_current_assets,2022,9290,filled,58,"Total current assets 9,290",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+EBAY_2022_10K,eBay,total_current_liabilities,2022,4271,filled,58,"Total current liabilities 4,271",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+EBAY_2022_10K,eBay,dividends_paid,2022,489,filled,62,Payments for dividends (489,agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,revenue,2022,94943,filled,47,"Sales to customers $ 94,943",agg11a-reader1 + pypdf cross-extractor 2026-11-11,"fiscal 2022 ended Jan 1, 2023",USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,net_income,2022,17941,filled,47,"Net earnings $ 17,941",agg11a-reader1 + pypdf cross-extractor 2026-11-11,no noncontrolling interest line,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,capex,2022,4009,filled,50,"Additions to property, plant and equipment (4,009",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,total_assets,2022,187378,filled,46,"Total assets $ 187,378",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,operating_cash_flow,2022,21194,filled,50,"Net cash flows from operating activities 21,194",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,total_current_assets,2022,55294,filled,46,"Total current assets 55,294",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,total_current_liabilities,2022,55802,filled,46,"Total current liabilities 55,802",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+JOHNSON_JOHNSON_2022_10K,Johnson & Johnson,dividends_paid,2022,11682,filled,50,"Dividends to shareholders (11,682",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+KRAFTHEINZ_2022_10K,Kraft Heinz,revenue,2022,26485,filled,52,"Net sales $ 26,485",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+KRAFTHEINZ_2022_10K,Kraft Heinz,net_income,2022,2363,filled,52,"Net income/(loss) attributable to common shareholders $ 2,363",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+KRAFTHEINZ_2022_10K,Kraft Heinz,capex,2022,916,filled,56,Capital expenditures (916,agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+KRAFTHEINZ_2022_10K,Kraft Heinz,total_assets,2022,90513,filled,54,"TOTAL ASSETS $ 90,513",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+KRAFTHEINZ_2022_10K,Kraft Heinz,operating_cash_flow,2022,2469,filled,56,"Net cash provided by/(used for) operating activities 2,469",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+KRAFTHEINZ_2022_10K,Kraft Heinz,total_current_assets,2022,7897,filled,54,"Total current assets 7,897",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+KRAFTHEINZ_2022_10K,Kraft Heinz,total_current_liabilities,2022,9028,filled,54,"Total current liabilities 9,028",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+KRAFTHEINZ_2022_10K,Kraft Heinz,dividends_paid,2022,1960,filled,56,"Dividends paid (1,960",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow; line may include preferred (none outstanding in 2022),USD millions,medium,true
+MCDONALDS_2022_10K,McDonald's,revenue,2022,23182.6,filled,36,"Total revenues 23,182.6",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MCDONALDS_2022_10K,McDonald's,net_income,2022,6177.4,filled,36,"Net income $ 6,177.4",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MCDONALDS_2022_10K,McDonald's,capex,2022,1899.2,filled,39,"Capital expenditures (1,899.2",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+MCDONALDS_2022_10K,McDonald's,total_assets,2022,50435.6,filled,38,"Total assets $ 50,435.6",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MCDONALDS_2022_10K,McDonald's,operating_cash_flow,2022,7386.7,filled,39,"Cash provided by operations 7,386.7",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MCDONALDS_2022_10K,McDonald's,total_current_assets,2022,5424.2,filled,38,"Total current assets 5,424.2",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MCDONALDS_2022_10K,McDonald's,total_current_liabilities,2022,3802.1,filled,38,"Total current liabilities 3,802.1",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MCDONALDS_2022_10K,McDonald's,dividends_paid,2022,4168.2,filled,39,"Common stock dividends (4,168.2",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+MGMRESORTS_2022_10K,MGM Resorts,revenue,2022,13127.485,filled,37,"Net revenues $ 13,127,485",agg11a-reader1 + pypdf cross-extractor 2026-11-11,statements are in thousands; value converted to USD millions,USD millions,high,true
+MGMRESORTS_2022_10K,MGM Resorts,net_income,2022,1473.093,filled,60,"Net income (loss) attributable to MGM Resorts International $ 1,473,093",agg11a-reader1 + pypdf cross-extractor 2026-11-11,"in thousands; attributable to MGM (net income incl. noncontrolling interests is 206,731)",USD millions,high,true
+MGMRESORTS_2022_10K,MGM Resorts,capex,2022,765.067,filled,62,"Capital expenditures (765,067",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands; magnitude of outflow,USD millions,high,true
+MGMRESORTS_2022_10K,MGM Resorts,total_assets,2022,45692.206,filled,59,"Total other assets 32,313,586 20,047,441 $ 45,692,206",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands; the total-assets line is unlabeled in the extracted text (equals total liabilities and stockholders equity),USD millions,medium,true
+MGMRESORTS_2022_10K,MGM Resorts,operating_cash_flow,2022,1756.462,filled,62,"Net cash provided by (used in) operating activities 1,756,462",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands,USD millions,high,true
+MGMRESORTS_2022_10K,MGM Resorts,total_current_assets,2022,8154.692,filled,59,"Total current assets 8,154,692",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands,USD millions,high,true
+MGMRESORTS_2022_10K,MGM Resorts,total_current_liabilities,2022,4515.892,filled,59,"Total current liabilities 4,515,892",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands,USD millions,high,true
+MGMRESORTS_2022_10K,MGM Resorts,dividends_paid,2022,4.048,filled,62,"Dividends paid to common shareholders (4,048",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands; magnitude of outflow,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,revenue,2022,198270,filled,57,"Total revenue 198,270",agg11a-reader1 + pypdf cross-extractor 2026-11-11,"fiscal 2022 ended Jun 30, 2022",USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,net_income,2022,72738,filled,57,"Net income $ 72,738",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,capex,2022,23886,filled,60,"Additions to property and equipment (23,886",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,total_assets,2022,364840,filled,59,"Total assets $ 364,840",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,operating_cash_flow,2022,89035,filled,60,"Net cash from operations 89,035",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,total_current_assets,2022,169684,filled,59,"Total current assets 169,684",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,total_current_liabilities,2022,95082,filled,59,"Total current liabilities 95,082",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+MICROSOFT_2022_10K,Microsoft,dividends_paid,2022,18135,filled,60,"Common stock cash dividends paid (18,135",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+NETFLIX_2022_10K,Netflix,revenue,2022,31615.55,filled,40,"Revenues $ 31,615,550",agg11a-reader1 + pypdf cross-extractor 2026-11-11,statements are in thousands; value converted to USD millions,USD millions,high,true
+NETFLIX_2022_10K,Netflix,net_income,2022,4491.924,filled,40,"Net income $ 4,491,924",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands,USD millions,high,true
+NETFLIX_2022_10K,Netflix,capex,2022,407.729,filled,42,"Purchases of property and equipment (407,729",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands; magnitude of outflow,USD millions,high,true
+NETFLIX_2022_10K,Netflix,total_assets,2022,48594.768,filled,43,"Total assets $ 48,594,768",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands,USD millions,high,true
+NETFLIX_2022_10K,Netflix,operating_cash_flow,2022,2026.257,filled,29,"Net cash provided by operating activities $ 2,026,257",agg11a-reader1 + pypdf cross-extractor 2026-11-11,"in thousands; the p42 statement line is merged in the extracted text, p29 MD&A table states the same figure",USD millions,medium,true
+NETFLIX_2022_10K,Netflix,total_current_assets,2022,9266.473,filled,43,"Total current assets 9,266,473",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands,USD millions,high,true
+NETFLIX_2022_10K,Netflix,total_current_liabilities,2022,7930.974,filled,43,"Total current liabilities 7,930,974",agg11a-reader1 + pypdf cross-extractor 2026-11-11,in thousands,USD millions,high,true
+NETFLIX_2022_10K,Netflix,dividends_paid,2022,,na,20,We have never declared or paid any cash dividends on our capital stock,agg11a-reader1 + pypdf cross-extractor 2026-11-11,never paid,USD millions,high,true
+PFIZER_2022_10K,Pfizer,revenue,2022,100330,filled,54,"Revenues $ 100,330",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+PFIZER_2022_10K,Pfizer,net_income,2022,31372,filled,54,"Net income attributable to Pfizer Inc. common shareholders $ 31,372",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+PFIZER_2022_10K,Pfizer,capex,2022,3236,filled,58,"Purchases of property, plant and equipment (3,236",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true
+PFIZER_2022_10K,Pfizer,total_assets,2022,197205,filled,56,"Total assets $ 197,205",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+PFIZER_2022_10K,Pfizer,operating_cash_flow,2022,29267,filled,58,"Net cash provided by operating activities 29,267",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+PFIZER_2022_10K,Pfizer,total_current_assets,2022,51259,filled,56,"Total current assets 51,259",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+PFIZER_2022_10K,Pfizer,total_current_liabilities,2022,42138,filled,56,"Total current liabilities 42,138",agg11a-reader1 + pypdf cross-extractor 2026-11-11,,USD millions,high,true
+PFIZER_2022_10K,Pfizer,dividends_paid,2022,8983,filled,58,"Cash dividends paid (8,983",agg11a-reader1 + pypdf cross-extractor 2026-11-11,magnitude of outflow,USD millions,high,true

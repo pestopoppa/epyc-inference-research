@@ -1,0 +1,417 @@
+{
+ "schema": "agg_phase1_corpus.v1",
+ "fiscal_year": 2022,
+ "fb_jsonl_sha256": "a5a2aa673e573e55675fc3c0f9aa38c1cf59d2abc91edb077534f71f10a71877",
+ "n_docs": 28,
+ "n_phase0_docs": 10,
+ "selection": "the 10 Phase 0 FinanceBench FY2022 10-Ks (unchanged, same pins) + 18 more FinanceBench FY2022 10-Ks chosen for sector spread, unit traps (USD thousands: MGM Resorts, Netflix), reversed column order (Amazon), net losses (Amazon, Boeing, eBay), no-dividend filers and an unclassified balance sheet (American Express); fiscal 2022 as each filing labels it",
+ "manifest_digest_sha256": "5c834d5e05c224365405a4a9d99e5b3184d55447991df91840c54af5562b3705",
+ "docs": [
+  {
+   "doc_name": "AMERICANWATERWORKS_2022_10K",
+   "company": "American Water Works",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/AMERICANWATERWORKS_2022_10K.pdf",
+   "sha256": "aea336531f1f8b10ecee1dd61066aab29794504f1f4a1407c857bd1e20d7da40",
+   "bytes": 2729077,
+   "pages": 306,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/AMERICANWATERWORKS_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_00070"
+   ]
+  },
+  {
+   "doc_name": "CORNING_2022_10K",
+   "company": "Corning",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/CORNING_2022_10K.pdf",
+   "sha256": "a63f102f045826b38ad21a606c33710f62932646fd7c0f1852ce411a4397a3ee",
+   "bytes": 1399926,
+   "pages": 159,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/CORNING_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_01346",
+    "financebench_id_00005"
+   ]
+  },
+  {
+   "doc_name": "JPMORGAN_2022_10K",
+   "company": "JPMorgan",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/JPMORGAN_2022_10K.pdf",
+   "sha256": "c269899950f36edfa496e3c8447a51d86d0a206442a96dc24dcd9317d55b957c",
+   "bytes": 6947859,
+   "pages": 382,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/JPMORGAN_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_00206"
+   ]
+  },
+  {
+   "doc_name": "PAYPAL_2022_10K",
+   "company": "Paypal",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/PAYPAL_2022_10K.pdf",
+   "sha256": "0c1dd6cd170261c6bd778de382a211a56a3bb1e009a429246370c97fa0defab3",
+   "bytes": 4371232,
+   "pages": 134,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/PAYPAL_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_00080"
+   ]
+  },
+  {
+   "doc_name": "VERIZON_2022_10K",
+   "company": "Verizon",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/VERIZON_2022_10K.pdf",
+   "sha256": "403d7346e8a059472863d1789527f16e5127a61c2f6c4429012e6227f27576d7",
+   "bytes": 2315268,
+   "pages": 124,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/VERIZON_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_00216",
+    "financebench_id_00215",
+    "financebench_id_00566"
+   ]
+  },
+  {
+   "doc_name": "AES_2022_10K",
+   "company": "AES Corporation",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/AES_2022_10K.pdf",
+   "sha256": "9c5de2227534c4d6bf3d805f635bad5d82eddf8e4183a85a3d1311b48b50291d",
+   "bytes": 4479324,
+   "pages": 257,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/AES_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_01319",
+    "financebench_id_00540",
+    "financebench_id_10420"
+   ]
+  },
+  {
+   "doc_name": "COCACOLA_2022_10K",
+   "company": "Coca-Cola",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/COCACOLA_2022_10K.pdf",
+   "sha256": "9f91bb914d94d014cfca96e1021c932d5476d8b8ac2a933767bac4c438fd7a71",
+   "bytes": 9485744,
+   "pages": 183,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/COCACOLA_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_06272"
+   ]
+  },
+  {
+   "doc_name": "GENERALMILLS_2022_10K",
+   "company": "General Mills",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/GENERALMILLS_2022_10K.pdf",
+   "sha256": "27f2cc507ffc056de3b679d124d51b80bd043ce7b8e867c59e2cdfe1d2ea5de3",
+   "bytes": 1083414,
+   "pages": 127,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/GENERALMILLS_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_10136"
+   ]
+  },
+  {
+   "doc_name": "LOCKHEEDMARTIN_2022_10K",
+   "company": "Lockheed Martin",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/LOCKHEEDMARTIN_2022_10K.pdf",
+   "sha256": "9a2317300d0f1e2623ba291fe9ec38fc779c1d1ad989dcfe6f862b77435c6923",
+   "bytes": 1398312,
+   "pages": 130,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/LOCKHEEDMARTIN_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_03718"
+   ]
+  },
+  {
+   "doc_name": "PEPSICO_2022_10K",
+   "company": "PepsiCo",
+   "phase0": true,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/PEPSICO_2022_10K.pdf",
+   "sha256": "7d8a9f3374e429c58f101319e2da8a0e601a89859e1e4f6854163dd5f8ce6b47",
+   "bytes": 2993516,
+   "pages": 503,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/PEPSICO_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_01009",
+    "financebench_id_00735",
+    "financebench_id_01328",
+    "financebench_id_03620",
+    "financebench_id_04481"
+   ]
+  },
+  {
+   "doc_name": "3M_2022_10K",
+   "company": "3M",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/3M_2022_10K.pdf",
+   "sha256": "d5cf549543a24b04228fd2af979ff2ca94cf64fb008a789340cb9117fbcfde5d",
+   "bytes": 1655681,
+   "pages": 252,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/3M_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_00499",
+    "financebench_id_01226",
+    "financebench_id_01865"
+   ]
+  },
+  {
+   "doc_name": "ACTIVISIONBLIZZARD_2022_10K",
+   "company": "Activision Blizzard",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/ACTIVISIONBLIZZARD_2022_10K.pdf",
+   "sha256": "2f929f118979c52658324f8a78374aba89ce30cf7fc7c3d97dab6177c54f003c",
+   "bytes": 2299060,
+   "pages": 312,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/ACTIVISIONBLIZZARD_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": []
+  },
+  {
+   "doc_name": "ADOBE_2022_10K",
+   "company": "Adobe",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/ADOBE_2022_10K.pdf",
+   "sha256": "ce8c716abac26bfa38ae6b71d703112852c8591a4bb19f7c1177beb1dfc87ad2",
+   "bytes": 620288,
+   "pages": 99,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/ADOBE_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-02",
+   "fb_questions": [
+    "financebench_id_00438",
+    "financebench_id_00591"
+   ]
+  },
+  {
+   "doc_name": "AMAZON_2022_10K",
+   "company": "Amazon",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/AMAZON_2022_10K.pdf",
+   "sha256": "084ef3d6031c4b57169b32ae6a878a86ebbcbc7bb868030e3170d04392b4096e",
+   "bytes": 712683,
+   "pages": 81,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/AMAZON_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": []
+  },
+  {
+   "doc_name": "AMD_2022_10K",
+   "company": "AMD",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/AMD_2022_10K.pdf",
+   "sha256": "a3bd74088fae0ad4aa03d04998a1f4c64fd0b3c693841601b0ac49b46cf5c1f4",
+   "bytes": 5122473,
+   "pages": 121,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/AMD_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_00222",
+    "financebench_id_00995",
+    "financebench_id_01198",
+    "financebench_id_00917",
+    "financebench_id_01279",
+    "financebench_id_00563",
+    "financebench_id_00757"
+   ]
+  },
+  {
+   "doc_name": "AMERICANEXPRESS_2022_10K",
+   "company": "American Express",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/AMERICANEXPRESS_2022_10K.pdf",
+   "sha256": "d3bbc7ab23d6160e07eab50a359e4d68c40efff9fde3baa168e7c40e06f568e6",
+   "bytes": 2436166,
+   "pages": 260,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/AMERICANEXPRESS_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_00476",
+    "financebench_id_01028",
+    "financebench_id_00723",
+    "financebench_id_00720",
+    "financebench_id_01351",
+    "financebench_id_01964",
+    "financebench_id_01981"
+   ]
+  },
+  {
+   "doc_name": "APPLE_2022_10K",
+   "company": "Apple",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/APPLE_2022_10K.pdf",
+   "sha256": "40f4a5169ac49f1c3011b8287afe28364138cd4f3e4db36c8d75c9da0f6b2a93",
+   "bytes": 729516,
+   "pages": 80,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/APPLE_2022_10K.pdf",
+   "fiscal_year_end": "2022-09-24",
+   "fb_questions": []
+  },
+  {
+   "doc_name": "BOEING_2022_10K",
+   "company": "Boeing",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/BOEING_2022_10K.pdf",
+   "sha256": "09285ff7ee737d3302977104aa05cc53c9dfb0161f3461a89b583dc38b9f2ab6",
+   "bytes": 1366995,
+   "pages": 190,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/BOEING_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_00517",
+    "financebench_id_01091",
+    "financebench_id_00678",
+    "financebench_id_01290",
+    "financebench_id_00464",
+    "financebench_id_00494",
+    "financebench_id_00585"
+   ]
+  },
+  {
+   "doc_name": "COSTCO_2022_10K",
+   "company": "Costco",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/COSTCO_2022_10K.pdf",
+   "sha256": "80f1845a06e6992885726c8fdce574a521236e49cba7ae924d323bc469772a78",
+   "bytes": 799480,
+   "pages": 86,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/COSTCO_2022_10K.pdf",
+   "fiscal_year_end": "2022-08-28",
+   "fb_questions": []
+  },
+  {
+   "doc_name": "CVSHEALTH_2022_10K",
+   "company": "CVS Health",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/CVSHEALTH_2022_10K.pdf",
+   "sha256": "183c196a41793cd50002ff6b88f8c6d32e4fcb1117ab490a732414e1208cda8f",
+   "bytes": 1898137,
+   "pages": 213,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/CVSHEALTH_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_00790",
+    "financebench_id_01107",
+    "financebench_id_01244"
+   ]
+  },
+  {
+   "doc_name": "EBAY_2022_10K",
+   "company": "eBay",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/EBAY_2022_10K.pdf",
+   "sha256": "ed3a72b091113d2ab019ee4cc81ce4987df5c480372339ef5627a93091b7d396",
+   "bytes": 1326258,
+   "pages": 133,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/EBAY_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": []
+  },
+  {
+   "doc_name": "JOHNSON_JOHNSON_2022_10K",
+   "company": "Johnson & Johnson",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/JOHNSON_JOHNSON_2022_10K.pdf",
+   "sha256": "dba7d6cc97734abd6dcbc1a6a34f82b5d228e60d0a1a32425a90404fd4d3e290",
+   "bytes": 1941368,
+   "pages": 151,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/JOHNSON_JOHNSON_2022_10K.pdf",
+   "fiscal_year_end": "2023-01-01 (fiscal 2022)",
+   "fb_questions": [
+    "financebench_id_00956",
+    "financebench_id_00669",
+    "financebench_id_00711"
+   ]
+  },
+  {
+   "doc_name": "KRAFTHEINZ_2022_10K",
+   "company": "Kraft Heinz",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/KRAFTHEINZ_2022_10K.pdf",
+   "sha256": "862aff613aa82ae057d7c1c3a5cd364e1efc187f79f252351b7b63ad003e19bb",
+   "bytes": 3133684,
+   "pages": 294,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/KRAFTHEINZ_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": []
+  },
+  {
+   "doc_name": "MCDONALDS_2022_10K",
+   "company": "McDonald's",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/MCDONALDS_2022_10K.pdf",
+   "sha256": "a30967c85beb68a624c0e0b4d801aa06c026d10c5813a23836d65f0097a29743",
+   "bytes": 1529243,
+   "pages": 104,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/MCDONALDS_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": []
+  },
+  {
+   "doc_name": "MGMRESORTS_2022_10K",
+   "company": "MGM Resorts",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/MGMRESORTS_2022_10K.pdf",
+   "sha256": "130b96c1309c97aaedcabee2fa5d5421e54491e618273bd33c3b1aeddad323ec",
+   "bytes": 1755866,
+   "pages": 220,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/MGMRESORTS_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": [
+    "financebench_id_01254"
+   ]
+  },
+  {
+   "doc_name": "MICROSOFT_2022_10K",
+   "company": "Microsoft",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/MICROSOFT_2022_10K.pdf",
+   "sha256": "561d30b6cfcb5ef2e673d8ae7d5e4264c432e62b972c94233c3569f9f5395212",
+   "bytes": 877980,
+   "pages": 116,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/MICROSOFT_2022_10K.pdf",
+   "fiscal_year_end": "2022-06-30",
+   "fb_questions": []
+  },
+  {
+   "doc_name": "NETFLIX_2022_10K",
+   "company": "Netflix",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/NETFLIX_2022_10K.pdf",
+   "sha256": "c57c586cd6e9483dbd4a8eac2f4982d10eb730159f557d0b1faec9b24601da72",
+   "bytes": 794637,
+   "pages": 87,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/NETFLIX_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": []
+  },
+  {
+   "doc_name": "PFIZER_2022_10K",
+   "company": "Pfizer",
+   "phase0": false,
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261111-agg1/pdfs/PFIZER_2022_10K.pdf",
+   "sha256": "0cb303feeff5290bff4f6a31c57b13c2e220dc24e57191820a47fa1d23058f8a",
+   "bytes": 2231275,
+   "pages": 159,
+   "source_url": "https://github.com/patronus-ai/financebench/raw/main/pdfs/PFIZER_2022_10K.pdf",
+   "fiscal_year_end": "2022-12-31",
+   "fb_questions": []
+  }
+ ]
+}

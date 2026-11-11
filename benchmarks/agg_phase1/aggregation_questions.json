@@ -1,0 +1,538 @@
+{
+ "schema": "agg_phase1_questions.v1",
+ "fiscal_year": 2022,
+ "n_continuity": 20,
+ "n_new": 38,
+ "questions": [
+  {
+   "id": "agg01",
+   "expr": "revenue",
+   "op": "argmax",
+   "q": "Which company in the corpus reported the highest FY2022 total revenue?",
+   "family": "continuity",
+   "phase0_id": "agg01"
+  },
+  {
+   "id": "agg02",
+   "expr": "revenue",
+   "op": "argmin",
+   "q": "Which company in the corpus reported the lowest FY2022 total revenue?",
+   "family": "continuity",
+   "phase0_id": "agg02"
+  },
+  {
+   "id": "agg03",
+   "expr": "revenue",
+   "op": "sum",
+   "q": "What is the combined FY2022 total revenue of all companies in the corpus, in USD millions?",
+   "family": "continuity",
+   "phase0_id": "agg03"
+  },
+  {
+   "id": "agg04",
+   "expr": "revenue",
+   "op": "count_gt",
+   "t": 50000,
+   "q": "How many companies in the corpus reported FY2022 total revenue above $50 billion?",
+   "family": "continuity",
+   "phase0_id": "agg04"
+  },
+  {
+   "id": "agg05",
+   "expr": "revenue",
+   "op": "top3",
+   "q": "List the three companies with the highest FY2022 total revenue, highest first.",
+   "family": "continuity",
+   "phase0_id": "agg05"
+  },
+  {
+   "id": "agg06",
+   "expr": "net_income",
+   "op": "argmax",
+   "q": "Which company reported the highest FY2022 net income attributable to shareholders?",
+   "family": "continuity",
+   "phase0_id": "agg06"
+  },
+  {
+   "id": "agg07",
+   "expr": "net_income",
+   "op": "count_lt",
+   "t": 0,
+   "q": "How many companies in the corpus reported a net loss attributable to shareholders for FY2022?",
+   "family": "continuity",
+   "phase0_id": "agg07"
+  },
+  {
+   "id": "agg08",
+   "expr": "net_income",
+   "op": "sum",
+   "q": "What is the combined FY2022 net income attributable to shareholders across the corpus, in USD millions?",
+   "family": "continuity",
+   "phase0_id": "agg08"
+  },
+  {
+   "id": "agg09",
+   "expr": "capex",
+   "op": "argmax",
+   "q": "Which company had the largest FY2022 capital expenditures?",
+   "family": "continuity",
+   "phase0_id": "agg09"
+  },
+  {
+   "id": "agg10",
+   "expr": "capex",
+   "op": "sum",
+   "q": "What were total FY2022 capital expenditures across all companies in the corpus, in USD millions?",
+   "family": "continuity",
+   "phase0_id": "agg10"
+  },
+  {
+   "id": "agg11",
+   "expr": "capex",
+   "op": "count_gt",
+   "t": 5000,
+   "q": "How many companies spent more than $5 billion on capital expenditures in FY2022?",
+   "family": "continuity",
+   "phase0_id": "agg11"
+  },
+  {
+   "id": "agg12",
+   "expr": "total_assets",
+   "op": "argmax",
+   "q": "Which company had the largest total assets at FY2022 year end?",
+   "family": "continuity",
+   "phase0_id": "agg12"
+  },
+  {
+   "id": "agg13",
+   "expr": "total_assets",
+   "op": "top3",
+   "q": "List the three companies with the largest total assets at FY2022 year end, largest first.",
+   "family": "continuity",
+   "phase0_id": "agg13"
+  },
+  {
+   "id": "agg14",
+   "expr": "operating_cash_flow",
+   "op": "argmax",
+   "q": "Which company generated the most cash from operating activities in FY2022?",
+   "family": "continuity",
+   "phase0_id": "agg14"
+  },
+  {
+   "id": "agg15",
+   "expr": "operating_cash_flow-net_income",
+   "op": "count_gt",
+   "t": 0,
+   "q": "For how many companies did FY2022 operating cash flow exceed net income attributable to shareholders?",
+   "family": "continuity",
+   "phase0_id": "agg15"
+  },
+  {
+   "id": "agg16",
+   "expr": "total_current_assets-total_current_liabilities",
+   "op": "count_gt",
+   "t": 0,
+   "q": "Among companies with a classified balance sheet, how many had positive working capital (total current assets minus total current liabilities) at FY2022 year end?",
+   "family": "continuity",
+   "phase0_id": "agg16"
+  },
+  {
+   "id": "agg17",
+   "expr": "total_current_assets-total_current_liabilities",
+   "op": "argmin",
+   "q": "Among companies with a classified balance sheet, which had the most negative working capital at FY2022 year end?",
+   "family": "continuity",
+   "phase0_id": "agg17"
+  },
+  {
+   "id": "agg18",
+   "expr": "dividends_paid",
+   "op": "sum",
+   "q": "What were total FY2022 cash dividends paid to common shareholders by the companies in the corpus other than JPMorgan and American Express, in USD millions?",
+   "exclude_docs": [
+    "JPMORGAN_2022_10K",
+    "AMERICANEXPRESS_2022_10K"
+   ],
+   "exclude_reason": "The cash-flow line 'Dividends paid' of JPMorgan and American Express combines preferred and common dividends and common-only paid is not stated on a statement face (JPMorgan: operator decision 2026-11-10 #3; American Express: same rule applied, p99/p100)",
+   "family": "continuity",
+   "phase0_id": "agg18",
+   "text_changed_from_phase0": true
+  },
+  {
+   "id": "agg19",
+   "expr": "capex/revenue",
+   "op": "argmax",
+   "q": "Which company had the highest FY2022 capital expenditures as a share of total revenue?",
+   "family": "continuity",
+   "phase0_id": "agg19"
+  },
+  {
+   "id": "agg20",
+   "expr": "net_income/revenue",
+   "op": "count_gt",
+   "t": 0.1,
+   "q": "How many companies had an FY2022 net margin (net income attributable / total revenue) above 10%?",
+   "family": "continuity",
+   "phase0_id": "agg20"
+  },
+  {
+   "id": "p1_01",
+   "expr": "net_income/revenue",
+   "op": "argmax",
+   "family": "margin",
+   "q": "Which company had the highest FY2022 net margin (net income attributable to shareholders divided by total revenue)?"
+  },
+  {
+   "id": "p1_02",
+   "expr": "net_income/revenue",
+   "op": "argmin",
+   "family": "margin",
+   "q": "Which company had the lowest (most negative) FY2022 net margin (net income attributable to shareholders divided by total revenue)?"
+  },
+  {
+   "id": "p1_03",
+   "expr": "net_income/revenue",
+   "op": "top3",
+   "family": "margin",
+   "q": "List the three companies with the highest FY2022 net margin (net income attributable to shareholders divided by total revenue), highest first."
+  },
+  {
+   "id": "p1_04",
+   "expr": "net_income/revenue",
+   "op": "count_lt",
+   "t": 0.05,
+   "family": "margin",
+   "q": "How many companies had an FY2022 net margin (net income attributable / total revenue) below 5%, counting net losses?"
+  },
+  {
+   "id": "p1_05",
+   "expr": "net_income",
+   "op": "count_gt",
+   "t": 10000,
+   "family": "net_income",
+   "q": "How many companies reported FY2022 net income attributable to shareholders above $10 billion?"
+  },
+  {
+   "id": "p1_06",
+   "expr": "net_income",
+   "op": "top3",
+   "family": "net_income",
+   "q": "List the three companies with the highest FY2022 net income attributable to shareholders, highest first."
+  },
+  {
+   "id": "p1_07",
+   "expr": "net_income",
+   "op": "sum",
+   "family": "net_income",
+   "where": {
+    "expr": "revenue",
+    "cmp": ">",
+    "t": 90000
+   },
+   "q": "What is the combined FY2022 net income attributable to shareholders of the companies whose FY2022 total revenue was above $90 billion, in USD millions?"
+  },
+  {
+   "id": "p1_08",
+   "expr": "net_income",
+   "op": "count_lt",
+   "t": 2000,
+   "family": "net_income",
+   "q": "How many companies reported FY2022 net income attributable to shareholders below $2 billion, counting net losses?"
+  },
+  {
+   "id": "p1_09",
+   "expr": "revenue",
+   "op": "count_gt",
+   "t": 90000,
+   "family": "revenue",
+   "q": "How many companies reported FY2022 total revenue above $90 billion?"
+  },
+  {
+   "id": "p1_10",
+   "expr": "revenue",
+   "op": "sum",
+   "family": "revenue",
+   "where": {
+    "expr": "net_income",
+    "cmp": "<",
+    "t": 0
+   },
+   "q": "What is the combined FY2022 total revenue, in USD millions, of the companies that reported a net loss attributable to shareholders for FY2022?"
+  },
+  {
+   "id": "p1_11",
+   "expr": "revenue",
+   "op": "count_lt",
+   "t": 15000,
+   "family": "revenue",
+   "q": "How many companies reported FY2022 total revenue below $15 billion?"
+  },
+  {
+   "id": "p1_12",
+   "expr": "operating_cash_flow",
+   "op": "top3",
+   "family": "cash_flow",
+   "q": "List the three companies with the highest FY2022 cash from operating activities, highest first."
+  },
+  {
+   "id": "p1_13",
+   "expr": "operating_cash_flow",
+   "op": "argmin",
+   "family": "cash_flow",
+   "q": "Which company had the lowest FY2022 cash from operating activities?"
+  },
+  {
+   "id": "p1_14",
+   "expr": "operating_cash_flow",
+   "op": "sum",
+   "family": "cash_flow",
+   "where": {
+    "expr": "net_income",
+    "cmp": "<",
+    "t": 0
+   },
+   "q": "What is the combined FY2022 cash from operating activities, in USD millions, of the companies that reported a net loss attributable to shareholders for FY2022?"
+  },
+  {
+   "id": "p1_15",
+   "expr": "operating_cash_flow-capex",
+   "op": "argmax",
+   "family": "free_cash_flow",
+   "q": "Which company had the highest FY2022 free cash flow (cash from operating activities minus capital expenditures)? Companies with no capital-expenditure line (JPMorgan) are excluded."
+  },
+  {
+   "id": "p1_16",
+   "expr": "operating_cash_flow-capex",
+   "op": "top3",
+   "family": "free_cash_flow",
+   "q": "List the three companies with the highest FY2022 free cash flow (cash from operating activities minus capital expenditures), highest first. Companies with no capital-expenditure line (JPMorgan) are excluded."
+  },
+  {
+   "id": "p1_17",
+   "expr": "operating_cash_flow-capex",
+   "op": "count_lt",
+   "t": 0,
+   "family": "free_cash_flow",
+   "q": "How many companies had negative FY2022 free cash flow (cash from operating activities minus capital expenditures)? Companies with no capital-expenditure line (JPMorgan) are excluded."
+  },
+  {
+   "id": "p1_18",
+   "expr": "operating_cash_flow-capex",
+   "op": "argmin",
+   "family": "free_cash_flow",
+   "q": "Which company had the lowest (most negative) FY2022 free cash flow (cash from operating activities minus capital expenditures)? Companies with no capital-expenditure line (JPMorgan) are excluded."
+  },
+  {
+   "id": "p1_19",
+   "expr": "capex",
+   "op": "count_gt",
+   "t": 3000,
+   "family": "capex",
+   "q": "How many companies spent more than $3 billion on capital expenditures in FY2022? Companies with no capital-expenditure line (JPMorgan) are excluded."
+  },
+  {
+   "id": "p1_20",
+   "expr": "capex",
+   "op": "top3",
+   "family": "capex",
+   "q": "List the three companies with the largest FY2022 capital expenditures, largest first."
+  },
+  {
+   "id": "p1_21",
+   "expr": "capex/revenue",
+   "op": "argmin",
+   "family": "capex",
+   "q": "Which company had the lowest FY2022 capital expenditures as a share of total revenue? Companies with no capital-expenditure line (JPMorgan) are excluded."
+  },
+  {
+   "id": "p1_22",
+   "expr": "capex",
+   "op": "sum",
+   "family": "capex",
+   "where": {
+    "expr": "revenue",
+    "cmp": ">",
+    "t": 90000
+   },
+   "q": "What were the combined FY2022 capital expenditures, in USD millions, of the companies whose FY2022 total revenue was above $90 billion? Companies with no capital-expenditure line (JPMorgan) are excluded."
+  },
+  {
+   "id": "p1_23",
+   "expr": "capex/revenue",
+   "op": "count_gt",
+   "t": 0.05,
+   "family": "capex",
+   "q": "How many companies spent more than 5% of FY2022 total revenue on capital expenditures? Companies with no capital-expenditure line (JPMorgan) are excluded."
+  },
+  {
+   "id": "p1_24",
+   "expr": "total_assets",
+   "op": "count_gt",
+   "t": 100000,
+   "family": "balance_sheet",
+   "q": "How many companies had total assets above $100 billion at FY2022 year end?"
+  },
+  {
+   "id": "p1_25",
+   "expr": "total_assets",
+   "op": "argmin",
+   "family": "balance_sheet",
+   "q": "Which company had the smallest total assets at FY2022 year end?"
+  },
+  {
+   "id": "p1_26",
+   "expr": "total_assets",
+   "op": "sum",
+   "family": "balance_sheet",
+   "where": {
+    "expr": "net_income",
+    "cmp": "<",
+    "t": 0
+   },
+   "q": "What are the combined total assets at FY2022 year end, in USD millions, of the companies that reported a net loss attributable to shareholders for FY2022?"
+  },
+  {
+   "id": "p1_27",
+   "expr": "total_current_assets",
+   "op": "argmax",
+   "family": "balance_sheet",
+   "q": "Among companies with a classified balance sheet, which company had the largest total current assets at FY2022 year end?"
+  },
+  {
+   "id": "p1_28",
+   "expr": "total_current_assets/total_current_liabilities",
+   "op": "count_gt",
+   "t": 1.25,
+   "family": "balance_sheet",
+   "q": "Among companies with a classified balance sheet, how many had a current ratio (total current assets divided by total current liabilities) above 1.25 at FY2022 year end?"
+  },
+  {
+   "id": "p1_29",
+   "expr": "total_current_assets/total_current_liabilities",
+   "op": "argmax",
+   "family": "balance_sheet",
+   "q": "Among companies with a classified balance sheet, which had the highest current ratio (total current assets divided by total current liabilities) at FY2022 year end?"
+  },
+  {
+   "id": "p1_30",
+   "expr": "total_current_assets/total_current_liabilities",
+   "op": "argmin",
+   "family": "balance_sheet",
+   "q": "Among companies with a classified balance sheet, which had the lowest current ratio (total current assets divided by total current liabilities) at FY2022 year end?"
+  },
+  {
+   "id": "p1_31",
+   "expr": "total_current_assets-total_current_liabilities",
+   "op": "sum",
+   "family": "balance_sheet",
+   "q": "Among companies with a classified balance sheet, what is the combined FY2022 year-end working capital (total current assets minus total current liabilities), in USD millions?"
+  },
+  {
+   "id": "p1_32",
+   "expr": "total_current_assets-total_current_liabilities",
+   "op": "top3",
+   "family": "balance_sheet",
+   "q": "Among companies with a classified balance sheet, which three had the highest FY2022 year-end working capital (total current assets minus total current liabilities), highest first?"
+  },
+  {
+   "id": "p1_33",
+   "expr": "dividends_paid",
+   "op": "argmax",
+   "family": "dividends",
+   "exclude_docs": [
+    "JPMORGAN_2022_10K",
+    "AMERICANEXPRESS_2022_10K"
+   ],
+   "exclude_reason": "The cash-flow line 'Dividends paid' of JPMorgan and American Express combines preferred and common dividends and common-only paid is not stated on a statement face (JPMorgan: operator decision 2026-11-10 #3; American Express: same rule applied, p99/p100)",
+   "q": "Which company paid the largest FY2022 cash dividends to common shareholders (excluding JPMorgan and American Express, whose cash-flow dividend lines combine preferred and common dividends)?"
+  },
+  {
+   "id": "p1_34",
+   "expr": "dividends_paid",
+   "op": "count_gt",
+   "t": 5000,
+   "family": "dividends",
+   "exclude_docs": [
+    "JPMORGAN_2022_10K",
+    "AMERICANEXPRESS_2022_10K"
+   ],
+   "exclude_reason": "The cash-flow line 'Dividends paid' of JPMorgan and American Express combines preferred and common dividends and common-only paid is not stated on a statement face (JPMorgan: operator decision 2026-11-10 #3; American Express: same rule applied, p99/p100)",
+   "q": "How many companies paid more than $5 billion in FY2022 cash dividends to common shareholders (excluding JPMorgan and American Express, whose cash-flow dividend lines combine preferred and common dividends)?"
+  },
+  {
+   "id": "p1_35",
+   "expr": "dividends_paid",
+   "op": "top3",
+   "family": "dividends",
+   "exclude_docs": [
+    "JPMORGAN_2022_10K",
+    "AMERICANEXPRESS_2022_10K"
+   ],
+   "exclude_reason": "The cash-flow line 'Dividends paid' of JPMorgan and American Express combines preferred and common dividends and common-only paid is not stated on a statement face (JPMorgan: operator decision 2026-11-10 #3; American Express: same rule applied, p99/p100)",
+   "q": "List the three companies that paid the largest FY2022 cash dividends to common shareholders, largest first (excluding JPMorgan and American Express, whose cash-flow dividend lines combine preferred and common dividends)."
+  },
+  {
+   "id": "p1_36",
+   "expr": "dividends_paid",
+   "op": "sum",
+   "family": "dividends",
+   "where": {
+    "expr": "revenue",
+    "cmp": ">",
+    "t": 50000
+   },
+   "exclude_docs": [
+    "JPMORGAN_2022_10K",
+    "AMERICANEXPRESS_2022_10K"
+   ],
+   "exclude_reason": "The cash-flow line 'Dividends paid' of JPMorgan and American Express combines preferred and common dividends and common-only paid is not stated on a statement face (JPMorgan: operator decision 2026-11-10 #3; American Express: same rule applied, p99/p100)",
+   "q": "What were the combined FY2022 cash dividends paid to common shareholders, in USD millions, by the companies whose FY2022 total revenue was above $50 billion (excluding JPMorgan and American Express, whose cash-flow dividend lines combine preferred and common dividends)? Companies that paid no cash dividends contribute zero."
+  },
+  {
+   "id": "p1_37",
+   "expr": "dividends_paid/net_income",
+   "op": "argmax",
+   "family": "dividends",
+   "where": {
+    "expr": "net_income",
+    "cmp": ">",
+    "t": 0
+   },
+   "exclude_docs": [
+    "JPMORGAN_2022_10K",
+    "AMERICANEXPRESS_2022_10K"
+   ],
+   "exclude_reason": "The cash-flow line 'Dividends paid' of JPMorgan and American Express combines preferred and common dividends and common-only paid is not stated on a statement face (JPMorgan: operator decision 2026-11-10 #3; American Express: same rule applied, p99/p100)",
+   "q": "Among profitable companies (positive FY2022 net income attributable to shareholders) that paid cash dividends, which had the highest dividend payout ratio (cash dividends paid divided by net income) (excluding JPMorgan and American Express, whose cash-flow dividend lines combine preferred and common dividends)?"
+  },
+  {
+   "id": "p1_38",
+   "expr": "dividends_paid/net_income",
+   "op": "count_gt",
+   "t": 0.6,
+   "family": "dividends",
+   "where": {
+    "expr": "net_income",
+    "cmp": ">",
+    "t": 0
+   },
+   "exclude_docs": [
+    "JPMORGAN_2022_10K",
+    "AMERICANEXPRESS_2022_10K"
+   ],
+   "exclude_reason": "The cash-flow line 'Dividends paid' of JPMorgan and American Express combines preferred and common dividends and common-only paid is not stated on a statement face (JPMorgan: operator decision 2026-11-10 #3; American Express: same rule applied, p99/p100)",
+   "q": "Among profitable companies (positive FY2022 net income attributable to shareholders) that paid cash dividends, how many had a dividend payout ratio (cash dividends paid divided by net income) above 60% (excluding JPMorgan and American Express, whose cash-flow dividend lines combine preferred and common dividends)?"
+  }
+ ],
+ "metrics": {
+  "revenue": "Total revenues / net sales / operating revenues, FY2022 (USD millions)",
+  "net_income": "Net income attributable to the company's shareholders, FY2022 (USD millions)",
+  "capex": "Capital expenditures (purchases of PP&E), FY2022 cash flow statement (USD millions, positive)",
+  "total_assets": "Total assets at FY2022 year end (USD millions)",
+  "operating_cash_flow": "Net cash provided by operating activities, FY2022 (USD millions)",
+  "total_current_assets": "Total current assets at FY2022 year end (USD millions); NA if unclassified balance sheet",
+  "total_current_liabilities": "Total current liabilities at FY2022 year end (USD millions); NA if unclassified",
+  "dividends_paid": "Cash dividends paid to common shareholders, FY2022 (USD millions, positive)"
+ }
+}
