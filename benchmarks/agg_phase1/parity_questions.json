@@ -1,0 +1,446 @@
+{
+ "schema": "agg15_parity_questions.v1",
+ "corpus_sha256": "bdeb7a978f036a8e2599bc6db752899d5d18bd57f5fbb8ac52a6dd3a1da41f84",
+ "sheet_sha256": "9f1bbfe34857532306da65ccbad6a6fceed3ab7db9c9fd3fe24da239cfe074aa",
+ "select_salt": "agg15-v1",
+ "mid_range_tokens": [
+  200000,
+  1000000
+ ],
+ "docs": [
+  {
+   "doc_name": "JPMORGAN_2022_10K",
+   "company": "JPMorgan",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/JPMORGAN_2022_10K.pdf",
+   "pdf_sha256": "c269899950f36edfa496e3c8447a51d86d0a206442a96dc24dcd9317d55b957c",
+   "n_tokens_est": 390496,
+   "n_questions": 4
+  },
+  {
+   "doc_name": "PEPSICO_2022_10K",
+   "company": "PepsiCo",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/PEPSICO_2022_10K.pdf",
+   "pdf_sha256": "7d8a9f3374e429c58f101319e2da8a0e601a89859e1e4f6854163dd5f8ce6b47",
+   "n_tokens_est": 301525,
+   "n_questions": 5
+  },
+  {
+   "doc_name": "AMERICANWATERWORKS_2022_10K",
+   "company": "American Water Works",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/AMERICANWATERWORKS_2022_10K.pdf",
+   "pdf_sha256": "aea336531f1f8b10ecee1dd61066aab29794504f1f4a1407c857bd1e20d7da40",
+   "n_tokens_est": 258302,
+   "n_questions": 5
+  },
+  {
+   "doc_name": "AES_2022_10K",
+   "company": "AES Corporation",
+   "pdf": "/mnt/raid0/llm/datasets/financebench-20261109/pdfs/AES_2022_10K.pdf",
+   "pdf_sha256": "9c5de2227534c4d6bf3d805f635bad5d82eddf8e4183a85a3d1311b48b50291d",
+   "n_tokens_est": 231844,
+   "n_questions": 6
+  }
+ ],
+ "questions": [
+  {
+   "id": "p15_01",
+   "doc_name": "JPMORGAN_2022_10K",
+   "company": "JPMorgan",
+   "metric": "revenue",
+   "question": "In JPMorgan's Form 10-K for fiscal year 2022, what amount is reported for \"Total net revenue\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Total net revenue",
+   "gold_value_usd_m": 128695.0,
+   "page": 161,
+   "quote": "Total net revenue 128,695",
+   "key": {
+    "numbers": [
+     {
+      "value": 128695.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_02",
+   "doc_name": "PEPSICO_2022_10K",
+   "company": "PepsiCo",
+   "metric": "total_current_assets",
+   "question": "In PepsiCo's Form 10-K for fiscal year 2022, what amount is reported for \"Total Current Assets\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Total Current Assets",
+   "gold_value_usd_m": 21539.0,
+   "page": 66,
+   "quote": "Total Current Assets 21,539",
+   "key": {
+    "numbers": [
+     {
+      "value": 21539.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_03",
+   "doc_name": "AMERICANWATERWORKS_2022_10K",
+   "company": "American Water Works",
+   "metric": "total_current_liabilities",
+   "question": "In American Water Works's Form 10-K for fiscal year 2022, what amount is reported for \"Total current liabilities\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Total current liabilities",
+   "gold_value_usd_m": 2811.0,
+   "page": 82,
+   "quote": "Total current liabilities 2,811",
+   "key": {
+    "numbers": [
+     {
+      "value": 2811.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_04",
+   "doc_name": "AES_2022_10K",
+   "company": "AES Corporation",
+   "metric": "net_income",
+   "question": "In AES Corporation's Form 10-K for fiscal year 2022, what amount is reported for \"NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION",
+   "gold_value_usd_m": -546.0,
+   "page": 132,
+   "quote": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION $ (546)",
+   "key": {
+    "numbers": [
+     {
+      "value": 546.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_05",
+   "doc_name": "JPMORGAN_2022_10K",
+   "company": "JPMorgan",
+   "metric": "operating_cash_flow",
+   "question": "In JPMorgan's Form 10-K for fiscal year 2022, what amount is reported for \"Net cash provided by/(used in) operating activities\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Net cash provided by/(used in) operating activities",
+   "gold_value_usd_m": 107119.0,
+   "page": 165,
+   "quote": "Net cash provided by/(used in) operating activities 107,119",
+   "key": {
+    "numbers": [
+     {
+      "value": 107119.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_06",
+   "doc_name": "PEPSICO_2022_10K",
+   "company": "PepsiCo",
+   "metric": "total_assets",
+   "question": "In PepsiCo's Form 10-K for fiscal year 2022, what amount is reported for \"Total Assets\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Total Assets",
+   "gold_value_usd_m": 92187.0,
+   "page": 66,
+   "quote": "Total Assets $ 92,187",
+   "key": {
+    "numbers": [
+     {
+      "value": 92187.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_07",
+   "doc_name": "AMERICANWATERWORKS_2022_10K",
+   "company": "American Water Works",
+   "metric": "total_current_assets",
+   "question": "In American Water Works's Form 10-K for fiscal year 2022, what amount is reported for \"Total current assets\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Total current assets",
+   "gold_value_usd_m": 1250.0,
+   "page": 81,
+   "quote": "Total current assets 1,250",
+   "key": {
+    "numbers": [
+     {
+      "value": 1250.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_08",
+   "doc_name": "AES_2022_10K",
+   "company": "AES Corporation",
+   "metric": "revenue",
+   "question": "In AES Corporation's Form 10-K for fiscal year 2022, what amount is reported for \"Total revenue\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Total revenue",
+   "gold_value_usd_m": 12617.0,
+   "page": 132,
+   "quote": "Total revenue 12,617",
+   "key": {
+    "numbers": [
+     {
+      "value": 12617.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_09",
+   "doc_name": "JPMORGAN_2022_10K",
+   "company": "JPMorgan",
+   "metric": "total_assets",
+   "question": "In JPMorgan's Form 10-K for fiscal year 2022, what amount is reported for \"Total assets\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Total assets",
+   "gold_value_usd_m": 3665743.0,
+   "page": 163,
+   "quote": "Total assets(a) $ 3,665,743",
+   "key": {
+    "numbers": [
+     {
+      "value": 3665743.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_10",
+   "doc_name": "PEPSICO_2022_10K",
+   "company": "PepsiCo",
+   "metric": "revenue",
+   "question": "In PepsiCo's Form 10-K for fiscal year 2022, what amount is reported for \"Net Revenue\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Net Revenue",
+   "gold_value_usd_m": 86392.0,
+   "page": 62,
+   "quote": "Net Revenue $ 86,392",
+   "key": {
+    "numbers": [
+     {
+      "value": 86392.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_11",
+   "doc_name": "AMERICANWATERWORKS_2022_10K",
+   "company": "American Water Works",
+   "metric": "capex",
+   "question": "In American Water Works's Form 10-K for fiscal year 2022, what amount is reported for \"Capital expenditures\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Capital expenditures",
+   "gold_value_usd_m": 2297.0,
+   "page": 85,
+   "quote": "Capital expenditures (2,297)",
+   "key": {
+    "numbers": [
+     {
+      "value": 2297.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_12",
+   "doc_name": "AES_2022_10K",
+   "company": "AES Corporation",
+   "metric": "total_current_liabilities",
+   "question": "In AES Corporation's Form 10-K for fiscal year 2022, what amount is reported for \"Total current liabilities\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Total current liabilities",
+   "gold_value_usd_m": 6491.0,
+   "page": 130,
+   "quote": "Total current liabilities 6,491",
+   "key": {
+    "numbers": [
+     {
+      "value": 6491.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_13",
+   "doc_name": "JPMORGAN_2022_10K",
+   "company": "JPMorgan",
+   "metric": "net_income",
+   "question": "In JPMorgan's Form 10-K for fiscal year 2022, what amount is reported for \"Net income\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Net income",
+   "gold_value_usd_m": 37676.0,
+   "page": 161,
+   "quote": "Net income $ 37,676",
+   "key": {
+    "numbers": [
+     {
+      "value": 37676.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_14",
+   "doc_name": "PEPSICO_2022_10K",
+   "company": "PepsiCo",
+   "metric": "operating_cash_flow",
+   "question": "In PepsiCo's Form 10-K for fiscal year 2022, what amount is reported for \"Net Cash Provided by Operating Activities\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Net Cash Provided by Operating Activities",
+   "gold_value_usd_m": 10811.0,
+   "page": 64,
+   "quote": "Net Cash Provided by Operating Activities 10,811",
+   "key": {
+    "numbers": [
+     {
+      "value": 10811.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_15",
+   "doc_name": "AMERICANWATERWORKS_2022_10K",
+   "company": "American Water Works",
+   "metric": "dividends_paid",
+   "question": "In American Water Works's Form 10-K for fiscal year 2022, what amount is reported for \"Dividends paid\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Dividends paid",
+   "gold_value_usd_m": 467.0,
+   "page": 85,
+   "quote": "Dividends paid (467)",
+   "key": {
+    "numbers": [
+     {
+      "value": 467.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_16",
+   "doc_name": "AES_2022_10K",
+   "company": "AES Corporation",
+   "metric": "capex",
+   "question": "In AES Corporation's Form 10-K for fiscal year 2022, what amount is reported for \"Capital expenditures\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Capital expenditures",
+   "gold_value_usd_m": 4551.0,
+   "page": 135,
+   "quote": "Capital expenditures (4,551)",
+   "key": {
+    "numbers": [
+     {
+      "value": 4551.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_17",
+   "doc_name": "PEPSICO_2022_10K",
+   "company": "PepsiCo",
+   "metric": "total_current_liabilities",
+   "question": "In PepsiCo's Form 10-K for fiscal year 2022, what amount is reported for \"Total Current Liabilities\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Total Current Liabilities",
+   "gold_value_usd_m": 26785.0,
+   "page": 66,
+   "quote": "Total Current Liabilities 26,785",
+   "key": {
+    "numbers": [
+     {
+      "value": 26785.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_18",
+   "doc_name": "AMERICANWATERWORKS_2022_10K",
+   "company": "American Water Works",
+   "metric": "operating_cash_flow",
+   "question": "In American Water Works's Form 10-K for fiscal year 2022, what amount is reported for \"Net cash provided by operating activities\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Net cash provided by operating activities",
+   "gold_value_usd_m": 1108.0,
+   "page": 85,
+   "quote": "Net cash provided by operating activities 1,108",
+   "key": {
+    "numbers": [
+     {
+      "value": 1108.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_19",
+   "doc_name": "AES_2022_10K",
+   "company": "AES Corporation",
+   "metric": "total_assets",
+   "question": "In AES Corporation's Form 10-K for fiscal year 2022, what amount is reported for \"TOTAL ASSETS\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "TOTAL ASSETS",
+   "gold_value_usd_m": 38363.0,
+   "page": 130,
+   "quote": "TOTAL ASSETS $ 38,363",
+   "key": {
+    "numbers": [
+     {
+      "value": 38363.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  },
+  {
+   "id": "p15_20",
+   "doc_name": "AES_2022_10K",
+   "company": "AES Corporation",
+   "metric": "operating_cash_flow",
+   "question": "In AES Corporation's Form 10-K for fiscal year 2022, what amount is reported for \"Net cash provided by operating activities\" in the consolidated financial statements for fiscal 2022? Give the absolute value in USD millions, as the statement prints it.",
+   "label": "Net cash provided by operating activities",
+   "gold_value_usd_m": 2715.0,
+   "page": 135,
+   "quote": "Net cash provided by operating activities 2,715",
+   "key": {
+    "numbers": [
+     {
+      "value": 2715.0,
+      "decimals": 0
+     }
+    ]
+   },
+   "source": "agg_phase1/facts_sheet.csv (filled, confidence high, verified)"
+  }
+ ]
+}
