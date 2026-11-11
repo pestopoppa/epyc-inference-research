@@ -17,6 +17,38 @@ from typing import Any, Sequence
 
 from . import numerics_gates as ng
 
+FLT_MAX = 3.4028234663852886e38
+
+
+def ggml_pool_max_row(row: Sequence[float]) -> float:
+    """ggml CPU GGML_OP_POOL_2D(MAX) semantics (ggml-cpu/ops.cpp ggml_compute_forward_pool_2d, byte-identical
+    at v10 ffc1bac82 and C10 7f1bd044b): `res = -FLT_MAX; res = std::max(x, res)` per element, where
+    std::max(a, b) = (a < b) ? b : a, i.e. `res = res if x < res else x`. Not IEEE: a NaN element is
+    adopted but the next element replaces it (comparisons with NaN are false), so only a NaN in the LAST
+    position survives; and an all--Inf row yields -FLT_MAX, not -Inf."""
+    res = -FLT_MAX
+    for x in row:
+        res = res if x < res else x
+    return res
+
+
+#: the native incumbent's documented max semantics (the row max is POOL_2D, not an IEEE reduction)
+GGML_POOL_MAX_OP = ng.Op("ggml_pool2d_max", lambda rows: [ggml_pool_max_row(r) for r in rows],
+                         ng.CLEAN.dot_rows)
+
+
+def ggml_pool_max_reference(rows=None) -> list[str]:
+    rows = ng.non_finite_inputs() if rows is None else rows
+    return [ng.value_class(ggml_pool_max_row(r)) for r in rows]
+
+
+def ieee_deviations(rows=None) -> list[dict]:
+    """Rows where ggml's documented class differs from IEEE (reported, never silently absorbed)."""
+    rows = ng.non_finite_inputs() if rows is None else rows
+    return [{"row": i, "ieee": a, "ggml": b}
+            for i, (a, b) in enumerate(zip(ng.non_finite_reference(rows), ggml_pool_max_reference(rows))) if a != b]
+
+
 VARIANTS = ("incumbent", "control_clamp_max", "control_f16_dot")
 #: control variant -> (gate that MUST be red, gate that must stay green)
 CONTROL_RED = {"control_clamp_max": (ng.GATE_NON_FINITE, ng.GATE_FP32_ACCUM),
@@ -60,7 +92,7 @@ def judge(text: str) -> dict[str, Any]:
         if r is None:
             problems.append(f"receipt_missing: {name}")
             continue
-        vs = ng.verdict_from_receipt(r)
+        vs = ng.verdict_from_receipt(r, want_max=ggml_pool_max_reference())
         verdicts[name] = [{"gate": v.gate, "passed": v.passed, "reason": v.reason} for v in vs]
         passed = {v.gate: v.passed for v in vs}
         if name == "incumbent":
@@ -74,7 +106,8 @@ def judge(text: str) -> dict[str, Any]:
             if not passed.get(green, False):
                 problems.append(f"control_collateral_red: {name} failed {green}")
     backends = sorted({str(r.get("backend")) for r in by_variant.values()})
-    return {"ok": not problems, "backend": backends, "variants": verdicts, "problems": problems}
+    return {"ok": not problems, "backend": backends, "variants": verdicts, "problems": problems,
+            "max_reference": "ggml_pool2d_max", "ieee_deviations": ieee_deviations()}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

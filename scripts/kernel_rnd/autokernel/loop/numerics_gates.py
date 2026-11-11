@@ -174,9 +174,11 @@ def non_finite_reference(rows) -> list[str]:
                         else NAN) for r in rows]
 
 
-def non_finite_gate(op: Op, rows=None) -> gates.Verdict:
+def non_finite_gate(op: Op, rows=None, want: Sequence[str] | None = None) -> gates.Verdict:
+    """`want` overrides the float64/IEEE class reference (a native leg whose op has DOCUMENTED non-IEEE
+    max semantics passes its own op's reference; default is the IEEE reference)."""
     rows = non_finite_inputs() if rows is None else rows
-    want = non_finite_reference(rows)
+    want = non_finite_reference(rows) if want is None else list(want)
     got = [value_class(float(v)) for v in op.max_rows(rows)]
     if len(got) != len(want):
         return gates.Verdict(GATE_NON_FINITE, False,
@@ -308,7 +310,8 @@ def parse_receipts(text: str) -> list[dict[str, Any]]:
     return out
 
 
-def verdict_from_receipt(receipt: Mapping[str, Any] | None) -> list[gates.Verdict]:
+def verdict_from_receipt(receipt: Mapping[str, Any] | None, *,
+                         want_max: Sequence[str] | None = None) -> list[gates.Verdict]:
     if not isinstance(receipt, Mapping) or receipt.get("schema") != SCHEMA:
         return [gates.Verdict(GATE_NON_FINITE, False,
                               f"numerics_receipt_missing: no {SCHEMA} receipt; absence is not a pass")]
@@ -319,4 +322,4 @@ def verdict_from_receipt(receipt: Mapping[str, Any] | None) -> list[gates.Verdic
     except (KeyError, TypeError, ValueError):
         return [gates.Verdict(GATE_NON_FINITE, False, "numerics_receipt_malformed")]
     op = Op("native", lambda rows: mx, lambda A, B: dt)
-    return [non_finite_gate(op), fp32_accum_gate(op)]
+    return [non_finite_gate(op, want=want_max), fp32_accum_gate(op)]
