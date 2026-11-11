@@ -30,6 +30,7 @@ os.environ["ORCHESTRATOR_FEATURE_AGG_LAYER"] = "1"
 try:
     sys.path.insert(0, str(ORCH))
     from src.aggregation.llm_backend import OutOfWindow  # noqa: E402,F401
+    from src.aggregation.registry import PassageHandle  # noqa: E402,F401  (the r3 builder; older pins lack it)
     HAVE_ORCH = True
 except Exception:  # pragma: no cover
     HAVE_ORCH = False
@@ -230,15 +231,20 @@ class ArmTests(unittest.TestCase):
     def test_pilot_futility_stops_before_the_remaining_questions(self):
         gold = {q["question"]: q["key"]["numbers"][0]["value"] for q in self.q["questions"]}
 
-        class Wrong(M.FakeBackend):  # B always right, P always wrong (P hit lists carry store chunk ids)
+        class Wrong(M.FakeBackend):  # B always right, P always wrong (the arm is set by the arm's open())
+            arm = "B"
+
             def chat(self, prompt, **kw):
                 r = super().chat(prompt, **kw)
                 if r["text"].startswith("FINAL:"):
                     q = next(k for k in gold if k in prompt)
-                    p_arm = re.search(r"\n\[[0-9a-f]{16}:\d+\]", prompt)
-                    r["text"] = "FINAL: 1" if p_arm else f"FINAL: {gold[q]:.0f}"
+                    r["text"] = "FINAL: 1" if self.arm == "P" else f"FINAL: {gold[q]:.0f}"
                 return r
-        rec, res = self.run_arms(Wrong())
+        be = Wrong()
+        p_open, b_open = M.PArm.open, M.BArm.open
+        with mock.patch.object(M.PArm, "open", lambda a: (setattr(be, "arm", "P"), p_open(a))[1]), \
+                mock.patch.object(M.BArm, "open", lambda a: (setattr(be, "arm", "B"), b_open(a))[1]):
+            rec, res = self.run_arms(be)
         v = res["verdict"]
         self.assertEqual((v["verdict"], v["stage"]), ("phase1_gate_tripped", "pilot"))
         self.assertIn("accuracy", v["failing"])
@@ -278,38 +284,34 @@ class ArmTests(unittest.TestCase):
 
 
 class ReadSpanTests(unittest.TestCase):
-    """AMENDMENT 2026-11-11 (post-data): hit_window and the 800-character read span; stdlib, no orchestrator."""
+    """AMENDMENT 1 (read span, post-data) as carried into r3: one pointer parser, one 800-character cap; stdlib."""
 
     def test_span_constant_is_the_context_search_chunk(self):
         self.assertEqual(M.READ_SPAN_CHARS, 800)
         self.assertEqual(M.R1_READ_CHARS, 12_000)  # the amended-away value stays on record
 
-    def test_hit_window_is_capped_and_centred_on_the_hit(self):
-        text = ("filler words here. " * 400) + "Total Current Assets 21,539 and more" + (" tail text." * 400)
-        w = M.hit_window(text, "Total Current Assets")
-        self.assertEqual(len(w), 800)
-        self.assertIn("Total Current Assets 21,539", w)
+    def test_parse_span_caps_the_read(self):
+        self.assertEqual(M.parse_span("100-500"), (100, 500))
+        self.assertEqual(M.parse_span(" 100-5000 "), (100, 900))
+        self.assertEqual(M.parse_span("100-50"), (100, 100))
+        self.assertIsNone(M.parse_span("c23f592eb1ea5048:00083"))
+        self.assertIsNone(M.parse_span("nope"))
 
-    def test_hit_window_prefers_the_window_with_most_query_words(self):
-        text = "alpha " + ("x " * 1500) + "alpha beta gamma " + ("y " * 1500)
-        w = M.hit_window(text, "alpha beta gamma")
-        self.assertIn("alpha beta gamma", w)
-        self.assertEqual(M.hit_window(text, "alpha beta gamma"), w)  # deterministic
+    def test_hit_text_shown_is_the_same_in_both_arms(self):
+        self.assertEqual(M.snippet(7, "x" * 500), "line 7 | " + "x" * 200)
 
-    def test_hit_window_short_text_and_no_match(self):
-        self.assertEqual(M.hit_window("short chunk", "anything"), "short chunk")
-        text = "".join(chr(97 + i % 26) for i in range(3000))
-        self.assertEqual(M.hit_window(text, "zzzzqqqq"), text[:800])
-        self.assertEqual(M.hit_window(text, ""), text[:800])
-        self.assertEqual(len(M.hit_window("x" * 5000, "x")), 800)
+    def test_r2_artifacts_are_gone_from_the_runner(self):
+        self.assertFalse(hasattr(M, "hit_window"))
+        self.assertEqual((M.P_BUILDER, M.R2_P_BUILDER), ("l1_passage_bm25", "l1_bm25"))
 
 
 class _Arm:
     """Minimal arm for the loop tests: pointers 'a' and 's-e' spans, read returns a long text."""
     def __init__(self):
-        self.dup_reads, self.reads = 0, []
+        self.dup_reads, self.dup_searches, self.reads, self.searches = 0, 0, [], []
 
     def search(self, q):
+        self.searches.append(q)
         return [("a", "first hit"), ("b", "second hit")]
 
     def read_key(self, ptr):
@@ -369,9 +371,47 @@ class RepeatedReadGuardTests(unittest.TestCase):
         self.assertEqual(arm.dup_reads, 0)
 
 
+class RepeatedSearchGuardTests(unittest.TestCase):
+    """AMENDMENT 2 (post-data): an identical SEARCH returns a note, in both arms, through the one shared loop."""
+
+    def run_loop(self, acts, arm=None):
+        arm = arm or _Arm()
+        b = _Scripted(acts)
+        return arm, b, M.retrieval_loop(b, "q?", arm, M.P0.CFG, [])
+
+    @unittest.skipUnless(HAVE_ORCH, "needs the orchestrator tree (OutOfWindow import)")
+    def test_identical_search_returns_the_note_not_the_hits(self):
+        arm, b, out = self.run_loop(["SEARCH: Total Current Assets", "SEARCH: Total Current Assets", "READ: a", "FINAL: 1"])
+        self.assertEqual(out, ("FINAL: 1", "ok"))
+        self.assertEqual(arm.searches, ["Total Current Assets"])  # the duplicate never reached the arm
+        self.assertEqual(arm.dup_searches, 1)
+        self.assertIn(M.ALREADY_SEARCHED.format(q="Total Current Assets"), b.prompts[2])
+        self.assertEqual(b.prompts[2].count("first hit"), 1)
+        self.assertLess(len(M.ALREADY_SEARCHED.format(q="x")), 160)
+
+    @unittest.skipUnless(HAVE_ORCH, "needs the orchestrator tree (OutOfWindow import)")
+    def test_case_and_whitespace_variants_are_the_same_query_a_different_query_is_not(self):
+        arm, b, _ = self.run_loop(["SEARCH: Total  Current Assets", "SEARCH: total current assets ", "SEARCH: current assets",
+                                   "FINAL: 1"])
+        self.assertEqual(arm.dup_searches, 1)
+        self.assertEqual(arm.searches, ["Total  Current Assets", "current assets"])
+
+    @unittest.skipUnless(HAVE_ORCH, "needs the orchestrator tree (OutOfWindow import)")
+    def test_the_duplicate_still_costs_a_call_and_reads_are_independent(self):
+        arm, b, _ = self.run_loop(["SEARCH: x", "SEARCH: x", "READ: a", "READ: a", "FINAL: 1"])
+        self.assertEqual(b.calls, 5)
+        self.assertEqual((arm.dup_searches, arm.dup_reads), (1, 1))
+
+    @unittest.skipUnless(HAVE_ORCH, "needs the orchestrator tree (OutOfWindow import)")
+    def test_an_empty_search_is_not_marked_asked(self):
+        arm, _, out = self.run_loop(["SEARCH: ", "SEARCH: ", "FINAL: 2"])
+        self.assertEqual(out, ("FINAL: 2", "ok"))
+        self.assertEqual(arm.dup_searches, 0)
+
+
 @unittest.skipUnless(HAVE_STORE, "needs the orchestrator tree and the Phase 0 store")
 class AmendedArmTests(unittest.TestCase):
-    """Both arms read the same span; a repeated read is guarded identically in both (one shared loop)."""
+    """r3: both arms show the same hit text, read the same span, and are guarded identically (one shared loop)."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -384,33 +424,29 @@ class AmendedArmTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_p_read_is_at_most_800_chars_and_around_the_hit(self):
+    def test_p_and_b_return_identical_pointers_and_hit_text(self):
         pa = M.PArm(self.store, self.reg, self.doc); pa.open()
-        long_chunks = [c for c in pa.chunks.values() if len(c["text"] or "") > 2000]
-        self.assertTrue(long_chunks)
-        hits = pa.search("consolidated balance sheet total current assets")
-        self.assertTrue(hits)
-        for ptr, _ in hits:
-            t = pa.read(ptr)
-            self.assertLessEqual(len(t), M.READ_SPAN_CHARS)
-            self.assertIn(t, pa.chunks[ptr]["text"])
-        self.assertEqual(len(pa.read(long_chunks[0]["chunk_id"])), 800)  # no hit: the start, still capped
+        ba = M.BArm(self.doc, self.text)
+        for query in ("total current assets", "Consolidated Balance Sheets", "net revenue", "income before income tax"):
+            self.assertEqual(pa.search(query), ba.search(query), query)
+            for ptr, _ in pa.search(query):
+                self.assertEqual(pa.read(ptr), ba.read(ptr))
+                self.assertLessEqual(len(pa.read(ptr)), M.READ_SPAN_CHARS)
 
-    def test_p_window_keeps_the_gold_whenever_the_top_chunk_has_it(self):
-        """The 800-character window must not hide a figure the whole chunk shows (the label query, all 20 questions)."""
-        pa = {d: M.PArm(self.store, self.reg, d) for d in M.DOCS}
-        for a_ in pa.values():
-            a_.open()
-        n_chunk = n_window = 0
-        for q in json.loads((D1 / "parity_questions.json").read_text())["questions"]:
-            arm = pa[q["doc_name"]]
-            ptr = arm.search(q["label"])[0][0]
-            g = f"{abs(q['gold_value_usd_m']):,.0f}"
-            if g in arm.chunks[ptr]["text"]:
-                n_chunk += 1
-                n_window += g in arm.read(ptr)
-        self.assertGreater(n_chunk, 5)
-        self.assertEqual(n_window, n_chunk)
+    def test_p_pointer_provenance_is_a_stored_chunk(self):
+        pa = M.PArm(self.store, self.reg, self.doc); pa.open()
+        ptrs = [p for p, _ in pa.search("total current assets")]
+        self.assertTrue(ptrs)
+        ids = {c["chunk_id"] for c in self.store.chunks(M.CORPUS_PREFIX + self.doc)}
+        self.assertTrue(all(pa.ptr_chunk[p] in ids for p in ptrs))
+
+    def test_p_index_is_l1_only_and_built_once_across_arms(self):
+        first = M.PArm(self.store, self.reg, self.doc); first.open()
+        second = M.PArm(self.store, self.reg, self.doc); second.open()
+        self.assertEqual((first.builds, second.builds), (1, 0))
+        self.assertIs(first.handle, second.handle)
+        self.assertEqual(self.store.built_layers(M.CORPUS_PREFIX + self.doc), {"L1"})
+        self.assertEqual({m["builder"] for m in self.store.manifest(M.CORPUS_PREFIX + self.doc)}, {M.P_BUILDER})
 
     def test_b_read_is_at_most_800_chars_even_for_a_wide_pointer(self):
         ba = M.BArm(self.doc, self.text)
@@ -418,33 +454,27 @@ class AmendedArmTests(unittest.TestCase):
         s, e = map(int, ptr.split("-"))
         self.assertLessEqual(e - s, 800)
         self.assertLessEqual(len(ba.read(ptr)), 800)
-        self.assertLessEqual(len(ba.read(f"{s}-{s + 5000}")), 800)  # a hand-made wide span is capped too
+        self.assertLessEqual(len(ba.read(f"{s}-{s + 5000}")), 800)
         self.assertEqual(ba.read_key(f"{s}-{s + 5000}"), (s, s + 800))
         self.assertIsNone(ba.read("not-a-pointer"))
-
-    def test_both_arms_expose_the_same_guard_interface(self):
         pa = M.PArm(self.store, self.reg, self.doc); pa.open()
-        ba = M.BArm(self.doc, self.text)
-        pp = pa.search("net revenue")[0][0]
-        bp = ba.search("net revenue")[0][0]
-        self.assertEqual(pa.read_key(pp), pp)
-        self.assertIsNotNone(ba.read_key(bp))
-        self.assertIsNone(pa.read_key("nope"))
-        self.assertEqual((pa.dup_reads, ba.dup_reads), (0, 0))
+        self.assertEqual(pa.read_key(f"{s}-{s + 5000}"), (s, s + 800))
+        self.assertIsNone(pa.read("not-a-pointer"))
+        self.assertIsNone(pa.read(f"{len(self.text) + 10}-{len(self.text) + 20}"))
 
-    def test_full_loop_repeated_read_note_in_both_arms(self):
-        class Re(M.FakeBackend):  # SEARCH, READ first, READ it again, then FINAL
+    def test_full_loop_repeated_read_and_search_notes_in_both_arms(self):
+        class Re(M.FakeBackend):  # SEARCH, SEARCH again, READ first, READ it again, then FINAL
             def chat(self, prompt, **kw):
                 self.calls += 1
-                self._n = getattr(self, "_n", 0) + 1
                 acts = re.findall(r"\n> (SEARCH|READ|FINAL): ?", prompt)
                 if not acts:
                     return {"text": "SEARCH: net revenue"}
                 if acts == ["SEARCH"]:
-                    m = re.search(r"\n\[([^\]]+)\]", prompt)
-                    self.ptr = m.group(1)
+                    return {"text": "SEARCH: Net  Revenue"}
+                if acts == ["SEARCH", "SEARCH"]:
+                    self.ptr = re.search(r"\n\[([^\]]+)\]", prompt).group(1)
                     return {"text": f"READ: {self.ptr}"}
-                if acts == ["SEARCH", "READ"]:
+                if acts == ["SEARCH", "SEARCH", "READ"]:
                     return {"text": f"READ: {self.ptr}"}
                 return {"text": "FINAL: 1"}
         pa = M.PArm(self.store, self.reg, self.doc); pa.open()
@@ -452,16 +482,84 @@ class AmendedArmTests(unittest.TestCase):
         for arm in (pa, ba):
             out = M.retrieval_loop(Re(), "q?", arm, M.P0.CFG, [])
             self.assertEqual(out, ("FINAL: 1", "ok"))
-            self.assertEqual(arm.dup_reads, 1)
+            self.assertEqual((arm.dup_searches, arm.dup_reads), (1, 1))
 
-    def test_answer_record_carries_dup_reads(self):
+    def test_answer_record_carries_dup_counters(self):
         q = json.loads((D1 / "parity_questions.json").read_text())
         rec = M.P0.Recorder(Path(self.tmp.name) / "r.jsonl")
         with mock.patch.object(M, "PILOT_FUTILE_PREFILL", 10**9), mock.patch.object(M, "PREFILL_TOL", 10**9):
             M.run_arms(rec, STORE, Path(self.tmp.name) / "p2.sqlite", M.FakeBackend(), q, guard=lambda: None, smoke=True)
         a = [r for r in rec.records if r["kind"] == "answer"]
         self.assertEqual(len(a), 2)
-        self.assertTrue(all(r["dup_reads"] == 0 for r in a))
+        self.assertTrue(all(r["dup_reads"] == 0 and r["dup_searches"] == 0 for r in a))
+
+
+@unittest.skipUnless(HAVE_STORE, "needs the orchestrator tree and the Phase 0 store")
+class OfflineReplayTests(unittest.TestCase):
+    """AMENDMENT 2 diagnosis as tests: no model. The replay compares the r1/r2 P arm (stored chunks whole, head shown),
+    B (context.search) and the r3 P arm over the same text, for the 20 label queries and the 45 SEARCH strings of the
+    r1/r2 traces (committed in agg15_trace_queries_r1_r2.json)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import parity_replay as R
+        cls.R = R
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.store = M.build_parity_store(STORE, Path(cls.tmp.name) / "p.sqlite", M.DOCS)
+        cls.qdoc = json.loads((D1 / "parity_questions.json").read_text())
+        cls.traces = json.loads((D1 / "agg15_trace_queries_r1_r2.json").read_text())
+        cls.out = R.run_replay(cls.store, cls.qdoc, cls.traces)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_trace_file_is_the_two_runs(self):
+        self.assertEqual(len(self.traces), 45)
+        self.assertEqual({t["run"] for t in self.traces}, {"r1", "r2"})
+        self.assertEqual({t["qid"] for t in self.traces}, {"p15_01", "p15_02", "p15_03", "p15_04", "p15_05"})
+
+    def test_gold_reaches_the_top_8_on_p_wherever_it_does_on_b_all_20_questions(self):
+        rows = self.out["label_queries"]["rows"]
+        self.assertEqual(len(rows), 20)
+        for r in rows:
+            if r["B"]["in_top8"]:
+                self.assertTrue(r["new_P"]["in_top8"], r)
+            self.assertEqual(r["new_P"]["gold_rank"], r["B"]["gold_rank"], r)
+        self.assertGreaterEqual(sum(r["B"]["in_top8"] for r in rows), 15)  # the property is not vacuous
+        self.assertEqual(self.out["label_queries"]["summary"]["new_P_ranking_identical_to_B"], 20)
+
+    def test_same_on_every_replayed_trace_query(self):
+        rows = self.out["trace_queries"]["rows"]
+        self.assertEqual(len(rows), 45)
+        for r in rows:
+            if r["B"]["in_top8"]:
+                self.assertTrue(r["new_P"]["in_top8"], r)
+            self.assertTrue(r["new_P_equals_B"], r)  # same pointers, same order, same spans
+        self.assertEqual(self.out["trace_queries"]["summary"]["new_P_ranking_identical_to_B"], 45)
+
+    def test_diagnosis_old_p_ranked_fine_but_showed_the_wrong_text(self):
+        """The cause (see PREDECLARED_AGG15_AMENDMENT2_20261111.md): not ranking. The r1/r2 P arm found the gold chunk in the
+        top 8 at least as often as B, but a hit was the HEAD of a ~3k-10k-character chunk, so the model saw the match in
+        the 200 shown characters on 1 of 20 label queries (B: 5 of 20) and on 0 of 45 trace queries."""
+        lab, tr = self.out["label_queries"]["summary"], self.out["trace_queries"]["summary"]
+        for s in (lab, tr):
+            self.assertGreaterEqual(s["old_P"]["gold_in_top8"], s["B"]["gold_in_top8"])
+        self.assertLessEqual(lab["old_P"]["gold_quote_inside_shown_200"], 1)
+        self.assertEqual(tr["old_P"]["gold_quote_inside_shown_200"], 0)
+        self.assertGreater(lab["B"]["gold_quote_inside_shown_200"], lab["old_P"]["gold_quote_inside_shown_200"])
+        self.assertGreater(lab["old_P"]["gold_hit_median_chars"], 3 * lab["B"]["gold_hit_median_chars"])
+
+    def test_the_p15_02_loop_hit_is_unreadable_on_old_p_and_readable_on_new_p(self):
+        rows = [r for r in self.out["trace_queries"]["rows"]
+                if r["qid"] == "p15_02" and r["arm"] == "P-retrieval" and r["query"] == "Total Current Assets"]
+        self.assertTrue(rows)
+        for r in rows:
+            self.assertEqual(r["old_P"]["gold_rank"], 1)             # ranked first, yet ...
+            self.assertFalse(r["old_P"]["quote_in_shown"])           # ... the quote is not in what the model saw
+            self.assertGreater(r["old_P"]["quote_offset"], 5000)     # it sits 6,008 characters into a 9,789-character chunk
+            self.assertTrue(r["new_P"]["quote_in_shown"] or r["new_P"]["quote_offset"] < 800)
+            self.assertLess(r["new_P"]["hit_chars"], 801)
 
 
 if __name__ == "__main__":

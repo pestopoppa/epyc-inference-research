@@ -1,0 +1,2124 @@
+{
+ "schema": "agg15_replay.v1",
+ "method": "offline, no model: three backends over the same corpus text",
+ "stored_chunk_sizes": {
+  "JPMORGAN_2022_10K": {
+   "chunks": 440,
+   "mean_chars": 3548,
+   "max_chars": 10155
+  },
+  "PEPSICO_2022_10K": {
+   "chunks": 385,
+   "mean_chars": 3131,
+   "max_chars": 10139
+  },
+  "AMERICANWATERWORKS_2022_10K": {
+   "chunks": 259,
+   "mean_chars": 3988,
+   "max_chars": 10078
+  },
+  "AES_2022_10K": {
+   "chunks": 199,
+   "mean_chars": 4659,
+   "max_chars": 10078
+  }
+ },
+ "passage_chars": 800,
+ "label_queries": {
+  "summary": {
+   "n": 20,
+   "old_P": {
+    "gold_in_top8": 18,
+    "gold_hit_label_visible_in_shown_text": 1,
+    "gold_in_top8_and_visible": 1,
+    "gold_top1": 6,
+    "gold_hit_median_chars": 3147,
+    "gold_quote_median_offset": 1002,
+    "gold_quote_inside_shown_200": 1,
+    "gold_found": 20
+   },
+   "B": {
+    "gold_in_top8": 16,
+    "gold_hit_label_visible_in_shown_text": 5,
+    "gold_in_top8_and_visible": 3,
+    "gold_top1": 4,
+    "gold_hit_median_chars": 737,
+    "gold_quote_median_offset": 264,
+    "gold_quote_inside_shown_200": 5,
+    "gold_found": 20
+   },
+   "new_P": {
+    "gold_in_top8": 16,
+    "gold_hit_label_visible_in_shown_text": 5,
+    "gold_in_top8_and_visible": 3,
+    "gold_top1": 4,
+    "gold_hit_median_chars": 737,
+    "gold_quote_median_offset": 264,
+    "gold_quote_inside_shown_200": 5,
+    "gold_found": 20
+   },
+   "old_P_r2_read_has_figure_when_gold_chunk_found": [
+    19,
+    20
+   ],
+   "new_P_ranking_identical_to_B": 20
+  },
+  "rows": [
+   {
+    "qid": "p15_01",
+    "query": "Total net revenue",
+    "old_P": {
+     "gold_rank": 8,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3526,
+     "quote_offset": 1512,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 792,
+     "quote_offset": 67,
+     "quote_in_shown": true
+    },
+    "new_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 792,
+     "quote_offset": 67,
+     "quote_in_shown": true
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_02",
+    "query": "Total Current Assets",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_03",
+    "query": "Total current liabilities",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1759,
+     "quote_offset": 980,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_04",
+    "query": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 2574,
+     "quote_offset": 1178,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_05",
+    "query": "Net cash provided by/(used in) operating activities",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3147,
+     "quote_offset": 871,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_06",
+    "query": "Total Assets",
+    "old_P": {
+     "gold_rank": 10,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6286,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 464,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 464,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_07",
+    "query": "Total current assets",
+    "old_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1269,
+     "quote_offset": 662,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 737,
+     "quote_offset": 369,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 737,
+     "quote_offset": 369,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_08",
+    "query": "Total revenue",
+    "old_P": {
+     "gold_rank": 8,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 2574,
+     "quote_offset": 171,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 556,
+     "quote_offset": 357,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 556,
+     "quote_offset": 357,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_09",
+    "query": "Total assets",
+    "old_P": {
+     "gold_rank": 5,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3502,
+     "quote_offset": 1019,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 50,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 761,
+     "quote_offset": 435,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 50,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 761,
+     "quote_offset": 435,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_10",
+    "query": "Net Revenue",
+    "old_P": {
+     "gold_rank": 16,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 1316,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 21,
+     "in_top8": false,
+     "visible": true,
+     "hit_chars": 771,
+     "quote_offset": 12,
+     "quote_in_shown": true
+    },
+    "new_P": {
+     "gold_rank": 21,
+     "in_top8": false,
+     "visible": true,
+     "hit_chars": 771,
+     "quote_offset": 12,
+     "quote_in_shown": true
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_11",
+    "query": "Capital expenditures",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3271,
+     "quote_offset": 249,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 9,
+     "in_top8": false,
+     "visible": true,
+     "hit_chars": 306,
+     "quote_offset": 0,
+     "quote_in_shown": true
+    },
+    "new_P": {
+     "gold_rank": 9,
+     "in_top8": false,
+     "visible": true,
+     "hit_chars": 306,
+     "quote_offset": 0,
+     "quote_in_shown": true
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_12",
+    "query": "Total current liabilities",
+    "old_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1786,
+     "quote_offset": 359,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 792,
+     "quote_offset": 239,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 792,
+     "quote_offset": 239,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_13",
+    "query": "Net income",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1137,
+     "quote_offset": 823,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 702,
+     "quote_offset": 0,
+     "quote_in_shown": true
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 702,
+     "quote_offset": 0,
+     "quote_in_shown": true
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_14",
+    "query": "Net Cash Provided by Operating Activities",
+    "old_P": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 3805,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 634,
+     "quote_offset": 264,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 634,
+     "quote_offset": 264,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_15",
+    "query": "Dividends paid",
+    "old_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 2419,
+     "quote_offset": 1559,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 693,
+     "quote_offset": 199,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 693,
+     "quote_offset": 199,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_16",
+    "query": "Capital expenditures",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 1033,
+     "quote_offset": 129,
+     "quote_in_shown": true,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 23,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 785,
+     "quote_offset": 548,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 23,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 785,
+     "quote_offset": 548,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_17",
+    "query": "Total Current Liabilities",
+    "old_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6461,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 649,
+     "quote_offset": 0,
+     "quote_in_shown": true
+    },
+    "new_P": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 649,
+     "quote_offset": 0,
+     "quote_in_shown": true
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_18",
+    "query": "Net cash provided by operating activities",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 2419,
+     "quote_offset": 814,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 691,
+     "quote_offset": 207,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 691,
+     "quote_offset": 207,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_19",
+    "query": "TOTAL ASSETS",
+    "old_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1234,
+     "quote_offset": 1000,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 5,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 631,
+     "quote_offset": 377,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 5,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 631,
+     "quote_offset": 377,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   },
+   {
+    "qid": "p15_20",
+    "query": "Net cash provided by operating activities",
+    "old_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3834,
+     "quote_offset": 1002,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 651,
+     "quote_offset": 178,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 651,
+     "quote_offset": 178,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true
+   }
+  ]
+ },
+ "trace_queries": {
+  "summary": {
+   "n": 45,
+   "old_P": {
+    "gold_in_top8": 45,
+    "gold_hit_label_visible_in_shown_text": 0,
+    "gold_in_top8_and_visible": 0,
+    "gold_top1": 22,
+    "gold_hit_median_chars": 9789,
+    "gold_quote_median_offset": 6008,
+    "gold_quote_inside_shown_200": 0,
+    "gold_found": 45
+   },
+   "B": {
+    "gold_in_top8": 30,
+    "gold_hit_label_visible_in_shown_text": 2,
+    "gold_in_top8_and_visible": 2,
+    "gold_top1": 11,
+    "gold_hit_median_chars": 760,
+    "gold_quote_median_offset": 322,
+    "gold_quote_inside_shown_200": 2,
+    "gold_found": 33
+   },
+   "new_P": {
+    "gold_in_top8": 30,
+    "gold_hit_label_visible_in_shown_text": 2,
+    "gold_in_top8_and_visible": 2,
+    "gold_top1": 11,
+    "gold_hit_median_chars": 760,
+    "gold_quote_median_offset": 322,
+    "gold_quote_inside_shown_200": 2,
+    "gold_found": 33
+   },
+   "old_P_r2_read_has_figure_when_gold_chunk_found": [
+    26,
+    45
+   ],
+   "new_P_ranking_identical_to_B": 45
+  },
+  "rows": [
+   {
+    "qid": "p15_01",
+    "query": "Total net revenue consolidated financial statements",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1668,
+     "quote_offset": 608,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 768,
+     "quote_offset": 322,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 768,
+     "quote_offset": 322,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_01",
+    "query": "Total net revenue consolidated financial statements",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1668,
+     "quote_offset": 608,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 768,
+     "quote_offset": 322,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 768,
+     "quote_offset": 322,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_01",
+    "query": "\"Total net revenue\"",
+    "old_P": {
+     "gold_rank": 8,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3526,
+     "quote_offset": 1512,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 792,
+     "quote_offset": 67,
+     "quote_in_shown": true
+    },
+    "new_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 792,
+     "quote_offset": 67,
+     "quote_in_shown": true
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Total Current Assets",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets Total Current Assets",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 5,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 5,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Total current assets",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets Assets",
+    "old_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 50,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 50,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets December 31",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Total Current Assets 2022",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Total Current Assets",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_03",
+    "query": "Total current liabilities",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1759,
+     "quote_offset": 980,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_03",
+    "query": "Total current liabilities",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1759,
+     "quote_offset": 980,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_04",
+    "query": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 2574,
+     "quote_offset": 1178,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_04",
+    "query": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 2574,
+     "quote_offset": 1178,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_05",
+    "query": "Net cash provided by operating activities",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3147,
+     "quote_offset": 871,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "P-retrieval",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_05",
+    "query": "Net cash provided by operating activities",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3147,
+     "quote_offset": 871,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r1",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_01",
+    "query": "Total net revenue consolidated financial statements",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1668,
+     "quote_offset": 608,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 768,
+     "quote_offset": 322,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 768,
+     "quote_offset": 322,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_01",
+    "query": "Total net revenue consolidated financial statements",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1668,
+     "quote_offset": 608,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 768,
+     "quote_offset": 322,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 7,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 768,
+     "quote_offset": 322,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_01",
+    "query": "\"Total net revenue\"",
+    "old_P": {
+     "gold_rank": 8,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3526,
+     "quote_offset": 1512,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 792,
+     "quote_offset": 67,
+     "quote_in_shown": true
+    },
+    "new_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": true,
+     "hit_chars": 792,
+     "quote_offset": 67,
+     "quote_in_shown": true
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Total Current Assets",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets Total Current Assets",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 5,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 5,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Total current assets",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets Assets",
+    "old_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 50,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 50,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Total current assets 2022 2021",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets December 31",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Consolidated Balance Sheets",
+    "old_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P": {
+     "gold_rank": null,
+     "in_top8": false,
+     "visible": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_02",
+    "query": "Total Current Assets",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 9789,
+     "quote_offset": 6008,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 760,
+     "quote_offset": 186,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_03",
+    "query": "Total current liabilities",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1759,
+     "quote_offset": 980,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_03",
+    "query": "Total current liabilities",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 1759,
+     "quote_offset": 980,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 661,
+     "quote_offset": 489,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_04",
+    "query": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 2574,
+     "quote_offset": 1178,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_04",
+    "query": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION",
+    "old_P": {
+     "gold_rank": 1,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 2574,
+     "quote_offset": 1178,
+     "quote_in_shown": false,
+     "r2_read_has_figure": true
+    },
+    "B": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 790,
+     "quote_offset": 346,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "B-context.search",
+    "status": "ok"
+   },
+   {
+    "qid": "p15_05",
+    "query": "Net cash provided by operating activities",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3147,
+     "quote_offset": 871,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_05",
+    "query": "Net cash provided by/(used in) operating activities 2022",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3147,
+     "quote_offset": 871,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": 5,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 5,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_05",
+    "query": "Net cash provided by/(used in) operating activities 2022 2021 2020",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3147,
+     "quote_offset": 871,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 6,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_05",
+    "query": "Consolidated statements of cash flows Net cash provided by/(used in) operating activities",
+    "old_P": {
+     "gold_rank": 2,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3147,
+     "quote_offset": 871,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": 10,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 10,
+     "in_top8": false,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "P-retrieval",
+    "status": "budget_exhausted"
+   },
+   {
+    "qid": "p15_05",
+    "query": "Net cash provided by operating activities",
+    "old_P": {
+     "gold_rank": 3,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 3147,
+     "quote_offset": 871,
+     "quote_in_shown": false,
+     "r2_read_has_figure": false
+    },
+    "B": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P": {
+     "gold_rank": 4,
+     "in_top8": true,
+     "visible": false,
+     "hit_chars": 742,
+     "quote_offset": 467,
+     "quote_in_shown": false
+    },
+    "new_P_equals_B": true,
+    "run": "r2",
+    "arm": "B-context.search",
+    "status": "ok"
+   }
+  ]
+ }
+}

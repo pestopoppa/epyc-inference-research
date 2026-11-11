@@ -1,0 +1,362 @@
+[
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_01",
+  "status": "ok",
+  "calls": 3,
+  "query": "Total net revenue consolidated financial statements"
+ },
+ {
+  "run": "r1",
+  "arm": "B-context.search",
+  "qid": "p15_01",
+  "status": "ok",
+  "calls": 4,
+  "query": "Total net revenue consolidated financial statements"
+ },
+ {
+  "run": "r1",
+  "arm": "B-context.search",
+  "qid": "p15_01",
+  "status": "ok",
+  "calls": 4,
+  "query": "\"Total net revenue\""
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Total Current Assets"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets Total Current Assets"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Total current assets"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets Assets"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets December 31"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Total Current Assets 2022"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r1",
+  "arm": "B-context.search",
+  "qid": "p15_02",
+  "status": "ok",
+  "calls": 3,
+  "query": "Total Current Assets"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_03",
+  "status": "ok",
+  "calls": 3,
+  "query": "Total current liabilities"
+ },
+ {
+  "run": "r1",
+  "arm": "B-context.search",
+  "qid": "p15_03",
+  "status": "ok",
+  "calls": 3,
+  "query": "Total current liabilities"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_04",
+  "status": "ok",
+  "calls": 3,
+  "query": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION"
+ },
+ {
+  "run": "r1",
+  "arm": "B-context.search",
+  "qid": "p15_04",
+  "status": "ok",
+  "calls": 3,
+  "query": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION"
+ },
+ {
+  "run": "r1",
+  "arm": "P-retrieval",
+  "qid": "p15_05",
+  "status": "ok",
+  "calls": 3,
+  "query": "Net cash provided by operating activities"
+ },
+ {
+  "run": "r1",
+  "arm": "B-context.search",
+  "qid": "p15_05",
+  "status": "ok",
+  "calls": 3,
+  "query": "Net cash provided by operating activities"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_01",
+  "status": "ok",
+  "calls": 3,
+  "query": "Total net revenue consolidated financial statements"
+ },
+ {
+  "run": "r2",
+  "arm": "B-context.search",
+  "qid": "p15_01",
+  "status": "ok",
+  "calls": 4,
+  "query": "Total net revenue consolidated financial statements"
+ },
+ {
+  "run": "r2",
+  "arm": "B-context.search",
+  "qid": "p15_01",
+  "status": "ok",
+  "calls": 4,
+  "query": "\"Total net revenue\""
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Total Current Assets"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets Total Current Assets"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Total current assets"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets Assets"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Total current assets 2022 2021"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets December 31"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_02",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated Balance Sheets"
+ },
+ {
+  "run": "r2",
+  "arm": "B-context.search",
+  "qid": "p15_02",
+  "status": "ok",
+  "calls": 3,
+  "query": "Total Current Assets"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_03",
+  "status": "ok",
+  "calls": 3,
+  "query": "Total current liabilities"
+ },
+ {
+  "run": "r2",
+  "arm": "B-context.search",
+  "qid": "p15_03",
+  "status": "ok",
+  "calls": 3,
+  "query": "Total current liabilities"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_04",
+  "status": "ok",
+  "calls": 3,
+  "query": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION"
+ },
+ {
+  "run": "r2",
+  "arm": "B-context.search",
+  "qid": "p15_04",
+  "status": "ok",
+  "calls": 3,
+  "query": "NET INCOME (LOSS) ATTRIBUTABLE TO THE AES CORPORATION"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_05",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Net cash provided by operating activities"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_05",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Net cash provided by/(used in) operating activities 2022"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_05",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Net cash provided by/(used in) operating activities 2022 2021 2020"
+ },
+ {
+  "run": "r2",
+  "arm": "P-retrieval",
+  "qid": "p15_05",
+  "status": "budget_exhausted",
+  "calls": 12,
+  "query": "Consolidated statements of cash flows Net cash provided by/(used in) operating activities"
+ },
+ {
+  "run": "r2",
+  "arm": "B-context.search",
+  "qid": "p15_05",
+  "status": "ok",
+  "calls": 3,
+  "query": "Net cash provided by operating activities"
+ }
+]

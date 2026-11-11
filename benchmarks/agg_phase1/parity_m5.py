@@ -11,8 +11,11 @@ same grammar, same caps): only the retrieval backend differs.
 
 * ``P-retrieval``    the planner scopes the question to its one document (``planner.scoped_facts``), plans it
                      (``planner.plan`` -> ``retrieval``, layers L0 L1 L2), and the pointers come from the STORE:
-                     ``IndexRegistry.get_or_build(corpus, 'l1_bm25')`` over the stored chunk table. The index is
-                     keyed by (corpus, content hash, builder, model) and built once per document, then reused.
+                     ``IndexRegistry.get_or_build(corpus, 'l1_passage_bm25')`` (AGG-1.5 r3, amendment 2): the
+                     ``context.search`` engine (line-aware 800-character passages, BM25, lexical) over the corpus text
+                     rebuilt from the stored chunk table. The index is keyed by (corpus, content hash, builder, model)
+                     and built once per document, then reused. (r1/r2 indexed the stored 3-10k-character chunks whole
+                     with ``l1_bm25`` and showed the head of each chunk: see PREDECLARED_AGG15_AMENDMENT2_20261111.md.)
 * ``B-context.search`` today's flow: a fresh ``ContextBundle`` per request holding the document as one section,
                      ``bundle.search`` pointers ({section, start, end}) read through ``bundle.get``. The bundle
                      builds its lazy ``ContextSearchIndex`` on its first search, once PER REQUEST (``context_bundle.py``
@@ -74,6 +77,12 @@ READ_SPAN_CHARS = 800
 READ_CHARS = READ_SPAN_CHARS  # recorded in the meta record; r1 recorded 12000
 R1_READ_CHARS = 12_000        # the amended-away r1 value, kept for the record only
 ALREADY_READ = "(already read: {ptr}; its text is earlier in this conversation. Read a different pointer or answer.)"
+# AMENDMENT 2 2026-11-11 (PREDECLARED_AGG15_AMENDMENT2_20261111.md, POST-DATA, operator decision "third try"): an identical
+# SEARCH (whitespace-folded, case-folded) in the same question returns this note instead of hits, in BOTH arms.
+ALREADY_SEARCHED = ("(already searched: {q}; its hits are earlier in this conversation. "
+                    "Search different keywords, read a pointer or answer.)")
+P_BUILDER = "l1_passage_bm25"      # AMENDMENT 2: the P arm's registry builder (r1/r2: "l1_bm25", stored chunks whole)
+R2_P_BUILDER = "l1_bm25"           # the amended-away r1/r2 value, kept for the record only
 SEARCH_K = 8
 NO_L = ("L2", "L3", "L4")
 STORE_DEFAULT = Path("/mnt/raid0/llm/tmp/agg0-arms-cpu-20261110-r2/out/store.sqlite")
@@ -314,72 +323,56 @@ def plan_question(store, planner, q: dict[str, Any], docs_meta: list[dict[str, A
             "planner_llm_called": dec.llm_called}
 
 
-_WORD = re.compile(r"[a-z0-9]+")
+def parse_span(ptr: str) -> tuple[int, int] | None:
+    """``'<start>-<end>'`` -> the read span (start, start + min(end - start, READ_SPAN_CHARS)); one rule for both arms."""
+    m = re.fullmatch(r"(\d+)-(\d+)", ptr.strip())
+    if not m:
+        return None
+    s, e = int(m.group(1)), int(m.group(2))
+    return s, s + min(max(e - s, 0), READ_SPAN_CHARS)
 
 
-def hit_window(text: str, query: str, width: int = READ_SPAN_CHARS) -> str:
-    """The ``width``-character window of ``text`` around the best lexical hit of ``query`` (the P arm's read span, the
-    counterpart of a context.search hit span). Candidates are centred on each occurrence of a query word; a window is
-    ranked by (the whole query appears as a phrase, distinct query words, query-word occurrences), ties to the earliest.
-    No query word present: the start of the text. Pure and deterministic; ``len(result) <= width``."""
-    if len(text) <= width:
-        return text
-    words = [w for w in _WORD.findall(query.lower()) if len(w) > 1]
-    if not words:
-        return text[:width]
-    uniq = sorted(set(words))
-    low = re.sub(r"\s+", " ", text.lower())
-    if len(low) != len(text):  # whitespace folding must not shift offsets: fall back to the raw lower-cased text
-        low = text.lower()
-    phrase = " ".join(words)
-    best, best_start = (-1, -1, -1), 0
-    centres = sorted({m.start() for w in uniq for m in re.finditer(re.escape(w), low)})
-    for c in centres:
-        start = min(max(c - width // 2, 0), len(text) - width)
-        win = low[start:start + width]
-        score = (int(phrase in win), sum(1 for w in uniq if w in win), sum(win.count(w) for w in uniq))
-        if score > best:
-            best, best_start = score, start
-    return text[best_start:best_start + width] if best[1] > 0 else text[:width]
+def snippet(line: int, text: str) -> str:
+    """The hit text shown to the model, identical in both arms: the line number and the first 200 characters of the span."""
+    return f"line {line} | {text[:200]}"
 
 
 class PArm:
-    """Planner ``retrieval`` pointers from the store's L1 index (built once per (corpus, content hash))."""
+    """Planner ``retrieval`` pointers from the store's L1 passage index (built once per (corpus, content hash)).
+
+    Same pointer and hit presentation as ``context.search`` (``{start}-{end}`` spans into the corpus text and the first
+    200 characters of the span); ``ptr_chunk`` keeps the stored chunk each pointer starts in (provenance, not shown)."""
 
     def __init__(self, store, registry, doc_id: str) -> None:
         self.store, self.registry, self.cid = store, registry, CORPUS_PREFIX + doc_id
-        self.chunks = {c["chunk_id"]: c for c in store.chunks(self.cid)}
         self.builds, self.build_s = 0, 0.0
-        self.dup_reads = 0
-        self.hit_query: dict[str, str] = {}  # chunk id -> the last SEARCH query whose hits returned it
+        self.dup_reads = self.dup_searches = 0
+        self.ptr_chunk: dict[str, str] = {}
 
     def open(self) -> None:
-        key = self.registry.key(self.cid, "l1_bm25")
+        key = self.registry.key(self.cid, P_BUILDER)
         fresh = key not in self.registry._live
         t0 = time.perf_counter()
-        self.handle = self.registry.get_or_build(self.cid, "l1_bm25")
+        self.handle = self.registry.get_or_build(self.cid, P_BUILDER)
         self.builds = int(fresh)
         self.build_s = time.perf_counter() - t0 if fresh else 0.0
 
     def search(self, query: str) -> list[tuple[str, str]]:
         out = []
-        for cid, _score in self.handle.search(query, SEARCH_K):
-            c = self.chunks[cid]
-            self.hit_query[cid] = query
-            out.append((cid, f"{(c.get('title') or '')[:80]} | {(c['text'] or '')[:200]}"))
+        for h in self.handle.search(query, SEARCH_K):
+            ptr = f"{h['start']}-{h['end']}"
+            self.ptr_chunk[ptr] = h["chunk_id"]
+            out.append((ptr, snippet(h["line"], self.handle.span(h["start"], h["end"]))))
         return out
 
     def read_key(self, ptr: str) -> Any:
-        ptr = ptr.strip()
-        return ptr if ptr in self.chunks else None
+        sp = parse_span(ptr)
+        return sp if sp is not None and sp[0] < len(self.handle.text) else None
 
     def read(self, ptr: str) -> str | None:
-        """At most READ_SPAN_CHARS characters of the chunk, the window around the hit for the query that returned it
-        (the same read span a context.search hit covers). A pointer never returned by a search has no hit: its start."""
-        c = self.chunks.get(ptr.strip())
-        if c is None:
-            return None
-        return hit_window(c["text"] or "", self.hit_query.get(ptr.strip(), ""), READ_SPAN_CHARS)
+        """At most READ_SPAN_CHARS characters at the pointer, read from the corpus text the index was built over."""
+        sp = self.read_key(ptr)
+        return None if sp is None else self.handle.span(*sp)
 
 
 class BArm:
@@ -391,7 +384,7 @@ class BArm:
         self.bundle = ContextBundle([Section(doc_id, text, "text", False, "10-K filing text")], search_enabled=True)
         self.bundle.set_embedder(None)  # dense off: the documented lexical mode, same as P (no L2)
         self.builds, self.build_s = 0, 0.0
-        self.dup_reads = 0
+        self.dup_reads = self.dup_searches = 0
         self._text = text
 
     def open(self) -> None:
@@ -403,34 +396,25 @@ class BArm:
         if self.builds == 0 and getattr(self.bundle, "_search_index", None) is not None:
             self.builds = 1
             self.build_s = time.perf_counter() - t0  # first search = lazy index build + one query
-        return [(f"{h['start']}-{h['end']}", f"line {h['line']} | {self._text[h['start']:h['end']][:200]}")
-                for h in hits]
-
-    @staticmethod
-    def _span(ptr: str) -> tuple[int, int] | None:
-        m = re.fullmatch(r"(\d+)-(\d+)", ptr.strip())
-        if not m:
-            return None
-        s, e = int(m.group(1)), int(m.group(2))
-        return s, s + min(max(e - s, 0), READ_SPAN_CHARS)
+        return [(f"{h['start']}-{h['end']}", snippet(h["line"], self._text[h["start"]:h["end"]])) for h in hits]
 
     def read_key(self, ptr: str) -> Any:
-        return self._span(ptr)
+        return parse_span(ptr)
 
     def read(self, ptr: str) -> str | None:
-        sp = self._span(ptr)
+        sp = self.read_key(ptr)
         if sp is None:
             return None
         return self.bundle.get(self.doc_id, max_chars=sp[1] - sp[0], offset=sp[0])
 
 
 def retrieval_loop(backend, question: str, arm, cfg: P0.Cfg, trace: list[str]) -> tuple[str, str]:
-    """The shared SEARCH / READ / FINAL loop (<= single_doc_max_calls); identical for both arms, repeated-read guard included."""
+    """The shared SEARCH / READ / FINAL loop (<= single_doc_max_calls); identical for both arms, repeated-read and repeated-search guards included."""
     from src.aggregation.llm_backend import OutOfWindow  # noqa: PLC0415
     head = ("You answer a question about ONE FY2022 10-K filing using tools. Each turn reply with exactly one "
             "line: 'SEARCH: <keywords>' (lexical search of the filing, returns pointers), 'READ: <pointer>' "
             f"(returns the text at that pointer) or 'FINAL: <answer>'.\n{RULE}\nQuestion: {question}\n")
-    hist, seen = "", set()
+    hist, seen, asked = "", set(), set()
     for _ in range(cfg.single_doc_max_calls):
         try:
             r = backend.chat(head + hist + "Next action:", n_predict=120, grammar=GRAMMAR, id_slot=0)
@@ -443,6 +427,12 @@ def retrieval_loop(backend, question: str, arm, cfg: P0.Cfg, trace: list[str]) -
             return act, "ok"
         arg = act.split(":", 1)[1].strip() if ":" in act else ""
         if act.startswith("SEARCH:"):
+            qkey = " ".join(arg.lower().split())
+            if qkey and qkey in asked:  # AMENDMENT 2 2026-11-11: an identical SEARCH costs a note, not the hits
+                arm.dup_searches += 1
+                hist += ALREADY_SEARCHED.format(q=arg)
+                continue
+            asked.add(qkey)
             hits = arm.search(arg) if arg else []
             hist += "\n".join(f"[{p}] {s.replace(chr(10), ' ')}" for p, s in hits) or "(no hits)"
         elif act.startswith("READ:"):
@@ -509,7 +499,8 @@ def run_arms(rec: P0.Recorder, src_store: Path, parity_path: Path, backend, qdoc
                          built_layers=sorted(store.built_layers(CORPUS_PREFIX + q["doc_name"])))
             rec.emit("answer", unit=unit, arm=arm_name, qid=q["id"], doc=q["doc_name"], qclass="single",
                      status=st, correct=correct, calls=t.calls, prefill_tokens=t.prefill, answer=text[-300:],
-                     index_builds=arm.builds, index_build_s=arm.build_s, dup_reads=arm.dup_reads, loop_actions=trace,
+                     index_builds=arm.builds, index_build_s=arm.build_s, dup_reads=arm.dup_reads,
+                     dup_searches=arm.dup_searches, loop_actions=trace,
                      final=st in ("ok", "out_of_window", "budget_exhausted"), wall_s=time.time() - t0)
         if smoke:
             return {"complete": False, "smoke": True}
@@ -601,7 +592,7 @@ def reachability(qdoc: dict[str, Any], store, registry) -> dict[str, Any]:
         qs = V.sq(q["quote"])
         pa = PArm(store, registry, q["doc_name"])
         pa.open()
-        top = [pa.chunks[cid]["text"] or "" for cid, _ in pa.handle.search(q["label"], SEARCH_K)]
+        top = [pa.handle.span(h["start"], h["end"]) for h in pa.handle.search(q["label"], SEARCH_K)]
         out["P-retrieval"] += any(qs in V.sq(t) for t in top)
         ba = BArm(q["doc_name"], chunks[q["doc_name"]])
         hits = ba.bundle.search(q["label"], SEARCH_K)
@@ -698,7 +689,8 @@ def main(argv: list[str] | None = None) -> int:
     backend = LlamaServerBackend(a.url, model_id=a.model_id)
     rec = P0.Recorder(a.out / "results.jsonl")
     rec.emit("meta", smoke=smoke, preflight=info, url=a.url, model_id=a.model_id, cfg=dict(vars(P0.CFG)),
-             read_chars=READ_CHARS, read_span_chars=READ_SPAN_CHARS, search_k=SEARCH_K, final=False)
+             read_chars=READ_CHARS, read_span_chars=READ_SPAN_CHARS, search_k=SEARCH_K, p_builder=P_BUILDER,
+             search_guard=True, final=False)
     try:
         res = run_arms(rec, a.store_src, a.parity_store, backend, load_questions(d), guard=guard, smoke=smoke)
     except P0.Stop as e:
