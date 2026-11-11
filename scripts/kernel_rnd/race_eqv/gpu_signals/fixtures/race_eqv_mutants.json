@@ -1,0 +1,32 @@
+{
+  "schema": "epyc.gfx90a.race_eqv_mutants.v1",
+  "anchor": "production-consolidated-v10 ffc1bac82eeca6f9099e1ccd9ba49703c460a115",
+  "build_tree": "llama.cpp-experimental worktree from the v10 tip; never the frozen tree",
+  "race1": {
+    "runs_per_mutant": 20,
+    "mutants": [
+      {"id": "R1-MMQ-TILE-LOAD", "kernel": "mul_mat_q", "site": "mmq.cuh tile-load __syncthreads", "edit": "delete one barrier"},
+      {"id": "R1-MMVQ-TMP-NW4", "kernel": "mul_mat_vec_q", "site": "mmvq.cu tmp_shared cross-warp reduction, nwarps=4 route", "edit": "delete one barrier"},
+      {"id": "R1-MMVQ-TMP-NW8", "kernel": "mul_mat_vec_q", "site": "mmvq.cu tmp_shared cross-warp reduction, nwarps=8 route", "edit": "delete one barrier"},
+      {"id": "R1-MMVQ-LDSDMA", "kernel": "mul_mat_vec_q", "site": "mmvq.cu LDS-DMA double buffer (GGML_CUDA_Q8_PREFETCH=1)", "edit": "delete one barrier"},
+      {"id": "R1-FA-MMA-SOFTMAX", "kernel": "flash_attn_ext_f16", "site": "fattn-mma tile softmax", "edit": "delete one barrier"}
+    ],
+    "isa_only_mutants": [
+      {"id": "R2-ISA-DEL-VMCNT0", "edit": "delete the q8pf s_waitcnt vmcnt(0)", "reassemble": "clang -target amdgcn-amd-amdhsa -mcpu=gfx90a"},
+      {"id": "R2-ISA-LDS-ABOVE-BARRIER", "edit": "move the first LDS read of a tile above its s_barrier", "reassemble": "clang -target amdgcn-amd-amdhsa -mcpu=gfx90a"}
+    ]
+  },
+  "eqv1": {
+    "seeds": 5,
+    "mutants": [
+      {"id": "E1-FA-RESCALE-SKIP", "kind": "mutant", "edit": "FA online-softmax rescale skipped only when the running max changes after the first KV tile"},
+      {"id": "E1-FA-DROP-LAST-KV", "kind": "mutant", "edit": "FA KV loop drops the last KV column"},
+      {"id": "E1-FATILE-DROP-TAIL", "kind": "mutant", "edit": "FA-tile drops one tail tile at a non-multiple context"},
+      {"id": "E1-GDN-DECAY-DROP", "kind": "mutant", "edit": "GDN exp(g) decay dropped at a chunk boundary"},
+      {"id": "E1-GDN-BETA-DROP", "kind": "mutant", "edit": "GDN beta dropped for one head"},
+      {"id": "E1-MMVF-PARTIAL-K", "kind": "mutant", "edit": "mmvf drops the final partial k-block at ne00 % tile != 0"},
+      {"id": "E1-CTRL-A", "kind": "control", "edit": "O(1) error injected (must be caught)"},
+      {"id": "E1-CTRL-B", "kind": "control", "edit": "O(1) error injected (must be caught)"}
+    ]
+  }
+}
