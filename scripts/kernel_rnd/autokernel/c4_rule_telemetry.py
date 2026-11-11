@@ -102,6 +102,44 @@ def records_from_report(report: Any, *, run_id: str, task_id: str,
     return records_for_run(run_id, task_id, rule_ids, fired, downstream_speedup)
 
 
+def evaluation_speedup(evaluation: Mapping[str, Any]) -> float | None:
+    """The downstream speedup of one eval-backend result, or None when the run
+    produced no VALID measurement (compile or correctness failed, or no positive
+    finite average_speedup). A failed run is a null, never a 0.0 'loss'."""
+    if evaluation.get("pass_compilation") is not True \
+            or evaluation.get("pass_correctness") is not True:
+        return None
+    value = evaluation.get("average_speedup")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not math.isfinite(value) or value <= 0:
+        return None
+    return float(value)
+
+
+def log_eval_run(config: Mapping[str, Any], *, run_id: str, task_id: str,
+                 evaluation: Mapping[str, Any]) -> dict[str, Any]:
+    """RVP-C4-9 wiring: re-run the deterministic C4 pass named by `config`
+    (manifest / mapping_profile / formal_profile / out) and append one record per
+    rule for this eval-backend run. Costs no GPU time; raises on a bad config."""
+    from . import profile_report   # local: keeps this reducer importable alone
+    missing = [k for k in ("manifest", "mapping_profile", "formal_profile", "out")
+               if not isinstance(config.get(k), str) or not config[k].strip()]
+    if missing:
+        raise TelemetryError(f"c4_telemetry config missing {missing}")
+    manifest = profile_report.ReportManifest.from_dict(
+        json.loads(Path(config["manifest"]).read_text(encoding="utf-8")))
+    report = profile_report.run_profile_report(
+        config["mapping_profile"], config["formal_profile"], manifest)
+    records = records_from_report(
+        report, run_id=run_id, task_id=task_id,
+        downstream_speedup=evaluation_speedup(evaluation))
+    append_records(Path(config["out"]), records)
+    return {"status": "logged", "records": len(records),
+            "fired": sum(1 for r in records if r.fired),
+            "downstream_speedup": records[0].downstream_speedup if records else None,
+            "out": config["out"]}
+
+
 def append_records(path: Path, records: Sequence[RuleRecord]) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

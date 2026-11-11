@@ -3040,8 +3040,12 @@ def _run_worker_impl(
     vendor_evaluator.write_task_result(
         result_workspace, evaluation, baseline_cases, task_id, arm_id, logger,
         create_plots=False)
+    c4_telemetry = _log_c4_rule_telemetry(
+        request.get("c4_telemetry"), baseline=baseline, campaign_id=campaign_id,
+        arm_id=arm_id, task_id=task_id, evaluation=evaluation)
     artifacts = _artifact_hashes(cell_root)
     return {
+        **({"c4_telemetry": c4_telemetry} if c4_telemetry is not None else {}),
         "schema": CHECKPOINT_SCHEMA,
         "authority": "whole_agent_task_only",
         "campaign_id": campaign_id,
@@ -3076,6 +3080,29 @@ def _run_worker_impl(
             "promotion_authority": False,
         },
     }
+
+
+def _log_c4_rule_telemetry(
+    config: Any, *, baseline: bool, campaign_id: str, arm_id: str, task_id: str,
+    evaluation: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """RVP-C4-9: per-rule hit-rate records for one agent eval-backend run.
+
+    Opt-in (request["c4_telemetry"]); baseline runs are not agent runs and are not
+    logged. Telemetry is observational: a failure here is recorded in the checkpoint
+    as an error status and never changes the evaluation verdict.
+    """
+    if config is None or baseline:
+        return None
+    from .. import c4_rule_telemetry
+    try:
+        if not isinstance(config, Mapping):
+            raise c4_rule_telemetry.TelemetryError("c4_telemetry must be an object")
+        return c4_rule_telemetry.log_eval_run(
+            config, run_id=f"{campaign_id}:{arm_id}", task_id=task_id,
+            evaluation=evaluation)
+    except Exception as exc:  # noqa: BLE001 - observational, must not void the cell
+        return {"status": "error", "error": f"{type(exc).__name__}: {exc}"[:500]}
 
 
 def run_worker(
