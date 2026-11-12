@@ -1,0 +1,1394 @@
+{
+ "agg11": {
+  "canonical_v1_ok": 177,
+  "canonical_v1_ok_cells": [
+   "3M_2022_10K|capex",
+   "3M_2022_10K|dividends_paid",
+   "3M_2022_10K|operating_cash_flow",
+   "3M_2022_10K|revenue",
+   "3M_2022_10K|total_assets",
+   "3M_2022_10K|total_current_assets",
+   "3M_2022_10K|total_current_liabilities",
+   "ACTIVISIONBLIZZARD_2022_10K|capex",
+   "ACTIVISIONBLIZZARD_2022_10K|dividends_paid",
+   "ACTIVISIONBLIZZARD_2022_10K|net_income",
+   "ACTIVISIONBLIZZARD_2022_10K|operating_cash_flow",
+   "ACTIVISIONBLIZZARD_2022_10K|revenue",
+   "ACTIVISIONBLIZZARD_2022_10K|total_assets",
+   "ACTIVISIONBLIZZARD_2022_10K|total_current_assets",
+   "ACTIVISIONBLIZZARD_2022_10K|total_current_liabilities",
+   "ADOBE_2022_10K|capex",
+   "ADOBE_2022_10K|net_income",
+   "ADOBE_2022_10K|operating_cash_flow",
+   "ADOBE_2022_10K|revenue",
+   "ADOBE_2022_10K|total_current_assets",
+   "AES_2022_10K|capex",
+   "AES_2022_10K|dividends_paid",
+   "AES_2022_10K|net_income",
+   "AES_2022_10K|operating_cash_flow",
+   "AES_2022_10K|revenue",
+   "AES_2022_10K|total_assets",
+   "AES_2022_10K|total_current_assets",
+   "AES_2022_10K|total_current_liabilities",
+   "AMAZON_2022_10K|capex",
+   "AMAZON_2022_10K|operating_cash_flow",
+   "AMAZON_2022_10K|revenue",
+   "AMAZON_2022_10K|total_assets",
+   "AMAZON_2022_10K|total_current_assets",
+   "AMAZON_2022_10K|total_current_liabilities",
+   "AMD_2022_10K|capex",
+   "AMD_2022_10K|operating_cash_flow",
+   "AMD_2022_10K|revenue",
+   "AMD_2022_10K|total_assets",
+   "AMD_2022_10K|total_current_assets",
+   "AMERICANEXPRESS_2022_10K|net_income",
+   "AMERICANEXPRESS_2022_10K|operating_cash_flow",
+   "AMERICANEXPRESS_2022_10K|revenue",
+   "AMERICANEXPRESS_2022_10K|total_assets",
+   "AMERICANWATERWORKS_2022_10K|capex",
+   "AMERICANWATERWORKS_2022_10K|dividends_paid",
+   "AMERICANWATERWORKS_2022_10K|net_income",
+   "AMERICANWATERWORKS_2022_10K|operating_cash_flow",
+   "AMERICANWATERWORKS_2022_10K|revenue",
+   "AMERICANWATERWORKS_2022_10K|total_assets",
+   "AMERICANWATERWORKS_2022_10K|total_current_assets",
+   "AMERICANWATERWORKS_2022_10K|total_current_liabilities",
+   "APPLE_2022_10K|dividends_paid",
+   "APPLE_2022_10K|net_income",
+   "APPLE_2022_10K|operating_cash_flow",
+   "APPLE_2022_10K|revenue",
+   "APPLE_2022_10K|total_assets",
+   "APPLE_2022_10K|total_current_assets",
+   "APPLE_2022_10K|total_current_liabilities",
+   "BOEING_2022_10K|capex",
+   "BOEING_2022_10K|operating_cash_flow",
+   "BOEING_2022_10K|revenue",
+   "COCACOLA_2022_10K|capex",
+   "COCACOLA_2022_10K|dividends_paid",
+   "COCACOLA_2022_10K|operating_cash_flow",
+   "COCACOLA_2022_10K|revenue",
+   "CORNING_2022_10K|capex",
+   "CORNING_2022_10K|dividends_paid",
+   "CORNING_2022_10K|operating_cash_flow",
+   "CORNING_2022_10K|total_assets",
+   "CORNING_2022_10K|total_current_assets",
+   "CORNING_2022_10K|total_current_liabilities",
+   "COSTCO_2022_10K|capex",
+   "COSTCO_2022_10K|dividends_paid",
+   "COSTCO_2022_10K|operating_cash_flow",
+   "COSTCO_2022_10K|total_current_assets",
+   "CVSHEALTH_2022_10K|capex",
+   "CVSHEALTH_2022_10K|dividends_paid",
+   "CVSHEALTH_2022_10K|net_income",
+   "CVSHEALTH_2022_10K|operating_cash_flow",
+   "CVSHEALTH_2022_10K|revenue",
+   "CVSHEALTH_2022_10K|total_assets",
+   "CVSHEALTH_2022_10K|total_current_assets",
+   "CVSHEALTH_2022_10K|total_current_liabilities",
+   "EBAY_2022_10K|capex",
+   "EBAY_2022_10K|dividends_paid",
+   "EBAY_2022_10K|net_income",
+   "EBAY_2022_10K|operating_cash_flow",
+   "EBAY_2022_10K|revenue",
+   "EBAY_2022_10K|total_assets",
+   "EBAY_2022_10K|total_current_assets",
+   "EBAY_2022_10K|total_current_liabilities",
+   "GENERALMILLS_2022_10K|capex",
+   "GENERALMILLS_2022_10K|dividends_paid",
+   "GENERALMILLS_2022_10K|operating_cash_flow",
+   "GENERALMILLS_2022_10K|revenue",
+   "GENERALMILLS_2022_10K|total_assets",
+   "GENERALMILLS_2022_10K|total_current_assets",
+   "GENERALMILLS_2022_10K|total_current_liabilities",
+   "JOHNSON_JOHNSON_2022_10K|dividends_paid",
+   "JOHNSON_JOHNSON_2022_10K|net_income",
+   "JOHNSON_JOHNSON_2022_10K|operating_cash_flow",
+   "JOHNSON_JOHNSON_2022_10K|revenue",
+   "JOHNSON_JOHNSON_2022_10K|total_assets",
+   "JOHNSON_JOHNSON_2022_10K|total_current_assets",
+   "JOHNSON_JOHNSON_2022_10K|total_current_liabilities",
+   "JPMORGAN_2022_10K|net_income",
+   "JPMORGAN_2022_10K|operating_cash_flow",
+   "JPMORGAN_2022_10K|revenue",
+   "JPMORGAN_2022_10K|total_assets",
+   "KRAFTHEINZ_2022_10K|capex",
+   "KRAFTHEINZ_2022_10K|dividends_paid",
+   "KRAFTHEINZ_2022_10K|net_income",
+   "KRAFTHEINZ_2022_10K|operating_cash_flow",
+   "KRAFTHEINZ_2022_10K|revenue",
+   "KRAFTHEINZ_2022_10K|total_assets",
+   "KRAFTHEINZ_2022_10K|total_current_assets",
+   "KRAFTHEINZ_2022_10K|total_current_liabilities",
+   "LOCKHEEDMARTIN_2022_10K|capex",
+   "LOCKHEEDMARTIN_2022_10K|dividends_paid",
+   "LOCKHEEDMARTIN_2022_10K|net_income",
+   "LOCKHEEDMARTIN_2022_10K|operating_cash_flow",
+   "LOCKHEEDMARTIN_2022_10K|revenue",
+   "LOCKHEEDMARTIN_2022_10K|total_assets",
+   "LOCKHEEDMARTIN_2022_10K|total_current_assets",
+   "LOCKHEEDMARTIN_2022_10K|total_current_liabilities",
+   "MCDONALDS_2022_10K|capex",
+   "MCDONALDS_2022_10K|dividends_paid",
+   "MCDONALDS_2022_10K|net_income",
+   "MCDONALDS_2022_10K|operating_cash_flow",
+   "MCDONALDS_2022_10K|revenue",
+   "MCDONALDS_2022_10K|total_assets",
+   "MCDONALDS_2022_10K|total_current_assets",
+   "MCDONALDS_2022_10K|total_current_liabilities",
+   "MGMRESORTS_2022_10K|capex",
+   "MGMRESORTS_2022_10K|dividends_paid",
+   "MGMRESORTS_2022_10K|operating_cash_flow",
+   "MGMRESORTS_2022_10K|total_current_assets",
+   "MGMRESORTS_2022_10K|total_current_liabilities",
+   "MICROSOFT_2022_10K|net_income",
+   "MICROSOFT_2022_10K|operating_cash_flow",
+   "MICROSOFT_2022_10K|revenue",
+   "MICROSOFT_2022_10K|total_assets",
+   "MICROSOFT_2022_10K|total_current_assets",
+   "MICROSOFT_2022_10K|total_current_liabilities",
+   "NETFLIX_2022_10K|capex",
+   "NETFLIX_2022_10K|net_income",
+   "NETFLIX_2022_10K|operating_cash_flow",
+   "NETFLIX_2022_10K|revenue",
+   "NETFLIX_2022_10K|total_assets",
+   "NETFLIX_2022_10K|total_current_assets",
+   "NETFLIX_2022_10K|total_current_liabilities",
+   "PAYPAL_2022_10K|capex",
+   "PAYPAL_2022_10K|net_income",
+   "PAYPAL_2022_10K|operating_cash_flow",
+   "PAYPAL_2022_10K|revenue",
+   "PAYPAL_2022_10K|total_assets",
+   "PAYPAL_2022_10K|total_current_assets",
+   "PAYPAL_2022_10K|total_current_liabilities",
+   "PEPSICO_2022_10K|capex",
+   "PEPSICO_2022_10K|dividends_paid",
+   "PEPSICO_2022_10K|operating_cash_flow",
+   "PEPSICO_2022_10K|revenue",
+   "PEPSICO_2022_10K|total_assets",
+   "PEPSICO_2022_10K|total_current_assets",
+   "PEPSICO_2022_10K|total_current_liabilities",
+   "PFIZER_2022_10K|net_income",
+   "PFIZER_2022_10K|revenue",
+   "PFIZER_2022_10K|total_assets",
+   "PFIZER_2022_10K|total_current_assets",
+   "PFIZER_2022_10K|total_current_liabilities",
+   "VERIZON_2022_10K|capex",
+   "VERIZON_2022_10K|dividends_paid",
+   "VERIZON_2022_10K|operating_cash_flow",
+   "VERIZON_2022_10K|revenue",
+   "VERIZON_2022_10K|total_assets",
+   "VERIZON_2022_10K|total_current_assets",
+   "VERIZON_2022_10K|total_current_liabilities"
+  ],
+  "m3": {
+   "calls_per_100_chunks": 22.30062356416147,
+   "corpus_tokens": 4527344,
+   "llm_calls": 1359,
+   "n_chunks": 6094,
+   "prefill_ratio": 0.3783642241455476,
+   "prefill_tokens": 1712985
+  },
+  "m3_incremental": {
+   "calls_per_100_chunks": 24.265927977839336,
+   "corpus_tokens": 2566282,
+   "llm_calls": 876,
+   "n_chunks": 3610,
+   "prefill_ratio": 0.4284891527899116,
+   "prefill_tokens": 1099624
+  },
+  "n_cells": 211,
+  "p_large": {
+   "accuracy": 0.3103448275862069,
+   "median_calls": 2.0,
+   "median_prefill": 606.5,
+   "n": 58,
+   "n_correct": 18,
+   "per_question": {
+    "agg01": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 580
+    },
+    "agg02": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 581
+    },
+    "agg03": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 598
+    },
+    "agg04": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 593
+    },
+    "agg05": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 600
+    },
+    "agg06": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 580
+    },
+    "agg07": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 588
+    },
+    "agg08": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 597
+    },
+    "agg09": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 574
+    },
+    "agg10": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 595
+    },
+    "agg11": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 589
+    },
+    "agg12": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 582
+    },
+    "agg13": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 607
+    },
+    "agg14": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 582
+    },
+    "agg15": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 711
+    },
+    "agg16": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 744
+    },
+    "agg17": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 603
+    },
+    "agg18": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 635
+    },
+    "agg19": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 586
+    },
+    "agg20": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 604
+    },
+    "p1_01": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 594
+    },
+    "p1_02": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 603
+    },
+    "p1_03": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 728
+    },
+    "p1_04": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 607
+    },
+    "p1_05": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 592
+    },
+    "p1_06": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 606
+    },
+    "p1_07": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 624
+    },
+    "p1_08": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 597
+    },
+    "p1_09": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 586
+    },
+    "p1_10": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 625
+    },
+    "p1_11": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 586
+    },
+    "p1_12": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 606
+    },
+    "p1_13": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 582
+    },
+    "p1_14": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 628
+    },
+    "p1_15": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 649
+    },
+    "p1_16": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 697
+    },
+    "p1_17": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 634
+    },
+    "p1_18": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 657
+    },
+    "p1_19": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 621
+    },
+    "p1_20": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 601
+    },
+    "p1_21": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 676
+    },
+    "p1_22": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 653
+    },
+    "p1_23": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 755
+    },
+    "p1_24": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 595
+    },
+    "p1_25": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 581
+    },
+    "p1_26": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 628
+    },
+    "p1_27": {
+     "calls": 2,
+     "correct": true,
+     "path": "sql",
+     "prefill_tokens": 605
+    },
+    "p1_28": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 680
+    },
+    "p1_29": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 636
+    },
+    "p1_30": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 636
+    },
+    "p1_31": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 621
+    },
+    "p1_32": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 678
+    },
+    "p1_33": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 635
+    },
+    "p1_34": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 648
+    },
+    "p1_35": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 702
+    },
+    "p1_36": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 701
+    },
+    "p1_37": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 740
+    },
+    "p1_38": {
+     "calls": 2,
+     "correct": false,
+     "path": "sql",
+     "prefill_tokens": 711
+    }
+   }
+  },
+  "per_doc_raw": {
+   "3M_2022_10K": {
+    "found": 7,
+    "gold": 8
+   },
+   "ACTIVISIONBLIZZARD_2022_10K": {
+    "found": 8,
+    "gold": 8
+   },
+   "ADOBE_2022_10K": {
+    "found": 5,
+    "gold": 7
+   },
+   "AES_2022_10K": {
+    "found": 8,
+    "gold": 8
+   },
+   "AMAZON_2022_10K": {
+    "found": 7,
+    "gold": 7
+   },
+   "AMD_2022_10K": {
+    "found": 5,
+    "gold": 7
+   },
+   "AMERICANEXPRESS_2022_10K": {
+    "found": 4,
+    "gold": 5
+   },
+   "AMERICANWATERWORKS_2022_10K": {
+    "found": 8,
+    "gold": 8
+   },
+   "APPLE_2022_10K": {
+    "found": 7,
+    "gold": 8
+   },
+   "BOEING_2022_10K": {
+    "found": 4,
+    "gold": 7
+   },
+   "COCACOLA_2022_10K": {
+    "found": 4,
+    "gold": 8
+   },
+   "CORNING_2022_10K": {
+    "found": 7,
+    "gold": 8
+   },
+   "COSTCO_2022_10K": {
+    "found": 5,
+    "gold": 8
+   },
+   "CVSHEALTH_2022_10K": {
+    "found": 8,
+    "gold": 8
+   },
+   "EBAY_2022_10K": {
+    "found": 8,
+    "gold": 8
+   },
+   "GENERALMILLS_2022_10K": {
+    "found": 7,
+    "gold": 8
+   },
+   "JOHNSON_JOHNSON_2022_10K": {
+    "found": 7,
+    "gold": 8
+   },
+   "JPMORGAN_2022_10K": {
+    "found": 4,
+    "gold": 4
+   },
+   "KRAFTHEINZ_2022_10K": {
+    "found": 8,
+    "gold": 8
+   },
+   "LOCKHEEDMARTIN_2022_10K": {
+    "found": 8,
+    "gold": 8
+   },
+   "MCDONALDS_2022_10K": {
+    "found": 8,
+    "gold": 8
+   },
+   "MGMRESORTS_2022_10K": {
+    "found": 7,
+    "gold": 8
+   },
+   "MICROSOFT_2022_10K": {
+    "found": 6,
+    "gold": 8
+   },
+   "NETFLIX_2022_10K": {
+    "found": 7,
+    "gold": 7
+   },
+   "PAYPAL_2022_10K": {
+    "found": 7,
+    "gold": 7
+   },
+   "PEPSICO_2022_10K": {
+    "found": 8,
+    "gold": 8
+   },
+   "PFIZER_2022_10K": {
+    "found": 5,
+    "gold": 8
+   },
+   "VERIZON_2022_10K": {
+    "found": 8,
+    "gold": 8
+   }
+  },
+  "pilot": {
+   "cells": [
+    "3M_2022_10K|capex",
+    "3M_2022_10K|dividends_paid",
+    "3M_2022_10K|net_income",
+    "3M_2022_10K|operating_cash_flow",
+    "3M_2022_10K|revenue",
+    "3M_2022_10K|total_assets",
+    "3M_2022_10K|total_current_assets",
+    "3M_2022_10K|total_current_liabilities",
+    "JOHNSON_JOHNSON_2022_10K|capex",
+    "JOHNSON_JOHNSON_2022_10K|dividends_paid",
+    "JOHNSON_JOHNSON_2022_10K|net_income",
+    "JOHNSON_JOHNSON_2022_10K|operating_cash_flow",
+    "JOHNSON_JOHNSON_2022_10K|revenue",
+    "JOHNSON_JOHNSON_2022_10K|total_assets",
+    "JOHNSON_JOHNSON_2022_10K|total_current_assets",
+    "JOHNSON_JOHNSON_2022_10K|total_current_liabilities",
+    "MICROSOFT_2022_10K|capex",
+    "MICROSOFT_2022_10K|dividends_paid",
+    "MICROSOFT_2022_10K|net_income",
+    "MICROSOFT_2022_10K|operating_cash_flow",
+    "MICROSOFT_2022_10K|revenue",
+    "MICROSOFT_2022_10K|total_assets",
+    "MICROSOFT_2022_10K|total_current_assets",
+    "MICROSOFT_2022_10K|total_current_liabilities"
+   ],
+   "docs": [
+    "MICROSOFT_2022_10K",
+    "JOHNSON_JOHNSON_2022_10K",
+    "3M_2022_10K"
+   ],
+   "found": 20,
+   "m1": 0.8333333333333334,
+   "n_cells": 24,
+   "recorded_pilot_m1_in_agg11": {
+    "found": 20,
+    "gold": 24,
+    "m1": 0.8333333333333334
+   }
+  },
+  "raw_found": 185,
+  "raw_hit_cells": [
+   "3M_2022_10K|capex",
+   "3M_2022_10K|dividends_paid",
+   "3M_2022_10K|operating_cash_flow",
+   "3M_2022_10K|revenue",
+   "3M_2022_10K|total_assets",
+   "3M_2022_10K|total_current_assets",
+   "3M_2022_10K|total_current_liabilities",
+   "ACTIVISIONBLIZZARD_2022_10K|capex",
+   "ACTIVISIONBLIZZARD_2022_10K|dividends_paid",
+   "ACTIVISIONBLIZZARD_2022_10K|net_income",
+   "ACTIVISIONBLIZZARD_2022_10K|operating_cash_flow",
+   "ACTIVISIONBLIZZARD_2022_10K|revenue",
+   "ACTIVISIONBLIZZARD_2022_10K|total_assets",
+   "ACTIVISIONBLIZZARD_2022_10K|total_current_assets",
+   "ACTIVISIONBLIZZARD_2022_10K|total_current_liabilities",
+   "ADOBE_2022_10K|capex",
+   "ADOBE_2022_10K|net_income",
+   "ADOBE_2022_10K|operating_cash_flow",
+   "ADOBE_2022_10K|revenue",
+   "ADOBE_2022_10K|total_current_assets",
+   "AES_2022_10K|capex",
+   "AES_2022_10K|dividends_paid",
+   "AES_2022_10K|net_income",
+   "AES_2022_10K|operating_cash_flow",
+   "AES_2022_10K|revenue",
+   "AES_2022_10K|total_assets",
+   "AES_2022_10K|total_current_assets",
+   "AES_2022_10K|total_current_liabilities",
+   "AMAZON_2022_10K|capex",
+   "AMAZON_2022_10K|net_income",
+   "AMAZON_2022_10K|operating_cash_flow",
+   "AMAZON_2022_10K|revenue",
+   "AMAZON_2022_10K|total_assets",
+   "AMAZON_2022_10K|total_current_assets",
+   "AMAZON_2022_10K|total_current_liabilities",
+   "AMD_2022_10K|capex",
+   "AMD_2022_10K|operating_cash_flow",
+   "AMD_2022_10K|revenue",
+   "AMD_2022_10K|total_assets",
+   "AMD_2022_10K|total_current_assets",
+   "AMERICANEXPRESS_2022_10K|net_income",
+   "AMERICANEXPRESS_2022_10K|operating_cash_flow",
+   "AMERICANEXPRESS_2022_10K|revenue",
+   "AMERICANEXPRESS_2022_10K|total_assets",
+   "AMERICANWATERWORKS_2022_10K|capex",
+   "AMERICANWATERWORKS_2022_10K|dividends_paid",
+   "AMERICANWATERWORKS_2022_10K|net_income",
+   "AMERICANWATERWORKS_2022_10K|operating_cash_flow",
+   "AMERICANWATERWORKS_2022_10K|revenue",
+   "AMERICANWATERWORKS_2022_10K|total_assets",
+   "AMERICANWATERWORKS_2022_10K|total_current_assets",
+   "AMERICANWATERWORKS_2022_10K|total_current_liabilities",
+   "APPLE_2022_10K|dividends_paid",
+   "APPLE_2022_10K|net_income",
+   "APPLE_2022_10K|operating_cash_flow",
+   "APPLE_2022_10K|revenue",
+   "APPLE_2022_10K|total_assets",
+   "APPLE_2022_10K|total_current_assets",
+   "APPLE_2022_10K|total_current_liabilities",
+   "BOEING_2022_10K|capex",
+   "BOEING_2022_10K|net_income",
+   "BOEING_2022_10K|operating_cash_flow",
+   "BOEING_2022_10K|revenue",
+   "COCACOLA_2022_10K|capex",
+   "COCACOLA_2022_10K|dividends_paid",
+   "COCACOLA_2022_10K|operating_cash_flow",
+   "COCACOLA_2022_10K|revenue",
+   "CORNING_2022_10K|capex",
+   "CORNING_2022_10K|dividends_paid",
+   "CORNING_2022_10K|operating_cash_flow",
+   "CORNING_2022_10K|revenue",
+   "CORNING_2022_10K|total_assets",
+   "CORNING_2022_10K|total_current_assets",
+   "CORNING_2022_10K|total_current_liabilities",
+   "COSTCO_2022_10K|capex",
+   "COSTCO_2022_10K|dividends_paid",
+   "COSTCO_2022_10K|operating_cash_flow",
+   "COSTCO_2022_10K|revenue",
+   "COSTCO_2022_10K|total_current_assets",
+   "CVSHEALTH_2022_10K|capex",
+   "CVSHEALTH_2022_10K|dividends_paid",
+   "CVSHEALTH_2022_10K|net_income",
+   "CVSHEALTH_2022_10K|operating_cash_flow",
+   "CVSHEALTH_2022_10K|revenue",
+   "CVSHEALTH_2022_10K|total_assets",
+   "CVSHEALTH_2022_10K|total_current_assets",
+   "CVSHEALTH_2022_10K|total_current_liabilities",
+   "EBAY_2022_10K|capex",
+   "EBAY_2022_10K|dividends_paid",
+   "EBAY_2022_10K|net_income",
+   "EBAY_2022_10K|operating_cash_flow",
+   "EBAY_2022_10K|revenue",
+   "EBAY_2022_10K|total_assets",
+   "EBAY_2022_10K|total_current_assets",
+   "EBAY_2022_10K|total_current_liabilities",
+   "GENERALMILLS_2022_10K|capex",
+   "GENERALMILLS_2022_10K|dividends_paid",
+   "GENERALMILLS_2022_10K|operating_cash_flow",
+   "GENERALMILLS_2022_10K|revenue",
+   "GENERALMILLS_2022_10K|total_assets",
+   "GENERALMILLS_2022_10K|total_current_assets",
+   "GENERALMILLS_2022_10K|total_current_liabilities",
+   "JOHNSON_JOHNSON_2022_10K|dividends_paid",
+   "JOHNSON_JOHNSON_2022_10K|net_income",
+   "JOHNSON_JOHNSON_2022_10K|operating_cash_flow",
+   "JOHNSON_JOHNSON_2022_10K|revenue",
+   "JOHNSON_JOHNSON_2022_10K|total_assets",
+   "JOHNSON_JOHNSON_2022_10K|total_current_assets",
+   "JOHNSON_JOHNSON_2022_10K|total_current_liabilities",
+   "JPMORGAN_2022_10K|net_income",
+   "JPMORGAN_2022_10K|operating_cash_flow",
+   "JPMORGAN_2022_10K|revenue",
+   "JPMORGAN_2022_10K|total_assets",
+   "KRAFTHEINZ_2022_10K|capex",
+   "KRAFTHEINZ_2022_10K|dividends_paid",
+   "KRAFTHEINZ_2022_10K|net_income",
+   "KRAFTHEINZ_2022_10K|operating_cash_flow",
+   "KRAFTHEINZ_2022_10K|revenue",
+   "KRAFTHEINZ_2022_10K|total_assets",
+   "KRAFTHEINZ_2022_10K|total_current_assets",
+   "KRAFTHEINZ_2022_10K|total_current_liabilities",
+   "LOCKHEEDMARTIN_2022_10K|capex",
+   "LOCKHEEDMARTIN_2022_10K|dividends_paid",
+   "LOCKHEEDMARTIN_2022_10K|net_income",
+   "LOCKHEEDMARTIN_2022_10K|operating_cash_flow",
+   "LOCKHEEDMARTIN_2022_10K|revenue",
+   "LOCKHEEDMARTIN_2022_10K|total_assets",
+   "LOCKHEEDMARTIN_2022_10K|total_current_assets",
+   "LOCKHEEDMARTIN_2022_10K|total_current_liabilities",
+   "MCDONALDS_2022_10K|capex",
+   "MCDONALDS_2022_10K|dividends_paid",
+   "MCDONALDS_2022_10K|net_income",
+   "MCDONALDS_2022_10K|operating_cash_flow",
+   "MCDONALDS_2022_10K|revenue",
+   "MCDONALDS_2022_10K|total_assets",
+   "MCDONALDS_2022_10K|total_current_assets",
+   "MCDONALDS_2022_10K|total_current_liabilities",
+   "MGMRESORTS_2022_10K|capex",
+   "MGMRESORTS_2022_10K|dividends_paid",
+   "MGMRESORTS_2022_10K|net_income",
+   "MGMRESORTS_2022_10K|operating_cash_flow",
+   "MGMRESORTS_2022_10K|revenue",
+   "MGMRESORTS_2022_10K|total_current_assets",
+   "MGMRESORTS_2022_10K|total_current_liabilities",
+   "MICROSOFT_2022_10K|net_income",
+   "MICROSOFT_2022_10K|operating_cash_flow",
+   "MICROSOFT_2022_10K|revenue",
+   "MICROSOFT_2022_10K|total_assets",
+   "MICROSOFT_2022_10K|total_current_assets",
+   "MICROSOFT_2022_10K|total_current_liabilities",
+   "NETFLIX_2022_10K|capex",
+   "NETFLIX_2022_10K|net_income",
+   "NETFLIX_2022_10K|operating_cash_flow",
+   "NETFLIX_2022_10K|revenue",
+   "NETFLIX_2022_10K|total_assets",
+   "NETFLIX_2022_10K|total_current_assets",
+   "NETFLIX_2022_10K|total_current_liabilities",
+   "PAYPAL_2022_10K|capex",
+   "PAYPAL_2022_10K|net_income",
+   "PAYPAL_2022_10K|operating_cash_flow",
+   "PAYPAL_2022_10K|revenue",
+   "PAYPAL_2022_10K|total_assets",
+   "PAYPAL_2022_10K|total_current_assets",
+   "PAYPAL_2022_10K|total_current_liabilities",
+   "PEPSICO_2022_10K|capex",
+   "PEPSICO_2022_10K|dividends_paid",
+   "PEPSICO_2022_10K|net_income",
+   "PEPSICO_2022_10K|operating_cash_flow",
+   "PEPSICO_2022_10K|revenue",
+   "PEPSICO_2022_10K|total_assets",
+   "PEPSICO_2022_10K|total_current_assets",
+   "PEPSICO_2022_10K|total_current_liabilities",
+   "PFIZER_2022_10K|net_income",
+   "PFIZER_2022_10K|revenue",
+   "PFIZER_2022_10K|total_assets",
+   "PFIZER_2022_10K|total_current_assets",
+   "PFIZER_2022_10K|total_current_liabilities",
+   "VERIZON_2022_10K|capex",
+   "VERIZON_2022_10K|dividends_paid",
+   "VERIZON_2022_10K|net_income",
+   "VERIZON_2022_10K|operating_cash_flow",
+   "VERIZON_2022_10K|revenue",
+   "VERIZON_2022_10K|total_assets",
+   "VERIZON_2022_10K|total_current_assets",
+   "VERIZON_2022_10K|total_current_liabilities"
+  ],
+  "raw_m1": 0.8767772511848341
+ },
+ "expected": {
+  "canonical_ok_v1": 177,
+  "cells": 211,
+  "n_questions": 58,
+  "p_large_correct": 18,
+  "raw_hits": 185
+ },
+ "expected_matches": true,
+ "got": {
+  "canonical_ok_v1": 177,
+  "cells": 211,
+  "n_questions": 58,
+  "p_large_correct": 18,
+  "raw_hits": 185
+ },
+ "model_calls": 0,
+ "partition": {
+  "held_out": [
+   "3M_2022_10K|capex",
+   "3M_2022_10K|dividends_paid",
+   "3M_2022_10K|operating_cash_flow",
+   "3M_2022_10K|revenue",
+   "3M_2022_10K|total_assets",
+   "3M_2022_10K|total_current_assets",
+   "3M_2022_10K|total_current_liabilities",
+   "ACTIVISIONBLIZZARD_2022_10K|capex",
+   "ACTIVISIONBLIZZARD_2022_10K|dividends_paid",
+   "ACTIVISIONBLIZZARD_2022_10K|net_income",
+   "ACTIVISIONBLIZZARD_2022_10K|operating_cash_flow",
+   "ACTIVISIONBLIZZARD_2022_10K|revenue",
+   "ACTIVISIONBLIZZARD_2022_10K|total_assets",
+   "ACTIVISIONBLIZZARD_2022_10K|total_current_assets",
+   "ACTIVISIONBLIZZARD_2022_10K|total_current_liabilities",
+   "ADOBE_2022_10K|capex",
+   "ADOBE_2022_10K|net_income",
+   "ADOBE_2022_10K|operating_cash_flow",
+   "ADOBE_2022_10K|revenue",
+   "ADOBE_2022_10K|total_current_assets",
+   "AES_2022_10K|capex",
+   "AES_2022_10K|dividends_paid",
+   "AES_2022_10K|net_income",
+   "AES_2022_10K|revenue",
+   "AES_2022_10K|total_assets",
+   "AES_2022_10K|total_current_assets",
+   "AMAZON_2022_10K|operating_cash_flow",
+   "AMAZON_2022_10K|revenue",
+   "AMAZON_2022_10K|total_assets",
+   "AMAZON_2022_10K|total_current_assets",
+   "AMD_2022_10K|capex",
+   "AMD_2022_10K|operating_cash_flow",
+   "AMD_2022_10K|revenue",
+   "AMD_2022_10K|total_assets",
+   "AMD_2022_10K|total_current_assets",
+   "AMERICANEXPRESS_2022_10K|operating_cash_flow",
+   "AMERICANEXPRESS_2022_10K|revenue",
+   "AMERICANEXPRESS_2022_10K|total_assets",
+   "AMERICANWATERWORKS_2022_10K|capex",
+   "AMERICANWATERWORKS_2022_10K|net_income",
+   "AMERICANWATERWORKS_2022_10K|operating_cash_flow",
+   "AMERICANWATERWORKS_2022_10K|revenue",
+   "AMERICANWATERWORKS_2022_10K|total_assets",
+   "AMERICANWATERWORKS_2022_10K|total_current_assets",
+   "APPLE_2022_10K|dividends_paid",
+   "APPLE_2022_10K|net_income",
+   "APPLE_2022_10K|operating_cash_flow",
+   "APPLE_2022_10K|revenue",
+   "APPLE_2022_10K|total_assets",
+   "APPLE_2022_10K|total_current_assets",
+   "APPLE_2022_10K|total_current_liabilities",
+   "BOEING_2022_10K|capex",
+   "BOEING_2022_10K|operating_cash_flow",
+   "BOEING_2022_10K|revenue",
+   "COCACOLA_2022_10K|capex",
+   "COCACOLA_2022_10K|dividends_paid",
+   "COCACOLA_2022_10K|operating_cash_flow",
+   "COCACOLA_2022_10K|revenue",
+   "CORNING_2022_10K|capex",
+   "CORNING_2022_10K|dividends_paid",
+   "CORNING_2022_10K|operating_cash_flow",
+   "CORNING_2022_10K|total_assets",
+   "CORNING_2022_10K|total_current_assets",
+   "CORNING_2022_10K|total_current_liabilities",
+   "COSTCO_2022_10K|capex",
+   "COSTCO_2022_10K|dividends_paid",
+   "COSTCO_2022_10K|operating_cash_flow",
+   "COSTCO_2022_10K|total_current_assets",
+   "CVSHEALTH_2022_10K|dividends_paid",
+   "CVSHEALTH_2022_10K|net_income",
+   "CVSHEALTH_2022_10K|operating_cash_flow",
+   "CVSHEALTH_2022_10K|revenue",
+   "CVSHEALTH_2022_10K|total_assets",
+   "CVSHEALTH_2022_10K|total_current_assets",
+   "CVSHEALTH_2022_10K|total_current_liabilities",
+   "EBAY_2022_10K|capex",
+   "EBAY_2022_10K|dividends_paid",
+   "EBAY_2022_10K|net_income",
+   "EBAY_2022_10K|revenue",
+   "EBAY_2022_10K|total_assets",
+   "EBAY_2022_10K|total_current_assets",
+   "EBAY_2022_10K|total_current_liabilities",
+   "GENERALMILLS_2022_10K|capex",
+   "GENERALMILLS_2022_10K|dividends_paid",
+   "GENERALMILLS_2022_10K|revenue",
+   "GENERALMILLS_2022_10K|total_assets",
+   "JOHNSON_JOHNSON_2022_10K|dividends_paid",
+   "JOHNSON_JOHNSON_2022_10K|net_income",
+   "JOHNSON_JOHNSON_2022_10K|operating_cash_flow",
+   "JOHNSON_JOHNSON_2022_10K|revenue",
+   "JOHNSON_JOHNSON_2022_10K|total_assets",
+   "JOHNSON_JOHNSON_2022_10K|total_current_assets",
+   "JOHNSON_JOHNSON_2022_10K|total_current_liabilities",
+   "JPMORGAN_2022_10K|net_income",
+   "JPMORGAN_2022_10K|operating_cash_flow",
+   "JPMORGAN_2022_10K|total_assets",
+   "KRAFTHEINZ_2022_10K|capex",
+   "KRAFTHEINZ_2022_10K|net_income",
+   "KRAFTHEINZ_2022_10K|revenue",
+   "KRAFTHEINZ_2022_10K|total_assets",
+   "KRAFTHEINZ_2022_10K|total_current_assets",
+   "KRAFTHEINZ_2022_10K|total_current_liabilities",
+   "LOCKHEEDMARTIN_2022_10K|net_income",
+   "LOCKHEEDMARTIN_2022_10K|operating_cash_flow",
+   "LOCKHEEDMARTIN_2022_10K|revenue",
+   "LOCKHEEDMARTIN_2022_10K|total_assets",
+   "LOCKHEEDMARTIN_2022_10K|total_current_assets",
+   "LOCKHEEDMARTIN_2022_10K|total_current_liabilities",
+   "MCDONALDS_2022_10K|capex",
+   "MCDONALDS_2022_10K|dividends_paid",
+   "MCDONALDS_2022_10K|net_income",
+   "MCDONALDS_2022_10K|operating_cash_flow",
+   "MCDONALDS_2022_10K|revenue",
+   "MCDONALDS_2022_10K|total_assets",
+   "MCDONALDS_2022_10K|total_current_assets",
+   "MCDONALDS_2022_10K|total_current_liabilities",
+   "MGMRESORTS_2022_10K|capex",
+   "MGMRESORTS_2022_10K|dividends_paid",
+   "MGMRESORTS_2022_10K|operating_cash_flow",
+   "MGMRESORTS_2022_10K|total_current_assets",
+   "MGMRESORTS_2022_10K|total_current_liabilities",
+   "MICROSOFT_2022_10K|net_income",
+   "MICROSOFT_2022_10K|operating_cash_flow",
+   "MICROSOFT_2022_10K|revenue",
+   "MICROSOFT_2022_10K|total_assets",
+   "MICROSOFT_2022_10K|total_current_assets",
+   "MICROSOFT_2022_10K|total_current_liabilities",
+   "NETFLIX_2022_10K|capex",
+   "NETFLIX_2022_10K|net_income",
+   "NETFLIX_2022_10K|operating_cash_flow",
+   "NETFLIX_2022_10K|revenue",
+   "NETFLIX_2022_10K|total_assets",
+   "NETFLIX_2022_10K|total_current_assets",
+   "NETFLIX_2022_10K|total_current_liabilities",
+   "PAYPAL_2022_10K|capex",
+   "PAYPAL_2022_10K|net_income",
+   "PAYPAL_2022_10K|operating_cash_flow",
+   "PAYPAL_2022_10K|revenue",
+   "PAYPAL_2022_10K|total_assets",
+   "PAYPAL_2022_10K|total_current_assets",
+   "PAYPAL_2022_10K|total_current_liabilities",
+   "PEPSICO_2022_10K|capex",
+   "PEPSICO_2022_10K|dividends_paid",
+   "PEPSICO_2022_10K|operating_cash_flow",
+   "PEPSICO_2022_10K|total_assets",
+   "PEPSICO_2022_10K|total_current_assets",
+   "PEPSICO_2022_10K|total_current_liabilities",
+   "PFIZER_2022_10K|net_income",
+   "PFIZER_2022_10K|revenue",
+   "PFIZER_2022_10K|total_assets",
+   "PFIZER_2022_10K|total_current_assets",
+   "PFIZER_2022_10K|total_current_liabilities",
+   "VERIZON_2022_10K|capex",
+   "VERIZON_2022_10K|dividends_paid",
+   "VERIZON_2022_10K|operating_cash_flow",
+   "VERIZON_2022_10K|revenue",
+   "VERIZON_2022_10K|total_assets",
+   "VERIZON_2022_10K|total_current_assets"
+  ],
+  "n_cells": 211,
+  "n_held_out": 158,
+  "n_touched": 53,
+  "reasons": {
+   "3M_2022_10K|net_income": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "ADOBE_2022_10K|total_assets": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "ADOBE_2022_10K|total_current_liabilities": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "AES_2022_10K|operating_cash_flow": [
+    "agg18_tier_probe"
+   ],
+   "AES_2022_10K|total_current_liabilities": [
+    "agg18_tier_probe"
+   ],
+   "AMAZON_2022_10K|capex": [
+    "agg18_tier_probe"
+   ],
+   "AMAZON_2022_10K|net_income": [
+    "agg18_bad_cell",
+    "agg18_tier_probe"
+   ],
+   "AMAZON_2022_10K|total_current_liabilities": [
+    "agg18_tier_probe"
+   ],
+   "AMD_2022_10K|net_income": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "AMD_2022_10K|total_current_liabilities": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "AMERICANEXPRESS_2022_10K|capex": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "AMERICANEXPRESS_2022_10K|net_income": [
+    "agg18_tier_probe"
+   ],
+   "AMERICANWATERWORKS_2022_10K|dividends_paid": [
+    "agg18_tier_probe"
+   ],
+   "AMERICANWATERWORKS_2022_10K|total_current_liabilities": [
+    "agg18_tier_probe"
+   ],
+   "APPLE_2022_10K|capex": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "BOEING_2022_10K|net_income": [
+    "agg18_bad_cell",
+    "agg18_tier_probe"
+   ],
+   "BOEING_2022_10K|total_assets": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "BOEING_2022_10K|total_current_assets": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "BOEING_2022_10K|total_current_liabilities": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "COCACOLA_2022_10K|net_income": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "COCACOLA_2022_10K|total_assets": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "COCACOLA_2022_10K|total_current_assets": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "COCACOLA_2022_10K|total_current_liabilities": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "CORNING_2022_10K|net_income": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "CORNING_2022_10K|revenue": [
+    "agg18_bad_cell",
+    "agg18_tier_probe"
+   ],
+   "COSTCO_2022_10K|net_income": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "COSTCO_2022_10K|revenue": [
+    "agg18_bad_cell",
+    "agg18_tier_probe"
+   ],
+   "COSTCO_2022_10K|total_assets": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "COSTCO_2022_10K|total_current_liabilities": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "CVSHEALTH_2022_10K|capex": [
+    "agg18_tier_probe"
+   ],
+   "EBAY_2022_10K|operating_cash_flow": [
+    "agg18_tier_probe"
+   ],
+   "GENERALMILLS_2022_10K|net_income": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "GENERALMILLS_2022_10K|operating_cash_flow": [
+    "agg18_tier_probe"
+   ],
+   "GENERALMILLS_2022_10K|total_current_assets": [
+    "agg18_tier_probe"
+   ],
+   "GENERALMILLS_2022_10K|total_current_liabilities": [
+    "agg18_tier_probe"
+   ],
+   "JOHNSON_JOHNSON_2022_10K|capex": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "JPMORGAN_2022_10K|revenue": [
+    "agg18_tier_probe"
+   ],
+   "KRAFTHEINZ_2022_10K|dividends_paid": [
+    "agg18_tier_probe"
+   ],
+   "KRAFTHEINZ_2022_10K|operating_cash_flow": [
+    "agg18_tier_probe"
+   ],
+   "LOCKHEEDMARTIN_2022_10K|capex": [
+    "agg18_tier_probe"
+   ],
+   "LOCKHEEDMARTIN_2022_10K|dividends_paid": [
+    "agg18_tier_probe"
+   ],
+   "MGMRESORTS_2022_10K|net_income": [
+    "agg18_bad_cell"
+   ],
+   "MGMRESORTS_2022_10K|revenue": [
+    "agg18_bad_cell",
+    "agg18_tier_probe"
+   ],
+   "MGMRESORTS_2022_10K|total_assets": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "MICROSOFT_2022_10K|capex": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "MICROSOFT_2022_10K|dividends_paid": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "PEPSICO_2022_10K|net_income": [
+    "agg18_bad_cell",
+    "agg18_tier_probe"
+   ],
+   "PEPSICO_2022_10K|revenue": [
+    "agg18_tier_probe"
+   ],
+   "PFIZER_2022_10K|capex": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "PFIZER_2022_10K|dividends_paid": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "PFIZER_2022_10K|operating_cash_flow": [
+    "agg111_triage",
+    "agg18_bad_cell",
+    "agg19_cell"
+   ],
+   "VERIZON_2022_10K|net_income": [
+    "agg18_bad_cell",
+    "agg18_tier_probe"
+   ],
+   "VERIZON_2022_10K|total_current_liabilities": [
+    "agg18_tier_probe"
+   ]
+  },
+  "touched": [
+   "3M_2022_10K|net_income",
+   "ADOBE_2022_10K|total_assets",
+   "ADOBE_2022_10K|total_current_liabilities",
+   "AES_2022_10K|operating_cash_flow",
+   "AES_2022_10K|total_current_liabilities",
+   "AMAZON_2022_10K|capex",
+   "AMAZON_2022_10K|net_income",
+   "AMAZON_2022_10K|total_current_liabilities",
+   "AMD_2022_10K|net_income",
+   "AMD_2022_10K|total_current_liabilities",
+   "AMERICANEXPRESS_2022_10K|capex",
+   "AMERICANEXPRESS_2022_10K|net_income",
+   "AMERICANWATERWORKS_2022_10K|dividends_paid",
+   "AMERICANWATERWORKS_2022_10K|total_current_liabilities",
+   "APPLE_2022_10K|capex",
+   "BOEING_2022_10K|net_income",
+   "BOEING_2022_10K|total_assets",
+   "BOEING_2022_10K|total_current_assets",
+   "BOEING_2022_10K|total_current_liabilities",
+   "COCACOLA_2022_10K|net_income",
+   "COCACOLA_2022_10K|total_assets",
+   "COCACOLA_2022_10K|total_current_assets",
+   "COCACOLA_2022_10K|total_current_liabilities",
+   "CORNING_2022_10K|net_income",
+   "CORNING_2022_10K|revenue",
+   "COSTCO_2022_10K|net_income",
+   "COSTCO_2022_10K|revenue",
+   "COSTCO_2022_10K|total_assets",
+   "COSTCO_2022_10K|total_current_liabilities",
+   "CVSHEALTH_2022_10K|capex",
+   "EBAY_2022_10K|operating_cash_flow",
+   "GENERALMILLS_2022_10K|net_income",
+   "GENERALMILLS_2022_10K|operating_cash_flow",
+   "GENERALMILLS_2022_10K|total_current_assets",
+   "GENERALMILLS_2022_10K|total_current_liabilities",
+   "JOHNSON_JOHNSON_2022_10K|capex",
+   "JPMORGAN_2022_10K|revenue",
+   "KRAFTHEINZ_2022_10K|dividends_paid",
+   "KRAFTHEINZ_2022_10K|operating_cash_flow",
+   "LOCKHEEDMARTIN_2022_10K|capex",
+   "LOCKHEEDMARTIN_2022_10K|dividends_paid",
+   "MGMRESORTS_2022_10K|net_income",
+   "MGMRESORTS_2022_10K|revenue",
+   "MGMRESORTS_2022_10K|total_assets",
+   "MICROSOFT_2022_10K|capex",
+   "MICROSOFT_2022_10K|dividends_paid",
+   "PEPSICO_2022_10K|net_income",
+   "PEPSICO_2022_10K|revenue",
+   "PFIZER_2022_10K|capex",
+   "PFIZER_2022_10K|dividends_paid",
+   "PFIZER_2022_10K|operating_cash_flow",
+   "VERIZON_2022_10K|net_income",
+   "VERIZON_2022_10K|total_current_liabilities"
+  ],
+  "touched_named_outside_211": [
+   "BOEING_2022_10K|dividends_paid"
+  ]
+ },
+ "partition_hit_rates_agg11": {
+  "held_out": {
+   "canonical_v1_ok": 158,
+   "n": 158,
+   "raw_found": 158
+  },
+  "touched": {
+   "canonical_v1_ok": 19,
+   "n": 53,
+   "raw_found": 27
+  }
+ },
+ "questions": {
+  "ids": [],
+  "n_verified": 58,
+  "n_with_only_untouched_evidence": 0,
+  "touched_evidence_cells_per_question_max": 17,
+  "touched_evidence_cells_per_question_min": 2
+ },
+ "schema": "agg112_reference.v1",
+ "sources": {
+  "partition_files": {
+   "agg111_triage.json": "f8a2f0ff560ed61d8d97acda193a7a4eb0c607be47e63d435261f05ab4dd4291",
+   "agg18_miss_table.json": "97ebad89a70e2802d4d1c12a5418389ee1471ae24709c8e747c42ba05dafa193",
+   "agg19_cells.csv": "31dffe2f0255c461bb31d25eb5286b278d34441d24ad5df58180a5bf8e5de08b",
+   "agg19_guard_probe.json": "dcb716ba02ec4e060dd1faf19cf848d981ed59d032a686ceeba9b6d3610b37a7"
+  },
+  "results": "/mnt/raid0/llm/tmp/agg1-arms-gpu-20261111/out/results.jsonl",
+  "results_sha256": "c921910e634f05e1b3403926ba1fe9679285603994727d63b0608d7aab57c95a",
+  "store": "/mnt/raid0/llm/tmp/agg1-arms-gpu-20261111/out/store.sqlite",
+  "store_sha256": "ba5cf95076f61ec0373699021970c1d8102da93b0d887b2b2958e72cd2e7b063"
+ },
+ "store_sha256_ok": true
+}
