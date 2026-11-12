@@ -300,5 +300,74 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(rep["pivot"], 30)
 
 
+STORE11 = Path("/mnt/raid0/llm/tmp/agg1-arms-gpu-20261111/out/store.sqlite")
+
+
+class OracleBackend:
+    """Plays the model: the reference SQL of the question it is asked (from the frozen ceiling) and that row's scored answer."""
+
+    def __init__(self, inp, wrong=False):
+        self.calls = self.prefill_tokens = 0
+        self.by_q = {g["question"]: g["id"] for g in inp["golds"]}
+        self.cm = {r["qid"]: r for r in inp["frozen"]["ceiling"]["rows"]}
+        self.wrong, self.cur = wrong, None
+
+    def chat(self, prompt, *, n_predict, grammar=None, cache_prompt=True, id_slot=None, logprobs=None):
+        self.calls += 1
+        self.prefill_tokens += len(prompt) // 4
+        if grammar:
+            q = prompt.split("Question: ", 1)[1].rsplit("\nSQL:", 1)[0].split("\nThat statement was rejected")[0].strip()
+            self.cur = self.cm[self.by_q[q]]
+            return {"text": self.cur["reference_sql"], "finish_reason": "stop"}
+        return {"text": "ok\n" + ("FINAL: nothing" if self.wrong else self.cur["answer"]), "finish_reason": "stop"}
+
+
+@unittest.skipUnless(HAVE_ORCH and STORE11.exists(), "needs the orchestrator tree and the AGG-1.1 store")
+class RunnerEndToEndTests(unittest.TestCase):
+    """The runner's answers loop on a COPY of the real AGG-1.1 store with an oracle standing in for the model."""
+
+    def _run(self, wrong):
+        tmp = Path(tempfile.mkdtemp())
+        inp = R.load(D1)
+        X.configure(P.CORPUS_ID)
+        rec = P.Recorder(tmp / "results.jsonl")
+        before = sha(STORE11)
+        res = R.run_answers(rec, tmp, inp, planner, OracleBackend(inp, wrong), store_src=STORE11, guard=lambda: None,
+                            smoke=False, corpus_id=P.CORPUS_ID, planner_version=G.V1)
+        self.assertEqual(sha(STORE11), before)                      # the source store is never mutated
+        return tmp, rec, res
+
+    def test_full_run_matches_the_ceiling_and_records_the_version(self):
+        tmp, rec, res = self._run(wrong=False)
+        self.assertEqual((res["complete"], res["verdict"], res["rc"]), (True, "agg_1_10_done", 0))
+        v = res["result"]
+        self.assertEqual((v["after"]["correct"], v["n_scored"], v["m4"]["median_calls"]), (9, 26, 2))
+        self.assertEqual(v["planner_versions"], ["agg110.v1"])
+        ans = [r for r in rec.records if r["kind"] == "answer"]
+        self.assertEqual(len(ans), 26)
+        self.assertTrue(all(r["planner_version"] == "agg110.v1" and r["sql_shape"]["shape"] == "pivot" and r["path"] == "sql"
+                            for r in ans))
+        self.assertEqual([r["qid"] for r in ans][:6], inp_pilot())
+        self.assertIsNotNone(next(r for r in rec.records if r.get("unit") == "pilot_done"))
+
+    def test_pilot_futility_stops_after_six(self):
+        tmp, rec, res = self._run(wrong=True)
+        self.assertEqual((res["verdict"], res["rc"], res["gate_tripped"]), ("phase1_gate_tripped", 3, ["futility:pilot_fixes_0_of_6"]))
+        self.assertEqual(len([r for r in rec.records if r["kind"] == "answer"]), 6)
+
+    def test_resume_skips_finished_units(self):
+        tmp, rec, res = self._run(wrong=False)
+        inp = R.load(D1)
+        b = OracleBackend(inp)
+        rec2 = P.Recorder(tmp / "results.jsonl")
+        res2 = R.run_answers(rec2, tmp, inp, planner, b, store_src=STORE11, guard=lambda: None, smoke=False,
+                             corpus_id=P.CORPUS_ID, planner_version=G.V1)
+        self.assertEqual((b.calls, res2["verdict"]), (0, "agg_1_10_done"))
+
+
+def inp_pilot():
+    return json.loads((D1 / "agg110_pilot.json").read_text())["qids"]
+
+
 if __name__ == "__main__":
     unittest.main()
