@@ -1,0 +1,343 @@
+{
+ "run": "agg13",
+ "cells": [
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "field": "revenue",
+   "gold": 168088.0,
+   "fy": "2021",
+   "verdict": "PERIOD_LABEL",
+   "n_facts": 1,
+   "candidate": {
+    "period": "FY2022",
+    "stored_value": 168088.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 168088.0,
+    "extractor": "l4_llm.v1",
+    "page": 42,
+    "quote": "Revenue $ 168,088"
+   }
+  },
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "field": "net_income",
+   "gold": 61271.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "field": "capex",
+   "gold": 20622.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "field": "total_assets",
+   "gold": 333779.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "field": "operating_cash_flow",
+   "gold": 76740.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "field": "total_current_assets",
+   "gold": 184406.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "field": "total_current_liabilities",
+   "gold": 88657.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "field": "dividends_paid",
+   "gold": 16521.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "revenue",
+   "gold": 93775.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "net_income",
+   "gold": 20878.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "capex",
+   "gold": 3652.0,
+   "fy": "2021",
+   "verdict": "NEAR_ROUNDED",
+   "n_facts": 1,
+   "candidate": {
+    "period": "FY2022",
+    "stored_value": 3700.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 3700.0,
+    "extractor": "l4_llm.v1",
+    "page": 36,
+    "quote": "(3.7) additions to property, plant and equipment"
+   }
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "total_assets",
+   "gold": 182018.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "operating_cash_flow",
+   "gold": 23410.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "total_current_assets",
+   "gold": 60979.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "total_current_liabilities",
+   "gold": 45226.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "dividends_paid",
+   "gold": 11032.0,
+   "fy": "2021",
+   "verdict": "WRONG_VALUE",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2021",
+    "stored_value": 4.19,
+    "stored_unit": "USD",
+    "scored_value": 4.1900000000000005e-06,
+    "extractor": "l3_regex.v1",
+    "page": 39,
+    "quote": "Cash dividends paid were $4.19 "
+   }
+  },
+  {
+   "doc": "3M_2022_10K",
+   "field": "revenue",
+   "gold": 35355.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "3M_2022_10K",
+   "field": "net_income",
+   "gold": 5921.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "3M_2022_10K",
+   "field": "capex",
+   "gold": 1603.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "3M_2022_10K",
+   "field": "total_assets",
+   "gold": 47072.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "3M_2022_10K",
+   "field": "operating_cash_flow",
+   "gold": 7454.0,
+   "fy": "2021",
+   "verdict": "PERIOD_LABEL",
+   "n_facts": 1,
+   "candidate": {
+    "period": "FY2022",
+    "stored_value": 7454.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 7454.0,
+    "extractor": "l4_llm.v1",
+    "page": 49,
+    "quote": "Net cash provided by (used in) operating activities 7,454"
+   }
+  },
+  {
+   "doc": "3M_2022_10K",
+   "field": "total_current_assets",
+   "gold": 15403.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "3M_2022_10K",
+   "field": "total_current_liabilities",
+   "gold": 9035.0,
+   "fy": "2021",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "3M_2022_10K",
+   "field": "dividends_paid",
+   "gold": 3420.0,
+   "fy": "2021",
+   "verdict": "PERIOD_LABEL",
+   "n_facts": 1,
+   "candidate": {
+    "period": "FY2022",
+    "stored_value": 3420.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 3420.0,
+    "extractor": "l4_llm.v1",
+    "page": 38,
+    "quote": "Dividends paid to stockholders (3,420)"
+   }
+  }
+ ],
+ "changed": {
+  "classes": {
+   "HIT": 0,
+   "PERIOD_LABEL": 3,
+   "UNIT_SCALE": 0,
+   "NEAR_ROUNDED": 1,
+   "WRONG_VALUE": 1,
+   "NO_FACT": 19
+  },
+  "strict": {
+   "gold": 24,
+   "found": 0,
+   "m1": 0.0
+  },
+  "diag_period_agnostic": {
+   "gold": 24,
+   "found": 3,
+   "m1": 0.125
+  },
+  "diag_unit_normalised": {
+   "gold": 24,
+   "found": 0,
+   "m1": 0.0
+  },
+  "diag_both": {
+   "gold": 24,
+   "found": 3,
+   "m1": 0.125
+  }
+ },
+ "retained_recorded": {
+  "gold": 187,
+  "found": 165,
+  "m1": 0.8823529411764706
+ },
+ "g4_overall": {
+  "strict_as_recorded": {
+   "gold": 211,
+   "found": 165,
+   "m1": 0.7819905213270142
+  },
+  "diag_period_agnostic": {
+   "gold": 211,
+   "found": 168,
+   "m1": 0.7962085308056872
+  },
+  "gate": 0.75
+ },
+ "scale_signature": {
+  "capex": {
+   "n": 25,
+   "abs_lt_1": 0
+  },
+  "dividends_paid": {
+   "n": 26,
+   "abs_lt_1": 1
+  },
+  "net_income": {
+   "n": 25,
+   "abs_lt_1": 0
+  },
+  "operating_cash_flow": {
+   "n": 27,
+   "abs_lt_1": 1
+  },
+  "revenue": {
+   "n": 43,
+   "abs_lt_1": 0
+  },
+  "total_assets": {
+   "n": 4,
+   "abs_lt_1": 0
+  },
+  "total_current_assets": {
+   "n": 14,
+   "abs_lt_1": 1
+  },
+  "total_current_liabilities": {
+   "n": 14,
+   "abs_lt_1": 4
+  }
+ }
+}

@@ -1,0 +1,535 @@
+{
+ "run": "agg14",
+ "cells": [
+  {
+   "doc": "AMERICANWATERWORKS_2022_10K",
+   "field": "long_term_debt",
+   "gold": 10926.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 5,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 10926.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 10926.0,
+    "extractor": "l3_textrow.v1",
+    "page": 82,
+    "quote": "Long-term debt 10,926 10,341"
+   }
+  },
+  {
+   "doc": "CORNING_2022_10K",
+   "field": "long_term_debt",
+   "gold": 6687.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 4,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 6687.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 6687.0,
+    "extractor": "l3_textrow.v1",
+    "page": 34,
+    "quote": "Long-term debt $ 6,687 $ 6,989"
+   }
+  },
+  {
+   "doc": "JPMORGAN_2022_10K",
+   "field": "long_term_debt",
+   "gold": 295865.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 14,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 295865.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 295865.0,
+    "extractor": "l3_textrow.v1",
+    "page": 46,
+    "quote": "Long-term debt 295,865 301,005 281,685"
+   }
+  },
+  {
+   "doc": "PAYPAL_2022_10K",
+   "field": "long_term_debt",
+   "gold": 10417.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 10417.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 10417.0,
+    "extractor": "l3_textrow.v1",
+    "page": 61,
+    "quote": "Long-term debt 10,417 8,049"
+   }
+  },
+  {
+   "doc": "VERIZON_2022_10K",
+   "field": "long_term_debt",
+   "gold": 140676.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 7,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 140676.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 140676.0,
+    "extractor": "l3_textrow.v1",
+    "page": 56,
+    "quote": "Long-term debt 140,676 143,425"
+   }
+  },
+  {
+   "doc": "COCACOLA_2022_10K",
+   "field": "long_term_debt",
+   "gold": 36377.0,
+   "fy": "2022",
+   "verdict": "WRONG_VALUE",
+   "n_facts": 1,
+   "candidate": {
+    "period": "2024",
+    "stored_value": 38116.0,
+    "stored_unit": "unknown",
+    "scored_value": 38116.0,
+    "extractor": "l3_table.v1",
+    "page": 91,
+    "quote": "Long-term debt $ 36,377 | $ 38,116"
+   }
+  },
+  {
+   "doc": "GENERALMILLS_2022_10K",
+   "field": "long_term_debt",
+   "gold": 9134.8,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 9134.8,
+    "stored_unit": "USD_millions",
+    "scored_value": 9134.8,
+    "extractor": "l3_textrow.v1",
+    "page": 47,
+    "quote": "Long-term debt 9,134.8 9,786.9"
+   }
+  },
+  {
+   "doc": "LOCKHEEDMARTIN_2022_10K",
+   "field": "long_term_debt",
+   "gold": 15429.0,
+   "fy": "2022",
+   "verdict": "UNIT_SCALE",
+   "n_facts": 1,
+   "candidate": {
+    "period": "2022-12-31",
+    "stored_value": 0.015429,
+    "stored_unit": "USD_millions",
+    "scored_value": 0.015429,
+    "extractor": "l4_llm.v1",
+    "page": 61,
+    "quote": "Long-term debt, net 15,429"
+   }
+  },
+  {
+   "doc": "PEPSICO_2022_10K",
+   "field": "long_term_debt",
+   "gold": 35657.0,
+   "fy": "2022",
+   "verdict": "UNIT_SCALE",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 0.035657,
+    "stored_unit": "USD_millions",
+    "scored_value": 0.035657,
+    "extractor": "l4_llm.v1",
+    "page": 61,
+    "quote": "Long-Term Debt Obligations 35,657"
+   }
+  },
+  {
+   "doc": "3M_2022_10K",
+   "field": "long_term_debt",
+   "gold": 14001.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 14001.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 14001.0,
+    "extractor": "l3_textrow.v1",
+    "page": 50,
+    "quote": "Long-term debt 14,001 16,056"
+   }
+  },
+  {
+   "doc": "ACTIVISIONBLIZZARD_2022_10K",
+   "field": "long_term_debt",
+   "gold": 3611.0,
+   "fy": "2022",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "AMAZON_2022_10K",
+   "field": "long_term_debt",
+   "gold": 67150.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 4,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 67150.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 67150.0,
+    "extractor": "l3_textrow.v1",
+    "page": 39,
+    "quote": "Long-term debt 48,744 67,150"
+   }
+  },
+  {
+   "doc": "AMD_2022_10K",
+   "field": "long_term_debt",
+   "gold": 2467.0,
+   "fy": "2022",
+   "verdict": "UNIT_SCALE",
+   "n_facts": 1,
+   "candidate": {
+    "period": "2022-12-31",
+    "stored_value": 0.002467,
+    "stored_unit": "USD_millions",
+    "scored_value": 0.002467,
+    "extractor": "l4_llm.v1",
+    "page": 78,
+    "quote": "Long-term debt, net of current portion 2,467"
+   }
+  },
+  {
+   "doc": "AMERICANEXPRESS_2022_10K",
+   "field": "long_term_debt",
+   "gold": 42573.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 6,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 42.6,
+    "stored_unit": "USD_billions",
+    "scored_value": 42600.0,
+    "extractor": "l3_textrow.v1",
+    "page": 67,
+    "quote": "Long-term debt 42.6 38.7"
+   }
+  },
+  {
+   "doc": "BOEING_2022_10K",
+   "field": "long_term_debt",
+   "gold": 51811.0,
+   "fy": "2022",
+   "verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null
+  },
+  {
+   "doc": "COSTCO_2022_10K",
+   "field": "long_term_debt",
+   "gold": 6484.0,
+   "fy": "2022",
+   "verdict": "UNIT_SCALE",
+   "n_facts": 3,
+   "candidate": {
+    "period": "2022-12-31",
+    "stored_value": 0.006483999999999999,
+    "stored_unit": "USD_millions",
+    "scored_value": 0.006483999999999999,
+    "extractor": "l4_llm.v1",
+    "page": 51,
+    "quote": "Long-term debt, excluding current portion $ 6,484"
+   }
+  },
+  {
+   "doc": "CVSHEALTH_2022_10K",
+   "field": "long_term_debt",
+   "gold": 50476.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 9,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 50476.0,
+    "stored_unit": "unknown",
+    "scored_value": 50476.0,
+    "extractor": "l3_textrow.v1",
+    "page": 110,
+    "quote": "Long-term debt 50,476 51,971"
+   }
+  },
+  {
+   "doc": "EBAY_2022_10K",
+   "field": "long_term_debt",
+   "gold": 7721.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 7721.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 7721.0,
+    "extractor": "l3_textrow.v1",
+    "page": 58,
+    "quote": "Long-term debt 7,721 7,727"
+   }
+  },
+  {
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "long_term_debt",
+   "gold": 26888.0,
+   "fy": "2022",
+   "verdict": "UNIT_SCALE",
+   "n_facts": 1,
+   "candidate": {
+    "period": "2022-12-31",
+    "stored_value": 0.026888,
+    "stored_unit": "USD_millions",
+    "scored_value": 0.026888,
+    "extractor": "l4_llm.v1",
+    "page": 64,
+    "quote": "Total long-term debt $ 26,888 $ 29,985"
+   }
+  },
+  {
+   "doc": "KRAFTHEINZ_2022_10K",
+   "field": "long_term_debt",
+   "gold": 19233.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 5,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 19233.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 19233.0,
+    "extractor": "l3_textrow.v1",
+    "page": 54,
+    "quote": "Long-term debt 19,233 21,061"
+   }
+  },
+  {
+   "doc": "MCDONALDS_2022_10K",
+   "field": "long_term_debt",
+   "gold": 35903.5,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 35903.5,
+    "stored_unit": "unknown",
+    "scored_value": 35903.5,
+    "extractor": "l3_textrow.v1",
+    "page": 38,
+    "quote": "Long-term debt 35,903.5 35,622.7"
+   }
+  },
+  {
+   "doc": "MGMRESORTS_2022_10K",
+   "field": "long_term_debt",
+   "gold": 7432.817,
+   "fy": "2022",
+   "verdict": "UNIT_SCALE",
+   "n_facts": 1,
+   "candidate": {
+    "period": "2022-12-31",
+    "stored_value": 0.0074328169999999995,
+    "stored_unit": "USD_millions",
+    "scored_value": 0.0074328169999999995,
+    "extractor": "l4_llm.v1",
+    "page": 59,
+    "quote": "Long-term debt, net 7,432,817"
+   }
+  },
+  {
+   "doc": "MICROSOFT_2022_10K",
+   "field": "long_term_debt",
+   "gold": 47032.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 4,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 47032.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 47032.0,
+    "extractor": "l3_textrow.v1",
+    "page": 59,
+    "quote": "Long-term debt 47,032 50,074"
+   }
+  },
+  {
+   "doc": "NETFLIX_2022_10K",
+   "field": "long_term_debt",
+   "gold": 14353.076,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 14353076.0,
+    "stored_unit": "USD_thousands",
+    "scored_value": 14353.076000000001,
+    "extractor": "l3_textrow.v1",
+    "page": 43,
+    "quote": "Long-term debt 14,353,076 14,693,072"
+   }
+  },
+  {
+   "doc": "PFIZER_2022_10K",
+   "field": "long_term_debt",
+   "gold": 32884.0,
+   "fy": "2022",
+   "verdict": "HIT",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 32884.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 32884.0,
+    "extractor": "l3_textrow.v1",
+    "page": 56,
+    "quote": "Long-term debt 32,884 36,195"
+   }
+  }
+ ],
+ "backfilled_docs": {
+  "classes": {
+   "HIT": 0,
+   "PERIOD_LABEL": 0,
+   "UNIT_SCALE": 6,
+   "NEAR_ROUNDED": 0,
+   "WRONG_VALUE": 1,
+   "NO_FACT": 2
+  },
+  "strict": {
+   "gold": 9,
+   "found": 0,
+   "m1": 0.0
+  },
+  "diag_period_agnostic": {
+   "gold": 9,
+   "found": 0,
+   "m1": 0.0
+  },
+  "diag_unit_normalised": {
+   "gold": 9,
+   "found": 6,
+   "m1": 0.6666666666666666
+  },
+  "diag_both": {
+   "gold": 9,
+   "found": 6,
+   "m1": 0.6666666666666666
+  }
+ },
+ "all_cells": {
+  "classes": {
+   "HIT": 16,
+   "PERIOD_LABEL": 0,
+   "UNIT_SCALE": 6,
+   "NEAR_ROUNDED": 0,
+   "WRONG_VALUE": 1,
+   "NO_FACT": 2
+  },
+  "strict": {
+   "gold": 25,
+   "found": 16,
+   "m1": 0.64
+  },
+  "diag_period_agnostic": {
+   "gold": 25,
+   "found": 16,
+   "m1": 0.64
+  },
+  "diag_unit_normalised": {
+   "gold": 25,
+   "found": 22,
+   "m1": 0.88
+  },
+  "diag_both": {
+   "gold": 25,
+   "found": 22,
+   "m1": 0.88
+  }
+ },
+ "l3_only_strict": {
+  "gold": 25,
+  "found": 16,
+  "m1": 0.64
+ },
+ "g2_recorded": {
+  "ok": false,
+  "m1": 0.64,
+  "gate": 0.75,
+  "na_cells": [
+   "ADOBE_2022_10K",
+   "AES_2022_10K",
+   "APPLE_2022_10K"
+  ],
+  "gold": 25,
+  "found": 16,
+  "backfilled_docs": {
+   "gold": 9,
+   "found": 0,
+   "m1": 0.0
+  },
+  "per_doc": {
+   "3M_2022_10K": true,
+   "ACTIVISIONBLIZZARD_2022_10K": false,
+   "AMAZON_2022_10K": true,
+   "AMD_2022_10K": false,
+   "AMERICANEXPRESS_2022_10K": true,
+   "AMERICANWATERWORKS_2022_10K": true,
+   "BOEING_2022_10K": false,
+   "COCACOLA_2022_10K": false,
+   "CORNING_2022_10K": true,
+   "COSTCO_2022_10K": false,
+   "CVSHEALTH_2022_10K": true,
+   "EBAY_2022_10K": true,
+   "GENERALMILLS_2022_10K": true,
+   "JOHNSON_JOHNSON_2022_10K": false,
+   "JPMORGAN_2022_10K": true,
+   "KRAFTHEINZ_2022_10K": true,
+   "LOCKHEEDMARTIN_2022_10K": false,
+   "MCDONALDS_2022_10K": true,
+   "MGMRESORTS_2022_10K": false,
+   "MICROSOFT_2022_10K": true,
+   "NETFLIX_2022_10K": true,
+   "PAYPAL_2022_10K": true,
+   "PEPSICO_2022_10K": false,
+   "PFIZER_2022_10K": true,
+   "VERIZON_2022_10K": true
+  },
+  "l3_only": {
+   "found": 16,
+   "m1": 0.64
+  },
+  "lift": 0
+ },
+ "gate": 0.75,
+ "scale_signature": {
+  "long_term_debt": {
+   "n": 13,
+   "abs_lt_1": 13
+  }
+ }
+}
