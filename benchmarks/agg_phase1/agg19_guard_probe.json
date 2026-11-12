@@ -1,0 +1,501 @@
+{
+ "adopted_guards": [
+  "attributable_net_income"
+ ],
+ "agg11_cell_decomposition": {
+  "missing/never_extracted_correctly": 20,
+  "ok/ok": 177,
+  "spurious/na_in_gold_but_value_in_store": 1,
+  "unit1000/never_extracted_correctly": 1,
+  "wrong/canonical_chose_wrong_or_dropped_but_candidate_correct": 8,
+  "wrong/never_extracted_correctly": 5
+ },
+ "control": {
+  "n_cells": 211,
+  "n_ok": 177,
+  "rule": "canonical.v1:tier>conf>audit>|value|desc>page>fact_id"
+ },
+ "raw_hits": {
+  "found": 185,
+  "m1": 0.8767772511848341,
+  "n": 211
+ },
+ "saved_sql_on_adopted_rule_before_fill": {
+  "guards": [
+   "attributable_net_income"
+  ],
+  "n": 14,
+  "n_correct": 0,
+  "per_question": {
+   "agg02": {
+    "aggregate_op": "argmin",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Corning"
+     ]
+    ],
+    "gold": "American Water Works",
+    "sql": "SELECT entity FROM facts_canonical WHERE field = 'revenue' AND period = '2022' ORDER BY value ASC LIMIT 1",
+    "was_correct_in_agg11": false
+   },
+   "agg03": {
+    "aggregate_op": "sum",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      2677995.254
+     ]
+    ],
+    "gold": 2695933.44,
+    "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'revenue' AND period = '2022'",
+    "was_correct_in_agg11": false
+   },
+   "agg08": {
+    "aggregate_op": "sum",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      325212.417
+     ]
+    ],
+    "gold": 348138.72,
+    "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'net_income' AND period = '2022'",
+    "was_correct_in_agg11": false
+   },
+   "agg10": {
+    "aggregate_op": "sum",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      119841.629
+     ]
+    ],
+    "gold": 163522.7,
+    "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'capex' AND period = '2022'",
+    "was_correct_in_agg11": false
+   },
+   "agg11": {
+    "aggregate_op": "count_gt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      3
+     ]
+    ],
+    "gold": 5,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'capex' AND period = '2022' AND value > 5000",
+    "was_correct_in_agg11": false
+   },
+   "agg18": {
+    "aggregate_op": "sum",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      82909.548
+     ]
+    ],
+    "gold": 99077.75,
+    "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express'",
+    "was_correct_in_agg11": false
+   },
+   "p1_08": {
+    "aggregate_op": "count_lt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      8
+     ]
+    ],
+    "gold": 9,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'net_income' AND period = '2022' AND value < 2000",
+    "was_correct_in_agg11": false
+   },
+   "p1_19": {
+    "aggregate_op": "count_gt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      5
+     ]
+    ],
+    "gold": 9,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'capex' AND period = '2022' AND value > 3000",
+    "was_correct_in_agg11": false
+   },
+   "p1_20": {
+    "aggregate_op": "top3",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Amazon"
+     ],
+     [
+      "Verizon"
+     ],
+     [
+      "PepsiCo"
+     ]
+    ],
+    "gold": [
+     "Amazon",
+     "Microsoft",
+     "Verizon"
+    ],
+    "sql": "SELECT entity FROM facts_canonical WHERE field = 'capex' AND period = '2022' ORDER BY value DESC LIMIT 3",
+    "was_correct_in_agg11": false
+   },
+   "p1_24": {
+    "aggregate_op": "count_gt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      9
+     ]
+    ],
+    "gold": 10,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'total_assets' AND period = '2022' AND value > 100000",
+    "was_correct_in_agg11": false
+   },
+   "p1_25": {
+    "aggregate_op": "argmin",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Boeing"
+     ]
+    ],
+    "gold": "eBay",
+    "sql": "SELECT entity FROM facts_canonical WHERE field = 'total_assets' AND period = '2022' ORDER BY value ASC LIMIT 1",
+    "was_correct_in_agg11": false
+   },
+   "p1_33": {
+    "aggregate_op": "argmax",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Apple"
+     ]
+    ],
+    "gold": "Microsoft",
+    "sql": "SELECT entity FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' ORDER BY value DESC LIMIT 1",
+    "was_correct_in_agg11": false
+   },
+   "p1_34": {
+    "aggregate_op": "count_gt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      6
+     ]
+    ],
+    "gold": 7,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND value > 5000 AND entity != 'JPMorgan' AND entity != 'American Express'",
+    "was_correct_in_agg11": false
+   },
+   "p1_35": {
+    "aggregate_op": "top3",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Apple",
+      14793.0
+     ],
+     [
+      "Johnson & Johnson",
+      11682.0
+     ],
+     [
+      "Boeing",
+      10998.0
+     ]
+    ],
+    "gold": [
+     "Microsoft",
+     "Apple",
+     "Johnson & Johnson"
+    ],
+    "sql": "SELECT entity, value FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' ORDER BY value DESC LIMIT 3",
+    "was_correct_in_agg11": false
+   }
+  }
+ },
+ "saved_sql_on_agg11_store": {
+  "n": 14,
+  "n_correct": 0,
+  "per_question": {
+   "agg02": {
+    "aggregate_op": "argmin",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Corning"
+     ]
+    ],
+    "gold": "American Water Works",
+    "sql": "SELECT entity FROM facts_canonical WHERE field = 'revenue' AND period = '2022' ORDER BY value ASC LIMIT 1",
+    "was_correct_in_agg11": false
+   },
+   "agg03": {
+    "aggregate_op": "sum",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      2677995.254
+     ]
+    ],
+    "gold": 2695933.44,
+    "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'revenue' AND period = '2022'",
+    "was_correct_in_agg11": false
+   },
+   "agg08": {
+    "aggregate_op": "sum",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      324404.055
+     ]
+    ],
+    "gold": 348138.72,
+    "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'net_income' AND period = '2022'",
+    "was_correct_in_agg11": false
+   },
+   "agg10": {
+    "aggregate_op": "sum",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      119841.629
+     ]
+    ],
+    "gold": 163522.7,
+    "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'capex' AND period = '2022'",
+    "was_correct_in_agg11": false
+   },
+   "agg11": {
+    "aggregate_op": "count_gt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      3
+     ]
+    ],
+    "gold": 5,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'capex' AND period = '2022' AND value > 5000",
+    "was_correct_in_agg11": false
+   },
+   "agg18": {
+    "aggregate_op": "sum",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      82909.548
+     ]
+    ],
+    "gold": 99077.75,
+    "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express'",
+    "was_correct_in_agg11": false
+   },
+   "p1_08": {
+    "aggregate_op": "count_lt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      8
+     ]
+    ],
+    "gold": 9,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'net_income' AND period = '2022' AND value < 2000",
+    "was_correct_in_agg11": false
+   },
+   "p1_19": {
+    "aggregate_op": "count_gt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      5
+     ]
+    ],
+    "gold": 9,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'capex' AND period = '2022' AND value > 3000",
+    "was_correct_in_agg11": false
+   },
+   "p1_20": {
+    "aggregate_op": "top3",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Amazon"
+     ],
+     [
+      "Verizon"
+     ],
+     [
+      "PepsiCo"
+     ]
+    ],
+    "gold": [
+     "Amazon",
+     "Microsoft",
+     "Verizon"
+    ],
+    "sql": "SELECT entity FROM facts_canonical WHERE field = 'capex' AND period = '2022' ORDER BY value DESC LIMIT 3",
+    "was_correct_in_agg11": false
+   },
+   "p1_24": {
+    "aggregate_op": "count_gt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      9
+     ]
+    ],
+    "gold": 10,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'total_assets' AND period = '2022' AND value > 100000",
+    "was_correct_in_agg11": false
+   },
+   "p1_25": {
+    "aggregate_op": "argmin",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Boeing"
+     ]
+    ],
+    "gold": "eBay",
+    "sql": "SELECT entity FROM facts_canonical WHERE field = 'total_assets' AND period = '2022' ORDER BY value ASC LIMIT 1",
+    "was_correct_in_agg11": false
+   },
+   "p1_33": {
+    "aggregate_op": "argmax",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Apple"
+     ]
+    ],
+    "gold": "Microsoft",
+    "sql": "SELECT entity FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' ORDER BY value DESC LIMIT 1",
+    "was_correct_in_agg11": false
+   },
+   "p1_34": {
+    "aggregate_op": "count_gt",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      6
+     ]
+    ],
+    "gold": 7,
+    "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND value > 5000 AND entity != 'JPMorgan' AND entity != 'American Express'",
+    "was_correct_in_agg11": false
+   },
+   "p1_35": {
+    "aggregate_op": "top3",
+    "correct": false,
+    "error": null,
+    "first_rows": [
+     [
+      "Apple",
+      14793.0
+     ],
+     [
+      "Johnson & Johnson",
+      11682.0
+     ],
+     [
+      "Boeing",
+      10998.0
+     ]
+    ],
+    "gold": [
+     "Microsoft",
+     "Apple",
+     "Johnson & Johnson"
+    ],
+    "sql": "SELECT entity, value FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' ORDER BY value DESC LIMIT 3",
+    "was_correct_in_agg11": false
+   }
+  }
+ },
+ "variants": {
+  "attributable_net_income": {
+   "adopted": true,
+   "broken": [],
+   "by_field": {
+    "net_income": {
+     "broken": 0,
+     "fixed": 4
+    }
+   },
+   "fixed": [
+    "BOEING_2022_10K|net_income",
+    "MGMRESORTS_2022_10K|net_income",
+    "PEPSICO_2022_10K|net_income",
+    "VERIZON_2022_10K|net_income"
+   ],
+   "guards": [
+    "attributable_net_income"
+   ],
+   "n_ok": 181
+  },
+  "both": {
+   "adopted": true,
+   "broken": [],
+   "by_field": {
+    "net_income": {
+     "broken": 0,
+     "fixed": 4
+    }
+   },
+   "fixed": [
+    "BOEING_2022_10K|net_income",
+    "MGMRESORTS_2022_10K|net_income",
+    "PEPSICO_2022_10K|net_income",
+    "VERIZON_2022_10K|net_income"
+   ],
+   "guards": [
+    "thousands_unit",
+    "attributable_net_income"
+   ],
+   "n_ok": 181
+  },
+  "thousands_unit": {
+   "adopted": false,
+   "broken": [],
+   "by_field": {},
+   "fixed": [],
+   "guards": [
+    "thousands_unit"
+   ],
+   "n_ok": 177
+  }
+ }
+}
