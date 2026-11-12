@@ -46,10 +46,10 @@ PATH_AGGREGATE_LIMITATION = (
     "that hits one weight path, prefill included -- their bandwidth is "
     "NOT a roofline reading. The ROOFLINE GAP table below is the "
     "per-node replacement for that framing.")
-CONTROL_SHA256 = "ad87294ac66c8ceb9ba15823a0503d38b0e16f3141bb64f0cc88c6daad9ecea3"  # P1-G: control + relies_on_claims template delta
+CONTROL_SHA256 = "19ff8f60e6c48633f8f52f8038481f6bfca4803c0afc72d4955976b054b43dae"  # P1-G: control + relies_on_claims template delta
 #: What the live planner/author actually send: the control bytes plus `\n\n` + actors.ANTI_GAMING_RULE,
 #: appended by 57f6db044 (R24-6, intentional). Verified equal to sha256(control + that one clause).
-LIVE_PROMPT_SHA256 = "f2a5780f9dde46844093272d2ea030cd2e199e4f368f1f60c2ea1335bd883390"
+LIVE_PROMPT_SHA256 = "17b0ec47320082089d08ca9b4eb5e613f6f4e90d4fa27835d8e83640aa6e079f"
 NODE_PROFILE_SECTION_CHARS = 3878 + len(PATH_AGGREGATE_LIMITATION) + 1
 RUN8_RECORDED_SHA256 = "72c8677850d955b2598bd9d7254460b0fdead5c0ee2f150c80e897ae0ce47b99"
 CPU_FORMAT = dict(
@@ -79,19 +79,38 @@ ABSTAIN_IDENTITY_EXTENSION = (
 #: frozen fixtures predate them, so the reconciliation strips exactly these two pieces from
 #: the live suffix (an in-memory delta, never a rewrite of recorded bytes).
 RELIES_ON_TEMPLATE_DELTA = (
-    (',\n  "relies_on_claims": ["<belief-section claim id your mechanism depends on>"]', ""),
-    ('"relies_on_claims" lists the claim ids (clm_...) from the belief-kernel evidence section '
-     'that your mechanism depends on; [] if none. Only target- and sibling-scoped claims count; '
-     'host-ceiling lines are background and are not accepted as reliance.\n\n', ""))
+    (',\n  "relies_on_claims": ["<claim id>"]', ""),
+    ('In either reply, proposal or abstention, "relies_on_claims" lists the claim ids (clm_...) '
+     'from the belief-kernel evidence section that your answer depends on; [] if none. It is '
+     'optional and decides nothing about your answer. Only knob-, target- and sibling-scoped '
+     'claims count; host-ceiling lines are background and are not accepted as reliance. Before '
+     'answering, read the target-tier and "Tried" lines for your mechanism\'s family and list every '
+     'claim id whose result your answer builds on, differs from, or avoids repeating; answer [] '
+     'only if no shown claim bears on it.\n\n', ""))
+
+
+#: 952c4d859 (2026-11): both abstain forms in the live template also carry `relies_on_claims`.
+#: The frozen fixtures predate it, so it is applied (forward) / stripped (legacy) in memory too.
+ABSTAIN_RELIES = ', "relies_on_claims": ["<claim id>"]'
+_ABSTAIN_SPOTS = (('"<specific reason>"}.', '"<specific reason>"' + ABSTAIN_RELIES + '}.'),
+                  ('"target_symbol": "<function>"} -- all four',
+                   '"target_symbol": "<function>"' + ABSTAIN_RELIES + '} -- all four'))
+
+
+def _with_abstain_relies(text: str) -> str:
+    for old, new in _ABSTAIN_SPOTS:
+        assert text.count(old) == 1, old
+        text = text.replace(old, new)
+    return text
 
 
 def _with_relies_delta(prompt: str) -> str:
     """Apply the P1-G template delta (forward) to a prompt made under the old template."""
     old_tail = '"<the function you will change>"}\n\nRules:'
     assert prompt.count(old_tail) == 1
-    return prompt.replace(
+    return _with_abstain_relies(prompt.replace(
         old_tail, '"<the function you will change>"' + RELIES_ON_TEMPLATE_DELTA[0][0]
-        + '}\n\n' + RELIES_ON_TEMPLATE_DELTA[1][0] + 'Rules:', 1)
+        + '}\n\n' + RELIES_ON_TEMPLATE_DELTA[1][0] + 'Rules:', 1))
 
 
 def _recorded_prompt() -> str:
@@ -133,6 +152,8 @@ def _real_context_text(prompt: str | None = None, *, legacy_suffix: bool = False
         for piece, replacement in RELIES_ON_TEMPLATE_DELTA:
             assert suffix.count(piece) == 1, piece
             suffix = suffix.replace(piece, replacement)
+        assert suffix.count(ABSTAIN_RELIES) == 2
+        suffix = suffix.replace(ABSTAIN_RELIES, "")
         assert suffix.endswith(ABSTAIN_IDENTITY_EXTENSION)
         suffix = suffix[:-len(ABSTAIN_IDENTITY_EXTENSION)]
     prompt = _real_prompt() if prompt is None else prompt
@@ -193,7 +214,8 @@ class NodeProfileIsExactlyOneInsertedSection(unittest.TestCase):
         self.assertEqual(len(block), NODE_PROFILE_SECTION_CHARS)
         self.assertEqual(len(control) - len(recorded),
                          NODE_PROFILE_SECTION_CHARS + len(ABSTAIN_IDENTITY_EXTENSION)
-                         + sum(len(piece) for piece, _ in RELIES_ON_TEMPLATE_DELTA))
+                         + sum(len(piece) for piece, _ in RELIES_ON_TEMPLATE_DELTA)
+                         + 2 * len(ABSTAIN_RELIES))
         at = recorded.index("\n\n## Already tried\n") + 2
         self.assertEqual(control, _with_relies_delta(
             recorded[:at] + block + recorded[at:] + ABSTAIN_IDENTITY_EXTENSION))
@@ -533,7 +555,7 @@ class VariableModeThroughThePlanner(unittest.TestCase):
         self.assertIn(str(bundle), seen["prompt"])
         self.assertNotIn('"full_transfer_target"', seen["prompt"])
         self.assertTrue(seen["prompt"].endswith(
-            '{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION
+             _with_abstain_relies('{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION)
             + "\n\n" + actors.ANTI_GAMING_RULE))  # 57f6db044 (R24-6)
         self.assertEqual(seen["env"][actors.SEAT_ENV_ARM], "plain+ctx-variable")
         assert_snapshot_only(self, {k: v for k, v in seen["env"].items()
@@ -647,7 +669,7 @@ class OrchestratorVariableMode(unittest.TestCase):
         self.assertIn("ORCHESTRATOR mode", seen["prompt"])
         self.assertNotIn('"full_transfer_target"', seen["prompt"])
         self.assertTrue(seen["prompt"].endswith(
-            '{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION
+             _with_abstain_relies('{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION)
             + "\n\n" + actors.ANTI_GAMING_RULE))  # 57f6db044 (R24-6)
         self.assertEqual(seen["env"][actors.SEAT_ENV_ARM], "orch+ctx-orch-variable")
         self.assertEqual("".join(e["text"] for e in seen["bundle"]["sections"]), _real_context_text())
