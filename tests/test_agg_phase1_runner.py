@@ -819,5 +819,146 @@ class CliTests(unittest.TestCase):
         self.assertIn("not ready", (tmp / "o2" / "results.jsonl").read_text())
 
 
+# --------------------------------------------------------------------------------------------- per-document fiscal year
+class FyDescriptionTests(unittest.TestCase):
+    def test_fy2022_is_the_identity_on_every_frozen_description(self):
+        for f, d in A0.METRICS.items():
+            for fy in (None, "", "2022", 2022):
+                self.assertEqual(X.l4_description(d, fy), d, (f, fy))
+
+    def test_other_years_swap_only_the_year(self):
+        for f, d in A0.METRICS.items():
+            r = X.l4_description(d, 2021)
+            self.assertEqual(r, d.replace("FY2022", "FY2021"), f)
+            self.assertNotIn("2022", r)
+            self.assertIn("FY2021", r)
+        self.assertEqual(X.l4_description("Net income, FY2022 (USD millions)", "2023"), "Net income, FY2023 (USD millions)")
+
+    def test_a_description_without_the_base_year_is_refused(self):
+        with self.assertRaises(ValueError):
+            X.l4_description("Net income (USD millions)", "2021")
+
+    def test_doc_fiscal_year_comes_from_the_manifest(self):
+        corpus11 = {"fiscal_year": 2022}
+        self.assertEqual(X.doc_fiscal_year({"doc_name": "A"}, corpus11), "2022")
+        self.assertEqual(X.doc_fiscal_year({"doc_name": "A", "fiscal_year": 2021}, corpus11), "2021")
+        self.assertEqual(X.doc_fiscal_year({"doc_name": "A"}, {}), "2022")
+        real = json.loads((D1 / "corpus_agg13.json").read_text())
+        got = {d["doc_name"]: X.doc_fiscal_year(d, json.loads((D1 / "corpus.json").read_text())) for d in real["docs"]}
+        self.assertEqual({k for k, v in got.items() if v == "2021"}, {"MICROSOFT_2022_10K", "JOHNSON_JOHNSON_2022_10K", "3M_2022_10K"})
+        self.assertEqual(sum(v == "2022" for v in got.values()), 25)
+
+    def test_fy_stage_self_check_is_clean(self):
+        self.assertEqual(X.l4_fy_stage_problems(), [])
+        with mock.patch.dict(A0.METRICS, {"revenue": "Revenue, FY2022 (USD millions) vs 2022 plan"}):
+            self.assertTrue(X.l4_fy_stage_problems())     # a description naming another 2022 reference cannot re-render cleanly
+
+    def test_l4_unit_itself_is_still_the_phase0_loop(self):
+        """The AGG-1.1 function is not edited: its statements equal run_cpu's L4 loop (the L4 reuse test)."""
+        self.assertEqual(X._l4_loop_ast(ast.parse((D0 / "phase0_arms.py").read_text())), X.l4_unit_ast())
+
+
+@unittest.skipUnless(HAVE_ORCH, "orchestrator tree not importable")
+class FyRenderingTests(unittest.TestCase):
+    """For an FY2022 document ``l4_unit_fy`` is ``l4_unit``: same BM25 query, same prompts, same record."""
+
+    class Rec(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.prompts = []
+
+        def complete(self, prompt, **kw):
+            self.prompts.append(prompt)
+            return super().complete(prompt, **kw)
+
+    def _run(self, fn, fx, **kw):
+        be, rec = self.Rec(), P.Recorder(Path(tempfile.mkdtemp()) / "r.jsonl")
+        queries = []
+        real = X.bm25_top
+        with mock.patch.object(X, "bm25_top", lambda u, q, k: (queries.append(q), real(u, q, k))[1]):
+            units = P.windows(fx["p0store"], P.CORPUS_ID, P.CFG.window_chars)
+            for f in A0.METRICS:
+                for d in P0_NAMES:
+                    fn(rec, fx["p0store"], be, units, f, d, lambda: None, **kw)
+        recs = [{k: v for k, v in r.items() if k not in ("ts", "wall_s", "fy", "n_unit_overrides", "unit_overrides")}
+                for r in rec.records if r["kind"] == "l4_unit"]
+        return be.prompts, queries, recs
+
+    def test_fy2022_prompt_query_and_record_are_byte_identical(self):
+        tmp = Path(tempfile.mkdtemp())
+        fx = make_fixture(tmp)
+        ref = self._run(X.l4_unit, fx)
+        self.assertEqual(len(ref[2]), len(A0.METRICS) * len(P0_NAMES))
+        for fy in (None, "2022", 2022):
+            got = self._run(X.l4_unit_fy, fx, fy=fy)
+            self.assertEqual(got[1], ref[1], fy)           # BM25 queries
+            self.assertEqual(got[0], ref[0], fy)           # every prompt sent to the backend, byte for byte
+            self.assertEqual(got[2], ref[2], fy)           # the unit records
+
+    def test_fy2021_renders_the_year_in_prompt_and_query_and_names_no_other(self):
+        tmp = Path(tempfile.mkdtemp())
+        fx = make_fixture(tmp)
+        prompts, queries, recs = self._run(X.l4_unit_fy, fx, fy="2021")
+        self.assertTrue(prompts and all("FY2022" not in p.split("Excerpt:\n", 1)[0] for p in prompts))
+        self.assertTrue(any("FY2021" in p.split("Excerpt:\n", 1)[0] for p in prompts))
+        self.assertTrue(all("FY2021" in q and "2022" not in q for q in queries))
+        # the unit record says which year it asked for
+        rec = P.Recorder(Path(tempfile.mkdtemp()) / "r.jsonl")
+        units = P.windows(fx["p0store"], P.CORPUS_ID, P.CFG.window_chars)
+        X.l4_unit_fy(rec, fx["p0store"], FakeBackend(), units, "revenue", P0_NAMES[0], lambda: None, fy="2021")
+        self.assertEqual(next(r for r in rec.records if r["kind"] == "l4_unit")["fy"], "2021")
+
+    def test_unit_is_skipped_when_already_recorded(self):
+        tmp = Path(tempfile.mkdtemp())
+        fx = make_fixture(tmp)
+        rec = P.Recorder(tmp / "r.jsonl")
+        units = P.windows(fx["p0store"], P.CORPUS_ID, P.CFG.window_chars)
+        be = FakeBackend()
+        self.assertTrue(X.l4_unit_fy(rec, fx["p0store"], be, units, "revenue", P0_NAMES[0], lambda: None, fy="2021"))
+        calls = be.calls
+        self.assertFalse(X.l4_unit_fy(rec, fx["p0store"], be, units, "revenue", P0_NAMES[0], lambda: None, fy="2021"))
+        self.assertEqual(be.calls, calls)
+
+
+class AmendedReuseCheckTests(unittest.TestCase):
+    """The amended mode: facts_llm.py must equal its AMENDED sha256 (not the AGG-1.1 pin); everything else as before."""
+
+    _job = ReuseCheckTests._job
+
+    def test_amended_stage_file_is_expected_at_its_amended_sha_only(self):
+        tmp = Path(tempfile.mkdtemp())
+        job, orch = self._job(tmp)                       # the pin holds the ORIGINAL facts_llm.py ("A")
+        new = sha(orch / "src/aggregation/facts_llm.py")
+        self.assertTrue(X.l4_reuse_check(job, orch)["reuse_ok"])
+        # amended mode with the same bytes expected: equal to the amended sha -> ok
+        r = X.l4_reuse_check(job, orch, amended={"src/aggregation/facts_llm.py": new})
+        self.assertTrue(r["reuse_ok"], r)
+        self.assertEqual(r["files"]["src/aggregation/facts_llm.py"]["amended_expect"], new)
+        # the file the job pins is NOT the amended stage -> fail closed (amended mode never falls back to the AGG-1.1 pin)
+        r = X.l4_reuse_check(job, orch, amended={"src/aggregation/facts_llm.py": "0" * 64})
+        self.assertFalse(r["reuse_ok"])
+        self.assertTrue(r["files"]["src/aggregation/facts_llm.py"]["equals_phase0_pin"])
+        # a different amended file fails too; and llm_backend.py is still held to the AGG-1.1 pin
+        (orch / "src/aggregation/facts_llm.py").write_text("something else")
+        self.assertFalse(X.l4_reuse_check(job, orch, amended={"src/aggregation/facts_llm.py": new})["reuse_ok"])
+        tmp2 = Path(tempfile.mkdtemp())
+        job2, orch2 = self._job(tmp2)
+        (orch2 / "src/aggregation/llm_backend.py").write_text("B changed")
+        self.assertFalse(X.l4_reuse_check(job2, orch2, amended={"src/aggregation/facts_llm.py": sha(orch2 / "src/aggregation/facts_llm.py")})["reuse_ok"])
+
+    def test_amended_mode_runs_the_fy_stage_self_check(self):
+        tmp = Path(tempfile.mkdtemp())
+        job, orch = self._job(tmp)
+        with mock.patch.object(X, "l4_fy_stage_problems", lambda: ["boom"]):
+            r = X.l4_reuse_check(job, orch, amended={"src/aggregation/facts_llm.py": sha(orch / "src/aggregation/facts_llm.py")})
+        self.assertFalse(r["reuse_ok"])
+        self.assertIn("fy stage: boom", r["problems"])
+
+    @unittest.skipUnless(HAVE_ORCH and os.environ.get("AGG_ORCH_ROOT"), "set AGG_ORCH_ROOT to the amended orchestrator tree")
+    def test_amended_l4_pin_is_the_orchestrator_stage(self):
+        self.assertEqual(sha(ORCH / "src/aggregation/facts_llm.py"), X.AMENDED_L4["src/aggregation/facts_llm.py"])
+
+
+
 if __name__ == "__main__":
     unittest.main()

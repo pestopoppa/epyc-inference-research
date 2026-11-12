@@ -4,9 +4,9 @@
 Code only. Nothing here loads a model, starts a server or signals a process: every model call goes through an injected
 backend (``src.aggregation.llm_backend.LlamaServerBackend`` in a keeper job, a fake in tests).
 
-Implements ``benchmarks/agg_phase1/PREDECLARED_AGG14.md`` literally. The L4 unit is ``phase1_arms.l4_unit`` itself (the
-AGG-1.1 function, AST-equal to the Phase 0 ``run_cpu`` loop): grammar-constrained GBNF rows with the verbatim-quote
-check and the ``n_predict`` cap, unchanged. The only new input is the field description, supplied to that function
+Implements ``benchmarks/agg_phase1/PREDECLARED_AGG14.md`` literally. The L4 unit is ``phase1_arms.l4_unit_fy`` (amendment 2,
+2026-11-12: the AGG-1.1 ``l4_unit`` with the field description rendered for the document's own fiscal year, FY2022 here, so
+byte-identical): grammar-constrained GBNF rows with the verbatim-quote check and the ``n_predict`` cap, unchanged. The only new input is the field description, supplied to that function
 through ``field_description`` (it reads ``phase0 METRICS``; the context manager adds and removes the key, no file edited).
 
 Phase ``backfill`` (``run_agg14.py``): copy the AGG-1.1 store; seed the 224 AGG-1.1 L4 units as cache hits; snapshot the
@@ -37,9 +37,12 @@ for _p in (str(P0DIR), str(HERE)):
 import agg_phase0 as A  # noqa: E402
 import phase0_arms as P  # noqa: E402
 import phase1_arms as X  # noqa: E402
+from agg1314_zero_cell_diag import fy_contract_problems, scale_signature  # noqa: E402
 
 # --------------------------------------------------------------------------- pins
 AMENDMENT1_SHA = "8a632c67748acadbe7a525fd1ff5a5f0b094da585e97e37915f3987b8ab46b49"
+AMENDMENT2_FILE = "PREDECLARED_AGG14_AMENDMENT2_20261112.md"
+AMENDMENT2_SHA = "fd506c07e489c56d072d1ffbbaf6dccd8c80791a257c23a36399541a408abc6b"   # 2026-11-12: L4d unit-label cross-check; fiscal year taken from the manifest
 PREDECLARED_SHA = "e27b4dcb212dd2692f69e9247a4ae923a1d43a8741eb724ae287df4bd63c038b"
 FROZEN = {
     "agg14_field_pick.json": "007e39070665863792713cf2ee63f2b0d486f30afe1fbbc99c785879aa3806c9",
@@ -96,12 +99,43 @@ def pin_problems(set_dir: Path = HERE, *, predeclared_sha: str = PREDECLARED_SHA
     got = SHA256(am) if am.exists() else None
     if got != AMENDMENT1_SHA:
         problems.append(f"PREDECLARED_AGG14_AMENDMENT1_20261111.md sha256 {got} != recorded {AMENDMENT1_SHA}")
+    am2 = set_dir / AMENDMENT2_FILE
+    got = SHA256(am2) if am2.exists() else None
+    if got != AMENDMENT2_SHA:
+        problems.append(f"{AMENDMENT2_FILE} sha256 {got} != recorded {AMENDMENT2_SHA}")
     for name, want in (FROZEN if frozen is None else frozen).items():
         p = set_dir / name
         got = SHA256(p) if p.exists() else None
         if got != want:
             problems.append(f"frozen input {name} sha256 {got} != pinned {want}")
     return problems
+
+
+def l4_reuse_check14(agg11_job: Path, orch_root: Path, research_arms: Path | None = None) -> dict[str, Any]:
+    """The AGG-1.1 reuse rule against the AGG-1.1 job's pin, with the one amended L4 stage file (``facts_llm.py``,
+    amendment 2, 2026-11-12) expected at ``X.AMENDED_L4`` for the 12 backfill units; the 224 earlier units stay the
+    AGG-1.1 cache hits."""
+    res = X.l4_reuse_check(agg11_job, orch_root, research_arms, amended=X.AMENDED_L4)
+    res["against"] = ("AGG-1.1 job pin (" + str(agg11_job) + "), L4 stage as amended 2026-11-12 "
+                      "(PREDECLARED_AGG14_AMENDMENT2_20261112.md) for the backfill units")
+    return res
+
+
+def doc_fy(inp: dict[str, Any], doc: str) -> str:
+    """The document's own fiscal year from the corpus manifest (the AGG-1.1 manifest: 2022)."""
+    entry = next((d for d in inp["corpus"]["docs"] if d["doc_name"] == doc), {})
+    return X.doc_fiscal_year(entry, inp["corpus"])
+
+
+def fy_problems(inp: dict[str, Any]) -> list[str]:
+    """Amendment 2 hard preflight check: the field description rendered for each document's own fiscal year (corpus
+    manifest) must not name a fiscal year other than the one its gold cell is for."""
+    out = []
+    for r in inp["cells"]:
+        fy_doc = doc_fy(inp, r["doc_name"])
+        descs = {FIELD: X.l4_description(FIELD_DESC, fy_doc)}
+        out += [f"{r['doc_name']}: {p}" for p in fy_contract_problems(descs, [{"field": r["metric"], "fy": r["fiscal_year"]}])]
+    return out
 
 
 def cells_problems(inp: dict[str, Any], *, expect: bool = True) -> list[str]:
@@ -291,7 +325,7 @@ def run_backfill(rec: P.Recorder, out: Path, inp: dict[str, Any], orch_root: Pat
             if unit in rec.done:
                 continue
             with field_description():
-                X.l4_unit(rec, store, backend, units, FIELD, doc, guard, cfg)
+                X.l4_unit_fy(rec, store, backend, units, FIELD, doc, guard, cfg, fy=doc_fy(inp, doc))
             if unit not in rec.done:
                 return {"complete": False, "reason": f"{unit} errored; re-grant retries it", "rc": RC_PARTIAL}
             if smoke:
@@ -341,13 +375,17 @@ def _finish(rec, out, store, inp, corpus_id, before, rcp, order) -> dict[str, An
     row = store.conn.execute(
         "SELECT doc_id, value FROM facts_canonical WHERE corpus_id = ? AND field = ? AND period = ? "
         "ORDER BY value DESC LIMIT 1", [corpus_id, FIELD, PERIOD]).fetchone()
+    sig = scale_signature(store.conn, FIELD)   # informational: facts stored |value| < 1 USD_millions (the r2 mis-scale)
+    ovr = [o for r in fresh_units for o in (r.get("unit_overrides") or [])]
     det = {"informational": True, "canonical": canon, "gold_argmax": gold_top[0] if gold_top else None,
            "table_argmax": row[0] if row else None, "table_argmax_value": row[1] if row else None,
            "table_rows_for_field": store.conn.execute(
                "SELECT COUNT(*) FROM facts_canonical WHERE corpus_id = ? AND field = ? AND period = ?",
                [corpus_id, FIELD, PERIOD]).fetchone()[0]}
-    rec.emit("gates_cpu", unit="gates_cpu", g1=g1, g2=g2, g3=g3, g4=g4, deterministic_check=det)
+    rec.emit("gates_cpu", unit="gates_cpu", g1=g1, g2=g2, g3=g3, g4=g4, deterministic_check=det, scale_signature=sig)
     tripped = [g for g, v in (("G1", g1), ("G2", g2), ("G3", g3), ("G4", g4)) if not v["ok"]]
     return _result(out, complete=True, futility_stop="+".join(tripped) if tripped else None, gate_tripped=tripped,
                    verdict="phase1_gate_tripped" if tripped else "agg_1_4_done", m1=g2["m1"], g1=g1, g2=g2, g3=g3, g4=g4,
-                   fresh=fresh, deterministic_check=det, order=order, rc=RC_GATE if tripped else RC_OK)
+                   fresh=fresh, deterministic_check=det, scale_signature=sig,
+                   n_unit_overrides=sum(int(r.get("n_unit_overrides") or 0) for r in fresh_units), unit_overrides=ovr,
+                   order=order, rc=RC_GATE if tripped else RC_OK)

@@ -120,7 +120,7 @@ def scale_signature(conn: sqlite3.Connection, field: str | None = None) -> dict[
         q += " AND field = ?"
         args.append(field)
     q += " GROUP BY field ORDER BY field"
-    return {r["field"]: {"n": r["n"], "abs_lt_1": int(r["lt1"] or 0)} for r in conn.execute(q, args)}
+    return {r[0]: {"n": r[1], "abs_lt_1": int(r[2] or 0)} for r in conn.execute(q, args)}   # tuple or sqlite3.Row
 
 
 _FY_RE = re.compile(r"\bFY\s?(\d{4})\b")

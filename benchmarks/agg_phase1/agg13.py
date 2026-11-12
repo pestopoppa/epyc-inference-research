@@ -6,7 +6,8 @@ backend (``src.aggregation.llm_backend.LlamaServerBackend`` in a keeper job, a f
 
 Implements ``benchmarks/agg_phase1/PREDECLARED_AGG13.md`` literally. It imports the AGG-1.1 runner (``phase1_arms``),
 the Phase 0 arms and the Phase 0 L3 loader and edits none of them (their sha256 pins are asserted by ``preflight``);
-the L4 unit is ``phase1_arms.l4_unit`` itself, so the AGG-1.1 cache hits are valid by construction.
+the L4 unit of a changed document is ``phase1_arms.l4_unit_fy`` (amendment 2, 2026-11-12: the field description carries the
+document's own fiscal year; FY2022 renders the AGG-1.1 prompt byte for byte), and the retained units are AGG-1.1 cache hits.
 
 Phases (``run_agg13.py --phase``):
 
@@ -46,9 +47,12 @@ import agg_phase0 as A  # noqa: E402
 import l3_load as L3  # noqa: E402
 import phase0_arms as P  # noqa: E402
 import phase1_arms as X  # noqa: E402
+from agg1314_zero_cell_diag import fy_contract_problems  # noqa: E402
 
 # --------------------------------------------------------------------------- pins
 AMENDMENT1_SHA = "07831066b7549c1bb2b97b92e97ec960ec415ee794724189d120be537031d84c"
+AMENDMENT2_FILE = "PREDECLARED_AGG13_AMENDMENT2_20261112.md"
+AMENDMENT2_SHA = "2bf12216a43eba69644d93c55118ddfeb0f1a3b4a0cc3f00b6d6196180bc0b1f"   # 2026-11-12: period-parameterised L4 description + unit-label cross-check
 PREDECLARED_SHA = "fde0cb0d4bea0fc816e1393b38533c82c766853330d1218d2b0b37c3c5607183"
 FROZEN = {  # asserted by preflight and by the tests (the gold sheet is read by one reader + the cross-extractor check)
     "corpus_agg13.json": "933b4d2f47f313cb903127a27f12f6f348b6887bdf813d8bc2fc8fe424926e43",
@@ -170,12 +174,32 @@ def pin_problems(set_dir: Path = HERE, *, predeclared_sha: str = PREDECLARED_SHA
     got = SHA256(am) if am.exists() else None
     if got != AMENDMENT1_SHA:
         problems.append(f"PREDECLARED_AGG13_AMENDMENT1_20261111.md sha256 {got} != recorded {AMENDMENT1_SHA}")
+    am2 = set_dir / AMENDMENT2_FILE
+    got = SHA256(am2) if am2.exists() else None
+    if got != AMENDMENT2_SHA:
+        problems.append(f"{AMENDMENT2_FILE} sha256 {got} != recorded {AMENDMENT2_SHA}")
     for name, want in (FROZEN if frozen is None else frozen).items():
         p = set_dir / name
         got = SHA256(p) if p.exists() else None
         if got != want:
             problems.append(f"frozen input {name} sha256 {got} != pinned {want}")
     return problems
+
+
+def fy_problems(inp: dict[str, Any]) -> list[str]:
+    """Amendment 2 hard preflight check: for every document, the L4 field descriptions rendered for the document's OWN
+    fiscal year (corpus manifest) must not name a fiscal year other than the one its gold cells are for. A frozen
+    ``FY2022`` description on a FY2021 slot (the AGG-1.3 r2 defect) fails here, before any model call."""
+    by_doc: dict[str, list[dict[str, Any]]] = {}
+    for d, m, _v, fy in m1_cells13(inp):
+        by_doc.setdefault(d, []).append({"field": m, "fy": fy})
+    entries = {d["doc_name"]: d for d in inp["corpus"]["docs"]}
+    out = []
+    for d, cells in sorted(by_doc.items()):
+        fy_doc = X.doc_fiscal_year(entries[d], inp["corpus11"])
+        descs = {f: X.l4_description(A.METRICS[f], fy_doc) for f in A.METRICS}
+        out += [f"{d}: {p}" for p in fy_contract_problems(descs, cells)]
+    return out
 
 
 def corpus_problems(corpus: dict[str, Any], corpus11: dict[str, Any], *, check_pdfs: bool = True) -> list[str]:
@@ -226,11 +250,14 @@ def cells_problems(inp: dict[str, Any]) -> list[str]:
 
 
 def l4_reuse_check13(agg11_job: Path, orch_root: Path, research_arms: Path | None = None) -> dict[str, Any]:
-    """The AGG-1.1 reuse rule, against the AGG-1.1 job's own pin: the L4 stage sources (``facts_llm.py``,
-    ``llm_backend.py``, ``phase0_arms.py``) equal their AGG-1.1 sha256 and the ``l4_unit`` statements are AST-equal to
-    ``run_cpu``'s L4 loop. Empty diff -> the 200 retained L4 units are cache hits; otherwise fail closed."""
-    res = X.l4_reuse_check(agg11_job, orch_root, research_arms)
-    res["against"] = "AGG-1.1 job pin (" + str(agg11_job) + ")"
+    """The AGG-1.1 reuse rule, against the AGG-1.1 job's own pin: ``llm_backend.py`` and ``phase0_arms.py`` equal their
+    AGG-1.1 sha256 and the ``l4_unit`` statements are AST-equal to ``run_cpu``'s L4 loop. ``facts_llm.py`` is the one
+    amended L4 stage file (amendment 2, 2026-11-12): it must equal ``X.AMENDED_L4`` and the fiscal-year rendering
+    self-check must hold; the 200 retained L4 units stay the AGG-1.1 cache hits, the 24 rerun units use the amended
+    stage. Anything else differing -> fail closed."""
+    res = X.l4_reuse_check(agg11_job, orch_root, research_arms, amended=X.AMENDED_L4)
+    res["against"] = ("AGG-1.1 job pin (" + str(agg11_job) + "), L4 stage as amended 2026-11-12 "
+                      "(PREDECLARED_AGG13_AMENDMENT2_20261112.md) for the rerun units")
     return res
 
 
@@ -566,12 +593,13 @@ def run_reingest(rec: P.Recorder, out: Path, inp: dict[str, Any], orch_root: Pat
                     return _gate_stop(rec, out, ["G1"], "ingest", doc_fail=[name])
             if name not in REPLACED:
                 continue
-            # ---- the changed document's L4 units (the AGG-1.1 l4_unit, unchanged)
+            # ---- the changed document's L4 units (``l4_unit_fy``: the AGG-1.1 unit with the document's own fiscal year)
             units = P.windows(store, corpus_id, cfg.window_chars)
             for f in A.METRICS:
                 if f"l4:{f}:{name}" in rec.done:
                     continue
-                X.l4_unit(rec, store, backend, units, f, name, guard, cfg)
+                X.l4_unit_fy(rec, store, backend, units, f, name, guard, cfg,
+                             fy=X.doc_fiscal_year(d, inp["corpus11"]))
                 if smoke:
                     return {"complete": False, "smoke": True, "rc": RC_OK}
                 gate = _running_g3(rec, bounds)

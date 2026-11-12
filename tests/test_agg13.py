@@ -8,6 +8,7 @@ orchestrator venv python and ``AGG_ORCH_ROOT=<tree at the AGG-1.3 pin>`` (the tr
 from __future__ import annotations
 
 import contextlib
+import copy
 import csv
 import hashlib
 import io
@@ -31,7 +32,7 @@ import phase0_arms as P  # noqa: E402
 import phase1_arms as X  # noqa: E402
 import run_agg13 as R  # noqa: E402
 
-DEFAULT_ORCH = "/mnt/raid0/llm/worktrees/agg13-14-orch-20261111"
+DEFAULT_ORCH = "/mnt/raid0/llm/tmp/agg13-reingest-cpu-20261111-r3/orch"   # the amended stage (amendment 2); AGG_ORCH_ROOT overrides
 ORCH = Path(os.environ.get("AGG_ORCH_ROOT", DEFAULT_ORCH))
 os.environ["ORCHESTRATOR_FEATURE_AGG_LAYER"] = "1"
 try:
@@ -57,8 +58,21 @@ class PinTests(unittest.TestCase):
         self.assertEqual(sha(D1 / "PREDECLARED_AGG13.md"), G.PREDECLARED_SHA)
         self.assertEqual(sha(D1 / "PREDECLARED_AGG13_AMENDMENT1_20261111.md"), G.AMENDMENT1_SHA)
         self.assertIn("160.17", (D1 / "PREDECLARED_AGG13_AMENDMENT1_20261111.md").read_text())
+        self.assertEqual(sha(D1 / G.AMENDMENT2_FILE), G.AMENDMENT2_SHA)
+        self.assertEqual(G.AMENDMENT2_FILE, "PREDECLARED_AGG13_AMENDMENT2_20261112.md")
+        self.assertIn(X.AMENDED_L4["src/aggregation/facts_llm.py"], (D1 / G.AMENDMENT2_FILE).read_text())
         for name, want in G.FROZEN.items():
             self.assertEqual(sha(D1 / name), want, name)
+
+    def test_amendment2_pin_is_asserted_by_preflight(self):
+        tmp = Path(tempfile.mkdtemp())
+        for f in list(G.FROZEN) + ["PREDECLARED_AGG13.md", "PREDECLARED_AGG13_AMENDMENT1_20261111.md", G.AMENDMENT2_FILE]:
+            shutil.copy(D1 / f, tmp / f)
+        self.assertEqual(G.pin_problems(tmp), [])
+        (tmp / G.AMENDMENT2_FILE).write_text((tmp / G.AMENDMENT2_FILE).read_text() + "x")
+        self.assertTrue(any(G.AMENDMENT2_FILE in p for p in G.pin_problems(tmp)))
+        (tmp / G.AMENDMENT2_FILE).unlink()
+        self.assertTrue(any(G.AMENDMENT2_FILE in p for p in G.pin_problems(tmp)))
 
     def test_agg11_predeclared_untouched(self):
         self.assertEqual(sha(D1 / "PREDECLARED.md"), X.PREDECLARED_SHA)
@@ -168,6 +182,28 @@ class CorpusAndCellsTests(unittest.TestCase):
         s = G.m1_summary13(cells, [True, False, True])
         self.assertEqual((s["overall"]["found"], s["overall"]["gold"]), (2, 3))
 
+    def test_fy_contract_passes_on_the_real_inputs_and_fails_the_r2_configuration(self):
+        """The AGG-1.3 r2 defect: FY2022 descriptions for FY2021 slots. The hard preflight check catches it."""
+        self.assertEqual(G.fy_problems(self.inp), [])
+        for d in G.replaced_docs(self.inp["corpus"]):
+            self.assertEqual(X.doc_fiscal_year(d, self.inp["corpus11"]), "2021")
+        for d in G.retained(self.inp["corpus"]):
+            self.assertEqual(X.doc_fiscal_year(d, self.inp["corpus11"]), "2022")
+        broken = copy.deepcopy(self.inp)
+        for d in broken["corpus"]["docs"]:
+            d.pop("fiscal_year", None)                       # the manifest no longer says the slots are FY2021
+        probs = G.fy_problems(broken)
+        self.assertEqual(len(probs), 3 * len(A0.METRICS))
+        self.assertTrue(all("names FY2022 but the gold cells are FY2021" in p for p in probs), probs[:2])
+
+    def test_runner_preflight_reports_the_fy_contract(self):
+        broken = copy.deepcopy(G.load_inputs(D1))
+        for d in broken["corpus"]["docs"]:
+            d.pop("fiscal_year", None)
+        a = R.build_parser().parse_args(["--phase", "preflight", "--pins", "none"])
+        problems, _ = R.checks(a, broken, deep=False)
+        self.assertTrue(any(p.startswith("fiscal-year contract:") for p in problems))
+
     def test_cells_problems_reject_a_missing_metric(self):
         inp = dict(self.inp)
         inp["cells13"] = [r for r in self.inp["cells13"] if not (r["doc_name"] == "3M_2022_10K" and r["metric"] == "capex")]
@@ -206,6 +242,24 @@ class FakeBackend:
         rows = [] if not m or "Field: revenue" not in prompt else [{
             "period": f"FY{per.group(1) if per else '2022'}", "value": float(m.group(0).split()[-1].replace(",", "")),
             "unit": "USD_millions", "quote": m.group(0), "confidence": "medium"}]
+        return {"text": json.dumps(rows), "prompt_tokens": len(prompt) // 4, "cache_n": 0}
+
+
+class DescBackend(FakeBackend):
+    """Behaves like the r2 model: the period it reports and whether it answers at all follow the fiscal year the FIELD
+    DESCRIPTION asks for (``FY2021`` in the description -> only a FY2021 line in the excerpt can answer)."""
+
+    def complete(self, prompt, *, grammar, n_predict, cache_prompt, id_slot):
+        if grammar == GATE_GBNF:
+            return super().complete(prompt, grammar=grammar, n_predict=n_predict, cache_prompt=cache_prompt, id_slot=id_slot)
+        self._bill(prompt)
+        head, body = prompt.split("Excerpt:\n", 1)
+        want = re.search(r"FY(\d{4})", head.split("Field:", 1)[-1])
+        m = re.search(r"Total revenues [\d,]+", body)
+        has = re.search(r"FY(\d{4})", body)
+        ok = m and "Field: revenue" in prompt and want and has and want.group(1) == has.group(1)
+        rows = [{"period": f"FY{want.group(1)}", "value": float(m.group(0).split()[-1].replace(",", "")),
+                 "unit": "USD_millions", "quote": m.group(0), "confidence": "medium"}] if ok else []
         return {"text": json.dumps(rows), "prompt_tokens": len(prompt) // 4, "cache_n": 0}
 
 
@@ -352,6 +406,25 @@ class ReingestTests(unittest.TestCase):
         rec2, res2, _ = self._run(fx, out, b2, parse_fn=lambda p: (_ for _ in ()).throw(AssertionError("re-parsed")))
         self.assertEqual(b2.calls, 0)
         self.assertEqual(res2["rc"], 0)
+
+    def test_changed_slots_are_extracted_with_their_own_fiscal_year(self):
+        """The r2 defect, end to end: a model that follows the description's fiscal year finds the FY2021 cells only when
+        the description names FY2021. Under the r2 configuration (FY2022 for every slot) the changed cells score 0."""
+        fx = make_fixture(self.tmp)
+        out = self.tmp / "out"
+        rec, res, b = self._run(fx, out, DescBackend())
+        self.assertEqual(res["rc"], 0, res)
+        self.assertEqual((res["m1_changed"]["gold"], res["m1_changed"]["found"]), (3, 3))
+        fresh = [r for r in rec.records if r["kind"] == "l4_unit" and not r.get("reused")]
+        self.assertEqual({r["fy"] for r in fresh}, {"2021"})
+        # r2 configuration: the manifest year is ignored, FY2022 descriptions
+        tmp2 = Path(tempfile.mkdtemp())
+        fx2 = make_fixture(tmp2)
+        with mock.patch.object(X, "doc_fiscal_year", lambda e, c=None: "2022"):
+            res2 = G.run_reingest(P.Recorder(tmp2 / "out" / "results.jsonl"), tmp2 / "out", fx2["inp"], Path("/unused"),
+                                  DescBackend(), base_store=fx2["base"], agg11_results=fx2["results11"],
+                                  cache_dirs=[fx2["cache11"]], guard=self.guard, parse_fn=new_parse, bounds=LENIENT)
+        self.assertEqual((res2["m1_changed"]["gold"], res2["m1_changed"]["found"]), (3, 0))
 
     def test_retained_document_without_a_cached_parse_trips_g1_before_any_compute(self):
         fx = make_fixture(self.tmp, drop_cache="PAYPAL_2022_10K")

@@ -74,6 +74,7 @@ def checks(a: argparse.Namespace, inp: dict[str, Any], *, deep: bool) -> tuple[l
     if a.pins == "agg14":
         problems += G.pin_problems(a.set_dir)
     problems += G.cells_problems(inp, expect=a.pins == "agg14")
+    problems += [f"fiscal-year contract: {p}" for p in G.fy_problems(inp)]
     if a.pins == "agg14":
         inp11 = X.load_inputs(corpus=a.set_dir / "corpus.json", golds=a.set_dir / "golds.jsonl",
                               verification=a.set_dir / "verification_record.json",
@@ -89,8 +90,7 @@ def checks(a: argparse.Namespace, inp: dict[str, Any], *, deep: bool) -> tuple[l
         if a.orch_pin and f.exists() and f.read_text().strip() != a.orch_pin:
             problems.append(f"{f} = {f.read_text().strip()} != expected orchestrator pin {a.orch_pin}")
         if a.agg11_job.exists():
-            import agg13 as G13  # noqa: PLC0415  (the shared AGG-1.1 reuse rule)
-            info["l4_reuse"] = G13.l4_reuse_check13(a.agg11_job, a.orch_root)
+            info["l4_reuse"] = G.l4_reuse_check14(a.agg11_job, a.orch_root)
             if not info["l4_reuse"].get("reuse_ok"):
                 problems.append("L4 reuse test failed: the earlier units are not cache hits")
     if deep and a.orch_root is not None:

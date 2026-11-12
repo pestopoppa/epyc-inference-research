@@ -13,6 +13,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import unittest
@@ -29,12 +30,12 @@ import phase0_arms as P  # noqa: E402
 import phase1_arms as X  # noqa: E402
 import run_agg14 as R  # noqa: E402
 
-DEFAULT_ORCH = "/mnt/raid0/llm/worktrees/agg13-14-orch-20261111"
+DEFAULT_ORCH = "/mnt/raid0/llm/tmp/agg13-reingest-cpu-20261111-r3/orch"   # the amended stage (amendment 2); AGG_ORCH_ROOT overrides
 ORCH = Path(os.environ.get("AGG_ORCH_ROOT", DEFAULT_ORCH))
 os.environ["ORCHESTRATOR_FEATURE_AGG_LAYER"] = "1"
 try:
     sys.path.insert(0, str(ORCH))
-    from src.aggregation import planner  # noqa: E402
+    from src.aggregation import facts_llm, planner  # noqa: E402
     from src.aggregation.llm_backend import GATE_GBNF  # noqa: E402
     from src.aggregation.store import CorpusStore  # noqa: E402
     from src.models.document import DocumentPreprocessResult, Section  # noqa: E402
@@ -53,6 +54,40 @@ class PinAndInputTests(unittest.TestCase):
         self.assertEqual(sha(D1 / "PREDECLARED_AGG14.md"), G.PREDECLARED_SHA)
         self.assertEqual(sha(D1 / "PREDECLARED_AGG14_AMENDMENT1_20261111.md"), G.AMENDMENT1_SHA)
         self.assertEqual(sha(D1 / "PREDECLARED.md"), X.PREDECLARED_SHA)
+        self.assertEqual(sha(D1 / G.AMENDMENT2_FILE), G.AMENDMENT2_SHA)
+        self.assertEqual(G.AMENDMENT2_FILE, "PREDECLARED_AGG14_AMENDMENT2_20261112.md")
+        self.assertIn(X.AMENDED_L4["src/aggregation/facts_llm.py"], (D1 / G.AMENDMENT2_FILE).read_text())
+
+    def test_amendment2_pin_is_asserted_by_preflight(self):
+        tmp = Path(tempfile.mkdtemp())
+        for f in list(G.FROZEN) + ["PREDECLARED_AGG14.md", "PREDECLARED_AGG14_AMENDMENT1_20261111.md", G.AMENDMENT2_FILE]:
+            shutil.copy(D1 / f, tmp / f)
+        self.assertEqual(G.pin_problems(tmp), [])
+        (tmp / G.AMENDMENT2_FILE).write_text((tmp / G.AMENDMENT2_FILE).read_text() + "x")
+        self.assertTrue(any(G.AMENDMENT2_FILE in p for p in G.pin_problems(tmp)))
+        (tmp / G.AMENDMENT2_FILE).unlink()
+        self.assertTrue(any(G.AMENDMENT2_FILE in p for p in G.pin_problems(tmp)))
+
+    def test_fy_contract_is_a_hard_preflight_check(self):
+        inp = G.load_inputs(D1)
+        self.assertEqual(G.fy_problems(inp), [])
+        self.assertEqual({G.doc_fy(inp, r["doc_name"]) for r in inp["cells"]}, {"2022"})
+        # a cell sheet for another fiscal year against the FY2022 manifest/description is a contract violation
+        bad = {"corpus": inp["corpus"], "cells": [dict(r, fiscal_year="2021") for r in inp["cells"]]}
+        self.assertEqual(len(G.fy_problems(bad)), 28)
+        a = R.build_parser().parse_args(["--phase", "preflight", "--pins", "none"])
+        problems, _ = R.checks(a, bad, deep=False)
+        self.assertTrue(any(p.startswith("fiscal-year contract:") for p in problems))
+
+    def test_scale_signature_is_informational_and_counts_the_r2_mis_scale(self):
+        import sqlite3  # noqa: PLC0415
+        import agg1314_zero_cell_diag as D  # noqa: PLC0415
+        c = sqlite3.connect(":memory:")
+        c.execute("CREATE TABLE facts (field TEXT, extractor TEXT, value REAL)")
+        c.executemany("INSERT INTO facts VALUES (?,?,?)", [("long_term_debt", "l4_llm.v1", 0.002467),
+                                                          ("long_term_debt", "l4_llm.v1", 2467.0),
+                                                          ("long_term_debt", "l3_table", 0.5)])
+        self.assertEqual(D.scale_signature(c, "long_term_debt"), {"long_term_debt": {"n": 2, "abs_lt_1": 1}})
 
     def test_gold_cells_28_with_25_filled_and_the_three_na(self):
         inp = G.load_inputs(D1)
@@ -143,7 +178,7 @@ class FakeBackend:
 
 def doc(name: str):
     ltd = f"Long-term debt {LTD[name]:,.0f}\n" if name in LTD else "Notes about nothing\n"
-    secs = [Section(id="s1", title="Balance", level=1, content=f"Balance sheet FY2022\nTotal revenues 100\n{ltd}",
+    secs = [Section(id="s1", title="Balance", level=1, content=f"Balance sheet FY2022\n(in millions)\nTotal revenues 100\n{ltd}",
                     page_start=60, page_end=60)]
     return DocumentPreprocessResult(original_path=f"/{name}.pdf", sections=secs, figures=[], total_pages=100, tables=[])
 
@@ -180,6 +215,21 @@ def make_fixture(tmp: Path, *, drop_old_unit: bool = False) -> dict:
     cells = [{"doc_name": n, "metric": G.FIELD, "fiscal_year": "2022", "verified": "true",
               "status": "filled" if n in LTD else "NA", "value_usd_m": str(LTD[n]) if n in LTD else ""} for n in DOCS]
     return {"inp": {"corpus": corpus, "cells": cells}, "base": base_dir / "store.sqlite", "results11": base_dir / "results.jsonl"}
+
+
+class UsdLabelBackend(FakeBackend):
+    """The r2 model: long-term debt rows say ``unit: "USD"`` although the value is the number printed in a table
+    declared (in millions)."""
+
+    def complete(self, prompt, *, grammar, n_predict, cache_prompt, id_slot):
+        r = super().complete(prompt, grammar=grammar, n_predict=n_predict, cache_prompt=cache_prompt, id_slot=id_slot)
+        if grammar == GATE_GBNF:
+            return r
+        rows = json.loads(r["text"])
+        for x in rows:
+            if "Long-term debt" in x["quote"]:
+                x["unit"] = "USD"
+        return dict(r, text=json.dumps(rows))
 
 
 @unittest.skipUnless(HAVE_ORCH, "orchestrator tree with planner.backfill_plan not importable")
@@ -234,6 +284,30 @@ class BackfillTests(unittest.TestCase):
         self.assertEqual(b2.calls, 0)
         # the base store was only read
         self.assertEqual(CorpusStore(fx["base"]).conn.execute("SELECT COUNT(*) FROM facts WHERE field = ? AND extractor = 'l4_llm.v1'", [G.FIELD]).fetchone()[0], 0)
+
+    def test_usd_label_on_a_millions_table_is_corrected_and_scores(self):
+        """AGG-1.4 r2 defect: label USD on a value printed in a (in millions) table was stored x1e-6 and missed. Now the
+        declared scale wins, the fact is stored in millions, the result reports the note and a clean scale signature."""
+        fx = make_fixture(self.tmp)
+        out = self.tmp / "out"
+        rec, res, b = self._run(fx, out, UsdLabelBackend())
+        self.assertEqual(res["rc"], 0, res)
+        self.assertEqual(res["g2"]["backfilled_docs"], {"gold": 1, "found": 1, "m1": 1.0})
+        self.assertEqual(res["scale_signature"], {G.FIELD: {"n": 1, "abs_lt_1": 0}})
+        self.assertEqual(res["n_unit_overrides"], 1)
+        self.assertEqual((res["unit_overrides"][0]["label"], res["unit_overrides"][0]["declared"],
+                          res["unit_overrides"][0]["raw_value"]), ("USD", "USD_millions", 910.0))
+        s = CorpusStore(out / "store.sqlite")
+        row = s.conn.execute("SELECT value, unit FROM facts WHERE field = ? AND extractor = 'l4_llm.v1'", [G.FIELD]).fetchone()
+        self.assertEqual((row[0], row[1]), (910.0, "USD_millions"))
+        self.assertEqual(next(r for r in rec.records if r.get("unit") == "gates_cpu")["scale_signature"], res["scale_signature"])
+        # the same run on the r2 stage (cross-check off): stored 0.00091, signature 1, the backfilled cell misses
+        tmp2 = Path(tempfile.mkdtemp())
+        fx2 = make_fixture(tmp2)
+        with mock.patch.object(facts_llm, "unit_override", lambda f: None):
+            _rec, res2, _b = self._run(fx2, tmp2 / "out", UsdLabelBackend())
+        self.assertEqual(res2["g2"]["backfilled_docs"]["found"], 0)
+        self.assertEqual(res2["scale_signature"], {G.FIELD: {"n": 1, "abs_lt_1": 1}})
 
     def test_call_gate_trips_in_the_pilot_projection_and_blocks_everything_after(self):
         fx = make_fixture(self.tmp)

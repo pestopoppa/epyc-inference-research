@@ -108,6 +108,13 @@ L4_ORCH_INFO_FILES = ("src/aggregation/store.py", "src/aggregation/__init__.py",
 
 RC_OK, RC_PREFLIGHT, RC_GATE, RC_PRECOND, RC_BUDGET, RC_L3, RC_PARTIAL = 0, 2, 3, 4, 5, 6, 75
 
+# 2026-11-12 (AGG-1.3 / AGG-1.4 amendment 2): the L4 stage the RERUN units use. ``facts_llm.py`` differs from the AGG-1.1
+# pin by the unit-label cross-check in ``reconcile`` (orchestrator tests/unit/test_aggregation_unit_override.py); the
+# prompt, grammar and extraction are byte-identical. ``l4_reuse_check(..., amended=AMENDED_L4)`` expects this sha256 for
+# the rerun units; the seeded AGG-1.1 cache-hit units stay as AGG-1.1 produced them.
+AMENDED_L4 = {"src/aggregation/facts_llm.py": "c64b7c9ed7df88906d38f07e71c5605bcbb4aae66549452ae42487c257dd7451"}
+BASE_FY = "2022"                   # the fiscal year the frozen ``agg_phase0.METRICS`` descriptions name
+
 
 def configure(corpus_id: str) -> None:
     """Point this module and the Phase 0 helpers it calls at one corpus id."""
@@ -335,13 +342,19 @@ def l4_unit_ast(source_path: Path | None = None) -> list[str]:
     return []
 
 
-def l4_reuse_check(p0_job: Path, orch_root: Path, research_arms: Path | None = None) -> dict[str, Any]:
+def l4_reuse_check(p0_job: Path, orch_root: Path, research_arms: Path | None = None, *,
+                   amended: dict[str, str] | None = None) -> dict[str, Any]:
     """PREDECLARED checkpoint 0: the L4 stage code diff against the Phase 0 CPU job's SOURCE.sha256 pin.
 
     Empty diff on (a) ``facts_llm.py`` and ``llm_backend.py`` of the orchestrator tree, (b) the Phase 0 research
     ``phase0_arms.py`` (it holds ``windows``, ``bm25_top``, ``Cfg`` and the L4 loop of ``run_cpu``; Phase 1 does
     not edit it) and (c) the Phase 1 ``l4_unit`` statements AST-equal to ``run_cpu``'s L4 loop. Then the 80
-    Phase 0 L4 units are cache hits; otherwise all 224 units run fresh and M3 is measured fresh."""
+    Phase 0 L4 units are cache hits; otherwise all 224 units run fresh and M3 is measured fresh.
+
+    ``amended`` (AGG-1.3 / AGG-1.4 amendment 2, 2026-11-12): ``{orchestrator rel path: expected sha256}`` for the L4 stage
+    file(s) the RERUN units use. Such a file must equal its AMENDED sha256 instead of the AGG-1.1 pin (the pin is still
+    reported as ``phase0``), and ``fy_stage_ok`` (``l4_fy_stage_problems``) must hold. Every other gating file, and the
+    ``l4_unit`` AST, are checked against the pin exactly as before."""
     research_arms = research_arms or Path(P.__file__)
     res: dict[str, Any] = {"p0_job": str(p0_job), "orch_root": str(orch_root), "files": {}, "problems": []}
     try:
@@ -354,6 +367,11 @@ def l4_reuse_check(p0_job: Path, orch_root: Path, research_arms: Path | None = N
         cur = orch_root / rel
         p0 = pins.get(f"orch/{rel}")
         now = sha256_file(cur) if cur.exists() else None
+        if amended and rel in amended:
+            res["files"][rel] = {"phase0": p0, "phase1": now, "equal": now is not None and now == amended[rel],
+                                 "gating": rel in L4_ORCH_FILES, "amended_expect": amended[rel],
+                                 "equals_phase0_pin": p0 is not None and p0 == now}
+            continue
         res["files"][rel] = {"phase0": p0, "phase1": now, "equal": p0 is not None and p0 == now,
                              "gating": rel in L4_ORCH_FILES}
     rel_arms = "res/benchmarks/agg_phase0/phase0_arms.py"
@@ -370,6 +388,10 @@ def l4_reuse_check(p0_job: Path, orch_root: Path, research_arms: Path | None = N
         res["problems"].append("Phase 0 pinned phase0_arms.py missing or not equal to its SOURCE.sha256 entry")
     res["l4_loop_ast_equal"] = ast_equal
     res["diff_empty"] = all(v["equal"] for v in res["files"].values() if v["gating"]) and ast_equal
+    if amended:
+        res["amended"] = dict(amended)
+        res["fy_stage_problems"] = l4_fy_stage_problems()
+        res["problems"] += [f"fy stage: {p}" for p in res["fy_stage_problems"]]
     res["reuse_ok"] = res["diff_empty"] and not res["problems"]
     return res
 
@@ -625,6 +647,72 @@ def l4_unit(rec, store, backend, units, fname, d, guard, cfg: P.Cfg = P.CFG):
              n_conflicts=len(out["conflicts"]), receipts=out["receipts"],
              llm_calls=backend.calls - calls0, prefill_tokens=backend.prefill_tokens - pre0,
              wall_s=time.time() - t0, final=status == "ok")
+    return True
+
+
+# --------------------------------------------------------------------------- L4 with a per-document fiscal year
+def l4_description(desc: str, fy: Any = None) -> str:
+    """The field description rendered for one document's fiscal year. ``METRICS`` names ``FY2022`` in every description;
+    a filing of another fiscal year gets that year instead (AGG-1.3 amendment 2). ``fy`` None or 2022 returns ``desc``
+    itself, so Phase 0 / AGG-1.1 prompts and BM25 queries are byte-identical."""
+    fy = BASE_FY if fy in (None, "") else str(fy)
+    if fy == BASE_FY:
+        return desc
+    if f"FY{BASE_FY}" not in desc:
+        raise ValueError(f"description does not name FY{BASE_FY}: {desc!r}")
+    return desc.replace(f"FY{BASE_FY}", f"FY{fy}")
+
+
+def doc_fiscal_year(entry: dict[str, Any], corpus: dict[str, Any] | None = None) -> str:
+    """The document's own fiscal year from the corpus manifest: the entry's ``fiscal_year`` (set on the AGG-1.3 replaced
+    slots), else the manifest's ``fiscal_year`` (AGG-1.1: 2022), else the base year."""
+    return str(entry.get("fiscal_year") or (corpus or {}).get("fiscal_year") or BASE_FY)
+
+
+def l4_fy_stage_problems() -> list[str]:
+    """Zero-compute self-check of the fiscal-year rendering: FY2022 is the identity on every frozen description, any
+    other year renders exactly the FY2022 text with the year swapped and names no other year."""
+    out = []
+    for f, d in A.METRICS.items():
+        if l4_description(d, None) != d or l4_description(d, "2022") != d or l4_description(d, 2022) != d:
+            out.append(f"{f}: FY2022 rendering is not the frozen description")
+        r = l4_description(d, "2021")
+        if r != d.replace("FY2022", "FY2021") or "2022" in r:
+            out.append(f"{f}: FY2021 rendering is wrong: {r!r}")
+    return out
+
+
+def l4_unit_fy(rec, store, backend, units, fname, d, guard, cfg: P.Cfg = P.CFG, *, fy: Any = None):
+    """``l4_unit`` with the field description rendered for the document's fiscal year (``fy``). For ``fy`` None / 2022
+    the description, the BM25 query, the extraction prompt and the emitted record are those of ``l4_unit`` (the test
+    ``FyRenderingTests`` runs both side by side). The AGG-1.1 function itself is NOT edited: it stays AST-equal to
+    ``phase0_arms.run_cpu``'s L4 loop, which is what the L4 reuse test compares. Extra record fields: ``fy``,
+    ``n_unit_overrides``, ``unit_overrides`` (the L4d unit-label cross-check notes)."""
+    from src.aggregation import facts_llm  # noqa: PLC0415
+    unit = f"l4:{fname}:{d}"
+    if unit in rec.done:
+        return False
+    guard()
+    t0 = time.time()
+    desc = l4_description(A.METRICS[fname], fy)
+    cands = bm25_top([u for u in units if u["doc_id"] == d],
+                     f"{fname.replace('_', ' ')} {desc}", cfg.k_per_doc)
+    bf = facts_llm.LazyFieldBackfill(store, backend, n_predict=cfg.l4_n_predict, id_slot=None,
+                                     hi=cfg.hi, lo=cfg.lo)
+    calls0, pre0 = backend.calls, backend.prefill_tokens
+    try:
+        out = bf.fill(CORPUS_ID, fname, desc, cands)
+        status = "ok"
+    except Exception as e:  # noqa: BLE001 — recorded per unit, the run continues
+        out, status = {"facts": [], "conflicts": [], "receipts": [], "audit_queue": []}, \
+            f"error:{type(e).__name__}:{str(e)[:200]}"
+    ovr = list(out.get("unit_overrides") or [])
+    rec.emit("l4_unit", unit=unit, field=fname, doc=d, status=status, ok=status == "ok",
+             n_candidates=len(cands), n_facts=len(out["facts"]),
+             n_conflicts=len(out["conflicts"]), receipts=out["receipts"],
+             llm_calls=backend.calls - calls0, prefill_tokens=backend.prefill_tokens - pre0,
+             wall_s=time.time() - t0, final=status == "ok",
+             fy=BASE_FY if fy in (None, "") else str(fy), n_unit_overrides=len(ovr), unit_overrides=ovr[:20])
     return True
 
 

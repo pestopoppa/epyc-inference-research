@@ -79,6 +79,7 @@ def checks(a: argparse.Namespace, inp: dict[str, Any], *, deep: bool) -> tuple[l
     problems += G.corpus_problems(inp["corpus"], inp["corpus11"], check_pdfs=a.phase not in ("gpu-audit", "gpu-answers",
                                                                                            "score"))
     problems += G.cells_problems(inp)
+    problems += [f"fiscal-year contract: {p}" for p in G.fy_problems(inp)]
     if a.pins == "agg13":
         ok11, info11 = X.preflight(inp | {"corpus": inp["corpus11"]}, a.set_dir, orch_root=None, p0_job=None,
                                    check_pdfs=False, run_build_check=True,
