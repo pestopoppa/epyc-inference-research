@@ -973,7 +973,6 @@ server_mode:
     # -- INF-86 (stack-change draft 20261111): --checkpoint-min-step 512 (v10 default 8192) --
     # Spacing only; the 32-checkpoint cap above is unchanged. Evidence:
     # handoffs/active/hybrid-checkpoint-prompt-reuse.md (INF-86 ckpt-spacing A/B).
-    checkpoint_min_step: 512
     serving_shape:
       n_ctx: 262144
       slots_by_shape: {full: 4, half: 1}   # 262144/4 = 65536 per slot on the full,
@@ -1489,7 +1488,6 @@ server_mode:
     # -- INF-86 (stack-change draft 20261111): --checkpoint-min-step 512 (v10 default 8192) --
     # Spacing only; the 32-checkpoint cap above is unchanged. Evidence:
     # handoffs/active/hybrid-checkpoint-prompt-reuse.md (INF-86 ckpt-spacing A/B).
-    checkpoint_min_step: 512
     serving_shape:
       # ── THE GPU CAP, RECOMPUTED 2026-09-22 ON A CORRECTED KV RATE ───────────────
       # ⚠ THE OLD BANNER'S ARITHMETIC WAS WRONG IN ITS INPUT, NOT IN ITS METHOD, AND
@@ -1982,7 +1980,6 @@ server_mode:
     # -- INF-86 (stack-change draft 20261111): --checkpoint-min-step 512 (v10 default 8192) --
     # Spacing only; the 32-checkpoint cap above is unchanged. Evidence:
     # handoffs/active/hybrid-checkpoint-prompt-reuse.md (INF-86 ckpt-spacing A/B).
-    checkpoint_min_step: 512
     serving_shape:
       n_ctx: 262144
       # ONE INSTANCE, ONE CLASS. `slots_by_shape` is written out rather than left to the
