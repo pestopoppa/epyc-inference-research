@@ -24,7 +24,6 @@ CLI:  agg_l3period.py --orch-root DIR [--store PATH] [--work-dir DIR] [--out JSO
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import sqlite3
@@ -166,7 +165,6 @@ def run_probe(*, store_path: Path, work_dir: Path, orch_root: Path, set_dir: Pat
     from src.aggregation.store import CorpusStore  # noqa: PLC0415
     inp = G19.load_inputs(set_dir)
     cells = inp["cells211"]
-    keys = [f"{d}|{f}" for d, f, _g in cells]
     fy = fiscal_years(inp["corpus"])
     triage = json.loads((set_dir / "agg111_triage.json").read_text())
     l3c = l3_class_cells(triage)
@@ -224,7 +222,7 @@ def run_probe(*, store_path: Path, work_dir: Path, orch_root: Path, set_dir: Pat
     # the 11 L3-class cells: group c on this store, the group b cell on the AGG-1.4 r3 store copy
     c_keys = [f"{c['doc']}|{c['field']}" for c in l3c if c["group"] == "c"]
     for name, rec in out["variants"].items():
-        after_raw, l3_after, after_c1 = rec.pop("_after")["raw"], rec.pop("_l3_only_after"), None
+        after_raw, l3_after = rec.pop("_after")["raw"], rec.pop("_l3_only_after")
         rec["l3_class_group_c"] = {
             "cells": c_keys,
             "found_before_raw": [k for k in c_keys if before["raw"][k]],
