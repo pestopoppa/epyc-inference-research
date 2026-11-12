@@ -1,0 +1,38 @@
+{
+ "picked": [
+  {
+   "qid": "agg17",
+   "stratum": "continuity-plan"
+  },
+  {
+   "qid": "p1_02",
+   "stratum": "margin/top3"
+  },
+  {
+   "qid": "p1_10",
+   "stratum": "where-filter sum"
+  },
+  {
+   "qid": "p1_28",
+   "stratum": "current-ratio count"
+  }
+ ],
+ "qids": [
+  "agg17",
+  "p1_02",
+  "p1_10",
+  "p1_28",
+  "p1_03",
+  "p1_14"
+ ],
+ "rule": "first 6 ceiling-true questions in stratum order; PREDECLARED_AGG110.md",
+ "schema": "agg110_pilot.v1",
+ "strata": [
+  "continuity-malformed",
+  "continuity-plan",
+  "margin/top3",
+  "where-filter sum",
+  "current-ratio count",
+  "dividends where"
+ ]
+}
